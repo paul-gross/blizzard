@@ -96,6 +96,36 @@ def refuse_unconsumed_gate(node: Node, gate: GateDecision | None) -> None:
     )
 
 
+def competing_gate(facts: ChunkFacts, node: Node, *, epoch: int) -> DecisionFact | None:
+    """The current visit's unconsumed decision a fresh gate at ``epoch`` competes with, or ``None``.
+    A decision at this very ``epoch`` is a racing duplicate of the submission, left for the record's own
+    replay answer. More than one is refused (:class:`AmbiguousGateDecision`, from :func:`visit_gate`)."""
+    visit = visit_gate(facts, node)
+    if visit is None or visit.epoch == epoch:
+        return None
+    return visit
+
+
+def refuse_unresolving(
+    decision: GateDecision | None, submission: Completion, *, chunk: Chunk, node: Node, in_visit: bool
+) -> None:
+    """:class:`CompletionRefused` unless ``decision`` is this chunk's and ``node``'s, resolved to
+    ``submission.choice``; ``in_visit`` says whether it is the node's current-visit decision."""
+    detail = (
+        f"decision {submission.decision_id} does not match node `{node.name}`"
+        if decision is None
+        else decision.resolving_refusal(
+            chunk_id=chunk.chunk_id,
+            node_id=node.node_id,
+            node_name=node.name,
+            in_visit=in_visit,
+            choice=submission.choice,
+        )
+    )
+    if detail is not None:
+        raise CompletionRefused(detail)
+
+
 # The escalations a repeat of the same report is answered over, with no write.
 HUB_AUTHORED_ESCALATIONS = (EscalationCause.MIGRATION_TARGET_UNRESOLVABLE, EscalationCause.ESCALATE_CHOICE)
 
@@ -264,19 +294,7 @@ class CompletionPlan:
         this choice; then the edge and destination refusals."""
         visit = visit_gate(facts, gate_node)
         in_visit = visit is not None and decision is not None and visit.decision_id == decision.decision_id
-        detail = (
-            f"decision {submission.decision_id} does not match node `{gate_node.name}`"
-            if decision is None
-            else decision.resolving_refusal(
-                chunk_id=chunk.chunk_id,
-                node_id=gate_node.node_id,
-                node_name=gate_node.name,
-                in_visit=in_visit,
-                choice=submission.choice,
-            )
-        )
-        if detail is not None:
-            raise CompletionRefused(detail)
+        refuse_unresolving(decision, submission, chunk=chunk, node=gate_node, in_visit=in_visit)
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             raise CompletionRefused(f"gate `{gate_node.name}` has no choice `{submission.choice}`")

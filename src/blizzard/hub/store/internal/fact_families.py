@@ -3,9 +3,10 @@
 Each chunk-keyed fact table is declared once here, with the family it belongs to, the columns a projection orders
 and pages by, and the projections that carry it. Every projection over a chunk's facts derives its table list from
 this declaration — ``ChunkFacts`` load, the status probe, ``StepFacts`` for the trace and egress sweeps, closing
-candidates, and the activity event feed — and keeps its own per-entry mapper. A table carried by no projection is
-named in :data:`EXCLUDED` with its reason; ``tests/unit/hub/store/internal/test_fact_families.py`` fails any
-chunk-keyed table that is neither registered nor excluded.
+candidates, the activity event feed, and the environment timeline — and keeps its own per-entry mapper. A table
+carried by no projection is named in :data:`EXCLUDED` with its reason;
+``tests/unit/hub/store/internal/test_fact_families.py`` fails any chunk-keyed table that is neither registered nor
+excluded.
 
 Membership records what each projection carries today: a family one projection omits is omitted by its entry, not
 by a list in that projection."""
@@ -29,6 +30,7 @@ class Projection(StrEnum):
     TRACE = "trace"  # StepFacts, for the trace and egress sweeps
     CLOSING = "closing"  # the sweeps' closing-candidate pages
     EVENTS = "events"  # the activity event feed
+    TIMELINE = "timeline"  # the environment timeline
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,14 @@ def trace_order(entry: FactTable) -> Column[Any]:
     return entry.row_id
 
 
-_F, _S, _T, _C, _E = Projection.FACTS, Projection.STATUS, Projection.TRACE, Projection.CLOSING, Projection.EVENTS
+_F, _S, _T, _C, _E, _L = (
+    Projection.FACTS,
+    Projection.STATUS,
+    Projection.TRACE,
+    Projection.CLOSING,
+    Projection.EVENTS,
+    Projection.TIMELINE,
+)
 
 
 def _entry(
@@ -87,7 +96,17 @@ def _entry(
 #: Every fact table, in the order closing candidates read them.
 FACT_TABLES: tuple[FactTable, ...] = (
     _entry(
-        s.transitions, "transitions", _F, _S, _T, _C, _E, row_id="transition_id", time="recorded_at", trace_by_time=True
+        s.transitions,
+        "transitions",
+        _F,
+        _S,
+        _T,
+        _C,
+        _E,
+        _L,
+        row_id="transition_id",
+        time="recorded_at",
+        trace_by_time=True,
     ),
     _entry(s.decisions, "decisions", _F, _S, _T, _C, _E, row_id="decision_id", time="submitted_at", trace_by_time=True),
     _entry(s.decision_resolutions, "decisions", _F, _S, _T, _E, key=None, row_id="decision_id", time="resolved_at"),
@@ -99,31 +118,34 @@ FACT_TABLES: tuple[FactTable, ...] = (
         _T,
         _C,
         _E,
+        _L,
         row_id="migration_id",
         time="recorded_at",
         trace_by_time=True,
     ),
-    _entry(s.escalations, "escalations", _F, _S, _T, _C, _E, time="recorded_at"),
-    _entry(s.chunk_restarts, "restarts", _F, _S, _T, _C, _E, time="recorded_at"),
-    _entry(s.route_released, "routes_released", _F, _S, _T, _C, _E, time="released_at"),
-    _entry(s.chunk_stopped, "stopped", _F, _S, _T, _C, _E, time="stopped_at"),
-    _entry(s.chunk_completed, "operator_completed", _F, _S, _T, _C, _E, time="completed_at"),
-    _entry(s.epoch_owners, "epoch_owners", _F, _T, _C, time="recorded_at"),
+    _entry(s.escalations, "escalations", _F, _S, _T, _C, _E, _L, time="recorded_at"),
+    _entry(s.chunk_restarts, "restarts", _F, _S, _T, _C, _E, _L, time="recorded_at"),
+    _entry(s.route_released, "routes_released", _F, _S, _T, _C, _E, _L, time="released_at"),
+    _entry(s.chunk_stopped, "stopped", _F, _S, _T, _C, _E, _L, time="stopped_at"),
+    _entry(s.chunk_completed, "operator_completed", _F, _S, _T, _C, _E, _L, time="completed_at"),
+    _entry(s.epoch_owners, "epoch_owners", _F, _T, _C, _L, time="recorded_at"),
     _entry(s.chunk_promoted, "promoted", _F, _S, _T, _E, time="promoted_at"),
     _entry(s.chunk_demoted, "promoted", _F, _S, _T, _E, time="demoted_at"),
-    _entry(s.lease_facts, "leases", _F, _S, _T, time="minted_at"),
-    _entry(s.route_created, "routes_created", _F, _S, _T, _E, row_id="route_id", time="created_at", trace_by_time=True),
+    _entry(s.lease_facts, "leases", _F, _S, _T, _L, time="minted_at"),
+    _entry(
+        s.route_created, "routes_created", _F, _S, _T, _E, _L, row_id="route_id", time="created_at", trace_by_time=True
+    ),
     _entry(s.route_token_minted, "route_tokens_minted", _F, time="minted_at"),
     _entry(s.questions, "questions", _F, _S, _T, _E, row_id="question_id", time="asked_at"),
     _entry(s.question_answers, "questions", _F, _S, _E, key=None, row_id="question_id", time="answered_at"),
-    _entry(s.requeues, "requeues", _F, _S, _T, _E, time="requeued_at"),
+    _entry(s.requeues, "requeues", _F, _S, _T, _E, _L, time="requeued_at"),
     _entry(s.chunk_pause_facts, "pauses", _F, _S, _T, _E, time="set_at"),
-    _entry(s.usage_facts, "usage", _F, _T, time="recorded_at"),
+    _entry(s.usage_facts, "usage", _F, _T, _L, time="recorded_at"),
     _entry(s.chunk_bounces, "bounces", _F, _T, time="recorded_at"),
     _entry(s.hub_node_poll, "hub_node_polls", _F, _T, time="polled_at"),
     _entry(s.delivery_landed, "delivery_landed", _F, time="landed_at"),
     _entry(s.delivery_repo_landed, "landed_repos", _F, time="landed_at"),
-    _entry(s.chunk_work_refs, None, _T, time=None),
+    _entry(s.chunk_work_refs, None, _T, _L, time=None),
     _entry(s.chunk_dependencies, None, _T, key="dependent_chunk_id", row_id="dependency_id", time="declared_at"),
     _entry(s.flow_submissions, None, _T, row_id="submission_id", time="submitted_at"),
     _entry(s.chunk_grouped, None, _E, time="grouped_at", ephemeral=True),

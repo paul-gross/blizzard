@@ -44,6 +44,7 @@ from blizzard.hub.domain.execution.completion import (
     refuse_hub_executed,
     refuse_incoherent_attempt,
     refuse_unconsumed_gate,
+    refuse_unresolving,
     replayed_migration,
     stored_artifacts,
     visit_gate,
@@ -311,20 +312,9 @@ class ApplyService:
     def _refuse_foreign_decision(self, chunk: Chunk, from_node: Node, submission: Completion) -> None:
         """A resolving re-escalation's decision is already closed by its own escalation, so the visit
         membership no longer applies; it must still be this chunk's and node's, resolved to this choice."""
-        decision = self._decisions.get_decision(submission.decision_id) if submission.decision_id else None
-        detail = (
-            f"decision {submission.decision_id} does not match node `{from_node.name}`"
-            if decision is None
-            else decision.resolving_refusal(
-                chunk_id=chunk.chunk_id,
-                node_id=from_node.node_id,
-                node_name=from_node.name,
-                in_visit=True,
-                choice=submission.choice,
-            )
-        )
-        if detail is not None:
-            raise CompletionRefused(detail)
+        assert submission.decision_id is not None
+        decision = self._decisions.get_decision(submission.decision_id)
+        refuse_unresolving(decision, submission, chunk=chunk, node=from_node, in_visit=True)
 
     def _gate_plan(
         self,

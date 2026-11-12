@@ -4,7 +4,7 @@ projection reads exactly what the registry says it carries."""
 from __future__ import annotations
 
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import chunk_events_store, chunk_fact_loading, corpus_rows
+from blizzard.hub.store.internal import chunk_events_store, chunk_fact_loading, corpus_rows, env_timeline_store
 from blizzard.hub.store.internal.fact_families import EXCLUDED, FACT_TABLES, Projection, families, tables
 
 
@@ -57,6 +57,10 @@ def test_the_trace_reads_the_tables_the_registry_says() -> None:
 
 def test_the_event_feed_reads_the_tables_the_registry_says() -> None:
     assert set(chunk_events_store.EVENT_SOURCES) == set(tables(Projection.EVENTS))
+
+
+def test_the_env_timeline_reads_the_tables_the_registry_says() -> None:
+    assert set(env_timeline_store.TIMELINE_READERS) == set(tables(Projection.TIMELINE))
 
 
 def test_closing_candidates_page_by_a_time_and_an_id() -> None:

@@ -11,9 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.checks import INHERITED_FAILURE, Findings
-from blizzard.hub.delivery.actions.landing.fast_forward import cleanup
 from blizzard.hub.delivery.actions.landing.repo import (
     PENDING,
     Admitted,
@@ -66,8 +64,6 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
     for repo, state in ordered:
         if isinstance(state, Landed):
             await run.settle(repo, state)
-            if repo.record.landing_policy is LandingPolicy.FAST_FORWARD:
-                await cleanup(repo, state.revision)
 
     if person := next((state for state in states if isinstance(state, NeedsPerson)), None):
         run.say(f"escalated to a person: {person.escalation.detail}")
@@ -116,8 +112,6 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
         if isinstance(outcome, NoCode):
             continue
         await run.settle(repo, outcome)
-        if repo.record.landing_policy is LandingPolicy.FAST_FORWARD:
-            await cleanup(repo, outcome.revision)
     return run.answer(LANDED)
 
 

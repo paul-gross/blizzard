@@ -42,10 +42,12 @@ from blizzard.hub.domain.execution.completion import (
     NextStepKind,
     OpenQuestion,
     ReplayedMigration,
+    competing_gate,
     decision_choices,
     gate_refusal,
     refuse_hub_executed,
     refuse_incoherent_attempt,
+    refuse_unresolving,
     replayed_migration,
     stored_artifacts,
     visit_gate,
@@ -302,6 +304,35 @@ def test_the_visit_gate_is_the_one_unconsumed_decision_at_the_node() -> None:
     assert visit_gate(arrived_at("nd_gate", epoch=1, decisions=[held]), _GATE) == held
     assert visit_gate(arrived_at("nd_gate", epoch=1, decisions=[replace(held, closed=True)]), _GATE) is None
     assert visit_gate(arrived_at("nd_review", epoch=1, decisions=[held]), _GATE) is None
+
+
+@pytest.mark.parametrize("in_visit", [True, False])
+def test_the_resolving_refusal_is_decided_on_the_loaded_decision(in_visit: bool) -> None:
+    submission = completion_submission("yes", from_node_id="nd_gate", decision_id="dec_1")
+    resolved = gate_decision(resolved="yes")
+    if in_visit:
+        refuse_unresolving(resolved, submission, chunk=CHUNK, node=_GATE, in_visit=True)
+    else:
+        with pytest.raises(CompletionRefused, match="is not the current visit's decision"):
+            refuse_unresolving(resolved, submission, chunk=CHUNK, node=_GATE, in_visit=False)
+    with pytest.raises(CompletionRefused, match="decision dec_1 does not match node `gate`"):
+        refuse_unresolving(None, submission, chunk=CHUNK, node=_GATE, in_visit=True)
+    with pytest.raises(CompletionRefused, match="is not the resolved choice `no`"):
+        refuse_unresolving(gate_decision(resolved="no"), submission, chunk=CHUNK, node=_GATE, in_visit=True)
+
+
+def test_a_fresh_gate_competes_with_a_decision_of_a_later_epoch_only() -> None:
+    held = decision_fact(epoch=2)
+    facts = arrived_at("nd_gate", epoch=1, decisions=[held])
+    assert competing_gate(facts, _GATE, epoch=1) == held
+    assert competing_gate(facts, _GATE, epoch=2) is None
+    assert competing_gate(arrived_at("nd_gate", epoch=1, decisions=[]), _GATE, epoch=1) is None
+
+
+def test_a_fresh_gate_over_an_ambiguous_visit_is_refused_without_a_winner() -> None:
+    facts = arrived_at("nd_gate", epoch=1, decisions=[decision_fact("dec_1"), decision_fact("dec_2", epoch=2)])
+    with pytest.raises(AmbiguousGateDecision, match="dec_1, dec_2"):
+        competing_gate(facts, _GATE, epoch=3)
 
 
 # --- Migration replay --------------------------------------------------------
