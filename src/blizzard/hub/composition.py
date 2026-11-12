@@ -240,6 +240,9 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.secrets import StoreSecretReader
+from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.reader import HubSettingsReader
+from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -267,6 +270,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
+from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
@@ -935,6 +939,22 @@ class LiveConfig:
 
     objects: ConfigObjectCache
     secrets: ISecretReader
+
+
+@dataclass(frozen=True)
+class HubSettingsGraph:
+    store: HubSettingsStore
+    reader: HubSettingsReader
+    authoring: HubSettingsAuthoring
+    footing: HubSettingsFooting
+
+
+def build_hub_settings(
+    connections: HubStoreConnections, clock: IClock, footing: HubSettingsFooting
+) -> HubSettingsGraph:
+    store = HubSettingsStore(connections, clock, footing.validate)
+    reader = HubSettingsReader(store)
+    return HubSettingsGraph(store, reader, HubSettingsAuthoring(reader, store, footing.validate), footing)
 
 
 def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveConfig:

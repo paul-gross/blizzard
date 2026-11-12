@@ -55,7 +55,39 @@ GLOBAL_TABLES: frozenset[str] = frozenset(
         "hub_event_log",  # occurrences of the hub's own machinery, which concern no tenant
         "trace_cursor",  # trace export is hub configuration with one destination
         "egress_cursor",  # fact egress is hub configuration with one destination
+        "hub_settings",  # the hub-wide settings revision
+        "hub_setting_entries",  # the hub-wide settings values
+        "hub_setting_changes",  # the hub-wide settings audit
     }
+)
+
+hub_settings = Table(
+    "hub_settings",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("revision", Integer, nullable=False),
+    CheckConstraint("id = 1", name="ck_hub_settings_singleton"),
+)
+
+hub_setting_entries = Table(
+    "hub_setting_entries",
+    metadata,
+    Column("key", String, primary_key=True),
+    Column("value_json", Text, nullable=True),
+    Column("at_default", Boolean, nullable=False),
+    Column("revision", Integer, nullable=False),
+)
+
+hub_setting_changes = Table(
+    "hub_setting_changes",
+    metadata,
+    Column("revision", Integer, primary_key=True),
+    Column("diff_json", Text, nullable=False),
+    Column("op", String, nullable=False),
+    Column("door", String, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("apply_id", String, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
 )
 
 # --- The tenant boundary -------------------------------------------------------

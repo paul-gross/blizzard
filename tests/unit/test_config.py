@@ -1098,3 +1098,13 @@ auth_path = "/a/auth.json"
 [opencode.effort.aliases]
 "high" = "max"
 """
+
+
+@pytest.mark.parametrize("key", ["action_pass_seconds", "annotation_interval_seconds"])
+@pytest.mark.parametrize("value", ["0", "-1", '"4"', "true"])
+def test_hub_pass_durations_must_be_positive_integers(tmp_path: Path, key: str, value: str) -> None:
+    from blizzard.hub.config import ConfigError
+
+    (tmp_path / "blizzard-hub.toml").write_text(f"{key} = {value}\n")
+    with pytest.raises(ConfigError, match=key):
+        load_hub_config(tmp_path)

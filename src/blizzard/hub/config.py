@@ -80,6 +80,15 @@ _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 RUNNER_ONLY_TRACING_KEYS = ("worker_programs", "worker_program_services", "harness_telemetry")
 
 
+def bootstrap_document(document: Mapping[str, object]) -> dict[str, object]:
+    """The file inputs needed to locate the store, including legacy-key refusals."""
+    result = {key: document[key] for key in ("db_url", "host", "port", RENAMED_WORK_SOURCE_KEY) if key in document}
+    tracing = document.get("tracing")
+    if isinstance(tracing, dict):
+        result["tracing"] = {key: tracing[key] for key in RUNNER_ONLY_TRACING_KEYS if key in tracing}
+    return result
+
+
 def _replaced_by(registry: ConfigRegistry, path: str) -> str:
     """The home a deprecated key names through its registry declaration."""
     declared = registry.key(path)
@@ -250,7 +259,14 @@ def read_legacy_keys(config_path: Path, environ: Mapping[str, str], *, strict: b
     """The legacy keys ``config_path`` and ``environ`` still carry, read strictly when ``strict``; a malformed block
     raises :class:`ConfigError`."""
     raw = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
-    sources = _work_sources(ConfigView.root(HUB_REGISTRY, raw, strict=strict))
+    return legacy_keys_from_document(config_path, raw, environ, strict=strict)
+
+
+def legacy_keys_from_document(
+    config_path: Path, document: Mapping[str, object], environ: Mapping[str, str], *, strict: bool
+) -> LegacyKeys:
+    """Project legacy keys from the document and environment captured by a caller."""
+    sources = _work_sources(ConfigView.root(HUB_REGISTRY, document, strict=strict))
     named = [*LEGACY_FORGE_VARIABLES, *(source.token_env for source in sources)]
     variables = tuple(dict.fromkeys(name for name in named if name in environ))
     return LegacyKeys(config_path=config_path, sources=sources, variables=variables)
@@ -510,6 +526,13 @@ def _egress_integer(raw: ConfigView, key: str, default: int, *, minimum: int) ->
     return value
 
 
+def _positive_seconds(raw: ConfigView, key: str, default: int) -> int:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigError(f"{key} must be a positive integer number of seconds, got {value!r}")
+    return value
+
+
 def render_egress_toml(egress: EgressConfig) -> list[str]:
     """The ``[egress]`` block. ``directory`` is the switch and has no default; every other key is rendered
     commented out at its default, live once overridden."""
@@ -618,6 +641,15 @@ class HubConfig:
     @staticmethod
     def default_db_url(root: Path) -> str:
         return f"sqlite:///{(root / DATA_DIRNAME / STORE_FILENAME).resolve()}"
+
+    @staticmethod
+    def read_document(root: Path) -> dict[str, object]:
+        """Decode the runtime file once, refusing an uninitialized root."""
+        root = root.resolve()
+        path = root / CONFIG_FILENAME
+        if not path.exists():
+            raise ConfigError(f"{root} is not an initialized hub runtime (run `blizzard hub init {root}`)")
+        return tomllib.loads(path.read_text())
 
     @classmethod
     def scaffold(cls, root: Path) -> HubConfig:
@@ -735,6 +767,8 @@ class HubConfig:
         flag_registry: FlagRegistry,
         strict: bool,
         key_registry: ConfigRegistry | None = None,
+        document: Mapping[str, object] | None = None,
+        environ: Mapping[str, str] | None = None,
     ) -> HubConfig:
         """Read a runtime root's config file, strictly when ``strict``; overlay CLI host/port when given.
 
@@ -755,6 +789,8 @@ class HubConfig:
                 flag_registry,
                 strict,
                 key_registry or HUB_REGISTRY,
+                document,
+                environ,
             )
         except InvalidConfigValue as exc:
             raise ConfigError(str(exc)) from exc
@@ -770,8 +806,38 @@ class HubConfig:
         flag_registry: FlagRegistry,
         strict: bool,
         key_registry: ConfigRegistry,
+        document: Mapping[str, object] | None,
+        environ: Mapping[str, str] | None,
     ) -> HubConfig:
-        document = tomllib.loads(path.read_text())
+        document = tomllib.loads(path.read_text()) if document is None else document
+        return cls.resolve_document(
+            root,
+            document,
+            host=host,
+            port=port,
+            allow_external_db=allow_external_db,
+            flag_registry=flag_registry,
+            strict=strict,
+            key_registry=key_registry,
+            env=Env(dict(os.environ if environ is None else environ)),
+        )
+
+    @classmethod
+    def resolve_document(
+        cls,
+        root: Path,
+        document: Mapping[str, object],
+        *,
+        host: str | None,
+        port: int | None,
+        allow_external_db: bool,
+        flag_registry: FlagRegistry,
+        strict: bool,
+        key_registry: ConfigRegistry,
+        env: Env,
+    ) -> HubConfig:
+        """Resolve a decoded document using the supplied boot-time environment and overrides."""
+        path = root / CONFIG_FILENAME
         raw, resolution = resolve_for_keys(
             ConfigView.root(key_registry, document, strict=strict), "hub", flag_registry, ConfigError
         )
@@ -805,7 +871,6 @@ class HubConfig:
                 f"runner — the hub reads none of them; delete them here, or set {', '.join(homes)}."
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
-        env = Env()
         db_url = env.text(ENV_DB_URL) or str(raw.get("db_url") or cls.default_db_url(root))
         if not allow_external_db:
             StoreUrl(db_url).confine(root)
@@ -817,10 +882,10 @@ class HubConfig:
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
             follow_latest=follow_latest,
-            annotation_interval_seconds=int(
-                raw.get("annotation_interval_seconds", DEFAULT_ANNOTATION_INTERVAL_SECONDS)
+            annotation_interval_seconds=_positive_seconds(
+                raw, "annotation_interval_seconds", DEFAULT_ANNOTATION_INTERVAL_SECONDS
             ),
-            action_pass_seconds=int(raw.get("action_pass_seconds", DEFAULT_ACTION_PASS_SECONDS)),
+            action_pass_seconds=_positive_seconds(raw, "action_pass_seconds", DEFAULT_ACTION_PASS_SECONDS),
             close_forge_writes_enabled=close_forge_writes_enabled,
             auth=AuthConfig.of(raw.table("auth")),
             transcripts=TranscriptCapsConfig.of(raw.table("transcripts")),

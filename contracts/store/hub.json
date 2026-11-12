@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261111_1000_chunk_repository_targets",
+  "head_revision": "20261112_0900_hub_settings",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -5412,6 +5412,119 @@
           }
         }
       ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "hub_setting_changes": {
+      "checks": [],
+      "columns": {
+        "actor": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "apply_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "diff_json": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "door": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "op": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "revision"
+      ],
+      "unique": []
+    },
+    "hub_setting_entries": {
+      "checks": [],
+      "columns": {
+        "at_default": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "key": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "value_json": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "key"
+      ],
+      "unique": []
+    },
+    "hub_settings": {
+      "checks": [
+        "ck_hub_settings_singleton"
+      ],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
       "primary_key": [
         "id"
       ],

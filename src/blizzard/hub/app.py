@@ -123,6 +123,7 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.composition import (
     HubServices,
+    HubSettingsGraph,
     LiveConfig,
     TenantStores,
     build_config_authoring,
@@ -132,7 +133,14 @@ from blizzard.hub.composition import (
     build_process_core,
     build_services,
 )
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
+from blizzard.hub.config import (
+    AUTH_MODE_OAUTH,
+    ConfigError,
+    HubConfig,
+    StoreUrl,
+    legacy_keys_from_document,
+    read_legacy_keys,
+)
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
@@ -633,6 +641,7 @@ def build_hosted_app(
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx2.Client | None = None,
     version_window: VersionWindow,
+    settings: HubSettingsGraph | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
@@ -761,7 +770,16 @@ def build_hosted_app(
                 # The import is the hub's, recorded once into the one tenant it wrote, so any tenant answers it.
                 LegacyStart(
                     recorded=any(stores.config_import.recorded() for stores in tenants),
-                    keys=read_legacy_keys(config.config_path, os.environ, strict=config.strict),
+                    keys=(
+                        legacy_keys_from_document(
+                            config.config_path,
+                            settings.footing.document,
+                            settings.footing.environ,
+                            strict=config.strict,
+                        )
+                        if settings is not None and settings.footing.document is not None
+                        else read_legacy_keys(config.config_path, os.environ, strict=config.strict)
+                    ),
                 ).check()
             except LegacyStartRefused as refusal:
                 raise ConfigError(str(refusal)) from refusal
@@ -821,6 +839,7 @@ def build_hosted_app(
         )
         # Lifespan and the CLI fallback share the hosted resources' one-shot cleanup.
         app.state.engine = engine
+        app.state.hub_settings = settings
         # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
         app.state.flow_driver = None if controlled else flow_driver
         app.state.hosted_cleanup = cleanup.pop_all()
