@@ -34,6 +34,7 @@ from tests.support.scaffolding import (
     pointer_token,
     seed_chunk_record,
     seed_graph,
+    seed_promote,
     seed_work_item,
 )
 
@@ -213,10 +214,10 @@ def test_delete_refuses_every_status_outside_groupable(
 
 
 def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     not_ready = _mint(chunks, "ch_1")
     ready = _mint(chunks, "ch_2")
-    chunks.queue.record_promote("ch_2", at=_T0)
+    seed_promote(chunks, engine, "ch_2", at=_T0)
 
     delete.delete(not_ready, by="operator")
     delete.delete(ready, by="operator")
@@ -229,9 +230,9 @@ def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
 
 
 def test_activity_feed_shows_the_deletion_with_its_actor_and_no_other_row(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     chunk = _mint(chunks, "ch_1")
-    chunks.queue.record_promote("ch_1", at=_at(1))  # a row that would otherwise show for ch_1
+    seed_promote(chunks, engine, "ch_1", at=_at(1))  # a row that would otherwise show for ch_1
 
     delete.delete(chunk, by="paul")
 

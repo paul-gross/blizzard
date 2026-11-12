@@ -87,9 +87,6 @@ class _FakeChunkRepo:
     positions: dict[str, float] = field(default_factory=dict[str, float])
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
-    #: Chunks currently promoted — makes :meth:`record_backlog_positions` a no-op for them,
-    #: mirroring the real store.
-    promoted_chunk_ids: set[str] = field(default_factory=set[str])
     locks: list[tuple[list[str], list[tuple[str, str]]]] = field(
         default_factory=list[tuple[list[str], list[tuple[str, str]]]]
     )
@@ -130,8 +127,6 @@ class _FakeChunkRepo:
         self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
     ) -> None:
         for chunk_id, position in positions:
-            if chunk_id in self.promoted_chunk_ids:
-                continue
             self.stamped.append((chunk_id, position, at))
             self.positions[chunk_id] = position
 
@@ -279,14 +274,3 @@ def test_reposition_between_adjacent_backlog_doubles_renormalizes_then_succeeds(
     service.reposition(QueueList.NOT_READY, m, after=a)
 
     assert repo.positions["chk_a"] < repo.positions["chk_m"] < repo.positions["chk_b"]
-
-
-def test_record_backlog_position_is_a_no_op_for_a_chunk_promoted_since_candidates_were_resolved() -> None:
-    # A concurrent promote committed first: the backlog write must not override the
-    # fresh tail stamp it already landed for this chunk.
-    repo = _FakeChunkRepo(promoted_chunk_ids={"chk_m"})
-
-    repo.record_backlog_positions([("chk_m", 0.0)], at=_T0, transaction=cast(LockedTransaction, repo))
-
-    assert repo.stamped == []
-    assert "chk_m" not in repo.positions

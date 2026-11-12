@@ -21,7 +21,6 @@ from blizzard.hub.domain.chunk.ports.queue import (
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
-    after_newest,
     currently_promoted_ats,
     insert_demote_rows,
     insert_promote_rows,
@@ -64,15 +63,6 @@ class ChunkQueueStore:
             for batch in id_batches(chunk_ids):
                 result.update(currently_promoted_ats(conn, batch))
         return result
-
-    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
-        with self._store.write("record_promote") as conn:
-            if currently_promoted_ats(conn, [chunk_id]):
-                return None
-            at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
-            result = conn.execute(self._store.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else None
 
     def record_promote_with_position(
         self, chunk_id: str, *, position: float, at: datetime, transaction: LockedTransaction
@@ -118,20 +108,10 @@ class ChunkQueueStore:
         conn = connection_for(self._store, transaction, key=BACKLOG_RANKING_LOCK)
         if not positions:
             return
-        chunk_ids = [chunk_id for chunk_id, _ in positions]
-        # `.in_()` reads over id_batches, not one read per pair.
-        promoted: set[str] = set()
-        for batch in id_batches(chunk_ids):
-            promoted |= currently_promoted_ats(conn, batch).keys()
-        # A legacy store-side predicate, kept as recorded debt (``bzh:store-refuses-stale``): a pair
-        # naming a currently promoted chunk is dropped, a chunk demoted since its promotion is not.
-        rows = [
-            {"chunk_id": chunk_id, "position": position, "set_at": at}
-            for chunk_id, position in positions
-            if chunk_id not in promoted
-        ]
-        if rows:
-            conn.execute(self._store.insert(s.queue_positions), rows)
+        conn.execute(
+            self._store.insert(s.queue_positions),
+            [{"chunk_id": chunk_id, "position": position, "set_at": at} for chunk_id, position in positions],
+        )
 
     def _ranked_chunk_connection(
         self, transaction: LockedTransaction, chunk_id: str, ranking_lock: tuple[str, str]

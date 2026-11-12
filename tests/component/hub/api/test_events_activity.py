@@ -15,7 +15,15 @@ from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
 from tests.support.hub_request_auth import bearer, seed_enrolled
-from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    hub_store_connections,
+    seed_chunk,
+    seed_graph,
+    seed_promote,
+)
 
 
 def _activity(hub: HubHarness, **params: str | int) -> list[dict[str, Any]]:
@@ -55,7 +63,7 @@ def test_explicit_since_narrows(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=t0)  # "minted" at t0
-    store.queue.record_promote("ch_a", at=t0 + timedelta(seconds=1))
+    seed_promote(store, hub.engine, "ch_a", at=t0 + timedelta(seconds=1))
     store.lifecycle.record_pause("ch_a", paused=True, by="alice", at=t0 + timedelta(seconds=5))
 
     narrow = _activity(hub, since=iso_utc(t0 + timedelta(seconds=3)))
@@ -84,7 +92,7 @@ def test_rows_come_back_newest_first(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=t0)
-    store.queue.record_promote("ch_a", at=t0 + timedelta(seconds=1))
+    seed_promote(store, hub.engine, "ch_a", at=t0 + timedelta(seconds=1))
     store.lifecycle.record_pause("ch_a", paused=True, by="alice", at=t0 + timedelta(seconds=2))
     store.lifecycle.record_pause("ch_a", paused=False, by="alice", at=t0 + timedelta(seconds=3))
 

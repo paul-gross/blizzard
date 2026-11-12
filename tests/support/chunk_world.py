@@ -14,7 +14,15 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, seed_chunk_record, seed_graph, stamp
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    seed_chunk_record,
+    seed_graph,
+    seed_promote,
+    stamp,
+)
 
 OLD = timedelta(days=30)
 
@@ -41,7 +49,7 @@ def mint(hub: HubHarness, chunk_id: str, *, ago: timedelta, promote: bool = True
     stores = chunk_stores(hub.engine, hub.clock)
     seed_chunk_record(stores, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=at, default_model=[]))
     if promote:
-        stores.queue.record_promote(chunk_id, at=at)
+        seed_promote(stores, hub.engine, chunk_id, at=at)
 
 
 def transition(hub: SeededWorld, chunk_id: str, to_node: str, *, epoch: int, ago: timedelta, n: int = 0) -> None:

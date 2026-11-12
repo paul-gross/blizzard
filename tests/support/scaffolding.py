@@ -630,6 +630,21 @@ def ranking_unit(engine: Engine, *, lock: tuple[str, str] = READY_RANKING_LOCK) 
         yield transaction.lock_set(keys=[lock])
 
 
+def seed_promote(
+    stores: ChunkStores, engine: Engine, chunk_id: str, *, at: datetime, position: float | None = None
+) -> int:
+    """Promote ``chunk_id`` in its own unit locking the chunk and :data:`READY_RANKING_LOCK`.
+
+    ``position`` defaults to ``at``'s unix timestamp — the ready-queue's own fallback sort key for
+    a promotion with no explicit position, so a seed ranks as an unpositioned promotion would.
+    Returns the freshly-written ``chunk_promoted.id``."""
+    with HubTransactions(hub_store_connections(engine)).begin() as transaction:
+        locked = transaction.lock_set(chunks=[chunk_id], keys=[READY_RANKING_LOCK])
+        return stores.queue.record_promote_with_position(
+            chunk_id, position=at.timestamp() if position is None else position, at=at, transaction=locked
+        )
+
+
 def make_graph(
     graph_id: str,
     name: str,

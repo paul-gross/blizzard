@@ -33,6 +33,7 @@ from tests.support.scaffolding import (
     migrated_hub_at,
     seed_chunk,
     seed_graph,
+    seed_promote,
 )
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -78,8 +79,8 @@ def test_minted_reads_off_chunks_minted_at(tmp_path: Path) -> None:
 
 
 def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    store, engine = _store(tmp_path)
+    seed_promote(store, engine, "ch_1", at=_at(1))
     row = _row_for(store, "promoted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -405,7 +406,7 @@ def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
     """``activity_facts_since`` excludes a deleted chunk's history from every OTHER
     block — only the ``chunk_deleted`` row itself survives the filter."""
     store, engine = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    seed_promote(store, engine, "ch_1", at=_at(1))
     with hub_store_connections(engine).write("seed") as conn:
         record_deleted_row(conn, "ch_1", by="alice", at=_at(2))
 
@@ -419,7 +420,7 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
     drops away, a *grouped* one's still shows."""
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
-    store.queue.record_promote("ch_1", at=_at(1))
+    seed_promote(store, engine, "ch_1", at=_at(1))
     with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(2))
 
@@ -451,8 +452,8 @@ def test_the_activity_cause_vocabulary_is_every_chunk_change_cause_but_edited() 
 
 
 def test_since_window_excludes_an_older_fact(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    store, engine = _store(tmp_path)
+    seed_promote(store, engine, "ch_1", at=_at(1))
     excluded = [r for r in store.events.activity_facts_since(_at(2), limit=50) if r.cause == "promoted"]
     assert excluded == []
     included = [r for r in store.events.activity_facts_since(_at(1), limit=50) if r.cause == "promoted"]

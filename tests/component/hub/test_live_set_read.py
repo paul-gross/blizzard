@@ -28,6 +28,7 @@ from tests.support.scaffolding import (
     offending_index_scans,
     seed_chunk_record,
     seed_graph,
+    seed_promote,
     stamp,
 )
 
@@ -45,7 +46,7 @@ def _mint(hub: HubHarness, chunk_id: str, *, index: int, promote: bool = True) -
         stores, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_at(index), default_model=[])
     )
     if promote:
-        stores.queue.record_promote(chunk_id, at=_at(index))
+        seed_promote(stores, hub.engine, chunk_id, at=_at(index))
 
 
 def _transition(engine: Engine, chunk_id: str, to_node: str, *, epoch: int, at: int) -> None:
