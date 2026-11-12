@@ -173,6 +173,7 @@ class Host:
     def start(self, installation: Installation, hub_url: str) -> None:
         """Host the directory under ``installation`` until its ``/api/ready`` answers."""
         log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
+        # A supported release predates the host file's tick_seconds and ticks only on the variable.
         env = runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.3", FENCE_VAR: "1"}, base=installation.env())
         port_args, publishes = _port_args(installation, "blizzard-runner", listening, self.port)
         command = [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir), *port_args]
@@ -199,7 +200,7 @@ def shape_host_file(host: Host, *, name: str, hub_url: str, project: str, worksp
     text = path.read_text()
     for pattern, replacement in (
         (r'^hub_url = ".*"$', f'hub_url = "{hub_url}"'),
-        (r"^port = \d+$", f"port = {host.port}"),
+        (r"^port = \d+$", f"port = {host.port}\ntick_seconds = 0.3"),
         (
             r"^sample_interval_seconds = (\d+)$",
             rf'sample_interval_seconds = \1\ncredentials_path = "{host.dir / "no-such-credentials.json"}"',

@@ -20,7 +20,7 @@ observed. Which one a fresh mint actually spawns under is a per-`sessions:` entr
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
 regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
 fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
-pays it a few times an hour, not every ~30s tick; short enough that an in-place binary upgrade is noticed well within an
+pays it a few times an hour, not every tick — every `tick_seconds`, 30 by default (`blizzard-host.toml`); short enough that an in-place binary upgrade is noticed well within an
 operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
 session's owner resolves against this runner's own bindings: **unknown** means the session was recorded under a harness
 id this runner build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner

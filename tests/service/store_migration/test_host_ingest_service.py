@@ -21,7 +21,7 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_toke
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.support.config_inputs import load_host_config
 from tests.support.fleet_launchers import await_http, terminate
-from tests.support.host_files import init_runner_environment, write_host_file
+from tests.support.host_files import init_runner_environment, state_tick_seconds, write_host_file
 from tests.support.mock_fleet import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env
 from tests.support.runner_store_sql import insert as insert_rows
@@ -237,6 +237,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         assert invariants.returncode == 0, invariants.stdout + invariants.stderr
 
         log, listening = here / "daemon.log", here / LISTENING_FILE
+        state_tick_seconds(here, 0.5)
         proc = spawn_daemon(
             [
                 sys.executable,
@@ -248,7 +249,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
                 str(here),
                 *listening_args(listening, 0),
             ],
-            env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
+            env=runner_spawn_env(hub_url),
             log=log,
         )
         local = None

@@ -106,6 +106,8 @@ DEFAULT_AUTH_HUB_ROLE = "mirror"
 DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 #: Seconds a timed host waits from the end of one tick to the start of the next.
 DEFAULT_TICK_SECONDS = 30.0
+#: The deprecated variable a timed host's interval was set by before the host file's ``tick_seconds``.
+ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 # Both switches are off until an operator turns them on.
 DEFAULT_QUEUE_STRICT = False
 DEFAULT_TRANSCRIPTS_SHIP = False
@@ -1001,3 +1003,20 @@ class RunnerConfig:
         if not self.hub_token:
             return {}
         return {"Authorization": f"Bearer {self.hub_token}"}
+
+
+def resolve_tick_seconds(stated: float | None, environ: Mapping[str, str]) -> tuple[float, str | None]:
+    """A timed host's interval and the warning it earns: the host file's ``tick_seconds``, else the deprecated
+    ``BZ_RUNNER_TICK_SECONDS``, else the default. The warning names the variable whenever it is set, saying whether
+    it was honored or overridden by the file."""
+    variable = environ.get(ENV_TICK_SECONDS)
+    if variable is None:
+        return (DEFAULT_TICK_SECONDS if stated is None else stated), None
+    if stated is not None:
+        return stated, (
+            f"{ENV_TICK_SECONDS} is deprecated and overridden by the host file's tick_seconds = {stated}; unset it"
+        )
+    return float(variable), (
+        f"{ENV_TICK_SECONDS} is deprecated; honored as {variable} because the host file states no tick_seconds — "
+        "set tick_seconds in the host file instead"
+    )

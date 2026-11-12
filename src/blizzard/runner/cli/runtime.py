@@ -60,7 +60,7 @@ from blizzard.runner.composition import (
     build_read_stores,
     build_runner_process,
 )
-from blizzard.runner.config import DEFAULT_RUNNER_NAME, DEFAULT_TICK_SECONDS, RunnerConfig, worker_shell_refusal
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, resolve_tick_seconds, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
@@ -151,9 +151,6 @@ from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
-
-ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
-
 
 #: Bounds each of ``init``'s hub calls, so an unresponsive hub fails the command instead of hanging it.
 _INIT_HUB_TIMEOUT_SECONDS = 15.0
@@ -1033,8 +1030,13 @@ def start(
         # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
         with click_exception_on(ConfigError):
             hosted = build_hosted_app(shared, process)
+        tick_seconds, tick_warning = resolve_tick_seconds(config.tick_seconds, os.environ)
+        if tick_warning is not None:
+            click.echo(f"warning: {tick_warning}")
         try:
-            _serve_host(shared, process, hosted, loop=config.loop, listening_file=listening_file)
+            _serve_host(
+                shared, process, hosted, loop=config.loop, tick_seconds=tick_seconds, listening_file=listening_file
+            )
         finally:
             hosted.close()
     finally:
@@ -1150,17 +1152,24 @@ class _RunnerThreads:
 
 
 def _runner_threads(runner: RunnerProcess, stepper: RunnerStepper, *, interval: float) -> _RunnerThreads:
-    driver = PeriodicDriver(runner.config, interval_seconds=interval, process_graph=runner, stepper=stepper)
+    driver = PeriodicDriver(runner.config, interval=lambda: interval, process_graph=runner, stepper=stepper)
     return _RunnerThreads(runner, driver, _pass_drivers(runner, stepper))
 
 
 def _serve_host(
-    config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, loop: LoopMode, listening_file: Path | None = None
+    config: RunnerConfig,
+    host: HostProcess,
+    hosted: HostedApp,
+    *,
+    loop: LoopMode,
+    tick_seconds: float,
+    listening_file: Path | None = None,
 ) -> None:
-    """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer; a ``stepped`` one starts
-    none, and a pass runs only when requested through its stepper."""
+    """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer, each runner's tick and the
+    host tick waiting ``tick_seconds`` between passes; a ``stepped`` one starts none, and a pass runs only when
+    requested through its stepper."""
     app = hosted.app
-    interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
+    interval = tick_seconds
     for runner in host.runners:
         announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
     stepped = loop is LoopMode.STEPPED
@@ -1266,7 +1275,7 @@ def host_tick_driver(
         name="blizzard-host-tick",
         label="host tick",
         log=get_logger("blizzard.runner.subscriptions"),
-        interval_seconds=tick_seconds,
+        interval=lambda: tick_seconds,
         jitter_seconds=0,
     )
 
@@ -1281,7 +1290,7 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
                 name="blizzard-runner-trace-sweep",
                 label="lease trace sweep",
                 log=get_logger("blizzard.runner.trace_export"),
-                interval_seconds=runner.config.tracing.sweep_seconds,
+                interval=lambda: runner.config.tracing.sweep_seconds,
             )
         )
     return drivers

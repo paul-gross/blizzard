@@ -691,6 +691,30 @@ def test_a_loop_that_is_neither_timed_nor_stepped_is_refused_naming_the_key(tmp_
     assert any(error.startswith("loop: loop must be one of") for error in refused.value.errors)
 
 
+def test_tick_seconds_is_read_from_the_file_and_rewritten_only_when_stated(tmp_path: Path) -> None:
+    unstated = load_host_config(_write(tmp_path / "unstated", _VALID))
+    stated = load_host_config(_write(tmp_path / "stated", "tick_seconds = 0.5\n" + _VALID))
+
+    assert unstated.tick_seconds is None
+    assert "\ntick_seconds =" not in unstated.to_toml()
+    assert stated.tick_seconds == 0.5
+    assert load_host_config(_write(tmp_path / "again", stated.to_toml())).tick_seconds == 0.5
+
+
+def test_a_scaffold_states_no_tick_seconds(tmp_path: Path) -> None:
+    assert "\ntick_seconds =" not in HostConfig.scaffold(tmp_path).to_toml()
+
+
+@pytest.mark.parametrize("value", ["0", "-1", '"30"', "true"])
+def test_a_tick_seconds_that_is_not_a_positive_number_is_refused_naming_the_key(tmp_path: Path, value: str) -> None:
+    root = _write(tmp_path / "host", f"tick_seconds = {value}\n" + _VALID)
+
+    with pytest.raises(HostConfigError) as refused:
+        load_host_config(root)
+
+    assert any(error.startswith("tick_seconds: tick_seconds must be a positive") for error in refused.value.errors)
+
+
 def _two_runners(first_worker: str, second_worker: str, tools: str = "") -> str:
     def runner(name: str, worker: str) -> str:
         return (

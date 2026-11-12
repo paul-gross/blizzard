@@ -209,7 +209,7 @@ def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path
         name="test-credential-renewal",
         label="credential renewal pass",
         log=get_logger("tests.credential_renewal"),
-        interval_seconds=60,
+        interval=lambda: 60,
         jitter_seconds=0,
         stop_timeout_seconds=0.2,
     )

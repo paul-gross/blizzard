@@ -539,7 +539,7 @@ test.describe('a host under a hub offering an IdP', () => {
 test('test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream', async ({ runnerHosts, runnerStream }) => {
   // The interval outlasts the test, so once the first pass has ended no tick is ever in flight for shutdown to join:
   // the stream's drain is the subject.
-  const host = await runnerHosts.create({ runnerLoop: 'timed', runnerEnv: { BZ_RUNNER_TICK_SECONDS: '600' } });
+  const host = await runnerHosts.create({ runnerLoop: 'timed', runnerConfig: { tick_seconds: 600 } });
   await expect.poll(async () => (await host.runners[RUNNER]!.status()).body.last_tick_at, { timeout: 30_000 }).not.toBeNull();
   const parked = await runnerStream(host.url, { reconnect: false });
 
@@ -557,8 +557,8 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
   const host = await runnerHosts.create({
     runnerLoop: 'timed',
     runnerOtlp: 'hung',
-    runnerEnv: { BZ_RUNNER_TICK_SECONDS: '0.5', OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '120' },
-    runnerConfig: { tracing: { sweep_seconds: 1n, settle_seconds: 0n } },
+    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '120' },
+    runnerConfig: { tick_seconds: 0.5, tracing: { sweep_seconds: 1n, settle_seconds: 0n } },
   });
   // A chunk run to done on the timed loop, then the pass clock watched across several passes.
   test.slow();

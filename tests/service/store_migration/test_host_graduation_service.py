@@ -21,6 +21,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
 from tests.support.config_inputs import init_host
 from tests.support.fleet_launchers import await_http, terminate
+from tests.support.host_files import state_tick_seconds
 from tests.support.mock_fleet import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.support.runner_store_sql import select, utc_text
@@ -217,6 +218,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
         assert layout.store_path.is_file() and not layout.legacy_store_path.exists()
 
         log, listening = root / "daemon.log", root / LISTENING_FILE
+        state_tick_seconds(root, 0.5)
         proc = spawn_daemon(
             [
                 sys.executable,
@@ -228,7 +230,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
                 str(root),
                 *listening_args(listening, 0),
             ],
-            env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
+            env=runner_spawn_env(hub_url),
             log=log,
         )
         local = None

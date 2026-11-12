@@ -14,9 +14,9 @@ STOP_TIMEOUT_SECONDS = 5.0
 
 
 class PeriodicPassDriver:
-    """Runs ``run_pass`` every ``interval_seconds`` on its own thread, the first after a jitter
-    within that interval (``jitter_seconds`` pins it). A pass that raises is logged under
-    ``label`` and swallowed, so one bad pass never kills the thread."""
+    """Runs ``run_pass`` on its own thread, waiting ``interval()`` seconds from the end of each pass to the start of
+    the next, the first after a jitter within the interval (``jitter_seconds`` pins it). A pass that raises is
+    logged under ``label`` and swallowed, so one bad pass never kills the thread."""
 
     def __init__(
         self,
@@ -25,15 +25,15 @@ class PeriodicPassDriver:
         name: str,
         label: str,
         log: structlog.stdlib.BoundLogger,
-        interval_seconds: float,
+        interval: Callable[[], float],
         jitter_seconds: float | None = None,
         stop_timeout_seconds: float = STOP_TIMEOUT_SECONDS,
     ) -> None:
         self._run_pass = run_pass
         self._label = label
         self._log = log
-        self._interval = interval_seconds
-        self._jitter = random.uniform(0, interval_seconds) if jitter_seconds is None else jitter_seconds
+        self._interval = interval
+        self._jitter = random.uniform(0, interval()) if jitter_seconds is None else jitter_seconds
         self._stop_timeout = stop_timeout_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name=name, daemon=True)
@@ -60,4 +60,4 @@ class PeriodicPassDriver:
                 self._run_pass()
             except Exception as exc:  # a bad pass must not kill the thread
                 self._log.error(f"{self._label} failed", detail=str(exc))
-            wait = self._interval
+            wait = self._interval()
