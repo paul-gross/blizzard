@@ -61,6 +61,13 @@ class ForgeChoice:
     named: ConfiguredForge | None = None
     moved: tuple[MovedField, ...] = ()
 
+    @staticmethod
+    def named_forge(reference: str | None) -> str:
+        """``reference`` — the forge a write names: a record's forge is never cleared, so a ``null`` is refused."""
+        if reference is None:
+            raise ConfigFieldError(FORGE_FIELD, "must not be null")
+        return reference
+
 
 def resolve_forge(
     choice: ForgeChoice,

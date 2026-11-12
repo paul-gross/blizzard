@@ -177,6 +177,18 @@ def test_a_patch_clears_a_field_with_null_and_refuses_a_null_name(hub: HubHarnes
     assert emptied.json()["detail"][0]["loc"] == ["body", "schedule"]
 
 
+def test_a_null_chores_is_422_on_chores_and_changes_nothing(hub: HubHarness) -> None:
+    created = _create(hub, chores=[{"key": "arch", "routine": "arch"}])
+    url = f"/api/cadences/{created['cadence_id']}"
+
+    refused = hub.client.patch(url, json={"chores": None})
+
+    assert refused.status_code == 422, refused.text
+    assert [(d["loc"], d["msg"]) for d in refused.json()["detail"]] == [(["body", "chores"], "must not be null")]
+    reread = hub.client.get(url).json()
+    assert (reread["revision"], reread["chores"]) == (created["revision"], created["chores"])
+
+
 def test_an_unknown_cadence_is_404(hub: HubHarness) -> None:
     assert hub.client.get("/api/cadences/cad_nope").status_code == 404
     assert hub.client.patch("/api/cadences/cad_nope", json={"name": "x"}).status_code == 404

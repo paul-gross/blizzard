@@ -15,9 +15,11 @@ from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.model import (
+    CHORES_FIELD,
     Attention,
     AttentionFacts,
     Cadence,
+    CadenceEdit,
     Chore,
     ChoreShape,
     ChoreSpec,
@@ -357,3 +359,15 @@ def test_a_cadence_admits_work_only_while_live_and_keeping_a_promoting_chore() -
 
 def test_a_cadence_reads_its_attention_against_the_facts_it_is_handed() -> None:
     assert _cadence().attention(_LIVE) == (Attention(AttentionReason.NO_CHORES),)
+
+
+def test_a_stated_chore_list_is_answered_as_stated() -> None:
+    assert CadenceEdit.stated_chores(["a", "b"]) == ["a", "b"]
+    assert CadenceEdit.stated_chores([]) == []
+
+
+def test_a_null_chore_list_is_refused_on_the_chores_field() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        CadenceEdit.stated_chores(None)
+
+    assert (refused.value.field, refused.value.message) == (CHORES_FIELD, "must not be null")

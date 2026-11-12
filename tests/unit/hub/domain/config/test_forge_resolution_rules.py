@@ -11,7 +11,9 @@ import pytest
 
 from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import (
+    FORGE_FIELD,
     FieldMovedToForge,
     ForgeChoice,
     ForgeRequired,
@@ -204,3 +206,14 @@ def test_an_origins_slug_and_name_are_derived_as_the_migration_derives_them() ->
         "code.acme.example",
     )
     assert suffixed_slug("github", {"github", "github-2"}) == "github-3"
+
+
+def test_a_named_forge_is_answered_as_named() -> None:
+    assert ForgeChoice.named_forge("gh") == "gh"
+
+
+def test_a_null_forge_is_refused_on_the_forge_field() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        ForgeChoice.named_forge(None)
+
+    assert (refused.value.field, refused.value.message) == (FORGE_FIELD, "must not be null")

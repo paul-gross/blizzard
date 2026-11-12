@@ -376,6 +376,14 @@ class CadenceEdit:
     anchor: CadenceAnchor | None | UnsetType = UNSET
     chores: Sequence[ChoreShape] | UnsetType = UNSET
 
+    @staticmethod
+    def stated_chores[T](chores: Sequence[T] | None) -> Sequence[T]:
+        """``chores`` — the whole chore list an edit states: a cadence's chores are never cleared, so a ``null`` is
+        refused."""
+        if chores is None:
+            raise ConfigFieldError(CHORES_FIELD, "must not be null")
+        return chores
+
     def touches_rhythm(self) -> bool:
         return any(value is not UNSET for value in (self.schedule, self.spacing, self.anchor))
 
