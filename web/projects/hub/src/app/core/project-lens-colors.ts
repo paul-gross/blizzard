@@ -34,6 +34,19 @@ export function projectColorOf(
   return projects?.find((project) => project.project_id === projectId)?.color ?? null;
 }
 
+/**
+ * Each project's colour by id, or `null` where project colours are not shown ({@link injectShowProjectColors}) — the
+ * gate lives here so no caller can forget it. A consumer reads `null` as "wear another colour" (the runner's, on
+ * Tracks) or "no colour".
+ */
+export function projectColorMap(
+  shown: boolean,
+  projects: readonly { readonly project_id: string; readonly color: string }[] | undefined,
+): ReadonlyMap<string, string> | null {
+  if (!shown) return null;
+  return new Map((projects ?? []).map((project) => [project.project_id, project.color]));
+}
+
 /** The open chunk's project's color, joined from the projects list by `project_id` — `null` where project colours
  * are not shown ({@link injectShowProjectColors}), while the dock is closed, before the list is read, or when the
  * project is unknown. */

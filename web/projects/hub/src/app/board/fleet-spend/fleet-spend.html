@@ -1,6 +1,6 @@
 <span class="label">Today</span>
-<fleet-session-efficiency class="v" data-testid="glance-spend-value" [usage]="efficiency(today())" />
+<fleet-session-efficiency class="v" data-testid="glance-spend-value" [usage]="today()" />
 @if (yesterday(); as y) {
   <span class="label">Yesterday</span>
-  <fleet-session-efficiency class="v" data-testid="glance-spend-yesterday" [usage]="efficiency(y)" />
+  <fleet-session-efficiency class="v" data-testid="glance-spend-yesterday" [usage]="y" />
 }

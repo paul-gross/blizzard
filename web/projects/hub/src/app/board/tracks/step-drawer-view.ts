@@ -8,10 +8,12 @@ import {
   ChunkIssuePane,
   KitAsyncState,
   type KitAsyncStateValue,
+  KitBadge,
   KitCloseButton,
   type KitFact,
   KitFactList,
   KitPanel,
+  KitSectionHead,
   KitSkeleton,
   KitSwatch,
   SessionEfficiency,
@@ -20,6 +22,7 @@ import {
   compactRef,
   formatAbsolute,
   hasDelivery,
+  hubApi,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
@@ -36,7 +39,6 @@ import {
   stepFacts,
   stepIdentity,
   stepModel,
-  stepSpend,
 } from './step-drawer.model';
 
 /** The transcript's placeholder: a few turns as the stacked transcript lays them out — each a stamp, a kind, and its
@@ -64,9 +66,11 @@ const TRANSCRIPT_SKELETON: readonly (readonly string[])[] = [
     ChunkFacts,
     ChunkIssuePane,
     KitAsyncState,
+    KitBadge,
     KitCloseButton,
     KitFactList,
     KitPanel,
+    KitSectionHead,
     KitSkeleton,
     KitSwatch,
     LensLink,
@@ -113,7 +117,7 @@ export class StepDrawerView {
   /** The step's own detail, once it is the shown step's — not the previous step's held over. */
   private readonly detail = computed(() => (this.stepPending() ? undefined : this.view()));
   protected readonly escalations = computed(() => this.detail()?.escalations ?? []);
-  protected readonly spend = computed(() => stepSpend(this.detail()));
+  protected readonly spend = computed(() => this.detail()?.spend ?? null);
   protected readonly model = computed(() => stepModel(this.detail()));
 
   private readonly beganTpl = viewChild.required<TemplateRef<unknown>>('beganTpl');
@@ -125,6 +129,8 @@ export class StepDrawerView {
   );
 
   protected readonly transcriptSkeleton = TRANSCRIPT_SKELETON;
+  /** The generated executor constant, for the template to compare a step's executor against. */
+  protected readonly Executor = hubApi.Executor;
   protected readonly ref = compactRef;
   protected readonly absolute = formatAbsolute;
   protected readonly host = hostLabel;

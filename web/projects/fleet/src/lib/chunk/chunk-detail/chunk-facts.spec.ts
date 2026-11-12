@@ -43,7 +43,19 @@ describe('ChunkFacts', () => {
   });
 
   it('reads `$0.00` alone for a chunk with no recorded usage', async () => {
-    const el = await render({ ...chunkDetail(), cost: null } as unknown as ChunkDetail);
+    const el = await render(
+      chunkDetail({
+        cost: chunkUsageTotalView({
+          cost_usd: 0,
+          estimated_cost_usd: null,
+          cost_partial: false,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_create_tokens: 0,
+        }),
+      }),
+    );
     expect(parts(el)).toEqual(['$0.00']);
   });
 

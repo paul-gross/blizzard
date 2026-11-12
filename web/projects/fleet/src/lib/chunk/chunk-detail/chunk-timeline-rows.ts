@@ -1,5 +1,6 @@
 import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../../api/hub';
 import { openLookup } from '../../core/open-lookup';
+import type { SessionEfficiencyInput } from '../../core/session-efficiency';
 import { nodeStepKey } from '../../core/node-step';
 import { formatAbsolute, formatWhen, formatWhenParts } from '../../core/when';
 import { compactBounce } from './compact-bounce';
@@ -87,26 +88,18 @@ const ACTIVE_VERBS = openLookup<ChunkStatus, { choice: string; label: string } |
 
 /** One history step's summed usage — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
- * figure so the timeline reads one lap's cost per line. `costPartial` is true iff any
- * summed row's own wire `cost_partial` is. */
-export interface StepUsageTotal {
+ * figure so the timeline reads one lap's cost per line. `cost_partial` is true iff any
+ * summed row's own wire `cost_partial` is; `estimated_cost_usd` is the summed estimate, `null` iff no summed row
+ * carried one, already included in `cost_usd`. */
+export type StepUsageTotal = SessionEfficiencyInput & {
   readonly tokens: number;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreateTokens: number;
-  readonly costUsd: number;
-  readonly costPartial: boolean;
-  /** The step's summed estimate, `null` iff no summed row carried one; already included
-   * in `costUsd`. */
-  readonly estimatedCostUsd: number | null;
   /** The step's own recorded harness identity — read off whichever of
    * its own summed rows recorded one, newest first, never derived from `model`. `null`
    * when no row at this step recorded a stamp (a pre-provenance row, or none at all). */
   readonly harnessId: string | null;
   /** The runner that ran the step — its spawn's, else any of its rows' — `null` when none recorded one. */
   readonly runnerId: string | null;
-}
+};
 
 /**
  * The chunk's node-history rows, oldest-first: every judged transition, every
@@ -289,13 +282,13 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
   const estimatedRows = rows.flatMap((u) => (u.estimated_cost_usd == null ? [] : [u.estimated_cost_usd]));
   return {
     tokens: rows.reduce((sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_create_tokens, 0),
-    inputTokens: rows.reduce((sum, u) => sum + u.input_tokens, 0),
-    outputTokens: rows.reduce((sum, u) => sum + u.output_tokens, 0),
-    cacheReadTokens: rows.reduce((sum, u) => sum + u.cache_read_tokens, 0),
-    cacheCreateTokens: rows.reduce((sum, u) => sum + u.cache_create_tokens, 0),
-    costUsd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
-    costPartial: rows.some((u) => u.cost_partial === true),
-    estimatedCostUsd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
+    input_tokens: rows.reduce((sum, u) => sum + u.input_tokens, 0),
+    output_tokens: rows.reduce((sum, u) => sum + u.output_tokens, 0),
+    cache_read_tokens: rows.reduce((sum, u) => sum + u.cache_read_tokens, 0),
+    cache_create_tokens: rows.reduce((sum, u) => sum + u.cache_create_tokens, 0),
+    cost_usd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
+    cost_partial: rows.some((u) => u.cost_partial === true),
+    estimated_cost_usd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
     harnessId: stamped?.harness_id ?? null,
     runnerId: (rows.find((u) => u.kind === 'spawn' && u.runner_id) ?? rows.find((u) => u.runner_id))?.runner_id ?? null,
   };

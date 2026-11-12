@@ -3,25 +3,9 @@ import { TestBed } from '@angular/core/testing';
 
 import type { FleetSpendView } from 'fleet';
 import { fleetSpendView } from 'fleet/testing';
-import { FleetSpend, spendEfficiency } from './fleet-spend';
+import { FleetSpend } from './fleet-spend';
 
 const parts = (el: Element | null): (string | undefined)[] => [...(el?.querySelectorAll('.part') ?? [])].map((p) => p.textContent?.trim());
-
-describe('spendEfficiency', () => {
-  it('reads a spend as the session efficiency input, field for field', () => {
-    const spend = fleetSpendView({ cost_usd: 1.25, estimated_cost_usd: 0.5, cost_partial: true });
-
-    expect(spendEfficiency(spend)).toEqual({
-      costUsd: 1.25,
-      estimatedCostUsd: 0.5,
-      costPartial: true,
-      inputTokens: spend.input_tokens,
-      outputTokens: spend.output_tokens,
-      cacheReadTokens: spend.cache_read_tokens,
-      cacheCreateTokens: spend.cache_create_tokens,
-    });
-  });
-});
 
 describe('FleetSpend', () => {
   beforeEach(async () => {

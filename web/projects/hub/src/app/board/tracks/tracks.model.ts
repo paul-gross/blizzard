@@ -9,6 +9,7 @@ import {
   projectTint,
 } from 'fleet';
 
+import { projectColorMap } from '../../core/project-lens-colors';
 import type { NodeBlock } from '../node-strip/node-strip.model';
 import type { EnvTimelineHost, EnvTimelineView } from './env-timeline.model';
 import { RUNNER_HUES, type TrackItem, envBlocks, stepTooltip } from './tracks-blocks.model';
@@ -304,11 +305,12 @@ export function projectHuesOf(
   showProjectColors: boolean,
   projects: readonly ProjectView[] | undefined,
 ): ReadonlyMap<string, string> | null {
-  if (!showProjectColors) return null;
+  const colors = projectColorMap(showProjectColors, projects);
+  if (colors === null) return null;
   const hues = new Map<string, string>();
-  for (const p of projects ?? []) {
-    const tint = projectTint(p.color);
-    if (tint !== null) hues.set(p.project_id, tint);
+  for (const [projectId, color] of colors) {
+    const tint = projectTint(color);
+    if (tint !== null) hues.set(projectId, tint);
   }
   return hues;
 }

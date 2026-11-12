@@ -1,4 +1,5 @@
-import { type ChunkDetail, type ProjectView, type SessionEfficiencyInput, formatWhenParts, projectTint } from 'fleet';
+import { type ChunkDetail, type ProjectView, formatWhenParts, hubApi } from 'fleet';
+import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
 import {
@@ -99,22 +100,6 @@ export function neighbours(view: EnvTimelineStepView | undefined, current: Place
   return { previous: i > 0 ? view.journey[i - 1] : null, next: i >= 0 ? (view.journey[i + 1] ?? null) : null };
 }
 
-/** The whole step's spend, as the hub summed it over every invocation inside it, in the session efficiency figure's
- * shape; `null` with none recorded. */
-export function stepSpend(view: EnvTimelineStepView | undefined): SessionEfficiencyInput | null {
-  const spend = view?.spend;
-  if (spend == null) return null;
-  return {
-    costUsd: spend.cost_usd,
-    estimatedCostUsd: spend.estimated_cost_usd,
-    costPartial: spend.cost_partial,
-    inputTokens: spend.input_tokens,
-    outputTokens: spend.output_tokens,
-    cacheReadTokens: spend.cache_read_tokens,
-    cacheCreateTokens: spend.cache_create_tokens,
-  };
-}
-
 /** The harness and model the step's session ran on — its spawn's, else its first invocation's. */
 export function stepModel(view: EnvTimelineStepView | undefined): string | null {
   const session = view?.invocations.find((u) => u.kind === 'spawn') ?? view?.invocations[0];
@@ -176,7 +161,7 @@ export function stepArtifactsOf(chunk: ChunkDetail | null, keys: readonly string
 
 /** The transcript to read for a step — its session's, fenced by its epoch — or `null` for a step the hub ran itself. */
 export function transcriptRefOf(segment: EnvTimelineSegment | undefined): LeaseTranscriptRef | null {
-  return segment !== undefined && segment.executor !== 'hub' && segment.epoch !== null
+  return segment !== undefined && segment.executor !== hubApi.Executor.HUB && segment.epoch !== null
     ? { chunkId: segment.chunk_id, nodeId: segment.node_id, epoch: segment.epoch, live: segment.ended_at === null }
     : null;
 }
@@ -192,7 +177,7 @@ export interface StepIdentity {
 /** A runner step with no session id is either one whose session start the hub never heard — no fence either — or a
  * session that took the chunk over on a forced entry, fenced and with a transcript, but minted with no id. */
 export function stepIdentity(segment: EnvTimelineSegment): StepIdentity {
-  const hub = segment.executor === 'hub';
+  const hub = segment.executor === hubApi.Executor.HUB;
   if (segment.lease_id !== null) return { label: segment.lease_id, title: segment.lease_id, hub };
   return { label: segment.node_name, title: unnamedSessionTitle(segment, hub), hub };
 }
@@ -203,15 +188,20 @@ function unnamedSessionTitle(segment: EnvTimelineSegment, hub: boolean): string 
   return 'a session that took the chunk over on a forced entry';
 }
 
-/** A step's chunk's project: its name, and its colour as the board tints with it. */
+/** A step's chunk's project: its name, and its raw colour (a palette name or hex) — `null` where project colours are
+ * not shown. The swatch converts it. */
 export interface StepProject {
   readonly name: string;
   readonly color: string | null;
 }
 
-export function projectOf(projects: readonly ProjectView[] | undefined, projectId: string | null | undefined): StepProject | null {
+export function projectOf(
+  shown: boolean,
+  projects: readonly ProjectView[] | undefined,
+  projectId: string | null | undefined,
+): StepProject | null {
   const p = projects?.find((x) => x.project_id === projectId);
-  return p ? { name: p.name, color: projectTint(p.color) } : null;
+  return p ? { name: p.name, color: projectColorOf(shown, projects, projectId) } : null;
 }
 
 /**

@@ -84,7 +84,7 @@ export function glanceListGroups(
   readyOrder: readonly { readonly chunk_id: string }[],
   backlogOrder: readonly { readonly chunk_id: string }[],
   runnerHosts: ReadonlyMap<string, string>,
-  projectColors: ReadonlyMap<string, string>,
+  projectColors: ReadonlyMap<string, string> | null,
   workItems: ReadonlyMap<string, WorkItemsView>,
 ): GlanceListGroups {
   const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
@@ -111,7 +111,7 @@ export function glanceListGroups(
       costUsd: chunk.cost?.cost_usd ?? 0,
       costPartial: chunk.cost?.cost_partial ?? false,
       estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
-      projectColor: projectColors.get(chunk.project_id ?? '') ?? null,
+      projectColor: projectColors?.get(chunk.project_id ?? '') ?? null,
       completedAt: lane === DONE_LANE ? (chunk.completed_at ?? null) : null,
     };
     if (lane === DONE_LANE) {

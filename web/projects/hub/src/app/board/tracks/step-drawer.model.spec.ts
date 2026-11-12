@@ -17,7 +17,6 @@ import {
   stepFacts,
   stepIdentity,
   stepModel,
-  stepSpend,
   transcriptRefOf,
 } from './step-drawer.model';
 
@@ -197,44 +196,6 @@ describe('neighbours', () => {
   });
 });
 
-describe('stepSpend', () => {
-  type Spend = NonNullable<EnvTimelineStepView['spend']>;
-  const spend = (o: Partial<Spend> = {}): Spend => ({
-    billed_partial: false,
-    cache_create_tokens: 3,
-    cache_read_tokens: 4,
-    cost_partial: false,
-    cost_usd: 1.5,
-    estimated_cost_usd: null,
-    input_tokens: 11,
-    output_tokens: 6,
-    ...o,
-  });
-
-  it('is null with no spend recorded or no read', () => {
-    expect(stepSpend(undefined)).toBeNull();
-    expect(stepSpend(stepView([first]))).toBeNull();
-  });
-
-  it('is the hub-summed spend in the session efficiency shape, whatever the invocations say', () => {
-    const view = { ...stepView([first], [inv({ cost_usd: 99, input_tokens: 999 })]), spend: spend() };
-    expect(stepSpend(view)).toEqual({
-      costUsd: 1.5,
-      estimatedCostUsd: null,
-      costPartial: false,
-      inputTokens: 11,
-      outputTokens: 6,
-      cacheReadTokens: 4,
-      cacheCreateTokens: 3,
-    });
-  });
-
-  it('carries the estimate and the partial flag as the hub gives them', () => {
-    const view = { ...stepView([first]), spend: spend({ cost_usd: 0, estimated_cost_usd: 0.5, cost_partial: true }) };
-    expect(stepSpend(view)).toMatchObject({ costUsd: 0, estimatedCostUsd: 0.5, costPartial: true });
-  });
-});
-
 describe('stepModel', () => {
   it('prefers the spawn invocation', () => {
     const view = stepView([first], [inv({ harness_id: 'codex', model: 'gpt' }), inv({ kind: 'spawn', harness_id: 'claude', model: 'opus' })]);
@@ -390,22 +351,26 @@ describe('stepIdentity', () => {
 });
 
 describe('projectOf', () => {
-  const project = (project_id: string, name: string, color: string | null): ProjectView => ({ project_id, name, color }) as unknown as ProjectView;
-  const projects = [project('proj_1', 'Blizzard', '#ABCDEF'), project('proj_2', 'Plain', null)];
+  const project = (project_id: string, name: string, color: string): ProjectView => ({ project_id, name, color }) as ProjectView;
+  const projects = [project('proj_1', 'Blizzard', '#abcdef'), project('proj_2', 'Teal', 'teal')];
 
-  it('names the project with its tint', () => {
-    expect(projectOf(projects, 'proj_1')).toEqual({ name: 'Blizzard', color: '#abcdef' });
+  it('names the project with its raw colour', () => {
+    expect(projectOf(true, projects, 'proj_1')).toEqual({ name: 'Blizzard', color: '#abcdef' });
   });
 
-  it('has no colour for an uncoloured project', () => {
-    expect(projectOf(projects, 'proj_2')).toEqual({ name: 'Plain', color: null });
+  it('hands a palette-named colour to the swatch raw, for it to convert once', () => {
+    expect(projectOf(true, projects, 'proj_2')).toEqual({ name: 'Teal', color: 'teal' });
+  });
+
+  it('keeps the name and drops the colour under the gate', () => {
+    expect(projectOf(false, projects, 'proj_2')).toEqual({ name: 'Teal', color: null });
   });
 
   it('is null for an unknown, missing or unread project', () => {
-    expect(projectOf(projects, 'proj_9')).toBeNull();
-    expect(projectOf(projects, null)).toBeNull();
-    expect(projectOf(projects, undefined)).toBeNull();
-    expect(projectOf(undefined, 'proj_1')).toBeNull();
+    expect(projectOf(true, projects, 'proj_9')).toBeNull();
+    expect(projectOf(true, projects, null)).toBeNull();
+    expect(projectOf(true, projects, undefined)).toBeNull();
+    expect(projectOf(true, undefined, 'proj_1')).toBeNull();
   });
 });
 

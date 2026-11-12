@@ -1,45 +1,45 @@
 import { formatSessionEfficiency, sessionEfficiencyParts, sessionEfficiencyTitle, type SessionEfficiencyInput } from './session-efficiency';
 
 const usage = (overrides: Partial<SessionEfficiencyInput> = {}): SessionEfficiencyInput => ({
-  costUsd: 0.3,
-  estimatedCostUsd: null,
-  costPartial: false,
-  inputTokens: 20_000,
-  outputTokens: 32_700,
-  cacheReadTokens: 0,
-  cacheCreateTokens: 0,
+  cost_usd: 0.3,
+  estimated_cost_usd: null,
+  cost_partial: false,
+  input_tokens: 20_000,
+  output_tokens: 32_700,
+  cache_read_tokens: 0,
+  cache_create_tokens: 0,
   ...overrides,
 });
 
 describe('sessionEfficiencyParts', () => {
   it('reads the cost, distinct input, output and cache miss, each separator leading its part', () => {
     const parts = sessionEfficiencyParts(
-      usage({ inputTokens: 20_000, cacheCreateTokens: 200_000, outputTokens: 32_700, cacheReadTokens: 8_340_000 }),
+      usage({ input_tokens: 20_000, cache_create_tokens: 200_000, output_tokens: 32_700, cache_read_tokens: 8_340_000 }),
     );
     expect(parts).toEqual(['$0.30', '· 220kI', '/ 32.7kO', '× 2.57%']);
   });
 
   it('counts cache write as distinct input and cache read as neither input nor output', () => {
-    const parts = sessionEfficiencyParts(usage({ inputTokens: 100, cacheCreateTokens: 400, outputTokens: 0, cacheReadTokens: 500 }));
+    const parts = sessionEfficiencyParts(usage({ input_tokens: 100, cache_create_tokens: 400, output_tokens: 0, cache_read_tokens: 500 }));
     expect(parts).toEqual(['$0.30', '· 500I', '/ 0O', '× 50.0%']);
   });
 
   it('reads a cost-only figure for a step with no tokens at all — `$0.00`', () => {
-    expect(sessionEfficiencyParts(usage({ costUsd: 0, inputTokens: 0, outputTokens: 0 }))).toEqual(['$0.00']);
-    expect(formatSessionEfficiency(usage({ costUsd: 0, inputTokens: 0, outputTokens: 0 }))).toBe('$0.00');
+    expect(sessionEfficiencyParts(usage({ cost_usd: 0, input_tokens: 0, output_tokens: 0 }))).toEqual(['$0.00']);
+    expect(formatSessionEfficiency(usage({ cost_usd: 0, input_tokens: 0, output_tokens: 0 }))).toBe('$0.00');
   });
 
   it('carries the estimate and partial marks formatCost owns', () => {
-    expect(sessionEfficiencyParts(usage({ costUsd: 0.1, estimatedCostUsd: 0.2, costPartial: true }))[0]).toBe('~$0.30+');
+    expect(sessionEfficiencyParts(usage({ cost_usd: 0.1, estimated_cost_usd: 0.2, cost_partial: true }))[0]).toBe('~$0.30+');
   });
 
   it('reads a miss of `—` when output is the only token class', () => {
-    expect(sessionEfficiencyParts(usage({ inputTokens: 0, outputTokens: 50 }))).toEqual(['$0.30', '· 0I', '/ 50O', '× —']);
+    expect(sessionEfficiencyParts(usage({ input_tokens: 0, output_tokens: 50 }))).toEqual(['$0.30', '· 0I', '/ 50O', '× —']);
   });
 });
 
 describe('token counts to three significant figures', () => {
-  const input = (inputTokens: number): string => sessionEfficiencyParts(usage({ inputTokens }))[1];
+  const input = (input_tokens: number): string => sessionEfficiencyParts(usage({ input_tokens }))[1];
 
   it('reads a count under a thousand exactly', () => {
     expect(input(850)).toBe('· 850I');
@@ -60,8 +60,8 @@ describe('token counts to three significant figures', () => {
 });
 
 describe('cache miss percent', () => {
-  const miss = (inputTokens: number, cacheReadTokens: number): string =>
-    sessionEfficiencyParts(usage({ inputTokens, cacheReadTokens }))[3];
+  const miss = (input_tokens: number, cache_read_tokens: number): string =>
+    sessionEfficiencyParts(usage({ input_tokens, cache_read_tokens }))[3];
 
   it('reads to three significant figures', () => {
     expect(miss(412, 99_588)).toBe('× 0.412%');
@@ -80,7 +80,7 @@ describe('cache miss percent', () => {
 
 describe('formatSessionEfficiency', () => {
   it('joins the parts with single spaces', () => {
-    expect(formatSessionEfficiency(usage({ inputTokens: 1_000, cacheReadTokens: 1_000, outputTokens: 500 }))).toBe(
+    expect(formatSessionEfficiency(usage({ input_tokens: 1_000, cache_read_tokens: 1_000, output_tokens: 500 }))).toBe(
       '$0.30 · 1.00kI / 500O × 50.0%',
     );
   });
@@ -88,12 +88,12 @@ describe('formatSessionEfficiency', () => {
 
 describe('sessionEfficiencyTitle', () => {
   it('spells every count out in full', () => {
-    expect(sessionEfficiencyTitle(usage({ inputTokens: 20_000, cacheCreateTokens: 200_000, outputTokens: 32_700, cacheReadTokens: 8_340_000 }))).toBe(
+    expect(sessionEfficiencyTitle(usage({ input_tokens: 20_000, cache_create_tokens: 200_000, output_tokens: 32_700, cache_read_tokens: 8_340_000 }))).toBe(
       'session efficiency cost: $0.30 · 220,000 input (in + cache write) · 32,700 output · 8,340,000 cache read · 2.57% cache miss',
     );
   });
 
   it('reads `—` for the miss with no input at all', () => {
-    expect(sessionEfficiencyTitle(usage({ inputTokens: 0, outputTokens: 0 }))).toContain('· — cache miss');
+    expect(sessionEfficiencyTitle(usage({ input_tokens: 0, output_tokens: 0 }))).toContain('· — cache miss');
   });
 });

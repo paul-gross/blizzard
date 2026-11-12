@@ -5,13 +5,13 @@ import type { SessionEfficiencyInput } from './session-efficiency';
 import { SessionEfficiency } from './session-efficiency-view';
 
 const USAGE: SessionEfficiencyInput = {
-  costUsd: 0.3,
-  estimatedCostUsd: null,
-  costPartial: false,
-  inputTokens: 20_000,
-  outputTokens: 32_700,
-  cacheReadTokens: 8_340_000,
-  cacheCreateTokens: 200_000,
+  cost_usd: 0.3,
+  estimated_cost_usd: null,
+  cost_partial: false,
+  input_tokens: 20_000,
+  output_tokens: 32_700,
+  cache_read_tokens: 8_340_000,
+  cache_create_tokens: 200_000,
 };
 
 describe('SessionEfficiency', () => {
@@ -37,7 +37,7 @@ describe('SessionEfficiency', () => {
   });
 
   it('renders only the cost for a step with no tokens', async () => {
-    const el = await render({ ...USAGE, costUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreateTokens: 0 });
+    const el = await render({ ...USAGE, cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 });
     expect([...el.querySelectorAll('.part')].map((p) => p.textContent)).toEqual(['$0.00']);
   });
 });

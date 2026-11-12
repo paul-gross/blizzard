@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import type { hubApi } from 'fleet';
+import { type Tone, type hubApi, toneColor } from 'fleet';
 import { chunkDetail, settle, turnSegmentView } from 'fleet/testing';
 import type { LeaseTranscript } from './lease-transcript.query';
 import type { PlacedStep, StepRef } from './step.model';
@@ -81,13 +81,16 @@ describe('StepDrawerView', () => {
     return { fixture, el };
   }
 
+  /** The header badge wearing `tone`'s colour, if any. */
+  const badge = (el: HTMLElement, tone: Tone) =>
+    [...el.querySelectorAll<HTMLElement>('fleet-kit-badge')].find((b) => b.querySelector('.badge')?.getAttribute('style')?.includes(toneColor(tone)) ?? false) ?? null;
   const q = (el: HTMLElement, testid: string) => el.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
 
   it('names a leased step by its lease with no hub-step badge', async () => {
     const { el } = await render();
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('lease_01');
-    expect(el.querySelector('.st-hub')).toBeNull();
+    expect(badge(el, 'idle')).toBeNull();
   });
 
   it('names a lease-less step by its node and badges it as a hub step', async () => {
@@ -96,7 +99,7 @@ describe('StepDrawerView', () => {
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
     expect(q(el, 'step-drawer-lease')?.getAttribute('title')).toBe('no session of its own — a hub-side step');
-    expect(el.querySelector('.st-hub')?.textContent).toContain('hub step');
+    expect(badge(el, 'idle')?.textContent).toContain('hub step');
   });
 
   it('rests on its own copy, with a close button, for a chunk with no node step yet', async () => {
@@ -140,8 +143,8 @@ describe('StepDrawerView', () => {
     const live = placed({ escalation: 'stuck', escalation_open: true, ended_at: null });
     const { el } = await render({ view: stepView(live, { journey: [live] }) });
 
-    expect(el.querySelector('.st-esc')?.textContent).toContain('escalated · stuck');
-    expect(el.querySelector('.st-live')?.textContent).toContain('running');
+    expect(badge(el, 'needs')?.textContent).toContain('escalated · stuck');
+    expect(badge(el, 'running')?.textContent).toContain('running');
   });
 
   it('keeps a superseded escalation in the list, without the badge', async () => {
@@ -149,7 +152,7 @@ describe('StepDrawerView', () => {
     const escalations = [{ cause: 'stuck', detail: null, recorded_at: '2026-07-13T10:10:00Z' }];
     const { el } = await render({ view: stepView(settled, { journey: [settled], escalations }) });
 
-    expect(el.querySelector('.st-esc')).toBeNull();
+    expect(badge(el, 'needs')).toBeNull();
     expect(el.querySelector('.sd-escalation')?.textContent).toContain('escalated · stuck');
   });
 
@@ -159,7 +162,7 @@ describe('StepDrawerView', () => {
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
     expect(q(el, 'step-drawer-lease')?.getAttribute('title')).toBe("the hub never heard this step's session start");
-    expect(el.querySelector('.st-hub')).toBeNull();
+    expect(badge(el, 'idle')).toBeNull();
     expect(el.querySelector('.sd-transcript')?.textContent).not.toContain('hub-side');
   });
 
@@ -169,15 +172,15 @@ describe('StepDrawerView', () => {
 
     expect(q(el, 'step-drawer-lease')?.textContent?.trim()).toBe('build');
     expect(q(el, 'step-drawer-lease')?.getAttribute('title')).toBe('a session that took the chunk over on a forced entry');
-    expect(el.querySelector('.st-hub')).toBeNull();
+    expect(badge(el, 'idle')).toBeNull();
     expect(el.querySelector('.sd-transcript')?.textContent).not.toContain('hub-side');
   });
 
   it('shows neither badge on a settled, unescalated step', async () => {
     const { el } = await render();
 
-    expect(el.querySelector('.st-esc')).toBeNull();
-    expect(el.querySelector('.st-live')).toBeNull();
+    expect(badge(el, 'needs')).toBeNull();
+    expect(badge(el, 'running')).toBeNull();
   });
 
   it('names a step on no graph the hub knows by its node alone', async () => {
@@ -315,7 +318,7 @@ describe('StepDrawerView', () => {
   });
 
   describe('transcript', () => {
-    const heading = (el: HTMLElement) => el.querySelector('.sd-transcript .d-h')?.textContent?.trim();
+    const heading = (el: HTMLElement) => el.querySelector('.sd-transcript fleet-kit-section-head')?.textContent?.trim();
     const section = (el: HTMLElement) => el.querySelector('.sd-transcript')!.textContent!;
 
     it('explains that a hub-side step has none', async () => {
@@ -359,12 +362,38 @@ describe('StepDrawerView', () => {
       expect(heading(el)).toBe('Transcript');
     });
 
+    it('labels a null executor as unknown and still reads its transcript', async () => {
+      const unknown = placed({ executor: null, epoch: 2 });
+      const turns = [turnSegmentView({ index: 0 })];
+      const { el } = await render({ view: stepView(unknown, { journey: [unknown] }), transcriptState: 'ready', transcript: TRANSCRIPT(turns) });
+
+      expect(section(el)).toContain('executor unknown');
+      expect(el.querySelector('fleet-transcript-viewer')).not.toBeNull();
+    });
+
+    it('does not label a known executor as unknown', async () => {
+      const { el } = await render({ transcriptState: 'ready', transcript: TRANSCRIPT([]) });
+
+      expect(section(el)).not.toContain('executor unknown');
+    });
+
+    it('draws the loading, empty and error states through the kit, with the loading testid on the projected skeleton', async () => {
+      for (const state of ['loading', 'empty', 'error'] as const) {
+        const { el } = await render({ transcriptState: state });
+        expect(el.querySelector('.sd-transcript fleet-kit-async-state'), state).not.toBeNull();
+      }
+      const { el } = await render({ transcriptState: 'error' });
+      expect(el.querySelector('.sd-transcript .status.error')?.textContent).toContain('could not read the transcript');
+      const loading = await render({ transcriptState: 'loading' });
+      expect(q(loading.el, 'step-drawer-transcript-loading')?.closest('fleet-kit-async-state')).not.toBeNull();
+    });
+
     it('renders the viewer with the turns, counts them, and notes a truncation', async () => {
       const turns = [turnSegmentView({ index: 0 }), turnSegmentView({ index: 1, text: 'second' })];
       const { el } = await render({ transcriptState: 'ready', transcript: TRANSCRIPT(turns, true) });
 
       expect(el.querySelector('fleet-transcript-viewer')).not.toBeNull();
-      expect(heading(el)).toBe('Transcript · 2 turns');
+      expect(heading(el)).toBe('Transcript · 2');
       expect(section(el)).toContain('truncated — some turns were dropped');
     });
   });

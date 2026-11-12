@@ -1,6 +1,6 @@
 import { chunkDetail } from 'fleet/testing';
 
-import { openProjectColor, projectColorOf } from './project-lens-colors';
+import { openProjectColor, projectColorMap, projectColorOf } from './project-lens-colors';
 
 describe('projectColorOf', () => {
   const projects = [
@@ -27,5 +27,27 @@ describe('projectColorOf', () => {
   it('uses the same lookup for the open chunk', () => {
     expect(openProjectColor(true, chunkDetail({ project_id: 'second' }), projects)).toBe('#abcdef');
     expect(openProjectColor(true, undefined, projects)).toBeNull();
+  });
+});
+
+describe('projectColorMap', () => {
+  const projects = [
+    { project_id: 'proj_a', color: 'teal' },
+    { project_id: 'proj_b', color: '#abcdef' },
+  ];
+
+  it('maps each project id to its raw color when colors are shown', () => {
+    const colors = projectColorMap(true, projects);
+    expect(colors?.get('proj_a')).toBe('teal');
+    expect(colors?.get('proj_b')).toBe('#abcdef');
+    expect(colors?.get('proj_c')).toBeUndefined();
+  });
+
+  it('is empty before the projects read', () => {
+    expect(projectColorMap(true, undefined)).toEqual(new Map());
+  });
+
+  it('is null when the gate is closed', () => {
+    expect(projectColorMap(false, projects)).toBeNull();
   });
 });

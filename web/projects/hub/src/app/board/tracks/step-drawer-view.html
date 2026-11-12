@@ -28,11 +28,11 @@
             @let who = identity(s);
             <span class="id" data-testid="step-drawer-lease" [title]="who.title">{{ who.label }}</span>
             @if (who.hub) {
-              <span class="st st-hub">hub step</span>
+              <fleet-kit-badge tone="idle">hub step</fleet-kit-badge>
             }
             <!-- Only an escalation still open badges the step; a superseded one stays in the step's escalation list. -->
             @if (s.escalation_open && s.escalation) {
-              <span class="st st-esc">escalated · {{ s.escalation }}</span>
+              <fleet-kit-badge tone="needs">escalated · {{ s.escalation }}</fleet-kit-badge>
             }
           </span>
           <span class="d-sub">
@@ -66,7 +66,7 @@
             }
             @if (s.ended_at === null) {
               <span class="sep" aria-hidden="true">·</span>
-              <span class="st st-live">running</span>
+              <fleet-kit-badge tone="running">running</fleet-kit-badge>
             }
           </span>
         </div>
@@ -153,36 +153,45 @@
         </section>
 
         <section class="d-sec sd-transcript" aria-label="Transcript">
-          <div class="d-h">Transcript{{ transcript()?.turns?.length ? ' · ' + transcript()?.turns?.length + ' turns' : '' }}</div>
-          @if (s.executor === 'hub') {
-            <div class="dim">a hub-side step — no session, so no transcript</div>
-          } @else if (transcriptState() === 'empty') {
-            <div class="dim">no transcript to read for this step</div>
-          } @else if (transcriptState() === 'loading') {
-            <div class="sd-sk-transcript" data-testid="step-drawer-transcript-loading">
-              @for (turn of transcriptSkeleton; track $index) {
-                <div class="sd-sk-turn">
-                  <fleet-kit-skeleton class="sd-sk-stamp" [rows]="1" />
-                  <fleet-kit-skeleton class="sd-sk-kind" [rows]="1" />
-                  @for (width of turn; track $index) {
-                    <fleet-kit-skeleton class="sd-sk-text" [style.width]="width" [rows]="1" />
-                  }
-                </div>
-              }
-            </div>
-          } @else if (transcriptState() === 'error') {
-            <div class="dim">could not read the transcript</div>
-          } @else if (transcript() === null) {
-            <div class="dim" data-testid="step-drawer-transcript-no-access">no access to the transcript</div>
-          } @else if (transcript(); as t) {
-            @if (t.turns.length === 0) {
-              <div class="dim">no transcript shipped for this session</div>
-            } @else {
-              @if (t.truncated) {
-                <div class="dim">truncated — some turns were dropped</div>
-              }
-              <fleet-transcript-viewer [turns]="t.turns" layout="stacked" />
+          <fleet-kit-section-head label="Transcript" [count]="transcript()?.turns?.length || null">
+            @if (s.executor === null) {
+              <span class="dim">executor unknown</span>
             }
+          </fleet-kit-section-head>
+          @if (s.executor === Executor.HUB) {
+            <div class="dim">a hub-side step — no session, so no transcript</div>
+          } @else {
+            <fleet-kit-async-state
+              [state]="transcriptState()"
+              placement="inline"
+              loadingMode="content"
+              emptyText="no transcript to read for this step"
+              errorText="could not read the transcript"
+            >
+              <div loading class="sd-sk-transcript" data-testid="step-drawer-transcript-loading">
+                @for (turn of transcriptSkeleton; track $index) {
+                  <div class="sd-sk-turn">
+                    <fleet-kit-skeleton class="sd-sk-stamp" [rows]="1" />
+                    <fleet-kit-skeleton class="sd-sk-kind" [rows]="1" />
+                    @for (width of turn; track $index) {
+                      <fleet-kit-skeleton class="sd-sk-text" [style.width]="width" [rows]="1" />
+                    }
+                  </div>
+                }
+              </div>
+              @if (transcript() === null) {
+                <div class="dim" data-testid="step-drawer-transcript-no-access">no access to the transcript</div>
+              } @else if (transcript(); as t) {
+                @if (t.turns.length === 0) {
+                  <div class="dim">no transcript shipped for this session</div>
+                } @else {
+                  @if (t.truncated) {
+                    <div class="dim">truncated — some turns were dropped</div>
+                  }
+                  <fleet-transcript-viewer [turns]="t.turns" layout="stacked" />
+                }
+              }
+            </fleet-kit-async-state>
           }
         </section>
       </div>
