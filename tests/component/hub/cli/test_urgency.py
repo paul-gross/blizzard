@@ -139,7 +139,7 @@ def test_settings_set_changes_the_default(hub: HubHarness) -> None:
 def test_settings_get_prints_every_key_or_one_and_refuses_an_unknown_key(hub: HubHarness) -> None:
     every = _said(_cli("settings", "get"))
     assert every[0] == "default_urgency standard"
-    assert every[1] == "revision 1" or every[1].startswith("revision ")
+    assert every[1].startswith("revision ")
     assert _said(_cli("settings", "get", "default_urgency")) == ["default_urgency standard"]
     assert _said(_cli("settings", "show", "default_urgency")) == ["default_urgency standard"]
     refused = _cli("settings", "get", "nope")
@@ -161,6 +161,7 @@ def test_settings_set_against_a_stale_revision_is_a_conflict(hub: HubHarness) ->
     assert _cli("urgency", "create", "urgent").exit_code == 0
     assert _cli("urgency", "create", "soon").exit_code == 0
     forward_to = hub.client
+    patched: list[int] = []
 
     def racing(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
         if method.lower() == "patch":
@@ -170,13 +171,18 @@ def test_settings_set_against_a_stale_revision_is_a_conflict(hub: HubHarness) ->
                 headers={k: v for k, v in (headers or {}).items() if k.lower() != "if-match"},
                 json={"default_urgency": "soon"},
             )
-        return forward_to.request(method, url, headers=headers, **kwargs)
+        resp = forward_to.request(method, url, headers=headers, **kwargs)
+        if method.lower() == "patch":
+            patched.append(resp.status_code)
+        return resp
 
     _bound["hub"] = bind_stubs(request=racing)
     conflicted = _cli("settings", "set", "default_urgency", "urgent")
 
     assert conflicted.exit_code != 0
-    assert "409" in conflicted.output or "revision" in conflicted.output.lower()
+    assert patched == [409]
+    assert "is at revision 2" in conflicted.output
+    assert _said(_cli("settings", "get", "default_urgency")) == ["default_urgency soon"]
 
 
 def test_settings_unset_is_refused_with_the_reason(hub: HubHarness) -> None:
