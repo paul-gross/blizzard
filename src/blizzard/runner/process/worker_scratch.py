@@ -25,7 +25,7 @@ class IWorkerScratchDirs(Protocol):
         ...
 
     def sweep_orphans(self, active_lease_ids: Iterable[str]) -> int:
-        """Remove every entry whose name is not in ``active_lease_ids`` — the one-shot crash
-        reconciliation run at daemon start, before any spawn can race it. Returns the count
-        removed; an entry that vanishes mid-sweep is a no-op, not a fault."""
+        """Remove only the entries this runner's ownership records name as closed or orphaned
+        (not in ``active_lease_ids``); unknown, malformed and foreign entries are left alone.
+        Returns the count removed; an entry that vanishes mid-sweep is a no-op, not a fault."""
         ...

@@ -25,7 +25,7 @@ from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken
-from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.host_layout import WORKER_SCRATCH_DIRNAME, HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
@@ -225,7 +225,12 @@ def test_one_runners_start_sweep_leaves_the_other_runners_live_scratch(tmp_path:
             first_ctx.worker_scratch.ensure("lease_live_on_first")
         )  # a lease only the first runner's store holds
 
-        LoopWiring.of(second.config).context(FakeHub(), second, sweep_worker_scratch=True)
+        reconcile_scratch_roots(
+            tmp_path,
+            first.config.root / WORKER_SCRATCH_DIRNAME,
+            {second.runner_id: second.stores.lease_record},
+            scratch_factory=WorkerScratchDirs,
+        )
 
         assert live.is_dir()
     finally:
@@ -261,9 +266,20 @@ def test_a_pre_upgrade_flat_entry_is_removed_only_when_the_sweeping_runner_holds
         )
 
         second = host.runners[1]
-        LoopWiring.of(second.config).context(FakeHub(), second, sweep_worker_scratch=True)
+        scratch_root = first.config.root / WORKER_SCRATCH_DIRNAME
+        reconcile_scratch_roots(
+            tmp_path,
+            scratch_root,
+            {second.runner_id: second.stores.lease_record},
+            scratch_factory=WorkerScratchDirs,
+        )
         assert (flat / "lease_closed_here").is_dir()
-        LoopWiring.of(first.config).context(FakeHub(), first, sweep_worker_scratch=True)
+        reconcile_scratch_roots(
+            tmp_path,
+            scratch_root,
+            {first.runner_id: first.stores.lease_record},
+            scratch_factory=WorkerScratchDirs,
+        )
 
         assert (flat / "lease_never_held").is_dir()
         assert not (flat / "lease_closed_here").exists()
