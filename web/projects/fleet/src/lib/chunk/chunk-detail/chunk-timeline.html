@@ -130,7 +130,7 @@
           @if (usageForStep(row); as u) {
             <span class="step-usage" data-testid="history-step-usage">
               @if (costOnly()) {
-                <span class="eff" data-testid="history-step-cost">{{ formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial) }}</span>
+                <span class="eff" data-testid="history-step-cost">{{ formatCost(u.cost_usd, u.estimated_cost_usd, u.cost_partial) }}</span>
               } @else {
                 <fleet-session-efficiency class="eff" data-testid="history-step-efficiency" [usage]="u" />
               }

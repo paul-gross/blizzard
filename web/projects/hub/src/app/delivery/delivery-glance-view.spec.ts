@@ -46,7 +46,7 @@ describe('DeliveryGlanceView', () => {
         chunk_id: 'ch_timeout', graph_id: 'gr_build', status: 'needs_human', bounce_count: 1,
         latest_bounce: bounceView({ cause: 'poll-timeout', envelope, recorded_at: fixtureInstant(-60) }),
       })],
-      flows: [], repositories: [], facts: new Map(), workItems: new Map(), projects: [], runnerHosts: new Map(), now: FIXTURE_NOW,
+      flows: [], repositories: [], facts: new Map(), workItems: new Map(), projectColors: null, runnerHosts: new Map(), now: FIXTURE_NOW,
     });
     const { el } = await render('ready', list);
     expect(cards(el)).toEqual(['ch_timeout']);
