@@ -20,16 +20,17 @@ observed. Which one a fresh mint actually spawns under is a per-`sessions:` entr
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
 regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
 fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
-pays it a few times an hour, not every tick — every `tick_seconds`, 30 by default (`blizzard-host.toml`); short enough that an in-place binary upgrade is noticed well within an
-operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
-session's owner resolves against this runner's own bindings: **unknown** means the session was recorded under a harness
-id this runner build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner
-holding the chunk, never to substitute another harness. **unavailable** means the id is bound but this runner can't
-supply the specific capability being asked of it — resuming or judging versus reading its transcript. Both `claude_code`
-and `opencode` bind every capability the registry knows to ask for today, so this never fires for either; the loop's own
-usage-recording and session-rotation call sites still treat an `unavailable` binding as their ordinary "no fallback
-transcript" outcome, never a crash, for whichever future capability gap reintroduces one. Either shows up as an
-`owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
+pays it a few times an hour, not every tick — every `tick_seconds`, 30 by default (`blizzard-host.toml`); short enough
+that an in-place binary upgrade is noticed well within an operator's own deploy window) — never once per tick, and never
+for a binary that isn't on `PATH` at all. A recorded session's owner resolves against this runner's own bindings:
+**unknown** means the session was recorded under a harness id this runner build doesn't ship at all — the remedy is to
+run a runner version that binds that id, on the runner holding the chunk, never to substitute another harness.
+**unavailable** means the id is bound but this runner can't supply the specific capability being asked of it — resuming
+or judging versus reading its transcript. Both `claude_code` and `opencode` bind every capability the registry knows to
+ask for today, so this never fires for either; the loop's own usage-recording and session-rotation call sites still
+treat an `unavailable` binding as their ordinary "no fallback transcript" outcome, never a crash, for whichever future
+capability gap reintroduces one. Either shows up as an `owner-unresolvable` event, which
+[observability.md](./observability.md) owns reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
 tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode 1 version the runner admits today:
