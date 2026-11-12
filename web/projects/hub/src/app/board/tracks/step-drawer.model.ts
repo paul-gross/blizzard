@@ -1,4 +1,4 @@
-import { type ChunkDetail, type ProjectView, type SessionEfficiencyInput, formatWhenParts, projectTint } from 'fleet';
+import { type ChunkDetail, type ProjectView, formatWhenParts, projectTint } from 'fleet';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
 import {
@@ -97,22 +97,6 @@ export function neighbours(view: EnvTimelineStepView | undefined, current: Place
   if (view === undefined || current === null) return { previous: null, next: null };
   const i = view.journey.findIndex((p) => p.segment.started_at === current.segment.started_at);
   return { previous: i > 0 ? view.journey[i - 1] : null, next: i >= 0 ? (view.journey[i + 1] ?? null) : null };
-}
-
-/** The whole step's spend, as the hub summed it over every invocation inside it, in the session efficiency figure's
- * shape; `null` with none recorded. */
-export function stepSpend(view: EnvTimelineStepView | undefined): SessionEfficiencyInput | null {
-  const spend = view?.spend;
-  if (spend == null) return null;
-  return {
-    costUsd: spend.cost_usd,
-    estimatedCostUsd: spend.estimated_cost_usd,
-    costPartial: spend.cost_partial,
-    inputTokens: spend.input_tokens,
-    outputTokens: spend.output_tokens,
-    cacheReadTokens: spend.cache_read_tokens,
-    cacheCreateTokens: spend.cache_create_tokens,
-  };
 }
 
 /** The harness and model the step's session ran on — its spawn's, else its first invocation's. */

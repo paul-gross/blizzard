@@ -6,7 +6,6 @@ import type { ChunkDetail, ChunkNeighborView, ChunkStatus } from '../../api/hub'
 import { STATUS_LANE } from '../../core/chunk-lanes';
 import { compactRef } from '../../core/compact-ref';
 import { LensLink } from '../../core/lens-link';
-import { type SessionEfficiencyInput } from '../../core/session-efficiency';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { LaneIcon } from '../chunk-card/lane-icon';
 
@@ -27,21 +26,6 @@ export class ChunkFacts {
 
   /** The chunk detail route's own path segments, before the chunk id — each neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
-
-  /** The chunk's summed usage, in the session efficiency cost's own shape. */
-  protected readonly usage = computed<SessionEfficiencyInput>(() => {
-    const c = this.detail().cost;
-    return {
-      costUsd: c?.cost_usd ?? 0,
-      estimatedCostUsd: c?.estimated_cost_usd ?? null,
-      costPartial: c?.cost_partial ?? false,
-      inputTokens: c?.input_tokens ?? 0,
-      outputTokens: c?.output_tokens ?? 0,
-      cacheReadTokens: c?.cache_read_tokens ?? 0,
-      cacheCreateTokens: c?.cache_create_tokens ?? 0,
-    };
-  });
-
 
   protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.prerequisites ?? []);
 

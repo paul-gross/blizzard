@@ -1,15 +1,18 @@
+import type { ChunkUsageTotalView } from '../api/hub';
 import { formatCost, formatTokens } from './cost-format';
 
-/** One step's token classes and cost — what the session efficiency cost reads. */
-export interface SessionEfficiencyInput {
-  readonly costUsd: number;
-  readonly estimatedCostUsd: number | null;
-  readonly costPartial: boolean;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreateTokens: number;
-}
+/** The usage fields the session efficiency cost reads — the wire's own names, so a chunk's, a step's or the fleet's
+ * usage total passes straight through. */
+export type SessionEfficiencyInput = Pick<
+  ChunkUsageTotalView,
+  | 'cost_usd'
+  | 'estimated_cost_usd'
+  | 'cost_partial'
+  | 'input_tokens'
+  | 'output_tokens'
+  | 'cache_read_tokens'
+  | 'cache_create_tokens'
+>;
 
 /** The session efficiency cost: `$0.30 · 220kI / 32.7kO × 2.57%` — the cost, the distinct input (input plus cache
  * write, cache read excluded), the output, and the cache miss percent (distinct input over distinct input plus cache
@@ -21,26 +24,26 @@ export function formatSessionEfficiency(u: SessionEfficiencyInput): string {
 /** {@link formatSessionEfficiency}'s figure as its four parts, each separator leading the part it introduces —
  * `$0.30`, `· 220kI`, `/ 32.7kO`, `× 2.57%` — so a wrapping view breaks between parts and never strands one. With no tokens at all, only the cost. */
 export function sessionEfficiencyParts(u: SessionEfficiencyInput): readonly string[] {
-  const distinct = u.inputTokens + u.cacheCreateTokens;
-  const cost = formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial);
-  if (distinct + u.outputTokens + u.cacheReadTokens === 0) return [cost];
-  const miss = cacheMissPercent(distinct, u.cacheReadTokens);
+  const distinct = u.input_tokens + u.cache_create_tokens;
+  const cost = formatCost(u.cost_usd, u.estimated_cost_usd, u.cost_partial);
+  if (distinct + u.output_tokens + u.cache_read_tokens === 0) return [cost];
+  const miss = cacheMissPercent(distinct, u.cache_read_tokens);
   return [
     cost,
     `· ${formatTokens(distinct)}I`,
-    `/ ${formatTokens(u.outputTokens)}O`,
+    `/ ${formatTokens(u.output_tokens)}O`,
     `× ${miss === null ? '—' : `${sigPercent(miss)}%`}`,
   ];
 }
 
 /** The {@link formatSessionEfficiency} figure spelled out in full, for its hover title. */
 export function sessionEfficiencyTitle(u: SessionEfficiencyInput): string {
-  const distinct = u.inputTokens + u.cacheCreateTokens;
-  const miss = cacheMissPercent(distinct, u.cacheReadTokens);
+  const distinct = u.input_tokens + u.cache_create_tokens;
+  const miss = cacheMissPercent(distinct, u.cache_read_tokens);
   const n = (count: number): string => count.toLocaleString('en-US');
   return (
-    `session efficiency cost: ${formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial)} · ${n(distinct)} input (in + cache write) · ` +
-    `${n(u.outputTokens)} output · ${n(u.cacheReadTokens)} cache read · ${miss === null ? '—' : `${sigPercent(miss)}%`} cache miss`
+    `session efficiency cost: ${formatCost(u.cost_usd, u.estimated_cost_usd, u.cost_partial)} · ${n(distinct)} input (in + cache write) · ` +
+    `${n(u.output_tokens)} output · ${n(u.cache_read_tokens)} cache read · ${miss === null ? '—' : `${sigPercent(miss)}%`} cache miss`
   );
 }
 

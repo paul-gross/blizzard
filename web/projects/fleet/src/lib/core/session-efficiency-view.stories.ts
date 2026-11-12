@@ -7,13 +7,13 @@ const meta: Meta<SessionEfficiency> = {
   component: SessionEfficiency,
   args: {
     usage: {
-      costUsd: 0.3,
-      estimatedCostUsd: null,
-      costPartial: false,
-      inputTokens: 20_000,
-      outputTokens: 32_700,
-      cacheReadTokens: 8_340_000,
-      cacheCreateTokens: 200_000,
+      cost_usd: 0.3,
+      estimated_cost_usd: null,
+      cost_partial: false,
+      input_tokens: 20_000,
+      output_tokens: 32_700,
+      cache_read_tokens: 8_340_000,
+      cache_create_tokens: 200_000,
     },
   },
   render: (args) => ({ props: args, template: `<fleet-session-efficiency [usage]="usage" />` }),
@@ -26,11 +26,11 @@ type Story = StoryObj<SessionEfficiency>;
 export const Typical: Story = {};
 /** A step with no tokens reads its cost alone. */
 export const NoTokens: Story = {
-  args: { usage: { costUsd: 0, estimatedCostUsd: null, costPartial: false, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreateTokens: 0 } },
+  args: { usage: { cost_usd: 0, estimated_cost_usd: null, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 } },
 };
 /** An estimated, partial cost over millions of tokens. */
 export const EstimatedPartial: Story = {
-  args: { usage: { costUsd: 1.2, estimatedCostUsd: 3.4, costPartial: true, inputTokens: 1_234_567, outputTokens: 456_000, cacheReadTokens: 45_600_000, cacheCreateTokens: 0 } },
+  args: { usage: { cost_usd: 1.2, estimated_cost_usd: 3.4, cost_partial: true, input_tokens: 1_234_567, output_tokens: 456_000, cache_read_tokens: 45_600_000, cache_create_tokens: 0 } },
 };
 /** In a narrow box the figure wraps between its parts, never inside one. */
 export const Narrow: Story = {

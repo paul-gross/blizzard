@@ -1,5 +1,5 @@
 <!-- The chunk's total session efficiency cost — the node history rows' own figure, summed over the chunk. -->
-<fleet-session-efficiency class="cf-eff" data-testid="chunk-efficiency" [usage]="usage()" />
+<fleet-session-efficiency class="cf-eff" data-testid="chunk-efficiency" [usage]="detail().cost" />
 @if (prerequisites().length || dependents().length) {
   <div class="cf-deps" data-testid="chunk-deps">
     <div class="dep-col" data-testid="fact-depends-on">

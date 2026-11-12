@@ -17,7 +17,6 @@ import {
   stepFacts,
   stepIdentity,
   stepModel,
-  stepSpend,
   transcriptRefOf,
 } from './step-drawer.model';
 
@@ -194,44 +193,6 @@ describe('neighbours', () => {
     expect(neighbours(threeSteps, placed(seg('09:00', '09:10')))).toEqual({ previous: null, next: null });
     expect(neighbours(undefined, first)).toEqual({ previous: null, next: null });
     expect(neighbours(threeSteps, null)).toEqual({ previous: null, next: null });
-  });
-});
-
-describe('stepSpend', () => {
-  type Spend = NonNullable<EnvTimelineStepView['spend']>;
-  const spend = (o: Partial<Spend> = {}): Spend => ({
-    billed_partial: false,
-    cache_create_tokens: 3,
-    cache_read_tokens: 4,
-    cost_partial: false,
-    cost_usd: 1.5,
-    estimated_cost_usd: null,
-    input_tokens: 11,
-    output_tokens: 6,
-    ...o,
-  });
-
-  it('is null with no spend recorded or no read', () => {
-    expect(stepSpend(undefined)).toBeNull();
-    expect(stepSpend(stepView([first]))).toBeNull();
-  });
-
-  it('is the hub-summed spend in the session efficiency shape, whatever the invocations say', () => {
-    const view = { ...stepView([first], [inv({ cost_usd: 99, input_tokens: 999 })]), spend: spend() };
-    expect(stepSpend(view)).toEqual({
-      costUsd: 1.5,
-      estimatedCostUsd: null,
-      costPartial: false,
-      inputTokens: 11,
-      outputTokens: 6,
-      cacheReadTokens: 4,
-      cacheCreateTokens: 3,
-    });
-  });
-
-  it('carries the estimate and the partial flag as the hub gives them', () => {
-    const view = { ...stepView([first]), spend: spend({ cost_usd: 0, estimated_cost_usd: 0.5, cost_partial: true }) };
-    expect(stepSpend(view)).toMatchObject({ costUsd: 0, estimatedCostUsd: 0.5, costPartial: true });
   });
 });
 

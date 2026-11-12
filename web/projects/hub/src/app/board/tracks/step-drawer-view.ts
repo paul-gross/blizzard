@@ -36,7 +36,6 @@ import {
   stepFacts,
   stepIdentity,
   stepModel,
-  stepSpend,
 } from './step-drawer.model';
 
 /** The transcript's placeholder: a few turns as the stacked transcript lays them out — each a stamp, a kind, and its
@@ -113,7 +112,7 @@ export class StepDrawerView {
   /** The step's own detail, once it is the shown step's — not the previous step's held over. */
   private readonly detail = computed(() => (this.stepPending() ? undefined : this.view()));
   protected readonly escalations = computed(() => this.detail()?.escalations ?? []);
-  protected readonly spend = computed(() => stepSpend(this.detail()));
+  protected readonly spend = computed(() => this.detail()?.spend ?? null);
   protected readonly model = computed(() => stepModel(this.detail()));
 
   private readonly beganTpl = viewChild.required<TemplateRef<unknown>>('beganTpl');
