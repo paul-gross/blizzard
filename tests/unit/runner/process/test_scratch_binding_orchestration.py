@@ -17,6 +17,8 @@ class _Port:
         self.previous, self.fail_probe_on = previous, fail_probe_on
         self.events: list[tuple[str, Path]] = []
 
+    location = "/host/data/worker-scratch-root"
+
     def prepare(self, root: Path) -> None:
         self.events.append(("prepare", root))
 
@@ -82,7 +84,7 @@ def test_active_leases_refuse_a_changed_root_before_anything_is_reconciled() -> 
 
 
 def test_an_invalid_previous_binding_is_refused() -> None:
-    with pytest.raises(RuntimeError, match="Invalid scratch root binding"):
+    with pytest.raises(RuntimeError, match="Invalid scratch root binding in /host/data/worker-scratch-root"):
         _bind(_Port(Path("relative")), Path("/s/new"))
 
 

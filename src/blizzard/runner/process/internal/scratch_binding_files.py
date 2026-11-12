@@ -40,6 +40,10 @@ class ScratchBindingFiles:
         self._data = data_dir
         self._binding = data_dir / BINDING_FILENAME
 
+    @property
+    def location(self) -> str:
+        return str(self._binding)
+
     def prepare(self, root: Path) -> None:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         _check_root(root)

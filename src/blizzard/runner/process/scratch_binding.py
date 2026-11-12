@@ -31,6 +31,11 @@ class ScratchSweeperFactory(Protocol):
 
 
 class ScratchBindingPort(Protocol):
+    @property
+    def location(self) -> str:
+        """Where the binding is kept, named in a refusal so an operator can repair it."""
+        ...
+
     def prepare(self, root: Path) -> None:
         """Create ``root`` owner-only, prove it usable, and make its path durable."""
         ...
@@ -102,7 +107,7 @@ def bind_scratch_root(
     previous = port.read_previous()
     action = decide_binding(previous, root, active=any(leases.active_lease_ids for leases in runners.values()))
     if action is BindingAction.REFUSE_INVALID_PREVIOUS:
-        raise RuntimeError(f"Invalid scratch root binding: {previous}")
+        raise RuntimeError(f"Invalid scratch root binding in {port.location}")
     if action is BindingAction.REFUSE_ACTIVE_LEASES:
         raise RuntimeError(
             "Worker scratch root changed while leases are active; restore the old root and drain leases "
