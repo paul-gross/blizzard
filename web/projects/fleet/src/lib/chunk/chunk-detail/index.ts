@@ -4,6 +4,7 @@ export type { ChunkControl } from './chunk-control';
 export { ChunkDelivery } from './chunk-delivery';
 export { hasDelivery } from './has-delivery';
 export { bounceReason, parseBounceEnvelope } from './parse-bounce-envelope';
+export { compactBounce } from './compact-bounce';
 // The dock's presentational siblings a second shell re-stacks — the hub's chunk
 // detail page composes exactly these, in one column instead of three. Which siblings
 // belong here is `bzh:frontend-disjoint-diffs`.

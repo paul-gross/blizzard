@@ -71,14 +71,17 @@ describe('LocalAsks', () => {
     expect(row?.getAttribute('data-question-id')).toBe('q-1');
     expect(row?.querySelector('.q')?.textContent).toBe('Proceed with the migration?');
     expect(row?.querySelector('.chunk')?.textContent?.trim().length).toBeGreaterThan(0);
+    expect(row?.querySelector('a.chunk')?.getAttribute('href')).toBe(`/board/chunk/${ASK.chunk_id}`);
+    expect(el.textContent).not.toContain('blizzard hub');
   });
 
   it('merges every serving runner’s open asks, each row naming the runner it is open on', async () => {
-    const { el } = await render([ASK], [{ ...ASK, question_id: 'q-2', question: 'Ship it?' }]);
+    const { el } = await render([ASK], [{ ...ASK, question_id: 'q-2', chunk_id: 'ch_02DEF', question: 'Ship it?' }]);
 
     const rows = Array.from(el.querySelectorAll('[data-testid="ask-row"]'));
     expect(rows.map((row) => row.getAttribute('data-question-id'))).toEqual(['q-1', 'q-2']);
     expect(rows.map((row) => row.querySelector('[data-testid="ask-runner"]')?.textContent)).toEqual(['r1', 'r2']);
+    expect(rows.map((row) => row.querySelector('a.chunk')?.getAttribute('href'))).toEqual([`/board/chunk/${ASK.chunk_id}`, '/board/chunk/ch_02DEF']);
   });
 
   it('renders the empty state when there are no open asks', async () => {

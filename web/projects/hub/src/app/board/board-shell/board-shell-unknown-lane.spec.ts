@@ -41,13 +41,13 @@ describe('BoardShell unknown status lane', () => {
   it('opens no unknown lane while every chunk carries a status the board knows', async () => {
     const el = await render('board', [chunk('run', 'running')]);
 
-    expect(columnKeys(el)).toEqual(['notready', 'ready', 'waiting', 'needs', 'running', 'done']);
+    expect(columnKeys(el)).toEqual(['notready', 'ready', 'needs', 'running', 'done']);
   });
 
   it('seats a chunk with an unknown status in its own lane, headed and counted by its raw status', async () => {
     const el = await render('board', [chunk('run', 'running'), chunk('rev', 'newer-status')]);
 
-    expect(columnKeys(el)).toEqual(['notready', 'ready', 'waiting', 'needs', 'running', 'done', 'unknown']);
+    expect(columnKeys(el)).toEqual(['notready', 'ready', 'needs', 'running', 'done', 'unknown']);
     const lane = el.querySelector<HTMLElement>('app-board-column[data-col="unknown"]')!;
     expect(lane.querySelector('.col-lbl')?.textContent?.trim()).toBe('newer-status');
     expect(lane.querySelector('.n')?.textContent?.trim()).toBe('1');

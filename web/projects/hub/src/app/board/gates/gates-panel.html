@@ -1,1 +1,3 @@
-<app-gates-view [gates]="gates()" [state]="state()" [runnerHosts]="runnerHosts()" (selectChunk)="selectChunk.emit($event)" />
+@if (state() !== 'empty') {
+  <app-gates-view [gates]="gates()" [state]="state()" [runnerHosts]="runnerHosts()" (selectChunk)="selectChunk.emit($event)" />
+}

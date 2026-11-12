@@ -2,7 +2,7 @@ import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import { type HostDetailVm, resolveSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
@@ -150,6 +150,25 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       expect(root.scrollWidth, `${width}px: the detail overflows horizontally`).toBeLessThanOrEqual(root.clientWidth);
+
+      const url = root.querySelector<HTMLAnchorElement>('[data-testid="fleet-fact-url"] a')!;
+      const probe = document.createElement('span');
+      root.appendChild(probe);
+      probe.style.color = 'var(--amber)';
+      expect(getComputedStyle(url).color).toBe(getComputedStyle(probe).color);
+      expect(url.getAttribute('href')).toBe(CARD.url);
+      expect(url.getAttribute('rel')).toBe('noopener noreferrer');
+      await userEvent.keyboard('{Tab}');
+      url.focus();
+      expect(document.activeElement).toBe(url);
+      expect(url.matches(':focus-visible')).toBe(true);
+      probe.style.color = 'var(--amber-hi)';
+      const focused = getComputedStyle(url);
+      expect(focused.color).toBe(getComputedStyle(probe).color);
+      expect(focused.outlineStyle).toBe('solid');
+      expect(focused.outlineWidth).toBe('2px');
+      probe.remove();
+      url.blur();
 
       // The connection's two fact lists stack rather than share a row.
       const lists = root.querySelectorAll<HTMLElement>('[data-testid="fleet-connection"] fleet-kit-fact-list');

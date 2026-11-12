@@ -3,12 +3,22 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 .subnav {
   flex: none;
 }
-/* Whose records these are, at the strip's right end. It gives way first on a narrow screen, where the crumb above
- * already names the project. */
+@media (max-width: 767.98px) {
+  .subnav.sub {
+    height: auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .subnav > a {
+    min-height: 44px;
+  }
+}
 /* No longer the scroller (each tab's own two-column grid owns that split,
  * `gardening-scopes-page.css` and its siblings) — a flex column so the active
  * tab's own layout can size to the full remaining height and split it between

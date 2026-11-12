@@ -67,11 +67,33 @@ describe('KitMarkdown', () => {
     expect(el.querySelector('em')?.textContent).toBe('italic');
   });
 
+  it('keeps the roomier block rhythm while trimming the outer edges', async () => {
+    const el = await render('Introduction\n\n# Main\n\nBody\n\n### Detail\n\n- first\n- second\n\nClosing');
+    const body = el.querySelector('fleet-kit-markdown')!;
+    expect(getComputedStyle(body.firstElementChild!).marginTop).toBe('0px');
+    expect(getComputedStyle(body.lastElementChild!).marginBottom).toBe('0px');
+    expect(getComputedStyle(body.querySelector('p')!).marginBottom).toBe('12px');
+    expect(getComputedStyle(body.querySelector('h1')!).marginTop).toBe('24px');
+    expect(getComputedStyle(body.querySelector('h1')!).marginBottom).toBe('12px');
+    expect(getComputedStyle(body.querySelector('h3')!).marginTop).toBe('20px');
+    expect(getComputedStyle(body.querySelectorAll('li')[1]).marginTop).toBe('4px');
+  });
+
+  it.each(['# Only heading', '- only item', '```\nonly code\n```'])('trims both outer margins of a single block: %s', async (text) => {
+    const el = await render(text);
+    const body = el.querySelector('fleet-kit-markdown')!;
+    expect(body.children).toHaveLength(1);
+    const style = getComputedStyle(body.firstElementChild!);
+    expect(style.marginTop).toBe('0px');
+    expect(style.marginBottom).toBe('0px');
+  });
+
   it('renders an allowlisted link as a real, new-tab anchor', async () => {
     const el = await render('[the issue](https://forge.example/1)');
     const a = el.querySelector('a');
     expect(a?.getAttribute('href')).toBe('https://forge.example/1');
     expect(a?.getAttribute('target')).toBe('_blank');
+    expect(a?.getAttribute('rel')).toBe('noreferrer');
     expect(a?.textContent).toBe('the issue');
   });
 
@@ -98,5 +120,30 @@ describe('KitMarkdown', () => {
     const el = await render('> a blockquote is not in the subset');
     expect(el.querySelector('blockquote')).toBeNull();
     expect(el.textContent?.trim()).toBe('> a blockquote is not in the subset');
+  });
+
+  it.each(['data:text/html,unsafe', '//example.test/path', 'mailto:operator@example.test', 'JaVaScRiPt:alert'])('keeps a non-web destination inert: %s', async (href) => {
+    const el = await render(`[destination](${href})`);
+    expect(el.querySelector('a')).toBeNull();
+    expect(el.querySelector('[data-testid="markdown-inert-link"]')?.textContent).toBe('destination');
+  });
+
+  it('replaces previously rendered markup safely when the loaded text changes', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.text.set('# Before\n\n[old](https://example.test)');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe('Before');
+
+    fixture.componentInstance.text.set('**After**\n\n<img src=x onerror=alert(1)>\n\n[unsafe](javascript:alert)');
+    await fixture.whenStable();
+    expect(el.querySelector('h1, a, img')).toBeNull();
+    expect(el.querySelector('strong')?.textContent).toBe('After');
+    expect(el.textContent).toContain('<img src=x onerror=alert(1)>');
+
+    fixture.componentInstance.text.set('');
+    await fixture.whenStable();
+    expect(el.querySelector('fleet-kit-markdown')?.textContent?.trim()).toBe('');
+    expect(el.querySelector('strong, [data-testid="markdown-inert-link"]')).toBeNull();
   });
 });

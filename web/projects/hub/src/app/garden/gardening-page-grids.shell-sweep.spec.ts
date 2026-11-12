@@ -459,7 +459,21 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
   });
 
   it.each([1280, 390])('routines: puts the kept routine\'s "cadence" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
-    const { fixture, router, stub, viewport } = await render('/gardening/routines');
+    const keepingCadence = CADENCES[0];
+    const chore = keepingCadence.chores[0];
+    const routine = gardenRoutineView({
+      ...ROUTINES[0],
+      kept_by: [{
+        cadence_slug: keepingCadence.slug,
+        cadence_name: keepingCadence.name,
+        chore_key: chore.key,
+        next_moment: keepingCadence.next_moments[0] ?? null,
+      }],
+    });
+    expect(chore.routine).toBe(routine.slug);
+    const { fixture, router, stub, viewport } = await render('/gardening/routines', {
+      'GET /api/routines': () => [routine],
+    });
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
 
@@ -469,11 +483,12 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       await router.navigateByUrl('/gardening/routines');
       await settle(fixture);
 
-      const row = root.querySelector<HTMLElement>('[data-testid="gardening-routine-row-nightly"]')!;
+      const row = root.querySelector<HTMLElement>(`[data-testid="gardening-routine-row-${routine.slug}"]`)!;
       const name = row.querySelector<HTMLElement>('.rt-name')!;
       const cadence = row.querySelector<HTMLElement>('[data-testid="gardening-routine-cadence"]')!;
       const graph = row.querySelector<HTMLElement>('.rt-graph')!;
-      // `nightly` is kept by the `evening` cadence's chore.
+      // The routine response carries its kept-by facts; the UI does not join the cadence list.
+      expect(name.textContent?.trim()).toBe(routine.name);
       expect(cadence.textContent?.trim()).toBe('cadence');
       expect(graph.textContent?.trim()).toBe('graph garden-routine');
       expect(cadence.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);

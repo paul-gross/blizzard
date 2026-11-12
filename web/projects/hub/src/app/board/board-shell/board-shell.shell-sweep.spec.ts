@@ -142,7 +142,7 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
       try {
         const bounds = root.getBoundingClientRect();
         const columns = [...root.querySelectorAll<HTMLElement>('app-board-column')];
-        expect(columns, `width ${width}: the unknown lane did not open beside the six`).toHaveLength(7);
+        expect(columns, `width ${width}: the unknown lane did not open beside the five`).toHaveLength(6);
         for (const column of columns) {
           const rect = column.getBoundingClientRect();
           expect(rect.right, `width ${width}: ${column.dataset['col']} lane runs past the board`).toBeLessThanOrEqual(bounds.right + 0.5);

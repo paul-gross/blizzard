@@ -149,6 +149,7 @@
   color: var(--red);
 }
 .reason {
+  display: block;
   color: color-mix(in srgb, var(--red) 70%, var(--text));
 }
 .links {

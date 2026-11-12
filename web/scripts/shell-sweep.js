@@ -311,6 +311,9 @@
  *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts —
  *     a chunk's bounce and restart rows render in time order on both the timeline and
  *     the Node history Selection list with no horizontal overflow at 390px and 320px.
+ *   - projects/hub/src/app/delivery/delivery-layout.shell-sweep.spec.ts — the routed
+ *     Delivery drawer and full-screen detail keep repositories/history bounded and
+ *     the last history entry scrollable and hit-testable at 1280/901/900/390/320px.
  *   - projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts — the
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
@@ -328,8 +331,8 @@
  *     wraps inside its card, and every card's way in stays on screen.
  *   - projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts — a project's
  *     garden page: a bare gardening path lands on Proposals, the gardening strip wears
- *     the kit's sub-strip, the Proposals count is amber while any wait, and the strip
- *     scrolls inside itself at a phone width.
+ *     the kit's desktop sub-strip, the Proposals count is amber while any wait, and at
+ *     phone widths the tabs wrap within the page with 44px targets.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -392,6 +395,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/board-shell/board-shell.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/core/chunk-detail-header/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/delivery/delivery-layout.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-artifact-structured.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-card/chunk-card-tone.shell-sweep.spec.ts' },

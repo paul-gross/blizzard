@@ -70,10 +70,8 @@
                 item.stated_priority
               }}</fleet-kit-badge>
             }
-            <fleet-kit-markdown [text]="item.body ?? ''" class="i-body md-body" data-testid="issue-body" />
-          } @else {
-            <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
           }
+          <fleet-kit-markdown [text]="item.body ?? ''" class="i-body md-body" data-testid="issue-body" />
           <div class="i-messages">
             <fleet-kit-section-head label="Messages" [count]="item.comments.length" />
             @if (item.comments.length === 0) {

@@ -33,12 +33,12 @@
   font-size: var(--fs-xs);
 }
 .trail-answer {
+  margin: 4px 0;
   color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
   white-space: pre-wrap;
-}
-.trail-answer::before {
-  content: '· ';
-  color: var(--label-dim);
+  overflow-wrap: anywhere;
 }
 .delivered {
   color: var(--cyan);
@@ -50,6 +50,7 @@
   margin: 0 0 4px;
   color: var(--text);
   font-size: var(--fs-sm);
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

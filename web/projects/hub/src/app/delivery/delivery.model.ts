@@ -2,7 +2,7 @@ import {
   ageMs,
   type AsyncStateQuery,
   asyncStateOf,
-  bounceReason,
+  compactBounce,
   type ChunkStatus,
   chunkLane,
   type ChunkSummary,
@@ -12,7 +12,6 @@ import {
   type FlowFactView,
   type KitAsyncStateValue,
   type FlowView,
-  parseBounceEnvelope,
   type PrView,
   type RepositorySummary,
   projectTint,
@@ -110,6 +109,7 @@ function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
 
 /** The chunk's latest recorded bounce, as a row names it. */
 export interface DeliveryBounce {
+  readonly compact: ReturnType<typeof compactBounce>;
   /** `failure`, `conflict`, `poll-timeout` — the answer that bounced it. */
   readonly cause: string;
   /** Whether the bounce's turn withdrew its submission from its flows, as the hub records it. */
@@ -201,14 +201,16 @@ function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounc
   const footprint = chunk.open_prs.length > 0 || chunk.awaiting_external_merge;
   const age = ageMs(latest.recorded_at, inputs.now);
   if (!footprint && (age === null || age >= BOUNCE_WINDOW_MS)) return null;
-  const reason = parseBounceEnvelope(latest.envelope)?.detail ? bounceReason(latest.envelope) : null;
+  const compact = compactBounce(latest.envelope, latest.cause);
+  const reason = compact.reason;
   return {
+    compact,
     cause: latest.cause,
     withdrawn: latest.withdrawn,
     reason,
     count: chunk.bounce_count,
     at: latest.recorded_at,
-    title: [reason, formatAbsolute(latest.recorded_at)].filter((part) => part !== null).join('\n'),
+    title: [compact.full, latest.withdrawn ? 'withdrawn' : null, formatAbsolute(latest.recorded_at)].filter((part) => part !== null).join('\n'),
   };
 }
 

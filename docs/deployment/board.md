@@ -5,14 +5,15 @@ narrows it to one project is [projects.md](./projects.md#the-boards-project-lens
 
 ## Board, list and tracks layouts
 
-The switch in the board's header picks a layout. **Board** is the lane grid. **List** reads every chunk as one
-full-width row, top to bottom: needs human, waiting, and running, each lane newest first; then ready and backlog in the
-hub's dispatch and backlog order, split by a `▲ Ready · Backlog ▼` line; then done, newest finished first. Each row
-leads with an icon for its lane — paused and stopped have icons of their own — then the chunk's id over its work items,
-one cell naming its runner, its step and its open PRs, and its cost. On the All lens of a tenant with more than one
-project, each card and row takes its project's color as its background; under one project's lens, or on a tenant with
-one project, every chunk is the same project and the board drops the color. PRs show by number alone, a blocked chunk's
-marking is plain text, and a finished row closes on a check with the time it completed or stopped.
+The switch in the board's header picks a layout. **Board** is the lane grid, combining needs-human and waiting chunks in
+one **Human Attention** column. **List** keeps those lanes separate and reads every chunk as one full-width row, top to
+bottom: needs human, waiting, and running, each lane newest first; then ready and backlog in the hub's dispatch and
+backlog order, split by a `▲ Ready · Backlog ▼` line; then done, newest finished first. Each row leads with an icon for
+its lane — paused and stopped have icons of their own — then the chunk's id over its work items, one cell naming its
+runner, its step and its open PRs, and its cost. On the All lens of a tenant with more than one project, each card and
+row takes its project's color as its background; under one project's lens, or on a tenant with one project, every chunk
+is the same project and the board drops the color. PRs show by number alone, a blocked chunk's marking is plain text,
+and a finished row closes on a check with the time it completed or stopped.
 
 With the `queue:reorder` permission ([tenants.md](./tenants.md)), each ready and backlog row carries a grip and drags to
 a new place in its own list; with `chunk:control` as well, a row dragged above the line is promoted into the ready queue
@@ -48,23 +49,23 @@ with the waits between them; selecting a step there moves the drawer to it.
 The layout lives in the URL as `?layout=list` or `?layout=tracks`, beside the open chunk's `?chunk=` and under either
 lens, so a reload or a shared link keeps it. With no `layout` the board opens on the grid. Under Tracks the open step
 lives there too: `?step=` names it by its session, and `?at=` by the instant it began, for a step no session of a runner
-ran. Selecting a different chunk clears both.
+ran. Selecting a different chunk clears both. Switching project lenses keeps the selected layout but clears the open
+chunk and step.
 
 ## Work item titles
 
 A card names each work item as its work-ref label over its title. A chunk carrying up to three items lists every pair;
 past three it shows the first two and folds the rest behind `+N more`, which opens in place without opening the chunk.
-Beneath the items come a blocked chunk's `blocked by` marking, then, on a card in the running, waiting, or needs-human
-lane, its open PRs or `Awaiting your merge`. Next is a row with the chunk's step on the left, beside a `gate` badge
-while a decision waits on a person, and its id on the right, and last its cost on the right, with a done card's
-completion time on the left. The status word shows on the step row only where it says more than the lane's heading:
-paused and waiting on human, which share the waiting lane, and delivering, within running. In the list each label links
-out to its item at the work source.
+Beneath the items come a blocked chunk's `blocked by` marking, then, on a card in the Running or Human Attention column,
+its open PRs or `Awaiting your merge`. Next is a row with the chunk's step on the left, beside a `gate` badge while a
+decision waits on a person, and its id on the right, and last its cost on the right, with a done card's completion time
+on the left. The step row names paused and waiting-on-human states within Human Attention, and delivering within
+Running. In the list each label links out to its item at the work source.
 
-A card or row in the running, waiting, or needs-human lane also carries the chunk's graph-progress strip: one block per
-node of its graph, in tens, each block reading its node's state — current in pulsing cyan, passed in green, failed in
-red, and unvisited left dark. Hovering a block names the node and its state. A finished chunk carries no strip; its
-`graph_progress` is empty.
+A card in Running or Human Attention, or a list row in the running, waiting, or needs-human lane, also carries the
+chunk's graph-progress strip: one block per node of its graph, in tens, each block reading its node's state — current in
+pulsing cyan, passed in green, failed in red, and unvisited left dark. Hovering a block names the node and its state. A
+finished chunk carries no strip; its `graph_progress` is empty.
 
 The titles are a second read, made after the chunk list has answered, so the lanes fill first. The board reads its
 chunks in batches of 100, and each batch's cards gain their titles as that batch answers. Until then each title is a
@@ -90,38 +91,43 @@ it first. With `chunk:control`, the dock's ⋮ menu carries the chunk's actions.
 its Work item; the Work item box names the chunk's session efficiency and, beside it, the chunks it depends on and the
 chunks it blocks, each led by its lane's icon.
 
-The dock's Node history lists the chunk's steps oldest first. Each row closes on a usage row naming the step's session
-efficiency and who ran it as `host/runner · harness`; a step sent back carries its reason on a row of its own.
+The dock's Node history lists the chunk's steps oldest first, grouping consecutive steps under graph headings that link
+to their graphs. Where usage is recorded, a step's usage row names its dollar cost and who ran it as
+`host/runner · harness`; the full chunk page's Node history keeps the richer session efficiency figure. A bounce shows
+its repository and PR identity when available, with its reason on a separate row beneath; without that identity the
+reason appears directly in the verdict column. Hovering the bounce shows its full diagnostic text.
 
 ## Session efficiency
 
 The board reads a chunk's, a step's, or the fleet's usage as one figure, `$0.30 · 220kI / 32.7kO × 2.57%`: the cost,
 then the distinct input (input plus cache writes, cache reads excluded), the output, and the cache miss — distinct input
-over distinct input plus cache reads. Each figure but the cost reads to three significant digits, with `k` and `M` for
-thousands and millions; the cost reads `~$X` for an estimate and `$X+` for a partial total. With no input the miss reads
-`—`, and a usage of no tokens at all reads its cost alone. Hovering the figure spells each part out.
+over distinct input plus cache reads. The hub dock's Node history shows only the dollar cost alongside the runner and
+harness, rather than the token and cache figures. Each figure but the cost reads to three significant digits, with `k`
+and `M` for thousands and millions; the cost reads `~$X` for an estimate and `$X+` for a partial total. With no input
+the miss reads `—`, and a usage of no tokens at all reads its cost alone. Hovering the figure spells each part out.
 
 ## Fleet spend
 
 The board's right rail opens on Fleet spend: the fleet's session efficiency figure for today and for yesterday, each day
 running from local midnight. The mobile board shows the same two rows. Below it the rail stacks the runners, open
-questions, gates, and the Activity feed.
+questions, gates, and the Activity feed; empty Questions and Gates panels are hidden.
 
 ## The Delivery tab
 
 On a desktop, `/delivery` lists every chunk delivering above a divider and every chunk delivered below it, full width. A
 row leads with the chunk's lane icon and when it last moved, names the chunk's work items and its current step, draws
 the pipeline `PR open → in line → landing → landed` lit up to the furthest stage it reached — `in line` carries its best
-position — and links each repository's PR or landed commit. A chunk standing out of line after a bounce reads that
-bounce on its row as its cause, `· withdrawn` when its submission was withdrawn right after the bounced turn, how long
-ago, and its reason; a bounced chunk with no other delivery footprint drops off the list after 24 hours. A tenant with
-nothing delivering or delivered reads "Nothing delivering or delivered."
+position — and links each repository's PR or landed commit. A chunk standing out of line after a bounce shows a compact
+repository and PR identity when available, followed by its reason. Hovering that bounce shows the original diagnostic
+text, a `withdrawn` marker if its submission was withdrawn right after the bounced turn, and the absolute time; a
+bounced chunk with no other delivery footprint drops off the list after 24 hours. A tenant with nothing delivering or
+delivered reads "Nothing delivering or delivered."
 
 Clicking a row opens the chunk in a drawer beside the list, held in the URL's `?chunk=`; clicking it again, the drawer's
 ✕, or Escape closes it. The drawer lists the chunk's Repositories — each with its delivery state, branch, PRs, landed
-commit and last update — and its Delivery history newest first: its facts on every flow, its bounces with their cause
-and reason, and the graph transitions around them. A landing attempt whose submission was then withdrawn reads
-`· withdrawn`.
+commit and last update — and its Delivery history newest first: its facts on every flow, its bounces with compact
+repository and PR identities and reasons, and the graph transitions around them. A bounce's full diagnostic text is
+available on hover. A landing attempt whose submission was then withdrawn reads `· withdrawn`.
 
 On a phone, `/delivery` lists the same chunks as cards, and `/delivery/chunk/:chunkId` opens one chunk's delivery on a
 screen of its own; that route resolves on a desktop too, so a shared link still opens.

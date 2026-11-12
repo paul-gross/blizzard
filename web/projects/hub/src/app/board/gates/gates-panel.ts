@@ -15,6 +15,7 @@ import { injectHubDecisionsQuery } from './gates.query';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GatesPanelView],
   templateUrl: './gates-panel.html',
+  host: { '[style.display]': "state() === 'empty' ? 'none' : null" },
 })
 export class GatesPanel {
   private readonly query = injectHubDecisionsQuery();

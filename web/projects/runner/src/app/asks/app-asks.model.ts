@@ -16,6 +16,7 @@ export function askRows(asks: readonly PanelAsk[], now: number): readonly AskRow
     questionId: ask.question_id,
     runner: ask.owner.label,
     chunkRef: compactRef(ask.chunk_id),
+    chunkId: ask.chunk_id,
     askedFor: askedForLabel(ask.asked_at, now),
     question: ask.question,
   }));

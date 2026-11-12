@@ -1,7 +1,7 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { runnerApi } from 'fleet';
-import { page } from 'vitest/browser';
+import { KitPanel, type runnerApi } from 'fleet';
+import { commands, page } from 'vitest/browser';
 
 import { MachineDetailView } from './chunk-detail-view';
 
@@ -61,6 +61,72 @@ const ESCALATION: runnerApi.EscalationView = {
   wrapped_takeover_command: null,
   closure: null,
 };
+
+const WORKDIR = '/mock/workdir/ch_01M765F1D3TX19RBCKK62JG5JP';
+
+@Component({
+  selector: 'app-workdir-dock-test',
+  imports: [KitPanel, MachineDetailView],
+  template: `<fleet-kit-panel><app-machine-detail-view [lease]="lease" /></fleet-kit-panel>`,
+  styles: `:host { display: block; min-width: 0; }`,
+})
+class WorkdirDockTest {
+  readonly lease = { ...LEASE, workdir: WORKDIR };
+}
+
+describe('machine detail workdir layout (web:shell-sweep)', () => {
+  for (const width of [390, 320, 1024]) {
+    it(`keeps the full workdir readable inside the fact value and clipping panel at ${width}px`, async () => {
+      const tokens = document.createElement('style');
+      tokens.textContent = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+      document.head.appendChild(tokens);
+      await TestBed.configureTestingModule({
+        imports: [WorkdirDockTest],
+        providers: [provideZonelessChangeDetection()],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(WorkdirDockTest);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const path = root.querySelector<HTMLElement>('.path')!;
+        const value = path.closest('dd')!;
+        const clip = root.querySelector<HTMLElement>('.p-body')!.getBoundingClientRect();
+        const valueBounds = value.getBoundingClientRect();
+        expect(path.textContent).toBe(WORKDIR);
+        expect(valueBounds.right).toBeLessThanOrEqual(clip.right + 1);
+        expect(valueBounds.left).toBeGreaterThanOrEqual(clip.left);
+        expect(path.scrollWidth).toBeLessThanOrEqual(path.clientWidth);
+
+        // Check the glyphs, not just a box that the panel could silently clip.
+        const range = document.createRange();
+        const lines = new Set<number>();
+        for (let i = 0; i < WORKDIR.length; i++) {
+          range.setStart(path.firstChild!, i);
+          range.setEnd(path.firstChild!, i + 1);
+          const glyph = range.getBoundingClientRect();
+          expect(glyph.width).toBeGreaterThan(0);
+          expect(glyph.left).toBeGreaterThanOrEqual(valueBounds.left - 1);
+          expect(glyph.right).toBeLessThanOrEqual(Math.min(valueBounds.right, clip.right) + 1);
+          expect(glyph.top).toBeGreaterThanOrEqual(clip.top);
+          expect(glyph.bottom).toBeLessThanOrEqual(clip.bottom + 1);
+          lines.add(Math.round(glyph.top));
+        }
+        if (width < 400) expect(lines.size).toBeGreaterThan(1);
+        else expect(lines.size).toBe(1);
+        range.selectNodeContents(path);
+        expect(range.toString()).toBe(WORKDIR);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      } finally {
+        fixture.destroy();
+        root.remove();
+        tokens.remove();
+      }
+    });
+  }
+});
 
 describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep)', () => {
   it('renders the harness badge beside the resume command with no page errors or horizontal overflow at ~390px', async () => {

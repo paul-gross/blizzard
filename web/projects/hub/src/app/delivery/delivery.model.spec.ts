@@ -197,10 +197,11 @@ describe('a row\'s bounce', () => {
     expect(withdrawn({}).bounce?.withdrawn).toBe(false);
   });
 
-  it('reads no reason from an envelope with no account of its own, and titles the bounce with its instant alone', () => {
+  it('falls back to the recorded cause when an envelope has no detail', () => {
     const row = only(inputs([bounced(5, { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: JSON.stringify({ cause: 'failure' }), recorded_at: fixtureInstant(-5 * MIN) }) })]));
-    expect(row.bounce?.reason).toBeNull();
-    expect(row.bounce?.title.split('\n')).toHaveLength(1);
+    expect(row.bounce?.reason).toBe('failure');
+    expect(row.bounce?.compact).toEqual({ identity: null, reason: 'failure', full: 'failure' });
+    expect(row.bounce?.title.split('\n')).toHaveLength(2);
   });
 
   it('reads no bounce from a turn the hub judged bounced with no bounce recorded', () => {

@@ -20,6 +20,7 @@ import { injectHubQuestionsQuery } from './questions.query';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [QuestionsPanelView],
   templateUrl: './questions-panel.html',
+  host: { '[style.display]': "state() === 'empty' ? 'none' : null" },
 })
 export class QuestionsPanel {
   private readonly query = injectHubQuestionsQuery();

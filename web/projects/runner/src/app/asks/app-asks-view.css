@@ -9,15 +9,25 @@
 }
 .a-hdr {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
 }
 .chunk {
+  flex: none;
+  white-space: nowrap;
   color: var(--amber-hi);
   font-size: var(--fs-sm);
+  text-decoration: none;
+}
+.chunk:hover,
+.chunk:focus-visible {
+  text-decoration: underline;
 }
 .asked {
+  flex: none;
+  white-space: nowrap;
   color: var(--label);
   font-size: var(--fs-label);
 }
@@ -32,14 +42,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.route {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-  margin-top: 3px;
-}
-.route code {
-  color: var(--label);
-}
 .runner {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--label);
 }

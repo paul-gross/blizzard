@@ -19,11 +19,12 @@
   font-family: var(--mono);
 }
 .d-title {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  max-width: 100%;
 }
 .cid {
   display: block;
@@ -60,19 +61,25 @@
 .d-sub .project {
   color: var(--text);
   font-size: var(--fs-xs);
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .d-sub .runner {
   min-width: 0;
   color: var(--cyan);
   font-size: var(--fs-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+.d-sub .node {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-xs);
+  color: var(--label);
 }
 /* The chunk's worker under the identity line: its line and pid, or the ended-session note. */
 .worker {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -90,7 +97,7 @@
 .worker-line {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 460px;
+  max-width: 100%;
 }
 .pid {
   flex: none;
@@ -98,6 +105,8 @@
 }
 .no-worker {
   color: var(--label-dim);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 /* Right-anchored, both vertically centred: the ⋯ trigger and the close button, matched as
    two square targets large enough to hit without aiming — the hub dock header's own. */
@@ -109,7 +118,20 @@
   justify-content: flex-end;
   gap: 8px;
 }
-.actions {
-  --kit-menu-trigger-pad: 8px 15px;
-  --kit-menu-trigger-fs: var(--fs-lg);
+.actions ::ng-deep .trigger {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: var(--fs-lg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.action-dots {
+  display: block;
+  fill: currentColor;
 }

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, booleanAttribute, computed, input } from '@angular/core';
 import { KitBadge, type runnerApi } from 'fleet';
 
 import { deriveLeaseStatus } from '../core/lease-status';
@@ -23,6 +23,8 @@ export class WorkerLine {
 
   /** Whether to lead with the node — off where the surrounding line already names it. */
   readonly showNode = input(true);
+
+  readonly wrapping = input(false, { transform: booleanAttribute });
 
   protected readonly status = computed(() => deriveLeaseStatus(this.lease()));
   protected readonly isStale = computed(() => this.lease().state === 'stale');

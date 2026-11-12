@@ -1,5 +1,6 @@
 import {
   bounceReason,
+  compactBounce,
   type ChunkDetail,
   type FlowFactView,
   type FlowView,
@@ -38,6 +39,7 @@ export interface DrawerRepo {
 
 /** One entry of the delivery history. */
 export interface HistoryEntry {
+  readonly bounce?: ReturnType<typeof compactBounce>;
   readonly id: string;
   readonly at: string;
   /** The short stamp — `13:25`, `Yesterday 23:52`, a date. */
@@ -233,6 +235,7 @@ function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: numb
   const envelope = parseBounceEnvelope(bounce.envelope);
   return {
     ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced', bounce.rework)),
+    bounce: compactBounce(bounce.envelope, bounce.cause),
     repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
     detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
     logKey: logKey(detail, envelope?.action?.log_artifact ?? null, bounce.recorded_at),

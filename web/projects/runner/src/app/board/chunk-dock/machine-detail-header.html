@@ -9,7 +9,7 @@
         <span class="sep" aria-hidden="true">·</span>
       }
       @for (ref of workRefs(); track ref.source + ':' + ref.ref) {
-        <fleet-work-ref-link [workRef]="ref" testid="detail-pointer" />
+        <fleet-work-ref-link [workRef]="ref" appearance="wrapping" testid="detail-pointer" />
         <span class="sep" aria-hidden="true">·</span>
       }
       @if (runnerName(); as runner) {
@@ -18,18 +18,18 @@
       }
       <span class="st" data-testid="machine-detail-status">
         @if (statusTone(); as tone) {
-          <fleet-kit-badge [tone]="tone">{{ statusLabel() }}</fleet-kit-badge>
+          <fleet-kit-badge [tone]="tone">{{ drawerStatusLabel() }}</fleet-kit-badge>
         } @else {
-          {{ statusLabel() }}
+          {{ drawerStatusLabel() }}
         }
       </span>
       <span class="sep" aria-hidden="true">·</span>
-      <span class="st" data-testid="detail-node">{{ nodeName() }}</span>
+      <span class="node" data-testid="detail-node">Node: {{ nodeName() }}</span>
     </span>
     <span class="worker" data-testid="detail-worker">
       @if (worker(); as live) {
         <span class="worker-tag">worker</span>
-        <app-worker-line class="worker-line" [lease]="live" />
+        <app-worker-line class="worker-line" [lease]="live" [showNode]="false" wrapping />
         <span class="pid" data-testid="detail-worker-pid">pid {{ live.pid ?? '—' }}</span>
       } @else {
         <span class="no-worker" data-testid="detail-no-worker">{{ noWorkerText() }}</span>
@@ -38,7 +38,11 @@
   </div>
   <div class="d-actions">
     @if (pause() || pausable()) {
-      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu" />
+      <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu">
+        <svg trigger class="action-dots" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="8" cy="3.5" r="1.4" /><circle cx="8" cy="8" r="1.4" /><circle cx="8" cy="12.5" r="1.4" />
+        </svg>
+      </fleet-kit-menu>
     }
     <fleet-kit-close-button testid="detail-close" (click)="dismiss.emit()" />
   </div>

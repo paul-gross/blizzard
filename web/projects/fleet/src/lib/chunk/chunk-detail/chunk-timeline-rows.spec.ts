@@ -1,5 +1,5 @@
 import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, transitionView } from 'fleet/testing';
+import { bounceView, chunkDetail, transitionView } from 'fleet/testing';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, rowChoice, rowMark, usageForStep } from './chunk-timeline-rows';
 
 const BASE: ChunkDetail = chunkDetail({
@@ -77,10 +77,19 @@ describe('deriveHistoryRows', () => {
     expect(rowChoice(bounce)).toBe('bounced');
   });
 
-  it('titles a bounce whose envelope names no reason without its JSON', () => {
-    const detail = { ...BASE, bounces: [{ cause: 'x', envelope: '{}', recorded_at: '2026-07-13T00:00:02Z' }] } as ChunkDetail;
+  it.each(['{}', ''])('keeps the recorded cause when the bounce envelope has no account: %s', (envelope) => {
+    const detail = chunkDetail({ ...BASE, bounces: [bounceView({ cause: 'poll-timeout', envelope })] });
     const bounce = deriveHistoryRows(detail, NOW).find((r) => r.kind === 'bounce')!;
-    expect(bounce.title).toBe('bounced');
+    expect(bounce.title).toBe('poll-timeout');
+    expect(bounce.bounce).toEqual({ identity: null, reason: 'poll-timeout', full: 'poll-timeout' });
+  });
+
+  it('preserves a nonempty unknown JSON diagnostic in the bounce and its title', () => {
+    const raw = '{"error":"permission denied","code":403}';
+    const detail = { ...BASE, bounces: [{ cause: 'x', envelope: raw, recorded_at: '2026-07-13T00:00:02Z' }] } as ChunkDetail;
+    const bounce = deriveHistoryRows(detail, NOW).find((r) => r.kind === 'bounce')!;
+    expect(bounce.title).toBe(raw);
+    expect(bounce.bounce).toEqual({ identity: null, reason: raw, full: raw });
   });
 
   it('reads a same-graph restart as from → to, by its operator, with no usage of its own', () => {

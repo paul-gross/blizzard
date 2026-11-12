@@ -1,13 +1,10 @@
 @for (row of rows(); track row.questionId) {
   <div class="ask" data-testid="ask-row" [attr.data-question-id]="row.questionId">
     <div class="a-hdr">
-      <span class="chunk">{{ row.chunkRef }}</span>
+      <a class="chunk" [routerLink]="['/board/chunk', row.chunkId]" queryParamsHandling="merge" [attr.aria-label]="'Open question on chunk ' + row.chunkRef">{{ row.chunkRef }}</a>
       <span class="runner" data-testid="ask-runner">{{ row.runner }}</span>
-      <span class="asked">asked {{ row.askedFor }} ago</span>
+      <span class="asked" [attr.aria-label]="'Asked ' + row.askedFor + ' ago'" [title]="'Asked ' + row.askedFor + ' ago'">[{{ row.askedFor }}]</span>
     </div>
     <div class="q">{{ row.question }}</div>
-    <div class="route">
-      answer is a hub write → <code>blizzard hub question answer <span data-testid="ask-question-id">{{ row.questionId }}</span> &lt;answer&gt;</code> or the fleet board
-    </div>
   </div>
 }

@@ -1,5 +1,6 @@
 :host {
   display: block;
+  min-width: 0;
   min-height: 0;
 }
 .drawer {
@@ -98,6 +99,7 @@
 }
 .side,
 .main {
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   /* No side padding: the repository cards and the history rows run the column's full width, edge to edge, as node
@@ -211,6 +213,13 @@
   max-width: 100%;
 }
 .text {
+  overflow-wrap: anywhere;
+  color: var(--tone, var(--text));
+}
+.compact-bounce {
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
   color: var(--tone, var(--text));
 }
 /* A graph transition framing a delivery event: set as the node history sets a judgement: the node engraved, the choice in amber, where it went dim; its stamp and age dimmed. */
@@ -341,4 +350,33 @@
 }
 :host(.mobile) .entry {
   column-gap: 8px;
+}
+/* The detail also appears without the mobile host class in the Delivery drawer. */
+@media (max-width: 900px) {
+  .drawer {
+    overflow-y: auto;
+  }
+  .body {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .side,
+  .main {
+    overflow: visible;
+  }
+  .side {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .repo-head {
+    flex-wrap: wrap;
+  }
+  .repo-name,
+  .repo-state {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .entry {
+    column-gap: 8px;
+  }
 }

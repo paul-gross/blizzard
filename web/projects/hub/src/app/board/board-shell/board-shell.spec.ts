@@ -94,17 +94,14 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="card-merge-wait"]')).toBeNull();
   });
 
-  it('renders the board shell with all six columns and an empty state', async () => {
+  it('renders the board shell with five columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('state', 'empty');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // Six board columns: the backlog, the ready queue, and the four post-dispatch
-    // lanes. READY is a lane like any other — the ready queue is on the
-    // board, not in a rail beside it.
-    expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
     expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
     expect(el.querySelector('[data-col="ready"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
@@ -145,7 +142,7 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
   });
 
   it('engraves the backlog column BACKLOG and the queue column READY, in lane order', async () => {
@@ -155,7 +152,7 @@ describe('BoardShell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const heads = [...el.querySelectorAll('[data-col] .col-lbl')].map((n) => n.textContent?.trim());
-    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'Done']);
+    expect(heads).toEqual(['BACKLOG', 'READY', 'HUMAN ATTENTION', 'RUNNING', 'Done']);
   });
 
   it('renders a not-ready chunk as a card in the backlog column, with no Promote control', async () => {
@@ -210,7 +207,7 @@ describe('BoardShell', () => {
     expect(laneIds(el, 'running')).toEqual([]);
   });
 
-  it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {
+  it('renders a paused chunk in the HUMAN ATTENTION column', async () => {
     const chunks: ChunkSummary[] = [
       chunkSummary({ chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', current_node_id: 'nd_build', work_refs: [] }),
     ];
@@ -220,8 +217,7 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // Paused shares the WAIT/HUMAN column — work stopped pending a human either way.
-    const card = el.querySelector('[data-col="waiting"] [data-testid="chunk-card"]');
+    const card = el.querySelector('[data-col="needs"] [data-testid="chunk-card"]');
     expect(card?.getAttribute('data-status')).toBe('paused');
   });
 

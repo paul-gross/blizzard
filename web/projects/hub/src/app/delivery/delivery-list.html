@@ -59,6 +59,7 @@
       class="row-open"
       bare
       testid="delivery-row-open"
+      [attr.title]="row.bounce?.title"
       [ariaLabel]="'Select chunk ' + row.chunk.shortId"
       [selected]="row.chunk.chunkId === selectedId()"
       (picked)="picked.emit(row.chunk.chunkId)"
@@ -91,10 +92,8 @@
       </span>
       @if (row.bounce; as bounce) {
         <span class="bounce" data-testid="delivery-bounce" [title]="bounce.title"
-          ><span class="cause">{{ bounce.cause }}{{ bounce.withdrawn ? ' · withdrawn' : '' }} · {{ age(bounce.at) }}</span>
-          @if (bounce.reason; as reason) {
-            · <span class="reason">{{ reason }}</span>
-          }</span
+          >@if (bounce.compact.identity; as identity) {<span class="bounce-identity">{{ identity }}</span>}
+          <span class="reason">{{ bounce.compact.reason }}</span></span
         >
       }
       @if (row.line?.perRepo; as perRepo) {

@@ -23,6 +23,7 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
+  padding: 3px;
   overflow-x: auto;
   scrollbar-width: none;
   text-transform: none;
@@ -33,9 +34,14 @@
   width: 0;
   height: 0;
 }
+:host ::ng-deep fleet-kit-chip > .chip {
+  flex: none;
+  white-space: nowrap;
+}
 /* A braked runner's glyph after its name — amber for its own pause, red for the hub's, as on the board rail. */
 .brake {
   margin-left: 5px;
+  vertical-align: middle;
   color: var(--amber);
 }
 .brake[data-glyph='stop'] {
@@ -57,5 +63,6 @@
 }
 /* A project's swatch before its name. */
 .swatch {
-  margin-right: 5px;
+  margin-right: 6px;
+  vertical-align: middle;
 }
