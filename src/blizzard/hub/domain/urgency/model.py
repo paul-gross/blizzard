@@ -292,6 +292,10 @@ class Urgency:
         mark = MarkWrite(icon if icon_mark != self.icon else None, keep=icon_mark == self.icon)
         return edited, mark, edited._change(ctx, ChangeOp.EDIT, changes, at)
 
+    def retires_to(self, retired: bool) -> bool:
+        """Whether setting ``retired`` moves the urgency at all — ``False`` when it already stands there."""
+        return lifecycle.transition(self.retired, retired) is not None
+
     def set_retired(
         self,
         retired: bool,

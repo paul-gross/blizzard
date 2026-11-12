@@ -302,7 +302,7 @@ class UrgencyLifecycle:
             current = self._urgencies.get(urgency.urgency_id, transaction=locked)
             assert current is not None, "an urgency is never deleted"
             current.require_revision(if_match)
-            if current.retired:
+            if not current.retires_to(True):
                 return Retired(current, ())
             default_id = _settings(self._settings, transaction=locked).default_urgency_id
             open_chunks = self._chunks.open_chunks(current.urgency_id, transaction=locked)
@@ -328,7 +328,7 @@ class UrgencyLifecycle:
             for references in self._references:
                 references.clear(current, ctx, at=at, transaction=locked)
             decided = current.set_retired(True, ctx, if_match=None, at=at, extra=moved_diff(destination, len(moved)))
-            assert decided is not None, "a live urgency always retires"
+            assert decided is not None, "the model answered the no-op above"
             retired, change = decided
             stored = self._urgencies.record_lifecycle(
                 retired,

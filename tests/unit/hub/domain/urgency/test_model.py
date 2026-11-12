@@ -412,3 +412,10 @@ def test_every_refusal_outranks_the_permission_and_each_outranks_the_next() -> N
         retire(default=False, open_chunks=2, key="urgent", target=urgency)
     with pytest.raises(UrgencyMoveRefused):
         retire(default=False, open_chunks=2, key="standard", target=_new(UrgencyShape("standard")))
+
+
+def test_a_retire_moves_a_live_urgency_and_is_a_no_op_on_a_retired_one() -> None:
+    live = _new(UrgencyShape("urgent"))
+    retired = replace(live, retired=True)
+    assert (live.retires_to(True), retired.retires_to(True)) == (True, False)
+    assert (live.retires_to(False), retired.retires_to(False)) == (False, True)

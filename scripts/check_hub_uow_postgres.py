@@ -77,6 +77,9 @@ _APPLY: _LockSet = ([], [tenant_settings_lock(), urgency_order_lock(), urgency_l
 #: round: both take the set's lock, so the urgencies a reorder decides are live hold still until it commits.
 _REORDER: _LockSet = ([], [urgency_order_lock()])
 _ENABLE: _LockSet = ([], [urgency_order_lock(), urgency_lock(_RETIRING)])
+#: A stop or an operator complete of ``a`` — the chunk row alone — against the retire, each way round: every write
+#: that finishes a chunk takes its row lock, so no chunk the retire moves finishes between its re-read and its move.
+_FINISH: _LockSet = (["a"], [])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -92,6 +95,10 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "urgency retire, then config apply": (_RETIRE, _APPLY),
     "urgency retire, then reorder": (_RETIRE, _REORDER),
     "reorder, then urgency retire": (_REORDER, _RETIRE),
+    "urgency retire, then stop": (_RETIRE, _FINISH),
+    "stop, then urgency retire": (_FINISH, _RETIRE),
+    "urgency retire, then complete": (_RETIRE, _FINISH),
+    "complete, then urgency retire": (_FINISH, _RETIRE),
     "urgency enable, then reorder": (_ENABLE, _REORDER),
     "reorder, then urgency enable": (_REORDER, _ENABLE),
 }
