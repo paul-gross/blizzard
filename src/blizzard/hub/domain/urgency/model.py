@@ -26,6 +26,7 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.kernel.id_or_slug import SluggedKind
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick, decide_color, parse_color
@@ -135,6 +136,10 @@ class UrgencySlug(Slug):
                 "slug", f"must be 1-{SLUG_MAX} lowercase letters, digits and single inner hyphens, got {raw!r}"
             )
         return slug
+
+
+#: What resolving an urgency key by id or slug needs of the kind.
+URGENCY_KIND = SluggedKind(IdPrefix.URGENCY, UrgencyId, UrgencySlug.of)
 
 
 def parse_name(raw: object) -> str:

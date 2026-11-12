@@ -231,6 +231,12 @@ class _FakeUrgencies:
     def get_by_slug(self, slug: str, *, transaction: Transaction | None = None) -> Urgency | None:
         return self.held.get(slug)
 
+    def list_all(self, *, transaction: Transaction | None = None) -> list[Urgency]:
+        return [
+            replace(u, retired=True) if transaction is not None and u.slug == self.retire_under_lock else u
+            for u in self.held.values()
+        ]
+
 
 @dataclass
 class _FakeUnit:

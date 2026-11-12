@@ -185,7 +185,8 @@ def put_urgency_order(
     `urgency_order_incomplete` when it leaves a live urgency out, names a retired one, or names one twice, and
     `urgency_unknown` for one the tenant does not hold."""
     try:
-        named = [services.urgency_reading.named("urgencies", key) for key in request.urgencies]
+        named_by = services.urgency_reading.namer()
+        named = [named_by("urgencies", key) for key in request.urgencies]
         moved = services.urgency_ordering.set_order(named, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc

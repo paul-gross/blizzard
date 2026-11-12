@@ -13,7 +13,15 @@ from blizzard.auth_core import Role
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
-from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    seed_session,
+    seed_user,
+)
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 
@@ -265,6 +273,23 @@ def test_each_reorder_appends_one_order_row_and_one_that_moves_nothing_appends_n
     assert len(_changes(hub, "urgency_order")) == before + 2
     incomplete = hub.client.put("/api/urgencies/order", json={"urgencies": ["standard"]})
     assert _field(incomplete)[2] == "urgency_order_incomplete"
+
+
+def test_a_reorder_resolves_its_keys_in_statements_flat_in_how_many_it_names(tmp_path: Path) -> None:
+    def statements(name: str, created: list[str]) -> int:
+        (tmp_path / name).mkdir()
+        tenant = build_hub(tmp_path / name)
+        for slug in created:
+            _create(tenant, slug)
+        reordered = list(reversed(_slugs(tenant)))
+
+        def put() -> None:
+            response = tenant.client.put("/api/urgencies/order", json={"urgencies": reordered})
+            assert response.status_code == 200, response.text
+
+        return count_queries(tenant.engine, put)
+
+    assert statements("two", ["urgent"]) == statements("five", ["urgent", "high", "low", "background"])
 
 
 def test_reads_need_fleet_view_and_writes_config_edit(tmp_path: Path) -> None:

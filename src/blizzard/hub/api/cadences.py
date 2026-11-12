@@ -117,7 +117,8 @@ def cadence_shape(document: CadenceDocument, urgency: UrgencyNamer | None = None
 def _named_urgency(services: TenantServices) -> UrgencyNamer:
     """A request names an urgency by id or slug: each resolves to the id of the urgency the tenant holds, and one
     naming none is refused ``urgency_unknown``."""
-    return lambda field, key: services.urgency_reading.named(field, key).urgency_id
+    named = services.urgency_reading.namer()
+    return lambda field, key: named(field, key).urgency_id
 
 
 def chore_scopes(chore: Chore) -> Literal["all"] | list[str] | None:
