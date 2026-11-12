@@ -19,8 +19,8 @@ _REGISTRIES = [HUB_REGISTRY, HOST_REGISTRY]
 #: Constants that carry no lifetime: they stay in code and never become a key. Each is ``(module, name)``.
 _PINNED: tuple[tuple[str, str], ...] = (
     # Cryptographic sizes.
-    ("blizzard.hub.secrets.internal.key_material", "KEY_BYTES"),
-    ("blizzard.hub.secrets.internal.aes_gcm", "_NONCE_BYTES"),
+    ("blizzard.foundation.secrets.internal.key_material", "KEY_BYTES"),
+    ("blizzard.foundation.secrets.internal.aes_gcm", "_NONCE_BYTES"),
     # Wire-format limits.
     ("blizzard.wire.release", "RELEASE_REASON_MAX_LENGTH"),
     # Slug and name lengths.
