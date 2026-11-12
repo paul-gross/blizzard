@@ -58,7 +58,6 @@ Name such a repository by its new slug.
 | `allow_no_ci`        | Opt in to landing without CI (`--allow-no-ci`); defaults to false.                                                       |
 | `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it.    |
 
-
 Every field but `landing_policy`, `allow_no_ci` and `park_timeout_hours` is required; a create without `forge` is
 refused `422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours`
 is the one field that can, with `edit --clear park-timeout` or a `PATCH` sending `null`.
