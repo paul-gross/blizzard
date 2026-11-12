@@ -238,6 +238,7 @@ def runner_seams(
     config: RunnerConfig,
     *,
     clock: IClock,
+    monotonic_clock: IMonotonicClock,
     process: LinuxProcessProbe,
     children: IChildProcesses,
     events: IRunnerEventPublisher | None = None,
@@ -321,6 +322,7 @@ def runner_seams(
         process=process,
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
+        monotonic_clock=monotonic_clock,
         results=runner_stores.selftest_results if runner_stores else None,
     )
     # The runner's own health diagnostics; absent, the route and dashboard refuse.
@@ -399,12 +401,15 @@ def create_app(
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
-    children = children or SubprocessChildProcesses()
+    # Real OS processes are waited on here, so real time — never `hub_retry_clock`, which tests make a manual clock.
+    process_clock = SystemMonotonicClock()
+    children = children or SubprocessChildProcesses(process_clock)
     if runners is None:
         runners = (
             runner_seams(
                 config,
                 clock=clock,
+                monotonic_clock=process_clock,
                 process=process,
                 children=children,
                 events=RunnerEventPublisher.over(events, config.served_id()),
@@ -868,6 +873,7 @@ def _wire_runner(
     served = runner_seams(
         config,
         clock=clock,
+        monotonic_clock=host.monotonic_clock,
         process=process,
         children=graph.children,
         tracing=graph.trace_settings,

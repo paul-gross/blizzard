@@ -716,6 +716,7 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
         worker_env=AllowlistedEnv.of(()),
         binary="opencode",
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         versions=version_probe(),
     )
@@ -1662,6 +1663,7 @@ def test_orphan_and_reconcile_touch_nothing_a_worker_that_owned_its_turn_took_wi
         worker_env=AllowlistedEnv.of(()),
         binary="opencode",
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         versions=version_probe(),
     )

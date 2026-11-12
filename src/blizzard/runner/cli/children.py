@@ -43,7 +43,7 @@ class RunnerCliCollaborators(CliCollaborators):
             clock=shared.clock,
             wall_clock=shared.wall_clock,
             monotonic_clock=shared.monotonic_clock,
-            children=SubprocessChildProcesses(),
+            children=SubprocessChildProcesses(shared.monotonic_clock),
             loopback=UrllibLoopbackTransport(),
             service=UrllibServiceTransport(),
         )

@@ -9,6 +9,7 @@ from __future__ import annotations
 from concurrent.futures import Executor
 from pathlib import Path
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
@@ -62,6 +63,7 @@ def test_a_plugin_reference_does_not_change_fake_binary_output_parsing(
             worker_env=AllowlistedEnv.of(()),
             binary=binary,
             process=probe,
+            monotonic_clock=SystemMonotonicClock(),
             launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
             worker_config_path=worker_config_path,
             versions=version_probe(),

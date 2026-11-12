@@ -16,6 +16,7 @@ from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult,
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import StepKey, trace_id
@@ -107,7 +108,12 @@ def _host(tmp_path: Path, exports: _Exports) -> HostProcess:
             exporter=exports.spans,
         ),
         received_telemetry=build_received_telemetry_export(
-            config.tracing, _ENDPOINT, resource=resource, metric_exporter=exports.metrics, log_exporter=exports.logs
+            config.tracing,
+            _ENDPOINT,
+            resource=resource,
+            monotonic_clock=SystemMonotonicClock(),
+            metric_exporter=exports.metrics,
+            log_exporter=exports.logs,
         ),
     )
 

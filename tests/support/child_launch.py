@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import os
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.environments.factory import WorkspaceLaunch
 from blizzard.runner.environments.internal.basic_provider import CLONE_TIMEOUT
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
@@ -15,7 +16,7 @@ from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 #: The seam's one driver; stateless, so every test shares it.
-CHILDREN = SubprocessChildProcesses()
+CHILDREN = SubprocessChildProcesses(SystemMonotonicClock())
 
 
 def tool_env() -> ChildEnv:

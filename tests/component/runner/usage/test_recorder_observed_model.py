@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -159,6 +159,7 @@ def _opencode_recorder(
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         transcript_source=source,
         price_catalog=_LunaPriceCatalog(),
@@ -346,6 +347,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter),
         versions=version_probe(),
@@ -371,6 +373,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     solo = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         versions=version_probe(),
     )
@@ -422,6 +425,7 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter),
         versions=version_probe(),

@@ -8,10 +8,10 @@ tears down — no chunk, lease, environment binding, or hub call is ever on this
 from __future__ import annotations
 
 import os
-import time
 import uuid
 from dataclasses import dataclass, replace
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -70,13 +70,14 @@ class Worker:
 
     process: IProcessProbe
     pid: int
+    monotonic_clock: IMonotonicClock
 
     def wait_for_exit(self, start_time: str) -> bool:
-        deadline = time.monotonic() + _EXIT_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
+        deadline = self.monotonic_clock.monotonic() + _EXIT_TIMEOUT_SECONDS
+        while self.monotonic_clock.monotonic() < deadline:
             if not self.process.is_alive(self.pid, start_time):
                 return True
-            time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
+            self.monotonic_clock.sleep(_EXIT_POLL_INTERVAL_SECONDS)
         return not self.process.is_alive(self.pid, start_time)
 
     def reap(self) -> None:
@@ -84,9 +85,9 @@ class Worker:
         self.process.kill(self.pid)
         if start_time is None:  # already gone
             return
-        deadline = time.monotonic() + _REAP_TIMEOUT_SECONDS
-        while time.monotonic() < deadline and self.process.is_alive(self.pid, start_time):
-            time.sleep(_EXIT_POLL_INTERVAL_SECONDS)
+        deadline = self.monotonic_clock.monotonic() + _REAP_TIMEOUT_SECONDS
+        while self.monotonic_clock.monotonic() < deadline and self.process.is_alive(self.pid, start_time):
+            self.monotonic_clock.sleep(_EXIT_POLL_INTERVAL_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ class Scratch:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
+    monotonic_clock: IMonotonicClock
     elicitation_replies: IElicitationReplyReader
     workdir: str
     session_id: str
@@ -136,7 +138,7 @@ class Spawn:
         )
         if refusal is not None:
             return cls(refusal, handle)
-        exited = Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time)
+        exited = Worker(scratch.process, handle.pid, scratch.monotonic_clock).wait_for_exit(handle.process_start_time)
         verdict = spawn_exit_verdict(
             handle.pid, handle.session_id, exited=exited, exit_timeout_seconds=_EXIT_TIMEOUT_SECONDS
         )
@@ -190,7 +192,7 @@ class Judge(Check):
         handle.confirm_durable()  # no durable record here to threaten — disarm now
         # The detached launch/collect shape: the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
-        exited = Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time)
+        exited = Worker(scratch.process, handle.pid, scratch.monotonic_clock).wait_for_exit(handle.process_start_time)
         choice = scratch.adapter.parse_verdict(scratch.elicitation_replies.read(output_path)) if exited else None
         return judge_verdict(exited=exited, choice=choice)
 
@@ -210,7 +212,7 @@ class Resume(Check):
         verdict = resume_verdict(resumed.pid, scratch.session_id)
         if not verdict.passed:
             return verdict
-        worker = Worker(scratch.process, resumed.pid)
+        worker = Worker(scratch.process, resumed.pid, scratch.monotonic_clock)
         # Bounded wait first so a fast-finishing resume flushes its stdout before it is reaped.
         worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
@@ -274,6 +276,7 @@ class SelfTest:
     adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
+    monotonic_clock: IMonotonicClock
     elicitation_replies: IElicitationReplyReader
 
     def run(self) -> list[SelfTestCheck]:
@@ -282,6 +285,7 @@ class SelfTest:
                 adapter=self.adapter,
                 scratch_git=self.scratch_git,
                 process=self.process,
+                monotonic_clock=self.monotonic_clock,
                 elicitation_replies=self.elicitation_replies,
                 workdir=repo.workdir,
                 session_id=f"selftest-{uuid.uuid4().hex[:12]}",

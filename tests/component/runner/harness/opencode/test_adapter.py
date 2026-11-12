@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import ManualMonotonicClock, SystemMonotonicClock
 from blizzard.runner.harness.adapter import WorkerIdentityError
 from blizzard.runner.harness.opencode.adapter import (
     MAX_IDENTITY_PREAMBLE_LINES,
@@ -180,6 +181,7 @@ def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Pat
         stdout_path=str(stdout_path),
         stderr_path=str(stderr_path),
         process=probe,
+        monotonic_clock=ManualMonotonicClock(),
     )
 
     with pytest.raises(WorkerIdentityError, match="mock-opencode blew up"):
@@ -193,6 +195,7 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path, spawn_exec
     stdout_path = tmp_path / "lease-1.stdout"
     stdout_path.write_bytes(b"")
     probe = FakeProbe(alive={(4242, "start-token")})
+    clock = ManualMonotonicClock()
     pending = PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -200,10 +203,13 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path, spawn_exec
         stdout_path=str(stdout_path),
         stderr_path="",
         process=probe,
+        monotonic_clock=clock,
     )
 
-    with pytest.raises(WorkerIdentityError):
+    with pytest.raises(WorkerIdentityError, match=r"no identity within 0\.1s"):
         pending.await_identity(0.1)
+
+    assert clock.delays == [0.05, 0.05]
 
 
 def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(
@@ -233,6 +239,7 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
         stdout_path=str(stdout_path),
         stderr_path="",
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
     )
 
     handle = pending.await_identity(0.1)
@@ -280,6 +287,7 @@ def test_fresh_spawn_reads_the_record_a_worker_flushed_as_it_exited(tmp_path: Pa
         stdout_path=str(stdout_path),
         stderr_path="",
         process=_ExitsAtTheProbe(stdout_path, record),
+        monotonic_clock=SystemMonotonicClock(),
     )
 
     handle = pending.await_identity(0.1)
@@ -308,6 +316,7 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path, spawn_exec
         stdout_path=str(stdout_path),
         stderr_path="",
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
     )
 
     handle = pending.await_identity(1.0)
@@ -329,6 +338,7 @@ def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: P
         stdout_path=str(stdout_path),
         stderr_path="",
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
     )
 
     with pytest.raises(WorkerIdentityError):

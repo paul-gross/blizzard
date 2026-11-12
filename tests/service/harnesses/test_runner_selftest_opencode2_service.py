@@ -123,7 +123,11 @@ def test_the_selftest_passes_every_check_against_the_mock_opencode_2(
 ) -> None:
     adapter = _adapter(engine, tmp_path / "runner", executor)
     checks = SelfTest(
-        adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), LinuxProcessProbe(), ElicitationFiles(root="")
+        adapter,
+        SubprocessScratchGit(children=CHILDREN, env=tool_env()),
+        LinuxProcessProbe(),
+        SystemMonotonicClock(),
+        ElicitationFiles(root=""),
     ).run()
 
     assert len(checks) == 7

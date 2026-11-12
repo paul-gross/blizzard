@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.model_support import model_supported
 from blizzard.foundation.node_steps import TIER_PREFIX
@@ -118,12 +118,13 @@ class PendingOpenCodeIdentity:
     stdout_path: str
     stderr_path: str
     process: IProcessProbe
+    monotonic_clock: IMonotonicClock
     confirm_durable: Callable[[], None] = field(
         default=lambda: None, compare=False
     )  # disarms the daemon-death kill signal once durably recorded; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
-        deadline = time.monotonic() + timeout
+        deadline = self.monotonic_clock.monotonic() + timeout
         while True:
             # Probed before the read: a worker seen dead has written all it ever will, so a record
             # flushed just before it exited is still read below rather than lost between the two.
@@ -140,9 +141,9 @@ class PendingOpenCodeIdentity:
                 )
             if not alive:
                 raise WorkerIdentityError(f"the OpenCode worker exited before its first record{self._stderr_tail()}")
-            if time.monotonic() >= deadline:
+            if self.monotonic_clock.monotonic() >= deadline:
                 raise WorkerIdentityError(f"no identity within {timeout}s{self._stderr_tail()}")
-            time.sleep(_IDENTITY_POLL_INTERVAL_SECONDS)
+            self.monotonic_clock.sleep(_IDENTITY_POLL_INTERVAL_SECONDS)
 
     def _stderr_tail(self) -> str:
         """The worker's own diagnosis of its death, appended to an identity failure — the
@@ -249,7 +250,9 @@ class OpenCodeAdapter:
         process: IProcessProbe,
         launcher: IProcessLauncher,
         versions: VersionProbe,
+        monotonic_clock: IMonotonicClock,
     ) -> None:
+        self._monotonic_clock = monotonic_clock
         self._binary = binary
         self._versions = versions
         self._command = OpenCodeCommand(binary)
@@ -432,6 +435,7 @@ class OpenCodeAdapter:
             stdout_path=preamble.stdout_path,
             stderr_path=preamble.stderr_path,
             process=self._process,
+            monotonic_clock=self._monotonic_clock,
             confirm_durable=launched.confirm_durable,
         )
 

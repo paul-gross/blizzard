@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.platform_tracing.handle import platform_tracing_enabled
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
@@ -46,6 +47,7 @@ def build_received_telemetry_export(
     environ: Mapping[str, str],
     *,
     resource: Mapping[str, str],
+    monotonic_clock: IMonotonicClock,
     metric_exporter: Any | None = None,
     log_exporter: Any | None = None,
 ) -> IReceivedTelemetryExport:
@@ -61,4 +63,5 @@ def build_received_telemetry_export(
         log_exporter=log_exporter,
         metrics=metric_exporter is not None or signal_exportable(TelemetrySignal.METRICS, environ),
         logs=log_exporter is not None or signal_exportable(TelemetrySignal.LOGS, environ),
+        monotonic_clock=monotonic_clock,
     )

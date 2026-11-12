@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
@@ -58,7 +59,11 @@ def _selftest(bin_dir: Path, passthrough: tuple[str, ...], executor: ThreadPoolE
         versions=version_probe(),
     )
     return SelfTest(
-        adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), process, ElicitationFiles(root="")
+        adapter,
+        SubprocessScratchGit(children=CHILDREN, env=tool_env()),
+        process,
+        SystemMonotonicClock(),
+        ElicitationFiles(root=""),
     )
 
 

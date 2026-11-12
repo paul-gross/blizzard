@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
@@ -169,7 +170,7 @@ def _opencode_cell(autonomy: Autonomy, source: str, root: Path, binary: str, exe
         home, project, bundle = _opencode_project(cell, server.server_port)
         os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), XDG_DATA_HOME=str(home / ".data"))
         process = LinuxProcessProbe()
-        children = SubprocessChildProcesses()
+        children = SubprocessChildProcesses(SystemMonotonicClock())
         env = AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"))
         adapter = OpenCodeAdapter(
             binary=binary,
@@ -178,6 +179,7 @@ def _opencode_cell(autonomy: Autonomy, source: str, root: Path, binary: str, exe
             autonomy=autonomy,
             permission_resolver=SubprocessOpenCodePermissionResolver(binary, children=children),
             process=process,
+            monotonic_clock=SystemMonotonicClock(),
             launcher=ProcessLauncher(process, executor=executor, children=children),
             versions=VersionProbe(children, env.tool()),
         )
@@ -217,7 +219,7 @@ def _claude_cell(autonomy: Autonomy, root: Path, binary: str, model: str, execut
     settings = cell / "settings.json"
     settings.write_text(json.dumps({"permissions": {"ask": ["Bash(echo blizzard-probe-ask*)"]}}))
     process = LinuxProcessProbe()
-    children = SubprocessChildProcesses()
+    children = SubprocessChildProcesses(SystemMonotonicClock())
     env = AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"))
     adapter = ClaudeCodeAdapter(
         binary,

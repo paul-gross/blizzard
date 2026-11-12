@@ -7,11 +7,11 @@ import fcntl
 import os
 import subprocess
 import termios
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import IO
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import (
     ChildLaunchError,
@@ -138,6 +138,9 @@ def _killed(process: subprocess.Popen[str]) -> tuple[str, str]:
 class SubprocessChildProcesses:
     """Every launch starts a new session, so the child's pid is its pgid and a group kill reaches its descendants."""
 
+    def __init__(self, monotonic_clock: IMonotonicClock) -> None:
+        self._monotonic_clock = monotonic_clock
+
     def run(
         self,
         command: Sequence[str] | ShellCommand,
@@ -149,7 +152,7 @@ class SubprocessChildProcesses:
         input_settle: float = 0.0,
         stdout: IO[bytes] | None = None,
     ) -> ChildRun:
-        deadline = time.monotonic() + timeout
+        deadline = self._monotonic_clock.monotonic() + timeout
         try:
             process = subprocess.Popen(
                 command.script if isinstance(command, ShellCommand) else list(command),
@@ -168,9 +171,9 @@ class SubprocessChildProcesses:
         try:
             if input is not None and input_settle > 0:
                 write_unclosed(process, input)
-                time.sleep(max(0.0, min(input_settle, deadline - time.monotonic())))
+                self._monotonic_clock.sleep(max(0.0, min(input_settle, deadline - self._monotonic_clock.monotonic())))
                 input = None
-            out, err = process.communicate(input, timeout=max(0.0, deadline - time.monotonic()))
+            out, err = process.communicate(input, timeout=max(0.0, deadline - self._monotonic_clock.monotonic()))
         except subprocess.TimeoutExpired:
             out, err = _killed(process)
             return ChildRun(exit_code=None, stdout=out, stderr=err, timed_out=True)

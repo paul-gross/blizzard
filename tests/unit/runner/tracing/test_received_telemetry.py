@@ -12,6 +12,7 @@ import pytest
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.platform_tracing.received import (
     JSON_CONTENT_TYPE,
     PROTOBUF_CONTENT_TYPE,
@@ -359,13 +360,18 @@ def test_a_log_record_keeps_its_trace_context_only_inside_the_leases_chunk_trace
     [RunnerTracingConfig(), RunnerTracingConfig(harness_telemetry=True), RunnerTracingConfig(platform=True)],
 )
 def test_the_export_handle_is_off_unless_both_switches_are_on(config: RunnerTracingConfig) -> None:
-    handle = build_received_telemetry_export(config, _ENDPOINT, resource={"service.name": "blizzard-runner"})
+    handle = build_received_telemetry_export(
+        config, _ENDPOINT, resource={"service.name": "blizzard-runner"}, monotonic_clock=SystemMonotonicClock()
+    )
     assert isinstance(handle, DisabledReceivedTelemetryExport)
 
 
 def test_the_export_handle_is_off_without_an_otlp_endpoint() -> None:
     config = RunnerTracingConfig(platform=True, harness_telemetry=True)
-    assert isinstance(build_received_telemetry_export(config, {}, resource={}), DisabledReceivedTelemetryExport)
+    assert isinstance(
+        build_received_telemetry_export(config, {}, resource={}, monotonic_clock=SystemMonotonicClock()),
+        DisabledReceivedTelemetryExport,
+    )
 
 
 def test_a_url_attribute_leaves_without_its_query_string() -> None:
@@ -373,7 +379,11 @@ def test_a_url_attribute_leaves_without_its_query_string() -> None:
 
     exporter = InMemoryLogRecordExporter()
     handle = build_received_telemetry_export(
-        RunnerTracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, log_exporter=exporter
+        RunnerTracingConfig(platform=True, harness_telemetry=True),
+        _ENDPOINT,
+        resource={},
+        monotonic_clock=SystemMonotonicClock(),
+        log_exporter=exporter,
     )
     handle.forward_logs(
         [_record(attributes={"url.full": "https://x.test/p?token=secret#f", "url.query": "token=s"})], "s"
@@ -420,7 +430,11 @@ def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> No
 
     capture = Capture()
     handle = build_received_telemetry_export(
-        RunnerTracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, metric_exporter=capture
+        RunnerTracingConfig(platform=True, harness_telemetry=True),
+        _ENDPOINT,
+        resource={},
+        monotonic_clock=SystemMonotonicClock(),
+        metric_exporter=capture,
     )
     handle.forward_metrics(
         [
@@ -497,7 +511,7 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
             return None
 
     held = Held()
-    queue = MetricQueue(held, max_points=4)
+    queue = MetricQueue(held, SystemMonotonicClock(), max_points=4)
     empty = ResourceMetrics(resource=Resource({}), scope_metrics=[], schema_url="")
     batch = {n: MetricsData(resource_metrics=[empty] * n) for n in (1, 2, 3)}
     queue.put(batch[1], 1)
@@ -543,7 +557,7 @@ def test_the_metrics_queue_shutdown_discards_what_is_queued_and_leaves_an_in_fli
             self.shut_down_while_exporting = self.shut_down_while_exporting or self.exporting
 
     held = Held()
-    queue = MetricQueue(held)
+    queue = MetricQueue(held, SystemMonotonicClock())
     queue.put(MetricsData(resource_metrics=[]), 1)
     assert entered.wait(5.0)
     queue.put(MetricsData(resource_metrics=[]), 2)

@@ -98,7 +98,7 @@ class OpenCodeDeclaration:
     ) -> HarnessAssembly:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
         receives, and the one health probe every root shares."""
-        del clock, monotonic_clock, health_roots
+        del clock, health_roots
         worker_env = shared.worker_env
         tool_env = worker_env.tool()
         exporter = SubprocessOpenCodeExporter(binary=section.binary, children=children, env=tool_env)
@@ -128,6 +128,7 @@ class OpenCodeDeclaration:
             process=process,
             launcher=launcher,
             versions=VersionProbe(children, tool_env),
+            monotonic_clock=monotonic_clock,
         )
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
         auth_path = (

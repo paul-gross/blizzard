@@ -483,6 +483,7 @@ def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tm
     service = SelfTestService(
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         elicitation_replies=ElicitationFiles(root=""),
         clock=SystemClock(),
         run_budget_seconds=0.2,
@@ -511,6 +512,7 @@ def test_unavailable_harness_adapter_is_rejected_as_service_unavailable(tmp_path
     service = SelfTestService(
         scratch_git=_StubScratchGit(tmp_path / "scratch"),
         process=_NeverAliveProcessProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         elicitation_replies=ElicitationFiles(root=""),
         clock=SystemClock(),
     )
@@ -531,7 +533,11 @@ def test_resume_check_reaps_the_resumed_pid_before_the_scratch_repo_is_torn_down
     adapter = FixedPidAdapter(spawn_pid=111, resume_pid=222)
 
     checks = SelfTest(
-        adapter, SubprocessScratchGit(children=CHILDREN, env=tool_env()), probe, ElicitationFiles(root="")
+        adapter,
+        SubprocessScratchGit(children=CHILDREN, env=tool_env()),
+        probe,
+        SystemMonotonicClock(),
+        ElicitationFiles(root=""),
     ).run()
 
     by_name = {c.name: c for c in checks}

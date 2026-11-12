@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
@@ -405,6 +405,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         model="openai/gpt-5.6-luna",
         price_catalog=_LunaPriceCatalog(),

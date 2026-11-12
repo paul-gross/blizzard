@@ -567,12 +567,14 @@ def build_runner_platform_tracing(
 
 
 def build_runner_received_telemetry(
-    config: RunnerConfig, environ: Mapping[str, str] | None = None
+    config: RunnerConfig, monotonic_clock: IMonotonicClock, environ: Mapping[str, str] | None = None
 ) -> IReceivedTelemetryExport:
     """The handle Claude Code's received metrics and logs leave through: off unless ``[tracing]
     harness_telemetry`` and platform tracing are both on."""
     env = os.environ if environ is None else environ
-    return build_received_telemetry_export(config.tracing, env, resource=resource_attributes(env, __version__))
+    return build_received_telemetry_export(
+        config.tracing, env, resource=resource_attributes(env, __version__), monotonic_clock=monotonic_clock
+    )
 
 
 def held_hub_token(config: RunnerConfig, token: ResolvedToken | None = None) -> HubTokenHolder:
@@ -760,7 +762,7 @@ def _build_host_graph(
 
         if trace_platform:
             platform_tracing = build_runner_platform_tracing(config, environ)
-            received_telemetry = build_runner_received_telemetry(config, environ)
+            received_telemetry = build_runner_received_telemetry(config, monotonic_clock, environ)
         platform_tracing = platform_tracing or DisabledPlatformTracing()
         received_telemetry = received_telemetry or DisabledReceivedTelemetryExport()
         resolution = config.flag_resolution or resolve_flags(config.flag_registry, "runner", config.flags)
@@ -781,7 +783,7 @@ def _build_host_graph(
         metric_bounds = ReceiverBounds.fresh(clock)
         log_bounds = ReceiverBounds.fresh(clock)
         telemetry_names = declared_telemetry_names()
-        children = SubprocessChildProcesses()
+        children = SubprocessChildProcesses(monotonic_clock)
         tool_env = config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
         workspaces = build_workspaces(
             config.workspaces,

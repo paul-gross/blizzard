@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
@@ -12,26 +14,68 @@ _HUB_DIR = _SRC_DIR / "hub"
 _RUNNER_DIR = _SRC_DIR / "runner"
 
 # The rule's own implementation (`bzh:injected-clock`) — the one file allowed to read the
-# wall clock directly, since it is what every ``IClock.now()`` call ultimately reaches.
+# system clocks directly, since it is what every ``IClock.now()`` and ``IMonotonicClock`` call
+# ultimately reaches.
 _CLOCK_IMPLEMENTATION_FILE = _FOUNDATION_DIR / "clock.py"
+
+# The hand-run OpenCode compatibility tooling, reached only through the `opencode compatibility`
+# CLI command: a probe that runs once under an operator's eye, with no server loop, lease, or test
+# clock to hand a seam down from. Matched by package segment so both harness generations are covered.
+_COMPATIBILITY_PACKAGE = "compatibility"
 
 # AST-based (plan blizzard-context#clean-architecture): a literal-token grep would
 # misfire on `src/blizzard/foundation/clock.py`'s and `src/blizzard/hub/auth/signing.py`'s docstring mentions of
-# `datetime.now()`, and on `time.monotonic()` — a legitimate non-wall-clock read one token
-# away from `time.time()`.
+# `datetime.now()`.
 _WALL_CLOCK_CALLS: frozenset[tuple[str, str]] = frozenset(
     {
         ("datetime", "now"),
         ("datetime", "utcnow"),
-        ("time", "time"),
         ("func", "now"),
     }
 )
+_WALL_CLOCK_TIME_FUNCTIONS: frozenset[str] = frozenset({"time", "time_ns"})
+
+# The mechanical-deadline reads `IMonotonicClock` carries: ambient, they cannot be advanced by a test.
+_AMBIENT_TIME_FUNCTIONS: frozenset[str] = frozenset({"monotonic", "sleep"})
 
 
-def _wall_clock_read_lines(path: Path) -> list[int]:
-    tree = ast.parse(path.read_text(), filename=str(path))
+def _time_bindings(tree: ast.AST) -> tuple[set[str], dict[str, str]]:
+    """The names a module binds to the ``time`` module, and to its functions (local name -> function name)."""
+    modules: set[str] = set()
+    functions: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update((alias.asname or alias.name) for alias in node.names if alias.name == "time")
+        elif isinstance(node, ast.ImportFrom) and node.module == "time" and node.level == 0:
+            functions.update({(alias.asname or alias.name): alias.name for alias in node.names})
+    return modules, functions
+
+
+def _time_call_lines(source: str, time_functions: frozenset[str]) -> list[int]:
+    """Lines of calls to any of ``time_functions`` of the ``time`` module, however it was imported. Only calls: a
+    bare attribute load (``timer = time.monotonic``) is a default a collaborator can still replace."""
+    tree = ast.parse(source)
+    modules, functions = _time_bindings(tree)
     lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        through_module = (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id in modules
+            and func.attr in time_functions
+        )
+        through_import = isinstance(func, ast.Name) and functions.get(func.id) in time_functions
+        if through_module or through_import:
+            lines.append(node.lineno)
+    return lines
+
+
+def _wall_clock_read_lines_in(source: str) -> list[int]:
+    tree = ast.parse(source)
+    lines = _time_call_lines(source, _WALL_CLOCK_TIME_FUNCTIONS)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -42,12 +86,24 @@ def _wall_clock_read_lines(path: Path) -> list[int]:
             and (func.value.id, func.attr) in _WALL_CLOCK_CALLS
         ):
             lines.append(node.lineno)
-    return lines
+    return sorted(lines)
+
+
+def _wall_clock_read_lines(path: Path) -> list[int]:
+    return _wall_clock_read_lines_in(path.read_text())
+
+
+def _ambient_monotonic_call_lines(path: Path) -> list[int]:
+    return _time_call_lines(path.read_text(), _AMBIENT_TIME_FUNCTIONS)
+
+
+def _is_compatibility_tooling(path: Path) -> bool:
+    return _COMPATIBILITY_PACKAGE in path.relative_to(_SRC_DIR).parts[:-1]
 
 
 def test_no_direct_wall_clock_read_outside_the_clock_implementation() -> None:
     """bzh:injected-clock: every timestamp flows through an injected ``IClock`` — a direct
-    ``datetime.now()``, ``datetime.utcnow()``, ``time.time()``, or ``func.now()`` read is a
+    ``datetime.now()``, ``datetime.utcnow()``, ``time.time()``, ``time.time_ns()``, or ``func.now()`` read is a
     violation everywhere under ``src/blizzard`` except the clock's own implementation."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):
@@ -56,6 +112,82 @@ def test_no_direct_wall_clock_read_outside_the_clock_implementation() -> None:
         for lineno in _wall_clock_read_lines(path):
             violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
     assert not violations, f"K — every timestamp must flow through IClock: {violations}"
+
+
+def test_no_ambient_monotonic_read_or_sleep_outside_the_clock_implementation() -> None:
+    """bzh:injected-clock: every mechanical deadline flows through an injected ``IMonotonicClock`` — a direct
+    ``time.monotonic()`` or ``time.sleep()`` call is a violation everywhere under ``src/blizzard`` except the clock's
+    own implementation and the hand-run OpenCode compatibility tooling."""
+    violations: list[str] = []
+    for path in sorted(_SRC_DIR.rglob("*.py")):
+        if path == _CLOCK_IMPLEMENTATION_FILE or _is_compatibility_tooling(path):
+            continue
+        for lineno in _ambient_monotonic_call_lines(path):
+            violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
+    assert not violations, f"M — every mechanical deadline must flow through IMonotonicClock: {violations}"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import time\ntime.monotonic()\n",
+        "import time\ntime.sleep(1)\n",
+        "import time as t\nt.monotonic()\n",
+        "import time as t\nt.sleep(0.1)\n",
+        "from time import monotonic\nmonotonic()\n",
+        "from time import sleep as nap\nnap(1)\n",
+        "import time\nx = time.monotonic() + 1\n",
+    ],
+)
+def test_ambient_monotonic_matcher_flags_every_import_form(source: str) -> None:
+    assert _time_call_lines(source, _AMBIENT_TIME_FUNCTIONS)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import time\ntimer = time.monotonic\n",
+        "import time\ndef f(sleep=time.sleep): ...\n",
+        "import time\ntime.time_ns()\n",
+        "from time import time_ns\ntime_ns()\n",
+        "class time:\n    def monotonic(self): ...\ntime().monotonic()\n",
+        "clock.monotonic()\nclock.sleep(1)\n",
+        "import time as t\ntime.monotonic()\n",
+    ],
+)
+def test_ambient_monotonic_matcher_admits_attribute_loads_and_other_calls(source: str) -> None:
+    assert not _time_call_lines(source, _AMBIENT_TIME_FUNCTIONS)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import time\ntime.time()\n",
+        "import time\ntime.time_ns()\n",
+        "import time as t\nt.time()\n",
+        "from time import time_ns as now_ns\nnow_ns()\n",
+        "from datetime import datetime\ndatetime.now()\n",
+    ],
+)
+def test_wall_clock_matcher_flags_every_import_form(source: str) -> None:
+    assert _wall_clock_read_lines_in(source)
+
+
+def test_wall_clock_matcher_admits_the_monotonic_reads() -> None:
+    assert not _wall_clock_read_lines_in("import time\ntime.monotonic()\ntime.sleep(1)\nt = time.time\n")
+
+
+@pytest.mark.parametrize(
+    ("relative", "exempt"),
+    [
+        ("runner/harness/opencode/compatibility/probe.py", True),
+        ("runner/harness/opencode_v2/compatibility/probe.py", True),
+        ("runner/harness/opencode/adapter.py", False),
+        ("runner/harness/compatibility.py", False),
+    ],
+)
+def test_compatibility_exemption_is_a_package_segment(relative: str, exempt: bool) -> None:
+    assert _is_compatibility_tooling(_SRC_DIR / relative) is exempt
 
 
 # The composition-root set `bzh:dependency-injection`'s Do. declares

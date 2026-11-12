@@ -9,7 +9,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.foundation.selftest import SelfTestTerminalStatus
 from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
@@ -85,6 +85,7 @@ def test_selftest_service_persists_a_completed_runs_outcome_through_a_wired_repo
     service = SelfTestService(
         scratch_git=SubprocessScratchGit(children=CHILDREN, env=tool_env()),
         process=RecordingProcessProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
         results=_SlowWriter(store),
