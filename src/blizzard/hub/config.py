@@ -13,7 +13,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, cast, overload
+from typing import Literal, overload
 from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
@@ -29,6 +29,7 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.toml_emit import default_line, json_literal
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.auth.throttle import DEFAULT_CAPACITY, DEFAULT_REFILL_SECONDS
@@ -531,8 +532,7 @@ def render_egress_toml(egress: EgressConfig) -> list[str]:
     ]
     for key in _EGRESS_KEYS:
         value: object = getattr(egress, key)
-        literal = json.dumps(list(cast("tuple[object, ...]", value))) if isinstance(value, tuple) else json.dumps(value)
-        lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
+        lines.append(default_line(key, json_literal(value), at_default=value == getattr(defaults, key)))
     return lines
 
 
@@ -658,7 +658,8 @@ class HubConfig:
             "[transcripts]\n",
         ]
         lines += [
-            f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n" for key, value, default in caps
+            default_line(key, str(default if value is None else value), at_default=value is None)
+            for key, value, default in caps
         ]
         return lines
 

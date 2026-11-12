@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
+from blizzard.foundation.toml_emit import toml_literal
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner import config as runner_config
 from blizzard.runner.host_config import HostConfig, HostConfigError
 from blizzard.runner.tracing.config import RESERVED_SERVICE_NAMES, RunnerTracingConfig

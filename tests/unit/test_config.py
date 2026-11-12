@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
+from blizzard.foundation.toml_emit import toml_literal
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT

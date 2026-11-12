@@ -270,9 +270,17 @@ def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
 _HUB_ONLY_UNTIL_HOST_SEALS = (
     "only the hub reaches it until the host seals its runners' tokens with it (`product:runners-come-and-go`)"
 )
+_SETTINGS_RECORD_UNTIL_CONSUMERS = (
+    "no daemon reaches it until product:runner-settings-in-store and product:hub-settings-record land; "
+    "the entry goes stale once both do"
+)
+
 _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
     f"blizzard.foundation.secrets.{module}": _HUB_ONLY_UNTIL_HOST_SEALS
     for module in ("factories", "key_variables", "rotation", "sealing", "value")
+} | {
+    f"blizzard.foundation.settings_record.{module}": _SETTINGS_RECORD_UNTIL_CONSUMERS
+    for module in ("record", "refusals", "vocabulary", "write")
 }
 
 
