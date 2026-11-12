@@ -2,8 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type QuestionView } from 'fleet';
-import { questionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
+import { type DecisionView, type QuestionView } from 'fleet';
+import { decisionView, questionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
+import { GatesPanel } from '../gates/gates-panel';
 import { QuestionsPanel } from './questions-panel';
 
 const QUESTIONS: QuestionView[] = [
@@ -32,10 +33,16 @@ const QUESTIONS: QuestionView[] = [
 describe('QuestionsPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (questions: QuestionView[] = QUESTIONS) => {
-    stub = stubHubClient({ 'GET /api/questions': () => questions });
+  const render = async (
+    questions: QuestionView[] | (() => QuestionView[] | Promise<QuestionView[]>) = QUESTIONS,
+    gates: () => DecisionView[] = () => [],
+  ) => {
+    stub = stubHubClient({
+      'GET /api/questions': () => typeof questions === 'function' ? questions() : questions,
+      'GET /api/decisions': () => ({ decisions: gates() }),
+    });
     await TestBed.configureTestingModule({
-      imports: [QuestionsPanel],
+      imports: [QuestionsPanel, GatesPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -83,13 +90,88 @@ describe('QuestionsPanel', () => {
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
-  it('rests on an empty state when the fleet has no open ask', async () => {
+  it('hides the panel only once the fleet has no open ask', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="questions-empty"]')).not.toBeNull();
+    expect(el.style.display).toBe('none');
+    expect(el.querySelector('[data-testid="questions-panel"]')).toBeNull();
+    expect(el.querySelector('[data-testid="questions-empty"]')).toBeNull();
     expect(el.querySelectorAll('[data-testid="rail-question"]')).toHaveLength(0);
     // The count badge is omitted entirely rather than printing a bare 0 beside "open questions".
     expect(el.querySelector('[data-testid="questions-count"]')).toBeNull();
+  });
+
+  it('keeps the loading panel visible until an empty read resolves', async () => {
+    let release!: (questions: QuestionView[]) => void;
+    const held = new Promise<QuestionView[]>((resolve) => (release = resolve));
+    const fixture = await render(() => held);
+    const el = fixture.nativeElement as HTMLElement;
+    try {
+      expect(el.style.display).not.toBe('none');
+      expect(el.querySelector('[data-testid="questions-loading"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="questions-empty"]')).toBeNull();
+    } finally {
+      release([]);
+      await settle(fixture);
+    }
+    expect(el.style.display).toBe('none');
+  });
+
+  it('reappears when questions arrive and hides again when they are answered', async () => {
+    let questions: QuestionView[] = [];
+    const fixture = await render(() => questions);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.style.display).toBe('none');
+
+    questions = QUESTIONS;
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(fixture);
+    expect(el.style.display).not.toBe('none');
+    expect(el.querySelectorAll('[data-testid="rail-question"]')).toHaveLength(2);
+
+    questions = [];
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(fixture);
+    expect(el.style.display).toBe('none');
+  });
+
+  it('shows a failed read instead of treating it as known empty, and recovers', async () => {
+    let failed = true;
+    const fixture = await render(() => {
+      if (failed) throw new Error('questions unavailable');
+      return QUESTIONS;
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.style.display).not.toBe('none');
+    expect(el.querySelector('[data-testid="questions-error"]')).not.toBeNull();
+
+    failed = false;
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="questions-error"]')).toBeNull();
+    expect(el.querySelectorAll('[data-testid="rail-question"]')).toHaveLength(2);
+  });
+
+  it('hides questions and gates independently as their own reads change', async () => {
+    let questions: QuestionView[] = [];
+    let gates: DecisionView[] = [decisionView()];
+    const questionsFixture = await render(() => questions, () => gates);
+    const gatesFixture = TestBed.createComponent(GatesPanel);
+    await settle(gatesFixture);
+    const questionsEl = questionsFixture.nativeElement as HTMLElement;
+    const gatesEl = gatesFixture.nativeElement as HTMLElement;
+    expect(questionsEl.style.display).toBe('none');
+    expect(gatesEl.style.display).not.toBe('none');
+    expect(gatesEl.querySelectorAll('[data-testid="rail-gate"]')).toHaveLength(1);
+
+    questions = QUESTIONS;
+    gates = [];
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(questionsFixture);
+    await settle(gatesFixture);
+    expect(questionsEl.style.display).not.toBe('none');
+    expect(questionsEl.querySelectorAll('[data-testid="rail-question"]')).toHaveLength(2);
+    expect(gatesEl.style.display).toBe('none');
   });
 });

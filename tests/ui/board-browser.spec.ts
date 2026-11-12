@@ -155,16 +155,18 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   expect((await api.get(`/api/chunks/${chunkB}`)).body.work_refs).toHaveLength(2);
   await expect(page.getByTestId('runner')).toHaveAttribute('data-online', 'true');
 
-  // B parks on its question and crosses to the waiting lane live; A stays ready.
+  // B parks on its question and crosses to Human Attention live; A stays ready.
   expect(await stepUntil(runnerHost, () => status(chunkB), (s) => ['waiting_on_human', 'done', 'needs_human'].includes(s))).toBe('waiting_on_human');
-  await expect(colCards('waiting')).toHaveCount(1);
-  await expect(col('waiting').getByTestId('chunk-status')).toHaveText('waiting_on_human');
+  await expect(colCards('needs')).toHaveCount(1);
+  const attentionCardB = col('needs').locator(`[data-testid="chunk-card"][data-chunk="${chunkB}"]`);
+  await expect(attentionCardB).toHaveAttribute('data-status', 'waiting_on_human');
+  await expect(attentionCardB.getByTestId('chunk-status')).toHaveText('waiting_on_human');
   await expect(readyCard(chunkA)).toHaveCount(1);
 
   // With nothing selected the dock is closed; selecting B opens it on B's question, answered from the dock.
   const dock = page.locator('app-chunk-detail.dock');
   await expect(dock).toHaveClass(/\bclosed\b/);
-  await colCards('waiting').first().click();
+  await attentionCardB.click();
   await expect(page.getByTestId('chunk-detail')).toBeVisible();
   await expect(page.getByTestId('detail-id')).toHaveText(chunkB);
   await expect(page.getByTestId('question-text')).toContainText('API style');
@@ -239,10 +241,12 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   await page.getByTestId('pause-chunk').click();
   await page.getByTestId('confirm-dialog-confirm').click();
 
-  // The chip flips to paused live and the card moves to the waiting lane, keeping its claim.
+  // The chip flips to paused live and the card moves to Human Attention, keeping its claim.
   await expect(colCards('running')).toHaveCount(0);
-  await expect(colCards('waiting')).toHaveCount(1);
-  await expect(col('waiting').getByTestId('chunk-status')).toHaveText('paused');
+  await expect(colCards('needs')).toHaveCount(1);
+  const attentionCardA = col('needs').locator(`[data-testid="chunk-card"][data-chunk="${chunkA}"]`);
+  await expect(attentionCardA).toHaveAttribute('data-status', 'paused');
+  await expect(attentionCardA.getByTestId('chunk-status')).toHaveText('paused');
   await expect(readyCard(chunkA)).toHaveCount(0);
 
   // The runner parks the lease on its next passes, keeping the claim: no requeue, no released route.

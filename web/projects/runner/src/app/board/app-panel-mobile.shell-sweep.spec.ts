@@ -10,6 +10,7 @@ import {
   runnerAskView,
   runnerDashboardView,
   runnerStatusView,
+  settle,
   stubRunnerClient,
   workItemEntry,
 } from 'fleet/testing';
@@ -146,10 +147,10 @@ async function render(asks: runnerApi.AskListResponse = { items: [] }) {
   const defaults = {
     chunksTriadState: 'ready',
     machineChunks: MACHINE_CHUNKS,
-    openAskCount: 0,
+    openAskCount: asks.items.length,
   };
   for (const [key, value] of Object.entries(defaults)) fixture.componentRef.setInput(key, value);
-  await fixture.whenStable();
+  await settle(fixture);
   return { fixture, stub };
 }
 
@@ -246,6 +247,8 @@ describe('runner mobile board shell sweep (web:shell-sweep)', () => {
 
         const ask = root.querySelector<HTMLElement>('[data-testid="ask-row"] .q');
         expect(ask, `width ${width}: no ask text in the DOM`).not.toBeNull();
+        expect(ask!.textContent).toBe(LONG_ASK.items[0].question);
+        expect(ask!.getBoundingClientRect().height).toBeGreaterThan(0);
 
         // The preserved newlines have to produce real height — a collapsed render of this
         // question still wraps, so height alone is weak. Measuring the same element both

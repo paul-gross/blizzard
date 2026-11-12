@@ -18,7 +18,7 @@
         @if (env.held) {
           <div class="env held" [class.elsewhere]="env.elsewhere" data-testid="host-env-held">
             <fleet-kit-beacon class="env-dot" aria-hidden="true" [active]="true" tone="amber" blink="hold" />
-            <span class="env-id">{{ env.environmentId }}</span>
+            <span class="env-id" [title]="env.environmentId">{{ env.environmentId === 'env-' + env.chunkId ? 'env' : env.environmentId }}</span>
             @if (env.chunkId; as chunkId) {
               <a class="chunk" routerLink="/board" [queryParams]="{ chunk: chunkId }" queryParamsHandling="merge" [title]="chunkId">
                 @if (env.color; as color) {

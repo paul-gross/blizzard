@@ -1,5 +1,5 @@
 <div class="mc" data-testid="board-shell">
-  <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board" [bodyScroll]="false">
+  <fleet-kit-panel class="board-panel" aria-label="Chunk board" [bodyScroll]="false">
     <div fleetKitPanelHeader class="hdr">
       <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
     </div>
@@ -23,7 +23,7 @@
         @for (col of columns(); track col.key) {
           <app-board-column
             [column]="col"
-            [cards]="cardsFor(col.key)"
+            [cards]="boardCardsFor(col.key)"
             [count]="countFor(col.key)"
             [headTitle]="headTitleFor(col.key)"
             [skeletons]="skeletonsFor(col.key)"

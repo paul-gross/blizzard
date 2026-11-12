@@ -54,3 +54,18 @@
   min-width: 66px;
   text-align: right;
 }
+.wl.wrapping {
+  flex-wrap: wrap;
+}
+.wrapping .facts {
+  flex-wrap: wrap;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+.wrapping .facts > * {
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}

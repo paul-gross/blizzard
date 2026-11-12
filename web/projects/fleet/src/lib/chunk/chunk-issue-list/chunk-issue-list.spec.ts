@@ -159,6 +159,46 @@ describe('ChunkIssueList', () => {
     expect(messages).toEqual(['seen it too', 'repro attached']);
   });
 
+  it.each([false, true])('renders a loaded description through safe Markdown (hub_source=%s)', async (hub_source) => {
+    const initial = item({ source: hub_source ? 'hub' : 'github', hub_source, ref: '42', body: null, error: 'source unavailable' });
+    const { fixture, el } = await render([initial]);
+    expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
+
+    fixture.componentRef.setInput('items', [{
+      ...initial,
+      error: null,
+      body: '# Loaded description\n\n**Important** and `code`\n\n- first\n- second\n\n[Safe](https://example.test/issue) [Unsafe](javascript:alert)\n\n<img src=x onerror=alert(1)>',
+    }]);
+    await fixture.whenStable();
+
+    const body = el.querySelector('[data-testid="issue-body"]')!;
+    expect(el.querySelector('[data-testid="issue-item-error"]')).toBeNull();
+    expect(body.tagName.toLowerCase()).toBe('fleet-kit-markdown');
+    expect(body.querySelector('h1')?.textContent?.trim()).toBe('Loaded description');
+    expect(body.querySelector('strong')?.textContent).toBe('Important');
+    expect(body.querySelector('code')?.textContent).toBe('code');
+    expect(body.querySelectorAll('li')).toHaveLength(2);
+    const link = body.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('https://example.test/issue');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noreferrer');
+    expect(body.querySelectorAll('a')).toHaveLength(1);
+    expect(body.querySelector('[data-testid="markdown-inert-link"]')?.textContent).toBe('Unsafe');
+    expect(body.querySelector('img')).toBeNull();
+    expect(body.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('keeps an unavailable source error literal and hides stale description and messages', async () => {
+    const error = 'source unavailable <img src=x onerror=alert(1)>';
+    const { el } = await render([item({ source: 'github', ref: '42', error, body: '# Stale', comments: ['stale message'] })]);
+
+    expect(el.querySelector('[data-testid="issue-item-error"]')?.textContent).toContain(error);
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
+    expect(el.querySelector('[data-testid="issue-messages"]')).toBeNull();
+    expect(el.querySelector('[data-testid="issue-ref"]')?.textContent).toContain('github#42');
+  });
+
   // --- The hub idiom ------------------------------------------
 
   it('a hub entry renders its markdown body, a user authorship line, stated priority, and no forge anchor', async () => {

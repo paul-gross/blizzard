@@ -140,6 +140,25 @@ describe('FleetProposalPanel', () => {
     expect(el.textContent).toContain('Seventeen modules narrate their own change history.');
   });
 
+  it('keeps proposal body, evidence and closure reason as safe monospaced verbatim text, not Markdown', async () => {
+    const text = '# Literal heading\n\n  **indented** `code`\n[link](javascript:alert)\n<img src=x onerror=alert(1)>';
+    const fixture = await mount({
+      vm: { ...BASE_VM, body: text, closure: { kind: 'passed', closedBy: 'u_1', closedAt: '2026-01-04T00:00:00Z', reason: text } },
+      evidence: [{ ...EVIDENCE[0], summary: text }],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const blocks = el.querySelectorAll<HTMLElement>('fleet-kit-prose-block .tx');
+    expect(blocks).toHaveLength(3);
+    expect(el.querySelector('fleet-kit-markdown')).toBeNull();
+    for (const block of blocks) {
+      expect(block.textContent).toBe(text);
+      expect(block.querySelector('h1, strong, code, a, img')).toBeNull();
+      const style = getComputedStyle(block);
+      expect(style.whiteSpace).toBe('pre-wrap');
+      expect(style.overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('renders findings from the live evidence read, not from any proposal-carried text, each linked by compact ref', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;

@@ -32,6 +32,7 @@
       <fleet-chunk-detail-timeline
         [detail]="detail()"
         [heading]="false"
+        [graphLinkBase]="graphLinkBase()"
         [activatable]="true"
         (pickStep)="pickStep.emit($event)"
       />

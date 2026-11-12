@@ -8,7 +8,7 @@
     [class.tinted]="row.chunk.tint !== null"
     [style.--project-tint]="row.chunk.tint"
   >
-    <a class="hit" [routerLink]="['/delivery', 'chunk', row.chunk.chunkId] | lensLink" [attr.aria-label]="'Open delivery of ' + row.chunk.shortId"></a>
+    <a class="hit" [routerLink]="['/delivery', 'chunk', row.chunk.chunkId] | lensLink" [attr.aria-label]="'Open delivery of ' + row.chunk.shortId" [attr.title]="row.bounce?.title ?? null"></a>
     <fleet-lane-icon class="lane" [lane]="row.icon.lane" [status]="row.icon.status" />
     <span class="grow">
       <span class="head">

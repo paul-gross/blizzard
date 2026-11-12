@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
 import { formatAbsolute } from '../../core/when';
-import { chunkDetail, chunkUsageTotalView, chunkUsageView, transitionView } from 'fleet/testing';
+import { bounceView, chunkDetail, chunkUsageTotalView, chunkUsageView, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 /** A step usage cell's session efficiency cost, part by part. */
@@ -220,6 +220,18 @@ describe('ChunkTimeline', () => {
     }).compileComponents();
   });
 
+  it.each(['{}', ''])('shows the recorded cause and its full hover when the envelope has no account: %s', async (envelope) => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', chunkDetail({
+      status: 'done', history: [], bounces: [bounceView({ cause: 'poll-timeout', envelope })],
+    }));
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="history-bounce-step"]')!;
+    expect(row.querySelector('[data-testid="history-choice"]')?.textContent).toBe('poll-timeout');
+    expect(row.title).toBe('poll-timeout');
+    expect(row.querySelector('.bounce-diagnostic')?.getAttribute('title')).toBe('poll-timeout');
+  });
+
   it('renders a bounce and a restart in time order, keyless and inert', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', FORENSICS_DETAIL);
@@ -234,11 +246,11 @@ describe('ChunkTimeline', () => {
 
     const bounce = el.querySelector<HTMLElement>('[data-testid="history-bounce-step"]')!;
     expect(bounce.getAttribute('title')).toBe('hub node deliver routed failure to resolve — delivery incomplete');
-    expect(bounce.querySelector('[data-testid="history-bounce-reason"]')?.textContent).toBe('hub node deliver routed failure to resolve — delivery incomplete');
+    expect(bounce.querySelector('[data-testid="history-bounce-reason"]')).toBeNull();
     expect(bounce.querySelector('svg.bounce-icon')).not.toBeNull();
     expect(bounce.querySelector('.att')?.textContent).not.toContain('\u21A9');
     expect(bounce.getAttribute('data-choice')).toBe('bounced');
-    expect(bounce.querySelector('[data-testid="history-choice"]')?.textContent).toContain('failure');
+    expect(bounce.querySelector('[data-testid="history-choice"]')?.textContent).toBe('hub node deliver routed failure to resolve — delivery incomplete');
     expect(bounce.querySelector('.jg-to')).toBeNull();
 
     const restart = el.querySelector<HTMLElement>('[data-testid="history-restart-step"]')!;
@@ -269,7 +281,7 @@ describe('ChunkTimeline', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     const bounces = [...el.querySelectorAll<HTMLElement>('[data-testid="history-bounce-step"]')];
-    expect(bounces.map((b) => b.querySelector('[data-testid="history-bounce-reason"]')?.textContent)).toEqual([
+    expect(bounces.map((b) => b.querySelector('[data-testid="history-choice"]')?.textContent)).toEqual([
       'no verdict within 600s',
       'not json {',
     ]);
@@ -500,7 +512,7 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('keeps a multi-graph row’s graph badge plain text inside the row link, so no anchor nests another', async () => {
+  it('links graph headers separately from the node rows, so no anchor nests another', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
     fixture.componentRef.setInput('graphLinkBase', ['/graphs']);
@@ -511,8 +523,8 @@ describe('ChunkTimeline', () => {
     expect(rowLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_build:1`,
     );
-    const graphBadge = rowLink.querySelector('[data-testid="history-graph"]');
-    expect(graphBadge?.tagName).toBe('SPAN');
+    expect(rowLink.querySelector('[data-testid="history-graph"]')).toBeNull();
+    expect(el.querySelector('[data-testid="history-graph"]')?.getAttribute('href')).toBe('/graphs/gr_src');
     expect(rowLink.querySelector('a')).toBeNull();
   });
 

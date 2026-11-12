@@ -179,15 +179,23 @@ export class ProjectLens {
   }
 
   /** The URL of the view `from` names (default: the board's current location), under the lens of `slug` (`null` for
-   * All) — see {@link lensSource} and {@link viewOf}. */
+   * All), keeping the board's layout but not its drawer state — see {@link lensSource} and {@link viewOf}. */
   private viewUnder(slug: string | null, from?: string | null): string {
-    return lensedUrl(viewOf(lensSource(from ?? this.url())), slug);
+    const source = lensSource(from ?? this.url());
+    const view = viewOf(source);
+    const target = this.router.parseUrl(lensedUrl(view, slug));
+    if (view === '/board') {
+      const layout = this.router.parseUrl(source).queryParamMap.get('layout');
+      if (layout === 'board' || layout === 'list' || layout === 'tracks')
+        target.queryParams['layout'] = layout;
+    }
+    return this.router.serializeUrl(target);
   }
 
   /**
    * Puts the lens on `slug` (`null` for All), keeping the view — and a tabbed view's tab — of `from`, or of the
-   * location the board is on. The record, query and fragment are dropped. A caller off the board's own views, such as
-   * the picker, passes its source explicitly.
+   * location the board is on. Only the board's layout query is kept; the record, other queries and fragment are dropped.
+   * A caller off the board's own views, such as the picker, passes its source explicitly.
    */
   switchTo(slug: string | null, from?: string | null): Promise<boolean> {
     this.noticeText.set(null);

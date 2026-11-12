@@ -85,3 +85,34 @@ describe('MachineDetailHeader ended-ago note', () => {
     expect(text).toContain('last session ended 0s ago');
   });
 });
+
+describe('MachineDetailHeader identity', () => {
+  for (const displayStatus of ['waiting-ask', 'running'] as const) {
+    it(`keeps project first, the ${displayStatus} status distinct from Node, and worker wrapping drawer-only`, async () => {
+      await TestBed.configureTestingModule({
+        imports: [MachineDetailHeader],
+        providers: [provideZonelessChangeDetection(), provideRouter([])],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(MachineDetailHeader);
+      const worker = { ...endedLease('2026-07-16T11:55:00.000Z'), display_status: displayStatus, state: 'running', pid: 1234 };
+      fixture.componentRef.setInput('chunkId', worker.chunk_id);
+      fixture.componentRef.setInput('projectName', 'Console');
+      fixture.componentRef.setInput('runnerName', 'r1');
+      fixture.componentRef.setInput('nodeName', 'build');
+      fixture.componentRef.setInput('statusLabel', 'RUNNING');
+      fixture.componentRef.setInput('statusTone', 'running');
+      fixture.componentRef.setInput('workRefs', [{ source: 'test', ref: '123', label: 'test#123', web_url: null }]);
+      fixture.componentRef.setInput('lease', worker);
+      fixture.componentRef.setInput('worker', worker);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.d-sub')?.firstElementChild?.getAttribute('data-testid')).toBe('detail-project');
+      expect(el.querySelector('[data-testid="machine-detail-status"]')?.textContent?.trim()).toBe(displayStatus === 'waiting-ask' ? 'Waiting on human' : 'RUNNING');
+      expect(el.querySelector('[data-testid="detail-node"]')?.textContent?.trim()).toBe('Node: build');
+      expect(el.querySelector('[data-testid="worker-node"]')).toBeNull();
+      expect(el.querySelector('[data-testid="worker-line"]')?.classList).toContain('wrapping');
+      expect(el.querySelector('[data-testid="worker-env"]')?.textContent?.trim()).toBe('Env: e1');
+      expect(el.querySelector('[data-testid="detail-worker-pid"]')?.textContent?.trim()).toBe('pid 1234');
+    });
+  }
+});

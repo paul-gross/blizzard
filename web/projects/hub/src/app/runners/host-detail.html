@@ -101,7 +101,7 @@
 </ng-template>
 <ng-template #url>
   @if (detail().card.url; as href) {
-    <a [href]="href" target="_blank" rel="noopener noreferrer">{{ href }}</a>
+    <a class="runner-url" [href]="href" target="_blank" rel="noopener noreferrer">{{ href }}</a>
   } @else {
     —
   }

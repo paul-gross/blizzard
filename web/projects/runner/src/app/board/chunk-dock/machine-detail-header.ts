@@ -70,6 +70,10 @@ export class MachineDetailHeader {
   /** The live worker, or `null` once the newest session ended. */
   readonly worker = input<runnerApi.LeaseView | null>(null);
 
+  protected readonly drawerStatusLabel = computed(() =>
+    this.lease()?.display_status === 'waiting-ask' ? 'Waiting on human' : this.statusLabel(),
+  );
+
   /** Ticks once a second so the ended-ago note advances. */
   private readonly now = injectNowSignal();
 

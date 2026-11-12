@@ -75,9 +75,15 @@
         />
       </header>
 
-      <fleet-kit-prose-block label="Summary" [text]="panel.summary" testid="fp-summary" />
+      <section class="fp-content" data-testid="fp-summary">
+        <h4>Summary</h4>
+        <fleet-kit-markdown [text]="panel.summary" />
+      </section>
       @if (panel.note) {
-        <fleet-kit-prose-block label="Note" [text]="panel.note" testid="fp-note" />
+        <section class="fp-content" data-testid="fp-note">
+          <h4>Note</h4>
+          <fleet-kit-markdown [text]="panel.note" />
+        </section>
       }
 
       <section class="fp-timeline" data-testid="fp-timeline">

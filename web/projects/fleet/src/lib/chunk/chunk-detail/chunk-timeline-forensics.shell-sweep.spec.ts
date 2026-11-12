@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, transitionView } from 'fleet/testing';
+import { bounceView, chunkDetail, transitionView } from 'fleet/testing';
 import { ChunkTimeline } from './chunk-timeline';
 
 /**
@@ -61,6 +61,59 @@ const DETAIL: ChunkDetail = chunkDetail({
 
 describe('chunk timeline bounce and restart rows shell sweep (web:shell-sweep)', () => {
   for (const width of [390, 320]) {
+    it(`bounds long identityless and identified diagnostics to five lines without losing text at ${width}px`, async () => {
+      await page.viewport(width, 800);
+      const tokens = document.createElement('style');
+      tokens.textContent = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
+      document.head.appendChild(tokens);
+      await TestBed.configureTestingModule({
+        imports: [ChunkTimeline],
+        providers: [provideZonelessChangeDetection(), provideRouter([])],
+      }).compileComponents();
+      const plain = 'Permission denied while opening the repository. '.repeat(80);
+      const unknown = JSON.stringify({ error: 'unrecognized-diagnostic-'.repeat(200), code: 403 });
+      const identified = JSON.stringify({
+        cause: 'failure', detail: plain,
+        unlanded: [{ repo: 'org/repo', branch: 'work', commit: 'abc', pr: { number: 42, url: 'https://example.test/pull/42' } }],
+      });
+      const fixture = TestBed.createComponent(ChunkTimeline);
+      fixture.componentRef.setInput('detail', chunkDetail({
+        status: 'done', history: [],
+        bounces: [plain, unknown, identified].map((envelope, index) => bounceView({ envelope, recorded_at: `2026-08-09T00:00:0${index}Z` })),
+      }));
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      try {
+        await fixture.whenStable();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const rows = [...root.querySelectorAll<HTMLElement>('[data-testid="history-bounce-step"]')];
+        expect(rows).toHaveLength(3);
+        for (const [index, row] of rows.entries()) {
+          const diagnostic = row.querySelector<HTMLElement>(index === 2 ? '.bounce-reason' : '.bounce-diagnostic')!;
+          const full = index === 1 ? unknown : plain;
+          expect(diagnostic.textContent).toBe(full);
+          expect(diagnostic.title).toBe(full);
+          expect(row.title).toBe(full);
+          const style = getComputedStyle(diagnostic);
+          expect(style.webkitLineClamp).toBe('5');
+          const lineHeight = Number.parseFloat(style.lineHeight);
+          expect(lineHeight).toBeGreaterThan(0);
+          expect(diagnostic.getBoundingClientRect().height).toBeGreaterThan(0);
+          expect(diagnostic.getBoundingClientRect().height).toBeLessThanOrEqual(5 * lineHeight + 1);
+          expect(diagnostic.scrollHeight).toBeGreaterThan(diagnostic.clientHeight);
+          expect(diagnostic.getBoundingClientRect().right).toBeLessThanOrEqual(root.getBoundingClientRect().right + 1);
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        }
+        expect(rows[2].querySelector('.verdict')?.textContent).toBe('org/repo · PR #42');
+        expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      } finally {
+        fixture.destroy();
+        root.remove();
+        tokens.remove();
+      }
+    });
+
     it(`renders a bounce and a restart in time order with no page errors or horizontal overflow at ${width}px`, async () => {
       const pageErrors: string[] = [];
       const onError = (e: ErrorEvent) => pageErrors.push(e.message);

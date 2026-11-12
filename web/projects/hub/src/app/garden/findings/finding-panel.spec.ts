@@ -72,6 +72,27 @@ describe('FleetFindingPanel', () => {
     expect(el.querySelector('[data-testid="gardening-finding-panel-empty"]')).toBeTruthy();
   });
 
+  it('renders summary and note as safe Markdown rather than verbatim proposal prose', async () => {
+    const text = '## Context\n\n**Read** `src/a.py`\n\n- first\n- second\n\n[Safe](https://example.test) [Unsafe](javascript:alert)\n\n<script>alert(1)</script>';
+    const fixture = await mount({ vm: { ...LIVE_VM, summary: text, note: text } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const testid of ['fp-summary', 'fp-note']) {
+      const section = el.querySelector(`[data-testid="${testid}"]`)!;
+      expect(section.querySelector('fleet-kit-markdown')).not.toBeNull();
+      expect(section.querySelector('fleet-kit-prose-block')).toBeNull();
+      expect(section.querySelector('h2')?.textContent?.trim()).toBe('Context');
+      expect(section.querySelector('strong')?.textContent).toBe('Read');
+      expect(section.querySelector('code')?.textContent).toBe('src/a.py');
+      expect(section.querySelectorAll('li')).toHaveLength(2);
+      expect(section.querySelectorAll('a')).toHaveLength(1);
+      expect(section.querySelector('a')?.getAttribute('rel')).toBe('noreferrer');
+      expect(section.querySelector('[data-testid="markdown-inert-link"]')?.textContent).toBe('Unsafe');
+      expect(section.querySelector('script')).toBeNull();
+      expect(section.textContent).toContain('<script>alert(1)</script>');
+    }
+  });
+
   it('renders the class, locus, state, and observed count, with the full id in a title attribute', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;

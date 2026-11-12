@@ -35,10 +35,10 @@
 }
 .path {
   display: block;
+  min-width: 0;
   color: var(--cyan);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .hb-line {
   display: flex;

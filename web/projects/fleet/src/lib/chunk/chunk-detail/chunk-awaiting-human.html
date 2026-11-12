@@ -95,8 +95,8 @@
         <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>
         <p class="trail-line" data-testid="answered-by">
           Answered by {{ q.answered_by || 'operator' }}
-          <span class="trail-answer" data-testid="answered-answer">{{ q.answer }}</span>
         </p>
+        <p class="trail-answer" data-testid="answered-answer">{{ q.answer }}</p>
         <p class="trail-line" [class.delivered]="q.delivered" data-testid="answer-delivery">
           {{ deliveryLine(q) }}
         </p>

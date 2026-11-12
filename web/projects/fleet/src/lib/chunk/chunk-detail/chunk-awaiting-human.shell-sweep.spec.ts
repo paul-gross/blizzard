@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, decisionView } from 'fleet/testing';
+import { chunkDetail, decisionView, questionView } from 'fleet/testing';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 /**
@@ -59,6 +59,47 @@ async function mount(imposedBy: string | null, resolution: Partial<NonNullable<C
 }
 
 describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
+  it.each([320, 390])('preserves question and answer lines and indentation without overflow at %ipx', async (width) => {
+    await page.viewport(width, 800);
+    await TestBed.configureTestingModule({
+      imports: [ChunkAwaitingHuman],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const text = `first line\n  second line\n\n${'long-token-'.repeat(35)}`;
+    fixture.componentRef.setInput('detail', chunkDetail({
+      questions: [
+        questionView({ question_id: 'q_open', question: text, answered: false }),
+        questionView({ question_id: 'q_answered', question: text, answered: true, answer: text }),
+      ],
+    }));
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      for (const testid of ['question-text', 'answered-question-text', 'answered-answer']) {
+        const block = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!;
+        expect(block.textContent).toBe(text);
+        expect(block.scrollWidth).toBeLessThanOrEqual(block.clientWidth);
+        const node = block.firstChild!;
+        const range = document.createRange();
+        range.setStart(node, 0);
+        range.setEnd(node, 1);
+        const first = range.getBoundingClientRect();
+        const secondIndex = text.indexOf('second');
+        range.setStart(node, secondIndex);
+        range.setEnd(node, secondIndex + 1);
+        const second = range.getBoundingClientRect();
+        expect(second.top).toBeGreaterThan(first.top);
+        expect(second.left).toBeGreaterThan(first.left);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+
   it.each([
     ['a runner-imposed gate', 'r-a-runner-id-long-enough-to-need-wrapping-on-a-narrow-phone-0123456789', 'gated by runner'],
     ['a graph-declared gate', null, 'declared by the graph'],

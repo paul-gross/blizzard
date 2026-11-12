@@ -21,7 +21,7 @@
 /* Light, environment, chunk, project, runner — the hub Fleet page's environment line, named by its environment. */
 .env {
   display: grid;
-  grid-template-columns: 12px 48px 96px minmax(0, 1fr) minmax(0, 160px);
+  grid-template-columns: 12px minmax(48px, 160px) max-content minmax(0, 1fr) minmax(0, 160px);
   align-items: center;
   gap: 10px;
   padding: 4px 10px;
@@ -41,6 +41,8 @@
   height: 7px;
 }
 .env-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--label);
   font-size: var(--fs-xs);
 }
@@ -50,6 +52,7 @@
   gap: 5px;
   color: var(--amber-hi);
   text-decoration: none;
+  white-space: nowrap;
 }
 a.chunk:hover,
 a.chunk:focus-visible {
@@ -76,4 +79,16 @@ a.chunk:focus-visible {
   color: var(--label-dim);
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
+}
+@media (max-width: 600px) {
+  .env {
+    grid-template-columns: 12px minmax(0, 1fr) max-content;
+  }
+  .project {
+    grid-column: 2;
+  }
+  .holder {
+    grid-column: 2 / -1;
+    text-align: left;
+  }
 }

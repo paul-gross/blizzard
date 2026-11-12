@@ -726,11 +726,28 @@ describe('ChunkAwaitingHuman', () => {
     expect(answer.textContent).toContain('line one\nline two');
     expect(getComputedStyle(answer).whiteSpace).toBe('pre-wrap');
 
-    // The separator pseudo-element inherits that pre-wrap, so a leading space in its
-    // `content` is no longer collapsed — and it sits right after the space the parent
-    // `.trail-line` already collapses out of the template's own line break. Two spaces
-    // in a monospace face is visible, so the separator carries only a trailing one.
-    expect(getComputedStyle(answer, '::before').content).not.toMatch(/^["']\s/);
+  });
+
+  it('preserves indentation and literal markup in open questions, answered questions and answers', async () => {
+    const question = 'First paragraph\n\n  1. indented detail\n    <img src=x onerror=alert(1)>\n[unsafe](javascript:alert)';
+    const answer = 'Keep the indentation:\n  **literal**\n    <script>alert(1)</script>';
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...MULTILINE_DETAIL,
+      questions: MULTILINE_DETAIL.questions!.map((q) => ({ ...q, question, answer: q.answered ? answer : null })),
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const [testid, text] of [
+      ['question-text', question], ['answered-question-text', question], ['answered-answer', answer],
+    ]) {
+      const block = el.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!;
+      expect(block.textContent).toBe(text);
+      expect(block.querySelector('img, script, a, strong')).toBeNull();
+      expect(getComputedStyle(block).whiteSpace).toBe('pre-wrap');
+      expect(getComputedStyle(block).overflowWrap).toBe('anywhere');
+    }
   });
 
   it('renders the takeover region for an escalated chunk (deep coverage lives in ChunkEscalation’s own spec)', async () => {

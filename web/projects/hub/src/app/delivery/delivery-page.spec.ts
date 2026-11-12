@@ -5,7 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, type FlowFactView } from 'fleet';
+import { FLEET_CLOCK, type FlowFactView, formatAbsolute } from 'fleet';
 import {
   bounceView,
   FIXTURE_NOW,
@@ -141,10 +141,27 @@ describe('DeliveryPage', () => {
     expect(inLine.querySelector('[data-testid="delivery-bounce"]')).toBeNull();
 
     const bounce = row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"]');
-    expect(bounce?.querySelector('.cause')?.textContent?.trim()).toBe('failure · [10m 0s]');
-    expect(bounce?.querySelector('.cause')?.textContent).not.toContain('withdrawn');
+    expect(bounce).not.toBeNull();
     expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('checks failed in lint');
+    expect(bounce?.getAttribute('title')).toBe(`checks failed in lint\n${formatAbsolute(fixtureInstant(-600))}`);
+    expect(bounce?.textContent).not.toContain('withdrawn');
     expect(row(el, LANDED).querySelector('[data-testid="delivery-link"]')?.textContent).toContain('9f2c4e1');
+  });
+
+  it.each(['{}', ''])('shows the recorded cause in the list and its dated hover without an envelope account: %s', async (envelope) => {
+    configure(hubRoutes(undefined, {
+      'GET /api/chunks': () => ({
+        chunks: [chunkSummary({
+          chunk_id: BOUNCED, graph_id: 'gr_1', status: 'needs_human', bounce_count: 1,
+          latest_bounce: bounceView({ cause: 'poll-timeout', envelope, recorded_at: fixtureInstant(-600), withdrawn: true }),
+        })],
+        next_cursor: null, board_done_policy: null,
+      }),
+    }));
+    const { el } = await open();
+    const bounce = row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"]');
+    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('poll-timeout');
+    expect(bounce?.getAttribute('title')).toBe(`poll-timeout\nwithdrawn\n${formatAbsolute(fixtureInstant(-600))}`);
   });
 
   it('says so when nothing is delivering or delivered', async () => {
@@ -193,8 +210,20 @@ describe('DeliveryPage', () => {
     expect(drawer.querySelector('[data-testid="detail-id"]')).not.toBeNull();
     const repos = [...drawer.querySelectorAll('[data-testid="delivery-drawer-repo"]')];
     expect(repos.map((repo) => repo.querySelector('.repo-state')?.textContent?.trim())).toEqual(['in line · 2nd']);
-    const history = [...drawer.querySelectorAll('[data-testid="delivery-history-entry"] .text')].map((text) => text.textContent?.trim());
-    expect(history).toEqual([expect.stringMatching(/^bounced · /)]);
+    const history = [...drawer.querySelectorAll('.history > [data-testid="delivery-history-entry"]')];
+    // The detail builder supplies start → build at -60s; it frames the bounce at -7200s, newest first.
+    expect(history.map((entry) => ({
+      transition: entry.classList.contains('transition'),
+      from: entry.querySelector('.move .nd')?.getAttribute('title') ?? null,
+      to: entry.querySelector('.move .jg-to')?.getAttribute('title') ?? null,
+      reason: entry.querySelector('.compact-bounce .detail')?.textContent?.trim() ?? null,
+      hover: entry.querySelector('.compact-bounce')?.getAttribute('title') ?? null,
+      when: entry.querySelector('.when')?.getAttribute('title'),
+    }))).toEqual([
+      { transition: true, from: 'build/start', to: '→ build/build', reason: null, hover: null, when: formatAbsolute(fixtureInstant(-60)) },
+      { transition: false, from: null, to: null, reason: 'The step ended without declaring commit.', hover: 'The step ended without declaring commit.', when: formatAbsolute(fixtureInstant(-7200)) },
+    ]);
+    expect(repos[0].querySelector('a')?.getAttribute('href')).toBe(prView({ number: 41 }).url);
   });
 
   it('reads no chunk\'s own detail for the list', async () => {

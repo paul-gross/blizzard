@@ -95,7 +95,12 @@
                 </span>
                 <span class="what">
                   <span class="summary-line">
-                    @if (entry.move; as move) {
+                    @if (entry.bounce; as bounce) {
+                      <span class="compact-bounce" [title]="bounce.full">
+                        @if (bounce.identity; as identity) {<span>{{ identity }}</span>}
+                        <span class="detail">{{ bounce.reason }}</span>
+                      </span>
+                    } @else if (entry.move; as move) {
                       <!-- Each part keeps whole — a name never breaks at its hyphens — and a line breaks only before a separator, which
                            stays with the part after it. -->
                       <span class="move"
@@ -113,14 +118,14 @@
                       <a class="log" [routerLink]="'/board/chunk/' + id + '/artifact/' + key | lensLink">log</a>
                     }
                   </span>
-                  @if (entry.repos; as repos) {
+                  @if (!entry.bounce && entry.repos; as repos) {
                     <span class="dim repos">
                       @for (repo of repos.split(' · '); track repo; let first = $first) {
                         <span class="part" [title]="repo">@if (!first) {·&nbsp;}{{ repo }}</span>
                       }
                     </span>
                   }
-                  @if (entry.detail; as detail) {
+                  @if (!entry.bounce && entry.detail; as detail) {
                     <span class="detail" [title]="detail">{{ detail }}</span>
                   }
                 </span>

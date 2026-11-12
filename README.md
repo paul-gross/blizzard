@@ -17,13 +17,6 @@
   <img alt="Store" src="https://img.shields.io/badge/store-sqlite%20%7C%20postgres-5cd1e5">
 </p>
 
-<p align="center">
-  <img src="docs/media/board.webp" alt="The Blizzard chunk board: a live fleet view with a chunk's detail drawer open" width="900">
-</p>
-<p align="center">
-  <sub><em>Mission control: the chunk board, the runner registry, and one chunk's full node history.</em></sub>
-</p>
-
 Blizzard runs **the loops around the work**. Ingest items from your backlog, sequence them, and blizzard's runners take
 the work to completion. Each one is leased an isolated environment in **your own workspace**, what it returns is judged,
 the result is driven to delivery, and every step recovers correctly when any of it is interrupted. Those loops, and the

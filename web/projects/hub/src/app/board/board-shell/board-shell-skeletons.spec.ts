@@ -32,7 +32,7 @@ describe('BoardShell loading skeletons', () => {
         [...el.querySelectorAll('[data-col]')].map((col) => [col.getAttribute('data-col'), col.querySelectorAll('[data-testid="chunk-card-skeleton"]').length]),
       );
 
-    expect(perLane()).toEqual(Object.fromEntries(LANE_SKELETONS));
+    expect(perLane()).toEqual({ notready: 3, ready: 0, needs: 3, running: 4, done: 9 });
 
     fixture.componentRef.setInput('state', 'empty');
     await fixture.whenStable();

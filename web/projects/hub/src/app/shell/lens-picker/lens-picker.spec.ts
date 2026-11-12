@@ -82,11 +82,11 @@ describe('LensPicker', () => {
     describe(`on the ${mount} mount`, () => {
       const at = (from: string | null) => `${prefix}/lens${from === null ? '' : `?from=${encodeURIComponent(from)}`}`;
 
-      it('opens the chosen project on the originating view, dropping its record, query and fragment', async () => {
-        const { harness, choice } = await open(at('/board/chunk/chk_1?layout=list#x'));
+      it('opens the chosen project with the originating layout, dropping its record, other queries and fragment', async () => {
+        const { harness, choice } = await open(at('/board/chunk/chk_1?layout=list&tab=work&question=qn_1#x'));
         choice('zeta')!.click();
         await settle(harness.fixture);
-        expect(TestBed.inject(Router).url).toBe('/p/zeta/board');
+        expect(TestBed.inject(Router).url).toBe('/p/zeta/board?layout=list');
       });
 
       it('keeps a gardening tab across a choice', async () => {
@@ -103,11 +103,11 @@ describe('LensPicker', () => {
         expect(TestBed.inject(Router).url).toBe('/admin/members');
       });
 
-      it('leaves the picker for the view-only URL when the project already on is chosen', async () => {
-        const { harness, choice } = await open(at('/board/chunk/chk_1'));
+      it('keeps Tracks but closes the record on a choice of Glacier, even when already selected', async () => {
+        const { harness, choice } = await open(at('/board/chunk/chk_1?layout=tracks&tab=work#x'));
         choice('glacier')!.click();
         await settle(harness.fixture);
-        expect(TestBed.inject(Router).url).toBe('/p/glacier/board');
+        expect(TestBed.inject(Router).url).toBe('/p/glacier/board?layout=tracks');
       });
 
       for (const from of [null, '', 'fleet', '//evil.example/x', '/lens', '/p/zeta/lens?from=lens']) {
@@ -123,12 +123,13 @@ describe('LensPicker', () => {
     });
   }
 
-  it('returns to the view on All when All is chosen', async () => {
-    const { harness, choice } = await open('/p/glacier/lens?from=%2Fboard%3Flayout%3Dlist');
+  it('returns to the originating layout on All without its drawer state when All is chosen', async () => {
+    const from = encodeURIComponent('/board/chunk/chk_1?layout=list&gate=dc_1&tab=general#x');
+    const { harness, choice } = await open(`/p/glacier/lens?from=${from}`);
 
     choice('all')!.click();
     await settle(harness.fixture);
-    expect(TestBed.inject(Router).url).toBe('/board');
+    expect(TestBed.inject(Router).url).toBe('/board?layout=list');
   });
 
   it('shows All and Back with a loading line while the projects are pending', async () => {

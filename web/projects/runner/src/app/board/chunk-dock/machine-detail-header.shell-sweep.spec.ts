@@ -118,6 +118,27 @@ describe('machine detail header shell sweep (web:shell-sweep)', () => {
           expect(rect, `width ${width}: no ${testid} in the DOM`).toBeDefined();
           expect(rect!.right, `width ${width}: ${testid} extends past the header (${rect!.right} > ${bounds.right})`).toBeLessThanOrEqual(bounds.right + 1);
         }
+        const menu = root.querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')!.getBoundingClientRect();
+        const close = root.querySelector<HTMLElement>('[data-testid="detail-close"]')!.getBoundingClientRect();
+        expect(menu.width).toBe(30);
+        expect(menu.height).toBe(30);
+        expect(close.width).toBe(30);
+        expect(close.height).toBe(30);
+        expect(Math.abs((menu.top + menu.height / 2) - (close.top + close.height / 2))).toBeLessThanOrEqual(1);
+        const workerFacts = root.querySelector<HTMLElement>('.worker-line .facts')!;
+        expect(getComputedStyle(workerFacts).whiteSpace).toBe('normal');
+        expect(root.querySelector('[data-testid="worker-env"]')?.textContent?.trim()).toBe(`Env: ${WORKER.environment_id}`);
+        expect(root.querySelector('[data-testid="detail-runner"]')?.textContent).toBe(RUNNER);
+        for (const testid of ['detail-project', 'detail-pointer', 'detail-runner', 'machine-detail-status', 'detail-node', 'detail-worker']) {
+          const text = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!;
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          for (const rect of Array.from(range.getClientRects())) {
+            expect(rect.left, `width ${width}: ${testid} text escapes the header's left edge`).toBeGreaterThanOrEqual(bounds.left - 1);
+            expect(rect.right, `width ${width}: ${testid} text escapes the header's right edge`).toBeLessThanOrEqual(bounds.right + 1);
+          }
+        }
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
       } finally {
         root.remove();
       }
@@ -155,7 +176,7 @@ describe('machine detail header shell sweep (web:shell-sweep)', () => {
         expect(badge.textContent?.trim()).toBe('RUNNING');
         expect(getComputedStyle(badge).color).toBe(tokenColor('--amber'));
         const node = root.querySelector<HTMLElement>('[data-testid="detail-node"]')!;
-        expect(node.textContent?.trim()).toBe('build');
+        expect(node.textContent?.trim()).toBe('Node: build');
         expect(getComputedStyle(node).color).not.toBe(tokenColor('--amber'));
       } finally {
         root.remove();

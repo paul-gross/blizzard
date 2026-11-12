@@ -24,8 +24,8 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 ];
 
 /**
- * The mission-control chunk board — the six status columns and their
- * cards, plus a seventh, headed with the raw status, while any chunk carries a status this
+ * The mission-control chunk board — five columns, combining the human-attention lanes,
+ * plus another, headed with the raw status, while any chunk carries a status this
  * build does not know (`unknownLane`).
  *
  * READY and BACKLOG are two of those columns: both are hub-ranked
@@ -123,19 +123,24 @@ export class BoardShell {
 
   protected readonly columns = computed(() => {
     const unknown = unknownLane(this.chunks());
-    const lanes = LANES.map((lane) => (lane.key === DONE_LANE ? { ...lane, label: this.donePolicy().heading } : lane));
+    const lanes = LANES.filter((lane) => lane.key !== 'waiting').map((lane) => {
+      if (lane.key === 'needs') return { ...lane, label: 'HUMAN ATTENTION' };
+      return lane.key === DONE_LANE ? { ...lane, label: this.donePolicy().heading } : lane;
+    });
     return unknown === null ? lanes : [...lanes, unknown];
   });
 
   protected skeletonsFor(columnKey: string): number {
-    return this.state() === 'loading' ? (this.laneSkeletons().get(columnKey) ?? 0) : 0;
+    if (this.state() !== 'loading') return 0;
+    const counts = this.laneSkeletons();
+    return (counts.get(columnKey) ?? 0) + (columnKey === 'needs' ? (counts.get('waiting') ?? 0) : 0);
   }
   protected readonly layoutTabs = LAYOUT_TABS;
 
   /** The list's rows, each tagged with its lane: what wants a person, then work in flight —
    * each lane newest first — then any chunk whose status this build does not know, then READY
-   * and BACKLOG in their hub order, then DONE, newest finished first. Every group holds the same
-   * cards in the same order its grid column does. */
+    * and BACKLOG in their hub order, then DONE, newest finished first. Human-attention rows
+    * retain their individual lane tags even though the grid combines their columns. */
   protected readonly listGroups = computed<BoardListGroups>(() => {
     const tagged = (key: string): readonly BoardListEntry[] => this.cardsFor(key).map((card) => ({ lane: key, card }));
     return {
@@ -152,7 +157,8 @@ export class BoardShell {
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
-    const grouped = new Map<string, BoardCard[]>(this.columns().map((lane) => [lane.key, []]));
+    const grouped = new Map<string, BoardCard[]>(LANES.map((lane) => [lane.key, []]));
+    grouped.set(UNKNOWN_LANE, []);
     // Every chunk's status by id, so a blocked card can name its blocker's state without
     // a second read — the blocker is itself a chunk on this board.
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
@@ -241,7 +247,9 @@ export class BoardShell {
   protected countFor(columnKey: string): number | null {
     if (columnKey === UNKNOWN_LANE) return this.cardsFor(columnKey).length;
     if (columnKey === DONE_LANE) return this.state() === 'loading' ? null : this.cardsFor(columnKey).length;
-    return this.laneTotals()?.get(columnKey) ?? null;
+    const totals = this.laneTotals();
+    if (totals === null) return null;
+    return (totals.get(columnKey) ?? 0) + (columnKey === 'needs' ? (totals.get('waiting') ?? 0) : 0);
   }
 
   /** A column head's explanation — DONE's says what its window keeps, and its all-time total. */
@@ -253,5 +261,11 @@ export class BoardShell {
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {
     return this.cards().get(columnKey) ?? [];
+  }
+
+  protected boardCardsFor(columnKey: string): readonly BoardCard[] {
+    return columnKey === 'needs'
+      ? [...this.cardsFor('needs'), ...this.cardsFor('waiting')]
+      : this.cardsFor(columnKey);
   }
 }

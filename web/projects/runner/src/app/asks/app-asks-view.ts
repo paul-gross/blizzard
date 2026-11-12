@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 /** One resolved row for {@link LocalAsksView} — every value is already resolved for
  * display (including {@link askedFor}'s clock-driven text), so the view itself
@@ -8,6 +9,7 @@ export interface AskRow {
   /** The runner the ask is open on, by its bare name. */
   readonly runner: string;
   readonly chunkRef: string;
+  readonly chunkId: string;
   readonly askedFor: string;
   readonly question: string;
 }
@@ -21,6 +23,7 @@ export interface AskRow {
 @Component({
   selector: 'app-asks-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   templateUrl: './app-asks-view.html',
   styleUrl: './app-asks-view.css',
 })

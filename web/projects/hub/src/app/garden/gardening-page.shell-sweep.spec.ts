@@ -15,8 +15,7 @@ import { GardeningPage } from './gardening-page';
  * method) — a real, headless-Chromium proof that a bare `/p/{project}/gardening` lands on the Proposals tab; that the
  * gardening strip wears the kit's sub-strip — 30px tall on `--panel-deep`, its active tab cyan on `--overlay-30` with a
  * `--cyan-dim` underline — beneath the app's own strip; that the Proposals count turns `--amber-hi` while any proposal
- * waits and stays plain at zero; and that at a phone width the strip scrolls inside itself rather than widening the
- * page, its active tab still on screen.
+ * waits and stays plain at zero; and that at phone widths all six tabs wrap inside the page with 44px targets.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it needs
  * `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
@@ -86,7 +85,7 @@ async function render(proposals: GardenProposalView[], projects = PROJECTS) {
 describe('gardening page sub-strip shell sweep (web:shell-sweep)', () => {
   beforeAll(loadDesignTokens);
 
-  it.each([1280, 390])('lands on Proposals under the sub-strip, its waiting count amber, at %ipx', async (width) => {
+  it.each([1280, 390, 320])('lands on Proposals under the sub-strip, its waiting count amber, at %ipx', async (width) => {
     await page.viewport(width, 800);
     const { root, router, stub } = await render([waiting('gp_1'), waiting('gp_2')]);
 
@@ -96,7 +95,7 @@ describe('gardening page sub-strip shell sweep (web:shell-sweep)', () => {
 
       const strip = root.querySelector<HTMLElement>('[data-testid="gardening-subnav"]')!;
       expect(strip.classList.contains('sub')).toBe(true);
-      expect(getComputedStyle(strip).height).toBe('30px');
+      if (width >= 768) expect(getComputedStyle(strip).height).toBe('30px');
       expect(getComputedStyle(strip).backgroundColor).toBe(token('--panel-deep', 'backgroundColor'));
 
       const active = root.querySelector<HTMLElement>('[data-testid="gardening-tab-proposals"]')!;
@@ -118,8 +117,21 @@ describe('gardening page sub-strip shell sweep (web:shell-sweep)', () => {
 
       expect(document.documentElement.scrollWidth, `the page widens at ${width}px`).toBeLessThanOrEqual(width);
       expect(strip.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-      strip.scrollLeft = strip.scrollWidth;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (width < 768) {
+        const tabs = [...strip.querySelectorAll<HTMLElement>('[fleetKitTab]')];
+        expect(tabs).toHaveLength(6);
+        expect(getComputedStyle(strip).flexWrap).toBe('wrap');
+        expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+        const bounds = strip.getBoundingClientRect();
+        for (const tab of tabs) {
+          const box = tab.getBoundingClientRect();
+          expect(box.height).toBeGreaterThanOrEqual(44);
+          expect(box.left).toBeGreaterThanOrEqual(bounds.left);
+          expect(box.right).toBeLessThanOrEqual(bounds.right + 1);
+          expect(box.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+        }
+        expect(tabs.at(-1)!.getBoundingClientRect().top).toBeGreaterThan(tabs[0].getBoundingClientRect().top);
+      }
       const rect = active.getBoundingClientRect();
       expect(rect.width).toBeGreaterThan(0);
       expect(rect.right, `the active tab cannot be reached at ${width}px`).toBeLessThanOrEqual(width + 1);

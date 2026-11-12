@@ -6,13 +6,13 @@ import type { ChunkDetail } from '../../api/hub';
 import { harnessName } from '../../core/harness-name';
 import { injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoardParts } from '../../core/runner-display-name';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
+import { formatCost } from '../../core/cost-format';
 import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
 import { KitSectionHead } from '../../kit/kit-section-head';
 import {
   deriveActiveRow,
   deriveHistoryRows,
-  deriveMultiGraph,
   type HistoryRow,
   type StepUsageTotal,
   rowChoice,
@@ -23,6 +23,7 @@ import { chunkGraphLabel } from './graph-label';
 import { LensLink } from '../../core/lens-link';
 import { toneColor } from '../../kit/kit-badge';
 import { verdictTone } from './verdict-tone';
+import { deriveActiveGraphHeader, deriveGraphHeaders } from './chunk-timeline-graphs.model';
 
 /** The chunk's node-history timeline — one row per judged node,
  * oldest-first: the node, the verdict that closed it in an aligned column
@@ -41,8 +42,8 @@ import { verdictTone } from './verdict-tone';
  * Each `<li>` stays a bare grid item — its own listitem role is what lets a
  * screen reader announce `.timeline` as an `<ol>` with the right item count.
  * The row inside it is one interactive element: an `<a>` to the chunk page's step, a `<button>` that picks it when
- * {@link activatable}, or a plain `<div>` for a keyless row. Its content is plain text throughout — the graph badge
- * included — so no anchor nests another, and the whole row takes the native cursor, URL preview and tooltips. `.step`
+  * {@link activatable}, or a plain `<div>` for a keyless row. Graph links occupy separate header rows,
+  * so no anchor nests another, and the whole node row takes the native cursor, URL preview and tooltips. `.step`
  * subgrids a second time from the bare `<li>`'s own subgrid, so the verdict column stays aligned across the nesting.
  */
 @Component({
@@ -61,6 +62,9 @@ export class ChunkTimeline {
    * already titles the section. */
   readonly heading = input(true);
 
+  /** Show only the dollar amount in each step's usage line. */
+  readonly costOnly = input(false);
+
   /** Whether a row carrying a real join key activates by mouse/Enter/Space, emitting
    * {@link pickStep}, instead of linking to the chunk detail page's Node history tab
    * under {@link linkBase}. Either way, a keyed row draws the hover wash and takes the
@@ -78,7 +82,7 @@ export class ChunkTimeline {
    * {@link activatable} is `true`, since an activatable row emits instead of linking. */
   readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** The graphs view's own path segments the heading's graph label links to; `null` leaves it plain text. */
+  /** The graphs view's path segments for the heading and consecutive graph-run headers; `null` leaves them plain text. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
   /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the heading. */
@@ -95,6 +99,7 @@ export class ChunkTimeline {
   protected readonly rowChoice = rowChoice;
   protected readonly verdictTone = verdictTone;
   protected readonly toneColor = toneColor;
+  protected readonly formatCost = formatCost;
 
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 
@@ -114,9 +119,9 @@ export class ChunkTimeline {
   /** The tick `historyRows` stamps read against, so "HH:MM" rolls over to "Yesterday". */
   private readonly now = injectNowSignal();
 
-  /** When true, each row is labelled with its graph; a single-graph chunk shows no
-   * graph badge (it would be noise). See {@link deriveMultiGraph}. */
-  protected readonly multiGraph = computed<boolean>(() => deriveMultiGraph(this.historyRows()));
+  protected readonly graphHeaders = computed(() => deriveGraphHeaders(this.historyRows()));
+
+  protected readonly activeGraphHeader = computed(() => deriveActiveGraphHeader(this.historyRows(), this.detail()));
 
   /** The node currently in flight, as a synthetic timeline row — `RUN` while a worker
    * drives it, or the parked state's own verb (`WAITING`, `NEEDS HUMAN`, `PAUSED`).
@@ -127,7 +132,7 @@ export class ChunkTimeline {
   /** How many grid rows an entry takes — its main row, plus its usage line, plus a bounce's reason — which the stamp
    * cell spans. */
   protected rowSpan(row: HistoryRow): number {
-    return 1 + (this.usageForStep(row) ? 1 : 0) + (row.kind === 'bounce' && row.title ? 1 : 0);
+    return 1 + (this.usageForStep(row) ? 1 : 0) + (row.bounce?.identity ? 1 : 0);
   }
 
   private readonly runnerHosts = injectRunnerHostNames();

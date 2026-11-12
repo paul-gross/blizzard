@@ -137,19 +137,53 @@ describe('ProjectLens', () => {
     expect(router.url).toBe('/gardening/findings');
   });
 
-  it('switches from an explicit source, dropping its record, query and fragment but keeping its tab', async () => {
+  it('switches from an explicit source, keeping layout or tab but dropping record state', async () => {
     const lens = TestBed.inject(ProjectLens);
     const router = TestBed.inject(Router);
 
     await router.navigateByUrl('/p/a/lens?from=x');
     await lens.switchTo('b', '/board/chunk/chk_1?layout=list#x');
-    expect(router.url).toBe('/p/b/board');
+    expect(router.url).toBe('/p/b/board?layout=list');
     await lens.switchTo(null, '/gardening/findings/f1');
     expect(router.url).toBe('/gardening/findings');
     await lens.switchTo('a', '/admin/members/m1?q=1');
     expect(router.url).toBe('/p/a/admin/members');
     await lens.switchTo('b', null);
     expect(router.url).toBe('/p/b/admin/members');
+  });
+
+  it.each(['board', 'list', 'tracks'])('keeps the %s layout across All and project lens switches', async (layout) => {
+    const lens = TestBed.inject(ProjectLens);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(`/board/chunk/c1?layout=${layout}&tab=work&question=q1#details`);
+
+    for (const [slug, path] of [['a', '/p/a/board'], ['b', '/p/b/board'], [null, '/board']] as const) {
+      await lens.switchTo(slug);
+      expect(router.url).toBe(`${path}?layout=${layout}`);
+    }
+  });
+
+  it.each(['board', 'list', 'tracks'])('keeps %s from explicit picker sources on All or a project', async (layout) => {
+    const lens = TestBed.inject(ProjectLens);
+    const router = TestBed.inject(Router);
+    for (const source of ['/board', '/p/a/board']) {
+      for (const [slug, path] of [['b', '/p/b/board'], [null, '/board']] as const) {
+        await router.navigateByUrl('/lens?from=ignored');
+        await lens.switchTo(slug, `${source}/chunk/c1?layout=${layout}&gate=g1&tab=general#details`);
+        expect(router.url).toBe(`${path}?layout=${layout}`);
+      }
+    }
+  });
+
+  it('does not carry an invalid, absent or non-board layout into the next lens', async () => {
+    const lens = TestBed.inject(ProjectLens);
+    const router = TestBed.inject(Router);
+    for (const source of ['/board?layout=grid', '/board?chunk=c1', '/board?layout=LIST']) {
+      await lens.switchTo('b', source);
+      expect(router.url).toBe('/p/b/board');
+    }
+    await lens.switchTo(null, '/p/a/gardening/findings/f1?layout=tracks#details');
+    expect(router.url).toBe('/gardening/findings');
   });
 
   it('tracks the unlensed location the board is on as its source', async () => {

@@ -2,7 +2,7 @@ import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../../api/h
 import { openLookup } from '../../core/open-lookup';
 import { nodeStepKey } from '../../core/node-step';
 import { formatAbsolute, formatWhen, formatWhenParts } from '../../core/when';
-import { bounceReason } from './parse-bounce-envelope';
+import { compactBounce } from './compact-bounce';
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
  * that verdict routed the chunk — a transition re-read node-first for display. A
@@ -24,6 +24,7 @@ import { bounceReason } from './parse-bounce-envelope';
  * `graph/node` form the way a migration's is. Neither is a node-step, so both are
  * keyless. */
 export interface HistoryRow {
+  readonly bounce?: ReturnType<typeof compactBounce>;
   readonly kind: 'transition' | 'migration' | 'bounce' | 'restart';
   readonly key: string | null;
   /** The row's epoch — `null` for a bounce, which records none. */
@@ -162,25 +163,29 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
     whenTitle: formatAbsolute(m.recorded_at),
     sortKey: m.recorded_at,
   }));
-  const bounces: HistoryRow[] = (detail.bounces ?? []).map((b) => ({
-    kind: 'bounce' as const,
-    key: null,
-    epoch: null,
-    nodeId: null,
-    nodeName: 'bounce',
-    graphName: null,
-    graphId: null,
-    verdict: b.cause,
-    toId: null,
-    toName: null,
-    actor: null,
-    title: bounceReason(b.envelope),
-    crossesGraph: false,
-    when: formatWhen(b.recorded_at, now),
-    whenParts: formatWhenParts(b.recorded_at, now),
-    whenTitle: formatAbsolute(b.recorded_at),
-    sortKey: b.recorded_at,
-  }));
+  const bounces: HistoryRow[] = (detail.bounces ?? []).map((b) => {
+    const bounce = compactBounce(b.envelope, b.cause);
+    return {
+      bounce,
+      kind: 'bounce' as const,
+      key: null,
+      epoch: null,
+      nodeId: null,
+      nodeName: 'bounce',
+      graphName: null,
+      graphId: null,
+      verdict: b.cause,
+      toId: null,
+      toName: null,
+      actor: null,
+      title: bounce.full,
+      crossesGraph: false,
+      when: formatWhen(b.recorded_at, now),
+      whenParts: formatWhenParts(b.recorded_at, now),
+      whenTitle: formatAbsolute(b.recorded_at),
+      sortKey: b.recorded_at,
+    };
+  });
   const restarts: HistoryRow[] = (detail.restarts ?? []).map((r) => {
     const toNode = r.to_node_name ?? r.to_node_id;
     const crossesGraph = r.from_graph_id != null;

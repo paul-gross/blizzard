@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
+import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitMarkdown, FleetWhen, type Tone } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingSeverityTone, findingStateTone, isFindingExited } from '../core/finding-state';
 import type { FindingTriageVerb } from '../core/finding-list';
@@ -54,7 +54,7 @@ export interface FindingPanelVm {
 
 /**
  * The gardening findings tab's single-finding detail panel — the record,
- * its summary and any note as prose (`fleet-kit-prose-block`), the linked work item
+ * its summary and any note as Markdown, the linked work item
  * when one names it, and the single-finding triage verbs. Presentational only.
  * The exit verbs render while the finding has not exited ({@link isFindingExited});
  * `reopen` renders once it has.
@@ -67,7 +67,7 @@ export interface FindingPanelVm {
     KitBadge,
     KitButton,
     KitFactList,
-    KitProseBlock,
+    KitMarkdown,
     FleetFindingFactTimeline,
     FleetWhen,
     RouterLink, LensLink,
