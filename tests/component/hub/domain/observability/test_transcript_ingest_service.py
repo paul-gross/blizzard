@@ -13,7 +13,7 @@ from typing import cast
 from sqlalchemy import insert, text
 
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.observability import transcripts as transcripts_domain
 from blizzard.hub.domain.observability.transcripts import (
@@ -28,6 +28,8 @@ from blizzard.hub.domain.observability.transcripts import (
     TranscriptCaps,
     TranscriptIngestService,
     TranscriptSlice,
+    transcript_chunk_lock,
+    transcript_lane_lock,
 )
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.store import schema as s
@@ -507,14 +509,14 @@ class _FakeUnits:
     unit's one lock declaration in ``locks``."""
 
     def __init__(self) -> None:
-        self.locks: list[tuple[list[str], list[tuple[str, str]]]] = []
+        self.locks: list[tuple[list[str], list[LockKey]]] = []
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> LockedTransaction:
         self.locks.append((list(chunks), list(keys)))
         return cast(LockedTransaction, self)
@@ -583,7 +585,7 @@ def test_an_ingest_locks_its_runners_lane_and_each_chunk_its_batch_names_once() 
     service.ingest("r1", [other_chunk, first, second])
 
     assert units.locks == [
-        ([], [("transcript_lane", "r1"), ("transcript_chunk", "ch_1"), ("transcript_chunk", "ch_2")])
+        ([], [transcript_lane_lock("r1"), transcript_chunk_lock("ch_1"), transcript_chunk_lock("ch_2")])
     ]
 
 
@@ -597,7 +599,7 @@ def test_an_ingest_encodes_its_records_turns_before_its_unit_takes_a_lock() -> N
 
     class _LockingUnits(_FakeUnits):
         def lock_set(
-            self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+            self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
         ) -> LockedTransaction:
             events.append("lock")
             return super().lock_set(chunks=chunks, keys=keys)

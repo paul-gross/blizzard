@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.projects.links import LINKED_FIELD, IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -64,14 +65,11 @@ LINK_KINDS: Mapping[RecordKind, LinkKind] = {
     RecordKind.PROJECT_REPOSITORY_LINK: _REPOSITORIES,
 }
 
-#: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
-#: unlink takes its project's key.
-PROJECT_SOURCE_LINKS_LOCK_NAMESPACE = "project-source-links"
-
 
 def _lock_source_links(conn: Connection, kind: LinkKind, project_id: str) -> None:
+    """Every source link or unlink takes its project's key in the project-source-links namespace."""
     if kind is _SOURCES:
-        lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project_id])
+        lock_keys(conn, LockNamespace.PROJECT_SOURCE_LINKS, [project_id])
 
 
 def _append_fact(

@@ -118,6 +118,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -242,7 +243,7 @@ class SeedingTranscriptSegmentStore(TranscriptSegmentStore):
         self._units = HubTransactions(store)
 
     @contextmanager
-    def _own_unit(self, locks: list[tuple[str, str]]) -> Generator[LockedTransaction]:
+    def _own_unit(self, locks: list[LockKey]) -> Generator[LockedTransaction]:
         with self._units.begin() as transaction:
             yield transaction.lock_set(keys=locks)
 
@@ -623,7 +624,7 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
 
 
 @contextmanager
-def ranking_unit(engine: Engine, *, lock: tuple[str, str] = READY_RANKING_LOCK) -> Generator[LockedTransaction]:
+def ranking_unit(engine: Engine, *, lock: LockKey = READY_RANKING_LOCK) -> Generator[LockedTransaction]:
     """A hub unit over ``engine`` graduated on one list's ranking ``lock`` — the authority a
     position write requires, for a test seeding positions straight through the queue store."""
     with HubTransactions(hub_store_connections(engine)).begin() as transaction:

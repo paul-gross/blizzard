@@ -31,6 +31,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict
@@ -137,13 +138,13 @@ class ConfigApplyStore:
         *,
         dry_run: bool,
         positions: Sequence[PlannedPosition] = (),
-        locks: Sequence[tuple[str, str]] = (),
+        locks: Sequence[LockKey] = (),
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
-                for namespace, key in sorted(set(locks)):
-                    lock_keys(conn, namespace, [key])
+                for lock in sorted(set(locks)):
+                    lock_keys(conn, lock.namespace, [lock.key])
                 if (stale := urgency_writes.stale_revision(conn, guards)) is not None:
                     guard, current = stale
                     moved = ConfigRevisionConflict("urgency", guard.slug, current=current)

@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.cadence.errands import ErrandKey, ErrandRun, LastRun, holder_of
 from blizzard.hub.domain.cadence.mint import mint_lock_keys, run_moved
-from blizzard.hub.domain.cadence.ports import ERRAND_LOCK_NAMESPACE
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.services import default_lock_keys
 
@@ -55,7 +55,7 @@ def test_the_lock_set_sorts_the_errand_ahead_of_the_ranking_and_urgency_locks() 
     promoting = mint_lock_keys(_KEY, promote=True, urgencies=default_lock_keys(_URGENCY))
     defaults = default_lock_keys(_URGENCY)
 
-    assert sorted(promoting)[0][0] == ERRAND_LOCK_NAMESPACE
+    assert sorted(promoting)[0].namespace is LockNamespace.CADENCE_ERRAND
     assert sorted(promoting)[1:3] == sorted([READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
     assert set(promoting[1:]) == {READY_RANKING_LOCK, BACKLOG_RANKING_LOCK, *defaults}
     assert mint_lock_keys(_KEY, promote=False, urgencies=default_lock_keys(_URGENCY)) == [promoting[0], *defaults]

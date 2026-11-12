@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import (
     GraduationError,
     IHubTransactions,
@@ -30,7 +30,7 @@ class _Unit:
         self.statements = False
         self.graduated = False
         self.chunks: frozenset[str] = frozenset()
-        self.keys: frozenset[tuple[str, str]] = frozenset()
+        self.keys: frozenset[LockKey] = frozenset()
         self.hub: frozenset[HubLock] = frozenset()
 
     def account(self, *args: Any, **kwargs: Any) -> None:
@@ -44,14 +44,14 @@ class _Transaction:
     def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
         return self.lock_set(chunks=chunk_ids)
 
-    def lock_keys(self, namespace: str, keys: Sequence[str]) -> LockedTransaction:
-        return self.lock_set(keys=[(namespace, key) for key in keys])
+    def lock_keys(self, namespace: LockNamespace, keys: Sequence[str]) -> LockedTransaction:
+        return self.lock_set(keys=[LockKey(namespace, key) for key in keys])
 
     def lock_set(
         self,
         *,
         chunks: Sequence[str] = (),
-        keys: Sequence[tuple[str, str]] = (),
+        keys: Sequence[LockKey] = (),
         hub: Sequence[HubLock] = (),
     ) -> LockedTransaction:
         unit = self.unit
@@ -107,7 +107,7 @@ def work_ref_handle_connection(handle: ILockedWorkRefRead, store: ScopedConnecti
         raise TransactionMisuse("invalid work-ref lock handle")
     conn = connection_for(store, handle.transaction)
     for pointer in pointers:
-        connection_for(store, handle.transaction, key=("work_ref", pointer_lock_key(pointer)))
+        connection_for(store, handle.transaction, key=LockKey(LockNamespace.WORK_REF, pointer_lock_key(pointer)))
     return conn
 
 
@@ -134,7 +134,7 @@ def connection_for(
     transaction: Transaction,
     *,
     chunk: str | None = None,
-    key: tuple[str, str] | None = None,
+    key: LockKey | None = None,
     hub: HubLock | None = None,
 ) -> Connection:
     """Resolve a token only for its originating store, lifetime, and requested lock coverage."""

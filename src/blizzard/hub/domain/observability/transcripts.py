@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.transcripts import TurnKind
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
@@ -45,25 +46,19 @@ REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
 #: The window the per-runner rate cap sums over.
 RUNNER_RATE_WINDOW = timedelta(hours=24)
 
-#: The keyed-lock namespace (``bzh:transaction-graduation``) of a runner's transcript lane — its
-#: high-water mark and its rolling rate window.
-TRANSCRIPT_LANE_LOCK_NAMESPACE = "transcript_lane"
 
-#: The keyed-lock namespace of one chunk's transcript — its budget and the natural keys of its records.
-TRANSCRIPT_CHUNK_LOCK_NAMESPACE = "transcript_chunk"
-
-
-def transcript_lane_lock(runner_id: str) -> tuple[str, str]:
-    """The keyed lock over ``runner_id``'s transcript lane."""
-    return (TRANSCRIPT_LANE_LOCK_NAMESPACE, runner_id)
+def transcript_lane_lock(runner_id: str) -> LockKey:
+    """The keyed lock (``bzh:transaction-graduation``) over ``runner_id``'s transcript lane — its high-water mark and
+    its rolling rate window."""
+    return LockKey(LockNamespace.TRANSCRIPT_LANE, runner_id)
 
 
-def transcript_chunk_lock(chunk_id: str) -> tuple[str, str]:
-    """The keyed lock over ``chunk_id``'s transcript."""
-    return (TRANSCRIPT_CHUNK_LOCK_NAMESPACE, chunk_id)
+def transcript_chunk_lock(chunk_id: str) -> LockKey:
+    """The keyed lock over ``chunk_id``'s transcript — its budget and the natural keys of its records."""
+    return LockKey(LockNamespace.TRANSCRIPT_CHUNK, chunk_id)
 
 
-def ingest_locks(runner_id: str, records: Iterable[TranscriptSlice]) -> list[tuple[str, str]]:
+def ingest_locks(runner_id: str, records: Iterable[TranscriptSlice]) -> list[LockKey]:
     """Every lock one ingest declares: the calling runner's lane and each chunk ``records`` name."""
     chunk_ids = sorted({record.chunk_id for record in records})
     return [transcript_lane_lock(runner_id), *(transcript_chunk_lock(chunk_id) for chunk_id in chunk_ids)]

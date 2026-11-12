@@ -33,6 +33,7 @@ from blizzard.hub.domain.config.apply import (
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.urgency.mark import IconShape
@@ -208,7 +209,7 @@ class _Planner:
         self._positions = False
         self._default: UrgencyId | None = None
 
-    def locks(self) -> tuple[tuple[str, str], ...]:
+    def locks(self) -> tuple[LockKey, ...]:
         """The settings' lock whenever the plan writes — every retire takes it, so none runs beside the apply — the
         set's when it lands a position, and the lock of the urgency it makes the default."""
         if not self.writes:

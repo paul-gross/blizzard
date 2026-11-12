@@ -7,16 +7,17 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 #: The keyed lock (``bzh:transaction-graduation``) every unit deciding the ``ready`` queue's order
 #: declares — the authority :meth:`IWriteChunkQueueRepository.record_queue_positions` and
 #: :meth:`~IWriteChunkQueueRepository.record_promote_with_position` require.
-READY_RANKING_LOCK: tuple[str, str] = ("queue_ranking", "ready")
+READY_RANKING_LOCK = LockKey(LockNamespace.QUEUE_RANKING, "ready")
 #: The ``not_ready`` list's own ranking lock (``bzh:ranking-is-per-list``) — the authority
 #: :meth:`IWriteChunkQueueRepository.record_backlog_positions` and
 #: :meth:`~IWriteChunkQueueRepository.record_demote_with_position` require.
-BACKLOG_RANKING_LOCK: tuple[str, str] = ("queue_ranking", "not_ready")
+BACKLOG_RANKING_LOCK = LockKey(LockNamespace.QUEUE_RANKING, "not_ready")
 
 
 class IReadChunkQueueRepository(Protocol):

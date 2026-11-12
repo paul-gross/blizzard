@@ -22,6 +22,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
@@ -58,7 +59,7 @@ class _CompatibleGuard(ScopedConnections):
             raise TenantClosed(self.scope.tenant)
 
 
-_LockSet = tuple[list[str], list[tuple[str, str]]]
+_LockSet = tuple[list[str], list[LockKey]]
 
 _RETIRING = UrgencyId("urg_proof")
 #: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, both
@@ -114,9 +115,9 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
 }
 
 
-def _canonical(chunks: Sequence[str], keys: Sequence[tuple[str, str]]) -> list[str]:
+def _canonical(chunks: Sequence[str], keys: Sequence[LockKey]) -> list[str]:
     """The order the store takes a lock set in: chunk ids, then keys by namespace and key."""
-    return [*sorted(chunks), *(f"{namespace}/{key}" for namespace, key in sorted(keys))]
+    return [*sorted(chunks), *(f"{lock.namespace}/{lock.key}" for lock in sorted(keys))]
 
 
 def _pid(conn: Connection) -> int:
@@ -169,7 +170,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
     def chunk_lock(conn: Connection, chunk_id: str) -> None:
         observe(conn, chunk_id, lambda: original_chunk(conn, chunk_id))
 
-    def key_lock(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
+    def key_lock(conn: Connection, namespace: LockNamespace, keys: Sequence[str]) -> None:
         observe(conn, f"{namespace}/{keys[0]}", lambda: original_keys(conn, namespace, keys))
 
     def writer(reverse: bool) -> None:
@@ -181,7 +182,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
                 elif kind == "chunks":
                     unit.lock_chunks(["b", "a"] if reverse else ["a", "b"])
                 else:
-                    keys = [("z", "b"), ("a", "a")]
+                    keys = [LockKey(LockNamespace.WORK_REF, "b"), LockKey(LockNamespace.CADENCE_ERRAND, "a")]
                     unit.lock_set(keys=keys if reverse else list(reversed(keys)))
         except BaseException as exc:
             failures.append(exc)
@@ -226,7 +227,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
         if sets is not None:
             expected_by = {worker: _canonical(*sets[index]) for index, worker in enumerate(("first", "second"))}
         else:
-            expected = ["a", "b"] if kind == "chunks" else ["a/a", "z/b"]
+            expected = ["a", "b"] if kind == "chunks" else ["cadence_errand/a", "work_ref/b"]
             expected_by = {"first": expected, "second": expected}
         if acquired != expected_by:
             raise RuntimeError(f"noncanonical lock order: {acquired}")
@@ -586,7 +587,9 @@ def main() -> None:
                 conn.execute(sa.text("INSERT INTO tenants VALUES (:tenant, 'proof')"), {"tenant": _TENANT})
                 conn.execute(sa.text("INSERT INTO chunks VALUES (:tenant, 'a'), (:tenant, 'b')"), {"tenant": _TENANT})
                 conn.execute(
-                    sa.text("INSERT INTO keyed_locks VALUES (:tenant, 'a', 'a'), (:tenant, 'z', 'b')"),
+                    sa.text(
+                        "INSERT INTO keyed_locks VALUES (:tenant, 'cadence_errand', 'a'), (:tenant, 'work_ref', 'b')"
+                    ),
                     {"tenant": _TENANT},
                 )
             _run_pair(engine, kind="chunks", production_guard=False)

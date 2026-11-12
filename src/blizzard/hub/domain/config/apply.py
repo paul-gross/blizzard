@@ -53,6 +53,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     WorkSourceId,
 )
+from blizzard.hub.domain.kernel.locks import LockKey
 
 PROJECTS_SECTION = "projects"
 SECRETS_SECTION = "secrets"
@@ -240,7 +241,7 @@ class ApplyPlan:
     #: The landing-order facts, committed after ``writes`` so a link the plan creates stands before its position.
     positions: tuple[PlannedPosition, ...] = ()
     #: The keyed locks the writer declares, in their canonical order, before its first write.
-    locks: tuple[tuple[str, str], ...] = ()
+    locks: tuple[LockKey, ...] = ()
     #: The urgencies the writes newly name, checked under ``locks`` before the first write.
     guards: tuple[UrgencyReferenceGuard, ...] = ()
 
@@ -261,7 +262,7 @@ class ConfigDeclaration:
     cadences: tuple[RecordDeclaration, ...] = ()
     #: The urgencies the routine and cadence writes newly name; their locks are declared beside the urgency sections'.
     reference_guards: tuple[UrgencyReferenceGuard, ...] = ()
-    reference_locks: tuple[tuple[str, str], ...] = ()
+    reference_locks: tuple[LockKey, ...] = ()
 
 
 @domain_model
@@ -302,7 +303,7 @@ class IConfigApplyWriter(Protocol):
         *,
         dry_run: bool,
         positions: Sequence[PlannedPosition] = (),
-        locks: Sequence[tuple[str, str]] = (),
+        locks: Sequence[LockKey] = (),
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
         """Declare ``locks`` once and refuse the entry of the first of ``guards`` whose urgency moved, then run each

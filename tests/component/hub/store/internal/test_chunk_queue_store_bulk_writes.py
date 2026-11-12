@@ -18,6 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from tests.support.scaffolding import (
     chunk_stores,
@@ -109,7 +110,7 @@ def test_record_backlog_positions_statement_count_is_independent_of_batch_size(t
     [("record_queue_positions", BACKLOG_RANKING_LOCK), ("record_backlog_positions", READY_RANKING_LOCK)],
 )
 def test_a_position_write_refuses_a_unit_not_holding_its_lists_ranking_lock(
-    tmp_path: Path, write: str, held: tuple[str, str]
+    tmp_path: Path, write: str, held: LockKey
 ) -> None:
     store, engine = _store(tmp_path)
     _mint(store, "ch_a")

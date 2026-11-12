@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockNamespace
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import statements_of
 
@@ -16,7 +16,7 @@ def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
     conn.execute(statements_of(conn).update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
-def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
+def lock_keys(conn: Connection, namespace: LockNamespace, keys: Sequence[str]) -> None:
     """Create absent keyed lock rows under savepoints, then lock them in sorted order."""
     stmts = statements_of(conn)
     lock = s.keyed_locks
