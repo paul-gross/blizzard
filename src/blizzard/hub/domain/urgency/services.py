@@ -62,7 +62,6 @@ class TenantSettingsMissing(LookupError):
         super().__init__("the tenant's settings are not seeded")
 
 
-@collaborator
 @dataclass(frozen=True)
 class StoredUrgencies:
     """Resolves an urgency key against the store, one read per key. An urgency's slug never changes, so no slug it
