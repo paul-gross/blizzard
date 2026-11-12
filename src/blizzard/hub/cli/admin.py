@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.hub.cli.admin_settings import admin_settings_group
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -51,3 +52,6 @@ def admin_revoke(cli: CliContext, user_id: str) -> None:
         "DELETE /admin/hub-admins/{user_id}",
     )
     cli.show_lines({"user_id": user_id, "revoked": True}, f"{user_id} is not a hub administrator")
+
+
+admin_group.add_command(admin_settings_group)
