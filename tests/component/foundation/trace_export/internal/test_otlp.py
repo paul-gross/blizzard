@@ -61,7 +61,12 @@ def sink(monkeypatch: pytest.MonkeyPatch) -> Iterator[OtlpSink]:
 def test_the_sink_receives_derived_ids_parent_times_attributes_events_links_and_resource(sink: OtlpSink) -> None:
     root, child = _records()
 
-    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export([root, child]) is True
+    assert (
+        OtlpTraceExporter(
+            resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
+        ).export([root, child])
+        is True
+    )
 
     [resource_spans] = sink.resource_spans()
     resource = {a.key: a.value.string_value for a in resource_spans.resource.attributes}
@@ -103,12 +108,19 @@ def test_the_sink_receives_derived_ids_parent_times_attributes_events_links_and_
 def test_a_sink_answering_5xx_makes_export_return_false(sink: OtlpSink) -> None:
     sink.status = 500
 
-    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export(list(_records())) is False
+    assert (
+        OtlpTraceExporter(
+            resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
+        ).export(list(_records()))
+        is False
+    )
     assert sink.requests == []
 
 
 def test_the_sweep_tells_assembled_steps_to_the_sink(tmp_path: Path, sink: OtlpSink) -> None:
-    exporter = OtlpTraceExporter(resource=_RESOURCE, **_SCOPE)
+    exporter = OtlpTraceExporter(
+        resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
+    )
     hub, graph = trace_hub(tmp_path, trace_exporter=exporter, tracing=TracingConfig(settle_seconds=0))
     sweep = hub.hub_services.trace_export
     assert sweep is not None
@@ -136,7 +148,12 @@ def test_a_span_naming_a_service_leaves_under_a_resource_of_its_own(sink: OtlpSi
     root, child = _records()
     lifetime = replace(child, service_name="blizzard-chunk")
 
-    assert OtlpTraceExporter(resource=_RESOURCE, **_SCOPE).export([root, lifetime]) is True
+    assert (
+        OtlpTraceExporter(
+            resource=_RESOURCE, scope=INSTRUMENTATION_SCOPE, scope_version=INSTRUMENTATION_SCOPE_VERSION
+        ).export([root, lifetime])
+        is True
+    )
 
     by_service = {
         {a.key: a.value.string_value for a in rs.resource.attributes}["service.name"]: rs
