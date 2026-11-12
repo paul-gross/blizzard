@@ -9273,6 +9273,7 @@
           "change-closed",
           "branch-protected",
           "merge-method-refused",
+          "missing-checks",
           "park-timeout",
           "escalate-choice"
         ],

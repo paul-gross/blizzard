@@ -825,9 +825,8 @@ def write_runner_config(
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built.
         subscriptions=sampler_without_credentials(runner_dir),
-        # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
-        # reaches a worker only because it is declared here.
-        worker_env_passthrough=(ENV_HARNESS_FENCE, *passthrough),
+        # Both the harness fence and the isolated OpenCode data directory must reach workers.
+        worker_env_passthrough=(ENV_HARNESS_FENCE, "XDG_DATA_HOME", *passthrough),
     )
     write_host_file(config)
     return config
@@ -855,7 +854,10 @@ def start_runner(
     client already holding the URL reach it again. Returns at once — :func:`await_host` waits for it."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     state_tick_seconds(runner_dir, TICK_SECONDS)
-    env = runner_spawn_env(load_runner_config(runner_dir).hub_url, {ENV_HARNESS_FENCE: "1", **(extra_env or {})})
+    env = runner_spawn_env(
+        load_runner_config(runner_dir).hub_url,
+        {ENV_HARNESS_FENCE: "1", "XDG_DATA_HOME": str(runner_dir / "xdg-data"), **(extra_env or {})},
+    )
     _apply_crash_env(env, crash_point)
     listening = runner_dir / LISTENING_FILE
     return spawn_daemon(

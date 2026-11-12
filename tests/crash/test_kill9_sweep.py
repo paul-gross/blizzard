@@ -96,6 +96,7 @@ from tests.support.config_inputs import init_host, load_host_config, load_hub_co
 from tests.support.crash_points import discover_crash_points
 from tests.support.fleet_world import BUILD_BRANCH, world_repos
 from tests.support.host_files import load_runner_config, with_runner
+from tests.support.opencode2_store import seed_store
 from tests.support.otlp_sink import OtlpSink, otlp_sink
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -1819,11 +1820,16 @@ def _lease_harness_ids_for_chunk(runner_dir: Path, chunk_id: str) -> set[str | N
 
 
 @pytest.mark.parametrize("point", _OPENCODE_GENERIC_SWEEP)
-def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+def test_kill9_at_crash_point_under_opencode(
+    crash_env: CrashEnv, tmp_path: Path, point: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage — the same
     ``spawn.*``/``advance.*`` windows a Claude-Code graph never reaches under OpenCode,
     armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
     landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
+    ambient_data = tmp_path / "ambient-data"
+    seed_store(ambient_data / "opencode" / "opencode.db", key="migration.v1-v2")
+    monkeypatch.setenv("XDG_DATA_HOME", str(ambient_data))
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
