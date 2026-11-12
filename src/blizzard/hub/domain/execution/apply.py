@@ -312,6 +312,7 @@ class ApplyService:
     def _refuse_foreign_decision(self, chunk: Chunk, from_node: Node, submission: Completion) -> None:
         """A resolving re-escalation's decision is already closed by its own escalation, so the visit
         membership no longer applies; it must still be this chunk's and node's, resolved to this choice."""
+        assert submission.decision_id is not None
         decision = self._decisions.get_decision(submission.decision_id)
         refuse_unresolving(decision, submission, chunk=chunk, node=from_node, in_visit=True)
 

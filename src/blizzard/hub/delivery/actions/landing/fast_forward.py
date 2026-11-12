@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from functools import partial
 
-
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.base_merge import contributes_only_base_change
