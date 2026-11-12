@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.foundation.config_keys import OPEN_TABLE, ConfigRegistry
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
-from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.config_keys import HUB_REGISTRY, WORK_SOURCE_RECORDS
 from blizzard.runner.cli import runner
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.harness.wiring import HarnessSections, declared, first_bindings
@@ -40,8 +40,12 @@ def test_flags_is_one_open_table_with_no_keys_beneath_it(name: str, registry: Co
     assert [(key["path"], key["type"]) for key in flags] == [("flags", OPEN_TABLE)]
 
 
+#: The record kinds a deprecated key may name as its home; any other text that is not a key or a file is refused.
+_RECORD_KINDS = frozenset({WORK_SOURCE_RECORDS})
+
+
 @pytest.mark.parametrize(("name", "registry"), CONFIGS, ids=[name for name, _ in CONFIGS])
-def test_a_deprecated_key_names_a_declared_replacement_or_another_file_or_none(
+def test_a_deprecated_key_names_a_declared_replacement_another_file_a_record_kind_or_none(
     name: str, registry: ConfigRegistry
 ) -> None:
     document = document_from_registry(registry)
@@ -52,6 +56,9 @@ def test_a_deprecated_key_names_a_declared_replacement_or_another_file_or_none(
             home = key["replaced_by"]
             # A key whose home is another file's registry names it as `<path> in <file>.toml`.
             if " in " in home and home.endswith(".toml"):
+                continue
+            # A key replaced by records configured through the API names the record kind.
+            if home in _RECORD_KINDS:
                 continue
             assert home in declared, f"{key['path']} -> {home}"
 

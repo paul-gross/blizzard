@@ -104,6 +104,8 @@ DEFAULT_AUTH_HUB_ROLE = "mirror"
 # sweep prunes them — long enough to investigate a stalled or rate-limited
 # invocation days after the fact.
 DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
+#: Seconds a timed host waits from the end of one tick to the start of the next.
+DEFAULT_TICK_SECONDS = 30.0
 # Both switches are off until an operator turns them on.
 DEFAULT_QUEUE_STRICT = False
 DEFAULT_TRANSCRIPTS_SHIP = False

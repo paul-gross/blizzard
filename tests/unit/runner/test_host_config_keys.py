@@ -315,6 +315,10 @@ def test_every_retired_key_graduates_to_its_placement_and_never_into_the_runner(
     assert runner["subscription"] == "anthropic"
 
 
+#: Keys declared, and so committed to the contract, before the host file's parse reads them.
+_DECLARED_UNREAD = ("tick_seconds",)
+
+
 def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -338,7 +342,7 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
     loaded.host_view()  # the lazily read tables — [auth] — are read when projected
 
     unread = [key.path for key in HOST_REGISTRY.keys if key.type != OPEN_TABLE and key.path not in read]
-    assert unread == []
+    assert unread == list(_DECLARED_UNREAD)
 
 
 def test_an_undeclared_host_key_read_names_the_key_and_the_host_registry(

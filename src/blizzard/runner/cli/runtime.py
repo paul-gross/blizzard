@@ -60,7 +60,7 @@ from blizzard.runner.composition import (
     build_read_stores,
     build_runner_process,
 )
-from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, worker_shell_refusal
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, DEFAULT_TICK_SECONDS, RunnerConfig, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
@@ -153,7 +153,6 @@ from blizzard.runner.stores import HostReadStores, RunnerReadStores
 from blizzard.runner.tracing.sweep import announce_rejected_tracing
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
-DEFAULT_TICK_SECONDS = 30.0
 
 
 #: Bounds each of ``init``'s hub calls, so an unresponsive hub fails the command instead of hanging it.

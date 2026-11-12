@@ -16,7 +16,7 @@ test('a misspelled key fails, naming the key', () => {
 });
 
 test('a deprecated key fails even though the hub still loads it, naming the key', () => {
-  expect(problemsIn('deprecated')).toEqual([expect.stringContaining('work_source[].close')]);
+  expect(problemsIn('deprecated')).toEqual([expect.stringContaining('work_source: deprecated')]);
 });
 
 test('a mistyped value fails, naming the key and the declared type', () => {
@@ -35,8 +35,8 @@ test('a key typed as a table must be a table, and an open table admits any path 
 });
 
 test('an array of tables flattens as name[].key', () => {
-  expect(checkProfile(parseProfile('[[work_source]]\nrepo = "o/n"\nrepro = "x"'))).toEqual([
-    expect.stringContaining('work_source[].repro'),
+  expect(checkProfile(parseProfile('[[auth.oauth.provider]]\nname = "o"\nnmae = "x"'))).toEqual([
+    expect.stringContaining('auth.oauth.provider[].nmae'),
   ]);
 });
 
@@ -76,17 +76,19 @@ test('api.sweep’s sweep names are the config contract’s', () => {
 
 test('a placeholder other than ${idp} and ${forge} fails, naming its key, wherever the string sits', () => {
   expect(checkProfile(parseProfile('[auth]\nsuperuser = "${nope}"'))).toEqual([expect.stringContaining('auth.superuser')]);
-  expect(checkProfile(parseProfile('[[work_source]]\napi_base = "${nope}/x"'))).toEqual([expect.stringContaining('work_source[0].api_base')]);
+  expect(checkProfile(parseProfile('[[auth.oauth.provider]]\napi_base = "${nope}/x"'))).toEqual([expect.stringContaining('auth.oauth.provider[0].api_base')]);
   expect(checkProfile(parseProfile('[flags]\nanything = ["${nope}"]'))).toEqual([expect.stringContaining('flags.anything[0]')]);
 });
 
 test('${idp} and ${forge} pass the check and expand in every string value', () => {
-  const profile = parseProfile('[auth]\nsuperuser = "${idp}/a-${forge}"\n[[work_source]]\napi_base = "${forge}"\nrepo = "o/n"');
+  const profile = parseProfile('[auth]\nsuperuser = "${idp}/a-${forge}"\n[[auth.oauth.provider]]\napi_base = "${forge}"\nname = "o"');
   expect(checkProfile(profile)).toEqual([]);
   const expanded = expandProfile(profile, { idp: 'http://127.0.0.1:1', forge: 'http://127.0.0.1:2' });
   expect(expanded).toEqual({
-    auth: { superuser: 'http://127.0.0.1:1/a-http://127.0.0.1:2' },
-    work_source: [{ api_base: 'http://127.0.0.1:2', repo: 'o/n' }],
+    auth: {
+      superuser: 'http://127.0.0.1:1/a-http://127.0.0.1:2',
+      oauth: { provider: [{ api_base: 'http://127.0.0.1:2', name: 'o' }] },
+    },
   });
   expect(JSON.stringify(profile)).toContain('${idp}');
 });

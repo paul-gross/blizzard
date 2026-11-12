@@ -16,11 +16,11 @@ import pytest
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.toml_emit import toml_literal
 from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
-from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
-from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys, render_egress_toml
+from blizzard.hub.config_defaults import ENV_DB_URL as HUB_ENV_DB_URL
+from blizzard.hub.config_defaults import ENV_HOST as HUB_ENV_HOST
+from blizzard.hub.config_defaults import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE

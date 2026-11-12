@@ -14,6 +14,19 @@ either is deliberate.
   such as `BZ_HUB_TOKEN_<NAME>` from a runner's name, or `null` for a fixed name such as `BZ_HOST_TOKEN`. `env` is
   `null` for a daemon that declares none. Never edited by hand.
 
+Each key also states its `lifetime` — when a change to its value takes effect — as one of four values: `pass` (read
+at the start of each pass of the loop that uses it, so the next pass takes a change), `session` (handed to a worker when
+its session launches, so a running session keeps what it launched with), `boot` (read when the daemon starts, so a
+change takes a restart), or `immutable` (written once, when the thing it belongs to is created). Every key holding a
+value states one, an `open table` included; a `table` or `array of tables` only groups its children and states `null`.
+A deprecated key states its replacement's lifetime. Moving a key's lifetime earlier is additive; moving it later is a
+break. A key's `env` names the environment variable that supplies its value and overrides the file, and only a `boot`
+key states one; it is `null` otherwise. It is distinct from the document's top-level `env`, the token env file.
+
+A deprecated key's `replaced_by` names one of three homes: another key of the same document, a key of the other
+daemon's file as `<path> in <file>.toml` (such as `tracing.worker_programs in blizzard-host.toml`), or a record kind
+configured through the API rather than the file (such as `work source records`).
+
 A key of type `open table` has free-form children, such as `flags`, `hub_tokens` or an alias table; no key beneath it is
 listed. A deprecated key is still read — to refuse it, graduate it, or honor it — so it stays declared.
 

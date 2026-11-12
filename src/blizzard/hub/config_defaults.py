@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+#: The variables that supply ``host``, ``port`` and ``db_url`` over the file; the registry declares each as its key's
+#: ``env``. The store URL varies by environment rather than being baked per image, and every verb honors it alike.
+ENV_HOST = "BZ_HUB_HOST"
+ENV_PORT = "BZ_HUB_PORT"
+ENV_DB_URL = "BZ_HUB_DB_URL"
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8421
 

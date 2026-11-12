@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, TABLE, ConfigKey, ConfigView, Lifetime
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.toml_emit import default_line, toml_literal
 
@@ -110,11 +110,11 @@ _DEFAULTS = TracingConfig()
 #: Every ``[tracing]`` key of the shared config, declared beside the parser that reads it.
 TRACING_KEYS: tuple[ConfigKey, ...] = (
     ConfigKey("tracing", TABLE),
-    ConfigKey("tracing.sweep_seconds", INTEGER, default=_DEFAULTS.sweep_seconds),
-    ConfigKey("tracing.settle_seconds", INTEGER, default=_DEFAULTS.settle_seconds),
-    ConfigKey("tracing.batch_limit", INTEGER, default=_DEFAULTS.batch_limit),
-    ConfigKey("tracing.max_lag_seconds", INTEGER, default=_DEFAULTS.max_lag_seconds),
-    ConfigKey("tracing.replay_max_window", INTEGER, default=_DEFAULTS.replay_max_window),
-    ConfigKey("tracing.platform", BOOLEAN, default=_DEFAULTS.platform),
-    ConfigKey("tracing.platform_sample_ratio", NUMBER, default=_DEFAULTS.platform_sample_ratio),
+    ConfigKey("tracing.sweep_seconds", INTEGER, default=_DEFAULTS.sweep_seconds, lifetime=Lifetime.PASS),
+    ConfigKey("tracing.settle_seconds", INTEGER, default=_DEFAULTS.settle_seconds, lifetime=Lifetime.PASS),
+    ConfigKey("tracing.batch_limit", INTEGER, default=_DEFAULTS.batch_limit, lifetime=Lifetime.PASS),
+    ConfigKey("tracing.max_lag_seconds", INTEGER, default=_DEFAULTS.max_lag_seconds, lifetime=Lifetime.PASS),
+    ConfigKey("tracing.replay_max_window", INTEGER, default=_DEFAULTS.replay_max_window, lifetime=Lifetime.PASS),
+    ConfigKey("tracing.platform", BOOLEAN, default=_DEFAULTS.platform, lifetime=Lifetime.BOOT),
+    ConfigKey("tracing.platform_sample_ratio", NUMBER, default=_DEFAULTS.platform_sample_ratio, lifetime=Lifetime.BOOT),
 )
