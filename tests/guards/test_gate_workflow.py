@@ -18,7 +18,7 @@ def _jobs() -> dict[str, Any]:
 def test_the_compat_job_checks_out_all_history_on_every_trigger_but_a_tag() -> None:
     job = _jobs()["compat"]
     assert job["name"] == "compatibility against supported releases"
-    assert job["if"] == "github.ref_type != 'tag'"
+    assert job["if"] == "${{ github.ref_type != 'tag' && !inputs.lint_only }}"
     assert job["steps"][0]["with"]["fetch-depth"] == 0
 
 

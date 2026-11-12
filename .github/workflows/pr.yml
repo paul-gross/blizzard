@@ -19,6 +19,13 @@
 # fails on any other non-success. The names of every job here are the required status contexts on
 # `master` (blizzard-context verification/blizzard/commands/packaging.md); `line provenance` runs
 # only on a release-line base, so it is not among them.
+#
+# A pull request into `master` from a `hotfix/` branch of this repository is the operator's fast
+# lane: `gate` and `upper-tiers` get `lint_only`, so of their jobs only the lint-class ones run
+# (ruff + pyright + structural gate; spec drift + change notes + flag lifecycle + dprint; the
+# process-reference lint) and the rest are skipped by condition, a skipped job passing its required
+# check. The store baseline and the rehearsal keep their own conditions, so a hotfix that changes a
+# store revision or cuts a release still runs its proof.
 name: pr
 
 on:
@@ -35,12 +42,15 @@ concurrency:
 jobs:
   gate:
     uses: ./.github/workflows/gate.yml
+    with:
+      lint_only: ${{ github.base_ref == 'master' && startsWith(github.head_ref, 'hotfix/') && github.event.pull_request.head.repo.full_name == github.repository }}
 
   upper-tiers:
     uses: ./.github/workflows/upper-tiers.yml
     with:
       full_suite: true
       crash_sweep_ci: ""
+      lint_only: ${{ github.base_ref == 'master' && startsWith(github.head_ref, 'hotfix/') && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # The proof needs the floor release's wheel and a Postgres service, so it runs only when the pull request
   # changes a revision; the check sits here, at job level, so no other job is gated on the paths.

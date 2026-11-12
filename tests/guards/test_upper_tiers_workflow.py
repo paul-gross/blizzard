@@ -18,9 +18,25 @@ def test_the_full_suite_input_defaults_off_and_the_crash_sweep_defaults_bounded(
     assert inputs["crash_sweep_ci"]["default"] == "1"
 
 
-@pytest.mark.parametrize("job", _SUITE_JOBS)
-def test_a_suite_job_runs_only_when_the_full_suite_is_asked_for(job: str) -> None:
+def test_the_lint_only_input_defaults_off() -> None:
+    assert _WORKFLOW[True]["workflow_call"]["inputs"]["lint_only"]["default"] is False
+
+
+@pytest.mark.parametrize("job", ("ui", "journey"))
+def test_a_mock_backed_suite_job_runs_only_when_the_full_suite_is_asked_for(job: str) -> None:
+    """Behind ``mock-ref``, which ``lint_only`` skips, so the job is skipped with it."""
     assert _JOBS[job]["if"] == "${{ inputs.full_suite }}"
+    assert "mock-ref" in _JOBS[job]["needs"]
+
+
+@pytest.mark.parametrize("job", ("image-smoke", "compose-smoke"))
+def test_a_smoke_runs_only_when_the_full_suite_is_asked_for_and_never_lint_only(job: str) -> None:
+    assert _JOBS[job]["if"] == "${{ inputs.full_suite && !inputs.lint_only }}"
+
+
+def test_lint_only_skips_the_mock_ref_and_the_service_tier_result() -> None:
+    assert _JOBS["mock-ref"]["if"] == "${{ !inputs.lint_only }}"
+    assert _JOBS["service-tier-result"]["if"] == "${{ !cancelled() && !inputs.lint_only }}"
 
 
 @pytest.mark.parametrize("job", ("service-tier-result", "crash-sweep", *_SUITE_JOBS))
