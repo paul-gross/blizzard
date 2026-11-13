@@ -1122,7 +1122,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_delivery = chunk_stores.delivery
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
-    chunk_exclusive = chunk_stores.exclusive
     live = build_live_config(stores, cipher=parts.secret_cipher)
     # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
     forge_budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
@@ -1232,7 +1231,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         artifacts=chunk_artifacts,
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
-        exclusive=chunk_exclusive,
+        record=chunk_record,
         transactions=stores.transactions,
         events=event_log,
         clock=clock,

@@ -443,12 +443,14 @@ _FAILURE_ROUTES: dict[str, tuple[type, str]] = {
     "node": (ChunkHubExecStore, "record_hub_step_transition"),
     "cross-graph": (ChunkMovementStore, "record_migration"),
     "unroutable": (ChunkEscalationsStore, "record_bounce_escalation"),
+    "missing-graph": (ChunkEscalationsStore, "record_bounce_escalation"),
 }
 #: The events a refusal along each failure edge records, once.
 _REFUSAL_EVENTS = {
     "node": ["repository-unresolved"],
     "cross-graph": ["repository-unresolved"],
     "unroutable": ["repository-unresolved", "hub-node-unroutable-outcome"],
+    "missing-graph": ["repository-unresolved"],
 }
 _REFUSAL_KINDS = frozenset(_REFUSAL_EVENTS["unroutable"])
 
@@ -488,6 +490,8 @@ def _routing_failure_to(world: World, route: str, *, repo: str) -> str:
     if route == "cross-graph":
         assert world.hub.client.post("/api/graphs", json={"definition_yaml": _LANDING}).status_code == 201
         graph = _GRAPH.replace(_MERGE_FAILURE, _MERGE_FAILURE.replace("to: build", "to: graph:landing"))
+    if route == "missing-graph":
+        graph = _GRAPH.replace(_MERGE_FAILURE, _MERGE_FAILURE.replace("to: build", "to: graph:absent"))
     chunk_id, build = world.mint(graph)
     world.complete(chunk_id, build, repo=repo)
     if route == "unroutable":
@@ -569,6 +573,7 @@ def test_a_refusal_that_raises_part_way_commits_nothing_and_a_later_pass_records
         "node": (graph_id, "build", "running"),
         "cross-graph": (landing.graph_id if landing is not None else "", "merge", "delivering"),
         "unroutable": (graph_id, "merge", "needs_human"),
+        "missing-graph": (graph_id, "merge", "needs_human"),
     }[route]
     hub_logs = ["hub-log.repository-unresolved"] + (["hub-unroutable-outcome"] if route == "unroutable" else [])
     assert (failed, retried) == (
@@ -606,7 +611,7 @@ def test_a_refusal_whose_chunk_left_the_visit_before_its_transaction_writes_noth
 
 
 #: The outcome a turn routing ``merge``'s failure edge ends on.
-_TURN_OUTCOME = {"node": "failure", "cross-graph": "failure", "unroutable": "escalated"}
+_TURN_OUTCOME = {"node": "failure", "cross-graph": "failure", "unroutable": "escalated", "missing-graph": "escalated"}
 
 
 def _refuse_at_the_turn(monkeypatch: pytest.MonkeyPatch) -> None:

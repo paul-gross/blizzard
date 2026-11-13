@@ -1,4 +1,4 @@
-import { chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
+import { breakActionEdge, chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 const REPO = 'toy-api';
 const LANDED = 'ACTION_LANDED.md';
@@ -76,5 +76,60 @@ test('test_test_actions_drive_hub_nodes', async ({ api, issue, runnerHost }) => 
   expect((detail.history as { choice_name: string }[]).map((item) => item.choice_name).slice(-2)).toEqual(['onward', 'done']);
   expect(Object.fromEntries((detail.artifacts as { name: string; content: string }[]).filter((item) => item.name.startsWith('test-sequence/')).map((item) => [item.name, item.content]))).toEqual({
     'test-sequence/0': 'pending', 'test-sequence/1': 'done',
+  });
+});
+
+for (const target of ['triage', 'absent'] as const) {
+  test(`test_a_hub_exit_routes_to_${target}`, async ({ api, issue, runnerHost }) => {
+    let destinationId = '';
+    if (target === 'triage') {
+      const destination = JSON.stringify({ name: 'triage', entry: 'build', nodes: {
+        build: { executor: 'runner', prompt: 'Triage.', judgement: { prompt: 'Assess.', choices: {
+          pass: { description: 'Done.', to: 'done' },
+        } } },
+      } });
+      const created = await api.post('/api/graphs', { data: { definition_yaml: destination } });
+      expect(created.status).toBe(201);
+      destinationId = created.body.graph_id;
+    }
+    const graph = actionGraph('pass\n', { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
+      landed: { description: 'Landed.', to: `graph:${target}` }, failure: { description: 'Failed.', to: 'build' },
+    } } } }, 'deliver');
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph } })).status).toBe(201);
+    const { chunk } = await issue(`cross graph ${target}`);
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
+      (body) => target === 'triage' ? body.graph_id === destinationId : body.status === 'needs_human',
+      { stallPasses: 80, progress: chunkProgress });
+    if (target === 'triage') {
+      expect(detail.current_node_name).toBe('build');
+    } else {
+      expect(detail.escalation?.cause).toBe('migration-target-unresolvable');
+      expect((detail.artifacts as { name: string }[]).map((item) => item.name)).not.toContain('hub-unroutable-outcome');
+    }
+  });
+}
+
+test.describe('an invalid stored edge', () => {
+  test.use({ isolation: 'fresh-hub' });
+
+  test('test_an_unroutable_hub_outcome_escalates_once', async ({ api, issue, runnerHost, testHub, events }) => {
+    const graph = actionGraph('pass\n', { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
+      landed: { description: 'Landed.', to: 'done' }, failure: { description: 'Failed.', to: 'build' },
+    } } } }, 'deliver');
+    const created = await api.post('/api/graphs', { data: { definition_yaml: graph } });
+    expect(created.status).toBe(201);
+    breakActionEdge(testHub, created.body.graph_id, 'deliver', 'done');
+    const { chunk } = await issue('unroutable hub action');
+    const subscription = await events.open({ barrier: true });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
+      (body) => body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
+    expect(detail.current_node_name).toBe('deliver');
+    expect((detail.artifacts as { name: string }[]).filter((item) => item.name === 'hub-unroutable-outcome')).toHaveLength(1);
+    const frames = await subscription.barrier();
+    expect(frames.filter((frame) => frame.event === 'event-logged' && frame.data?.chunk_id === chunk.chunk_id && frame.data?.kind === 'hub-node-unroutable-outcome')).toHaveLength(1);
+    const logged = (await api.get('/api/events')).body.events.filter((event: { chunk_id: string; kind: string }) => event.chunk_id === chunk.chunk_id && event.kind === 'hub-node-unroutable-outcome');
+    expect(logged).toHaveLength(1);
   });
 });
