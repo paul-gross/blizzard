@@ -111,3 +111,28 @@ class PublicOrigins:
             if (declared := _authority(url)) is not None and declared == _authority(f"{scheme}://{raw}"):
                 return url
         return None
+
+
+@domain_model
+@dataclass(frozen=True)
+class HubOrigin:
+    """The one browser origin the runner admits cross-origin on its liveness probe: its hub's.
+
+    Held in browser ``Origin`` serialization — lowercase scheme and host, the scheme's default port omitted, no path —
+    so :meth:`admits` is an exact comparison against what a browser sends. ``None`` admits nothing."""
+
+    origin: str | None = None
+
+    @classmethod
+    def of(cls, hub_url: str) -> HubOrigin:
+        """The origin ``hub_url`` names; an empty, non-http(s) or unparseable one admits nothing."""
+        split = urlsplit(hub_url.strip())
+        scheme = split.scheme.lower()
+        if scheme not in _ALLOWED_SCHEMES:
+            return cls()
+        authority = _authority(hub_url.strip())
+        return cls(f"{scheme}://{authority}" if authority is not None else None)
+
+    def admits(self, origin: str | None) -> bool:
+        """Whether an ``Origin`` header value is the hub's origin."""
+        return self.origin is not None and origin == self.origin
