@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261113_0900_host_urls",
+  "head_revision": "20261113_1000_credential_carry_over",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
