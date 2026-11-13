@@ -270,6 +270,7 @@ def _authoring(units: _Units, writer: _Writer) -> ConfigAuthoring:
         work_sources=unused,
         repositories=unused,
         forges=cast(Any, _NoForges()),
+        credentials=unused,
         offers=unused,
         secrets=cast(Any, _NoSecrets()),
         cipher=cast(Any, _Cipher()),
@@ -278,6 +279,7 @@ def _authoring(units: _Units, writer: _Writer) -> ConfigAuthoring:
         transactions=units,
         secret_references=unused,
         forge_references=unused,
+        credential_references=unused,
         clock=FixedClock(_AT),
     )
 

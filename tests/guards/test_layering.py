@@ -3830,12 +3830,15 @@ _CONFIGURED_WRITE_NAMES = frozenset(
         "IWriteWorkSourceRepository",
         "IWriteRepositoryRecordRepository",
         "IWriteForgeRepository",
+        "IWriteCredentialRepository",
     }
 )
 _CONFIGURED_WRITE_HOMES = frozenset(
     {
         _HUB_DIR / "domain" / "config" / "authoring.py",
         _HUB_DIR / "domain" / "config" / "forges.py",
+        _HUB_DIR / "domain" / "config" / "credentials.py",
+        _HUB_DIR / "domain" / "config" / "credential_bindings.py",
         _HUB_DIR / "domain" / "config" / "work_sources.py",
         _HUB_DIR / "domain" / "config" / "repositories.py",
         _HUB_DIR / "domain" / "config" / "secrets.py",

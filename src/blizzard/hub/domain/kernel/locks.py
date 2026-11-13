@@ -15,6 +15,7 @@ class LockNamespace(StrEnum):
     """Every keyed-lock namespace; its value is the ``keyed_locks.namespace`` a lock row is written under."""
 
     CADENCE_ERRAND = "cadence_errand"
+    CREDENTIAL = "credential"
     FINDING = "finding"
     FLOW = "flow"
     FORGE = "forge"

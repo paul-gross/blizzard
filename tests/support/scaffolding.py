@@ -161,6 +161,8 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -617,6 +619,7 @@ def config_authoring(
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
         forges=ForgeRecordStore(store),
+        credentials=CredentialRecordStore(store),
         offers=ForgeKindOffers() if offers is None else offers,
         secrets=SecretStore(store),
         cipher=secret_cipher(keys),
@@ -625,6 +628,7 @@ def config_authoring(
         transactions=HubTransactions(store),
         secret_references=SecretReferrersStore(store),
         forge_references=ForgeReferrersStore(store),
+        credential_references=CredentialReferrersStore(store),
         clock=clock,
     )
 

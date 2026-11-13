@@ -94,6 +94,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog, ISecretReader
@@ -250,6 +251,8 @@ from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
@@ -405,6 +408,8 @@ class TenantServices:
     repository_records: IReadRepositoryRecordRepository
     #: Stored forge records (the read half).
     forge_records: IReadForgeRepository
+    #: Stored credential records (the read half).
+    credential_records: IReadCredentialRepository
     #: Each chunk's landed-commit address on its repository record's forge.
     commit_links: IReadLandedCommitLinks
     #: Each branch's delivery line and the visits submitted to it (the read half).
@@ -637,11 +642,14 @@ class TenantStores:
     repository_records: RepositoryRecordStore
     #: Forge records — composition-only write half; ``HubServices`` carries the read half.
     forge_records: ForgeRecordStore
+    #: Credential records — composition-only write half; ``TenantServices`` carries the read half.
+    credential_records: CredentialRecordStore
     #: Each branch's delivery line — composition-only write half; ``TenantServices`` carries the read half.
     flows: FlowStore
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     forge_referrers: ForgeReferrersStore
+    credential_referrers: CredentialReferrersStore
     config_changes: ConfigChangeStore
     #: Projects — composition-only write half; ``HubServices`` carries the read half.
     projects: ProjectStore
@@ -718,9 +726,11 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         work_source_records=WorkSourceRecordStore(connections),
         repository_records=RepositoryRecordStore(connections),
         forge_records=ForgeRecordStore(connections),
+        credential_records=CredentialRecordStore(connections),
         flows=FlowStore(connections, clock),
         secret_referrers=SecretReferrersStore(connections),
         forge_referrers=ForgeReferrersStore(connections),
+        credential_referrers=CredentialReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
         project_links=project_links,
@@ -960,6 +970,7 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offer
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
         forges=stores.forge_records,
+        credentials=stores.credential_records,
         offers=offers,
         secrets=stores.secrets,
         cipher=cipher,
@@ -968,6 +979,7 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offer
         transactions=stores.transactions,
         secret_references=stores.secret_referrers,
         forge_references=stores.forge_referrers,
+        credential_references=stores.credential_referrers,
         clock=stores.clock,
     )
 
@@ -1478,6 +1490,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
+        credential_records=stores.credential_records,
         commit_links=commit_links,
         flows=stores.flows,
         flow_views=stores.flows,

@@ -1,4 +1,4 @@
-"""The keys each forge, secret, work-source and repository verb declares — once, before any read — and that it judges
+"""The keys each forge, credential, secret, work-source and repository verb declares — once, before any read — and that it judges
 what the record names, and runs its write, in that one unit (unit tier)."""
 
 from __future__ import annotations
@@ -15,6 +15,15 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordKind, RecordRef
+from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialEdit,
+    CredentialId,
+    CredentialInUse,
+    credential_lock,
+)
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeEdit,
@@ -73,6 +82,16 @@ _REPO = ConfiguredRepository(
     created_at=_AT,
     created_by="op",
 )
+_CRED_DRAFT = CredentialDraft(
+    slug="deploy", name=None, forge_id=_GHE, binding="github.token", secret_name="tok", settings={}
+)
+_CRED = ConfiguredCredential.new(
+    _CRED_DRAFT,
+    CREDENTIAL_BINDINGS["github.token"],
+    ChangeContext(actor="op", door=Door.API),
+    at=_AT,
+    credential_id=CredentialId("cred_deploy"),
+)[0]
 _SECRET = SecretMetadata(name="tok", revision=1, replaced_at=_AT, replaced_by="op", created_at=_AT, retired=False)
 _NAMED = [forge_lock(_GHE), secret_lock("tok")]
 _REFERRER = RecordRef(RecordKind.WORK_SOURCE, "wsrc_demo", "demo")
@@ -141,6 +160,7 @@ def _authoring(world: _World) -> ConfigAuthoring:
         work_sources=seam,
         repositories=seam,
         forges=seam,
+        credentials=seam,
         offers=seam,
         secrets=seam,
         cipher=seam,
@@ -149,6 +169,7 @@ def _authoring(world: _World) -> ConfigAuthoring:
         transactions=seam,
         secret_references=seam,
         forge_references=seam,
+        credential_references=seam,
         clock=FixedClock(_AT),
     )
 
@@ -156,6 +177,8 @@ def _authoring(world: _World) -> ConfigAuthoring:
 _Verb = Callable[[ConfigAuthoring], object]
 _RETIRED_SOURCE, _RETIRED_REPO = replace(_SOURCE, retired=True), replace(_REPO, retired=True)
 _RETIRED_FORGE = replace(_FORGE, retired=True)
+_RETIRED_CRED = replace(_CRED, retired=True)
+_CRED_KEY = credential_lock(CredentialId("cred_deploy"))
 
 _VERBS: dict[str, tuple[_Verb, list[LockKey], list[str]]] = {
     "forge edit": (
@@ -195,6 +218,22 @@ _VERBS: dict[str, tuple[_Verb, list[LockKey], list[str]]] = {
     "repository enable": (
         lambda a: a.enable_repository(_RETIRED_REPO, _CTX),
         _NAMED,
+        ["lock", "read", "read", "write"],
+    ),
+    "credential create": (
+        lambda a: a.create_credential(_CRED_DRAFT, _CTX),
+        _NAMED,
+        ["lock", "read", "read", "write"],
+    ),
+    "credential edit": (
+        lambda a: a.edit_credential(_CRED, CredentialEdit(name="Deploy"), _CTX),
+        [_CRED_KEY, *_NAMED],
+        ["lock", "read", "read", "write"],
+    ),
+    "credential retire": (lambda a: a.retire_credential(_CRED, _CTX), [_CRED_KEY], ["lock", "referrers", "write"]),
+    "credential enable": (
+        lambda a: a.enable_credential(_RETIRED_CRED, _CTX),
+        [_CRED_KEY, *_NAMED],
         ["lock", "read", "read", "write"],
     ),
     "secret retire": (lambda a: a.retire_secret(_SECRET, _CTX), [secret_lock("tok")], ["lock", "referrers", "write"]),
@@ -264,5 +303,23 @@ def test_an_enable_naming_a_retired_secret_raises_its_record_kind_s_own_refusal(
 
     with pytest.raises(refusal, match="secret tok is retired"):
         verb(_authoring(world))
+
+    assert "write" not in world.events
+
+
+def test_a_credential_an_enabled_record_names_is_refused_its_retire_under_the_credential_s_key() -> None:
+    world = _World(referrers=[_REFERRER])
+
+    with pytest.raises(CredentialInUse):
+        _authoring(world).retire_credential(_CRED, _CTX)
+
+    assert world.events == ["lock", "referrers"]
+
+
+def test_a_credential_enable_onto_a_retired_forge_is_refused_before_its_write() -> None:
+    world = _World(forge=_RETIRED_FORGE)
+
+    with pytest.raises(ForgeRetired):
+        _authoring(world).enable_credential(_RETIRED_CRED, _CTX)
 
     assert "write" not in world.events
