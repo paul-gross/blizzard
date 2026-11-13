@@ -106,7 +106,6 @@ class DecisionService:
         facts: IReadChunkFactsRepository,
         route: IWriteChunkRouteRepository,
         decisions: IWriteChunkDecisionsRepository,
-        exclusive: IChunkExclusiveWrites,
         transactions: IHubTransactions,
         retired: RetiredRunnerGuard,
         clock: IClock,
@@ -117,8 +116,6 @@ class DecisionService:
         self._route = route
         self._decisions = decisions
         self._events = events
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
         self._transactions = transactions
         self._retired = retired
         self._clock = clock
@@ -183,17 +180,17 @@ class DecisionService:
         decision_id = Id.mint(IdPrefix.DECISION, self._clock).value
         artifact_ids = [Id.mint(IdPrefix.ARTIFACT, self._clock).value for _ in submission.artifacts]
         artifact_rows = self._artifact_rows(chunk, node, submission.epoch, submission.artifacts, artifact_ids)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            locked = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            locked = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if locked is None:
                 return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
             try:
                 refuse_incoherent_attempt(locked, graph, from_node=node, epoch=submission.epoch)
-                self._refuse_competing_gate(locked, node, epoch=submission.epoch, transaction=handle.transaction)
+                self._refuse_competing_gate(locked, node, epoch=submission.epoch, transaction=transaction)
             except CompletionRefused as refused:
                 return DecisionSubmitResult.failure(refused.detail)
-            recorded = self._decisions.record_decision_locked(
-                handle,
+            recorded = self._decisions.record_decision(
                 decision_id=decision_id,
                 chunk_id=chunk.chunk_id,
                 node_id=node.node_id,
@@ -208,6 +205,7 @@ class DecisionService:
                 artifacts=artifact_rows,
                 imposed_by_runner_id=submission.runner_id,
                 close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
+                transaction=transaction,
             )
         if isinstance(recorded, FenceRefusal):
             return DecisionSubmitResult.failure(recorded.detail)

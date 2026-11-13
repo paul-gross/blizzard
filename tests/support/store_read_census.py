@@ -1886,37 +1886,41 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_decision_2 = "ch_hub_decision_2"
     _mint(chunk_decision_1, "1006", at=_ht(42))
     _mint(chunk_decision_2, "1007", at=_ht(43))
-    write.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id="dec_hub_1",
-        chunk_id=chunk_decision_1,
-        node_id=build_node.node_id,
-        node_name="build",
-        epoch=1,
-        choices=[
-            DecisionChoice(name="approve", description="do it"),
-            DecisionChoice(name="reject", description="don't"),
-        ],
-        at=_ht(44),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=_close_decision(chunk_decision_1),
-    )
-    write.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id="dec_hub_2",
-        chunk_id=chunk_decision_2,
-        node_id=build_node.node_id,
-        node_name="build",
-        epoch=1,
-        choices=[DecisionChoice(name="approve", description="do it")],
-        at=_ht(45),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=_close_decision(chunk_decision_2),
-    )
+    with write.exclusive.locked([chunk_decision_1]) as handle:
+        write.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id="dec_hub_1",
+            chunk_id=chunk_decision_1,
+            node_id=build_node.node_id,
+            node_name="build",
+            epoch=1,
+            choices=[
+                DecisionChoice(name="approve", description="do it"),
+                DecisionChoice(name="reject", description="don't"),
+            ],
+            at=_ht(44),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=_close_decision(chunk_decision_1),
+            transaction=handle.transaction,
+        )
+    with write.exclusive.locked([chunk_decision_2]) as handle:
+        write.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id="dec_hub_2",
+            chunk_id=chunk_decision_2,
+            node_id=build_node.node_id,
+            node_name="build",
+            epoch=1,
+            choices=[DecisionChoice(name="approve", description="do it")],
+            at=_ht(45),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=_close_decision(chunk_decision_2),
+            transaction=handle.transaction,
+        )
 
     # --- escalations ---------------------------------------------------------------------------
     chunk_escalation_1 = "ch_hub_escalation_1"

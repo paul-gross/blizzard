@@ -321,20 +321,22 @@ def _seed_promoted_with_open_decision(store: ChunkStores, engine: Engine, chunk_
     in which batch."""
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
     seed_promote(store, engine, chunk_id, at=T0)
-    store.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id=f"dec_{chunk_id}",
-        chunk_id=chunk_id,
-        node_id="nd_g1_hub",
-        node_name="n",
-        epoch=1,
-        choices=[DecisionChoice(name="ok", description="d")],
-        at=T0,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked([chunk_id]) as handle:
+        store.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id=f"dec_{chunk_id}",
+            chunk_id=chunk_id,
+            node_id="nd_g1_hub",
+            node_name="n",
+            epoch=1,
+            choices=[DecisionChoice(name="ok", description="d")],
+            at=T0,
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
 
 def test_load_all_facts_query_count_is_independent_of_decision_count_above_the_batch_size(

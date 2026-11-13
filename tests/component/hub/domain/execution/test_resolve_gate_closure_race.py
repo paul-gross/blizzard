@@ -198,7 +198,6 @@ def test_a_resolution_reads_and_writes_on_the_token_its_chunk_lock_returned(tmp_
         facts=cast(IReadChunkFactsRepository, facts),
         route=stores.route,
         decisions=cast(IWriteChunkDecisionsRepository, decisions),
-        exclusive=stores.exclusive,
         transactions=cast(IHubTransactions, transactions),
         retired=RetiredRunnerGuard(registry=cast(Any, None)),
         clock=hub.clock,

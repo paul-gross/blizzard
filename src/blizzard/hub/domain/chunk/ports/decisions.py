@@ -17,7 +17,6 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     GateResolution,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
@@ -105,37 +104,16 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> DecisionWrite | FenceRefusal:
-        """Open a gate decision, committing any step artifacts atomically, behind
-        the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is returned.
+        """Open a gate decision, committing any step artifacts atomically, behind the write fence
+        (``bzh:epoch-fencing``), in ``transaction``, a unit that locks ``chunk_id``
+        (``bzh:transaction-participation``), so the caller's guard reads and this write share one lock.
 
-        A graph gate passes no artifacts; a runner-config gate carries them
-        here, with ``imposed_by_runner_id`` naming the runner — ``None`` for a graph gate."""
-        ...
-
-    def record_decision_locked(
-        self,
-        handle: ILockedChunkRead,
-        *,
-        decision_id: str,
-        chunk_id: str,
-        node_id: str,
-        node_name: str,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        choices: list[DecisionChoice],
-        check_results: Sequence[DecisionCheck] = (),
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        imposed_by_runner_id: str | None,
-        close_decision: CloseEnqueueDecision,
-    ) -> DecisionWrite | FenceRefusal:
-        """:meth:`record_decision` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), so the caller's guard reads and this write share one
-        lock. A decision already open at ``(chunk_id, node_id, epoch)`` answers ``wrote`` ``False`` — the
-        lost-ack replay, nothing written; ``True`` is a fresh write; a refusal writes nothing."""
+        A graph gate passes no artifacts; a runner-config gate carries them here, with ``imposed_by_runner_id``
+        naming the runner — ``None`` for a graph gate. A decision already open at ``(chunk_id, node_id, epoch)``
+        answers ``wrote`` ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write; a refusal
+        writes nothing."""
         ...
 
     def record_decision_resolution(

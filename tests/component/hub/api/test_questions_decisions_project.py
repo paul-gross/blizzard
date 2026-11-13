@@ -65,20 +65,22 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
             stores,
             Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0, project_id=ProjectId(project)),
         )
-        stores.decisions.record_decision(
-            imposed_by_runner_id=None,
-            decision_id=f"dec_{chunk_id}",
-            close_decision=decide_close_enqueue([], lambda _: True),
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            node_name="n",
-            epoch=1,
-            choices=[DecisionChoice(name="ok", description="d")],
-            at=_T0,
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-        )
+        with stores.exclusive.locked([chunk_id]) as handle:
+            stores.decisions.record_decision(
+                imposed_by_runner_id=None,
+                decision_id=f"dec_{chunk_id}",
+                close_decision=decide_close_enqueue([], lambda _: True),
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                node_name="n",
+                epoch=1,
+                choices=[DecisionChoice(name="ok", description="d")],
+                at=_T0,
+                artifacts=[],
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
+                transaction=handle.transaction,
+            )
         with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
             stores.questions.record_question(
                 question_id=f"qn_{chunk_id}",

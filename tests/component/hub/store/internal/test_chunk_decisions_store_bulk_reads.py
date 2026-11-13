@@ -43,20 +43,22 @@ def _mint(store: ChunkStores, chunk_id: str) -> None:
 
 
 def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at: datetime = _T0) -> None:
-    store.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id=decision_id,
-        chunk_id=chunk_id,
-        node_id="nd_1",
-        node_name="n",
-        epoch=1,
-        choices=[DecisionChoice(name="ok", description="d")],
-        at=at,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked([chunk_id]) as handle:
+        store.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id=decision_id,
+            chunk_id=chunk_id,
+            node_id=f"nd_{decision_id}",
+            node_name="n",
+            epoch=1,
+            choices=[DecisionChoice(name="ok", description="d")],
+            at=at,
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
 
 def _resolve(

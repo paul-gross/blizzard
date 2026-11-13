@@ -247,7 +247,7 @@ class RestartService:
             close_skipped = open_graph_gate_on_arrival(
                 self._decisions,
                 self._facts,
-                handle,
+                handle.transaction,
                 self._clock,
                 chunk_id=chunk.chunk_id,
                 graph=to_graph if to_graph is not None else graph,

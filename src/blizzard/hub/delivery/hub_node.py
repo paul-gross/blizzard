@@ -492,7 +492,7 @@ class HubNodeRouter:
         if envelope is not None:
             if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
                 # The envelope rides on the escalation too: it is what marks this node's exit at the epoch, so a
-                # replay of the crossing is recognised by `record_bounce_locked`'s guard and counts nothing twice.
+                # replay of the crossing is recognised by `record_bounce`'s guard and counts nothing twice.
                 written = self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
@@ -542,7 +542,7 @@ class HubNodeRouter:
             close_skipped += open_graph_gate_on_arrival(
                 self._decisions,
                 self._facts,
-                handle,
+                handle.transaction,
                 self._clock,
                 chunk_id=chunk.chunk_id,
                 graph=graph,
@@ -597,7 +597,7 @@ class HubNodeRouter:
             close_skipped = outcome.close_skipped + open_graph_gate_on_arrival(
                 self._decisions,
                 self._facts,
-                handle,
+                handle.transaction,
                 self._clock,
                 chunk_id=chunk.chunk_id,
                 graph=landing.graph,
@@ -900,8 +900,7 @@ class HubNodeRouter:
         self, handle: ILockedChunkRead, chunk: Chunk, cause: EscalationCause, detail: str, *, epoch: int
     ) -> BounceEscalationOutcome:
         """Written as a bounce-cap escalation is — at ``epoch``, the visit's plus one, beside the hub's lease."""
-        return self._escalations.record_bounce_escalation_locked(
-            handle,
+        return self._escalations.record_bounce_escalation(
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
@@ -911,14 +910,14 @@ class HubNodeRouter:
             at=self._clock.now(),
             cause=cause,
             detail=detail,
+            transaction=handle.transaction,
         )
 
     def _bounce(
         self, handle: ILockedChunkRead, chunk: Chunk, node: Node, *, hub_epoch: int, cause: str, envelope: str
     ) -> bool:
         """Record a bounce, and escalate once it crosses the node's cap — whether it crossed."""
-        self._escalations.record_bounce_locked(
-            handle,
+        self._escalations.record_bounce(
             chunk.chunk_id,
             epoch=hub_epoch,
             admission=EpochAdmission.ABOVE,
@@ -927,6 +926,7 @@ class HubNodeRouter:
             envelope=envelope,
             at=self._clock.now(),
             visit_node_id=node.node_id,
+            transaction=handle.transaction,
         )
         facts = handle.facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP

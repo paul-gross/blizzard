@@ -247,8 +247,7 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
 
     def escalate(*, fail: bool) -> None:
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-            world.chunks.escalations.record_bounce_locked(
-                handle,
+            world.chunks.escalations.record_bounce(
                 submission.chunk_id,
                 epoch=1,
                 admission=EpochAdmission.ABOVE,
@@ -256,9 +255,9 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
                 cause="poll-timeout",
                 envelope="{}",
                 at=world.hub.clock.now(),
+                transaction=handle.transaction,
             )
-            world.chunks.escalations.record_bounce_escalation_locked(
-                handle,
+            world.chunks.escalations.record_bounce_escalation(
                 submission.chunk_id,
                 epoch=1,
                 admission=EpochAdmission.ABOVE,
@@ -268,6 +267,7 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
                 at=world.hub.clock.now(),
                 cause="bounce-cap",
                 detail="crossed",
+                transaction=handle.transaction,
             )
             world.flows.end_turn_locked(
                 handle, turn_id, outcome="escalated", closure=None, event=None, at=world.hub.clock.now()
@@ -388,8 +388,7 @@ def test_an_escalation_at_the_visits_epoch_plus_one_writes_and_at_its_own_is_ref
 
     def escalate(epoch: int) -> BounceEscalationOutcome:
         with world.chunks.exclusive.locked([chunk_id]) as handle:
-            return world.chunks.escalations.record_bounce_escalation_locked(
-                handle,
+            return world.chunks.escalations.record_bounce_escalation(
                 chunk_id,
                 epoch=epoch,
                 admission=EpochAdmission.ABOVE,
@@ -399,6 +398,7 @@ def test_an_escalation_at_the_visits_epoch_plus_one_writes_and_at_its_own_is_ref
                 at=world.hub.clock.now(),
                 cause="hub-action-stuck",
                 detail="cut off three times",
+                transaction=handle.transaction,
             )
 
     with world.chunks.exclusive.locked([chunk_id]) as handle:
@@ -415,8 +415,7 @@ def test_the_locked_bounce_is_fenced(world: _World) -> None:
     world.stop(chunk_id)
 
     with world.chunks.exclusive.locked([chunk_id]) as handle:
-        wrote = world.chunks.escalations.record_bounce_locked(
-            handle,
+        wrote = world.chunks.escalations.record_bounce(
             chunk_id,
             epoch=1,
             admission=EpochAdmission.ABOVE,
@@ -424,6 +423,7 @@ def test_the_locked_bounce_is_fenced(world: _World) -> None:
             cause="poll-timeout",
             envelope="{}",
             at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     assert wrote is False
