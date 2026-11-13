@@ -1,6 +1,7 @@
 """Which declaration binds a harness id: the one it has, or, among several, the one its configured binary's
-``--version`` names. Chosen once, when a runner is composed, and never swapped while it runs; a version no
-declaration binds falls to the first, whose health then refuses it."""
+``--version`` names. Each composed harness set keeps its selection for its retained invocations, including terminal
+work, even when a replacement set becomes current. A version no declaration binds falls to the first, whose health then
+refuses it."""
 
 from __future__ import annotations
 
