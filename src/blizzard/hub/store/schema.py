@@ -393,6 +393,79 @@ forge_lifecycle_facts = Table(
 )
 Index("ix_forge_lifecycle_facts_tenant_id", forge_lifecycle_facts.c.tenant_id)
 
+# --- Credentials (configured records: one per authority a forge is acted on with) ---
+# A credential is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant and
+# editable, and ``name`` a display label. ``binding`` names how it authenticates and ``secret_name`` the secret it
+# reads (a token, or an App's private key); ``authority`` is the identity it acts as, one credential per authority on
+# a forge.
+
+credentials = Table(
+    "credentials",
+    metadata,
+    Column("credential_id", String, nullable=False, info={"hub_unique": True}),  # cred_<ulid>
+    Column("slug", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_credentials_forges"), nullable=False),
+    Column("binding", String, nullable=False),
+    Column("secret_name", String, nullable=False),
+    Column("settings", Text, nullable=False),  # JSON object of the binding's settings; never a secret value
+    Column("authority", String, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_credentials_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("tenant_id", "credential_id", name="pk_credentials"),
+    UniqueConstraint("tenant_id", "slug", name="uq_credentials_tenant_slug"),
+    UniqueConstraint("tenant_id", "forge_id", "authority", name="uq_credentials_tenant_forge_authority"),
+    ForeignKeyConstraint(
+        ["tenant_id", "secret_name"], ["secrets.tenant_id", "secrets.name"], name="fk_credentials_secrets"
+    ),
+)
+
+# A slug a credential moved away from; at most one credential holds a given former slug.
+credential_former_slugs = Table(
+    "credential_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column("credential_id", String, nullable=False),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_credential_former_slugs_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_credential_former_slugs"),
+    ForeignKeyConstraint(
+        ["tenant_id", "credential_id"],
+        ["credentials.tenant_id", "credentials.credential_id"],
+        name="fk_credential_former_slugs_credentials",
+    ),
+)
+
+# Credential retire/enable facts: append-only, newest wins.
+credential_lifecycle_facts = Table(
+    "credential_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("credential_id", String, nullable=False),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_credential_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["tenant_id", "credential_id"],
+        ["credentials.tenant_id", "credentials.credential_id"],
+        name="fk_credential_lifecycle_facts_credentials",
+    ),
+)
+Index("ix_credential_lifecycle_facts_tenant_id", credential_lifecycle_facts.c.tenant_id)
+
 # --- Work sources (configured records; secret_name references a secret, never a value) ---
 # A work source is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant, editable,
 # and never ``hub``, and ``name`` a display label, unique nowhere and never resolved.
@@ -413,6 +486,9 @@ work_sources = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_sources_tenant_id"), nullable=False),
     # The forge the source reads its tracker on.
     Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_work_sources_forges"), nullable=False),
+    # The credential the record acts with; null until a write names one, and no foreign key while ``secret_name``
+    # still carries the token.
+    Column("credential_id", String, nullable=True),
     PrimaryKeyConstraint("work_source_id", name="pk_work_sources"),
     UniqueConstraint("tenant_id", "slug", name="uq_work_sources_tenant_slug"),
     UniqueConstraint("tenant_id", "provider", "forge_id", "locator", name="uq_work_sources_tenant_provider_locator"),
@@ -490,6 +566,9 @@ repositories = Table(
     Column("allow_no_ci", Boolean, nullable=False, server_default=false()),
     # How long a parked change may wait; null is the default.
     Column("park_timeout_hours", Integer, nullable=True),
+    # The credential the record acts with; null until a write names one, and no foreign key while ``secret_name``
+    # still carries the token.
+    Column("credential_id", String, nullable=True),
     PrimaryKeyConstraint("repository_id", name="pk_repositories"),
     UniqueConstraint("tenant_id", "slug", name="uq_repositories_tenant_slug"),
     UniqueConstraint("tenant_id", "forge_id", "owner", "repo", name="uq_repositories_tenant_coordinate"),

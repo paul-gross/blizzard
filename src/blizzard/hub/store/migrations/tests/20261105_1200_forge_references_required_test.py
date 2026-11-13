@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import cast
 
 import pytest
 import sqlalchemy as sa
@@ -151,18 +150,13 @@ def test_a_transition_era_store_crosses_over_keyed_on_its_forges(tmp_path: Path)
         "forge_id",
         "locator",
     )
+    # Later revisions add columns to both tables, so the crossed-over store is held to the declared schema at head.
+    runner.upgrade("head")
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)
         tables = ("repositories", "work_sources")
         migrated, schema = _snapshot(engine), _snapshot(declared)
-        # The CI opt-in was added to repositories after this revision.
-        repositories_shape = cast("tuple[frozenset[tuple[object, ...]], ...]", schema["repositories"])
-        assert any(c[0] == "allow_no_ci" for c in repositories_shape[0])
-        schema["repositories"] = (
-            frozenset(c for c in repositories_shape[0] if c[0] != "allow_no_ci"),
-            *repositories_shape[1:],
-        )
         assert {t: migrated[t] for t in tables} == {t: schema[t] for t in tables}
     finally:
         declared.dispose()

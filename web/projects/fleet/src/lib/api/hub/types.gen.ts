@@ -9420,6 +9420,7 @@ export const IdPrefix = {
     REPO: 'repo',
     WSRC: 'wsrc',
     FRG: 'frg',
+    CRED: 'cred',
     FLW: 'flw',
     FSUB: 'fsub',
     HTN: 'htn',
@@ -12421,16 +12422,17 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
- * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
- * unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
- * urgency order's and the tenant settings' is the tenant's id.
+ * The kind of configured record a change row names. A project's, a forge's, a credential's, a repository's and a
+ * work source's ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's
+ * id. Linking, unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its
+ * id; the urgency order's and the tenant settings' is the tenant's id.
  */
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
     SECRET: 'secret',
     REPOSITORY: 'repository',
     FORGE: 'forge',
+    CREDENTIAL: 'credential',
     SCOPE: 'scope',
     ROUTINE: 'routine',
     CADENCE: 'cadence',
@@ -12445,10 +12447,10 @@ export const RecordKind = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
- * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
- * unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
- * urgency order's and the tenant settings' is the tenant's id.
+ * The kind of configured record a change row names. A project's, a forge's, a credential's, a repository's and a
+ * work source's ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's
+ * id. Linking, unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its
+ * id; the urgency order's and the tenant settings' is the tenant's id.
  */
 export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 

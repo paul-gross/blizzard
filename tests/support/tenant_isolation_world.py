@@ -11,6 +11,8 @@ import httpx2
 from blizzard.auth_core import Role
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.credentials import CredentialDraft
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -238,6 +240,20 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         "secret": f"{label}-secret",
     }
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
+    # A credential has no route yet, so it is written through the tenant's own configured-record writer.
+    credential = harness.services.config_authoring.create_credential(
+        CredentialDraft(
+            slug=f"{label}-credential",
+            name=None,
+            forge_id=ForgeId(created_repository["forge_id"]),
+            binding="github.token",
+            secret_name=f"{label}-secret",
+            settings={},
+        ),
+        ChangeContext(actor=f"{label}-operator", door=Door.API),
+    )
+    t.keep("credential", credential.credential_id)
+    t.markers.add(credential.slug)
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(
         t.keep("finding_id", f"fin_{label}"),
         project_id=default_project(hub.engine, harness.tenant),

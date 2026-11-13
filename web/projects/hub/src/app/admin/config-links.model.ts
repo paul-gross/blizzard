@@ -10,6 +10,7 @@ const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
     [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
     [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
     [RecordKind.FORGE]: ['/admin', 'forges'],
+    [RecordKind.CREDENTIAL]: null,
     [RecordKind.SECRET]: ['/admin', 'secrets'],
     [RecordKind.PROJECT]: ['/admin', 'projects'],
     [RecordKind.SCOPE]: ['/gardening', 'scopes'],

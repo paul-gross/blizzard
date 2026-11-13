@@ -1,8 +1,8 @@
 """``ConfigAuthoring`` — the one writer of configured records.
 
 Every verb takes the record the edge resolved (``bzh:domain-takes-objects``), asks the record's model for the change,
-and hands it to the write repository with the record write. A write that changes nothing writes nothing. Secrets
-and forges route through here too.
+and hands it to the write repository with the record write. A write that changes nothing writes nothing. Secrets,
+forges and credentials route through here too.
 
 A repository or work-source write from a door goes through the ``…_naming`` verbs, which take the forge the write names
 as the edge resolved it: the forge is decided first
@@ -46,6 +46,17 @@ from blizzard.hub.domain.config.carry_over import (
     plan_import,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ISecretReferences
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialEdit,
+    ICredentialReferences,
+    IWriteCredentialRepository,
+    binding_named,
+    credential_lock,
+    require_credential_references,
+)
+from blizzard.hub.domain.config.credentials import require_unused as require_credential_unused
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice, resolve_forge
 from blizzard.hub.domain.config.forges import (
@@ -103,6 +114,7 @@ class ConfigAuthoring:
         work_sources: IWriteWorkSourceRepository,
         repositories: IWriteRepositoryRecordRepository,
         forges: IWriteForgeRepository,
+        credentials: IWriteCredentialRepository,
         offers: IForgeOffers,
         secrets: IWriteSecretRepository,
         cipher: ISecretCipher,
@@ -111,14 +123,16 @@ class ConfigAuthoring:
         transactions: IHubTransactions,
         secret_references: ISecretReferences,
         forge_references: IForgeReferences,
+        credential_references: ICredentialReferences,
         clock: IClock,
     ) -> None:
         """``offers`` answers what a repository's forge offers its landing policy; ``transactions`` opens the unit
-        each write runs in, and ``secret_references`` and ``forge_references`` read, in it, the records naming a secret
-        or a forge being retired."""
+        each write runs in, and ``secret_references``, ``forge_references`` and ``credential_references`` read, in it,
+        the records naming a secret, a forge or a credential being retired."""
         self._work_sources = work_sources
         self._repositories = repositories
         self._forges = forges
+        self._credentials = credentials
         self._offers = offers
         self._secrets = secrets
         self._cipher = cipher
@@ -127,6 +141,7 @@ class ConfigAuthoring:
         self._transactions = transactions
         self._secret_references = secret_references
         self._forge_references = forge_references
+        self._credential_references = credential_references
         self._clock = clock
 
     # --- Forges ------------------------------------------------------------------
@@ -198,6 +213,90 @@ class ConfigAuthoring:
             creating=current is None,
             forges=lambda: self._forges.list_all(include_retired=True),
         )
+
+    # --- Credentials -------------------------------------------------------------
+
+    def create_credential(self, draft: CredentialDraft, ctx: ChangeContext) -> ConfiguredCredential:
+        """Create a credential on the forge ``draft`` names, under the binding it names.
+        :class:`~blizzard.hub.domain.config.credentials.CredentialBindingUnknown`, the binding's settings refusal, and
+        the refusals of :meth:`_credential_unit`."""
+        binding = binding_named(draft.binding)
+        record, change = ConfiguredCredential.new(draft, binding, ctx, at=self._clock.now())
+        with self._credential_unit(record, change.op, held=[]) as locked:
+            return self._credentials.create(record, change=change, transaction=locked)
+
+    def edit_credential(
+        self, record: ConfiguredCredential, edit: CredentialEdit, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> ConfiguredCredential:
+        """Edit the credential; its forge and binding never change, and its authority is derived again."""
+        decided = record.edit(edit, binding_named(record.fields.binding), ctx, if_match=if_match, at=self._clock.now())
+        if decided is None:
+            return record
+        edited, change = decided
+        with self._credential_unit(edited, change.op, held=[credential_lock(record.credential_id)]) as locked:
+            return self._credentials.update(
+                edited,
+                from_revision=record.revision,
+                left_slug=record.slug_left_for(edited),
+                change=change,
+                transaction=locked,
+            )
+
+    def retire_credential(
+        self, record: ConfiguredCredential, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> ConfiguredCredential:
+        """Retire the credential. :class:`~blizzard.hub.domain.config.credentials.CredentialInUse` while an enabled
+        record names it."""
+        now = self._clock.now()
+        decided = record.set_retired(True, ctx, if_match=if_match, at=now)
+        if decided is None:
+            return record
+        moved, change = decided
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[credential_lock(record.credential_id)])
+            referrers = self._credential_references.referrers_of([record.credential_id], transaction=locked)
+            require_credential_unused(moved.slug, referrers[record.credential_id])
+            return self._credentials.record_lifecycle(
+                moved,
+                retired=True,
+                from_revision=record.revision,
+                at=now,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
+
+    def enable_credential(
+        self, record: ConfiguredCredential, ctx: ChangeContext, *, if_match: int | None = None
+    ) -> ConfiguredCredential:
+        """Enable the credential, refused unless its forge is enabled and its secret active."""
+        now = self._clock.now()
+        decided = record.set_retired(False, ctx, if_match=if_match, at=now)
+        if decided is None:
+            return record
+        moved, change = decided
+        with self._credential_unit(moved, change.op, held=[credential_lock(record.credential_id)]) as locked:
+            return self._credentials.record_lifecycle(
+                moved,
+                retired=False,
+                from_revision=record.revision,
+                at=now,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
+
+    @contextmanager
+    def _credential_unit(
+        self, record: ConfiguredCredential, op: ChangeOp, *, held: list[LockKey]
+    ) -> Generator[LockedTransaction]:
+        """The unit the ``op`` write of ``record`` runs in: it declares ``held`` and the keys of the forge and secret
+        ``record`` names, then judges, under them, whether it may name them."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=sorted([*held, *record.locks()]))
+            binding = binding_named(record.fields.binding)
+            require_credential_references(record, op, binding, *self._named_facts(record.locks(), locked))
+            yield locked
 
     # --- Work sources ------------------------------------------------------------
 

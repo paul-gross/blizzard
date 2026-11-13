@@ -8994,7 +8994,7 @@ export type HubStoreUnavailableProblem = {
  *
  * One tag per hub entity kind; a member formats as its own value.
  */
-export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn' | 'cad' | 'chr' | 'urg';
+export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'cred' | 'flw' | 'fsub' | 'htn' | 'cad' | 'chr' | 'urg';
 
 /**
  * IdpDisabledProblem
@@ -11881,12 +11881,12 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
- * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
- * unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
- * urgency order's and the tenant settings' is the tenant's id.
+ * The kind of configured record a change row names. A project's, a forge's, a credential's, a repository's and a
+ * work source's ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's
+ * id. Linking, unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its
+ * id; the urgency order's and the tenant settings' is the tenant's id.
  */
-export type RecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'scope' | 'routine' | 'cadence' | 'project' | 'project_source_link' | 'project_repository_link' | 'urgency' | 'urgency_order' | 'tenant_settings';
+export type RecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'credential' | 'scope' | 'routine' | 'cadence' | 'project' | 'project_source_link' | 'project_repository_link' | 'urgency' | 'urgency_order' | 'tenant_settings';
 
 /**
  * RecordRefView

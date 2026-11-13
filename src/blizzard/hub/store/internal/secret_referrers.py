@@ -15,6 +15,8 @@ from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, Re
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
+    credential_lifecycle_facts,
+    credentials,
     repositories,
     repository_lifecycle_facts,
     work_source_lifecycle_facts,
@@ -26,6 +28,7 @@ from blizzard.hub.store.transactions import connection_in
 #: Each referring kind: its record table, its lifecycle-fact table, the id column keying both, and the slug column
 #: labelling a record.
 _REFERRING: tuple[tuple[RecordKind, Table, Table, str, str], ...] = (
+    (RecordKind.CREDENTIAL, credentials, credential_lifecycle_facts, "credential_id", "slug"),
     (RecordKind.REPOSITORY, repositories, repository_lifecycle_facts, "repository_id", "slug"),
     (RecordKind.WORK_SOURCE, work_sources, work_source_lifecycle_facts, "work_source_id", "slug"),
 )

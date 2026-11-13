@@ -2964,7 +2964,7 @@ def test_a_record_off_its_forge_is_a_forge_reference_standing_violation(tmp_path
 
 
 def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> None:
-    """A record, a former slug, a lifecycle fact, or a change row naming another tenant's forge, or a forge that is not
+    """A record, a credential, a former slug, a lifecycle fact, or a change row naming another tenant's forge, or a forge that is not
     stored at all, is a breach; a reference to the tenant's own forge is not."""
     engine = _hub_engine(tmp_path)
     tenant = default_tenant(engine)
@@ -2982,6 +2982,8 @@ def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> 
         _forge_repository(conn, "repo_other", tenant=tenant, forge_id="frg_other")
         _forge_source(conn, "wsrc_home", tenant=tenant, forge_id="frg_home")
         _forge_source(conn, "wsrc_gone", tenant=tenant, forge_id="frg_gone")
+        _credential(conn, "cred_home", tenant=tenant, forge_id="frg_home")
+        _credential(conn, "cred_other", tenant=tenant, forge_id="frg_other")
         conn.execute(
             hub_scoped(insert(hub.forge_former_slugs)).values(
                 tenant_id=tenant, slug="old", forge_id="frg_other", left_at=NOW
@@ -3017,6 +3019,7 @@ def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> 
     assert _project_breaches(engine, "hub:forge-references-in-tenant") == [
         f"repositories row repo_other of tenant {tenant} names forge frg_other, not a forge of its tenant",
         f"work_sources row wsrc_gone of tenant {tenant} names forge frg_gone, not a forge of its tenant",
+        f"credentials row cred_other of tenant {tenant} names forge frg_other, not a forge of its tenant",
         f"forge_former_slugs row old of tenant {tenant} names forge frg_other, not a forge of its tenant",
         f"forge_lifecycle_facts row {fact_id} of tenant {tenant} names forge frg_other, not a forge of its tenant",
         f"config_changes row {change_ids[1]} of tenant {tenant} names forge frg_other, not a forge of its tenant",
@@ -3344,4 +3347,164 @@ def test_submission_terms_must_stand_on_what_the_submission_holds(tmp_path: Path
     assert _project_breaches(engine, "hub:submission-terms-standing") == [
         "submission fsub_1 has terms for repository repo_b, which it holds no flow for",
         "submission fsub_2 has an open turn but no terms for repository repo_a",
+    ]
+
+
+def _credential(
+    conn: sa.Connection,
+    credential_id: str,
+    *,
+    tenant: str,
+    forge_id: str,
+    secret_name: str = "tok",
+    authority: str | None = None,
+) -> None:
+    conn.execute(
+        hub_scoped(insert(hub.credentials)).values(
+            tenant_id=tenant,
+            credential_id=credential_id,
+            slug=credential_id,
+            name=credential_id,
+            forge_id=forge_id,
+            binding="github.token",
+            secret_name=secret_name,
+            settings="{}",
+            authority=authority or f"secret/{secret_name}",
+            revision=1,
+            created_at=NOW,
+            created_by="test",
+        )
+    )
+
+
+def _act_with(conn: sa.Connection, table: sa.Table, key: str, record_id: str, credential_id: str) -> None:
+    conn.execute(hub_scoped(sa.update(table)).where(table.c[key] == record_id).values(credential_id=credential_id))
+
+
+def _seed_tenant_credential(conn: sa.Connection, tenant: str) -> None:
+    """A tenant's secret, forge, and a credential a repository and a work source both act with — a whole, clean
+    credential world."""
+    _secret(conn, tenant)
+    _forge(conn, f"frg_{tenant}", tenant=tenant, api_base="https://api.github.com")
+    _credential(conn, f"cred_{tenant}", tenant=tenant, forge_id=f"frg_{tenant}")
+    _forge_repository(conn, f"repo_{tenant}", tenant=tenant, forge_id=f"frg_{tenant}")
+    _act_with(conn, hub.repositories, "repository_id", f"repo_{tenant}", f"cred_{tenant}")
+    _forge_source(conn, f"wsrc_{tenant}", tenant=tenant, forge_id=f"frg_{tenant}")
+    conn.execute(
+        hub_scoped(sa.update(hub.work_sources))
+        .where(hub.work_sources.c.work_source_id == f"wsrc_{tenant}")
+        .values(secret_name="tok", credential_id=f"cred_{tenant}")
+    )
+
+
+def test_a_store_holding_credentials_in_two_tenants_has_no_violations(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_tenant(engine)
+    other = add_tenant(engine, "other")
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, home)
+        _seed_tenant_credential(conn, other)
+        conn.execute(
+            hub_scoped(insert(hub.credential_former_slugs)).values(
+                tenant_id=home, slug="old", credential_id=f"cred_{home}", left_at=NOW
+            )
+        )
+
+    assert hub_invariants(engine).run() == []
+
+
+def test_a_credential_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    home = default_tenant(engine)
+    other = add_tenant(engine, "other")
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, home)
+        _seed_tenant_credential(conn, other)
+        _act_with(conn, hub.repositories, "repository_id", f"repo_{home}", f"cred_{other}")
+        _act_with(conn, hub.work_sources, "work_source_id", f"wsrc_{home}", "cred_gone")
+
+    assert _project_breaches(engine, "hub:credential-references-in-tenant") == [
+        f"tenant {home}: repository repo_{home} names credential cred_{other}, not a credential of its tenant",
+        f"tenant {home}: work source wsrc_{home} names credential cred_gone, not a credential of its tenant",
+    ]
+
+
+def test_a_record_acting_with_another_forges_credential_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, tenant)
+        _forge(conn, "frg_ghe", tenant=tenant, api_base="https://ghe.acme/api/v3")
+        _credential(conn, "cred_ghe", tenant=tenant, forge_id="frg_ghe")
+        _act_with(conn, hub.repositories, "repository_id", f"repo_{tenant}", "cred_ghe")
+
+    assert _project_breaches(engine, "hub:credential-forge-matches") == [
+        f"tenant {tenant}: repository repo_{tenant} is on forge frg_{tenant} and names credential cred_ghe of forge "
+        "frg_ghe"
+    ]
+
+
+def test_a_record_reading_another_secret_than_its_credentials_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, tenant)
+        conn.execute(
+            hub_scoped(sa.update(hub.work_sources))
+            .where(hub.work_sources.c.work_source_id == f"wsrc_{tenant}")
+            .values(secret_name=None)
+        )
+
+    assert _project_breaches(engine, "hub:credential-secret-mirrored") == [
+        f"tenant {tenant}: work source wsrc_{tenant} reads secret None and names credential cred_{tenant} of secret tok"
+    ]
+
+
+def test_an_enabled_record_on_an_unstanding_credential_is_a_violation(tmp_path: Path) -> None:
+    """An enabled record naming a retired credential, or one whose forge is retired or secret retired, is a breach; a
+    retired record naming any of them is not."""
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, tenant)
+        _retire(conn, hub.credential_lifecycle_facts, "credential_id", f"cred_{tenant}", tenant=tenant)
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", f"frg_{tenant}", tenant=tenant)
+        _retire(conn, hub.secret_lifecycle_facts, "name", "tok", tenant=tenant)
+        _retire(conn, hub.work_source_lifecycle_facts, "work_source_id", f"wsrc_{tenant}", tenant=tenant)
+
+    subject = f"tenant {tenant}: repository repo_{tenant} is enabled and names credential cred_{tenant}"
+    assert _project_breaches(engine, "hub:credential-reference-standing") == [
+        f"{subject}, which is retired",
+        f"{subject}, whose forge frg_{tenant} is retired",
+        f"{subject}, whose secret tok is retired",
+    ]
+
+
+def test_a_credential_authority_written_around_its_binding_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, tenant)
+        _credential(conn, "cred_forged", tenant=tenant, forge_id=f"frg_{tenant}", authority="secret/other")
+
+    assert _project_breaches(engine, "hub:credential-authority-derived") == [
+        f"tenant {tenant}: credential cred_forged holds authority secret/other, but its binding github.token derives "
+        "secret/tok"
+    ]
+
+
+def test_a_credential_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _seed_tenant_credential(conn, tenant)
+        _credential(conn, "cred_b", tenant=tenant, forge_id=f"frg_{tenant}", secret_name="tok", authority="secret/b")
+        conn.execute(
+            hub_scoped(insert(hub.credential_former_slugs)).values(
+                tenant_id=tenant, slug=f"cred_{tenant}", credential_id="cred_b", left_at=NOW
+            )
+        )
+
+    assert _project_breaches(engine, "hub:slug-not-current-and-former") == [
+        f"tenant {tenant}: slug cred_{tenant} is credential cred_{tenant}'s and credential cred_b's former slug"
     ]

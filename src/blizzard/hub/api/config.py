@@ -32,6 +32,7 @@ from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, CadenceEdit, Spacing
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
+from blizzard.hub.domain.config.credentials import CredentialId
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId
@@ -113,10 +114,11 @@ _SCHEMAS = {
 
 
 #: The kinds whose ``record_key`` is a repository's id, those whose is a work source's, and the kinds whose is a
-#: forge's and a project's.
+#: forge's, a credential's, and a project's.
 _REPOSITORY_KEYED = (RecordKind.REPOSITORY, RecordKind.PROJECT_REPOSITORY_LINK)
 _WORK_SOURCE_KEYED = (RecordKind.WORK_SOURCE, RecordKind.PROJECT_SOURCE_LINK)
 _FORGE_KEYED = (RecordKind.FORGE,)
+_CREDENTIAL_KEYED = (RecordKind.CREDENTIAL,)
 
 
 def _version_retired(loc: list[str], version: object) -> HTTPException:
@@ -138,7 +140,7 @@ def _labels(
     changes: list[ConfigChange], services: TenantServices
 ) -> tuple[dict[tuple[RecordKind, str], str], dict[str, str]]:
     """The current slug of each slugged record a page of changes names: one read each of the repositories, the work
-    sources, the forges and the projects it keys (``bzh:bulk-reconstitution``)."""
+    sources, the forges, the credentials and the projects it keys (``bzh:bulk-reconstitution``)."""
     repository_ids = list({RepositoryId(c.record_key) for c in changes if c.record_kind in _REPOSITORY_KEYED})
     source_ids = list({WorkSourceId(c.record_key) for c in changes if c.record_kind in _WORK_SOURCE_KEYED})
     forge_ids = list(
@@ -152,6 +154,7 @@ def _labels(
             if isinstance(value, str)
         }
     )
+    credential_ids = list({CredentialId(c.record_key) for c in changes if c.record_kind in _CREDENTIAL_KEYED})
     project_ids = list({ProjectId(c.record_key) for c in changes if c.record_kind is RecordKind.PROJECT})
     labels: dict[tuple[RecordKind, str], str] = {}
     for repository_id, repository in services.repository_records.get_many(repository_ids).items():
@@ -162,6 +165,8 @@ def _labels(
     forge_labels = {str(forge_id): f"{forge.slug} · {forge.name}" for forge_id, forge in forges.items()}
     for forge_id, forge in forges.items():
         labels.update({(kind, str(forge_id)): forge.slug for kind in _FORGE_KEYED})
+    for credential_id, credential in services.credential_records.get_many(credential_ids).items():
+        labels.update({(kind, str(credential_id)): credential.slug for kind in _CREDENTIAL_KEYED})
     for project_id, project in services.projects.get_many(project_ids).items():
         labels[(RecordKind.PROJECT, project_id)] = project.slug
     return labels, forge_labels
@@ -276,9 +281,9 @@ def list_changes(
 
 
 def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) -> str | None:
-    """The stored key a change-log filter names: the id of the project, repository, work source or forge an id or slug
-    resolves to; the
-    value as given when it resolves to none (so the page is empty) or the kind is keyed by its name."""
+    """The stored key a change-log filter names: the id of the project, repository, work source, forge or credential an
+    id or slug resolves to; the value as given when it resolves to none (so the page is empty) or the kind is keyed by
+    its name."""
     if key is None:
         return None
     if kind is RecordKind.PROJECT:
@@ -293,6 +298,9 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
     if kind in _FORGE_KEYED:
         forge = services.forge_records.resolve(key)
         return key if forge is None else forge.forge_id
+    if kind in _CREDENTIAL_KEYED:
+        credential = services.credential_records.resolve(key)
+        return key if credential is None else credential.credential_id
     return key
 
 

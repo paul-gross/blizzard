@@ -39,6 +39,8 @@ from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStor
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
+from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
@@ -181,6 +183,7 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
         forges=ForgeRecordStore(store),
+        credentials=CredentialRecordStore(store),
         offers=ForgeKindOffers(),
         secrets=SecretStore(store),
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
@@ -189,6 +192,7 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         transactions=HubTransactions(store),
         secret_references=SecretReferrersStore(store),
         forge_references=ForgeReferrersStore(store),
+        credential_references=CredentialReferrersStore(store),
         clock=FixedClock(_AT),
     )
 
