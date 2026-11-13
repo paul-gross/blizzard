@@ -316,12 +316,12 @@ def test_subprocess_compactor_cleanup_result_controls_transcript_admission(tmp_p
         UrllibLoopbackTransport(),
         timeout_seconds=5.0,
     )
-    probe, _ = _probe(mock_opencode, tmp_path, compactor=compactor, timeout_seconds=5.0)
+    probe, _ = _probe(mock_opencode, tmp_path, compactor=compactor, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
     if report_reaped:
-        assert report.admissible is True
+        assert report.admissible is True, report.results
     else:
         assert report.admissible is False
         assert report.results[0].probe is CompatibilityProbe.FRESH_TURN
@@ -354,7 +354,7 @@ def test_real_compactor_requires_a_new_transition_after_successful_summarize(tmp
         UrllibLoopbackTransport(),
         timeout_seconds=5.0,
     )
-    probe, _ = _probe(mock_opencode, tmp_path, compactor=compactor, compaction_no_change=True, timeout_seconds=5.0)
+    probe, _ = _probe(mock_opencode, tmp_path, compactor=compactor, compaction_no_change=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -426,7 +426,7 @@ def test_fake_binary_runs_every_probe_in_disposable_git_and_retains_sanitized_ev
 
     assert report.observed_version == PINNED_OPENCODE_VERSION
     assert report.complete is True
-    assert report.admissible is True
+    assert report.admissible is True, report.results
     assert tuple(result.probe for result in report.results) == PROBE_ROSTER
     assert {result.probe for result in report.results if result.state is EvidenceState.ABSENT} == {
         CompatibilityProbe.ROOT_HOOK,
@@ -520,7 +520,7 @@ def test_version_preflight_uses_disposable_cwd_and_isolated_child_scopes(tmp_pat
     report = CompatibilityDiagnostic(probe).run()
 
     assert report.observed_version == PINNED_OPENCODE_VERSION
-    assert report.admissible is True
+    assert report.admissible is True, report.results
     assert not caller_marker.exists()
     preflight = probe.evidence["preflight"]
     assert isinstance(preflight, dict)
@@ -560,7 +560,8 @@ def test_fresh_turn_nonzero_exit_blocks_valid_prior_shapes(tmp_path: Path) -> No
 
 def test_process_control_requires_the_requested_tool_to_be_live(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, process_control_no_live_state=True, timeout_seconds=1.5)
+    # Every diagnostic also runs the fake's five-second fresh turn before its target probe.
+    probe, _ = _probe(mock_opencode, tmp_path, process_control_no_live_state=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -594,7 +595,7 @@ def test_takeover_requires_the_exported_session_identity(tmp_path: Path) -> None
 
 def test_takeover_rejects_a_non_sse_upstream_response(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, takeover_non_sse=True, timeout_seconds=5.0)
+    probe, _ = _probe(mock_opencode, tmp_path, takeover_non_sse=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -620,7 +621,7 @@ def test_takeover_rejects_an_immediate_upstream_eof_or_failure(
     probe, _ = _probe(
         mock_opencode,
         tmp_path,
-        timeout_seconds=5.0,
+        timeout_seconds=15.0,
         takeover_immediate_eof=takeover_immediate_eof,
         takeover_stream_failure=takeover_stream_failure,
     )
@@ -634,7 +635,7 @@ def test_takeover_rejects_an_immediate_upstream_eof_or_failure(
 
 def test_takeover_accepts_an_idle_sse_handshake_and_preserves_stream_headers(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, takeover_idle_sse=True, timeout_seconds=1.5)
+    probe, _ = _probe(mock_opencode, tmp_path, takeover_idle_sse=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -646,7 +647,7 @@ def test_takeover_accepts_an_idle_sse_handshake_and_preserves_stream_headers(tmp
 
 def test_takeover_triggers_local_activity_to_complete_a_gated_upstream_handshake(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, takeover_event_gated=True, timeout_seconds=2.0)
+    probe, _ = _probe(mock_opencode, tmp_path, takeover_event_gated=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -658,7 +659,7 @@ def test_takeover_triggers_local_activity_to_complete_a_gated_upstream_handshake
 
 def test_takeover_requires_client_liveness_after_the_real_sse_handshake(tmp_path: Path) -> None:
     mock_opencode = _mock_opencode()
-    probe, _ = _probe(mock_opencode, tmp_path, takeover_exit_early=True, timeout_seconds=1.5)
+    probe, _ = _probe(mock_opencode, tmp_path, takeover_exit_early=True, timeout_seconds=15.0)
 
     report = CompatibilityDiagnostic(probe).run()
 
@@ -835,7 +836,7 @@ def test_a_local_version_suffix_is_admitted_by_range_membership(tmp_path: Path) 
 
     assert report.version_admitted is True
     assert scratch.path is not None
-    assert report.classification.value != "blocking"
+    assert report.classification.value != "blocking", report.results
 
 
 def test_a_version_above_the_pinned_corpus_but_inside_the_range_is_admitted(tmp_path: Path) -> None:
@@ -850,7 +851,7 @@ def test_a_version_above_the_pinned_corpus_but_inside_the_range_is_admitted(tmp_
     assert report.version_admitted is True
     assert report.observed_version == "1.18.31"
     assert scratch.path is not None
-    assert report.classification.value != "blocking"
+    assert report.classification.value != "blocking", report.results
 
 
 def test_a_version_at_or_above_the_upper_bound_is_rejected(tmp_path: Path) -> None:
@@ -878,7 +879,7 @@ def test_mutating_fake_cannot_change_host_auth_file_during_version_preflight(
     probe, _ = _probe(mock_opencode, tmp_path, mutate_auth=True, auth_source=auth_source)
     report = CompatibilityDiagnostic(probe).run()
 
-    assert report.admissible is True
+    assert report.admissible is True, report.results
     assert auth_source.read_bytes() == before
     assert _object(probe.evidence["xdg"])["auth_provisioned"] is True
 
