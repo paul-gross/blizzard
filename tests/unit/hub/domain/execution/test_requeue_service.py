@@ -11,13 +11,13 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import EscalationFact
 from blizzard.hub.domain.execution.decisions import NotEscalated, RequeueService
 from tests.support.completion_facts import AT_BUILD, CHUNK, T1
-from tests.unit.hub.domain.execution.test_apply_service import FakeTransactions
+from tests.support.fake_transactions import FakeTransactions
 
 
 @pytest.mark.parametrize("routed", [True, False])
 def test_requeue_uses_locked_token_and_releases_only_a_present_route(routed: bool) -> None:
     clock = FixedClock(T1)
-    transactions = FakeTransactions(clock)
+    transactions = FakeTransactions()
     facts = Mock()
     facts.load_facts.return_value = replace(AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=T1)])
     movement = Mock()
@@ -33,12 +33,14 @@ def test_requeue_uses_locked_token_and_releases_only_a_present_route(routed: boo
     )
 
     assert service.requeue(CHUNK, by="person", note="hello") == 42
-    assert transactions.locked_ids == [[CHUNK.chunk_id]]
-    facts.load_facts.assert_called_once_with(CHUNK.chunk_id, transaction=transactions)
-    route.route_of.assert_called_once_with(CHUNK.chunk_id, transaction=transactions)
-    assert movement.record_requeue.call_args.kwargs["transaction"] is transactions
+    assert transactions.locked_chunks == [[CHUNK.chunk_id]]
+    transaction = facts.load_facts.call_args.kwargs["transaction"]
+    assert transaction is not None
+    facts.load_facts.assert_called_once_with(CHUNK.chunk_id, transaction=transaction)
+    route.route_of.assert_called_once_with(CHUNK.chunk_id, transaction=transaction)
+    assert movement.record_requeue.call_args.kwargs["transaction"] is transaction
     if routed:
-        assert route.record_route_released.call_args.kwargs["transaction"] is transactions
+        assert route.record_route_released.call_args.kwargs["transaction"] is transaction
     else:
         route.record_route_released.assert_not_called()
 
@@ -46,7 +48,7 @@ def test_requeue_uses_locked_token_and_releases_only_a_present_route(routed: boo
 @pytest.mark.parametrize("missing", [True, False])
 def test_requeue_refuses_without_writes(missing: bool) -> None:
     clock = FixedClock(T1)
-    transactions = FakeTransactions(clock)
+    transactions = FakeTransactions()
     facts = Mock()
     facts.load_facts.return_value = None if missing else AT_BUILD
     movement, route = Mock(), Mock()
