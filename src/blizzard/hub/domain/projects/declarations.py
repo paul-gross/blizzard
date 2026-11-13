@@ -38,7 +38,7 @@ from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.color import ColorPick, decide_color, parse_color
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink, project_source_links_lock
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import (
     IReadProjectRepository,
     Project,
@@ -575,5 +575,5 @@ _import_links_conforms: type[IImportLinks] = ImportLinks
 
 
 def _link_lock(record: object) -> LockKey | None:
-    """The key a planned write moving a source link relies on — its project's source links'; ``None`` for any other."""
-    return project_source_links_lock(record.project_id) if isinstance(record, SourceLink) else None
+    """The key a planned link write relies on (:meth:`SourceLink.lock`); ``None`` for any other write."""
+    return record.lock() if isinstance(record, SourceLink | RepositoryLink) else None

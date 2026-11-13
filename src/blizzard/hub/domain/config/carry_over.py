@@ -172,12 +172,8 @@ class LegacyImport:
         secret it creates or a record names, and each project whose source links it writes."""
         keys = {forge_lock(forge.forge_id) for forge, _ in self.forges}
         keys.update(secret_lock(secret.name) for secret in self.secrets)
-        for source, _ in self.work_sources:
-            keys.add(forge_lock(source.fields.forge_id))
-            if source.fields.secret is not None:
-                keys.add(secret_lock(source.fields.secret))
-        for repository, _ in self.repositories:
-            keys.update((forge_lock(repository.fields.forge_id), secret_lock(repository.fields.secret_name)))
+        for record in (*(source for source, _ in self.work_sources), *(repo for repo, _ in self.repositories)):
+            keys.update(record.locks())
         keys.update(lock for link, _ in self.links if (lock := link.lock()) is not None)
         return sorted(keys)
 

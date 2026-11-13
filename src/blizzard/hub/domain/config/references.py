@@ -2,8 +2,8 @@
 their keys (``bzh:store-refuses-stale``).
 
 One judgment serves every door: a per-record verb raises it, and a config apply or import hands it to the write as the
-entry's verdict. It runs in the order the checks always ran: the forge, then the work source's forge kind, then the
-secret. A retire names nothing new and is never refused here."""
+entry's verdict. It judges the forge first, then a work source's forge kind, then the secret. A retire names nothing
+new and is never refused here."""
 
 from __future__ import annotations
 

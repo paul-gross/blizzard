@@ -19,7 +19,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, forge_lock
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
@@ -30,7 +30,6 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
     resolve_repository_reference,
 )
-from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
@@ -231,9 +230,9 @@ class RepositoryRecordStore:
         return record
 
     def _connection(self, transaction: LockedTransaction, record: ConfiguredRepository) -> Connection:
-        """``transaction``'s connection, which must lock the forge and the secret ``record`` names."""
-        connection_for(self._store, transaction, key=forge_lock(record.fields.forge_id))
-        connection_for(self._store, transaction, key=secret_lock(record.fields.secret_name))
+        """``transaction``'s connection, which must lock every key ``record`` names."""
+        for key in record.locks():
+            connection_for(self._store, transaction, key=key)
         return connection_for(self._store, transaction)
 
     def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None:

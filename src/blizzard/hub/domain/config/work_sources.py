@@ -23,10 +23,12 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.forges import ForgeId, forge_lock
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
@@ -172,6 +174,12 @@ class ConfiguredWorkSource:
     created_at: datetime
     created_by: str
     retired: bool = False
+
+    def locks(self) -> list[LockKey]:
+        """The keyed locks a write of the work source relies on: the forge's it names, and the secret's when it names
+        one."""
+        secret = self.fields.secret
+        return [forge_lock(self.fields.forge_id), *([] if secret is None else [secret_lock(secret)])]
 
     @classmethod
     def new(

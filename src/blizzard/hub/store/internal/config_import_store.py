@@ -21,14 +21,13 @@ from blizzard.hub.domain.config.carry_over import (
     LegacyImport,
     LegacyImportRefused,
 )
-from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
+from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.records import ConfiguredLink
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
 from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.projects.links import project_source_links_lock
 
 # Shares forge resolution and insertion on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -101,9 +100,13 @@ class ConfigImportStore:
 
     def write(self, imported: LegacyImport, *, transaction: LockedTransaction) -> bool:
         conn = connection_for(self._store, transaction)
-        for link, _ in imported.links:
-            if link.KIND is RecordKind.PROJECT_SOURCE_LINK:
-                connection_for(self._store, transaction, key=project_source_links_lock(link.project_id))
+        relied_on = [
+            *(key for source, _ in imported.work_sources for key in source.locks()),
+            *(key for repository, _ in imported.repositories for key in repository.locks()),
+            *(lock for link, _ in imported.links if (lock := link.lock()) is not None),
+        ]
+        for key in relied_on:
+            connection_for(self._store, transaction, key=key)
         if _recorded(conn):
             return False
         for secret in imported.secrets:

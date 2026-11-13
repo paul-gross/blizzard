@@ -47,7 +47,6 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryId,
 )
-from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
     ConfiguredWorkSource,
@@ -326,13 +325,8 @@ def _write_locks(writes: Sequence[PlannedWrite]) -> set[LockKey]:
         record = write.record
         if isinstance(record, ConfiguredForge):
             keys.add(forge_lock(record.forge_id))
-        elif isinstance(record, ConfiguredWorkSource):
-            keys.add(forge_lock(record.fields.forge_id))
-            if record.fields.secret is not None:
-                keys.add(secret_lock(record.fields.secret))
-        elif isinstance(record, ConfiguredRepository):
-            keys.add(forge_lock(record.fields.forge_id))
-            keys.add(secret_lock(record.fields.secret_name))
+        elif isinstance(record, ConfiguredWorkSource | ConfiguredRepository):
+            keys.update(record.locks())
     return keys
 
 

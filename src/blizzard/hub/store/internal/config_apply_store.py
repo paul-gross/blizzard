@@ -22,7 +22,7 @@ from blizzard.hub.domain.config.apply import (
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken, forge_lock
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -31,8 +31,9 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink, project_source_links_lock
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict
 from blizzard.hub.domain.urgency.declarations import SettingsWrite, UrgencyOrderWrite, UrgencyWrite
@@ -137,9 +138,8 @@ class ConfigApplyStore:
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
         conn = connection_for(self._store, transaction)
-        for write in writes:
-            if isinstance(write.record, SourceLink):
-                connection_for(self._store, transaction, key=project_source_links_lock(write.record.project_id))
+        for key in _relied_on(writes):
+            connection_for(self._store, transaction, key=key)
         if (stale := urgency_writes.stale_revision(conn, guards)) is not None:
             guard, current = stale
             moved = ConfigRevisionConflict("urgency", guard.slug, current=current)
@@ -238,6 +238,21 @@ class ConfigApplyStore:
             )
         else:
             repository_writes.update_record(conn, record, from_revision, None, change)
+
+
+def _relied_on(writes: Sequence[PlannedWrite]) -> set[LockKey]:
+    """Every key a body of ``writes`` relies on: a forge write's forge, the forge and secret a work-source or
+    repository write names, and a link write's own key."""
+    keys: set[LockKey] = set()
+    for write in writes:
+        record = write.record
+        if isinstance(record, ConfiguredForge):
+            keys.add(forge_lock(record.forge_id))
+        elif isinstance(record, ConfiguredWorkSource | ConfiguredRepository):
+            keys.update(record.locks())
+        elif isinstance(record, SourceLink | RepositoryLink) and (lock := record.lock()) is not None:
+            keys.add(lock)
+    return keys
 
 
 class _UrgencyOrderSeq:

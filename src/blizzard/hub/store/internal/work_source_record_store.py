@@ -18,8 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, forge_lock
-from blizzard.hub.domain.config.secrets import secret_lock
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
@@ -221,10 +220,9 @@ class WorkSourceRecordStore:
         return record
 
     def _connection(self, transaction: LockedTransaction, record: ConfiguredWorkSource) -> Connection:
-        """``transaction``'s connection, which must lock the forge and the secret ``record`` names."""
-        connection_for(self._store, transaction, key=forge_lock(record.fields.forge_id))
-        if record.fields.secret is not None:
-            connection_for(self._store, transaction, key=secret_lock(record.fields.secret))
+        """``transaction``'s connection, which must lock every key ``record`` names."""
+        for key in record.locks():
+            connection_for(self._store, transaction, key=key)
         return connection_for(self._store, transaction)
 
     def get(self, work_source_id: WorkSourceId) -> ConfiguredWorkSource | None:

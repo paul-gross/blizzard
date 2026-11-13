@@ -27,10 +27,12 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, forge_lock
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, PARKING_POLICIES, parse_policy
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
@@ -169,6 +171,10 @@ class ConfiguredRepository:
     retired: bool = False
     #: When the newest retirement fact was set; ``None`` while the record is enabled.
     retired_at: datetime | None = None
+
+    def locks(self) -> list[LockKey]:
+        """The keyed locks a write of the repository relies on: the forge's and the secret's it names."""
+        return [forge_lock(self.fields.forge_id), secret_lock(self.fields.secret_name)]
 
     @classmethod
     def new(

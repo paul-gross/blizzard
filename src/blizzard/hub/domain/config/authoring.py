@@ -14,7 +14,7 @@ an apply or an import plans — is checked against what :class:`IForgeOffers` sa
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 
@@ -87,7 +87,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     require_known_provider,
 )
-from blizzard.hub.domain.kernel.locks import LockKey
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.kernel.unset import UnsetType
 
@@ -368,40 +368,31 @@ class ConfigAuthoring:
     def _work_source_unit(self, record: ConfiguredWorkSource, op: ChangeOp) -> Generator[LockedTransaction]:
         """The unit the ``op`` write of ``record`` runs in: it declares the keys of the forge and secret ``record``
         names, then judges, under them, whether it may name them."""
-        with self._referrer_unit(record.fields.forge_id, record.fields.secret) as (locked, forges, secrets):
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=sorted(record.locks()))
             if op is not ChangeOp.RETIRE:
-                require_work_source_references(record, op, forges(), secrets())
+                require_work_source_references(record, op, *self._named_facts(record.locks(), locked))
             yield locked
 
     @contextmanager
     def _repository_unit(self, record: ConfiguredRepository, op: ChangeOp) -> Generator[LockedTransaction]:
         """The unit the ``op`` write of ``record`` runs in, as :meth:`_work_source_unit` opens one."""
-        with self._referrer_unit(record.fields.forge_id, record.fields.secret_name) as (locked, forges, secrets):
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=sorted(record.locks()))
             if op is not ChangeOp.RETIRE:
-                require_repository_references(record, op, forges(), secrets())
+                require_repository_references(record, op, *self._named_facts(record.locks(), locked))
             yield locked
 
-    @contextmanager
-    def _referrer_unit(
-        self, forge_id: ForgeId, secret: str | None
-    ) -> Generator[
-        tuple[
-            LockedTransaction,
-            Callable[[], Mapping[ForgeId, ConfiguredForge]],
-            Callable[[], Mapping[str, SecretMetadata]],
-        ]
-    ]:
-        """One unit declaring the keys of ``forge_id`` and ``secret``, and the reads of each that join it."""
-        keys: set[LockKey] = {forge_lock(forge_id)}
-        if secret is not None:
-            keys.add(secret_lock(secret))
-        with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=sorted(keys))
-            yield (
-                locked,
-                lambda: self._forges.get_many([forge_id], transaction=locked),
-                lambda: {} if secret is None else self._secrets.get_many([secret], transaction=locked),
-            )
+    def _named_facts(
+        self, keys: Iterable[LockKey], locked: LockedTransaction
+    ) -> tuple[dict[ForgeId, ConfiguredForge], dict[str, SecretMetadata]]:
+        """The forges and secrets ``keys`` lock, each read in ``locked``."""
+        held = set(keys)
+        forge_ids = sorted(ForgeId(key.key) for key in held if key.namespace is LockNamespace.FORGE)
+        names = sorted(key.key for key in held if key.namespace is LockNamespace.SECRET)
+        forges = dict(self._forges.get_many(forge_ids, transaction=locked)) if forge_ids else {}
+        secrets = dict(self._secrets.get_many(names, transaction=locked)) if names else {}
+        return forges, secrets
 
     # --- Apply -------------------------------------------------------------------
 
@@ -487,11 +478,12 @@ class ConfigAuthoring:
     def _judged(self, writes: Sequence[PlannedWrite], locked: LockedTransaction) -> tuple[PlannedWrite, ...]:
         """``writes``, each carrying the refusal its write earns for the forge and secret it names, read under the
         apply's keys with the apply's own forge writes — every one ahead of any referrer — landed over them."""
-        forges = dict(self._forges.get_many(sorted(_named_forges(writes)), transaction=locked))
+        forges, secrets = self._named_facts(
+            (key for write in writes if isinstance(write.record, _REFERRERS) for key in write.record.locks()), locked
+        )
         forges.update(
             {write.record.forge_id: write.record for write in writes if isinstance(write.record, ConfiguredForge)}
         )
-        secrets = self._secrets.get_many(sorted(_named_secrets(writes)), transaction=locked)
         return tuple(
             replace(write, verdict=references_refusal(write.record, write.change.op, forges, secrets))
             for write in writes
@@ -501,14 +493,8 @@ class ConfigAuthoring:
         """``imported``, carrying the refusal each work source and repository it creates earns for the forge and
         secret it names, read under the import's keys with the import's own secrets and forges landed over them."""
         records = [*(source for source, _ in imported.work_sources), *(repo for repo, _ in imported.repositories)]
-        forges = dict(self._forges.get_many(sorted({record.fields.forge_id for record in records}), transaction=locked))
+        forges, secrets = self._named_facts((key for record in records for key in record.locks()), locked)
         forges.update({forge.forge_id: forge for forge, _ in imported.forges})
-        named = {
-            name
-            for record in records
-            if (name := record.fields.secret if isinstance(record, ConfiguredWorkSource) else record.fields.secret_name)
-        }
-        secrets = dict(self._secrets.get_many(sorted(named), transaction=locked))
         for secret in imported.secrets:
             at, by = secret.change.recorded_at, secret.change.actor
             secrets[secret.name] = SecretMetadata(secret.name, 1, at, by, at, retired=False)
@@ -592,22 +578,8 @@ class ConfigAuthoring:
         return True
 
 
-def _named_forges(writes: Sequence[PlannedWrite]) -> set[ForgeId]:
-    return {
-        write.record.fields.forge_id
-        for write in writes
-        if isinstance(write.record, ConfiguredWorkSource | ConfiguredRepository)
-    }
-
-
-def _named_secrets(writes: Sequence[PlannedWrite]) -> set[str]:
-    named: set[str] = set()
-    for write in writes:
-        if isinstance(write.record, ConfiguredWorkSource) and write.record.fields.secret is not None:
-            named.add(write.record.fields.secret)
-        elif isinstance(write.record, ConfiguredRepository):
-            named.add(write.record.fields.secret_name)
-    return named
+#: The records whose writes name a forge and a secret.
+_REFERRERS = (ConfiguredWorkSource, ConfiguredRepository)
 
 
 def _record_id(record: ConfiguredWorkSource | ConfiguredRepository) -> str:
