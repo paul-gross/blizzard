@@ -257,6 +257,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingSt
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -640,6 +641,7 @@ class TenantStores:
     flows: FlowStore
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
+    forge_referrers: ForgeReferrersStore
     config_changes: ConfigChangeStore
     #: Projects — composition-only write half; ``HubServices`` carries the read half.
     projects: ProjectStore
@@ -718,6 +720,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         forge_records=ForgeRecordStore(connections),
         flows=FlowStore(connections, clock),
         secret_referrers=SecretReferrersStore(connections),
+        forge_referrers=ForgeReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
         project_links=project_links,
@@ -963,6 +966,8 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offer
         apply_writer=stores.config_apply,
         import_writer=stores.config_import,
         transactions=stores.transactions,
+        secret_references=stores.secret_referrers,
+        forge_references=stores.forge_referrers,
         clock=stores.clock,
     )
 

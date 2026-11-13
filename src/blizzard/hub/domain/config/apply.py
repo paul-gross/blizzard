@@ -205,6 +205,9 @@ class PlannedWrite:
     record: ConfiguredRecord
     from_revision: int | None
     change: ConfigChange
+    #: The refusal the write earns for the forge and secret it names, judged under the apply's keys; the writer raises
+    #: it where the write would run.
+    verdict: ConfigFieldError | None = None
 
 
 @domain_model

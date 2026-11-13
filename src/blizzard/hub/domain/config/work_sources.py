@@ -28,6 +28,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 WorkSourceId = NewType("WorkSourceId", str)
@@ -374,10 +375,11 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
     """Adds the work-source writes; each method commits ``change`` in the same transaction as
     the record write."""
 
-    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
-        """Insert, taking ``record.slug`` from any work source that left it. :class:`WorkSourceSlugTaken` /
-        :class:`WorkSourceLocatorTaken` on a collision; :class:`WorkSourceSecretUnavailable` when the secret is missing
-        or retired."""
+    def create(
+        self, record: ConfiguredWorkSource, *, change: ConfigChange, transaction: LockedTransaction
+    ) -> ConfiguredWorkSource:
+        """Insert in ``transaction``, which locks the forge and secret ``record`` names, taking ``record.slug`` from any
+        work source that left it. :class:`WorkSourceSlugTaken` / :class:`WorkSourceLocatorTaken` on a collision."""
         ...
 
     def update(
@@ -387,12 +389,13 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredWorkSource:
-        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
-        :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
-        the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this work
-        source's former slug at ``change.recorded_at``. :class:`WorkSourceSlugTaken` when another work source holds the
-        new slug as its current one."""
+        """In ``transaction``, which locks the forge and secret ``record`` names, compare-and-set ``from_revision``,
+        writing ``record``'s fields and revision; :class:`ConfigRevisionConflict` when the stored revision has moved.
+        When ``left_slug`` is set the slug moves in the same transaction: the former-slug row holding the new slug is
+        removed and ``left_slug`` becomes this work source's former slug at ``change.recorded_at``.
+        :class:`WorkSourceSlugTaken` when another work source holds the new slug as its current one."""
         ...
 
     def record_lifecycle(
@@ -404,7 +407,8 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
         at: datetime,
         by: str,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredWorkSource:
-        """Append the lifecycle fact and move the revision to ``record.revision``, as one
-        compare-and-set on ``from_revision``. Enabling re-checks the secret."""
+        """In ``transaction``, which locks the forge and secret ``record`` names, append the lifecycle fact and move
+        the revision to ``record.revision``, as one compare-and-set on ``from_revision``."""
         ...

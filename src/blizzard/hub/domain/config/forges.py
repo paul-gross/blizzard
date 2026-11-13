@@ -32,6 +32,7 @@ from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug, derive_slug
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 ForgeId = NewType("ForgeId", str)
@@ -539,8 +540,11 @@ class IReadForgeRepository(Protocol):
 
     def get(self, forge_id: ForgeId) -> ConfiguredForge | None: ...
 
-    def get_many(self, forge_ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
-        """Every named forge that exists, keyed by id (``bzh:bulk-reconstitution``)."""
+    def get_many(
+        self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None
+    ) -> dict[ForgeId, ConfiguredForge]:
+        """Every named forge that exists, keyed by id (``bzh:bulk-reconstitution``) — read in ``transaction`` when
+        one is given (``bzh:transaction-participation``)."""
         ...
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredForge]:
@@ -578,12 +582,18 @@ class IWriteForgeRepository(IReadForgeRepository, Protocol):
         ...
 
     def update(
-        self, record: ConfiguredForge, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredForge,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredForge:
-        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision and rewriting the addresses
-        every record naming the forge holds; :class:`ConfigRevisionConflict` when the stored revision has moved.
-        When ``left_slug`` is set the slug moves in the same transaction, as a repository's does.
-        :class:`ForgeSlugTaken` / :class:`ForgeOriginTaken` on a collision."""
+        """In ``transaction``, which locks the forge, compare-and-set ``from_revision``, writing ``record``'s fields and
+        revision and rewriting the addresses every record naming the forge holds; :class:`ConfigRevisionConflict` when
+        the stored revision has moved. When ``left_slug`` is set the slug moves in the same transaction, as a
+        repository's does. :class:`ForgeSlugTaken` / :class:`ForgeOriginTaken` on a collision."""
         ...
 
     def record_lifecycle(
@@ -595,9 +605,21 @@ class IWriteForgeRepository(IReadForgeRepository, Protocol):
         at: datetime,
         by: str,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredForge:
-        """Append the lifecycle fact and move the revision to ``record.revision``, as one compare-and-set on
-        ``from_revision``. Retiring refuses :class:`ForgeInUse` while an enabled record names the forge."""
+        """In ``transaction``, which locks the forge, append the lifecycle fact and move the revision to
+        ``record.revision``, as one compare-and-set on ``from_revision``."""
+        ...
+
+
+class IForgeReferences(Protocol):
+    """The enabled configured records that name a forge."""
+
+    def referrers_of(
+        self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None
+    ) -> dict[ForgeId, list[RecordRef]]:
+        """For each id, its enabled referencing records, ordered by kind then label; an id nothing names maps to
+        ``[]``. Read in ``transaction`` when one is given (``bzh:transaction-participation``)."""
         ...
 
 

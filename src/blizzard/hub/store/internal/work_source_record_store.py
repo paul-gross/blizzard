@@ -4,8 +4,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 from the append-only ``work_source_lifecycle_facts`` table, newest-fact-wins per id
 (``bzh:facts-not-status``). Every write commits its change row in the same transaction.
 
-Every write takes the named forge's row lock after the tenant's, refuses a forge that is gone, retired, or of another
-kind than the source's provider."""
+Every write runs in the caller's unit, which declares the keyed locks of the forge and the secret the source names;
+whether it may name them is the domain's judgment, not this adapter's."""
 
 from __future__ import annotations
 
@@ -17,35 +17,29 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, ForgeKindMismatch
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.config.forges import ForgeId, forge_lock
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
     WorkSourceFields,
     WorkSourceId,
     WorkSourceLocatorTaken,
-    WorkSourceSecretUnavailable,
     WorkSourceSlug,
     WorkSourceSlugTaken,
     resolve_work_source_reference,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
-
-# Shares forge resolution on the caller's connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.forge_record_store import StandingForge, referred_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-
-# Serializes secret availability with the secret adapter's row lock.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 _SLUGS = SlugTables(work_sources, work_source_former_slugs, "work_source_id", WorkSourceSlugTaken)
 
@@ -58,24 +52,6 @@ def retired_ids(conn: Connection, ids: list[WorkSourceId] | None = None) -> set[
             conn.execute(newest_retired_select(statements_of(conn), facts, facts.c.work_source_id, batch)).scalars()
         )
     return found
-
-
-def _check_secret(conn: Connection, secret: str | None) -> None:
-    if secret is None:
-        return
-    lock_secret_row(conn, secret)
-    retired = secret_unavailable(conn, secret)
-    if retired is not None:
-        raise WorkSourceSecretUnavailable(secret, retired=retired)
-
-
-def _check_forge(
-    conn: Connection, record: ConfiguredWorkSource, *, enabled: bool, enabling: bool = False
-) -> StandingForge:
-    forge = referred_forge(conn, record.fields.forge_id, enabled=enabled, enabling=enabling)
-    if forge.kind != record.fields.provider:
-        raise ForgeKindMismatch("forge", f"forge {forge.slug} is a {forge.kind} forge, not {record.fields.provider}")
-    return forge
 
 
 def _locator_holder(conn: Connection, record: ConfiguredWorkSource) -> str | None:
@@ -106,11 +82,8 @@ def _columns(record: ConfiguredWorkSource) -> dict[str, object]:
 
 
 def insert_record(conn: Connection, record: ConfiguredWorkSource, change: ConfigChange) -> None:
-    """The create body, inside the caller's transaction. :class:`WorkSourceSecretUnavailable`,
-    :class:`WorkSourceSlugTaken` or :class:`WorkSourceLocatorTaken` when refused, and the forge refusals of
-    :func:`referred_forge`."""
-    _check_forge(conn, record, enabled=not record.retired)
-    _check_secret(conn, record.fields.secret)
+    """The create body, inside the caller's transaction. :class:`WorkSourceSlugTaken` or
+    :class:`WorkSourceLocatorTaken` when refused."""
     _SLUGS.claim(conn, record.work_source_id, record.slug)
     holder = _locator_holder(conn, record)
     if holder is not None:
@@ -133,8 +106,6 @@ def update_record(
     conn: Connection, record: ConfiguredWorkSource, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
-    _check_forge(conn, record, enabled=not record.retired)
-    _check_secret(conn, record.fields.secret)
     if left_slug is not None:
         _SLUGS.claim(conn, record.work_source_id, record.slug)
     holder = _locator_holder(conn, record)
@@ -165,11 +136,7 @@ def record_lifecycle_fact(
     by: str,
     change: ConfigChange,
 ) -> None:
-    """The retire/enable body, inside the caller's transaction. Enabling re-checks the forge, refusing
-    :class:`~blizzard.hub.domain.config.forges.ForgeRetired` while it is retired, and the secret."""
-    if not retired:
-        _check_forge(conn, record, enabled=True, enabling=True)
-        _check_secret(conn, record.fields.secret)
+    """The retire/enable body, inside the caller's transaction."""
     moved = conn.execute(
         statements_of(conn)
         .update(work_sources)
@@ -188,6 +155,14 @@ def record_lifecycle_fact(
     append_change(conn, change)
 
 
+def _lost_race(conn: Connection, record: ConfiguredWorkSource) -> WorkSourceLocatorTaken | WorkSourceSlugTaken:
+    """The refusal a write that lost the locator or the slug to a concurrent one reads as, on ``conn``."""
+    holder = _locator_holder(conn, record)
+    if holder is not None:
+        return WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder)
+    return WorkSourceSlugTaken(record.slug)
+
+
 def _revision(conn: Connection, work_source_id: str) -> int:
     return conn.execute(
         statements_of(conn)
@@ -202,20 +177,15 @@ class WorkSourceRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
+    def create(
+        self, record: ConfiguredWorkSource, *, change: ConfigChange, transaction: LockedTransaction
+    ) -> ConfiguredWorkSource:
+        conn = self._connection(transaction, record)
         try:
-            with self._store.write(
-                "create",
-                expect=(
-                    ConfigFieldError,
-                    WorkSourceSlugTaken,
-                    WorkSourceLocatorTaken,
-                    IntegrityError,
-                ),
-            ) as conn:
+            with conn.begin_nested():
                 insert_record(conn, record, change)
         except IntegrityError as exc:
-            raise self._lost_race(record) from exc
+            raise _lost_race(conn, record) from exc
         return record
 
     def update(
@@ -225,30 +195,15 @@ class WorkSourceRecordStore:
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredWorkSource:
+        conn = self._connection(transaction, record)
         try:
-            with self._store.write(
-                "update",
-                expect=(
-                    ConfigFieldError,
-                    WorkSourceLocatorTaken,
-                    WorkSourceSlugTaken,
-                    ConfigRevisionConflict,
-                    IntegrityError,
-                ),
-            ) as conn:
+            with conn.begin_nested():
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
-            raise self._lost_race(record) from exc
+            raise _lost_race(conn, record) from exc
         return record
-
-    def _lost_race(self, record: ConfiguredWorkSource) -> WorkSourceLocatorTaken | WorkSourceSlugTaken:
-        """The refusal for a concurrent write that took the locator or the slug first, decided by a fresh read."""
-        with self._store.read("lost_race") as conn:
-            holder = _locator_holder(conn, record)
-        if holder is not None:
-            return WorkSourceLocatorTaken(record.fields.provider, record.fields.locator, holder=holder)
-        return WorkSourceSlugTaken(record.slug)
 
     def record_lifecycle(
         self,
@@ -259,12 +214,18 @@ class WorkSourceRecordStore:
         at: datetime,
         by: str,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredWorkSource:
-        with self._store.write("record_lifecycle", expect=(ConfigFieldError, ConfigRevisionConflict)) as conn:
-            record_lifecycle_fact(
-                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
-            )
+        conn = self._connection(transaction, record)
+        record_lifecycle_fact(conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change)
         return record
+
+    def _connection(self, transaction: LockedTransaction, record: ConfiguredWorkSource) -> Connection:
+        """``transaction``'s connection, which must lock the forge and the secret ``record`` names."""
+        connection_for(self._store, transaction, key=forge_lock(record.fields.forge_id))
+        if record.fields.secret is not None:
+            connection_for(self._store, transaction, key=secret_lock(record.fields.secret))
+        return connection_for(self._store, transaction)
 
     def get(self, work_source_id: WorkSourceId) -> ConfiguredWorkSource | None:
         return self.get_many([work_source_id]).get(work_source_id)

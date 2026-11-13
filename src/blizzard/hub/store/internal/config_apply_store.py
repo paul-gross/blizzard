@@ -147,6 +147,8 @@ class ConfigApplyStore:
         order = _UrgencyOrderSeq()
         for write in writes:
             try:
+                if write.verdict is not None:
+                    raise write.verdict
                 self._run(conn, write, order)
             except IntegrityError as exc:  # a concurrent create won the race
                 cause = _taken(write.record)

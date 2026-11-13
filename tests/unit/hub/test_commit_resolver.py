@@ -37,6 +37,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, ICommitResolver
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
@@ -111,7 +112,9 @@ class _ForgeRecords(IReadForgeRepository):
     def get(self, forge_id: ForgeId) -> ConfiguredForge | None:
         raise NotImplementedError
 
-    def get_many(self, forge_ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
+    def get_many(
+        self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None
+    ) -> dict[ForgeId, ConfiguredForge]:
         raise NotImplementedError
 
     def get_by_slug(self, slug: ForgeSlug) -> ConfiguredForge | None:

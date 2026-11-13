@@ -226,6 +226,14 @@ class _NoForges:
     def list_all(self, *, include_retired: bool) -> list[ConfiguredForge]:
         return []
 
+    def get_many(self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None) -> dict[ForgeId, Any]:
+        return {}
+
+
+class _NoSecrets:
+    def get_many(self, names: list[str], *, transaction: Transaction | None = None) -> dict[str, Any]:
+        return {}
+
 
 class _NoLinks:
     def links(self, *created: Any, **kwargs: Any) -> tuple[()]:
@@ -263,11 +271,13 @@ def _authoring(units: _Units, writer: _Writer) -> ConfigAuthoring:
         repositories=unused,
         forges=cast(Any, _NoForges()),
         offers=unused,
-        secrets=unused,
+        secrets=cast(Any, _NoSecrets()),
         cipher=cast(Any, _Cipher()),
         apply_writer=writer,
         import_writer=cast(Any, writer),
         transactions=units,
+        secret_references=unused,
+        forge_references=unused,
         clock=FixedClock(_AT),
     )
 

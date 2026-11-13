@@ -198,6 +198,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingSt
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
@@ -209,6 +210,7 @@ from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
@@ -1507,6 +1509,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         apply_writer=ConfigApplyStore(store_connections),
         import_writer=ConfigImportStore(store_connections),
         transactions=HubTransactions(store_connections),
+        secret_references=SecretReferrersStore(store_connections),
+        forge_references=ForgeReferrersStore(store_connections),
         clock=clock,
     )
     config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)

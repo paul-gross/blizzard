@@ -39,9 +39,11 @@ from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -184,6 +186,8 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
         transactions=HubTransactions(store),
+        secret_references=SecretReferrersStore(store),
+        forge_references=ForgeReferrersStore(store),
         clock=FixedClock(_AT),
     )
 

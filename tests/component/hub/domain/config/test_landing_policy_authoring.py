@@ -33,7 +33,7 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
-from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId, forge_lock
 from blizzard.hub.domain.config.landing_policies import ForgeCapabilityMissing
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -42,12 +42,12 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryId,
 )
-from blizzard.hub.domain.config.secrets import SecretName
+from blizzard.hub.domain.config.secrets import SecretName, secret_lock
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.schema import config_changes, repositories
-from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections, keyed_unit, migrated_hub_at
 
 _NOW = datetime(2026, 10, 29, 12, 0, 0, tzinfo=UTC)
 #: Offers every capability.
@@ -244,7 +244,8 @@ def test_an_edit_with_none_clears_the_park_timeout(world: _World) -> None:
         (FieldChange("park_timeout_hours", None, 24),),
         _NOW,
     )
-    world.repos.update(timed, from_revision=record.revision, left_slug=None, change=change)
+    with keyed_unit(world.engine, [forge_lock(timed.fields.forge_id), secret_lock(timed.fields.secret_name)]) as unit:
+        world.repos.update(timed, from_revision=record.revision, left_slug=None, change=change, transaction=unit)
     held = world.repos.get(record.repository_id)
     assert held is not None and held.fields.park_timeout_hours == 24
     cleared = world.authoring.edit_repository(held, RepositoryEdit(park_timeout_hours=None), _CLI)

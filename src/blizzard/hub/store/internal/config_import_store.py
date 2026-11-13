@@ -46,7 +46,7 @@ from blizzard.hub.store.internal import repository_record_store as repository_wr
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 
-# Serializes secret availability with the secret adapter's row lock.
+# Shares the secret create body on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
@@ -122,8 +122,10 @@ class ConfigImportStore:
             for forge, change in imported.forges:
                 forge_writes.insert_forge(conn, forge, change)
             for source, change in imported.work_sources:
+                _raise_verdict(imported, source.work_source_id)
                 work_source_writes.insert_record(conn, source, change)
             for repository, change in imported.repositories:
+                _raise_verdict(imported, repository.repository_id)
                 repository_writes.insert_record(conn, repository, change)
         except _REFUSALS as exc:
             raise LegacyImportRefused(str(exc)) from exc
@@ -131,6 +133,12 @@ class ConfigImportStore:
             _insert_link(conn, link, change)
         _append_fact(conn, imported.fact)
         return True
+
+
+def _raise_verdict(imported: LegacyImport, record_id: str) -> None:
+    """Raise the refusal the domain judged the record ``record_id`` earns, where its write would run."""
+    if (verdict := imported.verdicts.get(record_id)) is not None:
+        raise verdict
 
 
 def _insert_link(conn: Connection, link: ConfiguredLink, change: ConfigChange) -> None:

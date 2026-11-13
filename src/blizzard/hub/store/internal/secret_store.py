@@ -31,16 +31,17 @@ from blizzard.hub.domain.config.secrets import (
     SecretAlreadyExists,
     SecretMetadata,
     SecretRevisionConflict,
-    require_unreferenced,
+    secret_lock,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 _METADATA = (
     secrets.c.name,
@@ -49,29 +50,6 @@ _METADATA = (
     secrets.c.replaced_by,
     secrets.c.created_at,
 )
-
-
-def lock_secret_row(conn: Connection, name: str) -> None:
-    """Take the named secret row's write lock, as the first statement after the scoped write's
-    tenant-row lock and before any guard read (``bzh:store-exclusive-write``). Secret retire and
-    every referrer write take it, so one waits for the other's commit. A missing secret matches
-    no row, and the caller's unknown-secret refusal still fires."""
-    conn.execute(statements_of(conn).update(secrets).where(secrets.c.name == name).values(name=name))
-
-
-def secret_unavailable(conn: Connection, name: str) -> bool | None:
-    """Why a configured record may not reference ``name``: ``False`` when no such secret
-    exists, ``True`` when it is retired, ``None`` when it is usable."""
-    if conn.execute(statements_of(conn).select(secrets, secrets.c.name).where(secrets.c.name == name)).first() is None:
-        return False
-    newest = conn.execute(
-        statements_of(conn)
-        .select(secret_lifecycle_facts, secret_lifecycle_facts.c.retired)
-        .where(secret_lifecycle_facts.c.name == name)
-        .order_by(secret_lifecycle_facts.c.id.desc())
-        .limit(1)
-    ).first()
-    return True if newest is not None and newest.retired else None
 
 
 def insert_secret(
@@ -96,11 +74,7 @@ def insert_secret(
 def record_lifecycle_fact(
     conn: Connection, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange
 ) -> None:
-    """The retire/enable body, inside the caller's transaction. Retiring locks the secret row,
-    then refuses while an active record references it."""
-    if retired:
-        lock_secret_row(conn, name)
-        require_unreferenced(name, active_referrers(conn, [name])[name])
+    """The retire/enable body, inside the caller's transaction."""
     conn.execute(
         statements_of(conn).insert(secret_lifecycle_facts).values(name=name, retired=retired, set_at=at, set_by=by)
     )
@@ -144,11 +118,11 @@ class SecretStore:
             retired = row is not None and name in self._retired_among(conn, [name])
         return self._of(row, retired=retired) if row is not None else None
 
-    def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
+    def get_many(self, names: list[str], *, transaction: Transaction | None = None) -> dict[str, SecretMetadata]:
         if not names:
             return {}
         found: dict[str, SecretMetadata] = {}
-        with self._store.read("get_many") as conn:
+        with connection_in(self._store, transaction, "get_many") as conn:
             for batch in id_batches(names):
                 rows = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name.in_(batch))).all()
                 retired = self._retired_among(conn, batch)
@@ -228,9 +202,11 @@ class SecretStore:
                 if moved != 1:
                     raise SecretRotationConflict(change.name)
 
-    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
-        with self._store.write("record_lifecycle") as conn:
-            record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
+    def record_lifecycle(
+        self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange, transaction: LockedTransaction
+    ) -> None:
+        conn = connection_for(self._store, transaction, key=secret_lock(name))
+        record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
 
     @staticmethod
     def _of(row: Row[Any], *, retired: bool) -> SecretMetadata:

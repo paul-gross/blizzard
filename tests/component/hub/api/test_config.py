@@ -16,9 +16,11 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.store.internal import repository_record_store, work_source_record_store
 from blizzard.hub.store.internal.former_slugs import SlugTables
-from blizzard.hub.store.internal.secret_store import SecretStore, record_lifecycle_fact
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.wire.config import (
     CONFIG_APPLY_CONFLICT,
     CONFIG_DOCUMENT_INVALID,
@@ -358,8 +360,11 @@ def test_a_secret_retire_held_open_blocks_an_enable_which_then_refuses(hub: HubH
     enabled: list[int] = []
 
     def retire() -> None:
-        with connections.write("retire") as conn:
-            record_lifecycle_fact(conn, "gh", retired=True, at=hub.clock.now(), by="op", change=change)
+        with HubTransactions(connections).begin() as transaction:
+            locked = transaction.lock_set(keys=[secret_lock("gh")])
+            SecretStore(connections).record_lifecycle(
+                "gh", retired=True, at=hub.clock.now(), by="op", change=change, transaction=locked
+            )
             retire_open.set()
             release.wait(timeout=5)
 

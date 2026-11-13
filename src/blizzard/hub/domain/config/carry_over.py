@@ -13,7 +13,7 @@ writes — so a ``BZ_FORGE_URL`` spelled differently from a stored forge's origi
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -163,6 +163,9 @@ class LegacyImport:
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
     links: tuple[tuple[ConfiguredLink, ConfigChange], ...] = ()
+    #: The refusal each work source or repository created earns for the forge and secret it names, by the record's id,
+    #: judged under the import's keys; the writer raises it where that record's write would run.
+    verdicts: Mapping[str, ConfigFieldError] = field(default_factory=dict[str, ConfigFieldError])
 
     def locks(self) -> list[LockKey]:
         """The keys the import's unit declares, in canonical order: each forge it creates or a record names, each

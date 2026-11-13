@@ -22,6 +22,8 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.config.forges import ForgeId, forge_lock
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
@@ -91,6 +93,14 @@ _ENABLE: _LockSet = ([], [urgency_order_lock(), urgency_lock(_RETIRING)])
 #: A stop or an operator complete of ``a`` — the chunk row alone — against the retire, each way round: every write
 #: that finishes a chunk takes its row lock, so no chunk the retire moves finishes between its re-read and its move.
 _FINISH: _LockSet = (["a"], [])
+#: A forge retire — the forge's key — against an enable of a repository naming it — the forge's and its secret's keys —
+#: and a secret retire against an enable of a work source naming it, each way round: the shared key serializes them, so
+#: a retire never commits between a referrer's enable judging the forge or secret live and its write.
+_FORGE = forge_lock(ForgeId("frg_proof"))
+_SECRET = secret_lock("tok_proof")
+_FORGE_RETIRE: _LockSet = ([], [_FORGE])
+_SECRET_RETIRE: _LockSet = ([], [_SECRET])
+_REFERRER_ENABLE: _LockSet = ([], [_FORGE, _SECRET])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -112,6 +122,10 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "complete, then urgency retire": (_FINISH, _RETIRE),
     "urgency enable, then reorder": (_ENABLE, _REORDER),
     "reorder, then urgency enable": (_REORDER, _ENABLE),
+    "forge retire, then repository enable": (_FORGE_RETIRE, _REFERRER_ENABLE),
+    "repository enable, then forge retire": (_REFERRER_ENABLE, _FORGE_RETIRE),
+    "secret retire, then work-source enable": (_SECRET_RETIRE, _REFERRER_ENABLE),
+    "work-source enable, then secret retire": (_REFERRER_ENABLE, _SECRET_RETIRE),
 }
 
 
