@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261113_0900_repair_hub_locks",
+  "head_revision": "20261113_0900_credentials",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -2037,6 +2037,269 @@
         "id"
       ],
       "unique": []
+    },
+    "credential_former_slugs": {
+      "checks": [],
+      "columns": {
+        "credential_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "left_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "credential_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id",
+              "credential_id"
+            ],
+            "table": "credentials"
+          }
+        }
+      ],
+      "primary_key": [
+        "tenant_id",
+        "slug"
+      ],
+      "unique": []
+    },
+    "credential_lifecycle_facts": {
+      "checks": [],
+      "columns": {
+        "credential_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "retired": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "set_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "set_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "credential_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id",
+              "credential_id"
+            ],
+            "table": "credentials"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "credentials": {
+      "checks": [],
+      "columns": {
+        "authority": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "binding": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "created_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "credential_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "forge_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "secret_name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "settings": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "forge_id"
+          ],
+          "references": {
+            "columns": [
+              "forge_id"
+            ],
+            "table": "forges"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "secret_name"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id",
+              "name"
+            ],
+            "table": "secrets"
+          }
+        }
+      ],
+      "primary_key": [
+        "tenant_id",
+        "credential_id"
+      ],
+      "unique": [
+        [
+          "tenant_id",
+          "forge_id",
+          "authority"
+        ],
+        [
+          "tenant_id",
+          "slug"
+        ]
+      ]
     },
     "decision_resolutions": {
       "checks": [],
@@ -6701,6 +6964,12 @@
           "server_default": false,
           "type": "String"
         },
+        "credential_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "forge_id": {
           "deprecated": null,
           "nullable": false,
@@ -10406,6 +10675,12 @@
         "created_by": {
           "deprecated": null,
           "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "credential_id": {
+          "deprecated": null,
+          "nullable": true,
           "server_default": false,
           "type": "String"
         },
