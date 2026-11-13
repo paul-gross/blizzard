@@ -244,6 +244,7 @@ def test_production_selection_health_and_capabilities_share_binary_evidence(
         before = replacement.health.refresh("opencode", adapter=adapter, observed_version="2.0.0")
         assert before is not None and before.cause != HarnessHealthCause.MISSING_BINARY
         binary.unlink()
+        replacement.health.invalidate("opencode")
         after = replacement.health.refresh("opencode", adapter=adapter, observed_version="2.0.0")
         assert after is not None and after.cause == HarnessHealthCause.MISSING_BINARY
     finally:
