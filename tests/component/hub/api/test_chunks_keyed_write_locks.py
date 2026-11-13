@@ -18,8 +18,8 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedWorkRefRead
 from blizzard.hub.domain.graph.model import Graph, ILockedGraphNameRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
@@ -37,14 +37,14 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
     entered = threading.Event()
     release = threading.Event()
     record: Any = hub.services.chunks.record
-    real_mint_locked = record.mint_locked
+    real_mint = record.mint
 
-    def _blocking_mint_locked(handle: ILockedWorkRefRead, chunk: Chunk) -> None:
+    def _blocking_mint(chunk: Chunk, *, transaction: LockedTransaction) -> None:
         entered.set()
         assert release.wait(timeout=60), "test never released the first ingest"
-        return real_mint_locked(handle, chunk)
+        return real_mint(chunk, transaction=transaction)
 
-    record.mint_locked = _blocking_mint_locked
+    record.mint = _blocking_mint
     body = {"tokens": [pointer_token({"source": "default", "ref": "1"})]}
     results: dict[str, Any] = {}
     errors: dict[str, BaseException] = {}
@@ -66,7 +66,7 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
     release.set()
     first.join(timeout=60)
     second.join(timeout=60)
-    record.mint_locked = real_mint_locked
+    record.mint = real_mint
     assert not first.is_alive() and not second.is_alive(), "an ingest never finished after the first was released"
     for name, error in errors.items():
         raise AssertionError(f"the {name} ingest raised") from error

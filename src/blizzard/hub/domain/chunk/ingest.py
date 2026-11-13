@@ -17,12 +17,12 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkRef, mint_chunk
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, work_ref_lock
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.projects.links import IReadProjectLinks, project_source_links_lock
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.domain.urgency.services import TenantDefault
@@ -232,7 +232,8 @@ class IngestService:
         self,
         *,
         record: IWriteChunkRecordRepository,
-        exclusive: IChunkExclusiveWrites,
+        work_refs: IReadChunkWorkRefsRepository,
+        transactions: IHubTransactions,
         links: IReadProjectLinks,
         items: IWorkItemProjectRead,
         labels: IWorkRefLabels,
@@ -242,9 +243,9 @@ class IngestService:
         self._default = default
         self._record = record
         self._labels = labels
-        # The locked-transaction seam (``bzh:store-exclusive-write``): whether a pointer is held
-        # is read under the pointer's lock, on the connection the mint then writes on.
-        self._exclusive = exclusive
+        # Whether a pointer is held is read under the pointer's lock, in the unit the mint then writes in.
+        self._work_refs = work_refs
+        self._transactions = transactions
         self._links = links
         self._items = items
         self._clock = clock
@@ -275,17 +276,22 @@ class IngestService:
         chosen = self.choose_project(work_refs, project)
         ahead = self._default.ahead(stated=urgency)
         try:
-            with self._exclusive.locked_work_refs(work_refs, project=chosen, keys=ahead.lock_keys()) as handle:
-                choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
+            with self._transactions.begin() as unit:
+                transaction = unit.lock_set(
+                    keys=[*(work_ref_lock(p) for p in work_refs), project_source_links_lock(chosen), *ahead.lock_keys()]
+                )
+                sources = configured_sources(work_refs)
+                linking = self._links.projects_linking_sources(sources, transaction=transaction)
+                choose_ingest_project(chosen, work_refs, {source: linking.get(source, []) for source in sources}, {})
                 chunk = decide_ingest(
                     work_refs,
-                    live_holders=handle.live_holders(work_refs),
+                    live_holders=self._work_refs.live_holders(work_refs, transaction=transaction),
                     graph=graph,
                     project_id=chosen,
-                    urgency_id=self._default.resolve(ahead, handle.transaction).urgency_id,
+                    urgency_id=self._default.resolve(ahead, transaction).urgency_id,
                     at=self._clock.now(),
                 )
-                self._record.mint_locked(handle, chunk)
+                self._record.mint(chunk, transaction=transaction)
         except (IngestSourceNotLinked, IngestConflict) as exc:
             raise exc.labelled(self._labels) from None
         return chunk.chunk_id

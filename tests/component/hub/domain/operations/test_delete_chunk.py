@@ -282,7 +282,7 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     chunk_id = f"ch_{item.ref}"
     forge_pointer = WorkRef(source="forge", ref="99")
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.work_refs.add_work_refs_locked(handle, chunk_id, [forge_pointer], at=_T0)
+        chunks.work_refs.add_work_refs(chunk_id, [forge_pointer], at=_T0, transaction=handle.transaction)
     mixed = chunks.record.get(chunk_id)
     assert mixed is not None
     assert {r.source for r in mixed.work_refs} == {"hub", "forge"}

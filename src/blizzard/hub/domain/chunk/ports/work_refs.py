@@ -3,6 +3,7 @@ holds, and merge-group survivorship over them."""
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -12,8 +13,15 @@ from typing import Protocol
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import WorkRef, holds_work_refs
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.tenancy import TenantId
+
+
+def work_ref_lock(pointer: WorkRef) -> LockKey:
+    """The keyed lock on ``pointer`` (``bzh:transaction-graduation``): every decision on who holds the pointer takes it.
+    Both components are encoded without separator collisions."""
+    return LockKey(LockNamespace.WORK_REF, json.dumps([pointer.source, pointer.ref]))
 
 
 def resolve_live_holder(chunk_ids: Iterable[str], statuses: Mapping[str, ChunkStatus]) -> str | None:
@@ -104,10 +112,12 @@ class IReadChunkWorkRefsRepository(Protocol):
         """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
         ...
 
-    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
+    def live_holders(
+        self, pointers: Iterable[WorkRef], *, transaction: Transaction | None = None
+    ) -> dict[WorkRef, str]:
         """`find_live_holder`'s batched sibling — every pointer with a live (non-terminal)
         chunk holding it, keyed by pointer; a pointer with no live holder has no entry
-        at all, never mapped to None."""
+        at all, never mapped to None. Joins ``transaction`` when one is given."""
         ...
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
@@ -124,9 +134,9 @@ class IReadChunkWorkRefsRepository(Protocol):
 class IWriteChunkWorkRefsRepository(IReadChunkWorkRefsRepository, Protocol):
     """Read-write chunk-work-refs access."""
 
-    def add_work_refs_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    def add_work_refs(
+        self, chunk_id: str, pointers: list[WorkRef], *, at: datetime, transaction: LockedTransaction
     ) -> None:
-        """Fold work refs into a group survivor, de-duped by (source, ref), on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``)."""
+        """Fold work refs into a group survivor, de-duped by (source, ref), in ``transaction``, which locks the
+        survivor's row."""
         ...

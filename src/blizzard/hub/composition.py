@@ -1284,7 +1284,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         node_executors=graph_store,
         ingest=IngestService(
             record=chunk_record,
-            exclusive=chunk_exclusive,
+            work_refs=chunk_work_refs,
+            transactions=stores.transactions,
             links=stores.project_links,
             items=work_item_store,
             labels=work_sources,
@@ -1363,7 +1364,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             events=event_log,
         ),
         edit=EditService(
-            record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive, urgencies=stores.urgencies
+            record=chunk_record,
+            graphs=graph_store,
+            facts=chunk_facts,
+            transactions=stores.transactions,
+            urgencies=stores.urgencies,
         ),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,

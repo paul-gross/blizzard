@@ -566,7 +566,9 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
-        cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph_locked(handle, chunk_id, graph_id=other)
+        cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph(
+            chunk_id, graph_id=other, transaction=handle.transaction
+        )
 
     resp = _restart(hub, chunk_id)
 

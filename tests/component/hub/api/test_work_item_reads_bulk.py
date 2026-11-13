@@ -96,7 +96,9 @@ def test_an_unconfigured_source_and_a_failing_source_each_error_only_their_own_r
     hub_store = hub_store_connections(hub.engine)
     refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([gone]) as handle:
-        refs.add_work_refs_locked(handle, gone, [WorkRef(source="retired", ref="5")], at=hub.clock.now())
+        refs.add_work_refs(
+            gone, [WorkRef(source="retired", ref="5")], at=hub.clock.now(), transaction=handle.transaction
+        )
 
     chunks = _bulk(hub, [good, bad, gone]).json()["chunks"]
     assert chunks[good][0]["title"] == "fine" and chunks[good][0]["error"] is None

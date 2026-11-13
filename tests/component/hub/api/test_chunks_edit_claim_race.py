@@ -16,7 +16,6 @@ from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
@@ -89,14 +88,14 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_set_graph_locked = _writable_record(hub).set_graph_locked
+    real_set_graph = _writable_record(hub).set_graph
 
-    def _blocking_set_graph_locked(handle: ILockedChunkRead, cid: str, *, graph_id: str) -> None:
+    def _blocking_set_graph(cid: str, *, graph_id: str, transaction: LockedTransaction) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the edit's write"
-        real_set_graph_locked(handle, cid, graph_id=graph_id)
+        real_set_graph(cid, graph_id=graph_id, transaction=transaction)
 
-    monkeypatch.setattr(_writable_record(hub), "set_graph_locked", _blocking_set_graph_locked)
+    monkeypatch.setattr(_writable_record(hub), "set_graph", _blocking_set_graph)
 
     edit_result: dict[str, int] = {}
 

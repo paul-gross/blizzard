@@ -812,7 +812,7 @@ class GroupService:
         plan = plan_group(handle.standing_edges(), survivor_id, folded_ids)
         now = self._clock.now()
         for target in targets:
-            self._work_refs.add_work_refs_locked(handle, survivor_id, target.work_refs, at=now)
+            self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now, transaction=handle.transaction)
 
         grouped_id: int | None = None
         if targets:

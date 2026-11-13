@@ -168,7 +168,9 @@ class _Links(IReadProjectLinks):
     def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
         raise NotImplementedError
 
-    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+    def projects_linking_sources(
+        self, work_source_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, list[ProjectId]]:
         raise NotImplementedError
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:

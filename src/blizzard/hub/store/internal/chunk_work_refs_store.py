@@ -17,12 +17,12 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, holds_work_refs
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import (
     IWriteChunkWorkRefsRepository,
     WorkRefsSignature,
     resolve_live_holders,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 
 # Shares the chunk facts status-family tables and loader.
@@ -32,7 +32,7 @@ from blizzard.hub.store.internal.chunk_rows import ephemeral_ids, ephemeral_ids_
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import connection_for
 
 
 class ChunkWorkRefsStore:
@@ -83,13 +83,17 @@ class ChunkWorkRefsStore:
             marks=tuple((table.name, row[f"{table.name}__count"], row.get(f"{table.name}__max_id")) for table in tables)
         )
 
-    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
+    def live_holders(
+        self, pointers: Iterable[WorkRef], *, transaction: Transaction | None = None
+    ) -> dict[WorkRef, str]:
         """See ``src/blizzard/hub/domain/chunk/ports/work_refs.py``'s ``IReadChunkWorkRefsRepository.live_holders``.
 
         Statuses are read after the pointer rows' connection has closed, not nested inside it."""
         pointers = list(pointers)
         if not pointers:
             return {}
+        if transaction is not None:
+            return self.live_holders_conn(connection_for(self._store, transaction), pointers)
         with self._store.read("live_holders") as conn:
             pairs, maybe_live_ids = self._maybe_live_holders(conn, pointers)
         facts_by_id = self._facts.status_facts_for(sorted(maybe_live_ids))
@@ -147,12 +151,10 @@ class ChunkWorkRefsStore:
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
         return resolve_live_holders(live_pairs, statuses)
 
-    def add_work_refs_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    def add_work_refs(
+        self, chunk_id: str, pointers: list[WorkRef], *, at: datetime, transaction: LockedTransaction
     ) -> None:
-        """Fold pointers into a group survivor, de-duped by (source, ref) (``bzh:store-exclusive-write``) —
-        the group fold's own write, on ``handle``'s already-locked connection."""
-        self._add_work_refs_conn(chunk_handle_connection(handle, self._store, chunk_id), chunk_id, pointers)
+        self._add_work_refs_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, pointers)
 
     def _add_work_refs_conn(self, conn: Connection, chunk_id: str, pointers: list[WorkRef]) -> None:
         existing = {

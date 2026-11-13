@@ -21,7 +21,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions, chunk_handle_connection, work_ref_handle_connection
+from blizzard.hub.store.transactions import HubTransactions, chunk_handle_connection
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
@@ -243,7 +243,7 @@ def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> 
         assert handle.facts("ch_b") is None
         assert "ch_b" not in handle.facts_for(["ch_a", "ch_b"])
         with pytest.raises(TransactionMisuse):
-            chunks.record.set_graph_locked(handle, "ch_b", graph_id="gr_1")
+            chunks.record.set_graph("ch_b", graph_id="gr_1", transaction=handle.transaction)
         with pytest.raises(TransactionMisuse):
             chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=handle.transaction)
         other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
@@ -251,20 +251,16 @@ def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> 
             other, FixedClock(now), registry=RunnerRegistryStore(other), transactions=HubTransactions(other)
         )
         with pytest.raises(TransactionMisuse):
-            other_chunks.record.set_graph_locked(handle, "ch_a", graph_id="gr_1")
-        with pytest.raises(TransactionMisuse):
-            work_ref_handle_connection(handle, store)  # pyright: ignore[reportArgumentType]  # a chunk handle, passed to prove it is refused
+            other_chunks.record.set_graph("ch_a", graph_id="gr_1", transaction=handle.transaction)
     with pytest.raises(TransactionMisuse):
         chunk_handle_connection(handle, store)
     with pytest.raises(TransactionMisuse):
         handle.record("ch_a")
-    with chunks.exclusive.locked_work_refs([]) as refs:
-        assert work_ref_handle_connection(refs, store) is not None
-    with pytest.raises(TransactionMisuse):
-        work_ref_handle_connection(refs, store)
     pointer = WorkRef(source="source", ref="1")
-    with chunks.exclusive.locked_work_refs([]) as refs:
-        assert refs.live_holders([pointer]) == {}
-    with chunks.exclusive.locked_work_refs([]) as refs, pytest.raises(TransactionMisuse):
-        chunks.record.mint_locked(refs, Chunk(chunk_id="ch_b", graph_id="gr_1", work_refs=[pointer], minted_at=now))
+    with chunks.exclusive.locked([]) as unkeyed:
+        assert chunks.work_refs.live_holders([pointer], transaction=unkeyed.transaction) == {}
+    with chunks.exclusive.locked([]) as unkeyed, pytest.raises(TransactionMisuse):
+        chunks.record.mint(
+            Chunk(chunk_id="ch_b", graph_id="gr_1", work_refs=[pointer], minted_at=now), transaction=unkeyed.transaction
+        )
     engine.dispose()
