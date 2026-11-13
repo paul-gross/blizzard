@@ -71,7 +71,10 @@ _credentials = sa.table(
     sa.column(_TENANT, sa.String),
 )
 _former_slugs = sa.table(
-    "credential_former_slugs", sa.column("slug", sa.String), sa.column(_CREDENTIAL_ID, sa.String), sa.column(_TENANT, sa.String)
+    "credential_former_slugs",
+    sa.column("slug", sa.String),
+    sa.column(_CREDENTIAL_ID, sa.String),
+    sa.column(_TENANT, sa.String),
 )
 _facts = sa.table(
     "credential_lifecycle_facts",
@@ -192,7 +195,9 @@ def _retired(bind: sa.Connection, facts: sa.TableClause, *key: str) -> set[tuple
 def _authorities(bind: sa.Connection) -> dict[tuple[str, str, str], str]:
     """Each credential's id by the tenant, forge and authority it holds."""
     rows = bind.execute(
-        sa.select(_credentials.c[_TENANT], _credentials.c.forge_id, _credentials.c.authority, _credentials.c[_CREDENTIAL_ID])
+        sa.select(
+            _credentials.c[_TENANT], _credentials.c.forge_id, _credentials.c.authority, _credentials.c[_CREDENTIAL_ID]
+        )
     )
     return {(t, f, a): c for t, f, a, c in rows}
 
@@ -218,7 +223,14 @@ def _link(bind: sa.Connection) -> set[tuple[str, str]]:
 
 
 def _created_diff(slug: str, name: str, forge_id: str, secret_name: str) -> str:
-    fields: dict[str, object] = {"slug": slug, "name": name, "forge": forge_id, "binding": _BINDING, "secret": secret_name, "settings": {}}
+    fields: dict[str, object] = {
+        "slug": slug,
+        "name": name,
+        "forge": forge_id,
+        "binding": _BINDING,
+        "secret": secret_name,
+        "settings": {},
+    }
     return json.dumps([{"field": field, "old": None, "new": value} for field, value in fields.items()])
 
 
@@ -227,8 +239,9 @@ def _enabled_diff() -> str:
 
 
 def _create(bind: sa.Connection, at: datetime) -> None:
-    """Create the credential each (forge, secret) a referrer still names has none for, and the change row and lifecycle
-    fact of each that lacks one."""
+    """Create the credential, its change row, and its retiring fact where the secret is retired, for each (forge,
+    secret) a referrer still names with no credential. A stopped run is caught by the link step, which finds what it
+    created by its authority, so a re-run creates none of them again."""
     wanted: set[tuple[str, str, str]] = set()
     for table, _, _ in _REFERRERS:
         rows = bind.execute(
@@ -299,12 +312,17 @@ def _enable(bind: sa.Connection, at: datetime, linked: set[tuple[str, str]]) -> 
     for table, key, facts in _REFERRERS:
         retired_records = {record for (record,) in _retired(bind, facts, key)}
         rows = bind.execute(
-            sa.select(table.c[key], table.c[_CREDENTIAL_ID], table.c[_TENANT]).where(table.c[_CREDENTIAL_ID].is_not(None))
+            sa.select(table.c[key], table.c[_CREDENTIAL_ID], table.c[_TENANT]).where(
+                table.c[_CREDENTIAL_ID].is_not(None)
+            )
         )
         for record_id, credential_id, tenant_id in rows:
-            if credential_id in retired_credentials and record_id not in retired_records:
-                if (table.name, record_id) in linked:
-                    enabling[credential_id] = tenant_id
+            if (
+                credential_id in retired_credentials
+                and record_id not in retired_records
+                and (table.name, record_id) in linked
+            ):
+                enabling[credential_id] = tenant_id
     for credential_id, tenant_id in sorted(enabling.items()):
         revision_now = bind.execute(
             sa.select(_credentials.c.revision).where(
