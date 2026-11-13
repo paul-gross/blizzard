@@ -420,7 +420,7 @@ class ApplyService:
                 close_skipped = transitioned.close_skipped + open_graph_gate_on_arrival(
                     self._decisions,
                     self._facts,
-                    handle,
+                    handle.transaction,
                     self._clock,
                     chunk_id=chunk.chunk_id,
                     graph=graph,
@@ -609,7 +609,7 @@ class ApplyService:
                 close_skipped = (outcome.close_skipped if outcome is not None else ()) + open_graph_gate_on_arrival(
                     self._decisions,
                     self._facts,
-                    handle,
+                    handle.transaction,
                     self._clock,
                     chunk_id=chunk.chunk_id,
                     graph=landing.graph,

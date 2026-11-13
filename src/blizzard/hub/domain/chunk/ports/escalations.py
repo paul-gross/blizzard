@@ -12,7 +12,6 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, EscalationOpen
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
@@ -77,9 +76,8 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         locks ``chunk_id`` (``bzh:transaction-participation``)."""
         ...
 
-    def record_bounce_locked(
+    def record_bounce(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         epoch: int,
@@ -89,16 +87,17 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         envelope: str,
         at: datetime,
         visit_node_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> bool:
-        """Record one delivery kick-back on ``handle``'s already-locked connection (``bzh:store-exclusive-write``),
-        idempotent by ``(chunk_id, epoch)`` — narrowed, given ``visit_node_id``, to that node's own exit — and behind
-        the write fence (``bzh:epoch-fencing``): a replay, a terminal chunk, or a stale ``epoch`` writes nothing.
-        Append-only, and the sole input :meth:`ChunkFacts.bounce_count` derives from. Returns True iff it wrote."""
+        """Record one delivery kick-back in ``transaction``, a unit that locks ``chunk_id``
+        (``bzh:transaction-participation``), idempotent by ``(chunk_id, epoch)`` — narrowed, given
+        ``visit_node_id``, to that node's own exit — and behind the write fence (``bzh:epoch-fencing``): a replay, a
+        terminal chunk, or a stale ``epoch`` writes nothing. Append-only, and the sole input
+        :meth:`ChunkFacts.bounce_count` derives from. Returns True iff it wrote."""
         ...
 
-    def record_bounce_escalation_locked(
+    def record_bounce_escalation(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         epoch: int,
@@ -109,10 +108,12 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         at: datetime,
         cause: str,
         detail: str,
+        transaction: LockedTransaction,
     ) -> BounceEscalationOutcome:
-        """Escalate a chunk at a hub node on ``handle``'s already-locked connection (``bzh:store-exclusive-write``) —
-        committed with the turn's end — idempotent by the escalation's existence at ``epoch``. The hub lease and the
-        escalation fact land together; no transition is recorded. Handed the visit's epoch plus one with
-        :attr:`EpochAdmission.ABOVE`, so the escalation opens the next visit; behind the write fence
+        """Escalate a chunk at a hub node in ``transaction``, a unit that locks ``chunk_id``
+        (``bzh:transaction-participation``) — committed with the turn's end — idempotent by the escalation's
+        existence at ``epoch``. The hub lease and the escalation fact land together;
+        no transition is recorded. Handed the visit's epoch plus one
+        with :attr:`EpochAdmission.ABOVE`, so the escalation opens the next visit; behind the write fence
         (``bzh:epoch-fencing``), a terminal chunk or a stale ``epoch`` writes nothing and is ``REFUSED``."""
         ...

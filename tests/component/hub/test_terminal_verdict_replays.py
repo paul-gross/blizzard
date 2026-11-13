@@ -81,8 +81,7 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
     chunk.stop()
 
     with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        replayed = chunk.stores.decisions.record_decision_locked(
-            handle,
+        replayed = chunk.stores.decisions.record_decision(
             decision_id="dec_replay",
             chunk_id=chunk.chunk_id,
             node_id=chunk.nodes["build"],
@@ -95,9 +94,9 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
             artifacts=[],
             imposed_by_runner_id="r1",
             close_decision=_CLOSE,
+            transaction=handle.transaction,
         )
-        fresh = chunk.stores.decisions.record_decision_locked(
-            handle,
+        fresh = chunk.stores.decisions.record_decision(
             decision_id="dec_fresh",
             chunk_id=chunk.chunk_id,
             node_id=chunk.nodes["review"],
@@ -110,6 +109,7 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
             artifacts=[],
             imposed_by_runner_id="r1",
             close_decision=_CLOSE,
+            transaction=handle.transaction,
         )
 
     assert not isinstance(replayed, FenceRefusal) and replayed.wrote is False
@@ -217,8 +217,7 @@ def test_a_bounce_and_its_escalation_replayed_on_a_since_stopped_chunk_keep_thei
     chunk = Chunk(build_hub(tmp_path))
 
     def bounce(handle: ILockedChunkRead, epoch: int) -> bool:
-        return chunk.stores.escalations.record_bounce_locked(
-            handle,
+        return chunk.stores.escalations.record_bounce(
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
@@ -226,11 +225,11 @@ def test_a_bounce_and_its_escalation_replayed_on_a_since_stopped_chunk_keep_thei
             cause="poll-timeout",
             envelope="{}",
             at=chunk.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     def escalate(handle: ILockedChunkRead, epoch: int) -> BounceEscalationOutcome:
-        return chunk.stores.escalations.record_bounce_escalation_locked(
-            handle,
+        return chunk.stores.escalations.record_bounce_escalation(
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
@@ -240,6 +239,7 @@ def test_a_bounce_and_its_escalation_replayed_on_a_since_stopped_chunk_keep_thei
             at=chunk.hub.clock.now(),
             cause="bounce-cap",
             detail="crossed",
+            transaction=handle.transaction,
         )
 
     with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:

@@ -76,6 +76,7 @@ class _Ports:
     """Every port the services hold. Only the probes and the ``*_locked`` spies answer."""
 
     pre_lock: ChunkFacts
+    under_lock: ChunkFacts | None = None
     migrations: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     transitions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     decisions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
@@ -85,8 +86,8 @@ class _Ports:
     gate: GateDecision | None = None
 
     # facts
-    def load_facts(self, chunk_id: str) -> ChunkFacts:
-        return self.pre_lock
+    def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
+        return self.pre_lock if transaction is None else self.under_lock
 
     # movement
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
@@ -113,7 +114,8 @@ class _Ports:
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
         return None
 
-    def record_decision_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> DecisionWrite | FenceRefusal:
+    def record_decision(self, **kwargs: Any) -> DecisionWrite | FenceRefusal:
+        kwargs.pop("transaction", None)
         self.decisions.append(kwargs)
         return self.refusal or DecisionWrite(wrote=True)
 
@@ -170,6 +172,23 @@ class _FakeExclusiveWrites:
         yield cast(ILockedChunkRead, self.handles[-1])
 
 
+@dataclass
+class _FakeTransactions:
+    """One unit whose lock wait passes time; the facts a port reads in it are the ones under the lock."""
+
+    clock: FixedClock
+    locked_ids: list[list[str]] = field(default_factory=list[list[str]])
+
+    @contextmanager
+    def begin(self) -> Generator[Any]:
+        self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
+        yield self
+
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> object:
+        self.locked_ids.append(list(chunk_ids))
+        return self
+
+
 def _events(ports: _Ports) -> EventLogService:
     """The event log over the untouchable ports: a write that skipped no close publishes nothing."""
     return EventLogService(events=cast(IWriteChunkEventsRepository, ports), publisher=cast(IEventLogPublisher, ports))
@@ -177,7 +196,7 @@ def _events(ports: _Ports) -> EventLogService:
 
 def _wired(under_lock: ChunkFacts | None, *, pre_lock: ChunkFacts = AT_BUILD) -> tuple[_Ports, FixedClock, Any]:
     assert under_lock != pre_lock, "a race case needs the lock to see facts the pre-lock read did not"
-    ports = _Ports(pre_lock=pre_lock)
+    ports = _Ports(pre_lock=pre_lock, under_lock=under_lock)
     clock = FixedClock(T1 + timedelta(hours=1))
     return ports, clock, cast(IChunkExclusiveWrites, _FakeExclusiveWrites(under_lock, clock))
 
@@ -211,13 +230,12 @@ def _apply_service_with_lock(
 
 
 def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, FixedClock]:
-    ports, clock, exclusive = _wired(under_lock)
+    ports, clock, _exclusive = _wired(under_lock)
     service = DecisionService(
         facts=cast(IReadChunkFactsRepository, ports),
         route=cast(IWriteChunkRouteRepository, ports),
         decisions=cast(IWriteChunkDecisionsRepository, ports),
-        exclusive=cast(IChunkExclusiveWrites, exclusive),
-        transactions=cast(IHubTransactions, ports),
+        transactions=cast(IHubTransactions, _FakeTransactions(clock)),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
         closer_available=lambda source: source == "hub",

@@ -442,7 +442,7 @@ _MERGE_FAILURE = "          description: Failed to land.\n          to: build\n"
 _FAILURE_ROUTES: dict[str, tuple[type, str]] = {
     "node": (ChunkHubExecStore, "record_hub_step_transition_locked"),
     "cross-graph": (ChunkMovementStore, "record_migration_locked"),
-    "unroutable": (ChunkEscalationsStore, "record_bounce_escalation_locked"),
+    "unroutable": (ChunkEscalationsStore, "record_bounce_escalation"),
 }
 #: The events a refusal along each failure edge records, once.
 _REFUSAL_EVENTS = {
@@ -786,8 +786,7 @@ def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: Worl
     (started,) = world.driver.tick(world.stores, world.hub.clock).started
     stores = chunk_stores(world.hub.engine, world.hub.clock)
     with stores.exclusive.locked([chunk_id]) as handle:
-        stores.escalations.record_bounce_escalation_locked(
-            handle,
+        stores.escalations.record_bounce_escalation(
             chunk_id,
             epoch=2,
             admission=EpochAdmission.ABOVE,
@@ -797,6 +796,7 @@ def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: Worl
             at=world.hub.clock.now(),
             cause=EscalationCause.FORGE_AUTH,
             detail="held by a person",
+            transaction=handle.transaction,
         )
     assert world.detail(chunk_id)["status"] == "needs_human"
 

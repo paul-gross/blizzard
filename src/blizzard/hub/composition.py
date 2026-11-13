@@ -1326,7 +1326,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             route=chunk_route,
             decisions=chunk_decisions,
-            exclusive=chunk_exclusive,
             transactions=stores.transactions,
             retired=retired,
             clock=clock,

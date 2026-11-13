@@ -24,7 +24,6 @@ from blizzard.hub.domain.chunk.model import (
     GateResolution,
 )
 from blizzard.hub.domain.chunk.ports.decisions import DecisionWrite, IWriteChunkDecisionsRepository, LiveDecisionStatus
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
@@ -32,9 +31,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, is_landing_marker, next_artifact_seq
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -235,50 +233,11 @@ class ChunkDecisionsStore:
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> DecisionWrite | FenceRefusal:
-        with self._store.write("record_decision") as conn:
-            lock_chunk_row(conn, chunk_id)
-            return self._record_decision_conn(
-                conn,
-                decision_id=decision_id,
-                chunk_id=chunk_id,
-                node_id=node_id,
-                node_name=node_name,
-                epoch=epoch,
-                admission=admission,
-                terminal=terminal,
-                claimant=claimant,
-                choices=choices,
-                check_results=check_results,
-                at=at,
-                artifacts=artifacts,
-                imposed_by_runner_id=imposed_by_runner_id,
-                close_decision=close_decision,
-            )
-
-    def record_decision_locked(
-        self,
-        handle: ILockedChunkRead,
-        *,
-        decision_id: str,
-        chunk_id: str,
-        node_id: str,
-        node_name: str,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        choices: list[DecisionChoice],
-        check_results: Sequence[DecisionCheck] = (),
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        imposed_by_runner_id: str | None,
-        close_decision: CloseEnqueueDecision,
-    ) -> DecisionWrite | FenceRefusal:
-        """:meth:`record_decision` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
+        """A decision already open at ``(chunk_id, node_id, epoch)``
         answers ``wrote`` ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
-        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         if self._decision_exists(conn, chunk_id, node_id=node_id, epoch=epoch):
             return DecisionWrite(wrote=False)
         return self._record_decision_conn(

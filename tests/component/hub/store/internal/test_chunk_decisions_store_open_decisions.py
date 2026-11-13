@@ -44,20 +44,22 @@ def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) ->
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
-    store.decisions.record_decision(
-        imposed_by_runner_id=imposed_by_runner_id,
-        decision_id="dec_1",
-        chunk_id=chunk_id,
-        node_id="nd_1",
-        node_name="n",
-        epoch=1,
-        choices=[DecisionChoice(name="ok", description="d")],
-        at=_T0,
-        artifacts=[],
-        close_decision=decide_close_enqueue([], lambda _: True),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with store.exclusive.locked([chunk_id]) as handle:
+        store.decisions.record_decision(
+            imposed_by_runner_id=imposed_by_runner_id,
+            decision_id="dec_1",
+            chunk_id=chunk_id,
+            node_id="nd_1",
+            node_name="n",
+            epoch=1,
+            choices=[DecisionChoice(name="ok", description="d")],
+            at=_T0,
+            artifacts=[],
+            close_decision=decide_close_enqueue([], lambda _: True),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     return store, engine
 
 

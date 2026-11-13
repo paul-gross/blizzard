@@ -20,7 +20,6 @@ from blizzard.hub.domain.chunk.ports.escalations import (
     EscalationWrite,
     IWriteChunkEscalationsRepository,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
@@ -37,7 +36,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_for
+from blizzard.hub.store.transactions import connection_for
 
 
 class ChunkEscalationsStore:
@@ -126,9 +125,8 @@ class ChunkEscalationsStore:
             )
         return EscalationWrite(escalation_id)
 
-    def record_bounce_locked(
+    def record_bounce(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         epoch: int,
@@ -138,9 +136,10 @@ class ChunkEscalationsStore:
         envelope: str,
         at: datetime,
         visit_node_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> bool:
         return self._bounce_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             chunk_id,
             epoch=epoch,
             admission=admission,
@@ -193,9 +192,8 @@ class ChunkEscalationsStore:
         )
         return True
 
-    def record_bounce_escalation_locked(
+    def record_bounce_escalation(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         epoch: int,
@@ -206,9 +204,10 @@ class ChunkEscalationsStore:
         at: datetime,
         cause: str,
         detail: str,
+        transaction: LockedTransaction,
     ) -> BounceEscalationOutcome:
         return self._bounce_escalation_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             chunk_id,
             epoch=epoch,
             admission=admission,

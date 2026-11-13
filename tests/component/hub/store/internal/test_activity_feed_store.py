@@ -187,20 +187,22 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
 
 def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id="dec_1",
-        chunk_id="ch_1",
-        node_id="nd_gate",
-        node_name="gate",
-        epoch=1,
-        choices=[DecisionChoice(name="go", description="go")],
-        at=_at(1),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id="dec_1",
+            chunk_id="ch_1",
+            node_id="nd_gate",
+            node_name="gate",
+            epoch=1,
+            choices=[DecisionChoice(name="go", description="go")],
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -209,20 +211,22 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    store.decisions.record_decision(
-        imposed_by_runner_id=None,
-        decision_id="dec_1",
-        chunk_id="ch_1",
-        node_id="nd_gate",
-        node_name="gate",
-        epoch=1,
-        choices=[DecisionChoice(name="go", description="go")],
-        at=_at(1),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.decisions.record_decision(
+            imposed_by_runner_id=None,
+            decision_id="dec_1",
+            chunk_id="ch_1",
+            node_id="nd_gate",
+            node_name="gate",
+            epoch=1,
+            choices=[DecisionChoice(name="go", description="go")],
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
         store.decisions.record_decision_resolution(
             "dec_1", choice="go", resolved_by="alice", at=_at(2), transaction=unit

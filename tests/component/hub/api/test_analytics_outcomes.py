@@ -198,8 +198,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
     report_lease(hub, chunk_id, epoch=1, seq=1)
     stores = chunk_stores(hub.engine, hub.clock)
     with stores.exclusive.locked([chunk_id]) as handle:
-        stores.escalations.record_bounce_locked(
-            handle,
+        stores.escalations.record_bounce(
             chunk_id,
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
@@ -207,6 +206,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
             cause="conflict",
             envelope="{}",
             at=hub.clock.now(),
+            transaction=handle.transaction,
         )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # supersedes epoch 1, proving it's over
 
