@@ -157,7 +157,8 @@ def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
         True,
     )
     assert body["created_by"] == "operator"
-    assert body["warnings"] == []
+    assert [w["field"] for w in body["warnings"]] == ["secret"]
+    body["warnings"] = []
     assert hub.client.get("/api/work-sources/demo").json() == body
     assert hub.client.get(f"/api/work-sources/{body['work_source_id']}").json() == body
 
@@ -541,7 +542,8 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
     assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
     assert body["repository_id"].startswith("repo_")
     assert body["name"] == "blizzard"
-    assert body["warnings"] == []
+    assert [w["field"] for w in body["warnings"]] == ["secret_name"]
+    body["warnings"] = []
     assert hub.client.get("/api/repositories/blizzard").json() == body
     assert hub.client.get(f"/api/repositories/{body['repository_id']}").json() == body
     assert hub.client.get("/api/repositories").json()["repositories"] == [body]
@@ -555,7 +557,7 @@ def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) ->
         ({"owner": ""}, "owner"),
         ({"forge": "nope"}, "forge"),
         ({"secret_name": "absent"}, "secret_name"),
-        ({"secret_name": None}, "secret_name"),
+        ({"secret_name": None}, "credential"),
     )
     for overrides, field in cases:
         resp = hub.client.post("/api/repositories", json={**_REPO, **overrides})

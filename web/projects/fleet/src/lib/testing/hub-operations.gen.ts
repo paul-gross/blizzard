@@ -51,6 +51,8 @@ export interface HubOperations {
   'GET /api/config/export': { path: T.ExportConfigApiConfigExportGetData['path']; responses: T.ExportConfigApiConfigExportGetResponses; errors: T.ExportConfigApiConfigExportGetErrors };
   'GET /api/config/landing-policies': { path: T.ListLandingPoliciesApiConfigLandingPoliciesGetData['path']; responses: T.ListLandingPoliciesApiConfigLandingPoliciesGetResponses; errors: T.ListLandingPoliciesApiConfigLandingPoliciesGetErrors };
   'GET /api/config/schema/{kind}': { path: T.GetSchemaApiConfigSchemaKindGetData['path']; responses: T.GetSchemaApiConfigSchemaKindGetResponses; errors: T.GetSchemaApiConfigSchemaKindGetErrors };
+  'GET /api/credentials': { path: T.ListCredentialsApiCredentialsGetData['path']; responses: T.ListCredentialsApiCredentialsGetResponses; errors: T.ListCredentialsApiCredentialsGetErrors };
+  'GET /api/credentials/{credential}': { path: T.GetCredentialApiCredentialsCredentialGetData['path']; responses: T.GetCredentialApiCredentialsCredentialGetResponses; errors: T.GetCredentialApiCredentialsCredentialGetErrors };
   'GET /api/decisions': { path: T.ListDecisionsApiDecisionsGetData['path']; responses: T.ListDecisionsApiDecisionsGetResponses; errors: T.ListDecisionsApiDecisionsGetErrors };
   'GET /api/egress/status': { path: T.EgressStatusApiEgressStatusGetData['path']; responses: T.EgressStatusApiEgressStatusGetResponses; errors: T.EgressStatusApiEgressStatusGetErrors };
   'GET /api/env-timeline': { path: T.EnvTimelineApiEnvTimelineGetData['path']; responses: T.EnvTimelineApiEnvTimelineGetResponses; errors: T.EnvTimelineApiEnvTimelineGetErrors };
@@ -154,6 +156,7 @@ export interface HubOperations {
   'PATCH /api/admin/tenants/{tenant_id}': { path: T.RenameTenantApiAdminTenantsTenantIdPatchData['path']; responses: T.RenameTenantApiAdminTenantsTenantIdPatchResponses; errors: T.RenameTenantApiAdminTenantsTenantIdPatchErrors };
   'PATCH /api/cadences/{cadence_id}': { path: T.EditCadenceApiCadencesCadenceIdPatchData['path']; responses: T.EditCadenceApiCadencesCadenceIdPatchResponses; errors: T.EditCadenceApiCadencesCadenceIdPatchErrors };
   'PATCH /api/chunks/{chunk_id}': { path: T.PatchChunkApiChunksChunkIdPatchData['path']; responses: T.PatchChunkApiChunksChunkIdPatchResponses; errors: T.PatchChunkApiChunksChunkIdPatchErrors };
+  'PATCH /api/credentials/{credential}': { path: T.PatchCredentialApiCredentialsCredentialPatchData['path']; responses: T.PatchCredentialApiCredentialsCredentialPatchResponses; errors: T.PatchCredentialApiCredentialsCredentialPatchErrors };
   'PATCH /api/forges/{forge}': { path: T.PatchForgeApiForgesForgePatchData['path']; responses: T.PatchForgeApiForgesForgePatchResponses; errors: T.PatchForgeApiForgesForgePatchErrors };
   'PATCH /api/garden-proposals/{proposal_id}': { path: T.EditGardenProposalApiGardenProposalsProposalIdPatchData['path']; responses: T.EditGardenProposalApiGardenProposalsProposalIdPatchResponses; errors: T.EditGardenProposalApiGardenProposalsProposalIdPatchErrors };
   'PATCH /api/graphs/{graph_id}': { path: T.PatchGraphApiGraphsGraphIdPatchData['path']; responses: T.PatchGraphApiGraphsGraphIdPatchResponses; errors: T.PatchGraphApiGraphsGraphIdPatchErrors };
@@ -191,6 +194,9 @@ export interface HubOperations {
   'POST /api/chunks/{chunk_id}/resume': { path: T.ResumeChunkApiChunksChunkIdResumePostData['path']; responses: T.ResumeChunkApiChunksChunkIdResumePostResponses; errors: T.ResumeChunkApiChunksChunkIdResumePostErrors };
   'POST /api/chunks/{chunk_id}/stop': { path: T.StopChunkApiChunksChunkIdStopPostData['path']; responses: T.StopChunkApiChunksChunkIdStopPostResponses; errors: T.StopChunkApiChunksChunkIdStopPostErrors };
   'POST /api/config/apply': { path: T.ApplyConfigApiConfigApplyPostData['path']; responses: T.ApplyConfigApiConfigApplyPostResponses; errors: T.ApplyConfigApiConfigApplyPostErrors };
+  'POST /api/credentials': { path: T.CreateCredentialApiCredentialsPostData['path']; responses: T.CreateCredentialApiCredentialsPostResponses; errors: T.CreateCredentialApiCredentialsPostErrors };
+  'POST /api/credentials/{credential}/enable': { path: T.EnableCredentialApiCredentialsCredentialEnablePostData['path']; responses: T.EnableCredentialApiCredentialsCredentialEnablePostResponses; errors: T.EnableCredentialApiCredentialsCredentialEnablePostErrors };
+  'POST /api/credentials/{credential}/retire': { path: T.RetireCredentialApiCredentialsCredentialRetirePostData['path']; responses: T.RetireCredentialApiCredentialsCredentialRetirePostResponses; errors: T.RetireCredentialApiCredentialsCredentialRetirePostErrors };
   'POST /api/decisions/{decision_id}/resolutions': { path: T.ResolveDecisionApiDecisionsDecisionIdResolutionsPostData['path']; responses: T.ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses; errors: T.ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors };
   'POST /api/egress/backfill': { path: T.EgressBackfillApiEgressBackfillPostData['path']; responses: T.EgressBackfillApiEgressBackfillPostResponses; errors: T.EgressBackfillApiEgressBackfillPostErrors };
   'POST /api/egress/reset': { path: T.EgressResetApiEgressResetPostData['path']; responses: T.EgressResetApiEgressResetPostResponses; errors: T.EgressResetApiEgressResetPostErrors };

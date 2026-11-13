@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
@@ -21,9 +21,11 @@ from blizzard.hub.api import chunk_events, problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import ingest_conflict_refusal
+from blizzard.hub.api.credential_choice import credential_choice
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
+from blizzard.hub.api.forge_warnings import warned
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject, project_of_call
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
@@ -35,6 +37,9 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
+from blizzard.hub.domain.config.authoring import Authored
+from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD
+from blizzard.hub.domain.config.credentials import ConfiguredCredential
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD
 from blizzard.hub.domain.config.forges import ConfiguredForge
@@ -147,7 +152,11 @@ def _view(
 
 
 def _summary(
-    record: ConfiguredWorkSource, forge: ConfiguredForge, services: TenantServices, names: Mapping[str, str]
+    record: ConfiguredWorkSource,
+    forge: ConfiguredForge,
+    credential: ConfiguredCredential | None,
+    services: TenantServices,
+    names: Mapping[str, str],
 ) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
@@ -167,14 +176,30 @@ def _summary(
         created_by=record.created_by,
         created_by_name=names.get(record.created_by),
         retired=record.retired,
+        credential_id=None if credential is None else credential.credential_id,
+        credential_slug=None if credential is None else credential.slug,
+        credential_name=None if credential is None else credential.name,
     )
 
 
 def _shown(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
-    """``record``'s summary, with the forge it names."""
+    """``record``'s summary, with the forge and credential it names."""
     forge = services.forge_records.get(record.fields.forge_id)
     assert forge is not None
-    return _summary(record, forge, services, user_names(services, [record.created_by]))
+    credential_id = record.fields.credential_id
+    credential = None if credential_id is None else services.credential_records.get(credential_id)
+    return _summary(record, forge, credential, services, user_names(services, [record.created_by]))
+
+
+def _authored(
+    authored: Authored[ConfiguredWorkSource], response: Response, services: TenantServices
+) -> WorkSourceSummary:
+    """The written record's summary, carrying a warning for each old field the write resolved."""
+    shown = _shown(authored.record, services)
+    forge = services.forge_records.get(authored.record.fields.forge_id)
+    assert forge is not None
+    shown.warnings = warned(response, services, authored.old_fields, record=f"work source {shown.slug}", forge=forge)
+    return shown
 
 
 def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
@@ -209,10 +234,22 @@ def list_work_sources(services: Services, include_retired: bool = False) -> Work
     records = services.work_source_records.list_all(include_retired=include_retired)
     names = user_names(services, (r.created_by for r in records))
     forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
+    credentials = services.credential_records.get_many(
+        list({r.fields.credential_id for r in records if r.fields.credential_id is not None})
+    )
     return WorkSourcesListView(
         sources=[
             _built_in_summary(services),
-            *(_summary(r, forges[r.fields.forge_id], services, names) for r in records),
+            *(
+                _summary(
+                    r,
+                    forges[r.fields.forge_id],
+                    None if r.fields.credential_id is None else credentials.get(r.fields.credential_id),
+                    services,
+                    names,
+                )
+                for r in records
+            ),
         ]
     )
 
@@ -223,25 +260,38 @@ def create_work_source(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Services,
+    response: Response,
 ) -> WorkSourceSummary:
     """Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422
     naming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or
     locator, or a missing or retired secret, with the code `forge_required` for no `forge`, `forge_unavailable` for an
     unknown or retired forge, `forge_kind_mismatch` for a forge of another kind than the provider, and
     `field_moved_to_forge` for an `api_base` or `web_base`, which the forge carries — naming that forge where one can
-    be told; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder."""
+    be told; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.
+
+    The source acts with the credential `credential` names, or the `github.token` credential reading the deprecated
+    `secret` on the forge — created when there is none, and answered with a `Deprecation` header and a `warnings`
+    entry; a provider that acts with a credential needs one of them. 422 coded `credential_unavailable` for an unknown
+    or retired credential, `credential_forge_mismatch` for one of another forge, `credential_binding_unsupported` for
+    a binding the provider cannot act with, and `credential_conflict` for a `secret` that is not the credential's
+    secret."""
     draft = WorkSourceDraft(
         provider=request.provider, locator=request.locator, annotate=request.annotate, secret=request.secret
     )
     try:
-        record = services.config_authoring.create_work_source_naming(
-            request.slug, request.name, draft, forge_choice(request, services), change_context(identity, door)
-        ).record
+        authored = services.config_authoring.create_work_source_naming(
+            request.slug,
+            request.name,
+            draft,
+            forge_choice(request, services),
+            change_context(identity, door),
+            credential=credential_choice(request, services),
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    return _authored(authored, response, services)
 
 
 @router.get(
@@ -262,6 +312,7 @@ def patch_work_source(
     request: WorkSourcePatchRequest,
     door: RequestDoor,
     services: Services,
+    response: Response,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no
@@ -269,18 +320,27 @@ def patch_work_source(
     another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work
     source holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,
     a `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at
-    a forge."""
+    a forge, and `credential` at a credential, resolved and refused as on create; a deprecated `secret` other than the
+    source's resolves as on create. Moving the forge, or changing `secret`, of a source acting with a credential needs
+    a `credential` too: 422 `credential_forge_mismatch` or `credential_conflict` without one."""
     present = request.model_fields_set
-    edit = WorkSourceEdit(**{name: getattr(request, name) for name in present if name != FORGE_FIELD})
+    edit = WorkSourceEdit(
+        **{name: getattr(request, name) for name in present if name not in (FORGE_FIELD, CREDENTIAL_FIELD)}
+    )
     try:
-        edited = services.config_authoring.edit_work_source_naming(
-            record, edit, forge_choice(request, services), change_context(identity, door), if_match=if_match
-        ).record
+        authored = services.config_authoring.edit_work_source_naming(
+            record,
+            edit,
+            forge_choice(request, services),
+            change_context(identity, door),
+            if_match=if_match,
+            credential=credential_choice(request, services),
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(edited, services)
+    return _authored(authored, response, services)
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)

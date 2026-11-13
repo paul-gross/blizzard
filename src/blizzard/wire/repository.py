@@ -25,7 +25,8 @@ class RepositorySummary(WireModel):
     owner: str
     repo: str
     base_branch: str
-    secret_name: str
+    #: The secret of the credential the repository acts with — deprecated; read ``credential_id``.
+    secret_name: str = Field(json_schema_extra=DEPRECATED_FIELD)
     #: How the repository's changes land; a policy this build does not know is passed through as it reads.
     landing_policy: str
     allow_no_ci: bool = False
@@ -36,8 +37,12 @@ class RepositorySummary(WireModel):
     created_by: str
     created_by_name: str | None = None
     retired: bool = False
-    #: Always empty.
-    warnings: list[OldFieldWarning] = Field(default=[], json_schema_extra=DEPRECATED_FIELD)
+    #: The credential the record acts with, by id, slug and name — ``None`` while it names none.
+    credential_id: str | None = None
+    credential_slug: str | None = None
+    credential_name: str | None = None
+    #: One entry per old field the write leaned on; empty on a read.
+    warnings: list[OldFieldWarning] = []
 
 
 #: The address field a repository's forge now carries.
@@ -56,7 +61,11 @@ class RepositoryCreateRequest(MovedFieldsRequest):
     owner: str
     repo: str
     base_branch: str
-    secret_name: str
+    #: The credential the repository acts with, by id or slug — this or ``secret_name`` is needed.
+    credential: str | None = None
+    #: Deprecated: a secret, resolved to the ``github.token`` credential reading it on the forge — send
+    #: ``credential``.
+    secret_name: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     landing_policy: LandingPolicy = LandingPolicy.MERGE_ON_CHECKS
     allow_no_ci: bool = False
     park_timeout_hours: int | None = None
@@ -76,7 +85,10 @@ class RepositoryPatchRequest(MovedFieldsRequest):
     owner: str | None = None
     repo: str | None = None
     base_branch: str | None = None
-    secret_name: str | None = None
+    #: Re-points the repository at a credential, by id or slug.
+    credential: str | None = None
+    #: Deprecated: a secret, resolved as on create — send ``credential``.
+    secret_name: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     landing_policy: LandingPolicy | None = None
     allow_no_ci: bool | None = None
     park_timeout_hours: int | None = None

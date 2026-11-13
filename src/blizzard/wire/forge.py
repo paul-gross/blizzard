@@ -20,8 +20,8 @@ DEPRECATED_FIELD: JsonDict = {"deprecated": True}
 
 
 class OldFieldWarning(WireModel):
-    """A warning a write once answered about an address field — ``field``, and the forge it resolved to, by id and
-    slug. No write answers one now."""
+    """A warning a write answers about an old field it leaned on — ``field``, the forge of the record written, by id
+    and slug, and a ``message`` naming what the field resolved to."""
 
     field: str
     forge_id: str

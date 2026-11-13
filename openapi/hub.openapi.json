@@ -6758,6 +6758,595 @@
         "title": "ContradictoryPlacementProblem",
         "type": "object"
       },
+      "CredentialAuthorityTakenProblem": {
+        "additionalProperties": true,
+        "description": "Credential ``holder`` on the forge already acts as ``authority``.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "holder": {
+            "title": "Holder",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-authority-taken",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "holder",
+          "authority"
+        ],
+        "title": "CredentialAuthorityTakenProblem",
+        "type": "object"
+      },
+      "CredentialCapabilityMissingProblem": {
+        "additionalProperties": true,
+        "description": "A credential edit would no longer offer what an enabled repository acting with it needs: ``referrers`` lists\neach such repository, and ``missing`` the capabilities they would lose.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "referrers": {
+            "items": {
+              "$ref": "#/components/schemas/RecordReferrer"
+            },
+            "title": "Referrers",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-capability-missing",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "referrers",
+          "missing"
+        ],
+        "title": "CredentialCapabilityMissingProblem",
+        "type": "object"
+      },
+      "CredentialCreateRequest": {
+        "additionalProperties": false,
+        "description": "The ``POST /api/credentials`` body: ``forge`` names the credential's forge by id or slug, ``binding`` how it\nauthenticates, ``secret`` the secret it reads, and ``settings`` the binding's own fields.",
+        "properties": {
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Settings",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "forge",
+          "binding",
+          "secret"
+        ],
+        "title": "CredentialCreateRequest",
+        "type": "object"
+      },
+      "CredentialDocument": {
+        "description": "One credential with every repository and work source naming it, retired ones included.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "forge_name": {
+            "title": "Forge Name",
+            "type": "string"
+          },
+          "forge_slug": {
+            "title": "Forge Slug",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "referrers": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialReferenceView"
+            },
+            "title": "Referrers",
+            "type": "array"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "slug",
+          "name",
+          "forge_id",
+          "forge_slug",
+          "forge_name",
+          "binding",
+          "secret_name",
+          "settings",
+          "authority",
+          "revision",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "retired",
+          "referrers"
+        ],
+        "title": "CredentialDocument",
+        "type": "object"
+      },
+      "CredentialInUseProblem": {
+        "additionalProperties": true,
+        "description": "Enabled records still name the credential; ``referrers`` lists each.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "referrers": {
+            "items": {
+              "$ref": "#/components/schemas/RecordReferrer"
+            },
+            "title": "Referrers",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-in-use",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "referrers"
+        ],
+        "title": "CredentialInUseProblem",
+        "type": "object"
+      },
+      "CredentialNotFoundProblem": {
+        "additionalProperties": true,
+        "description": "A path names a credential the tenant does not hold.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "CredentialNotFoundProblem",
+        "type": "object"
+      },
+      "CredentialPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused. A\ncredential's ``forge`` and ``binding`` never change; a patch naming either is refused.",
+        "properties": {
+          "binding": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding"
+          },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "CredentialPatchRequest",
+        "type": "object"
+      },
+      "CredentialReferenceView": {
+        "description": "A repository or work source naming the credential, by kind, id and slug.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "label"
+        ],
+        "title": "CredentialReferenceView",
+        "type": "object"
+      },
+      "CredentialSlugTakenProblem": {
+        "additionalProperties": true,
+        "description": "Another credential holds ``slug``.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-slug-taken",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "slug"
+        ],
+        "title": "CredentialSlugTakenProblem",
+        "type": "object"
+      },
+      "CredentialSummary": {
+        "description": "One credential \u2014 the ``GET /api/credentials`` listing row and every record verb's view. ``authority`` is what\nits binding acts as, derived from its secret and settings.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "forge_name": {
+            "title": "Forge Name",
+            "type": "string"
+          },
+          "forge_slug": {
+            "title": "Forge Slug",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "slug",
+          "name",
+          "forge_id",
+          "forge_slug",
+          "forge_name",
+          "binding",
+          "secret_name",
+          "settings",
+          "authority",
+          "revision",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "retired"
+        ],
+        "title": "CredentialSummary",
+        "type": "object"
+      },
+      "CredentialsListView": {
+        "description": "Every stored credential by slug \u2014 ``GET /api/credentials``.",
+        "properties": {
+          "credentials": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialSummary"
+            },
+            "title": "Credentials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "credentials"
+        ],
+        "title": "CredentialsListView",
+        "type": "object"
+      },
       "CurrentNodeNotOnGraphProblem": {
         "additionalProperties": true,
         "description": "The chunk stands on a node its own pinned graph does not carry.",
@@ -17796,7 +18385,7 @@
         "type": "object"
       },
       "OldFieldWarning": {
-        "description": "A warning a write once answered about an address field \u2014 ``field``, and the forge it resolved to, by id and\nslug. No write answers one now.",
+        "description": "A warning a write answers about an old field it leaned on \u2014 ``field``, the forge of the record written, by id\nand slug, and a ``message`` naming what the field resolved to.",
         "properties": {
           "field": {
             "title": "Field",
@@ -19926,6 +20515,17 @@
             "title": "Base Branch",
             "type": "string"
           },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
           "forge": {
             "anyOf": [
               {
@@ -19972,8 +20572,16 @@
             "type": "string"
           },
           "secret_name": {
-            "title": "Secret Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "title": "Secret Name"
           },
           "slug": {
             "title": "Slug",
@@ -19984,8 +20592,7 @@
           "slug",
           "owner",
           "repo",
-          "base_branch",
-          "secret_name"
+          "base_branch"
         ],
         "title": "RepositoryCreateRequest",
         "type": "object"
@@ -20237,6 +20844,17 @@
             ],
             "title": "Base Branch"
           },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
           "forge": {
             "anyOf": [
               {
@@ -20311,6 +20929,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Secret Name"
           },
           "slug": {
@@ -20398,6 +21017,39 @@
             ],
             "title": "Created By Name"
           },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id"
+          },
+          "credential_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Name"
+          },
+          "credential_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Slug"
+          },
           "forge_id": {
             "title": "Forge Id",
             "type": "string"
@@ -20451,6 +21103,7 @@
             "type": "integer"
           },
           "secret_name": {
+            "deprecated": true,
             "title": "Secret Name",
             "type": "string"
           },
@@ -20460,7 +21113,6 @@
           },
           "warnings": {
             "default": [],
-            "deprecated": true,
             "items": {
               "$ref": "#/components/schemas/OldFieldWarning"
             },
@@ -20487,6 +21139,9 @@
           "created_by",
           "created_by_name",
           "retired",
+          "credential_id",
+          "credential_slug",
+          "credential_name",
           "warnings"
         ],
         "title": "RepositorySummary",
@@ -29891,6 +30546,17 @@
             "title": "Annotate",
             "type": "boolean"
           },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
           "forge": {
             "anyOf": [
               {
@@ -29930,6 +30596,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Secret"
           },
           "slug": {
@@ -30134,6 +30801,17 @@
             ],
             "title": "Annotate"
           },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
           "forge": {
             "anyOf": [
               {
@@ -30187,6 +30865,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Secret"
           },
           "slug": {
@@ -30288,6 +30967,39 @@
             ],
             "title": "Created By Name"
           },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id"
+          },
+          "credential_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Name"
+          },
+          "credential_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Slug"
+          },
           "edit": {
             "title": "Edit",
             "type": "boolean"
@@ -30376,6 +31088,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Secret"
           },
           "slug": {
@@ -30391,7 +31104,6 @@
           },
           "warnings": {
             "default": [],
-            "deprecated": true,
             "items": {
               "$ref": "#/components/schemas/OldFieldWarning"
             },
@@ -30428,6 +31140,9 @@
           "created_by_name",
           "retired",
           "built_in",
+          "credential_id",
+          "credential_slug",
+          "credential_name",
           "warnings"
         ],
         "title": "WorkSourceSummary",
@@ -41047,6 +41762,814 @@
         "summary": "Get Schema",
         "tags": [
           "config"
+        ]
+      }
+    },
+    "/api/credentials": {
+      "get": {
+        "description": "Every stored credential by slug, retired ones hidden unless `include_retired`.",
+        "operationId": "list_credentials_api_credentials_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialsListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "List Credentials",
+        "tags": [
+          "credentials"
+        ]
+      },
+      "post": {
+        "description": "Create a credential at revision 1 on the forge `forge` names, under `binding`, reading `secret`; its `name` is\nits `slug` when omitted. 422 naming the field for a malformed `slug` or `name`, with the code\n`credential_binding_unknown` for a binding not known, `credential_forge_kind_mismatch` for a forge of another kind\nthan the binding's, `credential_settings_invalid` for settings the binding refuses, `forge_unavailable` for an\nunknown or retired forge, and `secret_unavailable` for an unknown or retired secret; 409 for a slug some credential\nholds, or an authority another credential on the forge acts as, naming it.",
+        "operationId": "create_credential_api_credentials_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialSlugTakenProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialAuthorityTakenProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Create Credential",
+        "tags": [
+          "credentials"
+        ]
+      }
+    },
+    "/api/credentials/{credential}": {
+      "get": {
+        "description": "One credential by id, current slug or former slug, retired or not, with every repository and work source\nnaming it. 404 on an unknown credential.",
+        "operationId": "get_credential_api_credentials__credential__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "title": "Credential",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Get Credential",
+        "tags": [
+          "credentials"
+        ]
+      },
+      "patch": {
+        "description": "Apply only the fields present; a patch that changes nothing writes nothing, and a slug that changes keeps\nresolving to the credential until another claims it. A new `secret` is written to every record acting with the\ncredential. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some credential holds,\nor a taken authority; 422 naming the field, coded as on create, `credential_binding_immutable` for a `forge` or\n`binding`, and `forge_capability_missing` for settings that would no longer offer what an enabled repository\nacting with the credential needs, listing each.",
+        "operationId": "patch_credential_api_credentials__credential__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "title": "Credential",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialSlugTakenProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialAuthorityTakenProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialCapabilityMissingProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Patch Credential",
+        "tags": [
+          "credentials"
+        ]
+      }
+    },
+    "/api/credentials/{credential}/enable": {
+      "post": {
+        "description": "Enable a retired credential; enabling an enabled one changes nothing. 404 unknown, 409 for a stale `If-Match`,\n422 when its forge or secret has since been retired.",
+        "operationId": "enable_credential_api_credentials__credential__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "title": "Credential",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Enable Credential",
+        "tags": [
+          "credentials"
+        ]
+      }
+    },
+    "/api/credentials/{credential}/retire": {
+      "post": {
+        "description": "Retire a credential only when no enabled repository or work source names it; retiring a retired credential\nchanges nothing. 404 unknown; 409 for a stale `If-Match`, or naming each enabled record still naming it.",
+        "operationId": "retire_credential_api_credentials__credential__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "title": "Credential",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialInUseProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Retire Credential",
+        "tags": [
+          "credentials"
         ]
       }
     },
@@ -58439,7 +59962,7 @@
         ]
       },
       "post": {
-        "description": "Store a new repository at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422\nnaming the field for a malformed `slug` or `name`, a blank field, or a missing or retired secret, with the code\n`forge_required` for no `forge`, `forge_unavailable` for an unknown or retired forge, and `field_moved_to_forge`\nfor a `forge_api_url`, which the forge carries \u2014 naming that forge where one can be told; 409 for a slug some\nrepository holds or a taken `(forge, owner, repo)`, naming the holder.",
+        "description": "Store a new repository at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422\nnaming the field for a malformed `slug` or `name`, a blank field, or a missing or retired secret, with the code\n`forge_required` for no `forge`, `forge_unavailable` for an unknown or retired forge, and `field_moved_to_forge`\nfor a `forge_api_url`, which the forge carries \u2014 naming that forge where one can be told; 409 for a slug some\nrepository holds or a taken `(forge, owner, repo)`, naming the holder.\n\nThe repository acts with the credential `credential` names, or the `github.token` credential reading the\ndeprecated `secret_name` on the forge \u2014 created when there is none, and answered with a `Deprecation` header and\na `warnings` entry. 422 coded `credential_unavailable` for an unknown or retired credential,\n`credential_forge_mismatch` for one of another forge, `credential_conflict` for a `secret_name` that is not the\ncredential's secret, and `forge_capability_missing` for a landing policy the credential cannot honour.",
         "operationId": "create_repository_api_repositories_post",
         "parameters": [
           {
@@ -58672,7 +60195,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other\nfield. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until\nanother claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository\nholds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the\nrepository at a forge.",
+        "description": "Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other\nfield. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until\nanother claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository\nholds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the\nrepository at a forge, and `credential` at a credential, resolved and refused as on create; a deprecated\n`secret_name` other than the repository's resolves as on create. Moving the forge, or changing `secret_name`, of a\nrepository acting with a credential needs a `credential` too: 422 `credential_forge_mismatch` or\n`credential_conflict` without one.",
         "operationId": "patch_repository_api_repositories__repository__patch",
         "parameters": [
           {
@@ -66476,7 +67999,7 @@
         ]
       },
       "post": {
-        "description": "Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422\nnaming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or\nlocator, or a missing or retired secret, with the code `forge_required` for no `forge`, `forge_unavailable` for an\nunknown or retired forge, `forge_kind_mismatch` for a forge of another kind than the provider, and\n`field_moved_to_forge` for an `api_base` or `web_base`, which the forge carries \u2014 naming that forge where one can\nbe told; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.",
+        "description": "Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422\nnaming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or\nlocator, or a missing or retired secret, with the code `forge_required` for no `forge`, `forge_unavailable` for an\nunknown or retired forge, `forge_kind_mismatch` for a forge of another kind than the provider, and\n`field_moved_to_forge` for an `api_base` or `web_base`, which the forge carries \u2014 naming that forge where one can\nbe told; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.\n\nThe source acts with the credential `credential` names, or the `github.token` credential reading the deprecated\n`secret` on the forge \u2014 created when there is none, and answered with a `Deprecation` header and a `warnings`\nentry; a provider that acts with a credential needs one of them. 422 coded `credential_unavailable` for an unknown\nor retired credential, `credential_forge_mismatch` for one of another forge, `credential_binding_unsupported` for\na binding the provider cannot act with, and `credential_conflict` for a `secret` that is not the credential's\nsecret.",
         "operationId": "create_work_source_api_work_sources_post",
         "parameters": [
           {
@@ -66709,7 +68232,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until\nanother claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work\nsource holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,\na `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at\na forge.",
+        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until\nanother claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work\nsource holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,\na `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at\na forge, and `credential` at a credential, resolved and refused as on create; a deprecated `secret` other than the\nsource's resolves as on create. Moving the forge, or changing `secret`, of a source acting with a credential needs\na `credential` too: 422 `credential_forge_mismatch` or `credential_conflict` without one.",
         "operationId": "patch_work_source_api_work_sources__source__patch",
         "parameters": [
           {

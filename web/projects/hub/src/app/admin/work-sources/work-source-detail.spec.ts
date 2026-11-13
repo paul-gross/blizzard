@@ -21,6 +21,9 @@ const JIRA: WorkSourceSummary = {
   forge_slug: 'github',
   forge_name: 'GitHub',
   warnings: [],
+  credential_id: null,
+  credential_slug: null,
+  credential_name: null,
   work_source_id: 'wsrc_j',
   slug: 'jira',
   name: 'Acme Jira',
@@ -36,7 +39,7 @@ const JIRA: WorkSourceSummary = {
   built_in: false,
   retired: false,
 };
-const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
+const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], credential_id: null, credential_slug: null, credential_name: null, name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
 const HISTORY = configChangesPage({
   changes: [
     configChangeView({

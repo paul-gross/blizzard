@@ -11,7 +11,6 @@ import httpx2
 from blizzard.auth_core import Role
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.credentials import CredentialEdit
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -203,6 +202,8 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     run = t.keep("run_chunk_id", _ok(c.post(f"/api/routines/{routine['routine_id']}/run", json={}), 201)["chunk_id"])
     _ok(c.post(f"/api/chunks/{run}/promote"), 202)
     t.keep("secret", _ok(c.post("/api/secrets", json={"name": f"{label}-secret", "value": "v"}), 201)["name"])
+    # A secret no credential reads yet, for a credential created in the tenant's own name.
+    t.keep("spare_secret", _ok(c.post("/api/secrets", json={"name": f"{label}-spare", "value": "v"}), 201)["name"])
     repository = {
         "slug": f"{label}-repo",
         "forge": ensure_fixture_forge(c, "https://forge.example"),
@@ -239,17 +240,11 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         "secret": f"{label}-secret",
     }
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
-    # The repository's secret resolved to a credential; a credential has no route yet, so it is renamed through the
-    # tenant's own configured-record writer.
-    resolved = harness.services.repository_records.get(created_repository["repository_id"])
-    assert resolved is not None and resolved.fields.credential_id is not None
-    named = harness.services.credential_records.get(resolved.fields.credential_id)
-    assert named is not None
-    credential = harness.services.config_authoring.edit_credential(
-        named, CredentialEdit(slug=f"{label}-credential"), ChangeContext(actor=f"{label}-operator", door=Door.API)
-    )
-    t.keep("credential", credential.credential_id)
-    t.markers.add(credential.slug)
+    # The repository's secret resolved to a credential, renamed so that no tenant's slug repeats across them.
+    credential_id = created_repository["credential_id"]
+    renamed = _ok(c.patch(f"/api/credentials/{credential_id}", json={"slug": f"{label}-credential"}), 200)
+    t.keep("credential", credential_id)
+    t.markers.add(renamed["slug"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(
         t.keep("finding_id", f"fin_{label}"),
         project_id=default_project(hub.engine, harness.tenant),

@@ -234,4 +234,4 @@ def test_a_null_forge_is_422_on_forge_and_changes_nothing(hub: HubHarness) -> No
 
         assert refused.status_code == 422, refused.text
         assert [(d["loc"], d["msg"]) for d in refused.json()["detail"]] == [(["body", "forge"], "must not be null")]
-        assert hub.client.get(url).json() == held
+        assert hub.client.get(url).json() == {**held, "warnings": []}

@@ -4127,6 +4127,423 @@ export type ContradictoryPlacementProblem = {
 };
 
 /**
+ * CredentialAuthorityTakenProblem
+ *
+ * Credential ``holder`` on the forge already acts as ``authority``.
+ */
+export type CredentialAuthorityTakenProblem = {
+    /**
+     * Authority
+     */
+    authority: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Holder
+     */
+    holder: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-authority-taken';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialCapabilityMissingProblem
+ *
+ * A credential edit would no longer offer what an enabled repository acting with it needs: ``referrers`` lists
+ * each such repository, and ``missing`` the capabilities they would lose.
+ */
+export type CredentialCapabilityMissingProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Missing
+     */
+    missing: Array<string>;
+    /**
+     * Referrers
+     */
+    referrers: Array<RecordReferrer>;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-capability-missing';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialCreateRequest
+ *
+ * The ``POST /api/credentials`` body: ``forge`` names the credential's forge by id or slug, ``binding`` how it
+ * authenticates, ``secret`` the secret it reads, and ``settings`` the binding's own fields.
+ */
+export type CredentialCreateRequest = {
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Forge
+     */
+    forge: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Secret
+     */
+    secret: string;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * CredentialDocument
+ *
+ * One credential with every repository and work source naming it, retired ones included.
+ */
+export type CredentialDocument = {
+    /**
+     * Authority
+     */
+    authority: string;
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created By Name
+     */
+    created_by_name: string | null;
+    /**
+     * Credential Id
+     */
+    credential_id: string;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Forge Name
+     */
+    forge_name: string;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Referrers
+     */
+    referrers: Array<CredentialReferenceView>;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * CredentialInUseProblem
+ *
+ * Enabled records still name the credential; ``referrers`` lists each.
+ */
+export type CredentialInUseProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Referrers
+     */
+    referrers: Array<RecordReferrer>;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-in-use';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialNotFoundProblem
+ *
+ * A path names a credential the tenant does not hold.
+ */
+export type CredentialNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialPatchRequest
+ *
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused. A
+ * credential's ``forge`` and ``binding`` never change; a patch naming either is refused.
+ */
+export type CredentialPatchRequest = {
+    /**
+     * Binding
+     */
+    binding?: string | null;
+    /**
+     * Forge
+     */
+    forge?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+};
+
+/**
+ * CredentialReferenceView
+ *
+ * A repository or work source naming the credential, by kind, id and slug.
+ */
+export type CredentialReferenceView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * CredentialSlugTakenProblem
+ *
+ * Another credential holds ``slug``.
+ */
+export type CredentialSlugTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-slug-taken';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialSummary
+ *
+ * One credential — the ``GET /api/credentials`` listing row and every record verb's view. ``authority`` is what
+ * its binding acts as, derived from its secret and settings.
+ */
+export type CredentialSummary = {
+    /**
+     * Authority
+     */
+    authority: string;
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created By Name
+     */
+    created_by_name: string | null;
+    /**
+     * Credential Id
+     */
+    credential_id: string;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Forge Name
+     */
+    forge_name: string;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * CredentialsListView
+ *
+ * Every stored credential by slug — ``GET /api/credentials``.
+ */
+export type CredentialsListView = {
+    /**
+     * Credentials
+     */
+    credentials: Array<CredentialSummary>;
+};
+
+/**
  * CurrentNodeNotOnGraphProblem
  *
  * The chunk stands on a node its own pinned graph does not carry.
@@ -11213,8 +11630,8 @@ export type ObservedFindingView = {
 /**
  * OldFieldWarning
  *
- * A warning a write once answered about an address field — ``field``, and the forge it resolved to, by id and
- * slug. No write answers one now.
+ * A warning a write answers about an old field it leaned on — ``field``, the forge of the record written, by id
+ * and slug, and a ``message`` naming what the field resolved to.
  */
 export type OldFieldWarning = {
     /**
@@ -12646,6 +13063,10 @@ export type RepositoryCreateRequest = {
      */
     base_branch: string;
     /**
+     * Credential
+     */
+    credential?: string | null;
+    /**
      * Forge
      */
     forge?: string | null;
@@ -12668,8 +13089,10 @@ export type RepositoryCreateRequest = {
     repo: string;
     /**
      * Secret Name
+     *
+     * @deprecated
      */
-    secret_name: string;
+    secret_name?: string | null;
     /**
      * Slug
      */
@@ -12842,6 +13265,10 @@ export type RepositoryPatchRequest = {
      */
     base_branch?: string | null;
     /**
+     * Credential
+     */
+    credential?: string | null;
+    /**
      * Forge
      */
     forge?: string | null;
@@ -12864,6 +13291,8 @@ export type RepositoryPatchRequest = {
     repo?: string | null;
     /**
      * Secret Name
+     *
+     * @deprecated
      */
     secret_name?: string | null;
     /**
@@ -12929,6 +13358,18 @@ export type RepositorySummary = {
      */
     created_by_name: string | null;
     /**
+     * Credential Id
+     */
+    credential_id: string | null;
+    /**
+     * Credential Name
+     */
+    credential_name: string | null;
+    /**
+     * Credential Slug
+     */
+    credential_slug: string | null;
+    /**
      * Forge Id
      */
     forge_id: string;
@@ -12974,6 +13415,8 @@ export type RepositorySummary = {
     revision: number;
     /**
      * Secret Name
+     *
+     * @deprecated
      */
     secret_name: string;
     /**
@@ -12982,8 +13425,6 @@ export type RepositorySummary = {
     slug: string;
     /**
      * Warnings
-     *
-     * @deprecated
      */
     warnings: Array<OldFieldWarning>;
 };
@@ -19039,6 +19480,10 @@ export type WorkSourceCreateRequest = {
      */
     annotate?: boolean;
     /**
+     * Credential
+     */
+    credential?: string | null;
+    /**
      * Forge
      */
     forge?: string | null;
@@ -19056,6 +19501,8 @@ export type WorkSourceCreateRequest = {
     provider: string;
     /**
      * Secret
+     *
+     * @deprecated
      */
     secret?: string | null;
     /**
@@ -19200,6 +19647,10 @@ export type WorkSourcePatchRequest = {
      */
     annotate?: boolean | null;
     /**
+     * Credential
+     */
+    credential?: string | null;
+    /**
      * Forge
      */
     forge?: string | null;
@@ -19217,6 +19668,8 @@ export type WorkSourcePatchRequest = {
     provider?: string | null;
     /**
      * Secret
+     *
+     * @deprecated
      */
     secret?: string | null;
     /**
@@ -19284,6 +19737,18 @@ export type WorkSourceSummary = {
      */
     created_by_name: string | null;
     /**
+     * Credential Id
+     */
+    credential_id: string | null;
+    /**
+     * Credential Name
+     */
+    credential_name: string | null;
+    /**
+     * Credential Slug
+     */
+    credential_slug: string | null;
+    /**
      * Edit
      */
     edit: boolean;
@@ -19321,6 +19786,8 @@ export type WorkSourceSummary = {
     revision: number | null;
     /**
      * Secret
+     *
+     * @deprecated
      */
     secret: string | null;
     /**
@@ -19329,8 +19796,6 @@ export type WorkSourceSummary = {
     slug: string | null;
     /**
      * Warnings
-     *
-     * @deprecated
      */
     warnings: Array<OldFieldWarning>;
     /**
@@ -23781,6 +24246,353 @@ export type GetSchemaApiConfigSchemaKindGetResponses = {
 };
 
 export type GetSchemaApiConfigSchemaKindGetResponse = GetSchemaApiConfigSchemaKindGetResponses[keyof GetSchemaApiConfigSchemaKindGetResponses];
+
+export type ListCredentialsApiCredentialsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/credentials';
+};
+
+export type ListCredentialsApiCredentialsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListCredentialsApiCredentialsGetError = ListCredentialsApiCredentialsGetErrors[keyof ListCredentialsApiCredentialsGetErrors];
+
+export type ListCredentialsApiCredentialsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialsListView;
+};
+
+export type ListCredentialsApiCredentialsGetResponse = ListCredentialsApiCredentialsGetResponses[keyof ListCredentialsApiCredentialsGetResponses];
+
+export type CreateCredentialApiCredentialsPostData = {
+    body: CredentialCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/credentials';
+};
+
+export type CreateCredentialApiCredentialsPostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | CredentialSlugTakenProblem | CredentialAuthorityTakenProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type CreateCredentialApiCredentialsPostError = CreateCredentialApiCredentialsPostErrors[keyof CreateCredentialApiCredentialsPostErrors];
+
+export type CreateCredentialApiCredentialsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CredentialSummary;
+};
+
+export type CreateCredentialApiCredentialsPostResponse = CreateCredentialApiCredentialsPostResponses[keyof CreateCredentialApiCredentialsPostResponses];
+
+export type GetCredentialApiCredentialsCredentialGetData = {
+    body?: never;
+    path: {
+        /**
+         * Credential
+         */
+        credential: string;
+    };
+    query?: never;
+    url: '/api/credentials/{credential}';
+};
+
+export type GetCredentialApiCredentialsCredentialGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | CredentialNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetCredentialApiCredentialsCredentialGetError = GetCredentialApiCredentialsCredentialGetErrors[keyof GetCredentialApiCredentialsCredentialGetErrors];
+
+export type GetCredentialApiCredentialsCredentialGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialDocument;
+};
+
+export type GetCredentialApiCredentialsCredentialGetResponse = GetCredentialApiCredentialsCredentialGetResponses[keyof GetCredentialApiCredentialsCredentialGetResponses];
+
+export type PatchCredentialApiCredentialsCredentialPatchData = {
+    body: CredentialPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Credential
+         */
+        credential: string;
+    };
+    query?: never;
+    url: '/api/credentials/{credential}';
+};
+
+export type PatchCredentialApiCredentialsCredentialPatchErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | CredentialNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem | CredentialSlugTakenProblem | CredentialAuthorityTakenProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PatchCredentialApiCredentialsCredentialPatchError = PatchCredentialApiCredentialsCredentialPatchErrors[keyof PatchCredentialApiCredentialsCredentialPatchErrors];
+
+export type PatchCredentialApiCredentialsCredentialPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialSummary;
+};
+
+export type PatchCredentialApiCredentialsCredentialPatchResponse = PatchCredentialApiCredentialsCredentialPatchResponses[keyof PatchCredentialApiCredentialsCredentialPatchResponses];
+
+export type EnableCredentialApiCredentialsCredentialEnablePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Credential
+         */
+        credential: string;
+    };
+    query?: never;
+    url: '/api/credentials/{credential}/enable';
+};
+
+export type EnableCredentialApiCredentialsCredentialEnablePostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | CredentialNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EnableCredentialApiCredentialsCredentialEnablePostError = EnableCredentialApiCredentialsCredentialEnablePostErrors[keyof EnableCredentialApiCredentialsCredentialEnablePostErrors];
+
+export type EnableCredentialApiCredentialsCredentialEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialSummary;
+};
+
+export type EnableCredentialApiCredentialsCredentialEnablePostResponse = EnableCredentialApiCredentialsCredentialEnablePostResponses[keyof EnableCredentialApiCredentialsCredentialEnablePostResponses];
+
+export type RetireCredentialApiCredentialsCredentialRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Credential
+         */
+        credential: string;
+    };
+    query?: never;
+    url: '/api/credentials/{credential}/retire';
+};
+
+export type RetireCredentialApiCredentialsCredentialRetirePostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | CredentialNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem | CredentialInUseProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type RetireCredentialApiCredentialsCredentialRetirePostError = RetireCredentialApiCredentialsCredentialRetirePostErrors[keyof RetireCredentialApiCredentialsCredentialRetirePostErrors];
+
+export type RetireCredentialApiCredentialsCredentialRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialSummary;
+};
+
+export type RetireCredentialApiCredentialsCredentialRetirePostResponse = RetireCredentialApiCredentialsCredentialRetirePostResponses[keyof RetireCredentialApiCredentialsCredentialRetirePostResponses];
 
 export type ListDecisionsApiDecisionsGetData = {
     body?: never;

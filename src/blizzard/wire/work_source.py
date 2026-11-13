@@ -31,15 +31,20 @@ class WorkSourceSummary(WireModel):
     forge_id: str | None = None
     forge_slug: str | None = None
     forge_name: str | None = None
-    secret: str | None = None
+    #: The secret of the credential the source acts with — deprecated; read ``credential_id``.
+    secret: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     revision: int | None = None
     created_at: str | None = None
     created_by: str | None = None
     created_by_name: str | None = None
     retired: bool = False
     built_in: bool = False
-    #: Always empty.
-    warnings: list[OldFieldWarning] = Field(default=[], json_schema_extra=DEPRECATED_FIELD)
+    #: The credential the record acts with, by id, slug and name — ``None`` while it names none.
+    credential_id: str | None = None
+    credential_slug: str | None = None
+    credential_name: str | None = None
+    #: One entry per old field the write leaned on; empty on a read.
+    warnings: list[OldFieldWarning] = []
 
 
 #: The address fields a work source's forge now carries.
@@ -58,7 +63,12 @@ class WorkSourceCreateRequest(MovedFieldsRequest):
     locator: str
     forge: str | None = None
     annotate: bool = False
-    secret: str | None = None
+    #: The credential the source acts with, by id or slug — this or ``secret`` is needed for a provider that acts
+    #: with one.
+    credential: str | None = None
+    #: Deprecated: a secret, resolved to the ``github.token`` credential reading it on the forge — send
+    #: ``credential``.
+    secret: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
 
 
 class WorkSourcePatchRequest(MovedFieldsRequest):
@@ -74,7 +84,10 @@ class WorkSourcePatchRequest(MovedFieldsRequest):
     locator: str | None = None
     forge: str | None = None
     annotate: bool | None = None
-    secret: str | None = None
+    #: Re-points the source at a credential, by id or slug.
+    credential: str | None = None
+    #: Deprecated: a secret, resolved as on create — send ``credential``.
+    secret: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
 
 
 class WorkSourcesListView(WireModel):

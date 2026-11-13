@@ -5,6 +5,7 @@ from blizzard.wire.auth import AUTH_PROBLEM_TYPES
 from blizzard.wire.cadence import CADENCE_PROBLEM_TYPES
 from blizzard.wire.chunk import CHUNK_PROBLEM_TYPES
 from blizzard.wire.config import CONFIG_PROBLEM_TYPES
+from blizzard.wire.credential import CREDENTIAL_PROBLEM_TYPES
 from blizzard.wire.decision import DECISION_PROBLEM_TYPES
 from blizzard.wire.egress import EGRESS_PROBLEM_TYPES
 from blizzard.wire.finding import FINDING_PROBLEM_TYPES
@@ -47,6 +48,7 @@ ALL_PROBLEM_TYPES: frozenset[str] = (
     | CADENCE_PROBLEM_TYPES
     | CHUNK_PROBLEM_TYPES
     | CONFIG_PROBLEM_TYPES
+    | CREDENTIAL_PROBLEM_TYPES
     | DECISION_PROBLEM_TYPES
     | EGRESS_PROBLEM_TYPES
     | FINDING_PROBLEM_TYPES
