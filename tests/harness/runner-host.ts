@@ -115,9 +115,9 @@ export interface RunnerHostOptions {
    */
   runnerAdopted: { name: string; runnerId: string; token: string } | undefined;
   /**
-   * A directory the test already initialized, which the host boots over instead of one the fixture scaffolds: `init` and
-   * `add` are skipped, the runners and tokens are read from its host file and `.env`, and the directory is left to its
-   * owner when the host is disposed.
+   * A directory the test already initialized, which the host boots over instead of one the fixture creates: enrollment
+   * and `add` are skipped, local runtime files are reconciled when the profile selects harnesses, runners and tokens are read from its
+   * host file and `.env`, and the directory is left to its owner when the host is disposed.
    */
   runnerDir: string | undefined;
   /** Forge-backed bare origins supplied by repositories the test owns, replacing the fixture's same-named origins. */
@@ -575,6 +575,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
           initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
           if (hostId !== undefined) ctx.ledger.add('host', hostId);
+          for (const entry of runnerEntries(readHostFile(dir))) ctx.ledger.add('runner', entry.id);
         } else {
           initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
         }
@@ -590,6 +591,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           ]);
           const agents = entry.agents === undefined ? [] : ['--agents', String(entry.agents)];
           await run(runner, ['add', name, '--dir', dir, ...(projects.length > 0 ? projects : ['--project', 'default']), ...agents], home);
+          for (const entry of runnerEntries(readHostFile(dir))) ctx.ledger.add('runner', entry.id);
         }
         timings.addMs = Date.now() - started;
       } else {
@@ -597,6 +599,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
         if (first === undefined) throw new Error(`runnerDir ${ownDir} holds no runner in its host file; initialize it before booting a host over it`);
         defaultRunner = first.name;
         initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
+        for (const entry of runnerEntries(readHostFile(dir))) ctx.ledger.add('runner', entry.id);
       }
 
       // The overlay: the fixture's baseline first, then the profile, over the file the CLI wrote.
@@ -666,9 +669,12 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
+      // A profile can select a different harness after init; reconcile locally, without another enrollment.
+      if (((profile.runner ?? []) as TomlTable[]).some((entry) => 'opencode' in entry || 'claude_code' in entry || 'codex' in entry)) {
+        await run(requireBinary(binDir(), 'python'), [path.join(BLIZZARD_ROOT, 'tests', 'support', 'reconcile_runner_runtime.py'), dir], home);
+      }
+
       const entries = runnerEntries(readHostFile(dir));
-      // An adopted runner is the test's own minting, already in its ledger.
-      if (adopted === undefined) for (const entry of entries) ctx.ledger.add('runner', entry.id);
 
       // The default runner's root, which the mock worker reads as `BZ_TRANSCRIPTS_ROOT`; a `runnerEnv` naming it wins.
       const transcriptsRoot = (): string => {
