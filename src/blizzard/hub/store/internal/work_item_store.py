@@ -30,7 +30,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
-from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
+from blizzard.hub.domain.operations.delete import IHubItemWithdrawals, work_item_lock
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -60,8 +60,8 @@ class WorkItemStore:
     def store(self) -> ScopedConnections:
         return self._store
 
-    def get(self, source: str, ref: str) -> HubWorkItem | None:
-        with self._store.read("get") as conn:
+    def get(self, source: str, ref: str, *, transaction: Transaction | None = None) -> HubWorkItem | None:
+        with connection_in(self._store, transaction, "get") as conn:
             row = conn.execute(
                 self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             ).one_or_none()
@@ -257,33 +257,64 @@ class WorkItemStore:
         return work_item_id
 
     def edit(
-        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> HubWorkItem | None:
-        with self._store.write("edit") as conn:
-            result = conn.execute(
-                self._store.update(s.work_items)
-                .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
-                .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
-            )
-            if result.rowcount == 0:
-                return None
-            row = conn.execute(
-                self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
-            ).one()
-        return self._record(row)
+        self,
+        source: str,
+        ref: str,
+        *,
+        title: str,
+        body: str,
+        stated_priority: str | None,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> HubWorkItem:
+        conn = connection_for(self._store, transaction, key=work_item_lock(WorkRef(source=source, ref=ref)))
+        conn.execute(
+            statements_of(conn)
+            .update(s.work_items)
+            .where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+            .values(title=title, body=body, stated_priority=stated_priority, edited_at=at)
+        )
+        return self._fetch(conn, source, ref)
 
-    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> HubWorkItem:
-        with self._store.write("close") as conn:
-            self._close_conn(conn, source, ref, closure=closure, at=at)
-            row = conn.execute(
-                self._store.select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
-            ).one()
-        return self._record(row)
+    def close(
+        self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime, transaction: LockedTransaction
+    ) -> HubWorkItem:
+        conn = connection_for(self._store, transaction, key=work_item_lock(WorkRef(source=source, ref=ref)))
+        self._close_conn(conn, source, ref, closure=closure, at=at)
+        return self._fetch(conn, source, ref)
 
-    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
-        connection = connection_in(self._store, transaction, "withdraw_open", write=True)
-        with connection as conn:
-            self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
+        conn = connection_for(self._store, transaction, key=work_item_lock(pointer))
+        self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
+
+    def closures(
+        self, pointers: Sequence[WorkRef], *, transaction: Transaction | None = None
+    ) -> dict[WorkRef, WorkItemClosure | None]:
+        if not pointers:
+            return {}
+        refs_by_source: dict[str, list[str]] = defaultdict(list)
+        for pointer in pointers:
+            refs_by_source[pointer.source].append(pointer.ref)
+        result: dict[WorkRef, WorkItemClosure | None] = {}
+        with connection_in(self._store, transaction, "closures") as conn:
+            for source, refs in refs_by_source.items():
+                for batch in id_batches(refs):
+                    rows = conn.execute(
+                        statements_of(conn)
+                        .select(s.work_items)
+                        .where(s.work_items.c.source == source, s.work_items.c.ref.in_(batch))
+                    ).all()
+                    for row in rows:
+                        closure = WorkItemClosure(row.closure) if row.closure is not None else None
+                        result[WorkRef(source=row.source, ref=row.ref)] = closure
+        return result
+
+    @staticmethod
+    def _fetch(conn: Connection, source: str, ref: str) -> HubWorkItem:
+        row = conn.execute(
+            statements_of(conn).select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
+        ).one()
+        return WorkItemStore._record(row)
 
     def accept_create(
         self,
@@ -342,12 +373,11 @@ class WorkItemStore:
 
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:
-        """Closes an open item, on the caller's connection, inside the caller's transaction.
-        Closing an item already closed, or one that never existed, is a silent no-op."""
+        """Writes the item's closure on the caller's connection, inside the caller's transaction."""
         conn.execute(
             statements_of(conn)
             .update(s.work_items)
-            .where(s.work_items.c.source == source, s.work_items.c.ref == ref, s.work_items.c.closed_at.is_(None))
+            .where(s.work_items.c.source == source, s.work_items.c.ref == ref)
             .values(closed_at=at, closure=closure.value)
         )
 

@@ -28,6 +28,7 @@ class LockNamespace(StrEnum):
     TRANSCRIPT_LANE = "transcript_lane"
     URGENCY = "urgency"
     URGENCY_ORDER = "urgency_order"
+    WORK_ITEM = "work_item"
     WORK_REF = "work_ref"
 
 

@@ -9,24 +9,47 @@ from __future__ import annotations
 
 # The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
+import json
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts, ChunkVerb, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
+
+
+def work_item_lock(pointer: WorkRef) -> LockKey:
+    """The keyed lock on the hub work item ``pointer`` names (``bzh:transaction-graduation``), keyed injectively on
+    ``(source, ref)`` as a JSON array: every unit editing, closing, or withdrawing the item declares it, and decides
+    on the item re-read under it."""
+    return LockKey(LockNamespace.WORK_ITEM, json.dumps([pointer.source, pointer.ref]))
 
 
 class IHubItemWithdrawals(Protocol):
-    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None: ...
+    """The hub items a chunk delete withdraws: it reads their closures and withdraws the open ones, each under the
+    item's :func:`work_item_lock`."""
+
+    def closures(
+        self, pointers: Sequence[WorkRef], *, transaction: Transaction | None = None
+    ) -> Mapping[WorkRef, WorkItemClosure | None]:
+        """Each existing item's closure, ``None`` for an open one, keyed by pointer; a missing item is omitted.
+        Joins ``transaction`` when given."""
+        ...
+
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
+        """Write ``pointer``'s withdrawn closure unconditionally in ``transaction``, which must hold its
+        :func:`work_item_lock` — the caller has re-read it open under that key."""
+        ...
 
 
 class ChunkNotDeletable(ValueError):
@@ -112,9 +135,22 @@ class DeleteService:
         ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for one already
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
-        — every guard read taken fresh under the row lock."""
+        — every guard read taken fresh under the row lock. Each run declares the
+        :func:`work_item_lock` of every hub ref it knows; a re-read naming one outside
+        them runs the delete again over the union, having written nothing."""
+        pointers = frozenset(_hub_refs(chunk))
+        while True:
+            outcome = self._delete_locked(chunk, pointers, by=by)
+            if isinstance(outcome, int):
+                return outcome
+            pointers = pointers | outcome
+
+    def _delete_locked(self, chunk: Chunk, pointers: frozenset[WorkRef], *, by: str) -> int | frozenset[WorkRef]:
+        """One run of the delete's unit over ``pointers``: the deleted fact's id, or — writing nothing — the hub
+        refs the re-read found outside the declared keys."""
+        keys = sorted(work_item_lock(p) for p in pointers)
         with self._cycle_lock, self._transactions.begin() as transaction:
-            locked = transaction.lock_chunks([chunk.chunk_id])
+            locked = transaction.lock_set(chunks=[chunk.chunk_id], keys=keys)
             facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
@@ -125,10 +161,20 @@ class DeleteService:
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.
             current = self._record.get(chunk.chunk_id, transaction=locked) or chunk
+            held = _hub_refs(current)
+            uncovered = frozenset(held) - pointers
+            if uncovered:
+                return uncovered
+            closures = self._items.closures(held, transaction=locked)
             at = self._clock.now()
             deleted_id = self._record.record_deleted(chunk.chunk_id, by=by, at=at, transaction=locked)
             self._dependencies.release_outgoing(chunk.chunk_id, by=by, at=at, transaction=locked)
-            for pointer in current.work_refs:
-                if pointer.source == RESERVED_HUB_SOURCE_NAME:
+            for pointer in held:
+                if pointer in closures and closures[pointer] is None:
                     self._items.withdraw_open(pointer, at=at, transaction=locked)
             return deleted_id
+
+
+def _hub_refs(chunk: Chunk) -> list[WorkRef]:
+    """``chunk``'s ``hub:``-source work refs, in its own order."""
+    return [p for p in chunk.work_refs if p.source == RESERVED_HUB_SOURCE_NAME]

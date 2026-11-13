@@ -59,6 +59,7 @@ from tests.support.scaffolding import (
     seed_work_item,
     stamp,
 )
+from tests.support.work_item_units import close_item
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -242,7 +243,7 @@ def test_fetch_a_withdrawn_ref_raises(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
 
     with pytest.raises(WorkSourceError):
         source.fetch(WorkRef(source="hub", ref=created.ref))
@@ -258,7 +259,7 @@ def test_fetch_a_delivered_ref_still_resolves(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
 
     item = source.fetch(WorkRef(source="hub", ref=created.ref))
     assert item.body == "b"
@@ -298,7 +299,7 @@ def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_pa
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    items.close("hub", withdrawn.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    close_item(items, "hub", withdrawn.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
 
     listed = source.list()
 
@@ -632,7 +633,7 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
     pointer = WorkRef(source="hub", ref=created.ref)
 
     source.close(pointer, trace=None)  # must not raise, must not flip the closure
@@ -732,7 +733,7 @@ def test_close_of_a_withdrawn_item_still_delivers_the_accepted_proposals_live_fi
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
     pointer = WorkRef(source="hub", ref=created.ref)
     proposal_id = _seed_accepted_proposal(engine, pointer=pointer)
 
@@ -892,7 +893,7 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
         chunks.lifecycle.record_stop_locked(handle, f"ch_{created.ref}", by="operator", at=_T0, waiting=())
     stale = items.get("hub", created.ref)
     assert stale is not None and stale.closure is None
-    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
 
     with pytest.raises(WorkItemNotEditable) as caught:
         edits.withdraw(stale, by="operator")
@@ -916,7 +917,7 @@ def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_d
     holder = f"ch_{created.ref}"
     stale = items.get("hub", created.ref)
     assert stale is not None and stale.closure is None
-    items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    close_item(items, "hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
 
     with pytest.raises(WorkItemNotEditable) as caught:
         edits.withdraw(stale, by="operator")
@@ -940,7 +941,7 @@ def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_p
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    withdrawn = items.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
+    withdrawn = close_item(items, "hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_T0)
 
     assert edits.deliver(withdrawn) == withdrawn
     assert items.get("hub", created.ref) == withdrawn

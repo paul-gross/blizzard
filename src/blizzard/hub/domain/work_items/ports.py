@@ -12,8 +12,8 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transacti
 class IReadWorkItemRepository(Protocol):
     """Read-only hub-owned work item operations."""
 
-    def get(self, source: str, ref: str) -> HubWorkItem | None:
-        """Return the item, open or closed, or None if it was never allocated."""
+    def get(self, source: str, ref: str, *, transaction: Transaction | None = None) -> HubWorkItem | None:
+        """Return the item, open or closed, or None if it was never allocated; joins ``transaction`` when given."""
         ...
 
     def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
@@ -69,17 +69,30 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         ...
 
     def edit(
-        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> HubWorkItem | None:
-        """Edit an open item, returning None if it is already closed."""
+        self,
+        source: str,
+        ref: str,
+        *,
+        title: str,
+        body: str,
+        stated_priority: str | None,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> HubWorkItem:
+        """Write the item's fields unconditionally in ``transaction``, which must hold the item's
+        ``work_item_lock``: the caller has re-read it open under that key and decided the edit."""
         ...
 
-    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> HubWorkItem:
-        """Record closure on an open item, once."""
+    def close(
+        self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime, transaction: LockedTransaction
+    ) -> HubWorkItem:
+        """Write the item's closure unconditionally in ``transaction``, which must hold the item's
+        ``work_item_lock``: the caller has re-read it open under that key and decided the close."""
         ...
 
-    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
-        """Withdraw an open item; missing and closed items are no-ops."""
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
+        """Write the item's withdrawn closure unconditionally in ``transaction``, which must hold the item's
+        ``work_item_lock``: the caller has re-read it open under that key."""
         ...
 
     def accept_create(

@@ -2,8 +2,8 @@
 
 Holds the *write* work-item repository, reached only through a work-source binding's
 ``IWorkEditor``/``IWorkCloser``. Orchestration only: legality, the text invariant, and an edit's
-resolution are :mod:`blizzard.hub.domain.work_items.model`'s; this service reads the clock, asks the
-model, writes, and turns a lost write race into the model's refusal."""
+resolution are :mod:`blizzard.hub.domain.work_items.model`'s; this service declares the item's key, re-reads
+the item under it, asks the model, and writes."""
 
 from __future__ import annotations
 
@@ -30,7 +30,12 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
-from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.operations.delete import (
+    ChunkHasDependents,
+    ChunkNotDeletable,
+    DeleteService,
+    work_item_lock,
+)
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.urgency.services import TenantDefault
@@ -42,7 +47,6 @@ from blizzard.hub.domain.work_items.model import (
     WorkItemText,
     WorkItemVerb,
     require_open_for,
-    require_withdrawn,
 )
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
@@ -249,25 +253,26 @@ class WorkItemEditService:
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
     def edit(self, item: HubWorkItem, edit: WorkItemEdit) -> HubWorkItem:
-        """Write ``edit``'s revision of ``item`` — the record this call itself guards — in
-        place; raises :class:`~blizzard.hub.domain.work_items.model.WorkItemNotEditable` when
-        ``item`` already carries a closure, checked here and again on a closure race per
-        :meth:`IWriteWorkItemRepository.edit`."""
+        """Write ``edit``'s revision of ``item`` in place, in a unit declaring its
+        :func:`~blizzard.hub.domain.operations.delete.work_item_lock`; raises
+        :class:`~blizzard.hub.domain.work_items.model.WorkItemNotEditable` when ``item``, re-read under
+        that key, carries a closure."""
         require_open_for(item, WorkItemVerb.EDIT)
-        revision = edit.resolve_against(item)
-        updated = self._items.edit(
-            item.source,
-            item.ref,
-            title=revision.title,
-            body=revision.body,
-            stated_priority=revision.stated_priority,
-            at=self._clock.now(),
-        )
-        if updated is None:
-            current = self._items.get(item.source, item.ref)
-            assert current is not None and current.closure is not None
-            raise WorkItemNotEditable(current.work_item_id, current.closure)
-        return updated
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[work_item_lock(item.pointer)])
+            current = self._items.get(item.source, item.ref, transaction=locked)
+            assert current is not None, "a hub work item is never deleted"
+            require_open_for(current, WorkItemVerb.EDIT)
+            revision = edit.resolve_against(current)
+            return self._items.edit(
+                item.source,
+                item.ref,
+                title=revision.title,
+                body=revision.body,
+                stated_priority=revision.stated_priority,
+                at=self._clock.now(),
+                transaction=locked,
+            )
 
     def withdraw(self, item: HubWorkItem, *, by: str) -> WithdrawnWorkItem:
         """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
@@ -280,9 +285,7 @@ class WorkItemEditService:
         require_open_for(item, WorkItemVerb.WITHDRAW)
         holder = self._work_refs.find_live_holder(item.pointer)
         if holder is None:
-            closed = self._items.close(item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now())
-            require_withdrawn(closed)
-            return WithdrawnWorkItem(item=closed)
+            return WithdrawnWorkItem(item=self._withdraw_unheld(item))
         chunk = self._record.get(holder)
         if chunk is None:
             raise ChunkNotFound(holder)
@@ -303,11 +306,32 @@ class WorkItemEditService:
             raise WithdrawalLostToClosure(updated, withdrawn)
         return withdrawn
 
+    def _withdraw_unheld(self, item: HubWorkItem) -> HubWorkItem:
+        """Close ``item``, which no live chunk holds, as withdrawn in a unit declaring its key, refusing
+        :class:`WorkItemNotEditable` with the closure the re-read under that key finds standing."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[work_item_lock(item.pointer)])
+            current = self._items.get(item.source, item.ref, transaction=locked)
+            assert current is not None, "a hub work item is never deleted"
+            require_open_for(current, WorkItemVerb.WITHDRAW)
+            return self._items.close(
+                item.source, item.ref, closure=WorkItemClosure.WITHDRAWN, at=self._clock.now(), transaction=locked
+            )
+
     def deliver(self, item: HubWorkItem) -> HubWorkItem:
         """Close ``item`` as delivered — the close-intent drainer's own write path. A
         live chunk holding the pointer is the expected caller, not a conflict to block.
-        An item already closed — delivered by an earlier attempt, or withdrawn after its
-        holder landed — is a no-op that writes nothing and keeps its closure."""
+        An item already closed when re-read under its key — delivered by an earlier attempt,
+        or withdrawn after its holder landed — is a no-op that writes nothing and returns
+        the item carrying the closure that stands."""
         if WorkItemState.of(item).on(WorkItemVerb.DELIVER) is Transition.NOOP:
             return item
-        return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[work_item_lock(item.pointer)])
+            current = self._items.get(item.source, item.ref, transaction=locked)
+            assert current is not None, "a hub work item is never deleted"
+            if WorkItemState.of(current).on(WorkItemVerb.DELIVER) is Transition.NOOP:
+                return current
+            return self._items.close(
+                item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now(), transaction=locked
+            )
