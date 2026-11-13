@@ -186,6 +186,7 @@ from blizzard.hub.domain.urgency.ports import (
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.settings.model import IReadHubSettings
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
@@ -206,6 +207,7 @@ from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
@@ -2459,6 +2461,9 @@ HubRecipe = Callable[[HubWorld], object]
 HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
+    (IReadHubSettings, "revision"): lambda w: HubSettingsStore(
+        hub_level_connections(w.engine), w.clock, lambda _: {}
+    ).revision(),
     (IReadUrgencyRepository, "get"): lambda w: w.urgencies.get(w.urgency_id),
     (IReadUrgencyRepository, "get_by_slug"): lambda w: w.urgencies.get_by_slug("census-urgent"),
     (IReadUrgencyRepository, "list_all"): lambda w: w.urgencies.list_all(),
