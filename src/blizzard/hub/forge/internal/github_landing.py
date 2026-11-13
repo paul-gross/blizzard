@@ -29,6 +29,7 @@ from blizzard.hub.forge.landing import (
     ChangeState,
     Check,
     CheckOutcome,
+    CheckSource,
     CommitPresence,
     CommitSummary,
     Comparison,
@@ -125,6 +126,7 @@ _CHANGE = _Call("change", f"GET {_ROUTE}/pulls/{{pull_number}}")
 _UPDATE_FROM_BASE = _Call("update_from_base", f"PUT {_ROUTE}/pulls/{{pull_number}}/update-branch")
 _MERGE = _Call("merge", f"PUT {_ROUTE}/pulls/{{pull_number}}/merge")
 _CHECKS = _Call("checks", f"GET {_ROUTE}/commits/{{ref}}/check-runs")
+_STATUSES = _Call("checks", f"GET {_ROUTE}/commits/{{ref}}/status")
 _RERUN_CHECK = _Call("rerun_check", f"POST {_ROUTE}/actions/jobs/{{job_id}}/rerun")
 
 
@@ -371,29 +373,80 @@ class GitHubLanding:
 
     async def checks(self, ref: str) -> tuple[Check, ...]:
         found: list[Check] = []
-        for page in range(1, _PAGE_MAX + 1):
-            payload = await self._answered(
-                await self._send("GET", f"{self._repo}/commits/{ref}/check-runs?per_page={_PAGE_SIZE}&page={page}"),
-                ForgeObject.REVISION,
-                _CHECKS,
-            )
-            table = as_table(payload)
-            runs = as_list(table.get("check_runs")) if table is not None else None
-            if runs is None:
-                raise ForgeUnavailable(f"unreadable check runs on {ref}")
-            for run in runs:
-                entry = as_table(run)
-                if entry is None:
-                    raise ForgeUnavailable(f"unreadable check runs on {ref}")
-                found.append(_check(entry))
-            if len(runs) < _PAGE_SIZE:
-                break
+        for endpoint, key in (("check-runs", "check_runs"), ("status", "statuses")):
+            seen = 0
+            contexts: set[str] = set()
+            for page in range(1, _PAGE_MAX + 1):
+                payload = await self._answered(
+                    await self._send("GET", f"{self._repo}/commits/{ref}/{endpoint}?per_page={_PAGE_SIZE}&page={page}"),
+                    ForgeObject.REVISION,
+                    _CHECKS if endpoint == "check-runs" else _STATUSES,
+                )
+                table = as_table(payload)
+                entries = as_list(table.get(key)) if table is not None else None
+                if entries is None:
+                    raise ForgeUnavailable(f"unreadable {endpoint} on {ref}")
+                assert table is not None
+                total = table.get("total_count")
+                if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+                    raise ForgeUnavailable(f"unreadable {endpoint} on {ref}")
+                if endpoint == "status" and table.get("state") not in ("success", "failure", "error", "pending"):
+                    raise ForgeUnavailable(f"unreadable status on {ref}")
+                for item in entries:
+                    entry = as_table(item)
+                    name_key = "name" if endpoint == "check-runs" else "context"
+                    if (
+                        entry is None
+                        or not isinstance(entry.get("id"), int)
+                        or not isinstance(entry.get(name_key), str)
+                        or not entry[name_key]
+                    ):
+                        raise ForgeUnavailable(f"unreadable {endpoint} on {ref}")
+                    if endpoint == "status":
+                        state = entry.get("state")
+                        context = entry.get("context")
+                        if (
+                            not isinstance(context, str)
+                            or state not in ("success", "failure", "error", "pending")
+                            or context in contexts
+                        ):
+                            raise ForgeUnavailable(f"unreadable status on {ref}")
+                        contexts.add(context)
+                        target_url = entry.get("target_url")
+                        found.append(
+                            Check(
+                                id=f"status:{entry['id']}",
+                                name=context,
+                                outcome={
+                                    "success": CheckOutcome.PASSED,
+                                    "failure": CheckOutcome.FAILED,
+                                    "error": CheckOutcome.FAILED,
+                                    "pending": CheckOutcome.PENDING,
+                                }[state],
+                                detail=state,
+                                details_url=target_url if isinstance(target_url, str) else None,
+                                source=CheckSource.STATUS,
+                            )
+                        )
+                    else:
+                        found.append(_check(entry))
+                seen += len(entries)
+                if total < seen:
+                    raise ForgeUnavailable(f"unreadable {endpoint} on {ref}")
+                if len(entries) < _PAGE_SIZE:
+                    if seen != total:
+                        raise ForgeUnavailable(f"truncated {endpoint} on {ref}")
+                    break
+            else:
+                raise ForgeUnavailable(f"truncated {endpoint} on {ref}")
         return tuple(found)
 
     async def change_checks(self, number: int) -> tuple[Check, ...]:
         return await self.checks((await self.change(number)).head_revision)
 
     async def rerun_check(self, id: str) -> Rerun:
+        if id.startswith("status:"):
+            return Rerun(RerunOutcome.REFUSED, "commit statuses cannot be rerun")
         # A GitHub Actions check run's id is its job id, and a token can re-run a job; the check-run rerequest
         # route answers only the GitHub App that owns the run. A run that is no Actions job answers 404 or 422.
         response = await self._send("POST", f"{self._repo}/actions/jobs/{id}/rerun", write=True)

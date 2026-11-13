@@ -92,6 +92,7 @@ def _columns(record: ConfiguredRepository) -> dict[str, object]:
         "base_branch": f.base_branch,
         "secret_name": f.secret_name,
         "landing_policy": f.landing_policy.value,
+        "allow_no_ci": f.allow_no_ci,
         "park_timeout_hours": f.park_timeout_hours,
     }
 
@@ -303,6 +304,7 @@ def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
             base_branch=row.base_branch,
             secret_name=row.secret_name,
             landing_policy=LandingPolicy(row.landing_policy),
+            allow_no_ci=row.allow_no_ci,
             park_timeout_hours=row.park_timeout_hours,
         ),
         revision=row.revision,

@@ -49,4 +49,16 @@ test.describe('an adopted runner', () => {
       runnerHosts.create({ runnerStarted: true, runnerAdopted: { name: 'adopted-two', runnerId: minted.runnerId, token: minted.token } }),
     ).rejects.toThrow(/runnerStarted: false/);
   });
+
+  test('scaffolds a profile-enabled OpenCode without registering the adopted host', async ({ api, fleet, runnerHosts }) => {
+    const minted = await fleet('adopted-opencode');
+    const host = await runnerHosts.create({
+      runnerStarted: false,
+      runnerAdopted: { name: 'adopted-opencode', runnerId: minted.runnerId, token: minted.token },
+      runnerConfig: { runner: [{ name: 'adopted-opencode', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] },
+    });
+    expect(fs.existsSync(path.join(host.dir, 'opencode-worker-config.json'))).toBe(true);
+    expect(host.hubTokens()).toEqual({ host: undefined, runners: { 'adopted-opencode': minted.token } });
+    expect((await api.get('/api/hosts')).body).toEqual({ hosts: [] });
+  });
 });

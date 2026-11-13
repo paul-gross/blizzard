@@ -133,3 +133,39 @@ def test_the_export_and_each_schema_answer_version_2_by_default(tmp_path: Path) 
     assert "forge" in repositories["properties"] and "forge_api_url" not in repositories["properties"]
     sources = hub.client.get("/api/config/schema/work-sources").json()
     assert "forge" in sources["properties"] and "api_base" not in sources["properties"]
+
+
+def test_repository_allow_no_ci_round_trip_and_sparse_edits(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    document = {"version": 2, "forges": [FORGE], "repositories": [{**REPO, "allow_no_ci": True}]}
+    assert hub.client.post("/api/config/apply", json=document).status_code == 200
+    assert hub.client.get("/api/repositories/code").json()["allow_no_ci"] is True
+    assert hub.client.get("/api/config/export").json()["repositories"][0]["allow_no_ci"] is True
+    assert hub.client.post("/api/config/apply", json={**document, "repositories": [REPO]}).status_code == 200
+    assert hub.client.get("/api/repositories/code").json()["allow_no_ci"] is True
+    assert hub.client.patch("/api/repositories/code", json={"allow_no_ci": None}).status_code == 422
+    assert (
+        hub.client.post(
+            "/api/config/apply", json={**document, "repositories": [{**REPO, "allow_no_ci": None}]}
+        ).status_code
+        == 422
+    )
+    changed = hub.client.patch("/api/repositories/code", json={"allow_no_ci": False})
+    assert changed.status_code == 200 and changed.json()["allow_no_ci"] is False
+    assert hub.client.post("/api/config/apply", json=document).status_code == 200
+    assert hub.client.get("/api/repositories/code").json()["allow_no_ci"] is True
+    explicit_false = {**document, "repositories": [{**REPO, "allow_no_ci": False}]}
+    assert hub.client.post("/api/config/apply", json=explicit_false).status_code == 200
+    assert hub.client.get("/api/repositories/code").json()["allow_no_ci"] is False
+
+
+def test_repository_create_defaults_strict_and_rejects_null(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
+    assert hub.client.post("/api/forges", json=FORGE).status_code == 201
+    refused = hub.client.post("/api/repositories", json={**REPO, "allow_no_ci": None})
+    assert refused.status_code == 422
+    created = hub.client.post("/api/repositories", json=REPO)
+    assert created.status_code == 201, created.text
+    assert created.json()["allow_no_ci"] is False

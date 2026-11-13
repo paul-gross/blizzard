@@ -75,12 +75,139 @@ test.describe('the pending timeout, on the controlled clock', () => {
     const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
     await stepUntil(host, stepped, (row) => row.pending?.kind === 'pending', { stallPasses: 80, progress: chunkProgress });
     await clock.advance(3);
-    await stepUntil(host, stepped, (row) => row.history.some((item) => item.from_node_name === 'deliver' && item.choice_name === 'failure'), { stallPasses: 80, progress: chunkProgress });
+    await stepUntil(host, stepped, (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
     const result = await detail(api, chunk.chunk_id);
+    expect(result.escalation?.cause).toBe('missing-checks');
     expect(result.landed_repos).toEqual([]);
     const base = await forge.call('GET', `/repos/${fullName(repo)}/git/ref/heads/main`);
     expect(base.body.object.sha).toBe(original.body.object.sha);
     expect(await pulls(forge, repo)).toEqual([]);
+  });
+});
+
+test.describe('empty checks on the controlled clock', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  for (const policy of ['fast-forward', 'merge-on-checks'] as const) {
+    test(`checks registered during the grace period land with ${policy}`, async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
+      test.setTimeout(180_000);
+      const repo = await repository();
+      const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+      const before = await host.originHead(repo.name, 'main');
+      expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: policy } })).status).toBe(200);
+      expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 3600) } })).status).toBe(201);
+      const { chunk } = await issue('DELAYED-CHECKS.md', { repository: repo });
+      expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+      let arrived = false;
+      void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+      await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
+      const candidate = await host.originHead(repo.name, 'feature/diverged');
+      expect(candidate).toBeTruthy();
+      expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+      workerCheckpoint.release('pushed');
+      const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
+      const pending = await stepUntil(host, stepped, (row) => row.pending !== null, { stallPasses: 80, progress: chunkProgress });
+      expect(pending.landed).toBe(false);
+      expect(await host.originHead(repo.name, 'main')).toBe(before);
+      await clock.advance(300);
+      expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [{ name: 'ci', status: 'success' }] })).status).toBe(200);
+      const done = await stepUntil(host, stepped, (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
+      expect(done.landed).toBe(true);
+      expect(await host.originHead(repo.name, 'main')).not.toBe(before);
+    });
+
+    for (const allowNoCi of [false, true]) {
+      test(`empty checks ${policy} allow_no_ci=${allowNoCi}`, async ({ repository, issue, api, cli, clock, forge, runnerHosts, workerCheckpoint }) => {
+        test.setTimeout(180_000);
+        const repo = await repository();
+        const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+        const before = await host.originHead(repo.name, 'main');
+        expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: policy, allow_no_ci: allowNoCi } })).status).toBe(200);
+        expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 3600) } })).status).toBe(201);
+        const { chunk } = await issue('EMPTY-CHECKS.md', { repository: repo });
+        expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+        let arrived = false;
+        void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+        await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
+        const candidate = await host.originHead(repo.name, 'feature/diverged');
+        expect(candidate).toBeTruthy();
+        expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+        workerCheckpoint.release('pushed');
+        const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
+        const first = await stepUntil(host, stepped, (row) => allowNoCi ? row.status === 'done' : row.pending !== null, { stallPasses: 80, progress: chunkProgress });
+        if (allowNoCi) {
+          expect(first.landed).toBe(true);
+          expect(await host.originHead(repo.name, 'main')).not.toBe(before);
+          return;
+        }
+        expect(first.landed).toBe(false);
+        expect(await host.originHead(repo.name, 'main')).toBe(before);
+        const submissions = async () => {
+          const response = await api.get<{ items: { terms: { allow_no_ci: boolean }[] }[] }>(`/api/chunks/${chunk.chunk_id}/flow-submissions`);
+          expect(response.status).toBe(200);
+          return response.body.items.flatMap((item) => item.terms.map((term) => term.allow_no_ci));
+        };
+        expect(await submissions()).toEqual([false]);
+        const edit = await cli(['hub', 'repo', 'edit', repo.name, '--allow-no-ci']);
+        expect(edit.code, edit.stderr).toBe(0);
+        expect(await submissions()).toEqual([false]);
+        await clock.advance(601);
+        const escalated = await stepUntil(host, stepped, (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
+        expect(escalated.escalation?.cause).toBe('missing-checks');
+        expect(escalated.escalation?.detail).toContain(candidate!);
+        expect(escalated.landed).toBe(false);
+        expect(await host.originHead(repo.name, 'main')).toBe(before);
+
+        await clock.advance(1);
+        const requeue = await cli(['hub', 'chunk', 'requeue', chunk.chunk_id]);
+        expect(requeue.code, requeue.stderr).toBe(0);
+        await clock.advance(1);
+        const recovered = await stepUntil(host, stepped, (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
+        expect(recovered.landed).toBe(true);
+        expect(await submissions()).toEqual([false, true]);
+        expect(await host.originHead(repo.name, 'main')).not.toBe(before);
+      });
+    }
+  }
+
+  test('an externally merged PR is adopted after missing-checks escalation and requeue', async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
+    test.setTimeout(180_000);
+    const repo = await repository();
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    const before = await host.originHead(repo.name, 'main');
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 3600) } })).status).toBe(201);
+    const { chunk } = await issue('EXTERNAL-MERGE.md', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    let arrived = false;
+    void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+    await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
+    const candidate = await host.originHead(repo.name, 'feature/diverged');
+    expect(candidate).toBeTruthy();
+    expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+    workerCheckpoint.release('pushed');
+    const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
+    const pending = await stepUntil(host, stepped, (row) => row.pending !== null, { stallPasses: 80, progress: chunkProgress });
+    expect(pending.open_prs).toHaveLength(1);
+    await clock.advance(601);
+    const escalated = await stepUntil(host, stepped, (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
+    expect(escalated.escalation?.cause).toBe('missing-checks');
+    expect(escalated.landed).toBe(false);
+    expect(await host.originHead(repo.name, 'main')).toBe(before);
+    const reference = pending.open_prs[0]!;
+    const merged = await forge.call('PUT', `/repos/${fullName(repo)}/pulls/${reference.number}/merge`, { merge_method: 'merge' });
+    expect(merged.status, JSON.stringify(merged.body)).toBe(200);
+    const after = await host.originHead(repo.name, 'main');
+    expect(after).not.toBe(before);
+    await clock.advance(1);
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/requeues`)).status).toBe(202);
+    await clock.advance(1);
+    const recovered = await stepUntil(host, stepped, (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
+    expect(recovered.landed).toBe(true);
+    expect(recovered.open_prs).toEqual([]);
+    expect(recovered.closed_prs).toContainEqual(reference);
+    expect(recovered.landed_repos).toHaveLength(1);
+    expect(recovered.landed_repos[0]!.commit_hash).toBe(after);
+    expect(await host.originHead(repo.name, 'main')).toBe(after);
   });
 });
 

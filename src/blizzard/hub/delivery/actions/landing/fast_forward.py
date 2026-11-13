@@ -7,7 +7,7 @@ from functools import partial
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.base_merge import contributes_only_base_change
-from blizzard.hub.delivery.actions.landing.checks import FOREIGN, failed_checks, read_verdict
+from blizzard.hub.delivery.actions.landing.checks import FOREIGN, eligibility, failed_checks, read_verdict
 from blizzard.hub.delivery.actions.landing.head_gate import gate_head
 from blizzard.hub.delivery.actions.landing.no_code_proof import proves_no_code, record_no_code
 from blizzard.hub.delivery.actions.landing.repo import (
@@ -188,8 +188,13 @@ class FastForward:
                 verdict.failure_rows(base_verdict),
                 {"repo": repo.repo, "number": "-", "url": repo.branch},
             )
-        if not verdict.green:
-            return Waiting(f"{repo.repo}: candidate checks not green")
+        eligible = await eligibility(repo, candidate, verdict)
+        if eligible is not True:
+            return (
+                eligible
+                if isinstance(eligible, (Waiting, NeedsPerson))
+                else Waiting(f"{repo.repo}: candidate checks not green")
+            )
 
         async def advance() -> Landed | Waiting | NeedsPerson:
             await repo.run.post(_intent(repo, candidate), candidate)

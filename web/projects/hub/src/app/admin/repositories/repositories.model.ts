@@ -32,6 +32,7 @@ export function repositoryCreate(body: Readonly<Record<string, string | boolean>
     repo: text('repo'),
     base_branch: text('base_branch'),
     secret_name: text('secret_name'),
+    ...(typeof body['allow_no_ci'] === 'boolean' ? { allow_no_ci: body['allow_no_ci'] } : {}),
     ...(text('landing_policy') === '' ? {} : { landing_policy: text('landing_policy') as LandingPolicyName }),
     ...(text('park_timeout_hours') === '' ? {} : { park_timeout_hours: Number(text('park_timeout_hours')) }),
   };
@@ -122,6 +123,8 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
       { label: 'Repository', value: factText(repository.repo) },
       { label: 'Base branch', value: factText(repository.base_branch) },
       { label: 'Landing policy', value: landingPolicyLabel(repository.landing_policy) },
+      { label: 'Allow no CI', value: repository.allow_no_ci ? 'Yes' : 'No' },
+      { label: 'No CI policy', value: 'Only permits absent checks, not failing or pending checks. Snapshotted at the first turn of a visit; changes affect later visits.' },
       ...parkTimeoutFacts(repository),
       { label: 'Created by', value: factText(repository.created_by_name ?? repository.created_by) },
     ],
@@ -147,6 +150,7 @@ export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRe
   { key: 'base_branch', label: 'Base branch', kind: 'text', required: true },
   { key: 'secret_name', label: 'Token secret', kind: 'text', required: true },
   { key: 'landing_policy', label: 'Landing policy', kind: 'select' },
+  { key: 'allow_no_ci', label: 'Allow no CI', kind: 'checkbox' },
   {
     key: 'park_timeout_hours',
     label: 'Park timeout (hours)',

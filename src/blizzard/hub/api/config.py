@@ -331,6 +331,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
                     base_branch=repo.base_branch,
                     secret_name=repo.secret_name,
                     landing_policy=policy or DEFAULT_LANDING_POLICY,
+                    allow_no_ci=repo.allow_no_ci,
                     park_timeout_hours=repo.park_timeout_hours,
                 ),
                 edit=RepositoryEdit(**stated),
@@ -689,6 +690,7 @@ def export_config(
                 base_branch=r.fields.base_branch,
                 secret_name=r.fields.secret_name,
                 landing_policy=r.fields.landing_policy,
+                allow_no_ci=r.fields.allow_no_ci,
                 park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories

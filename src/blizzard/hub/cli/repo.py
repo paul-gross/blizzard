@@ -27,6 +27,7 @@ _PARK_TIMEOUT = click.option(
     metavar="HOURS",
     help="How long a parked change may wait, in hours; only a parked repository takes one.",
 )
+_ALLOW_NO_CI = click.option("--allow-no-ci/--no-allow-no-ci", default=None, help="Allow landing when CI is absent.")
 _IF_MATCH = click.option(
     "--if-match",
     "if_match",
@@ -65,6 +66,7 @@ def repo_group() -> None:
 @click.option("--secret", "secret", required=True, help="The stored secret holding the forge token.")
 @_POLICY
 @_PARK_TIMEOUT
+@_ALLOW_NO_CI
 def repo_create(
     cli: CliContext,
     slug: str,
@@ -76,6 +78,7 @@ def repo_create(
     secret: str,
     policy: str | None,
     park_timeout: int | None,
+    allow_no_ci: bool | None,
 ) -> None:
     """Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.
 
@@ -91,6 +94,7 @@ def repo_create(
         "base_branch": base_branch,
         "secret_name": secret,
         **_landing(policy, park_timeout),
+        **({} if allow_no_ci is None else {"allow_no_ci": allow_no_ci}),
     }
     resp = cli.post("/api/repositories", "POST /repositories", json_body=body, door=True)
     out = resp.json()
@@ -123,7 +127,7 @@ def repo_show(cli: CliContext, repository: str) -> None:
         f"id {body['repository_id']}",
         f"forge {body['forge_slug']}  {body['owner']}/{body['repo']}",
         f"base_branch {body['base_branch']}  secret {body['secret_name']}",
-        f"policy {body['landing_policy']}{_timeout(body)}",
+        f"policy {body['landing_policy']}{_timeout(body)}  allow no CI {body['allow_no_ci']}",
         f"created {body['created_at']} by {body['created_by']}",
     )
 
@@ -139,6 +143,7 @@ def repo_show(cli: CliContext, repository: str) -> None:
 @click.option("--secret", "secret", default=None, help="The new forge-token secret.")
 @_POLICY
 @_PARK_TIMEOUT
+@_ALLOW_NO_CI
 @click.option(
     "--clear",
     "clear",
@@ -159,6 +164,7 @@ def repo_edit(
     secret: str | None,
     policy: str | None,
     park_timeout: int | None,
+    allow_no_ci: bool | None,
     clear: tuple[str, ...],
     if_match: int | None,
 ) -> None:
@@ -176,6 +182,7 @@ def repo_edit(
         "base_branch": base_branch,
         "secret_name": secret,
         **_landing(policy, park_timeout),
+        **({} if allow_no_ci is None else {"allow_no_ci": allow_no_ci}),
     }
     body: dict[str, Any] = {k: v for k, v in given.items() if v is not None}
     for field in clear:

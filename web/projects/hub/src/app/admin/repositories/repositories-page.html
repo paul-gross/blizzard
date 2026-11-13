@@ -23,6 +23,7 @@
     heading="New repository"
     mode="create"
     [fields]="fields()"
+    hint="Allow no CI only permits absent checks, not failing or pending checks. The setting is snapshotted at the first turn of a visit; changes affect later visits."
     submitLabel="Create"
     [submitError]="createError()"
     [submitting]="createMutation.isPending()"

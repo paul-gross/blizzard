@@ -55,11 +55,12 @@ Name such a repository by its new slug.
 | `base_branch`        | The branch work lands on — the default a project's link may override ([projects.md](./projects.md#a-links-base-branch)). |
 | `secret_name`        | The stored [secret](./secrets.md) holding the forge token (`--secret`).                                                  |
 | `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                          |
+| `allow_no_ci`        | Opt in to landing without CI (`--allow-no-ci`); defaults to false.                                                       |
 | `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it.    |
 
-Every field but `landing_policy` and `park_timeout_hours` is required; a create without `forge` is refused
-`422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the
-one field that can, with `edit --clear park-timeout` or a `PATCH` sending `null`.
+Every field but `landing_policy`, `allow_no_ci` and `park_timeout_hours` is required; a create without `forge` is
+refused `422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours`
+is the one field that can, with `edit --clear park-timeout` or a `PATCH` sending `null`.
 [Delivery policy](./delivery-policy.md) helps choose and operate each policy. A policy is refused
 `422 forge_capability_missing` when the repository's forge does not offer every capability it needs, naming each one;
 `GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge get`
@@ -72,15 +73,18 @@ origin, so a `forge_api_url` is refused `422 field_moved_to_forge`, naming the f
 On GitHub, delivery needs a token on the repository with these permissions. A classic token is the supported path for
 reading checks; a fine-grained token is not promised the Checks API:
 
-| Permission    | Access       | Why                                                                         |
-| ------------- | ------------ | --------------------------------------------------------------------------- |
-| Contents      | Read & write | Read and move branches, compare revisions                                   |
-| Pull requests | Read & write | Open, update and merge pull requests                                        |
-| Checks        | Read         | Read each check on a revision                                               |
-| Actions       | Read & write | Re-run, once, a GitHub Actions check that is failing on the base branch too |
+| Permission      | Access       | Why                                                                         |
+| --------------- | ------------ | --------------------------------------------------------------------------- |
+| Contents        | Read & write | Read and move branches, compare revisions                                   |
+| Pull requests   | Read & write | Open, update and merge pull requests                                        |
+| Checks          | Read         | Read each check on a revision                                               |
+| Commit statuses | Read         | Read commit statuses alongside check runs                                   |
+| Actions         | Read & write | Re-run, once, a GitHub Actions check that is failing on the base branch too |
 
 `land` waits for every check on the change to finish before it asks for that re-run. Without Actions write, an inherited
-failure is never re-run and routes as the change's own failure.
+failure is never re-run and routes as the change's own failure. Upgrade existing tokens too: Checks read alone does not
+grant access to commit statuses. See [delivery policy](./delivery-policy.md#checks-and-missing-ci) for the strict
+default and recovery.
 
 ## Verbs
 
@@ -90,8 +94,9 @@ repo are already taken, when the secret is missing or retired, or when the forge
 another repository left moves it to the new repository. Every later change moves the revision by one:
 
 - `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--owner`, `--repo`, `--base-branch`,
-  `--secret`, `--policy`, and `--park-timeout`; `--clear park-timeout` clears the timeout, and is refused beside
-  `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the revision.
+  `--secret`, `--policy`, `--allow-no-ci` / `--no-allow-no-ci`, and `--park-timeout`; `--clear park-timeout` clears the
+  timeout, and is refused beside `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the
+  revision.
 - `retire <repository>` hides the repository from `list` unless `--include-retired` is given. A retired repository keeps
   its forge, owner and repo, so `create` for another slug on the same coordinate is refused with a message naming the
   holder; `enable` the holder instead.
@@ -212,8 +217,8 @@ Three outcomes refuse the step before it runs and route its failure choice; the 
 Each repository lands by its own `landing_policy`. A chunk whose work reaches several repositories lands them in its
 project's landing order: the repositories the project ranks first, lowest position first, then every unranked one in
 slug order, so a project that ranks nothing lands by slug ([projects.md](./projects.md#landing-order)). A `deliver` step
-takes the order and each repository's policy at its first turn and keeps them through retries and hub restarts, so an
-edit made while it waits reaches the next step, not that one.
+takes the order and each repository's policy and `allow_no_ci` setting at its first turn and keeps them through retries
+and hub restarts, so an edit made while it waits reaches the next step, not that one.
 
 Records that differ on forge, owner, base branch or secret do not refuse the step. The `land` action lands each
 repository against its own record and records each repository's landing, and the step refuses two commit entries that

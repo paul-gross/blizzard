@@ -54,14 +54,14 @@ class _World:
     flows: FlowStore
 
     def submit(
-        self, chunk_id: str, *, generation: int = 0, resources: Sequence[FlowResource] = (_MAIN,)
+        self, chunk_id: str, *, generation: int = 0, epoch: int = 1, resources: Sequence[FlowResource] = (_MAIN,)
     ) -> Submission | None:
         """Submit ``chunk_id``'s ``nd_deliver`` visit at epoch 1 in a unit locking the chunk, as the reconcile does."""
         with chunk_unit(hub_store_connections(self.engine), chunk_id) as unit:
             return self.flows.submit(
                 chunk_id,
                 node_id="nd_deliver",
-                epoch=1,
+                epoch=epoch,
                 generation=generation,
                 resources=resources,
                 at=_AT,
@@ -273,7 +273,7 @@ def test_ending_a_turn_without_a_withdrawal_leaves_the_submission_open(world: _W
     assert [sub.submission_id for sub in flows.open_submissions_from(0)] == [submission.submission_id]
 
 
-_TERMS_A = LandingTerms("repo_a", "merge-on-checks", None, 1.0)
+_TERMS_A = LandingTerms("repo_a", "merge-on-checks", None, 1.0, True)
 _TERMS_B = LandingTerms("repo_b", "merge-on-checks", None, 2.0)
 _THIRD = FlowResource("repo_c", "main")
 
@@ -400,7 +400,7 @@ def test_a_repository_with_no_earlier_terms_takes_its_candidate_and_one_with_nei
     world: _World, flows: FlowStore
 ) -> None:
     zero = world.submit("ch_1", resources=[_MAIN])
-    _plant_terms(world.engine, zero, "repo_a", 1.0)
+    earlier = _plant_terms(world.engine, zero, "repo_a", 1.0)
     _close(world.engine, zero)
     one = world.submit("ch_1", generation=1, resources=[_MAIN, _OTHER, _THIRD])
     assert one is not None
@@ -408,7 +408,7 @@ def test_a_repository_with_no_earlier_terms_takes_its_candidate_and_one_with_nei
 
     _turn(world, one, (candidate,))
 
-    assert flows.terms_of(one.submission_id) == {"repo_a": _TERMS_A, "repo_b": candidate}
+    assert flows.terms_of(one.submission_id) == {"repo_a": earlier, "repo_b": candidate}
 
 
 def _terms_rows_read_by_turn(world: _World, depth: int) -> int:
@@ -439,3 +439,28 @@ def test_the_rows_a_turn_reads_for_earlier_terms_do_not_grow_with_the_visits_his
 
     # The held repositories each read one newest earlier row, whatever the history behind it.
     assert 0 < shallow == deep
+
+
+def test_new_epoch_takes_new_allow_no_ci_terms(world: _World, flows: FlowStore) -> None:
+    first = world.submit("ch_1")
+    assert first is not None
+    turn = _turn(world, first, (_TERMS_A,))
+    flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
+    next_visit = world.submit("ch_1", epoch=2)
+    assert next_visit is not None
+    changed = LandingTerms("repo_a", "merge-on-checks", None, 1.0, False)
+    _turn(world, next_visit, (changed,))
+    assert flows.terms_of(next_visit.submission_id) == {"repo_a": changed}
+
+
+def test_requeue_in_same_epoch_retains_allow_no_ci_terms(world: _World, flows: FlowStore) -> None:
+    first = world.submit("ch_1")
+    assert first is not None
+    original = LandingTerms("repo_a", "merge-on-checks", None, 1.0, True)
+    turn = _turn(world, first, (original,))
+    flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
+    requeued = world.submit("ch_1", generation=1)
+    assert requeued is not None
+    changed = LandingTerms("repo_a", "merge-on-checks", None, 1.0, False)
+    _turn(world, requeued, (changed,))
+    assert flows.terms_of(requeued.submission_id) == {"repo_a": original}

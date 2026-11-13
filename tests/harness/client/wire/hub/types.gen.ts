@@ -1424,6 +1424,10 @@ export type CadenceView = {
  * Repository terms captured by the submission's first turn.
  */
 export type CapturedLandingTermsView = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci: boolean;
     landing_policy: LandingPolicyName;
     /**
      * Landing Position
@@ -5456,7 +5460,7 @@ export type ErrandState = 'due' | 'running' | 'waiting' | 'stopped';
 /**
  * EscalationCause
  */
-export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'harness-version-changed' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing' | 'change-closed' | 'branch-protected' | 'merge-method-refused' | 'park-timeout' | 'escalate-choice';
+export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'harness-version-changed' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing' | 'change-closed' | 'branch-protected' | 'merge-method-refused' | 'missing-checks' | 'park-timeout' | 'escalate-choice';
 
 /**
  * EventLogSeverity
@@ -12055,6 +12059,10 @@ export type RepositoryCoordinateTakenProblem = {
  */
 export type RepositoryCreateRequest = {
     /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean;
+    /**
      * Base Branch
      */
     base_branch: string;
@@ -12095,6 +12103,10 @@ export type RepositoryCreateRequest = {
  * A version-2 repository entry, naming its forge instead of an address.
  */
 export type RepositoryEntry = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean;
     /**
      * Base Branch
      */
@@ -12243,6 +12255,10 @@ export type RepositoryNotFoundProblem = {
  */
 export type RepositoryPatchRequest = {
     /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean | null;
+    /**
      * Base Branch
      */
     base_branch?: string | null;
@@ -12313,6 +12329,10 @@ export type RepositorySlugTakenProblem = {
  * what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label.
  */
 export type RepositorySummary = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci: boolean;
     /**
      * Base Branch
      */

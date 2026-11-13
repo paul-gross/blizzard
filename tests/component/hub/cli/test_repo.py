@@ -204,3 +204,16 @@ def test_create_takes_a_policy_and_clearing_the_timeout_on_edit_is_accepted(clie
     assert created.exit_code == 0, created.output
     assert cleared.exit_code == 0, cleared.output
     assert "revision 1" in cleared.output
+
+
+def test_allow_no_ci_flags_are_sparse_and_reversible(client: TestClient) -> None:
+    _seed()
+    assert client.get("/api/repositories/blizzard").json()["allow_no_ci"] is False
+    enabled = _repo(["edit", "blizzard", "--allow-no-ci"])
+    assert enabled.exit_code == 0, enabled.output
+    assert client.get("/api/repositories/blizzard").json()["allow_no_ci"] is True
+    assert _repo(["edit", "blizzard", "--name", "New name"]).exit_code == 0
+    assert client.get("/api/repositories/blizzard").json()["allow_no_ci"] is True
+    disabled = _repo(["edit", "blizzard", "--no-allow-no-ci"])
+    assert disabled.exit_code == 0, disabled.output
+    assert client.get("/api/repositories/blizzard").json()["allow_no_ci"] is False

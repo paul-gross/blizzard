@@ -137,7 +137,7 @@ def test_a_closed_pull_request_is_merged_only_with_merged_at(
     ),
 )
 def test_a_check_runs_status_and_conclusion_fold_into_one_outcome(run: dict[str, Any], outcome: CheckOutcome) -> None:
-    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [run]})]})
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [run]})]})
 
     (check,) = harness.run(lambda forge: forge.checks("h1"))
 
@@ -146,7 +146,7 @@ def test_a_check_runs_status_and_conclusion_fold_into_one_outcome(run: dict[str,
 
 def test_a_check_carries_its_forge_word_and_log_link_for_display() -> None:
     run = workflow_run("completed", "failure", id=42, details_url="https://ci/42")
-    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [run]})]})
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [run]})]})
 
     (check,) = harness.run(lambda forge: forge.checks("h1"))
 
@@ -158,8 +158,8 @@ def test_check_runs_are_paged_past_the_first_hundred() -> None:
     harness = Harness(
         {
             ("GET", f"{REPO}/commits/h1/check-runs"): [
-                reply(200, {"check_runs": first}),
-                reply(200, {"check_runs": [workflow_run("completed", "failure", id=100)]}),
+                reply(200, {"total_count": 101, "check_runs": first}),
+                reply(200, {"total_count": 101, "check_runs": [workflow_run("completed", "failure", id=100)]}),
             ]
         }
     )
@@ -167,11 +167,13 @@ def test_check_runs_are_paged_past_the_first_hundred() -> None:
     checks = harness.run(lambda forge: forge.checks("h1"))
 
     assert len(checks) == 101 and checks[-1].outcome is CheckOutcome.FAILED
-    assert [r.url.params["page"] for r in harness.recorded.requests] == ["1", "2"]
+    assert [r.url.params["page"] for r in harness.recorded.requests] == ["1", "2", "1"]
 
 
 def test_a_check_run_list_holding_something_other_than_runs_is_unavailable() -> None:
-    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": ["build"]})]})
+    harness = Harness(
+        {("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": ["build"]})]}
+    )
 
     with pytest.raises(ForgeUnavailable):
         harness.run(lambda forge: forge.checks("h1"))
@@ -707,3 +709,123 @@ def test_a_read_takes_no_lock() -> None:
     harness.run(lambda forge: forge.change(7))
 
     assert harness.recorded.locked == [False]
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ("success", CheckOutcome.PASSED),
+        ("failure", CheckOutcome.FAILED),
+        ("error", CheckOutcome.FAILED),
+        ("pending", CheckOutcome.PENDING),
+    ],
+)
+def test_commit_status_is_evidence_alongside_check_runs(state: str, expected: CheckOutcome) -> None:
+    from blizzard.hub.forge.landing import CheckSource
+
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [workflow_run()]})],
+            ("GET", f"{REPO}/commits/h1/status"): [
+                reply(
+                    200,
+                    {
+                        "state": state,
+                        "total_count": 1,
+                        "statuses": [{"id": 11, "context": "build", "state": state, "target_url": "https://ci/status"}],
+                    },
+                )
+            ],
+        }
+    )
+    run, status = harness.run(lambda forge: forge.checks("h1"))
+    assert run.source is CheckSource.CHECK_RUN
+    assert (status.source, status.outcome, status.details_url) == (CheckSource.STATUS, expected, "https://ci/status")
+    assert status.id != run.id
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"state": "pending", "total_count": 1, "statuses": []},
+        {"state": "pending", "total_count": 1, "statuses": [{"id": 1, "context": "ci", "state": "unknown"}]},
+    ],
+)
+def test_unreadable_or_truncated_status_evidence_is_unavailable(payload: dict[str, Any]) -> None:
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [workflow_run()]})],
+            ("GET", f"{REPO}/commits/h1/status"): [reply(200, payload)],
+        }
+    )
+    with pytest.raises(ForgeUnavailable):
+        harness.run(lambda forge: forge.checks("h1"))
+
+
+@pytest.mark.parametrize("count", [None, True, -1, 2])
+def test_check_runs_require_a_complete_count(count: object) -> None:
+    payload: dict[str, object] = {"check_runs": [workflow_run()]}
+    if count is not None:
+        payload["total_count"] = count
+    harness = Harness({("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, payload)]})
+    with pytest.raises(ForgeUnavailable):
+        harness.run(lambda forge: forge.checks("h1"))
+
+
+def test_full_last_page_fails_closed() -> None:
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/commits/h1/check-runs"): [
+                reply(200, {"total_count": 101, "check_runs": [workflow_run(id=i) for i in range(100)]})
+            ]
+        }
+    )
+    with pytest.raises(ForgeUnavailable):
+        harness.run(lambda forge: forge.checks("h1"))
+
+
+def test_status_id_is_never_sent_to_rerun() -> None:
+    harness = Harness({})
+    assert harness.run(lambda forge: forge.rerun_check("status:123")).outcome is RerunOutcome.REFUSED
+    assert harness.recorded.requests == []
+
+
+def test_a_denied_status_read_does_not_leave_check_runs_green() -> None:
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [workflow_run()]})],
+            ("GET", f"{REPO}/commits/h1/status"): [reply(403, {"message": "Forbidden"})],
+        }
+    )
+    with pytest.raises(ForgeRejected):
+        harness.run(lambda forge: forge.checks("h1"))
+
+
+def test_conditional_status_pages_are_each_revalidated() -> None:
+    statuses = [{"id": i, "context": f"ci-{i}", "state": "success"} for i in range(101)]
+    path = f"{REPO}/commits/h1/status"
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 0, "check_runs": []})],
+            ("GET", path): [
+                reply(200, {"state": "success", "total_count": 101, "statuses": statuses[:100]}, {"ETag": '"p1"'}),
+                reply(200, {"state": "success", "total_count": 101, "statuses": statuses[100:]}, {"ETag": '"p2"'}),
+                reply(304),
+                reply(304),
+            ],
+        }
+    )
+
+    async def twice(forge: GitHubLanding) -> None:
+        assert len(await forge.checks("h1")) == 101
+        assert len(await forge.checks("h1")) == 101
+
+    harness.run(twice)
+    requests = [r for r in harness.recorded.requests if r.url.path == path]
+    assert [(r.url.params["page"], r.headers.get("if-none-match")) for r in requests] == [
+        ("1", None),
+        ("2", None),
+        ("1", '"p1"'),
+        ("2", '"p2"'),
+    ]

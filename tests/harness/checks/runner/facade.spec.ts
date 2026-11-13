@@ -66,6 +66,8 @@ test.describe('with OpenCode enabled, a bundle and a world to read', () => {
 
   test('the host passes a step, and holds the synthetic OpenCode login under its private data home', async ({ runnerHost }) => {
     expect((await runnerHost.step()).outcome).toBe('completed');
+    const config = JSON.parse(fs.readFileSync(path.join(runnerHost.dir, 'opencode-worker-config.json'), 'utf8')) as { plugin: string[] };
+    expect(config.plugin.some((plugin) => plugin.includes('blizzard-heartbeat'))).toBe(true);
     const auth = path.join(runnerHost.home, '.local', 'share', 'opencode', 'auth.json');
     expect(fs.statSync(auth).size).toBeGreaterThan(0);
   });

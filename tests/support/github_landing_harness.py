@@ -36,6 +36,12 @@ class _Recorded:
 
     def __init__(self, routes: Mapping[tuple[str, str], Sequence[_Answer]], lock: asyncio.Lock | None = None) -> None:
         self._routes = {route: list(answers) for route, answers in routes.items()}
+        for method, path in routes:
+            if method == "GET" and path.endswith("/check-runs"):
+                self._routes.setdefault(
+                    (method, path.removesuffix("check-runs") + "status"),
+                    [reply(200, {"state": "pending", "total_count": 0, "statuses": []})],
+                )
         self._lock = lock
         self.requests: list[httpx2.Request] = []
         self.locked: list[bool] = []

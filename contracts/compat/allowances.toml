@@ -3,6 +3,13 @@
 [[allowance]]
 line = "0.4"
 surface = "http-api"
+where = "RepositoryEntry.allow_no_ci"
+reason = "property added to a forbid schema a response reaches"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the board ships no reader of it."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
 where = "HubMarkerRequest"
 reason = "component schema deleted"
 because = "HubMarkerRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:479); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."

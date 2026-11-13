@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from typing import cast
 
 import pytest
 import sqlalchemy as sa
@@ -154,7 +155,15 @@ def test_a_transition_era_store_crosses_over_keyed_on_its_forges(tmp_path: Path)
     try:
         s.metadata.create_all(declared)
         tables = ("repositories", "work_sources")
-        assert {t: _snapshot(engine)[t] for t in tables} == {t: _snapshot(declared)[t] for t in tables}
+        migrated, schema = _snapshot(engine), _snapshot(declared)
+        # The CI opt-in was added to repositories after this revision.
+        repositories_shape = cast("tuple[frozenset[tuple[object, ...]], ...]", schema["repositories"])
+        assert any(c[0] == "allow_no_ci" for c in repositories_shape[0])
+        schema["repositories"] = (
+            frozenset(c for c in repositories_shape[0] if c[0] != "allow_no_ci"),
+            *repositories_shape[1:],
+        )
+        assert {t: migrated[t] for t in tables} == {t: schema[t] for t in tables}
     finally:
         declared.dispose()
 

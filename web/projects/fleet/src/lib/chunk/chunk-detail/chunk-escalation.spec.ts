@@ -403,8 +403,15 @@ describe('ChunkEscalation', () => {
     });
 
     it('renders an unrecognized cause as its raw value', async () => {
-      const { sentence } = await causeOf('future-cause', null);
+      const { sentence, detail } = await causeOf('future-cause', 'Further information');
       expect(sentence).toBe('Escalated: future-cause (epoch 3).');
+      expect(detail).toBe('Further information');
+    });
+
+    it('renders missing checks as a human-readable cause with its detail', async () => {
+      const { sentence, detail } = await causeOf('missing-checks', 'CI did not report any checks');
+      expect(sentence).toBe('No CI checks were observed for the revision (epoch 3).');
+      expect(detail).toBe('CI did not report any checks');
     });
 
     it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(

@@ -60,6 +60,7 @@ def _summary(record: ConfiguredRepository, forge: ConfiguredForge, names: Mappin
         base_branch=fields.base_branch,
         secret_name=fields.secret_name,
         landing_policy=fields.landing_policy,
+        allow_no_ci=fields.allow_no_ci,
         park_timeout_hours=fields.park_timeout_hours,
         revision=record.revision,
         created_at=iso_utc(record.created_at),
@@ -119,6 +120,7 @@ def create_repository(
         base_branch=request.base_branch,
         secret_name=request.secret_name,
         landing_policy=request.landing_policy,
+        allow_no_ci=request.allow_no_ci,
         park_timeout_hours=request.park_timeout_hours,
     )
     try:

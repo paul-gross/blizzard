@@ -22,5 +22,6 @@ class EscalationCause(StrEnum):
     CHANGE_CLOSED = "change-closed"
     BRANCH_PROTECTED = "branch-protected"
     MERGE_METHOD_REFUSED = "merge-method-refused"
+    MISSING_CHECKS = "missing-checks"
     PARK_TIMEOUT = "park-timeout"
     ESCALATE_CHOICE = "escalate-choice"

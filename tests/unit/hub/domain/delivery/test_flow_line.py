@@ -385,14 +385,16 @@ def test_a_candidate_takes_its_records_policy_and_timeout_and_its_projects_posit
         repository_id=RepositoryId("repo_a"),
         slug="app",
         name="app",
-        fields=RepositoryFields(ForgeId("frg_1"), "acme", "app", "main", "s", LandingPolicy.MERGE_ON_CHECKS, None),
+        fields=RepositoryFields(
+            ForgeId("frg_1"), "acme", "app", "main", "s", LandingPolicy.MERGE_ON_CHECKS, None, True
+        ),
         revision=1,
         created_at=_AT,
         created_by="op",
     )
 
     assert LandingTerms.candidate("repo_a", record, position=2.0) == LandingTerms(
-        "repo_a", "merge-on-checks", None, 2.0
+        "repo_a", "merge-on-checks", None, 2.0, True
     )
 
 
@@ -414,11 +416,12 @@ def test_only_a_target_with_terms_is_stamped_from_them() -> None:
 
 def test_a_target_takes_its_position_from_its_terms_and_one_without_terms_from_the_project_now() -> None:
     resolution = _resolution()
-    terms = {"repo_a": LandingTerms("repo_a", "merge-on-checks", None, 1.0)}
+    terms = {"repo_a": LandingTerms("repo_a", "merge-on-checks", None, 1.0, True)}
 
     stamped = stamp_terms(resolution, terms, {"repo_a": 9.0, "repo_b": 2.0})
 
     assert [t.landing_position for t in stamped.targets] == [1.0, 2.0]
+    assert [t.allow_no_ci for t in stamped.targets] == [True, False]
 
 
 # --- withdrawal_for --------------------------------------------------------------------------------------------------

@@ -8361,6 +8361,20 @@
               "type": "integer"
             },
             {
+              "help": "Allow landing when CI is absent.",
+              "hidden": false,
+              "kind": "option",
+              "name": "allow_no_ci",
+              "opts": [
+                "--allow-no-ci"
+              ],
+              "required": false,
+              "secondary_opts": [
+                "--no-allow-no-ci"
+              ],
+              "type": "boolean"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8521,6 +8535,20 @@
               "required": false,
               "secondary_opts": [],
               "type": "integer"
+            },
+            {
+              "help": "Allow landing when CI is absent.",
+              "hidden": false,
+              "kind": "option",
+              "name": "allow_no_ci",
+              "opts": [
+                "--allow-no-ci"
+              ],
+              "required": false,
+              "secondary_opts": [
+                "--no-allow-no-ci"
+              ],
+              "type": "boolean"
             },
             {
               "help": "Clear a field; repeatable. Clearing park-timeout sets it back to its default.",

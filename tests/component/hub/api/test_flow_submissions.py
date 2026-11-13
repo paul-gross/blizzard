@@ -234,7 +234,13 @@ def test_captured_terms_and_paged_turns_include_zero_flow_submissions(tmp_path: 
     items = hub.client.get(f"/api/chunks/{chunk}/flow-submissions").json()["items"]
     assert items[0]["flow_ids"] == [submission.flows[0].flow_id]
     assert items[0]["terms"] == [
-        {"repository_id": "repo_a", "landing_policy": "park", "park_timeout_hours": 2, "landing_position": 1.5}
+        {
+            "repository_id": "repo_a",
+            "landing_policy": "park",
+            "park_timeout_hours": 2,
+            "landing_position": 1.5,
+            "allow_no_ci": False,
+        }
     ]
     assert items[1]["flow_ids"] == items[1]["terms"] == []
     url = f"/api/chunks/{chunk}/flow-submissions/{submission.submission_id}/turns"

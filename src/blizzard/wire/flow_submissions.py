@@ -24,6 +24,7 @@ class CapturedLandingTermsView(WireModel):
 
     repository_id: str
     landing_policy: Annotated[LandingPolicy | Unrecognized, OPEN]
+    allow_no_ci: bool = False
     park_timeout_hours: int | None
     landing_position: float | None
 

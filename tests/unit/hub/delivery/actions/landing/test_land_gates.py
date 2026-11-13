@@ -818,3 +818,18 @@ def test_a_base_block_abutting_a_feature_block_is_not_translated() -> None:
     assert base_merge.translate([_Block(3, 2, 1, ())], [_Block(5, 1, 1, ())]) is None
     assert base_merge.translate([_Block(6, 1, 1, ())], [_Block(5, 1, 1, ())]) is None
     assert base_merge.translate([_Block(3, 1, 1, ())], [_Block(5, 1, 1, ())]) == [_Block(3, 1, 1, ())]
+
+
+def test_base_failure_identity_includes_evidence_source() -> None:
+    from blizzard.hub.forge.landing import CheckSource
+
+    status = Check(
+        id="status:1",
+        name="build",
+        outcome=CheckOutcome.FAILED,
+        detail="failure",
+        details_url=None,
+        source=CheckSource.STATUS,
+    )
+    assert Verdict((status,)).failure_rows(Verdict((_FAILED,)))[0]["base_red"] is False
+    assert Verdict((_FAILED,)).failure_rows(Verdict((status,)))[0]["base_red"] is False

@@ -47,6 +47,79 @@ test('a host over a test-initialized directory serves that directory’s runner,
   expect(fs.existsSync(path.join(dir, 'blizzard-host.toml'))).toBe(true);
 });
 
+test('a test-owned directory receives the enabled OpenCode scaffold without another enrollment', async ({ runnerHosts, scratchDirs, mockHub }) => {
+  const dir = scratchDirs.make('opencode');
+  const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+  expect(init.code, init.stdout + init.stderr).toBe(0);
+  const store = fs.readFileSync(path.join(dir, 'data', 'host.db'));
+  const before = (await mockHub.captured.read()).body.requests;
+  const host = await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } });
+  expect(fs.existsSync(path.join(dir, 'opencode-worker-config.json'))).toBe(true);
+  expect(fs.readFileSync(path.join(dir, 'data', 'host.db'))).toEqual(store);
+  expect((await mockHub.captured.read()).body.requests).toEqual(before);
+  await host.restart();
+  expect((await host.step()).outcome).toBe('completed');
+});
+
+test('a scaffold failure leaves enrolled runner ids in the ledger', async ({ runnerHosts, ledger }) => {
+  const before = new Set(ledger.ids('runner'));
+  await expect(runnerHosts.create({ runnerConfig: {
+    workspace: [{ id: 'workspace-local', provider: 'no-such-provider' }],
+    runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }],
+  } })).rejects.toThrow(/provider must be/);
+  expect(ledger.ids('runner').filter((id) => !before.has(id))).toHaveLength(1);
+});
+
+test('an external OpenCode worker config is left unchanged', async ({ runnerHosts, scratchDirs }) => {
+  const external = path.join(scratchDirs.make('external'), 'worker.json');
+  const contents = '{"custom":"do not overwrite"}\n';
+  fs.writeFileSync(external, contents);
+  const host = await runnerHosts.create({ runnerStarted: false, runnerConfig: {
+    runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode', worker_config_path: external } }],
+  } });
+  expect(fs.readFileSync(external, 'utf8')).toBe(contents);
+  expect(host.hostFile()).toContain(external);
+});
+
+for (const present of ['config', 'plugin'] as const) {
+  test(`a partial OpenCode scaffold preserves the existing ${present} and writes the missing file`, async ({ runnerHosts, scratchDirs, mockHub }) => {
+    const dir = scratchDirs.make(`partial-${present}`);
+    const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+    expect(init.code, init.stdout + init.stderr).toBe(0);
+    const config = path.join(dir, 'opencode-worker-config.json');
+    const plugin = path.join(dir, 'plugins', 'blizzard-heartbeat.ts');
+    const existing = present === 'config' ? config : plugin;
+    const missing = present === 'config' ? plugin : config;
+    fs.rmSync(missing, { force: true });
+    fs.mkdirSync(path.dirname(existing), { recursive: true });
+    fs.writeFileSync(existing, 'existing sentinel\n');
+    expect(fs.existsSync(missing)).toBe(false);
+    await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+      runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }],
+    } });
+    expect(fs.readFileSync(existing, 'utf8')).toBe('existing sentinel\n');
+    expect(fs.statSync(missing).size).toBeGreaterThan(0);
+  });
+}
+
+test('a symlinked plugin is left alone while the missing config is created', async ({ runnerHosts, scratchDirs, mockHub }) => {
+  const dir = scratchDirs.make('symlink-host');
+  const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+  expect(init.code, init.stdout + init.stderr).toBe(0);
+  const external = path.join(scratchDirs.make('symlink-external'), 'plugin.ts');
+  fs.writeFileSync(external, 'external sentinel\n');
+  fs.mkdirSync(path.join(dir, 'plugins'), { recursive: true });
+  fs.rmSync(path.join(dir, 'opencode-worker-config.json'), { force: true });
+  fs.rmSync(path.join(dir, 'plugins', 'blizzard-heartbeat.ts'), { force: true });
+  fs.symlinkSync(external, path.join(dir, 'plugins', 'blizzard-heartbeat.ts'));
+  await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+    runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }],
+  } });
+  expect(fs.readFileSync(external, 'utf8')).toBe('external sentinel\n');
+  expect(fs.lstatSync(path.join(dir, 'plugins', 'blizzard-heartbeat.ts')).isSymbolicLink()).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'opencode-worker-config.json'))).toBe(true);
+});
+
 test('init host file is captured before the fixture overlay', async ({ runnerHost }) => {
   const current = fs.readFileSync(path.join(runnerHost.dir, 'blizzard-host.toml'), 'utf8');
   expect(runnerHost.hostFile()).toBe(current);

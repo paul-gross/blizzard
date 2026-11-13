@@ -17,7 +17,7 @@ export type Project = NonNullable<PlaywrightTestConfig['projects']>[number];
  * profile's.
  */
 export function profileProject(projectName: string): string {
-  if (projectName === 'harness') return 'service-hub';
+  if (projectName === 'harness' || projectName === 'manual-winter-forge') return 'service-hub';
   if (projectName === 'harness-auth') return 'service-hub-auth';
   if (projectName === 'harness-actions') return 'service-hub-actions';
   const fleet = /^service-fleet(-.+)?$/.exec(projectName);

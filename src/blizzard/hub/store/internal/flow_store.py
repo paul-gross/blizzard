@@ -669,6 +669,7 @@ class FlowStore:
                     submission_id=row.submission_id,
                     repository_id=repository_id,
                     landing_policy=chosen.landing_policy,
+                    allow_no_ci=chosen.allow_no_ci,
                     park_timeout_hours=chosen.park_timeout_hours,
                     landing_position=chosen.landing_position,
                 )
@@ -745,6 +746,7 @@ def _terms_of(row: Row[Any]) -> LandingTerms:
     return LandingTerms(
         repository_id=row.repository_id,
         landing_policy=row.landing_policy,
+        allow_no_ci=row.allow_no_ci,
         park_timeout_hours=row.park_timeout_hours,
         landing_position=row.landing_position,
     )

@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261112_0900_hub_locks",
+  "head_revision": "20261113_0900_repair_hub_locks",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -3355,6 +3355,12 @@
     "flow_submission_terms": {
       "checks": [],
       "columns": {
+        "allow_no_ci": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        },
         "landing_policy": {
           "deprecated": null,
           "nullable": false,
@@ -6671,6 +6677,12 @@
     "repositories": {
       "checks": [],
       "columns": {
+        "allow_no_ci": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "Boolean"
+        },
         "base_branch": {
           "deprecated": null,
           "nullable": false,

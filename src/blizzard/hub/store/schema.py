@@ -487,6 +487,7 @@ repositories = Table(
     Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_repositories_forges"), nullable=False),
     # How work lands into the repository; the hub writes it explicitly, the default speaks for an older writer.
     Column("landing_policy", String, nullable=False, server_default="merge-on-checks"),
+    Column("allow_no_ci", Boolean, nullable=False, server_default=false()),
     # How long a parked change may wait; null is the default.
     Column("park_timeout_hours", Integer, nullable=True),
     PrimaryKeyConstraint("repository_id", name="pk_repositories"),
@@ -1781,6 +1782,7 @@ flow_submission_terms = Table(
     ),
     Column("repository_id", String, nullable=False),
     Column("landing_policy", String, nullable=False),
+    Column("allow_no_ci", Boolean, nullable=False, server_default=false()),
     Column("park_timeout_hours", Integer, nullable=True),
     Column("landing_position", Float(), nullable=True),  # null is unranked
     PrimaryKeyConstraint("submission_id", "repository_id", name="pk_flow_submission_terms"),
