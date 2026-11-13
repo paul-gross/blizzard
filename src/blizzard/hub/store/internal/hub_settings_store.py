@@ -12,6 +12,7 @@ from sqlalchemy import Connection, delete, insert, select, true, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.settings_record.decision import decide
 from blizzard.foundation.settings_record.refusals import SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
 from blizzard.foundation.settings_record.write import Validate, seed_entry, write
@@ -125,6 +126,12 @@ class HubSettingsStore:
         return HubSettingsSnapshot(revision, MappingProxyType(entries))
 
     def seed(self, keys: Sequence[str], file: ConfigView) -> None:
+        with self._store.read("hub_settings_seed_validation") as conn:
+            record = _Record(self._clock)
+            revision = record.revision(conn)
+            existing = record.entries(conn)
+            sets = {key: file.value(key) for key in keys if key not in existing and file.states(key)}
+            decide(revision, existing, Change("seed", sets=sets), if_match=revision, validate=self._validate)
         for key in keys:
             if not file.states(key):
                 continue

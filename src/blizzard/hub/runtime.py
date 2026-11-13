@@ -26,9 +26,11 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig, bootstrap_document
+from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.settings.footing import setting_keys
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 from blizzard.hub.store.schema import hub_setting_entries
 
@@ -118,8 +120,9 @@ class Runtime:
         finally:
             engine.dispose()
         remaining: dict[str, object] = deepcopy(document)
+        live_keys = set(setting_keys(HUB_REGISTRY))
         for key in keys:
-            if key in {"db_url", "host", "port"}:
+            if key not in live_keys:
                 continue
             parts = key.split(".")
             section: dict[str, object] = remaining

@@ -101,6 +101,25 @@ older hub then runs each node's untouched `run:` again. A chunk escalated meanwh
 
 ## Upgrading to the next release
 
+### Hub settings boundary
+
+Back up the hub store and its configuration file before upgrading. Run `blizzard hub migrate` with the new release
+before starting the hub; the compose entrypoint runs the migration on startup. The first upgraded host start seeds each
+explicitly stated live (`pass`) file key that has no stored entry into the hub settings store. Live keys with neither a
+stored entry nor a stated file value use their declared defaults. Later starts can seed a newly stated live key only if
+it still has no entry; file edits never override an existing live entry. An unset live setting leaves a durable default
+entry, so a later file value does not resurrect it.
+
+Manage live values with [hub settings](./deployment/hub-settings.md). Boot settings are not stored in that record or
+writable through the API: file, environment and flags are read on each restart, as appropriate to each setting.
+
+Before rolling back to a release that reads the file instead of stored settings, export the live values with
+`blizzard hub admin settings export > hub-settings.toml` while the upgraded hub is still running. Copy the intended
+values into `blizzard-hub.toml`, preserving the boot configuration and any other file-only material. Export omits every
+entry at default, including unsets: remove or replace any old file values for those keys with the intended defaults. It
+is a values-only export, not a complete file or replacement snapshot. Check the resulting file before rolling back; the
+older hub cannot read the new settings entries. Follow [rollback](./rollback.md) for the store downgrade.
+
 ### Runners below 0.4 are refused
 
 The hub↔runner floor rises from 0.2 to 0.4, so the hub refuses a runner older than 0.4. This reverses the usual
