@@ -149,13 +149,13 @@ def test_completion_skips_an_unbound_ref_and_returns_its_row_id_publishing_nothi
     since = hub.events.latest_id()
 
     with stores.exclusive.locked([chunk_id]) as handle:
-        written = stores.lifecycle.record_completion_locked(
-            handle,
+        written = stores.lifecycle.record_completion(
             chunk_id,
             by="test",
             at=hub.clock.now(),
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
             waiting=(),
+            transaction=handle.transaction,
         )
 
     assert _pending_intents(hub) == set()

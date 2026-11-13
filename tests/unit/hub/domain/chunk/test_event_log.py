@@ -234,12 +234,12 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         )
     clock.instant = _at(20)
     with store.exclusive.locked(["ch_d"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_d", by="operator", at=_at(20), waiting=())
+        store.lifecycle.record_stop("ch_d", by="operator", at=_at(20), waiting=(), transaction=handle.transaction)
     # ch_e: stop then a LATER escalation -> still dropped; a stopped chunk is terminal, so the
     # store query excludes it before the escalation's ordering is ever consulted.
     clock.instant = _at(10)
     with store.exclusive.locked(["ch_e"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_e", by="operator", at=_at(10), waiting=())
+        store.lifecycle.record_stop("ch_e", by="operator", at=_at(10), waiting=(), transaction=handle.transaction)
     # Seeded as a raw row: the write fence refuses an escalation on a stopped chunk, so the
     # store cannot produce this ordering — only the read's exclusion can be pinned.
     with engine.begin() as conn:

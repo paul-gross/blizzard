@@ -99,13 +99,13 @@ def test_stores_with_no_services_record_the_skip_row_and_return_its_id(tmp_path:
     since = hub.events.latest_id()
 
     with stores.exclusive.locked([chunk_id]) as handle:
-        written = stores.lifecycle.record_completion_locked(
-            handle,
+        written = stores.lifecycle.record_completion(
             chunk_id,
             by="test",
             at=hub.clock.now(),
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
             waiting=(),
+            transaction=handle.transaction,
         )
 
     assert written.close_skipped == tuple(_skip_row_ids(hub))

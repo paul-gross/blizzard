@@ -1,12 +1,12 @@
 """CompleteService (unit tier) — the operator's manual chunk completion.
 
 A fake stands in for the lifecycle store and the locked-transaction seam — only
-``record_completion_locked`` and the handle's ``facts`` read are meaningfully implemented;
+``record_completion`` and the locked ``load_facts`` read are meaningfully implemented;
 every other seam raises loudly if called, mirroring ``StopService``'s own split. The
 service stamps ``at`` from its injected clock once the row lock is held, never before it
 (``bzh:store-exclusive-write``); the fake lock advances the clock while it waits so the
 stamp pins that ordering. The already-``done`` guard is
-re-derived from the locked handle's own ``facts`` read, never a pre-lock snapshot."""
+re-derived from the locked transaction's own ``load_facts`` read, never a pre-lock snapshot."""
 
 from __future__ import annotations
 
@@ -25,10 +25,11 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite, OpenSubmission
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, CloseEnqueueDecision, RouteCreatedFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -39,7 +40,7 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, p
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``record_completion_locked`` is live — see module docstring."""
+    """Only ``record_completion`` is live — see module docstring."""
 
     completed: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     stamps: list[datetime] = field(default_factory=list[datetime])
@@ -49,16 +50,17 @@ class _FakeChunkRepo:
 
     waiting: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
 
-    def record_completion_locked(
+    def record_completion(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         by: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
         waiting: Sequence[str],
+        transaction: LockedTransaction,
     ) -> LeverWrite:
+        assert transaction is _UNIT, "the completion is written on the unit's locked transaction"
         self.completed.append((chunk_id, by))
         self.waiting.append(tuple(waiting))
         self.stamps.append(at)
@@ -71,7 +73,7 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"CompleteService should not touch {name!r}")
 
 
-_UNIT = cast(Transaction, object())
+_UNIT = cast(LockedTransaction, object())
 
 
 @dataclass
@@ -89,33 +91,40 @@ class _FakeFlowSubmissions:
         )
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    chunk_facts: ChunkFacts | None
-    transaction: Transaction = _UNIT
+class _FakeUnit:
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        return _UNIT
 
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
+
+@dataclass
+class _FakeFacts:
+    chunk_facts: ChunkFacts | None
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        assert transaction is _UNIT, "the already-done guard is re-derived on the locked transaction"
         return self.chunk_facts
 
-    def record(self, chunk_id: str) -> Chunk | None:
-        return _CHUNK if self.chunk_facts is not None else None
 
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"CompleteService should not touch handle.{name!r}")
+@dataclass
+class _FakeRecord:
+    chunk_facts: ChunkFacts | None
+
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        assert transaction is _UNIT, "the record is re-read on the locked transaction"
+        return _CHUNK if self.chunk_facts is not None else None
 
 
 @dataclass
-class _FakeExclusiveWrites:
-    chunk_facts: ChunkFacts | None
+class _FakeTransactions:
     clock: FixedClock
     held: bool = False
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
+    def begin(self) -> Generator[Transaction]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         self.held = True
         try:
-            yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
+            yield cast(Transaction, _FakeUnit())
         finally:
             self.held = False
 
@@ -124,7 +133,7 @@ class _FakeExclusiveWrites:
 class _FakePublisher:
     """Records each ``event-logged`` frame, and whether the completion's lock was still held when it published."""
 
-    exclusive: _FakeExclusiveWrites
+    transactions: _FakeTransactions
     published: list[tuple[str, str | None, str | None, bool]] = field(
         default_factory=list[tuple[str, str | None, str | None, bool]]
     )
@@ -140,7 +149,7 @@ class _FakePublisher:
         key: str | None = None,
         project_id: str | None = None,
     ) -> int:
-        self.published.append((kind, key, project_id, self.exclusive.held))
+        self.published.append((kind, key, project_id, self.transactions.held))
         return len(self.published)
 
 
@@ -149,12 +158,14 @@ def _service(
 ) -> tuple[CompleteService, _FakeChunkRepo, _FakePublisher]:
     repo = _FakeChunkRepo(close_skipped=close_skipped)
     clock = FixedClock(_T0)
-    fake_exclusive = _FakeExclusiveWrites(facts, clock)
-    publisher = _FakePublisher(fake_exclusive)
+    fake_transactions = _FakeTransactions(clock)
+    publisher = _FakePublisher(fake_transactions)
     service = CompleteService(
         lifecycle=cast(IWriteChunkLifecycleRepository, repo),
         submissions=_FakeFlowSubmissions(),
-        exclusive=cast(IChunkExclusiveWrites, fake_exclusive),
+        facts=cast(IReadChunkFactsRepository, _FakeFacts(facts)),
+        record=cast(IReadChunkRecordRepository, _FakeRecord(facts)),
+        transactions=cast(IHubTransactions, fake_transactions),
         clock=clock,
         closer_available=lambda source: source == "hub",
         events=EventLogService(

@@ -9,8 +9,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 
 class IReadChunkLifecycleRepository(Protocol):
@@ -28,24 +27,23 @@ class IReadChunkLifecycleRepository(Protocol):
 class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
     """Read-write chunk-lifecycle access."""
 
-    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
+    def record_pause(
+        self, chunk_id: str, *, paused: bool, by: str, at: datetime, transaction: Transaction | None = None
+    ) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins.
 
         Always writes a fresh row (never a no-op — "newest fact wins" reads, it does not
-        skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally."""
+        skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally. A pause passes the
+        ``transaction`` that locks the chunk (``bzh:store-exclusive-write``), so the status the pause
+        was admitted at cannot move between the check and this write; a resume is admitted at every
+        status and writes alone."""
         ...
 
-    def record_pause_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
-        """Append a ``chunk.paused`` fact on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), so the status the pause was admitted at cannot move
-        between the check and this write. Returns the fresh ``chunk_pause_facts.id``."""
-        ...
-
-    def record_stop_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str]
+    def record_stop(
+        self, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str], transaction: LockedTransaction
     ) -> LeverWrite:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment —
-        and, atomically on ``handle``'s already-locked connection
+        and, atomically in the locked ``transaction``
         (``bzh:store-exclusive-write``), release any live route and close ``stopped`` each of
         the flow submissions the caller names in ``waiting``, in that order.
         ``at`` is passed in, stamped by the caller after the row lock, so a
@@ -55,22 +53,22 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         write, with the ``withdrawn`` flow facts it wrote."""
         ...
 
-    def record_completion_locked(
+    def record_completion(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         by: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
         waiting: Sequence[str],
+        transaction: LockedTransaction,
     ) -> LeverWrite:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
-        ``stopped`` — and, atomically on ``handle``'s already-locked connection
+        ``stopped`` — and, atomically in the locked ``transaction``
         (``bzh:store-exclusive-write``), release any live route and close ``completed`` each of
-        the flow submissions the caller names in ``waiting``, mirroring :meth:`record_stop_locked`, and enqueue
+        the flow submissions the caller names in ``waiting``, mirroring :meth:`record_stop`, and enqueue
         the chunk's close intents. The caller has already
         checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
-        caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
+        caller after the row lock — see :meth:`record_stop`. Returns the freshly-written
         ``chunk_completed.id``, with the ``withdrawn`` flow facts it wrote."""
         ...
