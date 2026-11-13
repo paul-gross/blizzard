@@ -1,6 +1,6 @@
-"""The flow record's one-transaction writes (component tier). A turn is taken only when its submission is open, free of
-an open turn, on flows no other turn holds, and behind no eligible arrival, and several flows are taken together or
-not at all. A turn's end commits with the writes that route its answer — a transition, a bounce and escalation, or a
+"""The flow record's one-transaction writes (component tier). A turn, judged on the standing read in a unit locking the
+submission's chunk and its flows, is taken only when its submission is open, free of an open turn, on flows no other
+turn holds, and behind no eligible arrival, and several flows are taken together or not at all. A turn's end commits with the writes that route its answer — a transition, a bounce and escalation, or a
 poll row — or not at all, and a fenced exit still ends the turn with ``withdrawal_for``'s closure. Every hub-node
 escalation writes the visit's epoch plus one. A landing on a flow writes its five rows once, and a lever withdraws a
 waiting submission and leaves a mid-turn one to its turn."""
@@ -37,6 +37,7 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
     chunk_unit,
+    flow_unit,
     hub_scoped,
     hub_store_connections,
     ingest,
@@ -81,10 +82,15 @@ class _World:
         return submission
 
     def take(self, submission: Submission, *, passed_over: frozenset[str] = frozenset()) -> str | None:
-        turn = self.flows.take_turn(
-            submission.submission_id, passed_over=passed_over, terms=(), at=self.hub.clock.now()
-        )
-        return None if turn is None else turn.turn_id
+        """Take ``submission``'s turn as the reconcile does: in a unit locking its chunk and its flows, when the
+        standing re-read there lets it."""
+        with flow_unit(hub_store_connections(self.hub.engine), submission) as unit:
+            standing = self.flows.queue_standing(submission.submission_id, transaction=unit)
+            if standing is None or not standing.may_take_turn(passed_over):
+                return None
+            return self.flows.take_turn(
+                submission.submission_id, terms=(), at=self.hub.clock.now(), transaction=unit
+            ).turn_id
 
     def count(self, table: Table) -> int:
         with self.hub.engine.connect() as conn:
@@ -139,7 +145,8 @@ def test_a_visit_with_an_open_turn_takes_no_second(world: _World) -> None:
 
 def test_a_closed_submission_takes_no_turn(world: _World) -> None:
     submission = world.submit(world.chunk())
-    world.flows.close(submission.submission_id, outcome="superseded", at=world.hub.clock.now())
+    with flow_unit(hub_store_connections(world.hub.engine), submission) as unit:
+        world.flows.close(submission.submission_id, outcome="superseded", at=world.hub.clock.now(), transaction=unit)
 
     assert world.take(submission) is None
 

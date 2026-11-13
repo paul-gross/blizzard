@@ -17,6 +17,7 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_unit,
     emitted_events,
+    flow_unit,
     hub_store_connections,
     ingest,
     report_lease,
@@ -283,7 +284,8 @@ def test_stop_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_its_tu
             transaction=unit,
         )
     assert waiting is not None and turning is not None
-    assert flows.take_turn(turning.submission_id, passed_over=frozenset(), terms=(), at=now) is not None
+    with flow_unit(hub_store_connections(hub.engine), turning) as unit:
+        flows.take_turn(turning.submission_id, terms=(), at=now, transaction=unit)
 
     for chunk_id in (waiting_chunk, turning_chunk):
         resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})

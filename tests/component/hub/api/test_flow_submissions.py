@@ -10,7 +10,7 @@ from pathlib import Path
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.auth_session import TENANT_HEADER
-from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
+from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, Turn, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
@@ -23,6 +23,7 @@ from tests.support.scaffolding import (
     count_queries,
     count_rows_read,
     explain_query_plan,
+    flow_unit,
     hub_store_connections,
     seed_session,
     seed_user,
@@ -52,6 +53,12 @@ def _submit(
         )
 
 
+def _take_turn(hub: HubHarness, submission: Submission, *, terms: Sequence[LandingTerms], at: datetime) -> Turn:
+    """Start ``submission``'s turn in a unit locking its chunk and its flows."""
+    with flow_unit(hub_store_connections(hub.engine), submission) as unit:
+        return _flows(hub).take_turn(submission.submission_id, terms=terms, at=at, transaction=unit)
+
+
 def test_the_read_serves_every_submission_in_arrival_order_with_its_closure(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, other_chunk = ingest_chunk(hub), ingest_chunk(hub, pointer_token="default:2")
@@ -60,7 +67,8 @@ def test_the_read_serves_every_submission_in_arrival_order_with_its_closure(tmp_
     _submit(hub, other_chunk)
     second = _submit(hub, chunk_id, generation=1, at=_AT + timedelta(seconds=1))
     assert first is not None and second is not None
-    assert flows.close(first.submission_id, outcome="superseded", at=_AT + timedelta(seconds=2))
+    with flow_unit(hub_store_connections(hub.engine), first) as unit:
+        assert flows.close(first.submission_id, outcome="superseded", at=_AT + timedelta(seconds=2), transaction=unit)
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/flow-submissions")
 
@@ -214,16 +222,14 @@ def test_captured_terms_and_paged_turns_include_zero_flow_submissions(tmp_path: 
     garden = _submit(hub, chunk, node_id="nd_garden", resources=[])
     assert submission is not None and garden is not None
     terms = [LandingTerms("repo_a", "park", 2, 1.5)]
-    first = flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=terms, at=_AT)
-    assert first is not None
+    first = _take_turn(hub, submission, terms=terms, at=_AT)
     event = TurnEvent(kind="turn-interrupted", chunk_id=chunk, node_name="deliver", message="interrupted", detail={})
     assert (
         flows.end_turn_interrupted(first.turn_id, withdrawal=None, event=event, at=_AT + timedelta(seconds=1))
         is not None
     )
-    second = flows.take_turn(submission.submission_id, passed_over=frozenset(), terms=[], at=_AT + timedelta(seconds=2))
-    garden_turn = flows.take_turn(garden.submission_id, passed_over=frozenset(), terms=[], at=_AT)
-    assert second is not None and garden_turn is not None
+    second = _take_turn(hub, submission, terms=[], at=_AT + timedelta(seconds=2))
+    garden_turn = _take_turn(hub, garden, terms=[], at=_AT)
 
     items = hub.client.get(f"/api/chunks/{chunk}/flow-submissions").json()["items"]
     assert items[0]["flow_ids"] == [submission.flows[0].flow_id]

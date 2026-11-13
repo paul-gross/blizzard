@@ -41,6 +41,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingTerms,
     PollPolicy,
+    QueueStanding,
     Submission,
     SubmissionRecord,
     Turn,
@@ -521,6 +522,9 @@ class _Flows:
         raise NotImplementedError
 
     def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
+        raise NotImplementedError
+
+    def queue_standing(self, submission_id: str, *, transaction: Transaction) -> QueueStanding | None:
         raise NotImplementedError
 
     def terms_of(self, submission_id: str) -> dict[str, LandingTerms]:

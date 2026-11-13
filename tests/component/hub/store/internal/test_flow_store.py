@@ -1,6 +1,7 @@
 """``FlowStore`` (component tier). A submission takes the tenant's newest arrival plus one and is written once per
-generation of a visit, only in a unit locking its chunk; a closure is written once, with its ``withdrawn`` facts, and never while a turn is open; the
-open walk from a floor returns only open submissions at or above it; and ending a turn ``interrupted`` writes its
+generation of a visit, only in a unit locking its chunk; a closure and a turn are written only in a unit locking the
+submission's chunk and every flow it holds, and a closure only once, with its ``withdrawn`` facts; the standing read
+projects a submission's own open turn, its busy flows, and the open submissions ahead of it; the open walk from a floor returns only open submissions at or above it; and ending a turn ``interrupted`` writes its
 ``turn-ended`` facts and, when asked, the closure, once. A turn gives its submission landing terms for each repository
 it holds and has none for — an earlier generation's, else the candidate — so a retried turn and a resubmission keep
 what the visit's first turn took."""
@@ -16,14 +17,26 @@ import pytest
 from sqlalchemy import Engine, Table, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.delivery.flows import (
+    FlowResource,
+    LandingTerms,
+    QueueStanding,
+    Submission,
+    Turn,
+    TurnEvent,
+    Withdrawal,
+    flow_lock,
+)
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     build_hub,
     capture_statements,
     chunk_unit,
+    flow_unit,
     hub_scoped,
     hub_store_connections,
     stamp,
@@ -54,6 +67,23 @@ class _World:
                 at=_AT,
                 transaction=unit,
             )
+
+    def close(
+        self, submission: Submission, outcome: Withdrawal, *, at: datetime = _AT
+    ) -> tuple[FlowFactWritten, ...] | None:
+        """Close ``submission`` in a unit locking its chunk and its flows."""
+        with flow_unit(hub_store_connections(self.engine), submission) as unit:
+            return self.flows.close(submission.submission_id, outcome=outcome, at=at, transaction=unit)
+
+    def turn(self, submission: Submission, terms: Sequence[LandingTerms] = (), *, at: datetime = _AT) -> Turn:
+        """Start ``submission``'s turn in a unit locking its chunk and its flows."""
+        with flow_unit(hub_store_connections(self.engine), submission) as unit:
+            return self.flows.take_turn(submission.submission_id, terms=terms, at=at, transaction=unit)
+
+    def standing(self, submission: Submission) -> QueueStanding | None:
+        """``submission``'s standing, read in a unit locking its chunk and its flows."""
+        with flow_unit(hub_store_connections(self.engine), submission) as unit:
+            return self.flows.queue_standing(submission.submission_id, transaction=unit)
 
 
 @pytest.fixture
@@ -127,8 +157,8 @@ def test_a_submission_is_closed_once_with_one_withdrawn_fact_per_flow(world: _Wo
     submission = world.submit("ch_1", resources=[_MAIN, _OTHER])
     assert submission is not None
 
-    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is not None
-    assert flows.close(submission.submission_id, outcome="stopped", at=_AT + timedelta(seconds=1)) is None
+    assert world.close(submission, "superseded") is not None
+    assert world.close(submission, "stopped", at=_AT + timedelta(seconds=1)) is None
 
     withdrawn = [f for f in flows.facts_of(submission.submission_id) if f.kind == "withdrawn"]
     assert sorted((f.flow_id, f.outcome) for f in withdrawn) == sorted(
@@ -139,20 +169,62 @@ def test_a_submission_is_closed_once_with_one_withdrawn_fact_per_flow(world: _Wo
     assert visit is not None and visit.closed == "superseded"
 
 
-def test_a_submission_with_an_open_turn_is_not_closed(world: _World, flows: FlowStore) -> None:
+def test_a_close_or_turn_refuses_a_unit_missing_the_chunk_or_a_flow_key(world: _World, flows: FlowStore) -> None:
+    submission = world.submit("ch_1", resources=[_MAIN, _OTHER])
+    assert submission is not None
+    store = hub_store_connections(world.engine)
+    short = [flow_lock(submission.flows[0])]
+
+    for chunks, keys in ((["ch_2"], [flow_lock(flow) for flow in submission.flows]), (["ch_1"], short)):
+        with pytest.raises(TransactionMisuse), HubTransactions(store).begin() as transaction:
+            unit = transaction.lock_set(chunks=chunks, keys=keys)
+            flows.close(submission.submission_id, outcome="superseded", at=_AT, transaction=unit)
+        with pytest.raises(TransactionMisuse), HubTransactions(store).begin() as transaction:
+            unit = transaction.lock_set(chunks=chunks, keys=keys)
+            flows.take_turn(submission.submission_id, terms=(), at=_AT, transaction=unit)
+
+    assert _count(world.engine, s.flow_submission_closures) == 0
+    assert _count(world.engine, s.hub_turns) == 0
+
+
+def test_a_close_writes_even_with_a_turn_open_leaving_the_judgment_to_its_caller(
+    world: _World, flows: FlowStore
+) -> None:
     submission = world.submit("ch_1")
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
-    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is None
-    assert _count(world.engine, s.flow_submission_closures) == 0
+    assert world.close(submission, "superseded") is not None
+    assert _count(world.engine, s.flow_submission_closures) == 1
+
+
+def test_the_standing_read_projects_the_turn_the_busy_flows_and_the_queue_ahead(
+    world: _World, flows: FlowStore
+) -> None:
+    first = world.submit("ch_1")
+    second = world.submit("ch_2", resources=[_MAIN, _OTHER])
+    alone = world.submit("ch_3", resources=[])
+    assert first is not None and second is not None and alone is not None
+
+    assert world.standing(second) == QueueStanding(
+        submission=second, turning=False, busy=False, ahead=frozenset({first.submission_id})
+    )
+    assert world.standing(alone) == QueueStanding(submission=alone, turning=False, busy=False, ahead=frozenset())
+
+    _plant_turn(world.engine, first.submission_id)
+    world.close(first, "superseded")
+
+    standing = world.standing(second)
+    assert standing is not None and (standing.turning, standing.busy, standing.ahead) == (False, True, frozenset())
+    closed = world.standing(first)
+    assert closed is not None and (closed.submission.closed, closed.turning) == ("superseded", True)
 
 
 def test_the_floor_walk_returns_only_open_submissions_at_or_above_the_floor(world: _World, flows: FlowStore) -> None:
     submitted = [world.submit(f"ch_{n}") for n in range(1, 5)]
     assert all(submitted)
     ids = [sub.submission_id for sub in submitted if sub is not None]
-    flows.close(ids[2], outcome="completed", at=_AT)
+    world.close(next(sub for sub in submitted if sub is not None and sub.submission_id == ids[2]), "completed")
 
     walked = flows.open_submissions_from(2)
 
@@ -206,10 +278,8 @@ _TERMS_B = LandingTerms("repo_b", "merge-on-checks", None, 2.0)
 _THIRD = FlowResource("repo_c", "main")
 
 
-def _turn(flows: FlowStore, submission_id: str, terms: tuple[LandingTerms, ...], *, at: datetime = _AT) -> str:
-    turn = flows.take_turn(submission_id, passed_over=frozenset(), terms=terms, at=at)
-    assert turn is not None
-    return turn.turn_id
+def _turn(world: _World, submission: Submission, terms: tuple[LandingTerms, ...], *, at: datetime = _AT) -> str:
+    return world.turn(submission, terms, at=at).turn_id
 
 
 def test_a_first_turn_takes_terms_for_every_repository_it_holds(world: _World, flows: FlowStore) -> None:
@@ -217,7 +287,7 @@ def test_a_first_turn_takes_terms_for_every_repository_it_holds(world: _World, f
     assert submission is not None
     assert flows.terms_of(submission.submission_id) == {}
 
-    _turn(flows, submission.submission_id, (_TERMS_A, _TERMS_B))
+    _turn(world, submission, (_TERMS_A, _TERMS_B))
 
     assert flows.terms_of(submission.submission_id) == {"repo_a": _TERMS_A, "repo_b": _TERMS_B}
 
@@ -225,10 +295,10 @@ def test_a_first_turn_takes_terms_for_every_repository_it_holds(world: _World, f
 def test_a_retried_turn_keeps_the_terms_its_first_attempt_took(world: _World, flows: FlowStore) -> None:
     submission = world.submit("ch_1")
     assert submission is not None
-    first = _turn(flows, submission.submission_id, (_TERMS_A,))
+    first = _turn(world, submission, (_TERMS_A,))
     flows.end_turn_interrupted(first, withdrawal=None, event=_INTERRUPTED, at=_AT)
 
-    _turn(flows, submission.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 9.0),))
+    _turn(world, submission, (LandingTerms("repo_a", "merge-on-checks", None, 9.0),))
 
     assert flows.terms_of(submission.submission_id) == {"repo_a": _TERMS_A}
     assert _count(world.engine, s.flow_submission_terms) == 1
@@ -240,13 +310,13 @@ def test_a_resubmission_copies_the_visits_terms_and_takes_fresh_ones_only_for_a_
 ) -> None:
     first = world.submit("ch_1", resources=[_MAIN, _OTHER])
     assert first is not None
-    turn = _turn(flows, first.submission_id, (_TERMS_A, _TERMS_B))
+    turn = _turn(world, first, (_TERMS_A, _TERMS_B))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
     second = world.submit("ch_1", generation=1, resources=[_MAIN, _THIRD])
     assert second is not None
     fresh_c = LandingTerms("repo_c", "merge-on-checks", None, None)
 
-    _turn(flows, second.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 5.0), fresh_c))
+    _turn(world, second, (LandingTerms("repo_a", "merge-on-checks", None, 5.0), fresh_c))
 
     assert flows.terms_of(second.submission_id) == {"repo_a": _TERMS_A, "repo_c": fresh_c}
 
@@ -255,12 +325,12 @@ def test_the_first_turn_of_a_visit_is_kept_across_its_resubmissions(world: _Worl
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) is None
     first = world.submit("ch_1")
     assert first is not None
-    turn = _turn(flows, first.submission_id, (_TERMS_A,))
+    turn = _turn(world, first, (_TERMS_A,))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
     second = world.submit("ch_1", generation=1)
     assert second is not None
 
-    _turn(flows, second.submission_id, (_TERMS_A,), at=_AT + timedelta(hours=1))
+    _turn(world, second, (_TERMS_A,), at=_AT + timedelta(hours=1))
 
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) == _AT
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=2) is None
@@ -321,7 +391,7 @@ def test_each_repository_takes_the_terms_of_its_own_newest_earlier_generation(wo
     _plant_terms(world.engine, future, "repo_b", 31.0)
     assert two is not None
 
-    _turn(flows, two.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 99.0),))
+    _turn(world, two, (LandingTerms("repo_a", "merge-on-checks", None, 99.0),))
 
     assert flows.terms_of(two.submission_id) == {"repo_a": newer_a, "repo_b": older_b}
 
@@ -336,7 +406,7 @@ def test_a_repository_with_no_earlier_terms_takes_its_candidate_and_one_with_nei
     assert one is not None
     candidate = LandingTerms("repo_b", "merge-on-checks", None, 5.0)
 
-    _turn(flows, one.submission_id, (candidate,))
+    _turn(world, one, (candidate,))
 
     assert flows.terms_of(one.submission_id) == {"repo_a": _TERMS_A, "repo_b": candidate}
 
@@ -352,8 +422,7 @@ def _terms_rows_read_by_turn(world: _World, depth: int) -> int:
     assert current is not None
     # Only the statements over the terms table: take_turn's other reads grow with the tenant's other rows.
     with capture_statements(world.engine) as statements:
-        turn = world.flows.take_turn(current.submission_id, passed_over=frozenset(), terms=(), at=_AT)
-    assert turn is not None
+        turn = world.turn(current)
     world.flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=_INTERRUPTED, at=_AT)
     total = 0
     with world.engine.connect() as conn:

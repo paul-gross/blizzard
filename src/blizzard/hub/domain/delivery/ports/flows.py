@@ -21,6 +21,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingTerms,
     LandingWrite,
+    QueueStanding,
     Submission,
     SubmissionRecord,
     Turn,
@@ -85,6 +86,12 @@ class IReadFlows(Protocol):
 
     def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
         """Where the visit's newest submission stands in the flows it holds, or ``None`` when it has no open
+        submission."""
+        ...
+
+    def queue_standing(self, submission_id: str, *, transaction: Transaction) -> QueueStanding | None:
+        """The submission as its flows' queue stands, read in ``transaction`` (``bzh:transaction-participation``) —
+        the unit that decides whether to close it or start its turn — or ``None`` when the tenant has no such
         submission."""
         ...
 
@@ -163,28 +170,30 @@ class IWriteFlows(IReadFlows, Protocol):
         Returns ``None``, writing nothing, when that generation of the visit is already submitted."""
         ...
 
-    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
-        """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds, answering those facts.
-        Returns ``None``, writing nothing, when a closure already exists or the submission has an open turn, whose end
-        writes the closure."""
+    def close(
+        self, submission_id: str, *, outcome: Withdrawal, at: datetime, transaction: LockedTransaction
+    ) -> tuple[FlowFactWritten, ...] | None:
+        """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds, answering those facts — in
+        ``transaction``, a unit that locks the submission's chunk and every flow it holds, where whether it may close is
+        decided (``bzh:transaction-participation``). Returns ``None``, writing nothing, when a closure already
+        exists."""
         ...
 
     def take_turn(
         self,
         submission_id: str,
         *,
-        passed_over: frozenset[str],
         terms: Sequence[LandingTerms],
         at: datetime,
-    ) -> Turn | None:
-        """Start a turn of the submission with a ``turn-started`` fact per flow it holds, in one transaction under the
-        tenant row lock and each held resource's lock. Returns ``None``, writing nothing, unless the submission is open
-        with no open turn, no flow it holds has an open turn, and every open submission ahead of it on those flows is
-        in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at all.
+        transaction: LockedTransaction,
+    ) -> Turn:
+        """Start a turn of the submission with a ``turn-started`` fact per flow it holds — in ``transaction``, a unit
+        that locks the submission's chunk and every flow it holds, where whether the queue lets it take the turn is
+        decided (``bzh:transaction-participation``).
 
-        The same transaction gives the submission terms for each repository it holds and has none for: those an
-        earlier generation of the visit took, else the candidate in ``terms`` — so a retried turn keeps what its first
-        took, and a resubmission keeps what the visit took."""
+        The same write gives the submission terms for each repository it holds and has none for: those an earlier
+        generation of the visit took, else the candidate in ``terms`` — so a retried turn keeps what its first took,
+        and a resubmission keeps what the visit took."""
         ...
 
     def end_turn_locked(

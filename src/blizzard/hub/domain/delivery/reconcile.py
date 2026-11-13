@@ -7,7 +7,7 @@ a turn for every visit next on each flow it holds."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -38,10 +38,12 @@ from blizzard.hub.domain.delivery.flows import (
     TURN_SUPERSEDED,
     AdmittedTurn,
     LandingTerms,
+    QueueStanding,
     Submission,
     Turn,
     TurnEvent,
     Withdrawal,
+    flow_lock,
     held_resources,
     withdrawal_for,
     written_on,
@@ -51,7 +53,8 @@ from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
-from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
+from blizzard.hub.domain.kernel.locks import LockKey
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
@@ -251,8 +254,8 @@ class FlowLineReconciler:
 
     def admit(self, floor: int, now: datetime) -> list[AdmittedTurn]:
         """Take a turn, oldest arrival first, for every open submission at or above ``floor`` that is next on every
-        flow it holds, judged on one bulk read; the store re-checks each under the flows' locks, handed the
-        submissions judged ineligible."""
+        flow it holds, judged on one bulk read; each is judged again in its own unit, on its standing re-read under its
+        chunk's and its flows' locks, handed the submissions judged ineligible."""
         subs = self._flows.open_submissions_from(floor)
         if not subs:
             return []
@@ -262,12 +265,20 @@ class FlowLineReconciler:
         terms = self._candidate_terms(nexts)
         admitted: list[AdmittedTurn] = []
         for sub in nexts:
-            turn: Turn | None = self._flows.take_turn(
-                sub.submission_id, passed_over=passed_over, terms=terms[sub.submission_id], at=self._clock.now()
-            )
-            if turn is not None:
+            if (turn := self._take_turn(sub, passed_over, terms[sub.submission_id])) is not None:
                 admitted.append(AdmittedTurn(turn, sub))
         return admitted
+
+    def _take_turn(self, sub: Submission, passed_over: frozenset[str], terms: Sequence[LandingTerms]) -> Turn | None:
+        """Start ``sub``'s turn in its own unit, when the standing re-read there lets it take one."""
+        return self._in_queue_unit(
+            sub,
+            lambda standing, locked: (
+                self._flows.take_turn(sub.submission_id, terms=terms, at=self._clock.now(), transaction=locked)
+                if standing.may_take_turn(passed_over)
+                else None
+            ),
+        )
 
     def _candidate_terms(self, subs: Sequence[Submission]) -> dict[str, tuple[LandingTerms, ...]]:
         """The terms each submission's repositories would take now, by submission: each held repository's record
@@ -437,13 +448,63 @@ class FlowLineReconciler:
             withdrawal = withdrawal_for(ChunkFacts.or_default(facts.get(sub.chunk_id)), sub)
             if sub.submission_id in turning or withdrawal is None:
                 still_open.append(sub)
-            elif (written := self._flows.close(sub.submission_id, outcome=withdrawal, at=now)) is not None:
+            elif (written := self._close(sub, withdrawal, at=now)) is not None:
                 closed.append(written)
         return closed, still_open
+
+    def _close(self, sub: Submission, withdrawal: Withdrawal, *, at: datetime) -> tuple[FlowFactWritten, ...] | None:
+        """Close ``sub`` ``withdrawal`` in its own unit, unless the standing re-read there finds a turn open."""
+        return self._in_queue_unit(
+            sub,
+            lambda standing, locked: (
+                self._flows.close(sub.submission_id, outcome=withdrawal, at=at, transaction=locked)
+                if standing.may_close()
+                else None
+            ),
+        )
+
+    def _in_queue_unit[T](
+        self, sub: Submission, act: Callable[[QueueStanding, LockedTransaction], T | None]
+    ) -> T | None:
+        """Run ``act`` in one unit declaring ``sub``'s chunk and a lock per flow it holds, on its standing re-read
+        there. A re-read flow outside the declared keys writes nothing and runs the unit again over the union; a
+        submission the re-read does not find writes nothing."""
+        keys = frozenset(flow_lock(flow) for flow in sub.flows)
+        while True:
+            outcome = self._queue_unit_once(sub, keys, act)
+            if not isinstance(outcome, _Unlocked):
+                return outcome
+            keys |= outcome.keys
+
+    def _queue_unit_once[T](
+        self,
+        sub: Submission,
+        keys: frozenset[LockKey],
+        act: Callable[[QueueStanding, LockedTransaction], T | None],
+    ) -> T | None | _Unlocked:
+        """One run of the unit over ``keys``: ``act``'s answer, or — writing nothing — the keys the re-read found
+        outside them."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(chunks=[sub.chunk_id], keys=sorted(keys))
+            standing = self._flows.queue_standing(sub.submission_id, transaction=locked)
+            if standing is None:
+                return None
+            unlocked = standing.locks() - keys
+            if unlocked:
+                return _Unlocked(unlocked)
+            return act(standing, locked)
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:
         """Each named chunk's graph's node names, by ``(chunk_id, node_id)``."""
         return {key: node.name for key, node in self._lines.nodes(chunk_ids).items()}
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Unlocked:
+    """The flow keys a queue unit's re-read found its submission holding outside the keys it declared."""
+
+    keys: frozenset[LockKey]
 
 
 def _hub_node_of(facts: ChunkFacts, graph: Graph | None) -> Node | None:
