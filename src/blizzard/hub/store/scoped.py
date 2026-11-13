@@ -44,10 +44,10 @@ raises :class:`TenantClosed` when the tenant is closed (:class:`UnknownTenant` w
 statement is the transaction's first write, so on SQLite the driver's deferred ``BEGIN`` precedes it and the read runs
 under the single writer lock; on Postgres a write that waited on a close's row lock takes a fresh snapshot for the
 read, which sees the close that committed meanwhile. Either way a close either committed before the read, and is seen,
-or waits for the writer's commit. The one write that cannot lock its
-tenant's row is the one that creates it: ``founding`` opens by inserting that row instead. The writes a closed
-tenant still takes — its deletion's drain and completion — open with ``teardown``, which locks the tenant's
-deletion fact instead, on the condition that the deletion is still underway."""
+or waits for the writer's commit. The one write that cannot lock its tenant's row is the one that creates it:
+``founding`` opens by inserting that row instead. The writes a closed tenant still takes — its deletion's drain and
+completion — open with ``teardown``, which locks the tenant's deletion fact instead, on the condition that the deletion
+is still underway."""
 
 from __future__ import annotations
 

@@ -401,7 +401,7 @@ def _case_closed_tenant_close_holds(hub: _Hub) -> None:
     finally:
         release.set()
         threads.join()
-        del hub.store.close  # type: ignore[attr-defined]
+        vars(hub.store).pop("close", None)
     if threads.outcomes.get("close") is not None:
         raise RuntimeError(f"the close failed: {threads.outcomes['close']!r}")
     refusal = threads.outcomes.get("write")
@@ -436,12 +436,13 @@ def _case_two_closes_last_tenants(hub: _Hub) -> None:
     try:
         if not held.wait(_TIMEOUT):
             raise RuntimeError(f"first close failed to hold: {threads.outcomes}")
-        del hub.store.close  # type: ignore[attr-defined]
+        vars(hub.store).pop("close", None)
         threads.start("second", lambda: hub.teardown.close(TenantId(second_tenant), by="proof"))
         _wait_for_blocked_by(hub.engine, pids["closer"])
     finally:
         release.set()
         threads.join()
+        vars(hub.store).pop("close", None)
     if threads.outcomes.get("first") is not None:
         raise RuntimeError(f"the first close failed: {threads.outcomes['first']!r}")
     if not isinstance(threads.outcomes.get("second"), LastTenant):
