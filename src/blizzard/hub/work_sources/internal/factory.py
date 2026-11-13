@@ -25,6 +25,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateBudgets, IWorkSourceRateGate
+from blizzard.hub.work_sources.refusal_reader import IWorkSourceRefusalReader
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkSourceError
 
@@ -42,6 +43,8 @@ class WorkSourceEntry:
     instrument: Callable[[httpx2.Client], None] = lambda _client: None
     #: The source's forge key's rate gate; its client's answers teach it, and its adapter admits each call through it.
     gate: IWorkSourceRateGate | None = None
+    #: The source's forge kind's refusal reader, classifying a credential refusal its gate declines as a rate one.
+    refusals: IWorkSourceRefusalReader | None = None
 
     @classmethod
     def of(
@@ -51,9 +54,11 @@ class WorkSourceEntry:
         secret: SecretValue | None,
         instrument: Callable[[httpx2.Client], None] | None = None,
         budgets: IWorkSourceRateBudgets | None = None,
+        refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
     ) -> WorkSourceEntry:
         """The entry ``record``'s provider names; with ``budgets``, gated by the budget of the forge it names under the
-        secret it names — the forge's anonymous budget when it names none."""
+        secret it names — the forge's anonymous budget when it names none; with ``refusals``, reading its forge's
+        credential refusals by that forge's kind."""
         kinds: dict[str, type[WorkSourceEntry]] = {"github": GithubEntry}
         kind = kinds.get(record.fields.provider)
         if kind is None:
@@ -61,8 +66,11 @@ class WorkSourceEntry:
         gate = (
             budgets.sweeping(record.fields.forge_id, record.fields.secret, forge.kind) if budgets is not None else None
         )
+        reader = refusals(forge.kind) if refusals is not None else None
         if gate is None:
-            return kind(record, forge, secret) if instrument is None else kind(record, forge, secret, instrument)
+            if instrument is None:
+                return kind(record, forge, secret, refusals=reader)
+            return kind(record, forge, secret, instrument, refusals=reader)
 
         def learn(response: httpx2.Response) -> None:
             gate.learn(response.headers)
@@ -72,7 +80,7 @@ class WorkSourceEntry:
             if instrument is not None:
                 instrument(client)
 
-        return kind(record, forge, secret, teach, gate)
+        return kind(record, forge, secret, teach, gate, reader)
 
     @classmethod
     def built(
@@ -83,6 +91,7 @@ class WorkSourceEntry:
         secrets: ISecretReader,
         budgets: IWorkSourceRateBudgets,
         instrument: Callable[[httpx2.Client], None] | None = None,
+        refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
     ) -> BuiltWorkSource:
         """Build the record's adapter on its forge's addresses, over a client carrying its revealed secret."""
         forge = forges.get(record.fields.forge_id)
@@ -94,7 +103,7 @@ class WorkSourceEntry:
                 secret = secrets.reveal(SecretName.parse(record.fields.secret))
             except (SecretNotFound, SecretRetired) as exc:
                 raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
-        entry = cls.of(record, forge, secret, instrument, budgets)
+        entry = cls.of(record, forge, secret, instrument, budgets, refusals)
         client = entry.client
         return BuiltWorkSource(record=record, source=entry.source(client), release=client.close)
 
@@ -111,16 +120,23 @@ class WorkSourceEntry:
         edits: WorkItemEditService,
         resolution: GardenProposalDeliveryResolution,
         budgets: IWorkSourceRateBudgets,
+        refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
         close_forge_writes_enabled: bool = True,
         instrument_client: Callable[[httpx2.Client], None] | None = None,
     ) -> StoreWorkSourceRegistry:
         """Construct a store-backed registry; ``instrument_client`` applies to each
-        configured source's client, and ``budgets`` gates each one's forge calls."""
+        configured source's client, ``budgets`` gates each one's forge calls, and ``refusals`` reads its forge kind's
+        credential refusals."""
         return StoreWorkSourceRegistry(
             records=records,
             objects=objects,
             build=lambda record: cls.built(
-                record, forges=forges, secrets=secrets, budgets=budgets, instrument=instrument_client
+                record,
+                forges=forges,
+                secrets=secrets,
+                budgets=budgets,
+                instrument=instrument_client,
+                refusals=refusals,
             ),
             built_in=HubWorkSource(work_item_store, edits, users, resolution),
             close_forge_writes_enabled=close_forge_writes_enabled,
@@ -165,4 +181,6 @@ class GithubEntry(WorkSourceEntry):
             repo=self.record.fields.locator,
             web_base=self.web_base,
             gate=self.gate,
+            refusals=self.refusals,
+            forge_id=self.forge.forge_id,
         )

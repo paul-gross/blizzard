@@ -15,8 +15,9 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef
-from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnnotateError
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnnotateError, WorkAnnotateRefusal
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
@@ -678,3 +679,84 @@ def test_the_work_refs_signature_moves_on_every_input_and_answers_in_one_stateme
 
     assert len({empty, minted, promoted, stopped}) == 4
     assert work_refs.live_work_refs_signature() == stopped
+
+
+_REFUSAL = WorkAnnotateRefusal(
+    ClassifiedRefusal(
+        AuthRefusal.CREDENTIAL_INVALID,
+        ForgeDiagnostic(
+            status=401,
+            operation="set_status",
+            endpoint="POST /repos/{owner}/{repo}/issues/{number}/labels",
+            repository="acme/default",
+            message="Bad credentials",
+            documentation_url=None,
+            request_id="AB12:34",
+            accepted_permissions=None,
+        ),
+    ),
+    forge_id="frg_example",
+)
+
+
+class _RefusedWrites(FakeAnnotator):
+    """Reads its markers, then has every write refused for its credential."""
+
+    def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
+        raise WorkAnnotateError("refused", refusal=_REFUSAL)
+
+
+def _refused_events(services: TenantServices) -> list[OperationalEvent]:
+    return [e for e in services.chunks.events.list_events() if e.kind == "forge-auth-refused"]
+
+
+def test_a_refused_source_records_one_event_per_pass_naming_the_source_and_its_forge(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
+    ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
+    reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": _RefusedWrites()}))
+
+    reconciler.sweep()
+    (event,) = _refused_events(hub.services)
+    reconciler.sweep()
+
+    assert len(_refused_events(hub.services)) == 2
+    assert event.severity == "warning"
+    assert event.chunk_id is None
+    assert event.detail is not None
+    assert event.detail["work_source_id"] == "default"
+    assert event.detail["forge_id"] == "frg_example"
+    assert event.detail["chunk_id"] is None
+    assert event.detail["refusal"] == "credential-invalid"
+    assert event.detail["diagnostic"] == {
+        "status": 401,
+        "operation": "set_status",
+        "endpoint": "POST /repos/{owner}/{repo}/issues/{number}/labels",
+        "repository": "acme/default",
+        "message": "Bad credentials",
+        "documentation_url": None,
+        "request_id": "AB12:34",
+        "accepted_permissions": None,
+    }
+
+
+def test_a_refused_read_records_the_event_beside_the_skip(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+
+    class _RefusedRead(FakeAnnotator):
+        def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+            raise WorkAnnotateError("refused", refusal=_REFUSAL)
+
+    _reconciler(hub, WorkSourceRegistry({}, {"default": _RefusedRead()})).sweep()
+
+    assert len(_refused_events(hub.services)) == 1
+    assert len(_skip_events(hub.services)) == 1
+
+
+def test_an_unrefused_failure_records_no_refusal_event(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
+    ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _reconciler(hub, WorkSourceRegistry({}, {"default": FakeAnnotator(fail_refs={"1"})})).sweep()
+    _reconciler(hub, WorkSourceRegistry({}, {"default": _FlakyRead()})).sweep()
+
+    assert _refused_events(hub.services) == []

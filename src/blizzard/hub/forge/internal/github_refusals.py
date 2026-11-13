@@ -76,3 +76,28 @@ def _refusal(status: int, sso: str, message: str) -> AuthRefusal:
     if sso.lower().startswith("required") or any(marker in message.lower() for marker in _SAML_MARKERS):
         return AuthRefusal.SSO_REQUIRED
     return AuthRefusal.PERMISSION_MISSING
+
+
+class GitHubRefusalReader:
+    """:func:`classify_auth_refusal` as the work-source family's refusal reader."""
+
+    def classify(
+        self,
+        status: int,
+        headers: Mapping[str, str],
+        message: str,
+        *,
+        documentation_url: str | None,
+        operation: str,
+        endpoint: str,
+        repository: str | None,
+    ) -> ClassifiedRefusal:
+        return classify_auth_refusal(
+            status,
+            headers,
+            message,
+            documentation_url=documentation_url,
+            operation=operation,
+            endpoint=endpoint,
+            repository=repository,
+        )

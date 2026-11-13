@@ -18,6 +18,13 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkCloser
+from blizzard.hub.domain.kernel.forge_refusals import (
+    AuthRefusal,
+    ClassifiedRefusal,
+    ForgeDiagnostic,
+    refusal_remedy,
+    refusal_sentence,
+)
 from blizzard.hub.work_sources.editor import IWorkEditor
 
 
@@ -71,6 +78,25 @@ class WorkSourceError(Exception):
         super().__init__(message)
         #: Set only when the forge's rate budget turned the call away or the forge refused it for rate: when to retry.
         self.retry_after = retry_after
+
+
+def refusal_explained(classified: ClassifiedRefusal) -> str:
+    """A credential refusal as an operator reads it: the refusal's sentence, then its remedy."""
+    refusal = classified.refusal
+    return (
+        f"the forge refused the credential: {refusal_sentence(refusal)}. "
+        f"{refusal_remedy(refusal, classified.diagnostic)}"
+    )
+
+
+class WorkSourceAuthRefused(WorkSourceError):
+    """The forge refused the credential the read carried; its message is the refusal's sentence and remedy."""
+
+    def __init__(self, subject: str, classified: ClassifiedRefusal) -> None:
+        refusal, diagnostic = classified.refusal, classified.diagnostic
+        super().__init__(f"{subject}: {refusal_explained(classified)}")
+        self.refusal: AuthRefusal = refusal
+        self.diagnostic: ForgeDiagnostic = diagnostic
 
 
 class IWorkSource(Protocol):

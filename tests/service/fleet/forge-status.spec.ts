@@ -99,4 +99,39 @@ test.describe('at fresh-hub', () => {
     await clock.advance(FLOOR_SECONDS);
     expect(await swept(d.number), 'the projection did not re-converge once the forge returned').toEqual(['blizzard:ingested']);
   });
+
+  test('test_forge_status_records_a_refused_credential_naming_the_work_source', async ({ api, issue, repository, forge, hubLog }) => {
+    const repo = await repository('refused-api');
+    const optedIn = await api.patch(`/api/work-sources/${repo.tokenPrefix}`, { data: { annotate: true } });
+    expect(optedIn.ok, JSON.stringify(optedIn.body)).toBe(true);
+    const source = await api.get(`/api/work-sources/${repo.tokenPrefix}`);
+    const sourceId = (source.body as { work_source_id: string }).work_source_id;
+    expect(sourceId).toBeTruthy();
+    const { chunk } = await issue('refuse my sweep', { repository: repo });
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+
+    // Armed hub-wide, so the work-item read's GraphQL call, which names no repository in its path, is refused too.
+    expect((await forge.call('POST', '/_levers/token_rejected', {})).status).toBe(200);
+    try {
+      await api.sweep('forge_status', { allTenants: true });
+      type Refused = { kind: string; detail?: { work_source_id?: string; forge_id?: string; refusal?: string; diagnostic?: { status?: number } } };
+      const feed = (await api.get('/api/events?limit=200')).body as { events: Refused[] };
+      const refused = feed.events.filter((event) => event.kind === 'forge-auth-refused' && event.detail?.work_source_id === sourceId);
+      expect(refused, 'the sweep should have recorded one refusal naming the work source').toHaveLength(1);
+      expect(refused[0]!.detail?.refusal).toBe('credential-invalid');
+      expect(refused[0]!.detail?.forge_id).toBeTruthy();
+      expect(refused[0]!.detail?.diagnostic?.status).toBe(401);
+
+      const items = (await api.get(`/api/chunks/${chunk.chunk_id}/work-items`)).body as { items: { error: string | null }[] };
+      const error = items.items[0]?.error ?? '';
+      expect(error).toContain('the token is wrong, expired, or revoked');
+      expect(error).toContain('Replace the token, or check the App\'s installation.');
+
+      expect(JSON.stringify(feed)).not.toContain('fixture-token');
+      expect(JSON.stringify(items)).not.toContain('fixture-token');
+      expect(hubLog.lines().filter((line) => line.raw.includes('fixture-token'))).toEqual([]);
+    } finally {
+      expect((await forge.call('DELETE', '/_levers/token_rejected')).status).toBe(200);
+    }
+  });
 });

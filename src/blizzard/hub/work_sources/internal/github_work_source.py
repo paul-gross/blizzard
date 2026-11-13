@@ -24,12 +24,22 @@ from blizzard.hub.domain.chunk.ports.work_sources import (
     IWorkAnnotator,
     IWorkCloser,
     WorkAnnotateError,
+    WorkAnnotateRefusal,
     WorkCloseError,
     WorkItemGoneError,
 )
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
+from blizzard.hub.domain.kernel.forge_refusals import ClassifiedRefusal
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateGate
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceBatchReader, WorkItem, WorkSourceError
+from blizzard.hub.work_sources.refusal_reader import IWorkSourceRefusalReader
+from blizzard.hub.work_sources.source import (
+    IWorkSource,
+    IWorkSourceBatchReader,
+    WorkItem,
+    WorkSourceAuthRefused,
+    WorkSourceError,
+    refusal_explained,
+)
 
 _log = get_logger("blizzard.hub.work_sources")
 
@@ -82,12 +92,18 @@ class GitHubWorkSource:
         repo: str,
         web_base: str,
         gate: IWorkSourceRateGate | None = None,
+        refusals: IWorkSourceRefusalReader | None = None,
+        forge_id: str | None = None,
     ) -> None:
         """``source_id`` is the key every pointer it parses holds; ``slug`` is the source's current slug, which its
         labels and error text render — the adapter is rebuilt when the record's revision moves. ``gate`` admits each
-        forge-calling method once before its first request; ``None`` admits every call."""
+        forge-calling method once before its first request; ``None`` admits every call. ``refusals`` classifies a
+        401 or 403 the gate declines as a rate refusal, as the forge ``forge_id`` refusing the credential; without
+        both, such an answer fails as any other."""
         self._client = client
         self._gate = gate
+        self._refusals = refusals
+        self._forge_id = forge_id
         self._id = source_id
         self._name = slug
         self._repo = repo
@@ -126,22 +142,58 @@ class GitHubWorkSource:
         response = exc.response
         return self._gate.refused(response.status_code, response.headers, _message(response))
 
+    def _auth_refusal(self, exc: httpx2.HTTPError, *, operation: str, endpoint: str) -> ClassifiedRefusal | None:
+        """When ``exc`` is a 401 or 403, the forge refusing the call's credential, classified. Ask only once the rate
+        gate has declined the answer as a rate refusal."""
+        if self._refusals is None or self._forge_id is None or not isinstance(exc, httpx2.HTTPStatusError):
+            return None
+        response = exc.response
+        if response.status_code not in (401, 403):
+            return None
+        return self._refusals.classify(
+            response.status_code,
+            response.headers,
+            _message(response),
+            documentation_url=_documentation_url(response),
+            operation=operation,
+            endpoint=endpoint,
+            repository=self._repo,
+        )
+
+    def _annotate_error(
+        self, message: str, exc: httpx2.HTTPError, *, operation: str, endpoint: str
+    ) -> WorkAnnotateError:
+        """``exc`` as the annotation error it fails with: a rate refusal's retry instant, else a credential refusal's
+        sentence, remedy, and refusal."""
+        if (resume := self._rate_refusal(exc)) is not None:
+            return WorkAnnotateError(f"{message}: {exc}", retry_after=resume)
+        refused = self._auth_refusal(exc, operation=operation, endpoint=endpoint)
+        if refused is None or self._forge_id is None:
+            return WorkAnnotateError(f"{message}: {exc}")
+        return WorkAnnotateError(
+            f"{message}: {refusal_explained(refused)}", refusal=WorkAnnotateRefusal(refused, self._forge_id)
+        )
+
     def fetch(self, pointer: WorkRef) -> WorkItem:
         if (resume_at := self._turned_away()) is not None:
             raise WorkSourceError(
                 f"{self._name}#{pointer.ref}: rate budget low until {resume_at}", retry_after=resume_at
             )
         base = f"/repos/{self._repo}/issues/{pointer.ref}"
+        endpoint = "GET /repos/{owner}/{repo}/issues/{number}"
         try:
             issue = self._client.get(base)
             issue.raise_for_status()
+            endpoint = "GET /repos/{owner}/{repo}/issues/{number}/comments"
             comments = self._client.get(f"{base}/comments")
             comments.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("work-item fetch failed", source=pointer.source, ref=pointer.ref, error=str(exc))
-            raise WorkSourceError(
-                f"failed to read {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)
-            ) from exc
+            resume = self._rate_refusal(exc)
+            refused = None if resume is not None else self._auth_refusal(exc, operation="fetch", endpoint=endpoint)
+            if refused is not None:
+                raise WorkSourceAuthRefused(f"{self._name}#{pointer.ref}", refused) from exc
+            raise WorkSourceError(f"failed to read {self._name}#{pointer.ref}: {exc}", retry_after=resume) from exc
         return WorkItem(
             body=str(issue.json().get("body") or ""),
             title=str(issue.json().get("title") or ""),
@@ -184,6 +236,13 @@ class GitHubWorkSource:
         except (httpx2.HTTPError, ValueError) as exc:
             _log.error("work-item batch fetch failed", source=self._name, count=len(pointers), error=str(exc))
             resume = self._rate_refusal(exc) if isinstance(exc, httpx2.HTTPError) else None
+            refused = (
+                self._auth_refusal(exc, operation="fetch_many", endpoint="POST /graphql")
+                if resume is None and isinstance(exc, httpx2.HTTPError)
+                else None
+            )
+            if refused is not None:
+                return {p: WorkSourceAuthRefused(f"{self._name}#{p.ref}", refused) for p in pointers}
             return {
                 p: WorkSourceError(f"failed to read {self._name}#{p.ref}: {exc}", retry_after=resume) for p in pointers
             }
@@ -229,7 +288,7 @@ class GitHubWorkSource:
 
     # -- IWorkAnnotator ------------------------------------------------------
 
-    def _ensure_labels_bootstrapped(self) -> None:
+    def _ensure_labels_bootstrapped(self, operation: str) -> None:
         """Create both marker labels on this repo before the first write of the
         process, tolerating GitHub's 422 for an already-existing label. Cached
         per instance — every subsequent write skips straight to the issue call."""
@@ -243,9 +302,11 @@ class GitHubWorkSource:
                     resp.raise_for_status()
             except httpx2.HTTPError as exc:
                 _log.error("label bootstrap failed", source=self._name, label=label.name, error=str(exc))
-                raise WorkAnnotateError(
-                    f"failed to bootstrap label {label.name!r} for {self._name}: {exc}",
-                    retry_after=self._rate_refusal(exc),
+                raise self._annotate_error(
+                    f"failed to bootstrap label {label.name!r} for {self._name}",
+                    exc,
+                    operation=operation,
+                    endpoint="POST /repos/{owner}/{repo}/labels",
                 ) from exc
         self._labels_bootstrapped = True
 
@@ -253,19 +314,23 @@ class GitHubWorkSource:
         """Add ``marker``'s label and delete the other one's, a 404 on the delete tolerated."""
         if (resume_at := self._turned_away()) is not None:
             raise WorkAnnotateError(f"{self._name}: rate budget low until {resume_at}", retry_after=resume_at)
-        self._ensure_labels_bootstrapped()
+        self._ensure_labels_bootstrapped("set_status")
+        endpoint = "POST /repos/{owner}/{repo}/issues/{number}/labels"
         try:
             added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[Label(marker).name])
             added.raise_for_status()
             other = Label(marker).excluded.name
+            endpoint = "DELETE /repos/{owner}/{repo}/issues/{number}/labels/{name}"
             resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
             if resp.status_code != 404:
                 resp.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("set-status failed", source=self._name, ref=pointer.ref, marker=marker.value, error=str(exc))
-            raise WorkAnnotateError(
-                f"failed to set {marker.value} on {self._name}#{pointer.ref}: {exc}",
-                retry_after=self._rate_refusal(exc),
+            raise self._annotate_error(
+                f"failed to set {marker.value} on {self._name}#{pointer.ref}",
+                exc,
+                operation="set_status",
+                endpoint=endpoint,
             ) from exc
 
     def clear_status(self, pointer: WorkRef) -> None:
@@ -273,7 +338,7 @@ class GitHubWorkSource:
         absent) is the expected steady state, not a failure."""
         if (resume_at := self._turned_away()) is not None:
             raise WorkAnnotateError(f"{self._name}: rate budget low until {resume_at}", retry_after=resume_at)
-        self._ensure_labels_bootstrapped()
+        self._ensure_labels_bootstrapped("clear_status")
         try:
             for marker in WorkStatusMarker:
                 resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{Label(marker).name}")
@@ -281,8 +346,11 @@ class GitHubWorkSource:
                     resp.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("clear-status failed", source=self._name, ref=pointer.ref, error=str(exc))
-            raise WorkAnnotateError(
-                f"failed to clear status on {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)
+            raise self._annotate_error(
+                f"failed to clear status on {self._name}#{pointer.ref}",
+                exc,
+                operation="clear_status",
+                endpoint="DELETE /repos/{owner}/{repo}/issues/{number}/labels/{name}",
             ) from exc
 
     def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
@@ -315,8 +383,11 @@ class GitHubWorkSource:
                     params = None  # the Link header's next URL already carries the query
         except httpx2.HTTPError as exc:
             _log.error("marked-refs discovery failed", source=self._name, error=str(exc))
-            raise WorkAnnotateError(
-                f"failed to discover marked refs for {self._name}: {exc}", retry_after=self._rate_refusal(exc)
+            raise self._annotate_error(
+                f"failed to discover marked refs for {self._name}",
+                exc,
+                operation="marked_refs",
+                endpoint="GET /repos/{owner}/{repo}/issues",
             ) from exc
         return {ref: frozenset(markers) for ref, markers in found.items()}
 
@@ -373,6 +444,16 @@ def _message(response: httpx2.Response) -> str:
         return response.text
     message = table.get("message") if table is not None else None
     return message if isinstance(message, str) else ""
+
+
+def _documentation_url(response: httpx2.Response) -> str | None:
+    """The forge's ``documentation_url`` field, or ``None`` when the answer carries none."""
+    try:
+        table = as_table(response.json()) if response.content else None
+    except ValueError:
+        return None
+    url = table.get("documentation_url") if table is not None else None
+    return url if isinstance(url, str) else None
 
 
 def _batch_query(pointers: Sequence[WorkRef], include_comments: bool) -> str:

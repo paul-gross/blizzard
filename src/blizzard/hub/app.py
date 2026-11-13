@@ -161,6 +161,7 @@ from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.refusals import refusal_reader
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
@@ -679,6 +680,7 @@ def build_hosted_app(
                 edits=stores.work_item_edits,
                 resolution=stores.garden_proposal_resolution,
                 budgets=budgets,
+                refusals=refusal_reader,
                 close_forge_writes_enabled=config.close_forge_writes_enabled,
                 instrument_client=platform_tracing.instrument_client,
             )

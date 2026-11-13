@@ -28,8 +28,14 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     WorkRefsSignature,
     live_work_ref_statuses,
 )
-from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkAnnotators, WorkAnnotateError
+from blizzard.hub.domain.chunk.ports.work_sources import (
+    IWorkAnnotator,
+    IWorkAnnotators,
+    WorkAnnotateError,
+    WorkAnnotateRefusal,
+)
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
+from blizzard.hub.domain.kernel.forge_refusals import forge_auth_refused_detail, refusal_sentence
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
@@ -38,6 +44,7 @@ _log = get_logger("blizzard.hub.forge_status")
 MarkerAction = Literal["set", "clear", "skip"]
 
 _SOURCE_SKIPPED: EventLogKind = "forge-status-source-skipped"
+_AUTH_REFUSED: EventLogKind = "forge-auth-refused"
 
 #: The full-pass floor, in sweep intervals — how long forge-side drift may outlive a skipped pass.
 FULL_PASS_FLOOR_INTERVALS = 5
@@ -181,7 +188,7 @@ class TenantAnnotation:
             annotator = self._work_sources.annotator(name)
             if annotator is None:  # pragma: no cover - annotating_ids() only names built ones
                 continue
-            if _reconcile(name, annotator, desired, tally) is None:
+            if _reconcile(name, annotator, desired, tally, partial(self._refused, name)) is None:
                 self._skipped(name, outages, tally)
             else:
                 outages.discard(name)
@@ -192,7 +199,7 @@ class TenantAnnotation:
                 _log.warning("forge-status source left config; its labels are not cleared", source=name)
                 outages.discard(name)
                 continue
-            failed = _reconcile(name, clearer, {}, tally)
+            failed = _reconcile(name, clearer, {}, tally, partial(self._refused, name))
             if failed is None:
                 self._skipped(name, outages, tally)
             else:
@@ -220,6 +227,24 @@ class TenantAnnotation:
             node_name=None,
             message=f"forge-status labels skipped for work source {label}: its forge could not be read",
             detail={"source": label, "work_source_id": name},
+            at=self._clock.now(),
+        )
+
+    def _refused(self, name: str, refusal: WorkAnnotateRefusal) -> None:
+        """Record that the forge refused the credential of the source keyed ``name`` in this tenant's event log."""
+        label = self._work_sources.source_label(name)
+        self._events.record(
+            kind=_AUTH_REFUSED,
+            runner_id=None,
+            chunk_id=None,
+            project_id=None,
+            lease_id=None,
+            node_name=None,
+            message=(
+                f"forge-status labels for work source {label} were refused: "
+                f"{refusal_sentence(refusal.classified.refusal)}"
+            ),
+            detail=forge_auth_refused_detail(refusal.classified, forge_id=refusal.forge_id, work_source_id=name),
             at=self._clock.now(),
         )
 
@@ -396,13 +421,27 @@ class _PassCorpus:
 
 
 def _reconcile(
-    name: str, annotator: IWorkAnnotator, desired: Mapping[WorkRef, ChunkStatus], tally: AnnotationTally
+    name: str,
+    annotator: IWorkAnnotator,
+    desired: Mapping[WorkRef, ChunkStatus],
+    tally: AnnotationTally,
+    refused: Callable[[WorkAnnotateRefusal], None],
 ) -> int | None:
     """Write the gap between ``desired`` and what ``name``'s forge carries; how many writes
-    failed, or ``None`` when its markers could not be read."""
+    failed, or ``None`` when its markers could not be read. The first call the forge refuses the
+    source's credential on reaches ``refused``, once per pass however many it refuses."""
+    reported = False
+
+    def failed_with(exc: WorkAnnotateError) -> None:
+        nonlocal reported
+        if exc.refusal is not None and not reported:
+            reported = True
+            refused(exc.refusal)
+
     try:
         actual = annotator.marked_refs()
-    except WorkAnnotateError:
+    except WorkAnnotateError as exc:
+        failed_with(exc)
         return None
     failed = 0
     source_refs: set[WorkRef] = {ref for ref in set(desired) | set(actual) if ref.source == name}
@@ -420,7 +459,8 @@ def _reconcile(
                     tally.written += 1
                 case "skip":
                     pass
-        except WorkAnnotateError:
+        except WorkAnnotateError as exc:
+            failed_with(exc)
             failed += 1
     tally.failed += failed
     return failed

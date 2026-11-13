@@ -6,12 +6,15 @@ satisfies both structurally."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
+from blizzard.hub.domain.kernel.forge_refusals import ClassifiedRefusal
 
 __all__ = [
     "IWorkAnnotator",
@@ -19,6 +22,7 @@ __all__ = [
     "IWorkCloser",
     "IWorkClosers",
     "WorkAnnotateError",
+    "WorkAnnotateRefusal",
     "WorkCloseError",
     "WorkItemGoneError",
 ]
@@ -47,14 +51,27 @@ class IWorkCloser(Protocol):
         ...
 
 
+@domain_model
+@dataclass(frozen=True)
+class WorkAnnotateRefusal:
+    """The forge refusing an annotation call's credential: why, and the forge that refused it."""
+
+    classified: ClassifiedRefusal
+    forge_id: str
+
+
 class WorkAnnotateError(Exception):
     """The forge write/read for annotation failed — an unreachable forge, a
     rate limit, or an insufficient-scope token."""
 
-    def __init__(self, message: str = "", *, retry_after: datetime | None = None) -> None:
+    def __init__(
+        self, message: str = "", *, retry_after: datetime | None = None, refusal: WorkAnnotateRefusal | None = None
+    ) -> None:
         super().__init__(message)
         #: Set only when the forge's rate budget turned the call away or the forge refused it for rate: when to retry.
         self.retry_after = retry_after
+        #: Set only when the forge refused the call's credential.
+        self.refusal = refusal
 
 
 class IWorkAnnotator(Protocol):
