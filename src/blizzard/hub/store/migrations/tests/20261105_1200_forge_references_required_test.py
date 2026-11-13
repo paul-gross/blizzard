@@ -151,6 +151,8 @@ def test_a_transition_era_store_crosses_over_keyed_on_its_forges(tmp_path: Path)
         "forge_id",
         "locator",
     )
+    # Later revisions add columns to both tables, so the crossed-over store is held to the declared schema at head.
+    runner.upgrade("head")
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)
