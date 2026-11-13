@@ -350,7 +350,7 @@ def _close_holding(hub: _Hub, tenant: str, held: threading.Event, release: threa
         if not release.wait(_TIMEOUT):
             raise TimeoutError("close was not released")
 
-    hub.store.close = close  # type: ignore[method-assign]
+    vars(hub.store)["close"] = close
     return lambda: hub.teardown.close(TenantId(tenant), by="proof")
 
 
