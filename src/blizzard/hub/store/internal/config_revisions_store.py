@@ -7,15 +7,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Column, Select, Table, literal
+from sqlalchemy import Column, Select, Table, func, literal
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRevisions
-from blizzard.hub.store.schema import forges, repositories, secrets, work_sources
+from blizzard.hub.store.schema import credentials, forges, repositories, secrets, work_sources
 from blizzard.hub.store.scoped import ScopedConnections
 
-#: Each referring kind's table and the column keying it: its id. Each names a secret and a forge.
+#: Each referring kind's table and the column keying it: its id. Each names a forge, and a secret or a credential
+#: whose secret it acts with.
 _REFERRING: dict[RecordKind, tuple[Table, str]] = {
     RecordKind.WORK_SOURCE: (work_sources, "work_source_id"),
     RecordKind.REPOSITORY: (repositories, "repository_id"),
@@ -42,6 +43,8 @@ class ConfigRevisionsStore:
                         secret_name=row.secret_name,
                         secret_revision=row.sr,
                         forge_revision=row.fr,
+                        credential_id=row.credential_id,
+                        credential_revision=row.cr,
                     )
         return found
 
@@ -55,22 +58,34 @@ class ConfigRevisionsStore:
                 secrets.c.name.label("secret_name"),
                 secrets.c.revision.label("sr"),
                 literal(None).label("fr"),
+                literal(None).label("credential_id"),
+                literal(None).label("cr"),
             )
             return query, secrets.c.name
         table, key_column = _REFERRING[kind]
-        with_secret = self._store.scope_join(
+        with_credential = self._store.scope_join(
             table,
+            credentials,
+            (credentials.c.tenant_id == table.c.tenant_id) & (credentials.c.credential_id == table.c.credential_id),
+            isouter=True,
+        )
+        # A credential referrer acts with its credential's secret, so that secret's revision is the one it rides on.
+        secret_name = func.coalesce(credentials.c.secret_name, table.c.secret_name)
+        with_secret = self._store.scope_join(
+            with_credential,
             secrets,
-            (secrets.c.tenant_id == table.c.tenant_id) & (secrets.c.name == table.c.secret_name),
+            (secrets.c.tenant_id == table.c.tenant_id) & (secrets.c.name == secret_name),
             isouter=True,
         )
         query = self._store.select(
             self._store.scope_join(with_secret, forges, forges.c.forge_id == table.c.forge_id, isouter=True),
             table.c[key_column].label("key"),
             table.c.revision,
-            table.c.secret_name,
+            secret_name.label("secret_name"),
             secrets.c.revision.label("sr"),
             forges.c.revision.label("fr"),
+            table.c.credential_id,
+            credentials.c.revision.label("cr"),
         )
         return query, table.c[key_column]
 

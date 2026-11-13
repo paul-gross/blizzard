@@ -33,11 +33,22 @@ class CacheKey:
     secret_revision: int | None
     #: The revision of the forge the record names, so an edit to the forge rebuilds every object built from it.
     forge_revision: int | None = None
+    #: The credential the record acts with and its revision, so an edit to the credential rebuilds every object built
+    #: from it; for a credential referrer, ``secret_name`` and ``secret_revision`` are the credential's secret's.
+    credential_id: str | None = None
+    credential_revision: int | None = None
 
     @classmethod
     def of(cls, kind: RecordKind, key: str, revisions: ConfigRevisions) -> CacheKey:
         return cls(
-            kind, key, revisions.revision, revisions.secret_name, revisions.secret_revision, revisions.forge_revision
+            kind,
+            key,
+            revisions.revision,
+            revisions.secret_name,
+            revisions.secret_revision,
+            revisions.forge_revision,
+            revisions.credential_id,
+            revisions.credential_revision,
         )
 
 

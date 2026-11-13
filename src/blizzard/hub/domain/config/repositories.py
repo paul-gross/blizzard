@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import NewType, Protocol
+from typing import TYPE_CHECKING, NewType, Protocol
 from urllib.parse import urlparse
 
 from blizzard.foundation.ids import Id, IdPrefix
@@ -37,6 +37,9 @@ from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+
+if TYPE_CHECKING:
+    from blizzard.hub.domain.config.credentials import CredentialId
 
 RepositoryId = NewType("RepositoryId", str)
 
@@ -183,6 +186,9 @@ class ConfiguredRepository:
     retired: bool = False
     #: When the newest retirement fact was set; ``None`` while the record is enabled.
     retired_at: datetime | None = None
+    #: The credential the record acts with; ``None`` while it acts with its secret alone. Read from the store; no
+    #: verb writes it.
+    credential_id: CredentialId | None = None
 
     def locks(self) -> list[LockKey]:
         """The keyed locks a write of the repository relies on: the forge's and the secret's it names, and the

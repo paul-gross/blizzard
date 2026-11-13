@@ -1,4 +1,5 @@
-"""The revisions read: a configured record's revision, its secret's, and its forge's, for one record.
+"""The revisions read: a configured record's revision, its secret's, its forge's, and its credential's, for one
+record.
 
 An object built from a record is current exactly while these match the ones it was built
 under (``bzh:config-read-on-use``)."""
@@ -20,12 +21,15 @@ class ConfigRevisions:
     names.
 
     A secret's own revisions name itself; a record with no secret carries ``None`` for both, and a record naming no
-    forge — a secret — ``None`` for its forge's."""
+    forge — a secret — ``None`` for its forge's. A record naming a credential carries the credential's id and revision,
+    and its secret's name and revision are the credential's secret's; any other record carries ``None`` for both."""
 
     revision: int
     secret_name: str | None
     secret_revision: int | None
     forge_revision: int | None = None
+    credential_id: str | None = None
+    credential_revision: int | None = None
 
 
 class IReadConfigRevisions(Protocol):
