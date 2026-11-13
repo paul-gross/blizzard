@@ -170,9 +170,11 @@ binding edit self-heals within that five-interval floor. Mid-sweep crashes, forg
 are retried on the very next pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a skip of
 that source, which records a `forge-status-source-skipped` warning in the tenant's event log (`GET /api/events`), naming
 the source and its id — once per outage, not once per pass: a source read successfully again re-arms it, and a hub
-restart during an outage announces it once more. A skip never blocks a chunk transition, an ingest, or any other hub
-request. The sweep is among the first callers the forge's [rate budget](./forges.md#the-rate-budget) turns away: at or
-below two fifths of the limit its source is skipped without a request, and the pass after the reset runs it again.
+restart during an outage announces it once more. A source whose credential the forge refuses also records one
+`forge-auth-refused` warning per pass, naming the source, and its work item's `error` carries the refusal and its
+remedy. A skip never blocks a chunk transition, an ingest, or any other hub request. The sweep is among the first
+callers the forge's [rate budget](./forges.md#the-rate-budget) turns away: at or below two fifths of the limit its
+source is skipped without a request, and the pass after the reset runs it again.
 
 Each tenant is judged on its own. The change check and the five-interval floor are kept per tenant, so a tenant whose
 source's forge cannot be read retries on every pass by itself while every other tenant keeps skipping unchanged passes,
