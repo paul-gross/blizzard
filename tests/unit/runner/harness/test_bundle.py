@@ -12,7 +12,7 @@ from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
+from blizzard.runner.harness.internal.bundle_publisher import bundle_source_identity, published_snapshot
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
@@ -20,6 +20,43 @@ from tests.support.harness_bundle import bundle as _bundle
 from tests.support.harness_bundle import runtime as _runtime
 from tests.support.harness_sections import sections
 from tests.support.host_files import load_runner_config
+
+
+def test_source_identity_follows_file_and_directory_symlinks(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    file = external / "settings.json"
+    file.write_text('{"model":"one"}')
+    directory = external / "agents"
+    directory.mkdir()
+    agent = directory / "agent.md"
+    agent.write_text("one")
+    (bundle / "settings.json").symlink_to(file)
+    (bundle / "agents").symlink_to(directory, target_is_directory=True)
+
+    first = bundle_source_identity(bundle)
+    assert first == bundle_source_identity(bundle)
+    file.write_text('{"model":"two"}')
+    second = bundle_source_identity(bundle)
+    assert second != first
+    agent.write_text("two")
+    third = bundle_source_identity(bundle)
+    assert third != second
+    agent.chmod(0o755)
+    assert bundle_source_identity(bundle) != third
+
+
+def test_source_identity_handles_dangling_and_cyclic_symlinks(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "dangling").symlink_to("missing")
+    (bundle / "cycle").symlink_to(bundle, target_is_directory=True)
+    first = bundle_source_identity(bundle)
+    assert first == bundle_source_identity(bundle)
+    (bundle / "missing").write_text("now present")
+    assert bundle_source_identity(bundle) != first
 
 
 def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_path: Path) -> None:

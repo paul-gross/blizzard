@@ -26,6 +26,7 @@ from blizzard.runner.harness.capability_snapshot import (
     TickCapabilities,
     capability_snapshot,
 )
+from blizzard.runner.harness.harness_set import IInvocationHarnesses, WorkerInvocation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -223,6 +224,8 @@ class LoopContext:
     #: The loop's own cross-tick retention-pass floor — mirrors ``harness_versions`` above.
     #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
     retention_passes: RetentionPasses | None = None
+    #: In-memory owners of launched invocations; absent on isolated loop callers.
+    harness_sets: IInvocationHarnesses | None = None
 
     @property
     def free_environments(self) -> IWorkspaceFreeEnvironment:
@@ -240,10 +243,37 @@ class LoopContext:
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource:
         """Resolve an existing session's transcript source from its recorded owner — same
         raise/guard contract as the registry's role accessors."""
-        return self.harnesses.transcript_source(session.harness_id)
+        registry = self.harness_sets.current.registry if self.harness_sets is not None else self.harnesses
+        return registry.transcript_source(session.harness_id)
+
+    def invocation_transcript_source(
+        self, session: SessionReference, lease_id: str, generation: int
+    ) -> IHarnessTranscriptSource:
+        """Resolve a live segment from its invocation, or the composed set after restart."""
+        owner = self.harness_sets.find(WorkerInvocation(lease_id, generation)) if self.harness_sets else None
+        registry = (
+            owner.registry
+            if owner is not None
+            else (self.harness_sets.current.registry if self.harness_sets else self.harnesses)
+        )
+        return registry.transcript_source(session.harness_id)
+
+    def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
+        owner = self.harness_sets.worker_for_lease(lease_id) if self.harness_sets else None
+        return (
+            owner.registry
+            if owner is not None
+            else (self.harness_sets.current.registry if self.harness_sets else self.harnesses)
+        )
+
+    def harnesses_for_judge(self, lease_id: str) -> IHarnessRegistry:
+        return self.harnesses_for_lease(lease_id)
+
+    def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource:
+        return self.harnesses_for_lease(lease_id).transcript_source(session.harness_id)
 
     def resolve_boundary_start(
-        self, session: SessionReference, workdir: str | None, workspace_id: str | None
+        self, session: SessionReference, workdir: str | None, workspace_id: str | None, *, lease_id: str | None = None
     ) -> tuple[str | None, bool]:
         """``(start_position, start_unreadable)`` for a boundary about to open on ``session`` —
         the current transcript tail, or ``(None, True)`` when the source is unresolvable or the
@@ -253,7 +283,9 @@ class LoopContext:
         The tail is read in the spawn cwd of ``workspace_id``, the workspace the lease's binding names."""
         spawn_cwd = SpawnCwd(self.workspaces.spawn_root(workspace_id), workdir).path
         try:
-            source = self.transcript_source_for(session)
+            source = (
+                self.lease_transcript_source(lease_id, session) if lease_id else self.transcript_source_for(session)
+            )
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.info(
                 "invocation boundary tail read blocked by unavailable harness transcript source",

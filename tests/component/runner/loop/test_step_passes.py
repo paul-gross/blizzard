@@ -438,3 +438,43 @@ def test_a_requested_pass_whose_tick_and_trace_sweep_both_raise_answers_both_mes
             stepper.close()
 
     assert (result.outcome, result.error) == (SweepPassOutcome.FAILED, "tick broke; sweep broke")
+
+
+def test_stepper_close_waits_for_tick_and_trace_context_borrowers(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    timeout = [30.0]
+    with loop_graph(config) as graph:
+        stepper = RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        tick_entered, trace_entered = threading.Event(), threading.Event()
+        release_tick, release_trace, closed = threading.Event(), threading.Event(), threading.Event()
+
+        def borrow(lock: Any, entered: threading.Event, release: threading.Event) -> None:
+            with lock.hold():
+                stepper._context()  # pyright: ignore[reportPrivateUsage]
+                entered.set()
+                assert release.wait(10)
+
+        tick_lock = stepper._tick_lock  # pyright: ignore[reportPrivateUsage]
+        tick_thread = threading.Thread(target=borrow, args=(tick_lock, tick_entered, release_tick))
+        tick_thread.start()
+        assert tick_entered.wait(10)
+        old = stepper._client  # pyright: ignore[reportPrivateUsage]
+        timeout[0] = 5.0
+        trace_lock = stepper._trace_lock  # pyright: ignore[reportPrivateUsage]
+        trace_thread = threading.Thread(target=borrow, args=(trace_lock, trace_entered, release_trace))
+        trace_thread.start()
+        assert trace_entered.wait(10)
+        new = stepper._client  # pyright: ignore[reportPrivateUsage]
+        assert old is not None and new is not None and old is not new
+        closer = threading.Thread(target=lambda: (stepper.close(), closed.set()))
+        closer.start()
+        assert not closed.wait(0.1)
+        assert not old.is_closed and not new.is_closed
+        release_tick.set()
+        tick_thread.join(10)
+        assert not closed.wait(0.1)
+        assert not old.is_closed and not new.is_closed
+        release_trace.set()
+        trace_thread.join(10)
+        closer.join(10)
+        assert closed.is_set() and old.is_closed and new.is_closed

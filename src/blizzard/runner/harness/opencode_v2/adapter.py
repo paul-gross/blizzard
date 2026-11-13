@@ -25,8 +25,8 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.stdout_target import stdout_target
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
@@ -47,6 +47,7 @@ from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RAN
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
@@ -78,7 +79,7 @@ class OpenCodeTwoAdapter:
         worker_env: AllowlistedEnv,
         launcher: IProcessLauncher,
         keeper: IServiceKeeper,
-        versions: VersionProbe,
+        versions: IVersionProbe,
         hold: VersionHold,
         request_dir: Path,
         clock: IClock,
@@ -93,8 +94,12 @@ class OpenCodeTwoAdapter:
         supported_models: Sequence[str] | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
         price_catalog: IOpenCodeTwoPriceCatalog | None = None,
+        transcript_root: str = "",
+        bundle_path: str | None = None,
     ) -> None:
         self._runner_id = runner_id
+        self._transcript_root = transcript_root
+        self._bundle_path = bundle_path
         self._worker_env = worker_env
         self._launcher = launcher
         self._keeper = keeper
@@ -119,6 +124,34 @@ class OpenCodeTwoAdapter:
     @property
     def autonomy(self) -> Autonomy:
         return self._autonomy
+
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            binary=self._binary,
+            default_model=self._model,
+            autonomy=self._autonomy,
+            environment=SessionEnvironment.capture(self._worker_env),
+            runner_id=self._runner_id,
+            harness_id="opencode",
+            transcript_root=self._transcript_root,
+            bundle_path=self._bundle_path,
+            driver_command=self._driver_command,
+            agent=self._agent,
+            model_aliases=tuple(self._model_aliases.items()),
+            effort_aliases=tuple(self._effort_aliases.items()),
+            supported_models=self._supported_models,
+            prompt_prefix=prompt_prefix,
+        )
 
     def observe_version(self) -> str | None:
         """The answering service's version, which the runner advertises and records; with none answering, the
@@ -180,14 +213,31 @@ class OpenCodeTwoAdapter:
         return False
 
     def identity_env(
-        self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
+        self,
+        preamble: WorkerPreamble,
+        chunk_id: str,
+        session_id: str,
+        *,
+        elicitation: bool = False,
+        settings: SessionSettings | None = None,
     ) -> dict[str, str]:
         return harness_shared.build_identity_env(
-            preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
+            preamble,
+            chunk_id,
+            session_id,
+            settings.environment if settings is not None else self._worker_env,
+            elicitation=elicitation,
         )
 
     def _launch(
-        self, request: DriveRequest, env: dict[str, str], stdout_path: str, stderr_path: str, *, stdout_mode: str = "ab"
+        self,
+        request: DriveRequest,
+        env: dict[str, str],
+        stdout_path: str,
+        stderr_path: str,
+        settings: SessionSettings,
+        *,
+        stdout_mode: str = "ab",
     ) -> LaunchedProcess:
         """Write ``request`` and launch its driver, deferred until the caller's durable record lands. Every failure
         before the driver exists is the seam's :class:`HarnessSpawnError`."""
@@ -200,7 +250,7 @@ class OpenCodeTwoAdapter:
             path = write_request(self._request_dir, request)
         except OSError as exc:
             raise HarnessSpawnError(f"cannot write the OpenCode 2 drive request: {exc}") from exc
-        argv = [*self._driver_command, "runner", "opencode", "drive", "--request", str(path)]
+        argv = [*settings.driver_command, "runner", "opencode", "drive", "--request", str(path)]
         try:
             with (
                 stdout_target(stdout_path, mode=stdout_mode) as stdout_file,
@@ -209,7 +259,7 @@ class OpenCodeTwoAdapter:
                 launched = self._launcher.launch(
                     argv,
                     cwd=request.directory,
-                    env=self._worker_env.worker(env),
+                    env=settings.environment.worker(env),
                     stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
                     stderr=stderr_file if stderr_file is not None else Stream.DEVNULL,
                     defer_disarm=True,
@@ -244,17 +294,18 @@ class OpenCodeTwoAdapter:
         model: str | None,
         effort: str | None,
         compaction_window: str | None,
+        settings: SessionSettings,
     ) -> DriveRequest:
         return DriveRequest(
             kind=kind,
             session_id=session_id,
             directory=directory,
             prompt=prompt,
-            runner_id=self._runner_id,
+            runner_id=settings.runner_id,
             lease_id=lease_id,
-            autonomy=self._autonomy,
-            model=self._reference(model, effort),
-            agent=self._agent,
+            autonomy=settings.autonomy,
+            model=ModelReference.parse(model or settings.default_model or "", effort),
+            agent=settings.agent,
             compaction_tokens=window_tokens(compaction_window),
         )
 
@@ -268,7 +319,10 @@ class OpenCodeTwoAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> WorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         del session_hint  # the binding mints its own ids
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
@@ -276,13 +330,13 @@ class OpenCodeTwoAdapter:
         if not directory:
             raise HarnessSpawnError("spawn has no working directory")
         session_id = resume_from or Id.mint(SESSION_ID_PREFIX, self._clock).value
-        prompt = "\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part)
+        prompt = "\n\n".join(part for part in (settings.prompt_prefix, envelope.prompt or "") if part)
         kind = DriveKind.RESUME if resume_from else DriveKind.SPAWN
         request = self._request(
-            kind, session_id, directory, prompt, preamble.lease_id, model, effort, compaction_window
+            kind, session_id, directory, prompt, preamble.lease_id, model, effort, compaction_window, settings
         )
-        env = self.identity_env(preamble, envelope.chunk_id, session_id)
-        launched = self._launch(request, env, preamble.stdout_path, preamble.stderr_path)
+        env = self.identity_env(preamble, envelope.chunk_id, session_id, settings=settings)
+        launched = self._launch(request, env, preamble.stdout_path, preamble.stderr_path, settings)
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,
@@ -303,19 +357,30 @@ class OpenCodeTwoAdapter:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> WorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         if not output_path:
             raise HarnessSpawnError("judge requires an output path — a detached verdict is unrecoverable without one")
         lease_id = preamble.lease_id if preamble is not None else ""
         request = self._request(
-            DriveKind.JUDGE, session_id, session_cwd, judgement_prompt, lease_id, model, effort, compaction_window
+            DriveKind.JUDGE,
+            session_id,
+            session_cwd,
+            judgement_prompt,
+            lease_id,
+            model,
+            effort,
+            compaction_window,
+            settings,
         )
         env = (
-            self.identity_env(preamble, chunk_id, session_id, elicitation=True)
+            self.identity_env(preamble, chunk_id, session_id, elicitation=True, settings=settings)
             if preamble is not None
-            else self._worker_env.variables
+            else settings.environment.variables
         )
-        launched = self._launch(request, env, output_path, "", stdout_mode="wb")
+        launched = self._launch(request, env, output_path, "", settings, stdout_mode="wb")
         return WorkerHandle(
             session_id=session_id,
             pid=launched.pid,
@@ -336,13 +401,20 @@ class OpenCodeTwoAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> ResumeHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         lease_id = preamble.lease_id if preamble is not None else ""
         request = self._request(
-            DriveKind.NUDGE, session_id, session_cwd, message, lease_id, model, effort, compaction_window
+            DriveKind.NUDGE, session_id, session_cwd, message, lease_id, model, effort, compaction_window, settings
         )
-        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
-        launched = self._launch(request, env, stdout_path, "")
+        env = (
+            self.identity_env(preamble, chunk_id, session_id, settings=settings)
+            if preamble is not None
+            else settings.environment.variables
+        )
+        launched = self._launch(request, env, stdout_path, "", settings)
         return ResumeHandle(
             pid=launched.pid,
             pgid=launched.pgid,

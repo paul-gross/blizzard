@@ -149,7 +149,14 @@ def _preamble(tmp_path: Path) -> WorkerPreamble:
 def test_a_spawn_mints_its_session_id_and_launches_the_driver_with_the_prompt_in_a_file(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path)
     envelope = _envelope("build the thing")
-    handle = adapter.spawn(envelope, _preamble(tmp_path), "hint-ignored", effort="high", compaction_window="200k")
+    handle = adapter.spawn(
+        envelope,
+        _preamble(tmp_path),
+        "hint-ignored",
+        effort="high",
+        compaction_window="200k",
+        session_settings=adapter.launch_settings(effort="high", compaction_window="200k", prompt_prefix="PREFIX"),
+    )
     assert not adapter.honors_session_hint()
     parsed = Id.parse(handle.session_id)
     assert parsed is not None and parsed.prefix == "ses" and parsed.minted_at == NOW
@@ -170,7 +177,9 @@ def test_a_spawn_mints_its_session_id_and_launches_the_driver_with_the_prompt_in
 
 def test_a_spawn_resuming_a_session_drives_that_session(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path)
-    handle = adapter.spawn(_envelope(), _preamble(tmp_path), None, resume_from="ses_existing")
+    handle = adapter.spawn(
+        _envelope(), _preamble(tmp_path), None, resume_from="ses_existing", session_settings=adapter.launch_settings()
+    )
     assert handle.session_id == "ses_existing" and launcher.requests[0].kind is DriveKind.RESUME
 
 
@@ -178,25 +187,85 @@ def test_a_judgement_writes_to_its_output_path_and_marks_the_elicitation(tmp_pat
     adapter, launcher = _adapter(tmp_path)
     output = tmp_path / "verdict.out"
     output.write_text("a stale reply\n")
-    adapter.judge(str(tmp_path), "ses_1", "judge it", str(output), preamble=_preamble(tmp_path), chunk_id="c1")
+    adapter.judge(
+        str(tmp_path),
+        "ses_1",
+        "judge it",
+        str(output),
+        preamble=_preamble(tmp_path),
+        chunk_id="c1",
+        session_settings=adapter.launch_settings(),
+    )
     assert launcher.requests[0].kind is DriveKind.JUDGE and launcher.requests[0].prompt == "judge it"
     assert launcher.envs[0]["BLIZZARD_ELICITATION"] == "1"
     assert output.read_text() == ""
     with pytest.raises(HarnessSpawnError):
-        adapter.judge(str(tmp_path), "ses_1", "judge it", "")
+        adapter.judge(str(tmp_path), "ses_1", "judge it", "", session_settings=adapter.launch_settings())
 
 
 def test_a_nudge_is_a_resumed_turn(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path)
-    handle = adapter.resume_with_message(str(tmp_path), "ses_1", "keep going", preamble=_preamble(tmp_path))
+    handle = adapter.resume_with_message(
+        str(tmp_path), "ses_1", "keep going", preamble=_preamble(tmp_path), session_settings=adapter.launch_settings()
+    )
     assert handle.pgid == 4242 and launcher.requests[0].kind is DriveKind.NUDGE
+
+
+def test_launch_stamps_override_legacy_arguments_for_spawn_judge_and_nudge(tmp_path: Path) -> None:
+    adapter, launcher = _adapter(tmp_path)
+    settings = replace(
+        adapter.launch_settings("provider/snapshot", "high", "200k"),
+        runner_id="snapshot-runner",
+        autonomy=Autonomy.Normal,
+        agent="snapshot-agent",
+        driver_command=("snapshot",),
+        prompt_prefix="snapshot-prefix",
+    )
+    adapter.spawn(
+        _envelope(),
+        _preamble(tmp_path),
+        None,
+        model="provider/old",
+        effort="low",
+        compaction_window="100k",
+        session_settings=settings,
+    )
+    adapter.judge(
+        str(tmp_path),
+        "ses_1",
+        "judge",
+        str(tmp_path / "judge"),
+        model="provider/old",
+        effort="low",
+        compaction_window="100k",
+        session_settings=settings,
+    )
+    adapter.resume_with_message(
+        str(tmp_path),
+        "ses_1",
+        "nudge",
+        model="provider/old",
+        effort="low",
+        compaction_window="100k",
+        session_settings=settings,
+    )
+    assert [request.model for request in launcher.requests] == [ModelReference("provider", "snapshot", "high")] * 3
+    assert [request.compaction_tokens for request in launcher.requests] == [200_000] * 3
+    assert launcher.requests[0].prompt == "snapshot-prefix\n\nwork"
+    assert all(
+        request.runner_id == "snapshot-runner"
+        and request.autonomy is Autonomy.Normal
+        and request.agent == "snapshot-agent"
+        for request in launcher.requests
+    )
+    assert all(argv[0] == "snapshot" for argv in launcher.argvs)
 
 
 def test_no_service_fails_the_launch_before_any_request_is_written(tmp_path: Path) -> None:
     keeper = _Keeper(up=False)
     adapter, launcher = _adapter(tmp_path, keeper=keeper)
     with pytest.raises(HarnessSpawnError, match="no OpenCode service"):
-        adapter.spawn(_envelope(), _preamble(tmp_path), None)
+        adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert keeper.ensured == 1 and not launcher.argvs
     assert not (tmp_path / "requests").exists() or not list((tmp_path / "requests").iterdir())
 
@@ -218,14 +287,14 @@ def test_a_launch_on_a_service_whose_version_changed_since_it_was_advertised_is_
     keeper = _Keeper()
     adapter, launcher = _adapter(tmp_path, keeper=keeper)
     assert adapter.observe_version() == "2.1.4"
-    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     keeper.version = "2.2.0"
     for _ in range(2):
         with pytest.raises(HarnessVersionChangedError, match=r"2\.2\.0, not 2\.1\.4"):
-            adapter.spawn(_envelope(), _preamble(tmp_path), None)
+            adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert len(launcher.requests) == 1
     assert adapter.observe_version() == "2.2.0"
-    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert len(launcher.requests) == 2
 
 
@@ -235,7 +304,7 @@ def test_a_launch_matching_a_version_the_runner_advertised_afresh_is_never_refus
     assert adapter.observe_version() == "2.1.4"
     keeper.version = "2.2.0"
     assert adapter.observe_version() == "2.2.0"
-    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert len(launcher.requests) == 1
 
 
@@ -246,12 +315,12 @@ def test_a_service_seen_on_another_major_version_refuses_every_launch_until_rest
     assert adapter.observe_version() == "2.1.4"
     keeper.version = "3.0.0"
     with pytest.raises(HarnessVersionChangedError, match="restart the runner"):
-        adapter.resume_with_message(str(tmp_path), "ses_1", "go")
+        adapter.resume_with_message(str(tmp_path), "ses_1", "go", session_settings=adapter.launch_settings())
     assert adapter.observe_version() == "3.0.0"
     keeper.version = "2.1.4"
     assert adapter.observe_version() == "2.1.4"
     with pytest.raises(HarnessVersionChangedError, match=r"3\.0\.0, outside"):
-        adapter.spawn(_envelope(), _preamble(tmp_path), None)
+        adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert launcher.requests == [] and hold.foreign == "3.0.0"
 
 
@@ -341,12 +410,12 @@ def test_a_spawn_without_an_environment_is_refused(tmp_path: Path) -> None:
     adapter, _ = _adapter(tmp_path)
     preamble = WorkerPreamble(environments=[], lease_id="l", local_api_url="http://127.0.0.1:1")
     with pytest.raises(HarnessSpawnError):
-        adapter.spawn(_envelope(), preamble, None)
+        adapter.spawn(_envelope(), preamble, None, session_settings=adapter.launch_settings())
 
 
 def test_the_autonomy_rides_the_request(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path, autonomy=Autonomy.Normal)
-    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    adapter.spawn(_envelope(), _preamble(tmp_path), None, session_settings=adapter.launch_settings())
     assert launcher.requests[0].autonomy is Autonomy.Normal
 
 

@@ -3,11 +3,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from blizzard.runner.harness.binding_selection import BindingSelection, select_bindings, select_declaration
+from blizzard.runner.harness.binary_identity import BinaryIdentity
+from blizzard.runner.harness.binding_selection import (
+    BindingSelection,
+    CachedVersionProbe,
+    select_bindings,
+    select_declaration,
+)
+from blizzard.runner.harness.capability_snapshot import BinaryVersionCache
 from blizzard.runner.harness.declaration import IHarnessDeclaration
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
@@ -68,6 +76,20 @@ def test_a_missing_binary_or_a_disabled_section_takes_opencode_1_without_a_probe
     probe = _Counting("2.1.4")
     disabled = _sections(enabled=False).of("opencode")
     assert select_declaration(family, disabled, probe) is OPENCODE_DECLARATION and probe.probes == 0
+
+
+def test_selection_shares_successful_binary_observation_with_later_probes() -> None:
+    class Identity:
+        def identify(self, binary: str) -> BinaryIdentity:
+            return BinaryIdentity(Path("/tools/opencode"), 42, 123)
+
+    raw = _Counting("2.1.4")
+    versions = BinaryVersionCache(Identity())
+    probe = CachedVersionProbe(raw, versions)
+    family = harness_families()["opencode"]
+    assert select_declaration(family, _sections().of("opencode"), probe) is OPENCODE_V2_DECLARATION
+    assert probe.observe_version("opencode") == "2.1.4"
+    assert raw.probes == 1
 
 
 def test_one_opencode_section_composes_either_major_and_claude_code_is_never_probed() -> None:

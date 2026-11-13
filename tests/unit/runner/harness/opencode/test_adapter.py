@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from structlog.testing import capture_logs
@@ -47,6 +48,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
     OpenCodeModelPrice,
     OpenCodeRate,
 )
+from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.node_steps.envelope import GraphArtifact
@@ -63,6 +65,42 @@ _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "ope
 _CORPUS_DIR = (
     repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 )
+
+
+def test_launch_uses_captured_binary_config_and_environment(
+    tmp_path: Path, spawn_executor: Executor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SNAPSHOT_ALLOWED", "captured")
+    config = tmp_path / "worker.json"
+    config.write_text("{}")
+    launcher = Mock()
+    launcher.launch.return_value = LaunchedProcess(10, 10, "start", lambda: None)
+    adapter = _adapter(
+        spawn_executor, binary="constructor", launcher=launcher, worker_env=AllowlistedEnv.of(("SNAPSHOT_ALLOWED",))
+    )
+    snapshot = replace(
+        adapter.launch_settings("provider/model", "high"),
+        binary="snapshot",
+        settings_path=str(config),
+        autonomy=Autonomy.Dangerous,
+        prompt_prefix="snapshot-prefix",
+    )
+    monkeypatch.setenv("SNAPSHOT_ALLOWED", "changed")
+    adapter.spawn(
+        make_envelope("c", "build", node_id="n", choices=[]),
+        _preamble(str(tmp_path), stdout_path=str(tmp_path / "out")),
+        None,
+        session_settings=snapshot,
+    )
+    assert "provider/model" in launcher.launch.call_args.args[0]
+    assert launcher.launch.call_args.args[0][-1].startswith("snapshot-prefix\n\n")
+    adapter.judge(str(tmp_path), "session", "judge", str(tmp_path / "judge"), session_settings=snapshot)
+    adapter.resume_with_message(str(tmp_path), "session", "continue", session_settings=snapshot)
+    assert launcher.launch.call_count == 3
+    for args, kwargs in launcher.launch.call_args_list:
+        assert args[0][0] == "snapshot"
+        assert kwargs["env"].variables["OPENCODE_CONFIG"] == str(config)
+        assert kwargs["env"].variables["SNAPSHOT_ALLOWED"] == "captured"
 
 
 def _manifest() -> dict[str, Any]:
@@ -177,12 +215,23 @@ def test_effective_bundle_is_delivered_to_every_launch_kind(
     adapter = _adapter(spawn_executor, worker_config_path=str(config), effective_config_dir=str(effective))
     preamble = _preamble(str(workdir), stdout_path=str(tmp_path / "spawn.out"))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    adapter.spawn(envelope, preamble, None)
-    adapter.spawn(envelope, preamble, None, resume_from="ses_prior")
-    adapter.resume_with_message(str(workdir), "ses_prior", "continue", preamble=preamble)
-    adapter.judge(str(workdir), "ses_prior", "assess", str(tmp_path / "judge.out"), preamble=preamble)
-    adapter.resume_with_message(str(workdir), "ses_prior", "continue")
-    adapter.judge(str(workdir), "ses_prior", "assess", str(tmp_path / "fallback.out"))
+    adapter.spawn(envelope, preamble, None, session_settings=adapter.launch_settings())
+    adapter.spawn(envelope, preamble, None, resume_from="ses_prior", session_settings=adapter.launch_settings())
+    adapter.resume_with_message(
+        str(workdir), "ses_prior", "continue", preamble=preamble, session_settings=adapter.launch_settings()
+    )
+    adapter.judge(
+        str(workdir),
+        "ses_prior",
+        "assess",
+        str(tmp_path / "judge.out"),
+        preamble=preamble,
+        session_settings=adapter.launch_settings(),
+    )
+    adapter.resume_with_message(str(workdir), "ses_prior", "continue", session_settings=adapter.launch_settings())
+    adapter.judge(
+        str(workdir), "ses_prior", "assess", str(tmp_path / "fallback.out"), session_settings=adapter.launch_settings()
+    )
 
     assert len(captured) == 6
     for env in captured:
@@ -223,13 +272,48 @@ def test_numeric_window_reaches_all_launches_using_session_stamp(
     )
     preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    adapter.spawn(envelope, preamble, None, model="old/model", compaction_window="8k")
-    adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model="old/model", compaction_window="8k")
-    adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model="old/model", compaction_window="8k")
-    adapter.judge(
-        str(tmp_path), "ses_prior", "assess", str(tmp_path / "judge.out"), model="old/model", compaction_window="8k"
+    adapter.spawn(
+        envelope,
+        preamble,
+        None,
+        model="old/model",
+        compaction_window="8k",
+        session_settings=adapter.launch_settings(model="old/model", compaction_window="8k"),
     )
-    adapter.spawn(envelope, preamble, None, resume_from="ses_prior", compaction_window="8k")
+    adapter.spawn(
+        envelope,
+        preamble,
+        None,
+        resume_from="ses_prior",
+        model="old/model",
+        compaction_window="8k",
+        session_settings=adapter.launch_settings(model="old/model", compaction_window="8k"),
+    )
+    adapter.resume_with_message(
+        str(tmp_path),
+        "ses_prior",
+        "continue",
+        model="old/model",
+        compaction_window="8k",
+        session_settings=adapter.launch_settings(model="old/model", compaction_window="8k"),
+    )
+    adapter.judge(
+        str(tmp_path),
+        "ses_prior",
+        "assess",
+        str(tmp_path / "judge.out"),
+        model="old/model",
+        compaction_window="8k",
+        session_settings=adapter.launch_settings(model="old/model", compaction_window="8k"),
+    )
+    adapter.spawn(
+        envelope,
+        preamble,
+        None,
+        resume_from="ses_prior",
+        compaction_window="8k",
+        session_settings=adapter.launch_settings(compaction_window="8k"),
+    )
 
     for _, env in captured[:4]:
         content = json.loads(env["OPENCODE_CONFIG_CONTENT"])
@@ -269,9 +353,31 @@ def test_auto_window_leaves_the_worker_config_untouched_on_spawn_and_resume(
     preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     with capture_logs() as logs:
-        adapter.spawn(envelope, preamble, None, model="old/model", compaction_window="auto")
-        adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model="old/model", compaction_window="auto")
-        adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model="old/model", compaction_window="auto")
+        adapter.spawn(
+            envelope,
+            preamble,
+            None,
+            model="old/model",
+            compaction_window="auto",
+            session_settings=adapter.launch_settings(model="old/model", compaction_window="auto"),
+        )
+        adapter.spawn(
+            envelope,
+            preamble,
+            None,
+            resume_from="ses_prior",
+            model="old/model",
+            compaction_window="auto",
+            session_settings=adapter.launch_settings(model="old/model", compaction_window="auto"),
+        )
+        adapter.resume_with_message(
+            str(tmp_path),
+            "ses_prior",
+            "continue",
+            model="old/model",
+            compaction_window="auto",
+            session_settings=adapter.launch_settings(model="old/model", compaction_window="auto"),
+        )
 
     assert len(captured) == 3
     assert not [log for log in logs if "compaction window" in log["event"]]
@@ -326,12 +432,40 @@ def test_numeric_window_fallback_preserves_launch_and_warns_once_per_window(
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
     with capture_logs() as logs:
-        adapter.spawn(envelope, preamble, None, model=model, compaction_window="8k")
-        adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model=model, compaction_window="8k")
-        adapter.judge(
-            str(tmp_path), "ses_prior", "assess", str(tmp_path / "judge.out"), model=model, compaction_window="8k"
+        adapter.spawn(
+            envelope,
+            preamble,
+            None,
+            model=model,
+            compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
         )
-        adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model=model, compaction_window="9k")
+        adapter.spawn(
+            envelope,
+            preamble,
+            None,
+            resume_from="ses_prior",
+            model=model,
+            compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
+        )
+        adapter.judge(
+            str(tmp_path),
+            "ses_prior",
+            "assess",
+            str(tmp_path / "judge.out"),
+            model=model,
+            compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
+        )
+        adapter.resume_with_message(
+            str(tmp_path),
+            "ses_prior",
+            "continue",
+            model=model,
+            compaction_window="9k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="9k"),
+        )
 
     assert len(captured) == 4
     assert all(env["OPENCODE_CONFIG_CONTENT"] == content for env in captured)
@@ -386,7 +520,12 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
     ).binding
     assert binding.adapter is not None
     binding.adapter.resume_with_message(
-        str(tmp_path), "ses_prior", "continue", model="provider/model", compaction_window="8k"
+        str(tmp_path),
+        "ses_prior",
+        "continue",
+        model="provider/model",
+        compaction_window="8k",
+        session_settings=binding.adapter.launch_settings(model="provider/model", compaction_window="8k"),
     )
     limits = json.loads(captured[0]["OPENCODE_CONFIG_CONTENT"])["provider"]["provider"]["models"]["model"]["limit"]
     assert limits == {"input": 9200, "context": 100000, "output": 5000}
@@ -622,7 +761,7 @@ def test_spawn_without_a_stdout_path_raises(spawn_executor: Executor) -> None:
     adapter = _adapter(spawn_executor, binary="opencode")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     with pytest.raises(HarnessSpawnError):
-        adapter.spawn(envelope, _preamble("/ws/e1"), session_hint="hint")
+        adapter.spawn(envelope, _preamble("/ws/e1"), session_hint="hint", session_settings=adapter.launch_settings())
 
 
 class _AskingResolver:
@@ -670,6 +809,7 @@ def test_spawn_pins_the_resolved_model_at_mint_only(
         _preamble(str(workdir), stdout_path=str(stdout_path)),
         session_hint="hint",
         model="openai/gpt-5.6-luna",
+        session_settings=adapter.launch_settings(model="openai/gpt-5.6-luna"),
     )
 
     cmd = captured["cmd"]
@@ -694,6 +834,7 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
         session_hint=None,
         resume_from="ses_prior",
         model="openai/gpt-5.6-luna",
+        session_settings=adapter.launch_settings(model="openai/gpt-5.6-luna"),
     )
 
     cmd = captured["cmd"]
@@ -721,7 +862,7 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
         versions=version_probe(),
     )
 
-    resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue")
+    resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue", session_settings=adapter.launch_settings())
 
     assert resumed.pid == 9_999_999
     assert resumed.process_start_time == "fake-resume-start-time"
@@ -1629,7 +1770,12 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
         graph_artifacts=[GraphArtifact(name="rubric", kind=ArtifactKind.ASSET, content="RUBRIC-BODY-7f3a")],
     )
 
-    _adapter(spawn_executor).spawn(envelope, _preamble(str(workdir), stdout_path=str(tmp_path / "spawn.out")), None)
+    _adapter(spawn_executor).spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(tmp_path / "spawn.out")),
+        None,
+        session_settings=_adapter(spawn_executor).launch_settings(),
+    )
 
     (cmd,) = captured
     assert envelope.prompt in cmd

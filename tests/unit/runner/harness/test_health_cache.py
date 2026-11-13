@@ -14,6 +14,7 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.harness.binary_identity import BinaryIdentity
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -131,6 +132,38 @@ def test_repeat_refresh_within_window_reuses_the_cached_result() -> None:
     clock.advance(timedelta(seconds=1))
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
     assert probe.calls == 1  # no second probe — nothing changed and the window has not elapsed
+
+
+def test_same_service_version_rechecks_health_when_binary_identity_moves_or_disappears() -> None:
+    class Identities:
+        identity: BinaryIdentity | None = BinaryIdentity(Path("/tool"), 1, 1)
+
+        def identify(self, binary: str) -> BinaryIdentity | None:
+            return self.identity
+
+    identities = Identities()
+    probe = _FakeProbe()
+    cache = HarnessHealthCache(
+        corpus=CommittedCorpus(),
+        clock=FixedClock(_NOW),
+        probes={_HARNESS_ID: probe},
+        selftest_results=_FakeSelftestResults(),
+        binary_identities=identities,
+        binaries={_HARNESS_ID: "tool"},
+    )
+    adapter = _FakeAdapter()
+    result = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert result is not None and result.available
+    cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert probe.calls == 1
+    identities.identity = BinaryIdentity(Path("/tool"), 2, 1)
+    cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert probe.calls == 2
+    identities.identity = None
+    probe.binary = False
+    result = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert result is not None and not result.available
+    assert probe.calls == 3
 
 
 def test_refresh_after_the_window_elapses_recomputes() -> None:

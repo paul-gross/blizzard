@@ -34,6 +34,12 @@ class StepLock:
         with self._lock:
             pass
 
+    @contextmanager
+    def hold_idle(self) -> Generator[None, None, None]:
+        """Wait for a pass and exclude new passes until the caller leaves."""
+        with self._lock:
+            yield
+
 
 @domain_model
 @dataclass(frozen=True)

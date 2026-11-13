@@ -31,8 +31,8 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.stdout_target import stdout_target
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
@@ -63,6 +63,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import (
 )
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
@@ -249,11 +250,15 @@ class OpenCodeAdapter:
         permission_resolver: IOpenCodePermissionResolver | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
-        versions: VersionProbe,
+        versions: IVersionProbe,
         monotonic_clock: IMonotonicClock,
+        transcript_root: str = "",
+        bundle_path: str | None = None,
     ) -> None:
         self._monotonic_clock = monotonic_clock
         self._binary = binary
+        self._transcript_root = transcript_root
+        self._bundle_path = bundle_path
         self._versions = versions
         self._command = OpenCodeCommand(binary)
         # Empty is a legitimate default: OpenCode resolves its own configured model.
@@ -289,6 +294,33 @@ class OpenCodeAdapter:
     @property
     def autonomy(self) -> Autonomy:
         return self._autonomy
+
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            binary=self._binary,
+            default_model=self._model,
+            autonomy=self._autonomy,
+            environment=SessionEnvironment.capture(self._worker_env),
+            settings_path=self._worker_config_path,
+            harness_id="opencode",
+            transcript_root=self._transcript_root,
+            bundle_path=self._bundle_path,
+            config_dir=self._effective_config_dir,
+            model_aliases=tuple(self._model_aliases.items()),
+            effort_aliases=tuple(self._effort_aliases.items()),
+            supported_models=self._supported_models,
+            prompt_prefix=prompt_prefix,
+        )
 
     def observe_version(self) -> str | None:
         """Shared verbatim with Claude Code (:class:`VersionProbe`); only
@@ -372,7 +404,10 @@ class OpenCodeAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> PendingWorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         if not preamble.stdout_path:
@@ -380,21 +415,23 @@ class OpenCodeAdapter:
             # (execution spec); with nowhere durable to read from it could never be learned.
             raise HarnessSpawnError("OpenCode spawn requires an injected stdout path to learn its session id")
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
-        prompt = "\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part)
+        prompt = "\n\n".join(part for part in (settings.prompt_prefix, envelope.prompt or "") if part)
         kind = OpenCodeInvocationKind.RESUME if resume_from else OpenCodeInvocationKind.FRESH
-        cmd = self._command.build(
+        cmd = OpenCodeCommand(settings.binary).build(
             kind,
             prompt=prompt,
             session_id=resume_from,
-            model=model or self._model,
+            model=model or settings.default_model,
             variant=effort,
-            auto=self._autonomy is not Autonomy.Normal,
+            auto=settings.autonomy is not Autonomy.Normal,
         )
-        env = self._spawn_env(envelope, preamble, resume_from or "")
+        env = self.identity_env(preamble, envelope.chunk_id, resume_from or "", settings=settings)
         if workdir:
-            self._check_plugins(workdir, env)
-        env = self._compose_compaction(workdir, env, model if resume_from else model or self._model, compaction_window)
-        env = self.deny_unanswerable_asks(workdir, env)
+            self._check_plugins(workdir, env, settings)
+        env = self._compose_compaction(
+            workdir, env, model if resume_from else model or settings.default_model, compaction_window, settings
+        )
+        env = self.deny_unanswerable_asks(workdir, env, settings)
         # Both go through `stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
@@ -407,16 +444,20 @@ class OpenCodeAdapter:
                 launched = self._launcher.launch(
                     cmd,
                     cwd=workdir,
-                    env=self._worker_env.worker(env),
+                    env=settings.environment.worker(env),
                     stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
                     stderr=stderr_file if stderr_file is not None else Stream.DEVNULL,
                     defer_disarm=True,
                 )
             except OSError as exc:
-                _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
-                raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
+                _log.error("harness spawn failed", binary=settings.binary, cwd=workdir, detail=str(exc))
+                raise HarnessSpawnError(f"failed to spawn {settings.binary} in {workdir}: {exc}") from exc
         _log.info(
-            "spawned worker", binary=self._binary, pid=launched.pid, session_id=resume_from or "(pending)", cwd=workdir
+            "spawned worker",
+            binary=settings.binary,
+            pid=launched.pid,
+            session_id=resume_from or "(pending)",
+            cwd=workdir,
         )
         if resume_from:
             # Resume never performs the handshake (execution spec) — the stored session
@@ -454,24 +495,27 @@ class OpenCodeAdapter:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> WorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         if not output_path:
             raise HarnessSpawnError("judge requires an output path — a detached verdict is unrecoverable without one")
-        cmd = self._command.build(
+        cmd = OpenCodeCommand(settings.binary).build(
             OpenCodeInvocationKind.JUDGE,
             prompt=judgement_prompt,
             session_id=session_id,
             variant=effort,
-            auto=self._autonomy is not Autonomy.Normal,
+            auto=settings.autonomy is not Autonomy.Normal,
         )
         env = (
-            self.identity_env(preamble, chunk_id, session_id, elicitation=True)
+            self.identity_env(preamble, chunk_id, session_id, elicitation=True, settings=settings)
             if preamble is not None
-            else self.config_env()
+            else self.config_env(settings)
         )
-        self._check_plugins(session_cwd, env)
-        env = self._compose_compaction(session_cwd, env, model, compaction_window)
-        env = self.deny_unanswerable_asks(session_cwd, env)
+        self._check_plugins(session_cwd, env, settings)
+        env = self._compose_compaction(session_cwd, env, model, compaction_window, settings)
+        env = self.deny_unanswerable_asks(session_cwd, env, settings)
         try:
             with stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -479,15 +523,17 @@ class OpenCodeAdapter:
                 launched = self._launcher.launch(
                     cmd,
                     cwd=session_cwd,
-                    env=self._worker_env.worker(env),
+                    env=settings.environment.worker(env),
                     stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
                     stderr=Stream.DEVNULL,
                     defer_disarm=True,
                 )
         except OSError as exc:
-            _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
-            raise HarnessSpawnError(f"failed to launch {self._binary} in {session_cwd}: {exc}") from exc
-        _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=session_cwd)
+            _log.error("elicitation launch failed", binary=settings.binary, cwd=session_cwd, detail=str(exc))
+            raise HarnessSpawnError(f"failed to launch {settings.binary} in {session_cwd}: {exc}") from exc
+        _log.info(
+            "elicitation launched", binary=settings.binary, pid=launched.pid, session_id=session_id, cwd=session_cwd
+        )
         # Left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
         # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
@@ -510,24 +556,31 @@ class OpenCodeAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> ResumeHandle:
-        cmd = self._command.build(
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
+        cmd = OpenCodeCommand(settings.binary).build(
             OpenCodeInvocationKind.NUDGE,
             prompt=message,
             session_id=session_id,
             variant=effort,
-            auto=self._autonomy is not Autonomy.Normal,
+            auto=settings.autonomy is not Autonomy.Normal,
         )
-        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self.config_env()
-        self._check_plugins(session_cwd, env)
-        env = self._compose_compaction(session_cwd, env, model, compaction_window)
-        env = self.deny_unanswerable_asks(session_cwd, env)
+        env = (
+            self.identity_env(preamble, chunk_id, session_id, settings=settings)
+            if preamble is not None
+            else self.config_env(settings)
+        )
+        self._check_plugins(session_cwd, env, settings)
+        env = self._compose_compaction(session_cwd, env, model, compaction_window, settings)
+        env = self.deny_unanswerable_asks(session_cwd, env, settings)
         # Deferred: a resume gets spawn/judge's ownership.
         with stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd,
                 cwd=session_cwd,
-                env=self._worker_env.worker(env),
+                env=settings.environment.worker(env),
                 stdout=stdout_file if stdout_file is not None else Stream.INHERIT,
                 stderr=Stream.INHERIT,
                 defer_disarm=True,
@@ -566,39 +619,53 @@ class OpenCodeAdapter:
         return 0
 
     def identity_env(
-        self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
+        self,
+        preamble: WorkerPreamble,
+        chunk_id: str,
+        session_id: str,
+        *,
+        elicitation: bool = False,
+        settings: SessionSettings | None = None,
     ) -> dict[str, str]:
         """The shared identity env with this binding's runner-owned OpenCode config vars layered on top."""
         env = harness_shared.build_identity_env(
-            preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
+            preamble,
+            chunk_id,
+            session_id,
+            settings.environment if settings is not None else self._worker_env,
+            elicitation=elicitation,
         )
-        config_env = self.config_env()
+        config_env = self.config_env(settings)
         for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR"):
             if key in config_env:
                 env[key] = config_env[key]
         return env
 
-    def config_env(self) -> dict[str, str]:
-        env = dict(self._worker_env.variables)
-        if self._worker_config_path:
-            env["OPENCODE_CONFIG"] = self._worker_config_path
-            with open(self._worker_config_path, encoding="utf-8") as f:
+    def config_env(self, settings: SessionSettings | None = None) -> dict[str, str]:
+        settings = settings or self.launch_settings()
+        env = dict(settings.environment.variables)
+        if settings.settings_path:
+            env["OPENCODE_CONFIG"] = settings.settings_path
+            with open(settings.settings_path, encoding="utf-8") as f:
                 content = f.read()
             env["OPENCODE_CONFIG_CONTENT"] = (
-                content_with_snapshot_references(content, Path(self._effective_config_dir))
-                if self._effective_config_dir
-                else content
+                content_with_snapshot_references(content, Path(settings.config_dir)) if settings.config_dir else content
             )
-            if self._effective_config_dir:
-                env["OPENCODE_CONFIG_DIR"] = self._effective_config_dir
+            if settings.config_dir:
+                env["OPENCODE_CONFIG_DIR"] = settings.config_dir
         return env
 
-    def _check_plugins(self, cwd: str, env: dict[str, str]) -> None:
-        if self._effective_config_dir:
-            check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
+    def _check_plugins(self, cwd: str, env: dict[str, str], settings: SessionSettings) -> None:
+        if settings.config_dir:
+            check_ambient_plugins(Path(settings.config_dir), Path(cwd), env)
 
     def _compose_compaction(
-        self, cwd: str | None, env: dict[str, str], model: str | None, window: str | None
+        self,
+        cwd: str | None,
+        env: dict[str, str],
+        model: str | None,
+        window: str | None,
+        settings: SessionSettings | None = None,
     ) -> dict[str, str]:
         if window is None or window == "auto":
             return env
@@ -609,7 +676,7 @@ class OpenCodeAdapter:
             limits = self._limits_catalog.limits_for(reference.provider, reference.model)
             if limits is None:
                 raise ValueError("model limits unavailable")
-            effective = self._permission_resolver.resolve(cwd=cwd, env=self._resolver_env(env)).merged_config
+            effective = self._permission_resolver.resolve(cwd=cwd, env=self._resolver_env(env, settings)).merged_config
             content = env.get("OPENCODE_CONFIG_CONTENT")
             base = decode_json(content) if content else {}
             if not isinstance(base, dict):
@@ -630,17 +697,23 @@ class OpenCodeAdapter:
                 )
             return env
 
-    def _resolver_env(self, env: dict[str, str]) -> ChildEnv:
+    def _resolver_env(self, env: dict[str, str], settings: SessionSettings | None = None) -> ChildEnv:
         """The tool profile for a permission-resolution child, plus the OpenCode config variables the composed launch
         env carries: the resolver reads configuration, so it needs no lease identity or runner address."""
-        return self._worker_env.tool().adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
+        return (
+            (settings.environment if settings is not None else self._worker_env)
+            .tool()
+            .adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
+        )
 
-    def deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
+    def deny_unanswerable_asks(
+        self, cwd: str | None, env: dict[str, str], settings: SessionSettings | None = None
+    ) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.
 
         Every reachable ask is composed to ``deny`` in ``OPENCODE_CONFIG_CONTENT``, then OpenCode re-resolves the
         result; a launch it cannot prove clean fails here, before any process starts."""
-        if self._autonomy is not Autonomy.Normal:
+        if (settings.autonomy if settings is not None else self._autonomy) is not Autonomy.Normal:
             return env
         if not cwd:
             raise HarnessSpawnError("no launch cwd can be resolved; refusing an unproven `normal` launch")
@@ -648,7 +721,7 @@ class OpenCodeAdapter:
         if resolver is None:
             raise HarnessSpawnError("no OpenCode permission resolver is wired; refusing an unproven `normal` launch")
         try:
-            resolved = resolver.resolve(cwd=cwd, env=self._resolver_env(env))
+            resolved = resolver.resolve(cwd=cwd, env=self._resolver_env(env, settings))
             overrides = compose_ask_denials(resolved.merged_config, resolved.agent_rulesets)
             if not overrides:
                 return env
@@ -658,7 +731,9 @@ class OpenCodeAdapter:
                 raise json.JSONDecodeError("OPENCODE_CONFIG_CONTENT is not a JSON object", content or "", 0)
             document = merge_overrides(base, overrides)
             composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
-            remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._resolver_env(composed)).agent_rulesets)
+            remaining = residual_asks(
+                resolver.resolve(cwd=cwd, env=self._resolver_env(composed, settings)).agent_rulesets
+            )
         except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
             raise HarnessSpawnError(f"cannot establish that an unattended OpenCode launch never asks: {exc}") from exc
         if remaining:

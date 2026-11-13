@@ -275,7 +275,15 @@ def _run(
             prompt=prompt,
             judgement_prompt="assess",
         )
-        handle = adapter.spawn(envelope, preamble, None, resume_from=session, model=model, compaction_window="8k")
+        handle = adapter.spawn(
+            envelope,
+            preamble,
+            None,
+            resume_from=session,
+            model=model,
+            compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
+        )
         handle.confirm_durable()
         minted = handle.await_identity(10).session_id if name == "fresh" else session
     elif name == "judge":
@@ -289,6 +297,7 @@ def _run(
             chunk_id="ch_probe",
             model=model,
             compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
         )
         handle.confirm_durable()
         minted = session
@@ -303,6 +312,7 @@ def _run(
             chunk_id="ch_probe",
             model=model,
             compaction_window="8k",
+            session_settings=adapter.launch_settings(model=model, compaction_window="8k"),
         )
         handle.confirm_durable()
         minted = session

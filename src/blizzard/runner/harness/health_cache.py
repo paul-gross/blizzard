@@ -1,7 +1,7 @@
 """The runner's harness-health cache and the read-only seam its consumers depend on.
 
-Composition-root-owned and as long-lived as the runner process; readers go through
-:class:`IReadHarnessHealth`."""
+Composition constructs a cache per harness set; readers go through :class:`IReadHarnessHealth`.
+See ``bzh:pluggable-seams`` for set ownership."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import admission_verdict
+from blizzard.runner.harness.binary_identity import IBinaryIdentity
 from blizzard.runner.harness.health import (
     RANKED_BEFORE_CONFLICTS,
     HarnessHealthEvidence,
@@ -34,7 +35,7 @@ class _ResolvesModelStrict(Protocol):
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None: ...
 
 
-#: How long a version is trusted before re-probing — long enough an idle runner isn't shelling out every tick.
+#: Refresh window for health and applicable service-version observations, not binary fingerprints.
 HARNESS_VERSION_REFRESH_SECONDS = 600.0
 
 #: Distinguishes "never computed" from a genuinely ``None``-valued previous observation.
@@ -76,11 +77,14 @@ class HarnessHealthCache:
     configured_tiers: Mapping[str, tuple[tuple[str, str], ...]] = field(
         default_factory=dict[str, tuple[tuple[str, str], ...]]
     )
+    binary_identities: IBinaryIdentity | None = None
+    binaries: Mapping[str, str] = field(default_factory=dict[str, str])
     refresh_seconds: float = HARNESS_VERSION_REFRESH_SECONDS
     _results: dict[str, HarnessHealthResult] = field(default_factory=dict[str, HarnessHealthResult], compare=False)
     _computed_at: dict[str, datetime] = field(default_factory=dict[str, datetime], compare=False)
     _last_version: dict[str, object] = field(default_factory=dict[str, object], compare=False)
     _last_selftest: dict[str, object] = field(default_factory=dict[str, object], compare=False)
+    _last_identity: dict[str, object] = field(default_factory=dict[str, object], compare=False)
 
     def refresh(
         self, harness_id: str, *, adapter: _ResolvesModelStrict, observed_version: str | None
@@ -95,12 +99,15 @@ class HarnessHealthCache:
             return None
         latest = self.selftest_results.latest_selftest_result(harness_id) if self.selftest_results is not None else None
         selftest_marker = (latest.status, latest.recorded_at) if latest is not None else None
+        binary = self.binaries.get(harness_id)
+        identity = self.binary_identities.identify(binary) if binary is not None and self.binary_identities else _UNSET
         now = self.clock.now()
         computed_at = self._computed_at.get(harness_id)
         stale = computed_at is None or (now - computed_at).total_seconds() >= self.refresh_seconds
         changed = (
             self._last_version.get(harness_id, _UNSET) != observed_version
             or self._last_selftest.get(harness_id, _UNSET) != selftest_marker
+            or self._last_identity.get(harness_id, _UNSET) != identity
         )
         if not stale and not changed and harness_id in self._results:
             return self._results[harness_id]
@@ -134,6 +141,7 @@ class HarnessHealthCache:
         self._computed_at[harness_id] = now
         self._last_version[harness_id] = observed_version
         self._last_selftest[harness_id] = selftest_marker
+        self._last_identity[harness_id] = identity
         return result
 
     def invalidate(self, harness_id: str) -> None:

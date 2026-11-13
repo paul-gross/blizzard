@@ -15,7 +15,7 @@ from blizzard.foundation.clock import IClock, IMonotonicClock, ManualMonotonicCl
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.binding_selection import BindingSelection
+from blizzard.runner.harness.binding_selection import BindingSelection, IVersionProbe
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
@@ -177,6 +177,10 @@ class _RecordingDeclaration:
         return self._inner.harness_id
 
     @property
+    def service_version(self) -> bool:
+        return self._inner.service_version
+
+    @property
     def normalizer_version(self) -> str:
         return self._inner.normalizer_version
 
@@ -203,6 +207,7 @@ class _RecordingDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
+        versions: IVersionProbe | None = None,
     ) -> HarnessAssembly:
         self._calls.append(_Assembled(self.harness_id, health_roots, corpus, monotonic_clock))
         roots = (*health_roots, *health_roots[:1] * self._extra_probes)

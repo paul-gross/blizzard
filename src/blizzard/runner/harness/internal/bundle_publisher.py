@@ -6,6 +6,7 @@ untouched."""
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import shutil
@@ -43,6 +44,56 @@ class _Plan:
 
     source_dir: Path
     harnesses: tuple[tuple[HarnessLayout, Path, tuple[str, ...], tuple[PurePosixPath, ...]], ...]
+
+
+def bundle_source_identity(
+    config_dir: Path | None, composition_inputs: tuple[Path, ...] = ()
+) -> tuple[Path, str] | None:
+    """Fingerprint supplied source material without publishing it."""
+    if config_dir is None:
+        return None
+    digest = hashlib.sha256()
+    try:
+        if not config_dir.is_dir():
+            raise HarnessBundleError(config_dir, "the configured bundle directory is missing or is not a directory")
+
+        def visit(directory: Path, ancestors: frozenset[tuple[int, int]]) -> None:
+            directory_stat = directory.stat()
+            identity = (directory_stat.st_dev, directory_stat.st_ino)
+            if identity in ancestors:
+                digest.update(b"cycle\0")
+                return
+            ancestors = ancestors | {identity}
+            for path in sorted(directory.iterdir()):
+                digest.update(path.relative_to(config_dir).as_posix().encode() + b"\0")
+                mode = path.lstat().st_mode
+                if stat.S_ISLNK(mode):
+                    digest.update(b"link\0" + os.fsencode(os.readlink(path)) + b"\0")
+                try:
+                    target = path.stat()
+                except OSError as exc:
+                    if not stat.S_ISLNK(mode) or exc.errno not in (errno.ENOENT, errno.ELOOP):
+                        raise
+                    digest.update(b"unresolved\0")
+                    continue
+                digest.update(str(stat.S_IMODE(target.st_mode)).encode() + b"\0")
+                if stat.S_ISDIR(target.st_mode):
+                    digest.update(b"directory\0")
+                    visit(path, ancestors)
+                elif stat.S_ISREG(target.st_mode):
+                    digest.update(b"file\0" + path.read_bytes() + b"\0")
+
+        visit(config_dir, frozenset())
+        for path in composition_inputs:
+            digest.update(b"compose\0" + os.fsencode(path) + b"\0")
+            if path.is_file():
+                digest.update(b"file\0" + path.read_bytes())
+            else:
+                digest.update(b"missing")
+            digest.update(b"\0")
+    except OSError as exc:
+        raise HarnessBundleError(config_dir, f"cannot read bundle source: {exc}") from exc
+    return config_dir, digest.hexdigest()
 
 
 def inspect_bundle(config_dir: Path, layouts: tuple[HarnessLayout, ...]) -> tuple[HarnessSource, ...]:

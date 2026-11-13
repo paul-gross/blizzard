@@ -9,6 +9,7 @@ from datetime import datetime
 from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 
@@ -20,6 +21,22 @@ class FixedPidAdapter:
     def __init__(self, spawn_pid: int, resume_pid: int) -> None:
         self.spawn_pid = spawn_pid
         self.resume_pid = resume_pid
+
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            environment=SessionEnvironment((), "/bin/bash"),
+            prompt_prefix=prompt_prefix,
+        )
 
     def observe_version(self) -> str | None:
         return "test"
@@ -34,6 +51,7 @@ class FixedPidAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> WorkerHandle:
         return WorkerHandle(
             session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t", pgid=self.spawn_pid
@@ -54,6 +72,7 @@ class FixedPidAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
         return ResumeHandle(pid=self.resume_pid, pgid=self.resume_pid, process_start_time="resume-t")
 
@@ -90,6 +109,7 @@ class FixedPidAdapter:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> WorkerHandle:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(json.dumps({"result": "<Choice>pass</Choice>"}))

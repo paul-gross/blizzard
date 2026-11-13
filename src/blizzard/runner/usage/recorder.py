@@ -12,6 +12,7 @@ from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.harness_set import IInvocationHarnesses, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     IHarnessTranscriptSourceRegistry,
@@ -67,6 +68,14 @@ class UsageRecorder:
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
+    invocation_harnesses: IInvocationHarnesses | None = None
+
+    def _registry(self, lease_id: str, generation: int, *, judge: bool = False) -> UsageRecorderHarnesses:
+        key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
+        owner = self.invocation_harnesses.find(key) if self.invocation_harnesses is not None else None
+        if owner is not None:
+            return owner.registry
+        return self.invocation_harnesses.current.registry if self.invocation_harnesses is not None else self.harnesses
 
     def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""
@@ -83,7 +92,7 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return
-        harness = self.harnesses.usage_accounting(session.harness_id)
+        harness = self._registry(lease.lease_id, generation, judge=True).usage_accounting(session.harness_id)
         requested = lease.resolved_model
         needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=requested)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
@@ -152,7 +161,7 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return None
-        harness = self.harnesses.usage_accounting(session.harness_id)
+        harness = self._registry(lease.lease_id, generation).usage_accounting(session.harness_id)
         requested = lease.resolved_model
         needs_transcript = (
             self.transcripts_wired and bool(output) and harness.needs_usage_transcript(output, model=requested)
@@ -215,6 +224,7 @@ class UsageRecorder:
             generation=generation,
             start=self.invocation_boundaries.current_start(lease.lease_id, generation, "judge"),
             end_kind=None,
+            judge=True,
         )
 
     def _read_range(
@@ -226,6 +236,7 @@ class UsageRecorder:
         generation: int,
         start: InvocationBoundary | InvocationBoundaryStart | None,
         end_kind: InvocationBoundaryKind | None,
+        judge: bool = False,
     ) -> list[str]:
         """The raw lines :func:`charge_range` charges this invocation for — a same-generation
         later invocation's recorded start (``end_kind``) caps the read."""
@@ -241,7 +252,7 @@ class UsageRecorder:
             binding.workdir if binding else None,
         ).path
         try:
-            source = self.harnesses.transcript_source(session.harness_id)
+            source = self._registry(lease_id, generation, judge=judge).transcript_source(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # No transcript source registered for this owner: no fallback read, never a
             # raise out of a usage-recording or usage-limit-classifying call site.

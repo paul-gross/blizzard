@@ -133,10 +133,23 @@ def _unattended(adapter: Any, workdir: Path, launcher: _RecordingLauncher) -> di
     preamble = _preamble(workdir)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     kinds: dict[str, Callable[[], object]] = {
-        "spawn": lambda: adapter.spawn(envelope, preamble, session_hint="sess-1"),
-        "resume": lambda: adapter.spawn(envelope, preamble, session_hint=None, resume_from="sess-1"),
-        "nudge": lambda: adapter.resume_with_message(str(workdir), "sess-1", "go on", preamble=preamble),
-        "judge": lambda: adapter.judge(str(workdir), "sess-1", "judge it", str(workdir / "j.out"), preamble=preamble),
+        "spawn": lambda: adapter.spawn(
+            envelope, preamble, session_hint="sess-1", session_settings=adapter.launch_settings()
+        ),
+        "resume": lambda: adapter.spawn(
+            envelope, preamble, session_hint=None, resume_from="sess-1", session_settings=adapter.launch_settings()
+        ),
+        "nudge": lambda: adapter.resume_with_message(
+            str(workdir), "sess-1", "go on", preamble=preamble, session_settings=adapter.launch_settings()
+        ),
+        "judge": lambda: adapter.judge(
+            str(workdir),
+            "sess-1",
+            "judge it",
+            str(workdir / "j.out"),
+            preamble=preamble,
+            session_settings=adapter.launch_settings(),
+        ),
     }
     seen: dict[str, list[str]] = {}
     for kind, run in kinds.items():
@@ -235,7 +248,7 @@ def test_opencode_normal_resolves_in_the_launch_cwd_of_every_unattended_kind(tmp
 def _unresolvable_spawn(adapter: OpenCodeAdapter, tmp_path: Path) -> object:
     preamble = replace(_preamble(tmp_path), environments=[AcquiredEnvironment(environment_id="e1", workdir="")])
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    return adapter.spawn(envelope, preamble, session_hint="sess-1")
+    return adapter.spawn(envelope, preamble, session_hint="sess-1", session_settings=adapter.launch_settings())
 
 
 def test_opencode_normal_fails_closed_when_the_spawn_cwd_cannot_be_resolved(tmp_path: Path) -> None:
@@ -540,9 +553,18 @@ def test_opencode_checks_ambient_plugins_on_every_unattended_kind(tmp_path: Path
     preamble = _preamble(tmp_path)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     runs: list[Callable[[], object]] = [
-        lambda: adapter.spawn(envelope, preamble, session_hint=None),
-        lambda: adapter.resume_with_message(str(tmp_path), "s", "go", preamble=preamble),
-        lambda: adapter.judge(str(tmp_path), "s", "judge", str(tmp_path / "j.out"), preamble=preamble),
+        lambda: adapter.spawn(envelope, preamble, session_hint=None, session_settings=adapter.launch_settings()),
+        lambda: adapter.resume_with_message(
+            str(tmp_path), "s", "go", preamble=preamble, session_settings=adapter.launch_settings()
+        ),
+        lambda: adapter.judge(
+            str(tmp_path),
+            "s",
+            "judge",
+            str(tmp_path / "j.out"),
+            preamble=preamble,
+            session_settings=adapter.launch_settings(),
+        ),
     ]
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("HOME", str(home))
@@ -559,8 +581,8 @@ def test_opencode_without_a_preamble_launches_with_the_bare_config_env(tmp_path:
     launcher = _RecordingLauncher()
     adapter = _opencode(launcher, worker_config_path=str(worker))
 
-    adapter.resume_with_message(str(tmp_path), "s", "go")
-    adapter.judge(str(tmp_path), "s", "judge", str(tmp_path / "j.out"))
+    adapter.resume_with_message(str(tmp_path), "s", "go", session_settings=adapter.launch_settings())
+    adapter.judge(str(tmp_path), "s", "judge", str(tmp_path / "j.out"), session_settings=adapter.launch_settings())
 
     for env in launcher.envs:
         assert env["OPENCODE_CONFIG"] == str(worker)

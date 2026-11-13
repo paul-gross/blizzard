@@ -10,6 +10,7 @@ from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.ambient import user_config_dir
@@ -61,6 +62,10 @@ class ClaudeCodeDeclaration:
         return CLAUDE_CODE_HARNESS_ID
 
     @property
+    def service_version(self) -> bool:
+        return False
+
+    @property
     def normalizer_version(self) -> str:
         return NORMALIZER_VERSION
 
@@ -93,6 +98,7 @@ class ClaudeCodeDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
+        versions: IVersionProbe | None = None,
     ) -> HarnessAssembly:
         # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
         del clock, monotonic_clock, corpus
@@ -111,9 +117,11 @@ class ClaudeCodeDeclaration:
             effort_aliases=section.effort_aliases,
             supported_models=section.supported_models,
             transcript_source=transcript_source,
+            transcript_root=projects_root,
+            bundle_path=str(shared.bundle.path) if shared.bundle is not None else None,
             process=process,
             launcher=launcher,
-            versions=VersionProbe(children, shared.worker_env.tool()),
+            versions=versions or VersionProbe(children, shared.worker_env.tool()),
             harness_telemetry=self.telemetry_plan(section, shared),
         )
         probes = tuple(
@@ -122,7 +130,7 @@ class ClaudeCodeDeclaration:
                 credentials_path=section.credentials_path,
                 ambient_sources=claude_code_ambient_sources(shared.worker_env, spawn_root=root),
                 permission_mode=claude_code_permission_mode(shared.autonomy, section.permission_mode),
-                versions=VersionProbe(children, shared.worker_env.tool()),
+                versions=versions or VersionProbe(children, shared.worker_env.tool()),
             )
             for root in health_roots
         )

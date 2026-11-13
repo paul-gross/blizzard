@@ -59,6 +59,7 @@ from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
@@ -1285,7 +1286,14 @@ class FakeHarness:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> PendingWorkerHandle:
+        if session_settings is not None:
+            model, effort, compaction_window = (
+                session_settings.model,
+                session_settings.effort,
+                session_settings.compaction_window,
+            )
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
         self.spawn_model_effort.append((model, effort))
@@ -1324,7 +1332,14 @@ class FakeHarness:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> WorkerHandle:
+        if session_settings is not None:
+            model, effort, compaction_window = (
+                session_settings.model,
+                session_settings.effort,
+                session_settings.compaction_window,
+            )
         self.judged.append((session_cwd, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
         self.judge_model_effort.append((model, effort))
@@ -1356,7 +1371,14 @@ class FakeHarness:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
+        if session_settings is not None:
+            model, effort, compaction_window = (
+                session_settings.model,
+                session_settings.effort,
+                session_settings.compaction_window,
+            )
         self.resumed.append((session_cwd, session_id, message))
         self.resume_models.append(model)
         self.resume_efforts.append(effort)
@@ -1431,6 +1453,22 @@ class FakeHarness:
 
     def supported_models(self) -> tuple[str, ...]:
         return self.supported
+
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            environment=SessionEnvironment((), "/bin/bash"),
+            prompt_prefix=prompt_prefix,
+        )
 
     def observe_version(self) -> str | None:
         self.version_probes += 1

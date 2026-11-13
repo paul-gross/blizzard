@@ -22,7 +22,11 @@ from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.harness_set import HarnessAssemblyInputs, HarnessAssemblyKey, HarnessSet, HarnessSets
+from blizzard.runner.harness.health import HarnessHealthCause
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.harness.wiring import first_bindings
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken, TokenSource
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -35,6 +39,8 @@ from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
+from tests.support.harness_bundle import bundle as harness_bundle
+from tests.support.harness_bundle import runtime as harness_runtime
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import FakeSubscriptionSampler, migrated_store_at
 
@@ -59,6 +65,227 @@ def _host(config: RunnerConfig, *runner_ids: str, halted: tuple[HaltedRunner, ..
     """The host the config's file declares, with one built runner for each of ``runner_ids``."""
     built = [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid), ResolvedToken()) for rid in runner_ids]
     return build_host_process(host_config_of(config), built, halted=halted)
+
+
+def test_production_set_reuses_last_key_and_rebuilds_for_changed_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys: list[HarnessAssemblyKey] = []
+    select = HarnessSets.select
+
+    def capture(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+        keys.append(key)
+        return select(sets, key)
+
+    monkeypatch.setattr(HarnessSets, "select", capture)
+    host = _host(_config(tmp_path), "rn_a")
+    try:
+        runner = host.runners[0]
+        key = keys[0]
+        initial = runner.harness_sets.current
+        assert runner.harness_sets.select(key) is initial
+        inputs = cast(HarnessAssemblyInputs, key.values[0])
+        changed = dataclasses.replace(key, values=(dataclasses.replace(inputs, telemetry_enabled=True),))
+        replacement = runner.harness_sets.select(changed)
+        assert replacement is not initial
+        assert replacement.registry is not initial.registry
+        assert replacement.health is not initial.health
+        assert runner.harnesses is replacement.registry
+        assert runner.health is replacement.health
+        assert runner.harness_sets.select(changed) is replacement
+    finally:
+        host.close()
+
+
+def test_stepper_rebinds_all_harness_consumers_without_replacing_hub_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys: list[HarnessAssemblyKey] = []
+    select = HarnessSets.select
+
+    def capture(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+        keys.append(key)
+        return select(sets, key)
+
+    monkeypatch.setattr(HarnessSets, "select", capture)
+    config = _config(tmp_path)
+    host = _host(config, "rn_a")
+    stepper = loop_wiring.RunnerStepper(config, process_graph=host.runners[0])
+    try:
+        sets = host.runners[0].harness_sets
+        original = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        client = stepper._client  # pyright: ignore[reportPrivateUsage]
+        held = sets.retain("existing")
+        inputs = cast(HarnessAssemblyInputs, keys[0].values[0])
+        selected = sets.select(composition.harness_assembly_key(dataclasses.replace(inputs, telemetry_enabled=True)))
+        current = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert current is not original
+        assert stepper._client is client  # pyright: ignore[reportPrivateUsage]
+        assert current.harnesses is selected.registry
+        assert current.harness_selector.harnesses is selected.registry
+        assert current.harness_selector.health is selected.health
+        assert current.sessions.harnesses is selected.registry
+        assert current.usage.harnesses is selected.registry
+        assert current.harness_health is selected.health
+        assert current.harness_versions is selected.versions
+        assert current.retention_passes is original.retention_passes
+        assert sets.lookup("existing") is held
+        assert original.harnesses is held.registry
+        assert stepper._context() is current  # pyright: ignore[reportPrivateUsage]
+        sets.release("existing")
+    finally:
+        stepper.close()
+        host.close()
+
+
+def test_replacement_with_unchanged_bundle_keeps_snapshot_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = harness_bundle(tmp_path)
+    config = dataclasses.replace(_config(harness_runtime(tmp_path, source)), harness_config_dir=source)
+    keys: list[HarnessAssemblyKey] = []
+    select = HarnessSets.select
+
+    def capture(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+        keys.append(key)
+        return select(sets, key)
+
+    monkeypatch.setattr(HarnessSets, "select", capture)
+    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())
+    host = build_host_process(host_config_of(config), [built], publish_bundles=True)
+    try:
+        sets = host.runners[0].harness_sets
+        original = sets.current
+        assert original.bundle is not None
+        inputs = cast(HarnessAssemblyInputs, keys[0].values[0])
+        changed = dataclasses.replace(keys[0], values=(dataclasses.replace(inputs, telemetry_enabled=True),))
+        replacement = sets.select(changed)
+        assert replacement is not original
+        assert replacement.bundle is not None
+        assert replacement.bundle.path == original.bundle.path
+        (source / "claude-code" / "settings.json").write_text('{"note":"changed"}')
+        changed_source = composition.harness_assembly_key(dataclasses.replace(inputs, telemetry_enabled=True))
+        assert changed_source != changed
+        newer = sets.select(changed_source)
+        assert newer.bundle is not None
+        assert newer.bundle.path != original.bundle.path
+    finally:
+        host.close()
+
+
+def test_production_selection_health_and_capabilities_share_binary_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    binary, calls = tmp_path / "opencode", tmp_path / "calls"
+
+    def executable(version: str) -> None:
+        binary.write_text(f"#!/bin/sh\necho x >> '{calls}'\necho '{version}'\n")
+        binary.chmod(0o755)
+
+    executable("1.2.3")
+    config = _config(tmp_path / "runner")
+    sections = config.harness_sections.replaced(OpenCodeSection(binary=str(binary)))
+    config = dataclasses.replace(config, harness_sections=sections)
+    keys: list[HarnessAssemblyKey] = []
+    select = HarnessSets.select
+
+    def capture(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+        keys.append(key)
+        return select(sets, key)
+
+    monkeypatch.setattr(HarnessSets, "select", capture)
+    host = _host(config, "rn_a")
+    try:
+        sets = host.runners[0].harness_sets
+        initial = sets.current
+        inputs = cast(HarnessAssemblyInputs, keys[0].values[0])
+        assert calls.read_text().splitlines() == ["x"]
+        lifecycle = initial.registry.lifecycle("opencode")
+        assert initial.versions.get("opencode", lifecycle.observe_version) == "1.2.3"
+        initial.probes["opencode"].probe_authentication()
+        initial.health.invalidate("opencode")
+        initial.probes["opencode"].probe_authentication()
+        assert calls.read_text().splitlines() == ["x"]
+        changed_inputs = dataclasses.replace(inputs, telemetry_enabled=not inputs.telemetry_enabled)
+        same_binary = sets.select(composition.harness_assembly_key(changed_inputs))
+        assert same_binary is not initial
+        assert (
+            same_binary.versions.get("opencode", same_binary.registry.lifecycle("opencode").observe_version) == "1.2.3"
+        )
+        assert calls.read_text().splitlines() == ["x"]
+        changed_profile = dataclasses.replace(
+            changed_inputs, worker_env=dataclasses.replace(changed_inputs.worker_env, path_prepend=(str(tmp_path),))
+        )
+        same_binary = sets.select(composition.harness_assembly_key(changed_profile))
+        assert (
+            same_binary.versions.get("opencode", same_binary.registry.lifecycle("opencode").observe_version) == "1.2.3"
+        )
+        assert calls.read_text().splitlines() == ["x"]
+        same_binary.versions.forget("opencode")
+        assert (
+            same_binary.versions.get("opencode", same_binary.registry.lifecycle("opencode").observe_version) == "1.2.3"
+        )
+        assert calls.read_text().splitlines() == ["x", "x"]
+
+        executable("2.0.0")
+        replacement_key = composition.harness_assembly_key(inputs)
+        assert replacement_key != keys[0]
+        replacement = sets.select(replacement_key)
+        assert replacement is not initial
+        assert replacement.selection.of("opencode").service_version
+        assert calls.read_text().splitlines() == ["x", "x", "x"]
+        assert (
+            replacement.versions.get("opencode", replacement.registry.lifecycle("opencode").observe_version) == "2.0.0"
+        )
+        assert calls.read_text().splitlines() == ["x", "x", "x"]
+        probe = replacement.probes["opencode"]
+        monkeypatch.setattr(probe, "config_conflicts", lambda: ())
+        adapter = replacement.registry.model_resolution("opencode")
+        before = replacement.health.refresh("opencode", adapter=adapter, observed_version="2.0.0")
+        assert before is not None and before.cause != HarnessHealthCause.MISSING_BINARY
+        binary.unlink()
+        after = replacement.health.refresh("opencode", adapter=adapter, observed_version="2.0.0")
+        assert after is not None and after.cause == HarnessHealthCause.MISSING_BINARY
+    finally:
+        host.close()
+
+
+def test_worker_config_change_rebuilds_and_republishes_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = harness_bundle(tmp_path)
+    root = harness_runtime(tmp_path, source)
+    config = dataclasses.replace(_config(root), harness_config_dir=source)
+    keys: list[HarnessAssemblyKey] = []
+    select = HarnessSets.select
+
+    def capture(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+        keys.append(key)
+        return select(sets, key)
+
+    monkeypatch.setattr(HarnessSets, "select", capture)
+    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())
+    host = build_host_process(
+        host_config_of(config), [built], selections={"rn_a": first_bindings()}, publish_bundles=True
+    )
+    try:
+        sets = host.runners[0].harness_sets
+        original = sets.current
+        assert original.bundle is not None
+        inputs = cast(HarnessAssemblyInputs, keys[0].values[0])
+        assert composition.harness_assembly_key(inputs) == keys[0]
+        worker_config = root / "opencode-worker-config.json"
+        document = json.loads(worker_config.read_text())
+        document["plugin"].append("new-worker-plugin@1")
+        worker_config.write_text(json.dumps(document))
+        changed = composition.harness_assembly_key(inputs)
+        assert changed != keys[0]
+        replacement = sets.select(changed)
+        assert replacement is not original
+        assert replacement.bundle is not None
+        assert replacement.bundle.path != original.bundle.path
+        published = json.loads((replacement.bundle.path / "opencode" / "opencode.json").read_text())
+        assert "new-worker-plugin@1" in published["plugin"]
+    finally:
+        host.close()
 
 
 def _reachable_runner_owned(root: object) -> list[str]:

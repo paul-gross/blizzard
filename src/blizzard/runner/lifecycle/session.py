@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -74,6 +75,7 @@ class SessionResolver:
     harnesses: SessionResolverHarnesses
     #: The transcripts lane's on/off switch — every actual read still dispatches per-owner through ``harnesses``.
     transcripts_wired: bool = False
+    transcript_for_lease: Callable[[str, SessionReference], IHarnessTranscriptSource] | None = None
 
     def resolve_resume(self, chunk_id: str, node: EnvelopeNode, spawn_cwd: str | None) -> ResumeTarget:
         """The prior session this spawn resumes, or ``None`` to mint fresh, paired
@@ -177,7 +179,11 @@ class SessionResolver:
         needs_transcript = rotate.max_context_tokens is not None or rotate.max_transcript_bytes is not None
         # An unresolvable transcript source leaves its checks unmeasured, not forced; each signal is read
         # only when its own bound is declared.
-        source = self._resolve_transcript_source(head.session) if needs_transcript and self.transcripts_wired else None
+        source = (
+            self._resolve_transcript_source(head.session, head.lease_id)
+            if needs_transcript and self.transcripts_wired
+            else None
+        )
         # The transcript, never the usage facts: only it records per-turn prompt sizes, and
         # a usage row's cumulative figure is not this quantity (`Record.context_tokens`).
         tokens = (
@@ -204,11 +210,13 @@ class SessionResolver:
             return exc
         return None
 
-    def _resolve_transcript_source(self, session: SessionReference) -> IHarnessTranscriptSource | None:
+    def _resolve_transcript_source(self, session: SessionReference, lease_id: str) -> IHarnessTranscriptSource | None:
         """Resolve ``session``'s transcript source, logging and returning ``None`` — never
         raising — when it is unknown or unavailable. A harness's transcript source resolves
         independently of its adapter: binding one is no guarantee of the other."""
         try:
+            if self.transcript_for_lease is not None:
+                return self.transcript_for_lease(lease_id, session)
             return self.harnesses.transcript_source(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(

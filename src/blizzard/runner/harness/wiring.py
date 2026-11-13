@@ -18,8 +18,13 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.binding_selection import BindingSelection, HarnessFamilies, select_bindings
-from blizzard.runner.harness.bundle import BundleSnapshot, HarnessBundleNotPublished, HarnessLayout, HarnessSource
+from blizzard.runner.harness.binding_selection import BindingSelection, HarnessFamilies, IVersionProbe, select_bindings
+from blizzard.runner.harness.bundle import (
+    BundleSnapshot,
+    HarnessBundleNotPublished,
+    HarnessLayout,
+    HarnessSource,
+)
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
 from blizzard.runner.harness.declaration import (
     HarnessSection,
@@ -142,12 +147,17 @@ def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
 
 
 def select_harness_bindings(
-    sections: HarnessSections, *, worker_env: AllowlistedEnv, children: IChildProcesses
+    sections: HarnessSections,
+    *,
+    worker_env: AllowlistedEnv,
+    children: IChildProcesses,
+    versions: IVersionProbe | None = None,
 ) -> BindingSelection:
-    """The declaration each harness id binds for ``sections``, its binary's ``--version`` run once where it chooses
-    — made once when a runner is composed, and passed to everything composing it."""
+    """Select declarations for ``sections`` using version evidence shared by the assembly.
+
+    See ``bzh:pluggable-seams`` for selection ownership."""
     by_id = {section.harness_id: section for section in sections}
-    return select_bindings(harness_families(), by_id, VersionProbe(children, worker_env.tool()))
+    return select_bindings(harness_families(), by_id, versions or VersionProbe(children, worker_env.tool()))
 
 
 def first_bindings() -> BindingSelection:
@@ -184,6 +194,18 @@ def configured_tiers(sections: HarnessSections) -> dict[str, tuple[tuple[str, st
 def bundle_layouts(selection: BindingSelection) -> tuple[HarnessLayout, ...]:
     """Each harness id's bundle layout under ``selection``, without runner composition."""
     return tuple(selection.of(harness_id).bundle_layout for harness_id in harness_families())
+
+
+def bundle_composition_inputs(sections: HarnessSections, *, autonomy: Autonomy, root: Path) -> tuple[Path, ...]:
+    """External compose inputs for all declarations that could be selected for these sections."""
+    return tuple(
+        dict.fromkeys(
+            path
+            for section in sections
+            for declaration in harness_families()[section.harness_id]
+            for path in declaration.publish_layout(section, autonomy=autonomy, runtime_root=root).composition_inputs
+        )
+    )
 
 
 def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
@@ -255,8 +277,9 @@ def build_production_harnesses(
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
+    versions: IVersionProbe | None = None,
 ) -> tuple[HarnessRegistry, dict[str, IHarnessHealthProbe]]:
-    """Assemble every enabled binding ``selection`` chose once for one runner, over one shared probe/launcher pair:
+    """Assemble every enabled binding ``selection`` chose for one harness set, over one shared probe/launcher pair:
     its registry, and each binding's health probe by harness id. The process graph owns the injected executor and
     probe for the lifetime of every child launch. A binding whose health reads the spawn root is probed at every
     distinct root of ``spawn_roots`` — the empty root when there is none — and one that does not at the first alone;
@@ -287,6 +310,7 @@ def build_production_harnesses(
             monotonic_clock=monotonic_clock,
             health_roots=health_roots,
             corpus=corpus,
+            versions=versions,
         )
         if len(assembly.health_probes) != len(health_roots):
             raise RuntimeError(

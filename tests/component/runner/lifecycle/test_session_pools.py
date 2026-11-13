@@ -12,6 +12,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, Unpack
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import update
@@ -24,9 +25,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
@@ -993,6 +995,37 @@ def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path: Pa
     assert source.context_tokens_calls == [head]
 
 
+def test_pool_rotation_reads_retained_head_transcript_after_set_replacement(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    old_source = FakeTranscriptSource(context_tokens_by_session={head: 101})
+    new_source = FakeTranscriptSource(context_tokens_by_session={head: 1})
+    handle = WorkerHandle(session_id=head, pid=1, process_start_time="t", pgid=1)
+    old_harness = FakeHarness(handle=handle, verdict=None, transcript_source=old_source)
+    new_harness = FakeHarness(handle=handle, verdict=None, transcript_source=new_source)
+    new_harness.resolved_model = "sonnet"
+    old_registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=old_harness, transcript_source=old_source)}
+    )
+    new_registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
+    )
+    old = Mock(spec=HarnessSet, registry=old_registry)
+    new = Mock(spec=HarnessSet, registry=new_registry, versions=None)
+    sets = HarnessSets(Mock(side_effect=[old, new]))
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.retain(WorkerInvocation("lease_head", 1))
+    sets.select(HarnessAssemblyKey((2,)))
+    ctx = _ctx(store, FakeHub(), FakeProvider({"e1": "/ws/e1"}), old_harness, minutes=1)
+    ctx = replace(ctx, harness_sets=sets)
+    envelope = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=100))
+
+    _enter(ctx, envelope)
+    assert new_harness.resume_froms == [None]
+    assert old_source.context_tokens_calls == [head]
+    assert new_source.context_tokens_calls == []
+
+
 @pytest.mark.parametrize(
     ("invocations", "bound", "resumed"),
     [(2, 3, True), (3, 3, True), (4, 3, False)],
@@ -1100,6 +1133,66 @@ def _rotation_rig(tmp_path: Path, *, owner_model: str = "opus"):
 
 def _enter(ctx: LoopContext, envelope: Envelope) -> None:
     Spawner(ctx).enter_node("ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test")
+
+
+def test_spawn_retains_before_identity_and_close_releases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, ctx, _, _ = _rotation_rig(tmp_path)
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    new = Mock(spec=HarnessSet, registry=Mock())
+    sets = HarnessSets(Mock(side_effect=[old, new]))
+    sets.select(HarnessAssemblyKey((1,)))
+    ctx = replace(ctx, harness_sets=sets)
+    await_identity = WorkerHandle.await_identity
+
+    def replace_while_pending(handle: WorkerHandle, timeout: float) -> WorkerHandle:
+        lease = store.active_lease_for_chunk("ch_1")
+        assert lease is not None
+        assert sets.lookup(WorkerInvocation(lease.lease_id, 1)) is old
+        sets.select(HarnessAssemblyKey((2,)))
+        return await_identity(handle, timeout)
+
+    monkeypatch.setattr(WorkerHandle, "await_identity", replace_while_pending)
+    _enter(ctx, _bounded(SessionMode.RESUME, model=["blizzard:basic"]))
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    key = WorkerInvocation(lease.lease_id, 1)
+    assert sets.lookup(key) is old
+    assert ctx.harnesses_for_lease(lease.lease_id) is old.registry
+    Attempt(ctx, lease).close(LeaseClosureReason.FAILED, _NOW)
+    assert sets.find(key) is None
+
+
+def test_failed_identity_releases_provisional_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, ctx, default, _ = _rotation_rig(tmp_path)
+    monkeypatch.setattr(default, "_identity_failures_remaining", 1)
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    sets = HarnessSets(Mock(return_value=old))
+    sets.select(HarnessAssemblyKey((1,)))
+    ctx = replace(ctx, harness_sets=sets)
+
+    with pytest.raises(HarnessSpawnError):
+        _enter(ctx, _bounded(SessionMode.RESUME, model=["blizzard:basic"]))
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    assert sets.find(WorkerInvocation(lease.lease_id, 1)) is None
+
+
+def test_cancelled_identity_releases_provisional_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, ctx, _, _ = _rotation_rig(tmp_path)
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    sets = HarnessSets(Mock(return_value=old))
+    sets.select(HarnessAssemblyKey((1,)))
+    ctx = replace(ctx, harness_sets=sets)
+
+    def cancel(_handle: WorkerHandle, _timeout: float) -> WorkerHandle:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(WorkerHandle, "await_identity", cancel)
+    with pytest.raises(KeyboardInterrupt):
+        _enter(ctx, _bounded(SessionMode.RESUME, model=["blizzard:basic"]))
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    assert sets.find(WorkerInvocation(lease.lease_id, 1)) is None
 
 
 def test_rotation_with_no_authored_set_mints_under_the_runner_default(tmp_path: Path):

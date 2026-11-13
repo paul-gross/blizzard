@@ -37,6 +37,7 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.harness.wiring import build_production_harnesses, first_bindings
@@ -340,6 +341,22 @@ class _HangingAdapter:
     shape a real drifted/hung CLI can produce, and the run-budget timeout exists to
     catch."""
 
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            environment=SessionEnvironment((), "/bin/bash"),
+            prompt_prefix=prompt_prefix,
+        )
+
     def observe_version(self) -> str | None:
         return "test"
 
@@ -353,6 +370,7 @@ class _HangingAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> WorkerHandle:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
@@ -372,6 +390,7 @@ class _HangingAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -407,6 +426,7 @@ class _HangingAdapter:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> WorkerHandle:
         raise AssertionError("unreachable — spawn never returns")
 

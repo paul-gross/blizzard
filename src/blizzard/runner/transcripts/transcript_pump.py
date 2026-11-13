@@ -176,38 +176,45 @@ class TranscriptPump:
                 break  # this run's bound reached — the rest catch up on a later tick
             self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
 
-    def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
+    def pump_lease(self, lease_id: str, *, deadline: datetime | None = None, mark_incomplete: bool = True) -> bool:
         """Drain a closing lease's own still-open segment(s) before finalization excludes
         them from every later ``run()``. Unlike ``run()``, this DRAINS each segment — one
         ``_pump_one`` call only advances one read window, and no later tick is coming — so
         each is pumped until caught up or ``deadline``. A segment never even attempted
-        before ``deadline`` is marked truncated too, same as a partially-drained one."""
+        before ``deadline`` is marked truncated too, same as a partially-drained one.
+        Returns whether every segment was drained, so a resume can defer rather than
+        finalize a predecessor whose source still has unread content."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
-            return
+            return True
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments_for_lease(lease_id)
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
         bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id for segment in segments})
+        complete = True
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
-                for remaining in segments[i:]:
-                    self._mark_record_truncated(remaining, TruncationReason.LEASE_CLOSURE_INCOMPLETE)
-                return
-            self.drain_segment(
+                if mark_incomplete:
+                    for remaining in segments[i:]:
+                        self._mark_record_truncated(remaining, TruncationReason.LEASE_CLOSURE_INCOMPLETE)
+                return False
+            drained = self.drain_segment(
                 segment.segment_id,
                 deadline=deadline,
+                incomplete_reason=TruncationReason.LEASE_CLOSURE_INCOMPLETE if mark_incomplete else None,
                 budget=budget,
                 shipped=shipped,
                 bindings_by_chunk=bindings_by_chunk,
             )
+            complete = drained and complete
+        return complete
 
     def drain_segment(
         self,
         segment_id: str,
         *,
         deadline: datetime | None,
-        incomplete_reason: TruncationReason = TruncationReason.LEASE_CLOSURE_INCOMPLETE,
+        incomplete_reason: TruncationReason | None = TruncationReason.LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
         bindings_by_chunk: ResolvedBindings | None = None,
@@ -239,14 +246,15 @@ class TranscriptPump:
                 case "read_to_end":
                     return True
                 case "incomplete":
-                    self._mark_record_truncated(segment, incomplete_reason)
+                    if incomplete_reason is not None:
+                        self._mark_record_truncated(segment, incomplete_reason)
                     return False
                 case "continue":
                     pass
         # The safety valve: a source that never reports `complete=True` across this many
         # reads is misbehaving — stop and mark, rather than spin forever.
         segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
-        if segment is not None:
+        if segment is not None and incomplete_reason is not None:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
 
@@ -330,7 +338,12 @@ class TranscriptPump:
                 held[0].workdir if held else None,
             ).path
         try:
-            source = self.ctx.transcript_source_for(segment.session)
+            invocation_source = getattr(self.ctx, "invocation_transcript_source", None)
+            source = (
+                invocation_source(segment.session, segment.lease_id, segment.generation)
+                if invocation_source is not None
+                else self.ctx.transcript_source_for(segment.session)
+            )
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # The segment's recorded owner, not this pump's own bug — a read-only side lane
             # that skips this segment for this tick; the lease's own dispatch path escalates it.

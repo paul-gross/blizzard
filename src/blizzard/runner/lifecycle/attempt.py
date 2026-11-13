@@ -124,8 +124,9 @@ class Attempt:
         the session both ran on: a turn that outlives its process is stopped once nothing can prompt it again."""
         if kill_worker:
             self._kill_process()
+        judge = self.ctx.stores.elicitations.in_flight_elicitation(self.lease.lease_id, self.lease.epoch) is not None
         self._kill_in_flight_elicitation()
-        orphan_session(self.ctx, self.lease, via="close")
+        orphan_session(self.ctx, self.lease, via="close", judge=judge)
 
     def fail(self, *, reason: LeaseChangeCause, via: str) -> None:
         """Close a failed attempt, then abandon, retry, defer, or escalate per :func:`failure_move`."""
@@ -677,6 +678,9 @@ class Attempt:
         # After the closure commits, never before (decision: a crash between the two leaves at
         # most an orphan the startup sweep collects, never a still-active lease's directory gone).
         self.ctx.worker_scratch.remove(self.lease.lease_id)
+        owners = getattr(self.ctx, "harness_sets", None)
+        if owners is not None:
+            owners.release_lease(self.lease.lease_id)
         if self.ctx.events is not None:
             lease_id = self.lease.lease_id
             # `reason` IS the LeaseChangeCause vocabulary — enforced by `close`'s and
@@ -742,7 +746,9 @@ class Attempt:
         """Resolve ``session``'s recorded owner, logging and returning ``None`` — never
         raising — when it is unknown or unavailable."""
         try:
-            return self.ctx.harnesses.lifecycle(session.harness_id)
+            resolve = getattr(self.ctx, "harnesses_for_lease", None)
+            harnesses = resolve(self.lease.lease_id) if resolve is not None else self.ctx.harnesses
+            return harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "attempt step blocked by unavailable harness owner",
@@ -764,7 +770,9 @@ class Attempt:
         if session is None:
             return None
         try:
-            self.ctx.harnesses.lifecycle(session.harness_id)
+            owners = getattr(self.ctx, "harness_sets", None)
+            harnesses = owners.current.registry if owners is not None else self.ctx.harnesses
+            harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             return session, exc
         return None

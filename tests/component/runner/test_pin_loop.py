@@ -12,6 +12,7 @@ from pathlib import Path
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.session_settings import SessionSettings
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.support.pin_runner_loop import (
@@ -64,6 +65,7 @@ class _RecordingResumeHarness(FakeHarness):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
         self.fired_at_resume.append(self._store.nudge_fired(self._lease_id, self._epoch))
         return super().resume_with_message(
@@ -76,6 +78,7 @@ class _RecordingResumeHarness(FakeHarness):
             model=model,
             effort=effort,
             compaction_window=compaction_window,
+            session_settings=session_settings,
         )
 
 

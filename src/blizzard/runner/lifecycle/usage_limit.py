@@ -95,7 +95,7 @@ def classify_worker_usage_limit(
     session = lease.session
     if session is None:
         return None
-    harness = _usage_limit_adapter(ctx, session)
+    harness = _usage_limit_adapter(ctx, session, lease.lease_id)
     if harness is None:
         return None
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
@@ -127,7 +127,7 @@ def classify_judge_usage_limit(
     session = lease.session
     if session is None:
         return None
-    harness = _usage_limit_adapter(ctx, session)
+    harness = _usage_limit_adapter(ctx, session, lease.lease_id, judge=True)
     if harness is None:
         return None
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
@@ -192,13 +192,17 @@ def _to_minute(at: datetime) -> datetime:
     return at.replace(second=0, microsecond=0)
 
 
-def _usage_limit_adapter(ctx: UsageLimitContext, session: SessionReference) -> IHarnessUsageLimits | None:
+def _usage_limit_adapter(
+    ctx: UsageLimitContext, session: SessionReference, lease_id: str, *, judge: bool = False
+) -> IHarnessUsageLimits | None:
     """This session's usage-limit classifier, resolved through the registry's own
     ``usage_limits`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
     exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
     escalation to make, not this classifier's."""
     try:
-        return ctx.harnesses.usage_limits(session.harness_id)
+        resolve = getattr(ctx, "harnesses_for_judge" if judge else "harnesses_for_lease", None)
+        harnesses = resolve(lease_id) if resolve is not None else ctx.harnesses
+        return harnesses.usage_limits(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):
         return None

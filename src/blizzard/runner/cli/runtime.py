@@ -1000,8 +1000,6 @@ def start(
     for built in runners:
         if refusal := worker_shell_refusal(built.config.worker_shell):
             raise click.ClickException(f"runner {built.config.name}: {refusal}")
-    selections = {built.id: collaborators.select_bindings(built.config) for built in runners}
-    bundles = {built.id: publish_runner_bundle(built.config, collaborators, selections[built.id]) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
@@ -1015,17 +1013,20 @@ def start(
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loops, so every writer and the stream route share it.
     broker = EventBroker()
-    process = collaborators.build_host_process(
-        config,
-        runners,
-        halted=halted,
-        events=broker,
-        bundles=bundles,
-        selections=selections,
-        trace_platform=True,
-        tcp_socket=tcp_socket,
-    )
+    with click_exception_on(ConfigError):
+        process = collaborators.build_host_process(
+            config,
+            runners,
+            halted=halted,
+            events=broker,
+            publish_bundles=True,
+            trace_platform=True,
+            tcp_socket=tcp_socket,
+        )
     try:
+        for runner in process.runners:
+            if snapshot := runner.harness_sets.current.bundle:
+                click.echo(snapshot.summary())
         shared = runners[0].config if runners else config.host_view()
         # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
         with click_exception_on(ConfigError):
@@ -1392,22 +1393,21 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        collaborators = InitCollaborators.of(ctx)
-        selection = collaborators.select_bindings(runner_built.config)
-        bundle = publish_runner_bundle(runner_built.config, collaborators, selection)
-        graph = build_runner_process(
-            runner_built.config,
-            bundle=bundle,
-            selection=selection,
-            runner_id=runner_built.id,
-            token=runner_built.token,
-            host_token=config.host_token.value,
-        )
+        with click_exception_on(ConfigError):
+            graph = build_runner_process(
+                runner_built.config,
+                publish_bundle=True,
+                runner_id=runner_built.id,
+                token=runner_built.token,
+                host_token=config.host_token.value,
+            )
         try:
+            if snapshot := graph.harness_sets.current.bundle:
+                click.echo(snapshot.summary())
             _reconcile_host_scratch(
                 runner_built.config, graph.host, [entry.id for entry in config.runners if entry.id is not None]
             )
-            LoopWiring.of(runner_built.config, bundle=bundle).tick_once(process=graph)
+            LoopWiring.of(runner_built.config, bundle=graph.harness_sets.current.bundle).tick_once(process=graph)
         finally:
             graph.close()
     click.echo("tick complete")

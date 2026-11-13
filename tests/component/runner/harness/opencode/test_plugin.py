@@ -68,7 +68,12 @@ def test_a_plugin_reference_does_not_change_fake_binary_output_parsing(
             worker_config_path=worker_config_path,
             versions=version_probe(),
         )
-        pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+        pending = adapter.spawn(
+            envelope,
+            _preamble(str(workdir), stdout_path=str(stdout_path)),
+            session_hint="hint",
+            session_settings=adapter.launch_settings(),
+        )
         pending.confirm_durable()  # stands in for `Spawner.spawn`'s own call
         handle = pending.await_identity(5.0)
         wait_for_exit(handle.pid)

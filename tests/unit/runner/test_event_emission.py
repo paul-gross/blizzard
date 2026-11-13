@@ -24,6 +24,7 @@ from blizzard.runner.harness.adapter import HarnessSpawnError, PendingWorkerHand
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.session_settings import SessionSettings
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -326,6 +327,7 @@ class _SpawnFailsHarness(FakeHarness):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> PendingWorkerHandle:
         raise HarnessSpawnError("failed to spawn claude in /ws/e1: [Errno 2] No such file or directory")
 

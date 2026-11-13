@@ -4126,9 +4126,8 @@ def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_
     assert hub.peek_queue_requests and hub.peek_queue_requests[-1].capabilities, "FILL peeked without capabilities"
 
 
-def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_path: Path):
-    """`TickCapabilities` alone rebuilds every tick; the composition-root `HarnessVersionCache`
-    is the actual cross-tick bound, proven here as a staleness policy, not an unlimited cache."""
+def test_harness_version_observation_is_requested_each_tick(tmp_path: Path):
+    """Each tick asks the adapter; binary evidence is cached underneath the adapter."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = []  # nothing claimable — FILL still peeks, carrying capabilities
@@ -4147,8 +4146,8 @@ def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_pat
 
     tick(ctx)
     tick(ctx)
-    assert harness.version_probes == 1, "two ticks inside the refresh window re-probed the binary"
+    assert harness.version_probes == 2
 
     clock.advance(timedelta(seconds=HARNESS_VERSION_REFRESH_SECONDS + 1))
     tick(ctx)
-    assert harness.version_probes == 2, "a tick past the refresh window never re-probed the now-stale version"
+    assert harness.version_probes == 3

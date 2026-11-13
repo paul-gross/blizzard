@@ -1619,7 +1619,7 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
     lease = ctx.stores.lease_record.active_lease("lease_1")
     assert lease is not None
 
-    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
+    assert TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=_NOW + timedelta(seconds=PUMP_LEASE_MAX_SECONDS))
 
     assert len(source.turns_since_calls) == 3  # all three reads drained in one call
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -1628,6 +1628,33 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
     assert segment.truncated_reason is None  # caught up — never marked incomplete
     pending = ctx.stores.transcript_ledger.pending_transcript_outbound()
     assert len(pending) == 3
+
+
+def test_pre_resume_drain_defers_without_marking_truncation_and_can_retry() -> None:
+    source = _SequencedTranscriptSource("sess-a", [transcript_batch([normalized_turn(0, "a")], next_token="end")])
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
+    )
+    store = make_store("sqlite://")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, transcripts_ship=True),
+    )
+    segment_id = _spawn_one_segment(ctx)
+    pump = TranscriptPump(ctx)
+
+    assert not pump.pump_lease("lease_1", deadline=ctx.clock.now(), mark_incomplete=False)
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None and segment.truncated_reason is None and not segment.final
+    assert pump.pump_lease("lease_1", deadline=ctx.clock.now() + timedelta(seconds=5), mark_incomplete=False)
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None and segment.cursor == "end" and segment.truncated_reason is None
 
 
 @dataclass
@@ -1702,7 +1729,7 @@ def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> No
     assert lease is not None
     deadline = clock.now() + timedelta(seconds=5)
 
-    TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=deadline)
+    assert not TranscriptPump(ctx).pump_lease(lease.lease_id, deadline=deadline)
 
     assert len(inner.turns_since_calls) == 2  # the third, would-be-final read never happened
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
@@ -13,6 +13,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSessions
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
+from blizzard.runner.harness.harness_set import WorkerInvocation
 from blizzard.runner.harness.registry import (
     IHarnessProviderOverloadRegistry,
     UnavailableHarnessError,
@@ -52,6 +53,7 @@ from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
 from blizzard.runner.throttle.release import Release, ReleaseContext, ReleaseReason, releases_usage_limited
 from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
+from blizzard.runner.transcripts.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -178,7 +180,9 @@ class DormantSession:
     ctx: DormantContext
     lease: Lease
 
-    def resume_on_unmet_produces(self, message: str, bindings: list[EnvBinding]) -> None:
+    def resume_on_unmet_produces(
+        self, message: str, bindings: list[EnvBinding], *, transcript_drained: bool = False
+    ) -> None:
         """Resume a session that exited with required ``produces:`` unattached, instead of
         judging it — no retry consumed, no epoch bumped. Owner resolution is
         checked **before** the generation's spend is recorded (the same "resolve before any
@@ -191,7 +195,10 @@ class DormantSession:
         self.ctx.usage.record_worker(lease, bindings)
         # The nudge already opened its own boundary at the call site — `_wake` self-
         # determines this and skips opening a second one, even for a LATER, unrelated wake.
-        pid, _, _ = self._wake(message, bindings, harness=harness)
+        woke = self._wake(message, bindings, harness=harness, transcript_drained=transcript_drained)
+        if woke is None:
+            return
+        pid, _, _ = woke
         _log.info(
             "resumed premature exit for unmet produces",
             chunk_id=lease.chunk_id,
@@ -284,13 +291,16 @@ class DormantSession:
         who = question.answered_by or "operator"
         facts = OutboundFacts(self.ctx)
         receipt_kind, receipt_payload = facts.answer_delivered_fact(lease, park.question_id)
-        pid, _, receipt_seq = self._wake(
+        woke = self._wake(
             f"# Answer from {who}. Continue.\n{question.answer}",
             bindings,
             harness=harness,
             points=_ANSWER_WAKE_POINTS,
             park_resume=ParkResume(park.question_id, receipt_kind, receipt_payload),
         )
+        if woke is None:
+            return
+        pid, _, receipt_seq = woke
         assert receipt_seq is not None
         if self.ctx.events is not None:
             self.ctx.events.publish_ask_changed(
@@ -400,7 +410,10 @@ class DormantSession:
             return
         # The paused generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _, _ = self._wake(UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
+        woke = self._wake(UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
+        if woke is None:
+            return
+        pid, _, _ = woke
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
             "resumed dormant session after an operator unpause",
@@ -510,7 +523,10 @@ class DormantSession:
             return
         # The overloaded generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _, _ = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
+        woke = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
+        if woke is None:
+            return
+        pid, _, _ = woke
         _log.info(
             "resumed a worker generation after a provider-overload backoff",
             chunk_id=lease.chunk_id,
@@ -530,6 +546,8 @@ class DormantSession:
         judgement = Judgement.of(self.ctx, lease)
         if judgement is None:
             return  # hub unreachable — `resume_after` is durable; retry next tick
+        if not judgement.current_launch_available():
+            return
         if lease.session is not None:
             # The standing "judge" boundary is reused, not reopened: advance it past the overloaded
             # elicitation's own signal, or the fresh one's classification would re-read that
@@ -540,6 +558,7 @@ class DormantSession:
                 lease.session,
                 binding.workdir if binding else None,
                 binding.workspace_id if binding else None,
+                lease_id=lease.lease_id,
             )
             self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
@@ -576,6 +595,8 @@ class DormantSession:
         judgement = Judgement.of(self.ctx, lease)
         if judgement is None:
             return  # hub unreachable — the park is durable; retry next tick
+        if not judgement.current_launch_available():
+            return
         if lease.session is not None:
             # The standing "judge" boundary is reused, not reopened: advance it past the limited
             # elicitation's own signal, or the fresh one's classification would re-read that
@@ -586,6 +607,7 @@ class DormantSession:
                 lease.session,
                 binding.workdir if binding else None,
                 binding.workspace_id if binding else None,
+                lease_id=lease.lease_id,
             )
             self.ctx.stores.invocation_boundaries.record_boundary_advance(
                 lease_id=lease.lease_id,
@@ -623,6 +645,10 @@ class DormantSession:
                 # `_resolve_harness` already escalated and killed any survivor as part of that
                 # closure — no other runner can resume this exact session to re-attach here.
                 return
+            # A failed drain must not kill a still-live survivor. Drain again
+            # after stopping it to capture anything written in the meantime.
+            if not self.drain_before_resume():
+                return
         now = self.ctx.clock.now()
         # Kill-first — never two processes on one session — via the shared, liveness-checked
         # kill: a stale/reused pid is never blindly signaled.
@@ -641,7 +667,10 @@ class DormantSession:
             return
         # The crashed generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _, _ = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
+        woke = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
+        if woke is None:
+            return
+        pid, _, _ = woke
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs as a no-op
         _log.info(
@@ -661,7 +690,9 @@ class DormantSession:
         session = lease.session
         assert session is not None
         try:
-            return self.ctx.harnesses.lifecycle(session.harness_id)
+            owners = getattr(self.ctx, "harness_sets", None)
+            registry = owners.current.registry if owners is not None else self.ctx.harnesses
+            return registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             Attempt(self.ctx, lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return None
@@ -673,7 +704,9 @@ class DormantSession:
         session = lease.session
         assert session is not None
         try:
-            return self.ctx.harnesses.lifecycle(session.harness_id)
+            resolve = getattr(self.ctx, "harnesses_for_lease", None)
+            registry = resolve(lease.lease_id) if resolve is not None else self.ctx.harnesses
+            return registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "dormant session usage record blocked by unavailable harness owner",
@@ -703,7 +736,8 @@ class DormantSession:
         at: datetime | None = None,
         points: WakePoints = _RESUME_WAKE_POINTS,
         park_resume: ParkResume | None = None,
-    ) -> tuple[int, datetime, int | None]:
+        transcript_drained: bool = False,
+    ) -> tuple[int, datetime, int | None] | None:
         """Deliver ``message`` into the dormant session and record the new pid under the same
         lease, returning that pid with the instant it was stamped and the receipt seq — an omitted ``at`` reads the
         clock *after* the resume returns. ``harness`` is the caller's already-resolved owner, so
@@ -716,10 +750,15 @@ class DormantSession:
         session = lease.session
         assert session is not None
         generation = spawner.generation(lease.lease_id)
+        if not transcript_drained and not self.drain_before_resume():
+            return None
         if not self._worker_boundary_already_open(generation):
             binding = bindings[0] if bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(
-                session, binding.workdir if binding else None, binding.workspace_id if binding else None
+                session,
+                binding.workdir if binding else None,
+                binding.workspace_id if binding else None,
+                lease_id=lease.lease_id,
             )
             self.ctx.stores.invocation_boundaries.record_boundary_open(
                 lease_id=lease.lease_id,
@@ -736,23 +775,35 @@ class DormantSession:
         # The version is observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py):
         # a hung or failing probe must never run after the worker is already live and unrecorded.
         spawn_cwd = SpawnCwd.of_session(self.ctx.workspaces.spawn_root(bindings[0].workspace_id), bindings[0].workdir)
-        resumed, version = spawner.launching(
-            session.harness_id,
-            harness.observe_version,
-            lambda: harness.resume_with_message(
-                spawn_cwd,
-                session.session_id,
-                message,
-                stdout_path=spawner.stdout_path(lease.lease_id),
-                preamble=spawner.preamble(lease, bindings),
-                chunk_id=lease.chunk_id,
-                model=lease.resolved_model,
-                # Reasserted, not sticky — see the judge call site's note.
-                effort=lease.resolved_effort,
-                # Reasserted, not sticky either — mirrors effort's treatment.
-                compaction_window=lease.resolved_compaction_window,
-            ),
-        )
+        owners = getattr(self.ctx, "harness_sets", None)
+        invocation = WorkerInvocation(lease.lease_id, generation)
+        if owners is not None:
+            selected = owners.retain(invocation)
+            try:
+                harness = selected.registry.lifecycle(session.harness_id)
+            except BaseException:
+                owners.release(invocation)
+                raise
+        try:
+            resumed, version = spawner.launching(
+                session.harness_id,
+                harness.observe_version,
+                lambda: harness.resume_with_message(
+                    spawn_cwd,
+                    session.session_id,
+                    message,
+                    stdout_path=spawner.stdout_path(lease.lease_id),
+                    preamble=spawner.preamble(lease, bindings),
+                    chunk_id=lease.chunk_id,
+                    session_settings=harness.launch_settings(
+                        lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
+                    ),
+                ),
+            )
+        except BaseException:
+            if owners is not None:
+                owners.release(invocation)
+            raise
         points.launched()  # the process exists; nothing about it is durable yet
         stamped = at if at is not None else self.ctx.clock.now()
         assert lease.session is not None
@@ -772,16 +823,32 @@ class DormantSession:
                 spawn_cwd=spawn_cwd,
                 park_resume=park_resume,
             )
-        except Exception:
+        except BaseException:
             # A plain raise here never disarms the trampoline on its own — kill it
             # explicitly instead (`Spawner.spawn`'s own guard, mirrored here).
-            self.ctx.process.kill_group(resumed.pgid)
-            orphan_session(self.ctx, lease, via="resume-record-failed")
+            try:
+                self.ctx.process.kill_group(resumed.pgid)
+                orphan_session(self.ctx, lease, via="resume-record-failed")
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
             raise
         points.recorded()  # ownership durable; not yet disarmed
         # Disarm only now this record is durable — a later REAP/ADVANCE pass can
         # re-adopt this exact process past here.
-        resumed.confirm_durable()
+        try:
+            resumed.confirm_durable()
+        except BaseException:
+            try:
+                self.ctx.process.kill_group(resumed.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
+            raise
+        if owners is not None:
+            previous = WorkerInvocation(lease.lease_id, generation - 1)
+            if owners.find(previous) is not None:
+                owners.release(previous)
         if self.ctx.events is not None:
             # Same 'spawned' cause the fresh-spawn path publishes (src/blizzard/runner/lifecycle/spawn.py) — a resumed
             # session's own flip back to a live pid is exactly as un-announced otherwise.
@@ -791,3 +858,15 @@ class DormantSession:
                 cause="spawned",
             )
         return resumed.pid, stamped, receipt_seq
+
+    def drain_before_resume(self) -> bool:
+        """Drain before a new spawn finalizes the old segment, deferring on failure."""
+        try:
+            return TranscriptPump(self.ctx).pump_lease(
+                self.lease.lease_id,
+                deadline=self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS),
+                mark_incomplete=False,
+            )
+        except Exception:
+            _log.exception("transcript pump failed ahead of resume", lease_id=self.lease.lease_id)
+            return False

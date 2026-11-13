@@ -11,6 +11,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
@@ -62,6 +63,10 @@ class OpenCodeDeclaration:
         return OPENCODE_HARNESS_ID
 
     @property
+    def service_version(self) -> bool:
+        return False
+
+    @property
     def normalizer_version(self) -> str:
         return NORMALIZER_VERSION
 
@@ -95,6 +100,7 @@ class OpenCodeDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
+        versions: IVersionProbe | None = None,
     ) -> HarnessAssembly:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
         receives, and the one health probe every root shares."""
@@ -121,13 +127,15 @@ class OpenCodeDeclaration:
             effective_config_dir=str(source.effective_dir) if source is not None else None,
             autonomy=shared.autonomy,
             transcript_source=transcript_source,
+            transcript_root=shared.transcripts_root,
+            bundle_path=str(shared.bundle.path) if shared.bundle is not None else None,
             price_catalog=price_catalog,
             limits_catalog=FileOpenCodeModelLimitsCatalog(cache_path) if cache_path is not None else None,
             descendant_usage=OpenCodeDescendantUsage(exporter),
             permission_resolver=SubprocessOpenCodePermissionResolver(binary=section.binary, children=children),
             process=process,
             launcher=launcher,
-            versions=VersionProbe(children, tool_env),
+            versions=versions or VersionProbe(children, tool_env),
             monotonic_clock=monotonic_clock,
         )
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
@@ -140,7 +148,7 @@ class OpenCodeDeclaration:
             binary=section.binary,
             auth_path=auth_path,
             corpus=corpus,
-            versions=VersionProbe(children, shared.worker_env.tool()),
+            versions=versions or VersionProbe(children, shared.worker_env.tool()),
             store_path=resolve_opencode_store_path(shared.worker_env.variables),
         )
         return HarnessAssembly(
