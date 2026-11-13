@@ -261,6 +261,20 @@ Locally the same tier is `mise run store-baseline`; set `BLIZZARD_STORE_BASELINE
 Postgres legs, and give `gh` a token (`GH_TOKEN`, plus `GH_REPO` outside a GitHub checkout) to download the floor's
 wheel.
 
+## The Postgres concurrency proof
+
+[`.github/workflows/postgres-uow-concurrency.yml`](../.github/workflows/postgres-uow-concurrency.yml) runs
+`scripts/check_hub_uow_postgres.py` (`blizzard:postgres-uow-concurrency`) against a `postgres:16` service, daily and on
+demand (`workflow_dispatch`). SQLite's single writer lock serializes every writer, so only Postgres can show whether the
+hub's locks hold: the script races pairs of writers on a scratch database, then on a second database migrated to head,
+with foreign keys enforced, runs a scoped write against a tenant's close in both orders, two closes of the last two open
+tenants, the drain of a tenant with a row in every table it owns, and keyed locks of different keys. A failing case
+exits non-zero and fails the run. It is never called by another workflow and never runs on a pull request or a `master`
+push.
+
+Locally, set `BLIZZARD_UOW_POSTGRES_URL` to a Postgres server whose user may create and drop databases and run
+`uv run --extra postgres python scripts/check_hub_uow_postgres.py`.
+
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the whole
@@ -269,7 +283,8 @@ journey and the two smokes, and on a release cut the upgrade rehearsal. A pull r
 `line-provenance`, which has [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit
 the pull request adds that is not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:`
 commit. A push to a release branch runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's
-`versions/` directory also runs the store baseline proof.
+`versions/` directory also runs the store baseline proof. Two workflows run on a schedule and never on a pull request or
+a `master` push: `isolation-cross-check` weekly, and `postgres-uow-concurrency` daily.
 
 A pull request into `master` from a `hotfix/` branch of this repository — never a fork — is the operator's fast lane.
 `pr.yml` sets `gate.yml` and `upper-tiers.yml`'s `lint_only` input, so of their jobs only

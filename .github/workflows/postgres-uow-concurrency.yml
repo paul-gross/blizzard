@@ -1,0 +1,51 @@
+# The Postgres concurrency proof (blizzard:postgres-uow-concurrency) — `scripts/check_hub_uow_postgres.py` run against a
+# Postgres service.
+#
+# It races pairs of hub writers on a scratch database and, on a second database migrated to the head revision with
+# foreign keys enforced, a scoped write against a tenant's close, two closes of the last two open tenants, the drain
+# of a tenant with a row in every table it owns, and keyed locks of different keys. SQLite's single writer lock
+# serializes every writer, so no other tier can tell whether these hold on Postgres.
+#
+# It runs daily and on demand; never on a pull request, a `master` push, or as a called workflow, so day-to-day
+# landings pay nothing for it. A failing case exits non-zero and fails the run.
+name: postgres-uow-concurrency
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-uow-concurrency:
+    name: hub writers racing on Postgres (blizzard:postgres-uow-concurrency)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: provision blizzard (the proof drives the Postgres driver)
+        run: uv sync --extra postgres
+      - name: concurrency proof — `scripts/check_hub_uow_postgres.py`
+        env:
+          BLIZZARD_UOW_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: uv run --extra postgres python scripts/check_hub_uow_postgres.py
