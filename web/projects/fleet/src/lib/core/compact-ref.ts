@@ -65,6 +65,8 @@ const ENTITY_DISPLAY = openLookup<IdPrefix, EntityDisplay>(
     /* `cad` (a cadence) and `chr` (a chore) would both default to `C`, colliding with `ch` (a chunk). */
     cad: { sigil: 'CAD', tailLength: 4 },
     chr: { sigil: 'CHR', tailLength: 4 },
+    /* `cred` (a credential) would default to `C`, colliding with `ch` (a chunk). */
+    cred: { sigil: 'CRED', tailLength: 4 },
     mg: defaultDisplay('mg'),
     usr: defaultDisplay('usr'),
     seg: defaultDisplay('seg'),

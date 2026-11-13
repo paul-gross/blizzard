@@ -24,6 +24,7 @@ _KINDS = click.Choice(
         "work_source",
         "repository",
         "forge",
+        "credential",
         "secret",
         "scope",
         "routine",

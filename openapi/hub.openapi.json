@@ -15107,6 +15107,7 @@
           "repo",
           "wsrc",
           "frg",
+          "cred",
           "flw",
           "fsub",
           "htn",
@@ -19640,12 +19641,13 @@
         "type": "object"
       },
       "RecordKind": {
-        "description": "The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the\nurgency order's and the tenant settings' is the tenant's id.",
+        "description": "The kind of configured record a change row names. A project's, a forge's, a credential's, a repository's and a\nwork source's ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's\nid. Linking, unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its\nid; the urgency order's and the tenant settings' is the tenant's id.",
         "enum": [
           "work_source",
           "secret",
           "repository",
           "forge",
+          "credential",
           "scope",
           "routine",
           "cadence",
