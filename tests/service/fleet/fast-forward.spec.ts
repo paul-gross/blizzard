@@ -117,7 +117,7 @@ test.describe('empty checks on the controlled clock', () => {
     });
 
     for (const allowNoCi of [false, true]) {
-      test(`empty checks ${policy} allow_no_ci=${allowNoCi}`, async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
+      test(`empty checks ${policy} allow_no_ci=${allowNoCi}`, async ({ repository, issue, api, cli, clock, forge, runnerHosts, workerCheckpoint }) => {
         test.setTimeout(180_000);
         const repo = await repository();
         const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
@@ -142,6 +142,15 @@ test.describe('empty checks on the controlled clock', () => {
         }
         expect(first.landed).toBe(false);
         expect(await host.originHead(repo.name, 'main')).toBe(before);
+        const submissions = async () => {
+          const response = await api.get<{ items: { terms: { allow_no_ci: boolean }[] }[] }>(`/api/chunks/${chunk.chunk_id}/flow-submissions`);
+          expect(response.status).toBe(200);
+          return response.body.items.flatMap((item) => item.terms.map((term) => term.allow_no_ci));
+        };
+        expect(await submissions()).toEqual([false]);
+        const edit = await cli(['hub', 'repo', 'edit', repo.name, '--allow-no-ci']);
+        expect(edit.code, edit.stderr).toBe(0);
+        expect(await submissions()).toEqual([false]);
         await clock.advance(601);
         const escalated = await stepUntil(host, stepped, (row) => row.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
         expect(escalated.escalation?.cause).toBe('missing-checks');
@@ -149,12 +158,13 @@ test.describe('empty checks on the controlled clock', () => {
         expect(escalated.landed).toBe(false);
         expect(await host.originHead(repo.name, 'main')).toBe(before);
 
-        expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [{ name: 'ci', status: 'success' }] })).status).toBe(200);
         await clock.advance(1);
-        expect((await api.post(`/api/chunks/${chunk.chunk_id}/requeues`)).status).toBe(202);
+        const requeue = await cli(['hub', 'chunk', 'requeue', chunk.chunk_id]);
+        expect(requeue.code, requeue.stderr).toBe(0);
         await clock.advance(1);
         const recovered = await stepUntil(host, stepped, (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
         expect(recovered.landed).toBe(true);
+        expect(await submissions()).toEqual([false, true]);
         expect(await host.originHead(repo.name, 'main')).not.toBe(before);
       });
     }

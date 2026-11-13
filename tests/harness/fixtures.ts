@@ -44,6 +44,8 @@ export interface FleetClient extends Verbs {
 }
 
 interface Fixtures {
+  /** Explicit manual exercise against the provisioned environment's standing forge, never the shared runner. */
+  winterForge: boolean;
   claimBarrierEnabled: boolean;
   claimBarrier: Awaited<ReturnType<typeof startClaimBarrier>> | undefined;
   api: HubApi;
@@ -95,6 +97,7 @@ export { FIXTURE_FORGE } from './hubs';
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
 export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
+  winterForge: [false, { option: true }],
   claimBarrierEnabled: [false, { option: true }],
   claimBarrier: async ({ claimBarrierEnabled, testHub }, use) => {
     const barrier = claimBarrierEnabled ? await startClaimBarrier(testHub.coordinates.url) : undefined;
@@ -261,9 +264,21 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     });
   },
 
-  forge: async ({ testHub, ledger }, use, testInfo) => {
-    const api = forgeApi({ context: testHub.context, testInfo, url: testHub.coordinates.forgeUrl, ledger });
-    await use({ ...api, ...originReads(testHub.coordinates.originsPath, daemonEnv(), TESTS_ROOT) });
+  forge: async ({ testHub, ledger, winterForge, level }, use, testInfo) => {
+    let url = testHub.coordinates.forgeUrl;
+    let origins = testHub.coordinates.originsPath;
+    if (winterForge) {
+      if (level.served !== 'fresh-hub') throw new Error('winterForge requires a fresh hub');
+      const port = process.env.BZ_FORGE_PORT;
+      const directory = process.env.BZ_FORGE_REPOS_DIR;
+      if (!port || !/^\d+$/.test(port) || !directory || !path.isAbsolute(directory)) {
+        throw new Error('source winter env and provide BZ_FORGE_PORT and BZ_FORGE_REPOS_DIR');
+      }
+      url = `http://127.0.0.1:${port}`;
+      origins = directory;
+    }
+    const api = forgeApi({ context: testHub.context, testInfo, url, ledger });
+    await use({ ...api, ...originReads(origins, daemonEnv(), TESTS_ROOT) });
   },
 
   secondForge: async ({ testHub, ledger, clockStack }, use, testInfo) => {
