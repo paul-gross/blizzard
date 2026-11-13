@@ -595,7 +595,7 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path:
     )
 
     class _NoEdges(ChunkDependenciesStore):
-        def list_standing_edges(self):
+        def list_standing_edges(self, *, transaction: Transaction | None = None):
             raise AssertionError("list_standing_edges")
 
     class _NoList(ChunkRecordStore):

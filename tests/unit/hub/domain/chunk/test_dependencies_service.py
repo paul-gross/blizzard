@@ -28,7 +28,9 @@ from blizzard.hub.domain.chunk.dependencies import (
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 TRANSACTION = object()
@@ -51,7 +53,7 @@ class _FakeFactsRepo:
     facts: ChunkFacts | None
     calls: list[str] = field(default_factory=list[str])
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Any = None) -> ChunkFacts | None:
         self.calls.append(chunk_id)
         return self.facts
 
@@ -69,7 +71,7 @@ class _FakeLifecycleRepo:
     ephemeral: frozenset[str] = frozenset()
     calls: list[str] = field(default_factory=list[str])
 
-    def is_ephemeral(self, chunk_id: str) -> bool:
+    def is_ephemeral(self, chunk_id: str, *, transaction: Any = None) -> bool:
         self.calls.append(chunk_id)
         return chunk_id in self.ephemeral
 
@@ -90,7 +92,7 @@ class _FakeDependenciesRepo:
     declare_transactions: list[Any] = field(default_factory=list[Any])
     _next_id: int = 0
 
-    def list_standing_edges(self) -> list[DependencyEdge]:
+    def list_standing_edges(self, *, transaction: Any = None) -> list[DependencyEdge]:
         return list(self.standing)
 
     def standing_edge(self, dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge | None:
@@ -142,41 +144,20 @@ def _as_dependencies(repo: _FakeDependenciesRepo) -> IWriteChunkDependenciesRepo
     return cast(IWriteChunkDependenciesRepository, repo)
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    """Only ``facts``/``is_ephemeral``/``standing_edges`` and the ``transaction`` token are live — see
-    module docstring."""
+class _FakeUnit:
+    """An open unit whose ``lock_chunks`` graduates to the shared :data:`TRANSACTION` token."""
 
-    facts_repo: _FakeFactsRepo
-    lifecycle_repo: _FakeLifecycleRepo
-    dependencies_repo: _FakeDependenciesRepo
-    transaction: Any = TRANSACTION
-
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.facts_repo.load_facts(chunk_id)
-
-    def is_ephemeral(self, chunk_id: str) -> bool:
-        return self.lifecycle_repo.is_ephemeral(chunk_id)
-
-    def standing_edges(self) -> list[DependencyEdge]:
-        return self.dependencies_repo.list_standing_edges()
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> Any:
+        return TRANSACTION
 
     def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"DependencyService should not touch handle.{name!r}")
+        raise NotImplementedError(f"DependencyService should not touch unit.{name!r}")
 
 
-@dataclass
-class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same fakes the
-    ``DependencyService`` under test was built with."""
-
-    facts_repo: _FakeFactsRepo
-    lifecycle_repo: _FakeLifecycleRepo
-    dependencies_repo: _FakeDependenciesRepo
-
+class _FakeTransactions:
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.facts_repo, self.lifecycle_repo, self.dependencies_repo))
+    def begin(self) -> Generator[Any]:
+        yield _FakeUnit()
 
 
 def _not_ready_facts() -> ChunkFacts:
@@ -197,11 +178,12 @@ def _service(
     defaults to a not-ready dependent; ``lifecycle`` defaults to no chunk being ephemeral."""
     facts_repo = facts or _FakeFactsRepo(facts=_not_ready_facts())
     lifecycle_repo = lifecycle or _FakeLifecycleRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts_repo, lifecycle_repo, dependencies))
     return (
         DependencyService(
             dependencies=_as_dependencies(dependencies),
-            exclusive=exclusive,
+            facts=cast(IReadChunkFactsRepository, facts_repo),
+            lifecycle=cast(IReadChunkLifecycleRepository, lifecycle_repo),
+            transactions=cast(IHubTransactions, _FakeTransactions()),
             clock=FixedClock(instant=_T0),
             cycle_lock=threading.Lock(),
         ),

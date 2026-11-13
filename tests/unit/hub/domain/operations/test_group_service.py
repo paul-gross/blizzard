@@ -88,24 +88,24 @@ class _FakeWorkRefsRepo:
 
 @dataclass
 class _FakeDependenciesRepo:
-    """Only ``list_standing_edges``/``record_fold_locked`` are live — see module docstring."""
+    """Only ``list_standing_edges``/``record_fold`` are live — see module docstring."""
 
     edges: list[DependencyEdge] = field(default_factory=list[DependencyEdge])
     folds: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     fold_calls: int = 0
     _next_id: int = 1
 
-    def list_standing_edges(self) -> list[DependencyEdge]:
+    def list_standing_edges(self, *, transaction: Any = None) -> list[DependencyEdge]:
         return self.edges
 
-    def record_fold_locked(
+    def record_fold(
         self,
-        handle: ILockedChunkRead,
         targets: list[FoldTarget],
         *,
         grouped_into: str,
         by: str,
         at: datetime,
+        transaction: Any,
     ) -> dict[str, int]:
         self.fold_calls += 1
         grouped_ids: dict[str, int] = {}
@@ -162,6 +162,8 @@ class _FakeLockedChunkRead:
     facts_repo: _FakeFactsRepo
     dependencies_repo: _FakeDependenciesRepo
 
+    transaction: Any = None
+
     def record(self, chunk_id: str) -> Chunk | None:
         return self.record_repo.get(chunk_id)
 
@@ -189,6 +191,8 @@ class _FakeExclusiveWrites:
     record_repo: _FakeRecordRepo
     facts_repo: _FakeFactsRepo
     dependencies_repo: _FakeDependenciesRepo
+
+    transaction: Any = None
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:

@@ -9,13 +9,14 @@ from typing import Protocol
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 class IReadChunkLifecycleRepository(Protocol):
     """Read-only chunk-lifecycle access — no ``get``: it would be ``record``'s
     byte-identical query, so a caller needing it depends on that seam instead."""
 
-    def is_ephemeral(self, chunk_id: str) -> bool:
+    def is_ephemeral(self, chunk_id: str, *, transaction: Transaction | None = None) -> bool:
         """Whether ``chunk_id`` names a grouped-away or deleted chunk — the
         read that tells an ephemeral prerequisite apart from one never minted at all,
         since :meth:`~blizzard.hub.domain.chunk.ports.record.IReadChunkRecordRepository.get`

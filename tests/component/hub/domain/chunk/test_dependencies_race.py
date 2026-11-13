@@ -16,7 +16,6 @@ from typing import cast
 from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, PrerequisiteIsEphemeral, PrerequisiteScope
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
@@ -251,16 +250,21 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_record_fold_locked = _writable_dependencies(hub).record_fold_locked
+    real_record_fold = _writable_dependencies(hub).record_fold
 
-    def _blocking_record_fold_locked(
-        handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    def _blocking_record_fold(
+        targets: list[FoldTarget],
+        *,
+        grouped_into: str,
+        by: str,
+        at: datetime,
+        transaction: LockedTransaction,
     ) -> dict[str, int]:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold_locked(handle, targets, grouped_into=grouped_into, by=by, at=at)
+        return real_record_fold(targets, grouped_into=grouped_into, by=by, at=at, transaction=transaction)
 
-    _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked
+    _writable_dependencies(hub).record_fold = _blocking_record_fold
 
     fold_result: dict[str, object] = {}
 

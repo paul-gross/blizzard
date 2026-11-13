@@ -18,12 +18,11 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 class ChunkDependenciesStore:
@@ -36,8 +35,8 @@ class ChunkDependenciesStore:
     def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
         release_outgoing_edges_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
 
-    def list_standing_edges(self) -> list[DependencyEdge]:
-        with self._store.read("list_standing_edges") as conn:
+    def list_standing_edges(self, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
+        with connection_in(self._store, transaction, "list_standing_edges") as conn:
             return self.list_standing_edges_conn(conn)
 
     def list_standing_edges_conn(self, conn: Connection) -> list[DependencyEdge]:
@@ -161,12 +160,20 @@ class ChunkDependenciesStore:
             released_by=by,
         )
 
-    def record_fold_locked(
-        self, handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    def record_fold(
+        self,
+        targets: list[FoldTarget],
+        *,
+        grouped_into: str,
+        by: str,
+        at: datetime,
+        transaction: LockedTransaction,
     ) -> dict[str, int]:
         """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
-        the group fold's own write, on ``handle``'s already-locked connection."""
-        conn = chunk_handle_connection(handle, self._store, grouped_into, *(target.chunk_id for target in targets))
+        the group fold's own write, on the locked ``transaction``'s connection."""
+        conn = connection_for(self._store, transaction, chunk=grouped_into)
+        for target in targets:
+            connection_for(self._store, transaction, chunk=target.chunk_id)
         return self._record_fold_conn(conn, targets, grouped_into=grouped_into, by=by, at=at)
 
     def _record_fold_conn(

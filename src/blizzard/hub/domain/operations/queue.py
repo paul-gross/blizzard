@@ -825,8 +825,8 @@ class GroupService:
             ]
             # One call, one transaction across every target — a target's
             # own row can never commit ahead of a sibling's edge release/mint.
-            grouped_ids = self._dependencies.record_fold_locked(
-                handle, fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now
+            grouped_ids = self._dependencies.record_fold(
+                fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now, transaction=handle.transaction
             )
             grouped_id = grouped_ids[targets[-1].chunk_id]
         _log.info(
