@@ -3,6 +3,7 @@ operator or the fleet itself drives the chunk to outside its graph's own transit
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
@@ -40,11 +41,13 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         between the check and this write. Returns the fresh ``chunk_pause_facts.id``."""
         ...
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    def record_stop_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str]
+    ) -> LeverWrite:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment —
         and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and close ``stopped`` each of
-        the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end.
+        the flow submissions the caller names in ``waiting``, in that order.
         ``at`` is passed in, stamped by the caller after the row lock, so a
         claim that wins the row lock first can never mint a route sorting newer than this
         release. Returns the freshly-written
@@ -53,12 +56,19 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         ...
 
     def record_completion_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and close ``completed`` each of
-        the chunk's flow submissions waiting its turn, mirroring :meth:`record_stop_locked`, and enqueue
+        the flow submissions the caller names in ``waiting``, mirroring :meth:`record_stop_locked`, and enqueue
         the chunk's close intents. The caller has already
         checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
         caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written

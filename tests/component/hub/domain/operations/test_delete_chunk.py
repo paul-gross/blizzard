@@ -187,13 +187,13 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
 
 def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, chunk_id, by="alice", at=_at(0))
+        chunks.lifecycle.record_stop_locked(handle, chunk_id, by="alice", at=_at(0), waiting=())
 
 
 def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
         chunks.lifecycle.record_completion_locked(
-            handle, chunk_id, by="alice", at=_at(0), close_decision=decide_close_enqueue([], lambda _: True)
+            handle, chunk_id, by="alice", at=_at(0), close_decision=decide_close_enqueue([], lambda _: True), waiting=()
         )
 
 

@@ -1341,6 +1341,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(
             movement=chunk_movement,
+            submissions=stores.flows,
             decisions=chunk_decisions,
             facts=chunk_facts,
             graphs=graph_store,
@@ -1352,9 +1353,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         detach=detach,
         release=ReleaseService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
-        stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
+        stop=StopService(lifecycle=chunk_lifecycle, submissions=stores.flows, exclusive=chunk_exclusive, clock=clock),
         complete=CompleteService(
             lifecycle=chunk_lifecycle,
+            submissions=stores.flows,
             exclusive=chunk_exclusive,
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,

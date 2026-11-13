@@ -29,6 +29,7 @@ from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
     count_rows_read,
+    flow_unit,
     hub_scoped,
     hub_store_connections,
     report_lease,
@@ -151,7 +152,8 @@ def test_a_submission_closed_between_the_chunk_reads_holds_no_place(
 
     def then_closed(self: FlowStore, chunk_ids: Sequence[str]) -> list[Submission]:
         found = found_open(self, chunk_ids)
-        store.close(closing.submission_id, outcome="superseded", at=line.world.hub.clock.now())
+        with flow_unit(hub_store_connections(line.world.hub.engine), closing) as unit:
+            store.close(closing.submission_id, outcome="superseded", at=line.world.hub.clock.now(), transaction=unit)
         return found
 
     monkeypatch.setattr(FlowStore, "open_submissions_of", then_closed)

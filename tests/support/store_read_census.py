@@ -71,6 +71,7 @@ from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRep
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
@@ -107,7 +108,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
     WorkSourceSlug,
 )
-from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.delivery.flows import FlowResource, QueueStanding, Submission
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows, IReadFlowViews
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
@@ -291,6 +292,7 @@ from tests.support.scaffolding import (
     chunk_unit,
     default_project,
     default_tenant,
+    flow_unit,
     hub_level_connections,
     hub_store_connections,
     project_record,
@@ -1334,6 +1336,7 @@ class HubWorld:
     forge_id: ForgeId
     #: A visit submitted to two flows, with an open turn; a second visit beside it is closed.
     flow_chunk: str
+    flow_submission: Submission
     flow_submission_id: str
     #: The first flow that visit holds.
     flow_id: str
@@ -2361,7 +2364,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             transaction=unit,
         )
     assert flow_submission is not None and closed_submission is not None
-    flow_store.close(closed_submission.submission_id, outcome="superseded", at=_ht(115))
+    with flow_unit(store_connections, closed_submission) as unit:
+        flow_store.close(closed_submission.submission_id, outcome="superseded", at=_ht(115), transaction=unit)
     # No production write starts a turn yet, so the census plants the one open turn it reads.
     with engine.begin() as conn:
         conn.execute(
@@ -2504,6 +2508,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         work_source_id=census_source.work_source_id,
         forge_id=census_forge.forge_id,
         flow_chunk=flow_chunk,
+        flow_submission=flow_submission,
         flow_submission_id=flow_submission.submission_id,
         flow_id=flow_submission.flows[0].flow_id,
         urgencies=urgency_store,
@@ -2519,6 +2524,13 @@ HubRecipe = Callable[[HubWorld], object]
 #: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
 #: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
 HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
+
+
+def _queue_standing(w: HubWorld) -> QueueStanding | None:
+    """The flow visit's standing, read in a unit locking its chunk and its flows, as the reconcile reads it."""
+    with flow_unit(w.store_connections, w.flow_submission) as unit:
+        return w.hub.services.flows.queue_standing(w.flow_submission_id, transaction=unit)
+
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadUrgencyRepository, "get"): lambda w: w.urgencies.get(w.urgency_id),
@@ -2770,6 +2782,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
     (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
     (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
+    (IReadFlows, "queue_standing"): _queue_standing,
+    (IReadChunkFlowSubmissions, "open_flow_submissions"): lambda w: FlowStore(
+        w.store_connections, w.clock
+    ).open_flow_submissions(w.flow_chunk),
     (IReadFlows, "terms_of"): lambda w: w.hub.services.flows.terms_of(w.flow_submission_id),
     (IReadFlows, "first_turn_at"): lambda w: w.hub.services.flows.first_turn_at(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1

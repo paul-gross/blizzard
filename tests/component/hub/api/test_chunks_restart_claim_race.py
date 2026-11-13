@@ -49,6 +49,7 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
         answer: str,
         to_graph_id: str | None,
         note: str | None,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the restart's write"
@@ -64,6 +65,7 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
             answer=answer,
             to_graph_id=to_graph_id,
             note=note,
+            waiting=waiting,
         )
 
     movement.record_restart_conn = _blocking_record_restart_conn

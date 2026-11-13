@@ -10,7 +10,7 @@ from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.flow_driver_world import (
     World,
 )
-from tests.support.scaffolding import hub_store_connections
+from tests.support.scaffolding import flow_unit, hub_store_connections
 
 
 class Line:
@@ -46,8 +46,8 @@ class Line:
         return listed
 
     def take_turn(self, chunk_id: str) -> None:
-        store = FlowStore(hub_store_connections(self.world.hub.engine), self.world.hub.clock)
-        turn = store.take_turn(
-            self.submission(chunk_id).submission_id, passed_over=frozenset(), terms=(), at=self.world.hub.clock.now()
-        )
-        assert turn is not None
+        connections = hub_store_connections(self.world.hub.engine)
+        store = FlowStore(connections, self.world.hub.clock)
+        submission = self.submission(chunk_id)
+        with flow_unit(connections, submission) as unit:
+            store.take_turn(submission.submission_id, terms=(), at=self.world.hub.clock.now(), transaction=unit)

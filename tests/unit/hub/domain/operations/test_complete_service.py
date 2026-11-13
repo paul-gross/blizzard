@@ -22,12 +22,13 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite, OpenSubmission
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, CloseEnqueueDecision, RouteCreatedFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.complete import CompleteService
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -46,10 +47,20 @@ class _FakeChunkRepo:
     close_skipped: tuple[int, ...] = ()
     _next_id: int = 1
 
+    waiting: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
+
     def record_completion_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         self.completed.append((chunk_id, by))
+        self.waiting.append(tuple(waiting))
         self.stamps.append(at)
         self.decisions.append(close_decision)
         fact_id = self._next_id
@@ -60,9 +71,28 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"CompleteService should not touch {name!r}")
 
 
+_UNIT = cast(Transaction, object())
+
+
+@dataclass
+class _FakeFlowSubmissions:
+    """The chunk's open submissions — one mid-turn between two waiting — read only in the handle's unit."""
+
+    def open_flow_submissions(
+        self, chunk_id: str, *, transaction: Transaction | None = None
+    ) -> tuple[OpenSubmission, ...]:
+        assert transaction is _UNIT, "the waiting set is read on the handle's transaction"
+        return (
+            OpenSubmission(submission_id="fs_1", turn_open=False),
+            OpenSubmission(submission_id="fs_2", turn_open=True),
+            OpenSubmission(submission_id="fs_3", turn_open=False),
+        )
+
+
 @dataclass
 class _FakeLockedChunkRead:
     chunk_facts: ChunkFacts | None
+    transaction: Transaction = _UNIT
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.chunk_facts
@@ -123,6 +153,7 @@ def _service(
     publisher = _FakePublisher(fake_exclusive)
     service = CompleteService(
         lifecycle=cast(IWriteChunkLifecycleRepository, repo),
+        submissions=_FakeFlowSubmissions(),
         exclusive=cast(IChunkExclusiveWrites, fake_exclusive),
         clock=clock,
         closer_available=lambda source: source == "hub",
@@ -233,3 +264,13 @@ def test_complete_publishes_nothing_when_it_wrote_no_close_skip() -> None:
     service.complete(_CHUNK, by="operator")
 
     assert publisher.published == []
+
+
+def test_complete_names_the_waiting_submissions_it_read_on_the_handle_unit() -> None:
+    """The completion withdraws the submissions waiting their turn, in arrival order; one mid-turn is left to its
+    turn."""
+    service, repo, _ = _service(_running_facts())
+
+    service.complete(_CHUNK, by="operator")
+
+    assert repo.waiting == [("fs_1", "fs_3")]

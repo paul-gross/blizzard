@@ -61,7 +61,12 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
     seed_promote(store, engine, "ch_terminal", at=_T0)
     with store.exclusive.locked(["ch_terminal"]) as handle:
         store.lifecycle.record_completion_locked(
-            handle, "ch_terminal", by="op", at=_T0, close_decision=decide_close_enqueue([terminal_ref], lambda _: True)
+            handle,
+            "ch_terminal",
+            by="op",
+            at=_T0,
+            close_decision=decide_close_enqueue([terminal_ref], lambda _: True),
+            waiting=(),
         )
 
     pointers = [live_ref, grouped_ref, terminal_ref, absent_ref]
@@ -80,7 +85,12 @@ def test_live_holders_prefers_a_live_holder_over_an_earlier_terminal_one(tmp_pat
     seed_promote(store, engine, "ch_a_terminal", at=_T0)
     with store.exclusive.locked(["ch_a_terminal"]) as handle:
         store.lifecycle.record_completion_locked(
-            handle, "ch_a_terminal", by="op", at=_T0, close_decision=decide_close_enqueue([shared_ref], lambda _: True)
+            handle,
+            "ch_a_terminal",
+            by="op",
+            at=_T0,
+            close_decision=decide_close_enqueue([shared_ref], lambda _: True),
+            waiting=(),
         )
 
     _mint(store, "ch_b_live", work_refs=[shared_ref])

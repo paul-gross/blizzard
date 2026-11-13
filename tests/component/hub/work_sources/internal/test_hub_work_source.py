@@ -415,7 +415,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         project_id=ProjectId(default_project(engine)),
     )
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0, waiting=())
 
     withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
@@ -436,7 +436,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0, waiting=())
     source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
@@ -563,7 +563,7 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0, waiting=())
 
     withdrawn = source.withdraw(pointer, by="operator")
 
@@ -888,7 +888,7 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
         at=_T0,
     )
     with chunks.exclusive.locked([f"ch_{created.ref}"]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, f"ch_{created.ref}", by="operator", at=_T0)
+        chunks.lifecycle.record_stop_locked(handle, f"ch_{created.ref}", by="operator", at=_T0, waiting=())
     stale = items.get("hub", created.ref)
     assert stale is not None and stale.closure is None
     items.close("hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)

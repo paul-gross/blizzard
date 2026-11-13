@@ -1,6 +1,6 @@
-"""The flow record's one-transaction writes (component tier). A turn is taken only when its submission is open, free of
-an open turn, on flows no other turn holds, and behind no eligible arrival, and several flows are taken together or
-not at all. A turn's end commits with the writes that route its answer — a transition, a bounce and escalation, or a
+"""The flow record's one-transaction writes (component tier). A turn, judged on the standing read in a unit locking the
+submission's chunk and its flows, is taken only when its submission is open, free of an open turn, on flows no other
+turn holds, and behind no eligible arrival, and several flows are taken together or not at all. A turn's end commits with the writes that route its answer — a transition, a bounce and escalation, or a
 poll row — or not at all, and a fenced exit still ends the turn with ``withdrawal_for``'s closure. Every hub-node
 escalation writes the visit's epoch plus one. A landing on a flow writes its five rows once, and a lever withdraws a
 waiting submission and leaves a mid-turn one to its turn."""
@@ -16,7 +16,8 @@ import pytest
 from sqlalchemy import Table, func, select
 
 from blizzard.foundation.hub_event_types import FlowChangeKind
-from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten, OpenSubmission
+from blizzard.hub.domain.chunk.flow_writes import waiting as pick_waiting
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -37,6 +38,7 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
     chunk_unit,
+    flow_unit,
     hub_scoped,
     hub_store_connections,
     ingest,
@@ -81,10 +83,15 @@ class _World:
         return submission
 
     def take(self, submission: Submission, *, passed_over: frozenset[str] = frozenset()) -> str | None:
-        turn = self.flows.take_turn(
-            submission.submission_id, passed_over=passed_over, terms=(), at=self.hub.clock.now()
-        )
-        return None if turn is None else turn.turn_id
+        """Take ``submission``'s turn as the reconcile does: in a unit locking its chunk and its flows, when the
+        standing re-read there lets it."""
+        with flow_unit(hub_store_connections(self.hub.engine), submission) as unit:
+            standing = self.flows.queue_standing(submission.submission_id, transaction=unit)
+            if standing is None or not standing.may_take_turn(passed_over):
+                return None
+            return self.flows.take_turn(
+                submission.submission_id, terms=(), at=self.hub.clock.now(), transaction=unit
+            ).turn_id
 
     def count(self, table: Table) -> int:
         with self.hub.engine.connect() as conn:
@@ -139,7 +146,8 @@ def test_a_visit_with_an_open_turn_takes_no_second(world: _World) -> None:
 
 def test_a_closed_submission_takes_no_turn(world: _World) -> None:
     submission = world.submit(world.chunk())
-    world.flows.close(submission.submission_id, outcome="superseded", at=world.hub.clock.now())
+    with flow_unit(hub_store_connections(world.hub.engine), submission) as unit:
+        world.flows.close(submission.submission_id, outcome="superseded", at=world.hub.clock.now(), transaction=unit)
 
     assert world.take(submission) is None
 
@@ -488,6 +496,7 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     reported: list[tuple[FlowFactWritten, ...]] = []
     for submission in (waiting, turning):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+            open_submissions = world.flows.open_flow_submissions(submission.chunk_id, transaction=handle.transaction)
             written = world.chunks.movement.record_restart_locked(
                 handle,
                 submission.chunk_id,
@@ -495,6 +504,7 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
                 to_node_id=_NODE,
                 by="operator",
                 at=world.hub.clock.now(),
+                waiting=pick_waiting(open_submissions),
             )
         reported.append(written.withdrawn)
 
@@ -508,6 +518,35 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     ]
     assert world.closed(waiting) == "restarted"
     assert world.closed(turning) is None
+
+
+def test_a_chunks_open_submissions_answer_whether_each_has_a_turn_open(world: _World) -> None:
+    chunk_id = world.chunk("12")
+    waiting = world.submit(chunk_id, _MAIN)
+    with world.chunks.exclusive.locked([chunk_id]) as handle:
+        before = world.flows.open_flow_submissions(chunk_id, transaction=handle.transaction)
+    assert world.take(waiting) is not None
+
+    assert before == (OpenSubmission(submission_id=waiting.submission_id, turn_open=False),)
+    assert world.flows.open_flow_submissions(chunk_id) == (
+        OpenSubmission(submission_id=waiting.submission_id, turn_open=True),
+    )
+
+
+def test_a_lever_closes_exactly_the_submissions_it_names(world: _World) -> None:
+    """The write judges no turn: it closes a named submission even mid-turn, and leaves an unnamed waiting one."""
+    named = world.submit(world.chunk("12"), _MAIN)
+    unnamed = world.submit(world.chunk("13"), _OTHER)
+    assert world.take(named) is not None
+
+    for submission, names in ((named, [named.submission_id]), (unnamed, [])):
+        with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+            world.chunks.lifecycle.record_stop_locked(
+                handle, submission.chunk_id, by="operator", at=world.hub.clock.now(), waiting=names
+            )
+
+    assert world.closed(named) == "stopped"
+    assert world.closed(unnamed) is None
 
 
 def test_a_visits_standing_counts_the_open_arrivals_ahead_of_it(world: _World) -> None:

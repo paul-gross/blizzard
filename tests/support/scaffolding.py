@@ -113,6 +113,7 @@ from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName, secret_lock
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
+from blizzard.hub.domain.delivery.flows import Submission, flow_lock
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
@@ -233,6 +234,14 @@ def chunk_unit(store: ScopedConnections, *chunk_ids: str) -> Generator[LockedTra
     requires, for a test writing straight through a store."""
     with HubTransactions(store).begin() as transaction:
         yield transaction.lock_chunks(chunk_ids)
+
+
+@contextmanager
+def flow_unit(store: ScopedConnections, submission: Submission) -> Generator[LockedTransaction]:
+    """A hub unit over ``store`` graduated on ``submission``'s chunk and a lock per flow it holds — the authority a
+    flow close or turn requires, for a test writing straight through the flow store."""
+    with HubTransactions(store).begin() as transaction:
+        yield transaction.lock_set(chunks=[submission.chunk_id], keys=[flow_lock(flow) for flow in submission.flows])
 
 
 class SeedingTranscriptSegmentStore(TranscriptSegmentStore):

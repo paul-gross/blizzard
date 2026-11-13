@@ -155,6 +155,7 @@ def test_completion_skips_an_unbound_ref_and_returns_its_row_id_publishing_nothi
             by="test",
             at=hub.clock.now(),
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
+            waiting=(),
         )
 
     assert _pending_intents(hub) == set()

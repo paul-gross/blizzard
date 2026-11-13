@@ -17,10 +17,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten, OpenSubmission
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.delivery.flows import (
     NOT_VERDICTS,
     TURN_INTERRUPTED,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingTerms,
     LandingWrite,
+    QueueStanding,
     Submission,
     SubmissionClosure,
     SubmissionRecord,
@@ -38,9 +40,9 @@ from blizzard.hub.domain.delivery.flows import (
     TurnEvent,
     VisitStanding,
     Withdrawal,
+    flow_lock,
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
-from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import write_landing_rows
@@ -51,12 +53,12 @@ from blizzard.hub.store.internal.flow_rows import (
     flow_of,
     flows_held,
     has_open_turn,
+    held_by,
     write_event,
     write_facts,
     write_landing,
 )
 from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_fact_select
-from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
 
@@ -396,46 +398,73 @@ class FlowStore:
             flows=flows,
         )
 
-    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
-        with self._store.write("close_flow_submission") as conn:
-            if has_open_turn(conn, submission_id):
-                return None
-            return close_submission(conn, submission_id, outcome=outcome, at=at)
+    def close(
+        self, submission_id: str, *, outcome: Withdrawal, at: datetime, transaction: LockedTransaction
+    ) -> tuple[FlowFactWritten, ...] | None:
+        conn = connection_for(self._store, transaction)
+        chunk_id, flows = held_by(conn, submission_id)
+        self._covered(transaction, chunk_id, flows)
+        return close_submission(conn, submission_id, outcome=outcome, at=at)
 
     def take_turn(
         self,
         submission_id: str,
         *,
-        passed_over: frozenset[str],
         terms: Sequence[LandingTerms],
         at: datetime,
-    ) -> Turn | None:
-        with self._store.write("take_turn") as conn:
-            row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
-            if row is None:
-                return None
-            flows = flows_held(conn, [submission_id]).get(submission_id, ())
-            lock_keys(conn, LockNamespace.FLOW, [flow.resource for flow in flows])
-            closed = conn.execute(
-                self._store.select(_closures, _closures.c.submission_id).where(
-                    _closures.c.submission_id == submission_id
+        transaction: LockedTransaction,
+    ) -> Turn:
+        conn = connection_for(self._store, transaction)
+        row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).one()
+        flows = flows_held(conn, [submission_id]).get(submission_id, ())
+        self._covered(transaction, row.chunk_id, flows)
+        turn = Turn(turn_id=Id.mint(IdPrefix.HUB_TURN, self._clock).value, submission_id=submission_id, started_at=at)
+        conn.execute(
+            self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
+        )
+        write_facts(conn, flows, submission_id, row.chunk_id, kind=FlowChangeKind.TURN_STARTED, outcome=None, at=at)
+        self._take_terms(conn, row, flows, terms)
+        return turn
+
+    def open_flow_submissions(
+        self, chunk_id: str, *, transaction: Transaction | None = None
+    ) -> tuple[OpenSubmission, ...]:
+        with connection_in(self._store, transaction, "open_flow_submissions") as conn:
+            open_turn = self._store.exists(
+                _turns, _turns.c.submission_id == _sub.c.submission_id, _turns.c.ended_at.is_(None)
+            )
+            rows = conn.execute(
+                self._store.select(_sub, _sub.c.submission_id, _sub.c.arrival, open_turn.label("turn_open")).where(
+                    _sub.c.chunk_id == chunk_id, self._open()
                 )
-            ).first()
-            if closed is not None or has_open_turn(conn, submission_id):
-                return None
-            if flows and (
-                self._busy(conn, flows) or not self._ahead_on(conn, flows, arrival=row.arrival) <= passed_over
-            ):
-                return None
-            turn = Turn(
-                turn_id=Id.mint(IdPrefix.HUB_TURN, self._clock).value, submission_id=submission_id, started_at=at
+            ).all()
+            return tuple(
+                OpenSubmission(submission_id=r.submission_id, turn_open=bool(r.turn_open))
+                for r in sorted(rows, key=lambda r: r.arrival)
             )
-            conn.execute(
-                self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
-            )
-            write_facts(conn, flows, submission_id, row.chunk_id, kind=FlowChangeKind.TURN_STARTED, outcome=None, at=at)
-            self._take_terms(conn, row, flows, terms)
-            return turn
+
+    def queue_standing(self, submission_id: str, *, transaction: Transaction) -> QueueStanding | None:
+        conn = connection_for(self._store, transaction)
+        row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
+        if row is None:
+            return None
+        outcome = conn.execute(
+            self._store.select(_closures, _closures.c.outcome).where(_closures.c.submission_id == submission_id)
+        ).scalar()
+        [submission] = self._submissions(conn, [row], closed={submission_id: outcome})
+        flows = submission.flows
+        return QueueStanding(
+            submission=submission,
+            turning=has_open_turn(conn, submission_id),
+            busy=bool(flows) and self._busy(conn, flows),
+            ahead=frozenset(self._ahead_on(conn, flows, arrival=row.arrival)) if flows else frozenset(),
+        )
+
+    def _covered(self, transaction: LockedTransaction, chunk_id: str, flows: Sequence[Flow]) -> None:
+        """Refuse a unit that does not lock the submission's chunk and every flow it holds."""
+        connection_for(self._store, transaction, chunk=chunk_id)
+        for flow in flows:
+            connection_for(self._store, transaction, key=flow_lock(flow))
 
     def end_turn_locked(
         self,
@@ -724,3 +753,4 @@ def _terms_of(row: Row[Any]) -> LandingTerms:
 
 _flows_conforms: type[IWriteFlows] = FlowStore
 _flow_views_conforms: type[IReadFlowViews] = FlowStore
+_chunk_flow_submissions_conforms: type[IReadChunkFlowSubmissions] = FlowStore

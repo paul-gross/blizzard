@@ -10,9 +10,10 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 
 
@@ -35,9 +36,15 @@ class StopService:
     """Terminally abandon a chunk and release any route it holds — ``blizzard hub stop``."""
 
     def __init__(
-        self, *, lifecycle: IWriteChunkLifecycleRepository, exclusive: IChunkExclusiveWrites, clock: IClock
+        self,
+        *,
+        lifecycle: IWriteChunkLifecycleRepository,
+        submissions: IReadChunkFlowSubmissions,
+        exclusive: IChunkExclusiveWrites,
+        clock: IClock,
     ) -> None:
         self._lifecycle = lifecycle
+        self._submissions = submissions
         self._clock = clock
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
@@ -56,4 +63,7 @@ class StopService:
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             require_stoppable(chunk.chunk_id, facts)
-            return self._lifecycle.record_stop_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
+            return self._lifecycle.record_stop_locked(
+                handle, chunk.chunk_id, by=by, at=self._clock.now(), waiting=waiting(open_submissions)
+            )

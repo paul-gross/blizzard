@@ -27,6 +27,7 @@ from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryResolution
 from blizzard.hub.domain.graph.actions import LANDED, RESERVED_WAITS, REWORK_ANSWERS, ActionSpec
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
@@ -399,6 +400,43 @@ class VisitStanding:
     submission: Submission
     turning: bool
     ahead: tuple[int, ...]
+
+
+def flow_lock(flow: Flow) -> LockKey:
+    """The keyed lock on ``flow`` (``bzh:transaction-graduation``), keyed by its resource: a unit that closes a
+    submission or takes its turn declares one per flow the submission holds."""
+    return LockKey(LockNamespace.FLOW, flow.resource)
+
+
+@domain_model
+@dataclass(frozen=True)
+class QueueStanding:
+    """One submission as its flows' queue stands, re-read inside the unit that closes it or takes its turn:
+    ``turning`` while it has an open turn, ``busy`` while any flow it holds has an open turn — of any submission
+    holding it, open or closed — and ``ahead`` the open submissions that arrived before it on those flows."""
+
+    submission: Submission
+    turning: bool
+    busy: bool
+    ahead: frozenset[str]
+
+    def locks(self) -> frozenset[LockKey]:
+        """The flow keys a unit acting on this submission must hold."""
+        return frozenset(flow_lock(flow) for flow in self.submission.flows)
+
+    def may_close(self) -> bool:
+        """Whether the submission may be closed now: not while a turn is open, whose end writes the closure."""
+        return not self.turning
+
+    def may_take_turn(self, passed_over: frozenset[str]) -> bool:
+        """Whether the submission may start a turn now: open, with no open turn of its own, no flow it holds busy, and
+        every open submission ahead of it on those flows in ``passed_over`` — the ones the caller judged ineligible.
+        A submission holding no flows is judged on its closure and its own turn alone."""
+        if self.submission.closed is not None or self.turning:
+            return False
+        if not self.submission.flows:
+            return True
+        return not self.busy and self.ahead <= passed_over
 
 
 @domain_model
