@@ -88,9 +88,7 @@ class _FakeChunkRepo:
     positions: dict[str, float] = field(default_factory=dict[str, float])
     promoted_ats_by_chunk: dict[str, datetime] = field(default_factory=dict[str, datetime])
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list[tuple[str, float, datetime]])
-    locks: list[tuple[list[str], list[LockKey]]] = field(
-        default_factory=list[tuple[list[str], list[LockKey]]]
-    )
+    locks: list[tuple[list[str], list[LockKey]]] = field(default_factory=list[tuple[list[str], list[LockKey]]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:

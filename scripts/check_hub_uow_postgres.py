@@ -40,7 +40,7 @@ from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTena
 _TENANT = "uow_proof"
 _TIMEOUT = 10.0
 _CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
-_PROBE_NAMESPACE = "proof"
+_PROBE_NAMESPACE = LockNamespace.FLOW
 
 
 class _CompatibleGuard(ScopedConnections):
@@ -349,7 +349,7 @@ class _Threads:
 def _writes_a_probe(hub: _Hub, tenant: str, key: str, hold: Callable[[int], None] | None = None) -> None:
     """A scoped write that locks one key (inserting its ``keyed_locks`` row) and then holds, if asked."""
     with hub.unit(TenantId(tenant)).begin() as unit:
-        unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+        unit.lock_set(keys=[LockKey(_PROBE_NAMESPACE, key)])
         if hold is not None:
             hold(_unit_pid(unit))
 
@@ -515,7 +515,7 @@ def _case_different_keys_do_not_exclude(hub: _Hub) -> None:
 
     def write(key: str, hold: bool) -> None:
         with tx.HubTransactions(store).begin() as unit:
-            unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+            unit.lock_set(keys=[LockKey(_PROBE_NAMESPACE, key)])
             if hold:
                 held.set()
                 if not release.wait(_TIMEOUT):

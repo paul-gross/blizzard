@@ -67,8 +67,8 @@ class _Transaction:
         unit.keys = frozenset(keys)
         for chunk_id in sorted(unit.chunks):
             lock_chunk_row(unit.conn, chunk_id)
-        for namespace, key in sorted(unit.keys):
-            lock_keys(unit.conn, namespace, [key])
+        for lock_key in sorted(unit.keys):
+            lock_keys(unit.conn, lock_key.namespace, [lock_key.key])
         for lock in sorted(unit.hub):
             lock_hub(unit.conn, lock)
         return _LockedTransaction(unit)
