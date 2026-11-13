@@ -22,7 +22,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.actions.declarations import GitCommits
-from blizzard.hub.domain.actions.effects import ActionEscalation, MissingCapability
+from blizzard.hub.domain.actions.effects import ActionEscalation, ForgeAuthReason, MissingCapability
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent, close_skipped_events
@@ -64,6 +64,7 @@ from blizzard.hub.domain.graph.model import (
     IReadGraphRepository,
     Node,
 )
+from blizzard.hub.domain.kernel.forge_refusals import forge_auth_refused_detail
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -77,6 +78,7 @@ _EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 _EVENT_ACTION_MISSING: EventLogKind = "hub-action-missing"
 _EVENT_CAPABILITY_MISSING: EventLogKind = "forge-capability-missing"
 _CAPABILITY_MISSING_STEP = "forge-capability-missing"
+_EVENT_FORGE_AUTH_REFUSED: EventLogKind = "forge-auth-refused"
 HUB_LOG_PREFIX = "hub-log."
 _PENDING = "pending"
 #: The event each resolution outcome records — ``None`` where the resolution stands. Every refused
@@ -806,6 +808,36 @@ class HubNodeRouter:
     def escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd = NO_TURN) -> None:
         """An escalation the hub authors at the visit's epoch plus one, routing nothing."""
         self._escalated(chunk, escalation, epoch=epoch, ending=ending)
+
+    def escalate_forge_auth(
+        self,
+        chunk: Chunk,
+        node: Node,
+        escalation: ActionEscalation,
+        reason: ForgeAuthReason,
+        *,
+        epoch: int,
+        ending: ITurnEnd = NO_TURN,
+    ) -> bool:
+        """Escalate a pass whose forge refused its credential, recording ``forge-auth-refused`` once the escalation
+        takes — so a duplicate escalation of the same visit records none."""
+        outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
+        if outcome is not BounceEscalationOutcome.RECORDED:
+            return False
+        self._events.record(
+            kind=_EVENT_FORGE_AUTH_REFUSED,
+            runner_id=None,
+            chunk_id=chunk.chunk_id,
+            project_id=chunk.project_id,
+            lease_id=None,
+            node_name=node.name,
+            message=escalation.detail,
+            detail=forge_auth_refused_detail(
+                reason.classified, forge_id=reason.forge, chunk_id=chunk.chunk_id, repository_id=reason.repository
+            ),
+            at=self._clock.now(),
+        )
+        return True
 
     def escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int) -> bool:
         """A hub node naming no action — one the carry-over could not translate — escalates its chunk, its stored

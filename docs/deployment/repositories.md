@@ -69,7 +69,8 @@ origin, so a `forge_api_url` is refused `422 field_moved_to_forge`, naming the f
 
 ### The forge token
 
-On GitHub, delivery needs a fine-grained token on the repository with these permissions:
+On GitHub, delivery needs a token on the repository with these permissions. A classic token is the supported path for
+reading checks; a fine-grained token is not promised the Checks API:
 
 | Permission    | Access       | Why                                                                         |
 | ------------- | ------------ | --------------------------------------------------------------------------- |

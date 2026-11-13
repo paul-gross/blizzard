@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import threading
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
@@ -34,6 +36,7 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.config.work_sources import WorkSourceId
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, ICommitResolver
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
@@ -41,6 +44,7 @@ from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.landing import (
     CommitPresence,
     Comparison,
+    ForgeAuthRefused,
     ForgeNotFound,
     ForgeObject,
     ForgeUnavailable,
@@ -279,6 +283,34 @@ def test_a_commit_the_forge_does_not_hold_resolves_absent(loop: ActionLoop) -> N
 )
 def test_a_forge_that_cannot_say_degrades_to_none(loop: ActionLoop, failure: Exception) -> None:
     assert _resolver(_Forges(_Refs(failure)), loop)("widget", _SHA) is None
+
+
+def test_a_refused_credential_degrades_to_none_and_warns_with_the_diagnostic_never_the_token(
+    loop: ActionLoop,
+) -> None:
+    diagnostic = ForgeDiagnostic(
+        status=401,
+        operation="commit_exists",
+        endpoint="GET /repos/{owner}/{repo}/commits/{ref}",
+        repository="acme/widget",
+        message="Bad credentials",
+        documentation_url=None,
+        request_id="ABCD:1234",
+        accepted_permissions=None,
+    )
+    refused = ForgeAuthRefused(ClassifiedRefusal(AuthRefusal.CREDENTIAL_INVALID, diagnostic))
+
+    with capture_logs() as logs:
+        assert _resolver(_Forges(_Refs(refused)), loop)("widget", _SHA) is None
+
+    warnings = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert len(warnings) == 1
+    assert warnings[0]["refusal"] == "credential-invalid"
+    assert warnings[0]["diagnostic"]["request_id"] == "ABCD:1234"
+    assert warnings[0]["repository_id"] == "repo_widget"
+    # Only the sanitized diagnostic travels: no field carries the secret or anything the forge was sent.
+    assert set(warnings[0]) == {"event", "log_level", "repository_id", "refusal", "diagnostic"}
+    assert "tok" not in json.dumps(warnings[0]["diagnostic"]).split('"')
 
 
 def test_an_unrevealable_secret_degrades_to_none(loop: ActionLoop) -> None:

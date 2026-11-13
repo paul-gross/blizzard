@@ -2701,6 +2701,7 @@ _ACTION_BLIZZARD = frozenset(
         "blizzard.hub.domain.artifact.model",
         "blizzard.hub.domain.chunk.pr_markers",
         "blizzard.hub.domain.kernel.garden_delivery_fault",
+        "blizzard.hub.domain.kernel.forge_refusals",
         "blizzard.hub.domain.config.repositories",
         "blizzard.hub.domain.config.capabilities",
         "blizzard.hub.domain.config.landing_policies",

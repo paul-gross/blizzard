@@ -13,8 +13,10 @@ from typing import Protocol
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 
 
 @domain_model
@@ -102,17 +104,37 @@ class MissingCapability:
 
 @domain_model
 @dataclass(frozen=True)
+class ForgeAuthReason:
+    """A credential the forge refused mid-pass: why, the forge's sanitized answer, and the repository record and
+    forge the refused call was made to."""
+
+    refusal: AuthRefusal
+    diagnostic: ForgeDiagnostic
+    repository: RepositoryId
+    forge: ForgeId
+
+    @property
+    def classified(self) -> ClassifiedRefusal:
+        return ClassifiedRefusal(self.refusal, self.diagnostic)
+
+
+@domain_model
+@dataclass(frozen=True)
 class ActionEscalation:
     """Something only a person can settle: the cause the chunk escalates with, and what it is about.
-    ``missing`` is the typed reason of a :attr:`EscalationCause.FORGE_CAPABILITY_MISSING` escalation, and only of it."""
+    ``missing`` is the typed reason of a :attr:`EscalationCause.FORGE_CAPABILITY_MISSING` escalation, and only of it;
+    ``auth`` that of a :attr:`EscalationCause.FORGE_AUTH` escalation, and only of it."""
 
     cause: EscalationCause
     detail: str
     missing: MissingCapability | None = None
+    auth: ForgeAuthReason | None = None
 
     def __post_init__(self) -> None:
         if (self.cause is EscalationCause.FORGE_CAPABILITY_MISSING) != (self.missing is not None):
             raise ValueError("a missing-capability reason goes with the forge-capability-missing cause, and only it")
+        if self.auth is not None and self.cause is not EscalationCause.FORGE_AUTH:
+            raise ValueError("a forge-auth reason goes with the forge-auth cause, and only it")
 
 
 @domain_model

@@ -13,6 +13,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal
 from blizzard.hub.forge.internal.github_landing import ATTEMPT_TIMEOUT_SECONDS, GitHubLanding
 from blizzard.hub.forge.landing import (
     ChangeListing,
@@ -20,6 +21,7 @@ from blizzard.hub.forge.landing import (
     CheckOutcome,
     CommitPresence,
     ComparisonStatus,
+    ForgeAuthRefused,
     ForgeNotFound,
     ForgeObject,
     ForgeRateLimited,
@@ -423,6 +425,115 @@ def test_a_refused_credential_on_any_other_call_is_auth(status: int) -> None:
         harness.run(lambda forge: forge.compare("a", "b"))
 
     assert raised.value.reason == ForgeRejected.AUTH
+
+
+def test_a_refused_credential_carries_its_refusal_and_the_calls_diagnostic() -> None:
+    answer = reply(
+        401,
+        {"message": "Bad credentials", "documentation_url": "https://docs.github.com/rest"},
+        {"X-GitHub-Request-Id": "ABCD:1234"},
+    )
+    harness = Harness({("GET", f"{REPO}/commits/h/check-runs"): [answer]})
+
+    with pytest.raises(ForgeAuthRefused) as raised:
+        harness.run(lambda forge: forge.checks("h"))
+
+    assert raised.value.reason == ForgeRejected.AUTH
+    assert raised.value.refusal is AuthRefusal.CREDENTIAL_INVALID
+    diagnostic = raised.value.diagnostic
+    assert (diagnostic.status, diagnostic.operation, diagnostic.endpoint) == (
+        401,
+        "checks",
+        "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
+    )
+    assert (diagnostic.repository, diagnostic.message, diagnostic.request_id) == (
+        "acme/widget",
+        "Bad credentials",
+        "ABCD:1234",
+    )
+    assert diagnostic.documentation_url == "https://docs.github.com/rest"
+    assert diagnostic.accepted_permissions is None
+
+
+def test_a_refused_repository_probe_is_the_refusal_of_the_call_it_was_made_for() -> None:
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/pulls/7"): [reply(404, {"message": "Not Found"})],
+            ("GET", REPO): [reply(403, {"message": "Resource not accessible by integration"})],
+        }
+    )
+
+    with pytest.raises(ForgeAuthRefused) as raised:
+        harness.run(lambda forge: forge.change(7))
+
+    assert raised.value.refusal is AuthRefusal.PERMISSION_MISSING
+    assert (raised.value.diagnostic.operation, raised.value.diagnostic.endpoint) == (
+        "change",
+        "GET /repos/{owner}/{repo}",
+    )
+
+
+def test_a_rate_limited_403_is_rate_limited_never_an_auth_refusal() -> None:
+    answer = reply(403, {"message": "API rate limit exceeded"}, {"x-ratelimit-remaining": "0"})
+    harness = Harness({("GET", f"{REPO}/commits/h/check-runs"): [answer]})
+
+    with pytest.raises(ForgeRateLimited):
+        harness.run(lambda forge: forge.checks("h"))
+
+
+def test_a_protected_ref_refusal_carries_a_sanitized_diagnostic() -> None:
+    message = "Protected branch update failed for refs/heads/main. token ghp_leaked"
+    harness = Harness(
+        {
+            ("GET", f"{REPO}/git/ref/heads/main"): [reply(200, {"object": {"sha": "a"}})],
+            ("PATCH", f"{REPO}/git/refs/heads/main"): [reply(422, {"message": message})],
+        }
+    )
+
+    with pytest.raises(ForgeRejected) as raised:
+        harness.run(lambda forge: forge.advance_ref("main", "a", "b"))
+
+    assert raised.value.reason == ForgeRejected.PROTECTED
+    assert raised.value.diagnostic is not None
+    assert raised.value.diagnostic.endpoint == "PATCH /repos/{owner}/{repo}/git/refs/heads/{branch}"
+    assert raised.value.diagnostic.message == "Protected branch update failed for refs/heads/main. token [redacted]"
+    assert "ghp_leaked" not in str(raised.value)
+
+
+def test_a_disallowed_merge_method_carries_a_diagnostic() -> None:
+    harness = Harness({("PUT", f"{REPO}/pulls/7/merge"): [reply(405, {"message": "Squash merges are not allowed"})]})
+
+    with pytest.raises(ForgeRejected) as raised:
+        harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.SQUASH, "msg"))
+
+    assert raised.value.reason == ForgeRejected.METHOD
+    assert raised.value.diagnostic is not None
+    assert (raised.value.diagnostic.operation, raised.value.diagnostic.status) == ("merge", 405)
+
+
+def test_a_rejection_in_the_forges_own_words_carries_a_diagnostic() -> None:
+    harness = Harness({("POST", f"{REPO}/pulls"): [reply(422, {"message": "A pull request already exists"})]})
+
+    with pytest.raises(ForgeRejected) as raised:
+        harness.run(lambda forge: forge.open_change("feat", "main", "t", "b"))
+
+    assert raised.value.diagnostic is not None
+    assert (raised.value.diagnostic.operation, raised.value.diagnostic.endpoint) == (
+        "open_change",
+        "POST /repos/{owner}/{repo}/pulls",
+    )
+    assert raised.value.diagnostic.message == "A pull request already exists"
+
+
+def test_an_unavailable_forges_message_carries_its_body_sanitized() -> None:
+    body = "<html>  upstream \n failed Authorization: Bearer ghs_secret </html>"
+    harness = Harness({("GET", f"{REPO}/pulls/7"): [httpx2.Response(502, content=body.encode())]})
+
+    with pytest.raises(ForgeUnavailable) as raised:
+        harness.run(lambda forge: forge.change(7))
+
+    assert str(raised.value).endswith("HTTP 502: <html> upstream failed Authorization: [redacted] </html>")
+    assert "ghs_secret" not in str(raised.value)
 
 
 def test_any_other_4xx_is_rejected_with_the_forges_message() -> None:

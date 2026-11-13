@@ -624,7 +624,11 @@ class TurnRunner:
         self, chunk: Chunk, node: Node, ready: _Ready, escalation: ActionEscalation, *, epoch: int, ending: _TurnEnding
     ) -> None:
         """Route a pass's escalation; one that carries a missing-capability reason is announced, resolved against the
-        visit's captured targets. An identity none of them match still reaches a person, unannounced."""
+        visit's captured targets. An identity none of them match still reaches a person, unannounced. One that
+        carries a forge-auth reason is announced once it takes."""
+        if escalation.auth is not None:
+            self._router.escalate_forge_auth(chunk, node, escalation, escalation.auth, epoch=epoch, ending=ending)
+            return
         reason = escalation.missing
         target = (
             next((t for t in ready.resolution.targets if t.record == reason.repository), None)

@@ -64,6 +64,11 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "forge-capability-missing": Recorded(
         "hub/delivery/hub_node.py:HubNodeRouter.escalate_capability_missing", "warning"
     ),
+    "forge-auth-refused": Recorded(
+        "hub/delivery/hub_node.py:HubNodeRouter.escalate_forge_auth",
+        "warning",
+        also=("hub/domain/observability/forge_status.py:TenantAnnotation._refused",),
+    ),
     "forge-budget-low": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
     "forge-rate-limited": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),

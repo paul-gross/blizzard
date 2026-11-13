@@ -11,15 +11,18 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Any, ClassVar, NoReturn
+from typing import Any, ClassVar, NamedTuple, NoReturn
 
 import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, sanitize_forge_text
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
+from blizzard.hub.forge.internal.github_refusals import classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
@@ -31,6 +34,7 @@ from blizzard.hub.forge.landing import (
     Comparison,
     ComparisonStatus,
     FileChange,
+    ForgeAuthRefused,
     ForgeNotFound,
     ForgeObject,
     ForgeRateLimited,
@@ -97,6 +101,33 @@ _CONCLUSION_OUTCOME = {
 }
 
 
+@adapter_model
+class _Call(NamedTuple):
+    """The seam operation a request serves, and its method and route template — never the filled-in path."""
+
+    operation: str
+    endpoint: str
+
+
+_ROUTE = "/repos/{owner}/{repo}"
+_PROBE_ENDPOINT = f"GET {_ROUTE}"
+_BRANCH_TIP = _Call("branch_tip", f"GET {_ROUTE}/git/ref/heads/{{branch}}")
+_COMPARE = _Call("compare", f"GET {_ROUTE}/compare/{{basehead}}")
+_COMMIT_EXISTS = _Call("commit_exists", f"GET {_ROUTE}/commits/{{ref}}")
+_ADVANCE_REF = _Call("advance_ref", f"PATCH {_ROUTE}/git/refs/heads/{{branch}}")
+_MERGE_INTO = _Call("merge_into", f"POST {_ROUTE}/merges")
+_CREATE_REF = _Call("create_ref", f"POST {_ROUTE}/git/refs")
+_DELETE_REF = _Call("delete_ref", f"DELETE {_ROUTE}/git/refs/heads/{{branch}}")
+_CHANGES = _Call("changes", f"GET {_ROUTE}/pulls")
+_RECENTLY_CLOSED = _Call("recently_closed", f"GET {_ROUTE}/pulls")
+_OPEN_CHANGE = _Call("open_change", f"POST {_ROUTE}/pulls")
+_CHANGE = _Call("change", f"GET {_ROUTE}/pulls/{{pull_number}}")
+_UPDATE_FROM_BASE = _Call("update_from_base", f"PUT {_ROUTE}/pulls/{{pull_number}}/update-branch")
+_MERGE = _Call("merge", f"PUT {_ROUTE}/pulls/{{pull_number}}/merge")
+_CHECKS = _Call("checks", f"GET {_ROUTE}/commits/{{ref}}/check-runs")
+_RERUN_CHECK = _Call("rerun_check", f"POST {_ROUTE}/actions/jobs/{{job_id}}/rerun")
+
+
 def mergeability_of(mergeable_state: object) -> Mergeability:
     """The named mergeable states map to their Mergeability; any other state is ``PENDING``."""
     if not isinstance(mergeable_state, str):
@@ -126,6 +157,7 @@ class GitHubLanding:
     ) -> None:
         self._binding = binding
         self._repo = f"/repos/{binding.owner}/{binding.repo}"
+        self._full_name = f"{binding.owner}/{binding.repo}"
         self._clock = clock
         self._sleep = sleep
         self._transport = transport
@@ -161,9 +193,9 @@ class GitHubLanding:
         missing_ref = f"ref does not resolve in {self._binding.owner}/{self._binding.repo}: {branch}"
         if response.status_code == 422 and _message(response) == missing_ref:
             return None
-        if response.status_code == 404 and not await self._repository_missing():
+        if response.status_code == 404 and not await self._repository_missing(_BRANCH_TIP):
             return None
-        payload = await self._answered(response, ForgeObject.BRANCH)
+        payload = await self._answered(response, ForgeObject.BRANCH, _BRANCH_TIP)
         table = as_table(payload)
         ref = as_table(table.get("object") or {}) if table is not None else None
         sha = ref.get("sha") if ref is not None else None
@@ -180,7 +212,7 @@ class GitHubLanding:
 
     async def _compare(self, base: str, head: str) -> Comparison:
         payload = await self._answered(
-            await self._send("GET", f"{self._repo}/compare/{base}...{head}"), ForgeObject.REVISION
+            await self._send("GET", f"{self._repo}/compare/{base}...{head}"), ForgeObject.REVISION, _COMPARE
         )
         try:
             status = ComparisonStatus(payload["status"])
@@ -207,9 +239,9 @@ class GitHubLanding:
 
     async def commit_exists(self, revision: str) -> CommitPresence:
         response = await self._send("GET", f"{self._repo}/commits/{revision}")
-        if response.status_code == 404 and not await self._repository_missing():
+        if response.status_code == 404 and not await self._repository_missing(_COMMIT_EXISTS):
             return CommitPresence(False)
-        payload = await self._answered(response, ForgeObject.REVISION)
+        payload = await self._answered(response, ForgeObject.REVISION, _COMMIT_EXISTS)
         return CommitPresence(True, _authored_at(payload))
 
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
@@ -219,8 +251,8 @@ class GitHubLanding:
             "PATCH", f"{self._repo}/git/refs/heads/{branch}", {"sha": revision, "force": False}, write=True
         )
         if response.status_code == 422:
-            self._refuse_ref(response, stale=_STALE_PREFIXES)
-        await self._answered(response, ForgeObject.BRANCH)
+            self._refuse_ref(response, _ADVANCE_REF, stale=_STALE_PREFIXES)
+        await self._answered(response, ForgeObject.BRANCH, _ADVANCE_REF)
 
     async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
         body = {"base": branch, "head": revision, "commit_message": message, "user": _HUB_USER}
@@ -230,8 +262,8 @@ class GitHubLanding:
         if response.status_code == 409:
             raise ForgeRejected(ForgeRejected.CONFLICT, _message(response))
         if response.status_code == 422:
-            self._refuse_ref(response)
-        result = await self._answered(response, ForgeObject.BRANCH)
+            self._refuse_ref(response, _MERGE_INTO)
+        result = await self._answered(response, ForgeObject.BRANCH, _MERGE_INTO)
         merged = as_table(result)
         return self._text(merged.get("sha") if merged is not None else None, "merge commit")
 
@@ -244,26 +276,26 @@ class GitHubLanding:
                 if await self.branch_tip(branch) == revision:
                     return
                 raise ForgeRejected(ForgeRejected.STALE, _message(response))
-            self._refuse_ref(response)
-        await self._answered(response, ForgeObject.BRANCH)
+            self._refuse_ref(response, _CREATE_REF)
+        await self._answered(response, ForgeObject.BRANCH, _CREATE_REF)
 
     async def delete_ref(self, branch: str) -> None:
         response = await self._send("DELETE", f"{self._repo}/git/refs/heads/{branch}", write=True)
         if response.status_code in (404, 422) and not _has_prefix(_message(response), _PROTECTED_PREFIXES):
             return
         if response.status_code == 422:
-            self._refuse_ref(response)
-        await self._answered(response, ForgeObject.BRANCH)
+            self._refuse_ref(response, _DELETE_REF)
+        await self._answered(response, ForgeObject.BRANCH, _DELETE_REF)
 
-    @staticmethod
-    def _refuse_ref(response: httpx2.Response, stale: tuple[str, ...] = ()) -> NoReturn:
+    def _refuse_ref(self, response: httpx2.Response, call: _Call, stale: tuple[str, ...] = ()) -> NoReturn:
         """Raise the named reason a 422's message carries, or the forge's own words."""
         message = _message(response)
         if _has_prefix(message, stale):
             raise ForgeRejected(ForgeRejected.STALE, message)
+        diagnostic = self._diagnostic(response, call)
         if _has_prefix(message, _PROTECTED_PREFIXES):
-            raise ForgeRejected(ForgeRejected.PROTECTED, message)
-        raise ForgeRejected(message or "HTTP 422")
+            raise ForgeRejected(ForgeRejected.PROTECTED, message, diagnostic=diagnostic)
+        raise ForgeRejected(message or "HTTP 422", diagnostic=diagnostic)
 
     # IForgeChanges
 
@@ -273,7 +305,9 @@ class GitHubLanding:
             query += f"&head={self._binding.owner}:{head}"
         found: list[Change] = []
         for page in range(1, _PAGE_MAX + 1):
-            listed = await self._read("GET", f"{self._repo}/pulls?{query}&page={page}", ForgeObject.REPOSITORY)
+            listed = await self._read(
+                "GET", f"{self._repo}/pulls?{query}&page={page}", ForgeObject.REPOSITORY, _CHANGES
+            )
             pulls = as_list(listed)
             if pulls is None:
                 raise ForgeUnavailable(f"unreadable pull request list into {base}")
@@ -288,7 +322,7 @@ class GitHubLanding:
 
     async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
         query = f"state=closed&base={base}&sort=updated&direction=desc&per_page={limit}"
-        listed = await self._read("GET", f"{self._repo}/pulls?{query}", ForgeObject.REPOSITORY)
+        listed = await self._read("GET", f"{self._repo}/pulls?{query}", ForgeObject.REPOSITORY, _RECENTLY_CLOSED)
         pulls = as_list(listed)
         if pulls is None:
             raise ForgeUnavailable(f"unreadable pull request list into {base}")
@@ -296,10 +330,12 @@ class GitHubLanding:
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
         body_json = {"title": title, "head": head, "base": base, "body": body, "user": _HUB_USER}
-        return _change(await self._read("POST", f"{self._repo}/pulls", ForgeObject.BRANCH, body_json, write=True))
+        return _change(
+            await self._read("POST", f"{self._repo}/pulls", ForgeObject.BRANCH, _OPEN_CHANGE, body_json, write=True)
+        )
 
     async def change(self, number: int) -> Change:
-        return _change(await self._read("GET", f"{self._repo}/pulls/{number}", ForgeObject.CHANGE))
+        return _change(await self._read("GET", f"{self._repo}/pulls/{number}", ForgeObject.CHANGE, _CHANGE))
 
     async def update_from_base(self, number: int, expected_head: str) -> Update:
         response = await self._send(
@@ -309,7 +345,7 @@ class GitHubLanding:
         if status < 400:
             return Update(UpdateOutcome.ACCEPTED, UpdateMethod.MERGE)
         if status in (401, 403, 404):
-            await self._fail(response, ForgeObject.CHANGE)
+            await self._fail(response, ForgeObject.CHANGE, _UPDATE_FROM_BASE)
         if status == 422 and "conflict" in _message(response).lower():
             return Update(UpdateOutcome.CONFLICT, UpdateMethod.MERGE)
         return Update(UpdateOutcome.REFUSED, UpdateMethod.MERGE)
@@ -318,14 +354,17 @@ class GitHubLanding:
         body = {"commit_message": message, "sha": expected_head, "merge_method": str(method), "user": _HUB_USER}
         response = await self._send("PUT", f"{self._repo}/pulls/{number}/merge", body, write=True)
         if response.status_code == 405 and _has_prefix(_message(response), _METHOD_PREFIXES):
-            raise ForgeRejected(ForgeRejected.METHOD, _message(response))
-        result = await self._answered(response, ForgeObject.CHANGE)
+            raise ForgeRejected(ForgeRejected.METHOD, _message(response), diagnostic=self._diagnostic(response, _MERGE))
+        result = await self._answered(response, ForgeObject.CHANGE, _MERGE)
         merged = as_table(result)
         if merged is not None and merged.get("merged") and isinstance(sha := merged.get("sha"), str) and sha:
             return sha
         landed = await self.change(number)
         if landed.merged_revision is None:
-            raise ForgeRejected(_message(response) or f"pull request {number} did not merge")
+            raise ForgeRejected(
+                _message(response) or f"pull request {number} did not merge",
+                diagnostic=self._diagnostic(response, _MERGE),
+            )
         return landed.merged_revision
 
     # IForgeChecks
@@ -336,6 +375,7 @@ class GitHubLanding:
             payload = await self._answered(
                 await self._send("GET", f"{self._repo}/commits/{ref}/check-runs?per_page={_PAGE_SIZE}&page={page}"),
                 ForgeObject.REVISION,
+                _CHECKS,
             )
             table = as_table(payload)
             runs = as_list(table.get("check_runs")) if table is not None else None
@@ -364,41 +404,71 @@ class GitHubLanding:
             if "already running" in message.lower():
                 return Rerun(RerunOutcome.RUN_IN_PROGRESS, detail)
             return Rerun(RerunOutcome.REFUSED, detail)
-        await self._answered(response, ForgeObject.CHECK)
+        await self._answered(response, ForgeObject.CHECK, _RERUN_CHECK)
         return Rerun(RerunOutcome.ACCEPTED)
 
     # Answers
 
     async def _read(
-        self, method: str, path: str, missing: ForgeObject, body: dict[str, Any] | None = None, *, write: bool = False
+        self,
+        method: str,
+        path: str,
+        missing: ForgeObject,
+        call: _Call,
+        body: dict[str, Any] | None = None,
+        *,
+        write: bool = False,
     ) -> Any:
-        return await self._answered(await self._send(method, path, body, write=write), missing)
+        return await self._answered(await self._send(method, path, body, write=write), missing, call)
 
-    async def _answered(self, response: httpx2.Response, missing: ForgeObject) -> Any:
+    async def _answered(self, response: httpx2.Response, missing: ForgeObject, call: _Call) -> Any:
         """A 2xx answer's body, or the failure any other answer is — a 404 naming ``missing`` unless the probe finds
         the repository gone."""
         if response.status_code < 300:
             return _body(response)
-        await self._fail(response, missing)
+        await self._fail(response, missing, call)
 
-    async def _fail(self, response: httpx2.Response, missing: ForgeObject | None) -> NoReturn:
-        """Raise the failure a non-2xx answer is; ``missing`` of ``None`` reads a 404 as any other refusal."""
+    async def _fail(self, response: httpx2.Response, missing: ForgeObject | None, call: _Call) -> NoReturn:
+        """Raise the failure a non-2xx answer ``call`` got is; ``missing`` of ``None`` reads a 404 as any other
+        refusal. A 401 or 403 reaching here is no rate refusal — :meth:`_attempt` has already raised those."""
         status = response.status_code
         if status in (401, 403):
-            raise ForgeRejected(ForgeRejected.AUTH)
+            raise ForgeAuthRefused(
+                classify_auth_refusal(
+                    status,
+                    response.headers,
+                    _message(response),
+                    documentation_url=_documentation_url(response),
+                    operation=call.operation,
+                    endpoint=call.endpoint,
+                    repository=self._full_name,
+                )
+            )
         if status == 404 and missing is not None:
-            raise ForgeNotFound(ForgeObject.REPOSITORY if await self._repository_missing() else missing)
-        raise ForgeRejected(_message(response) or f"HTTP {status}")
+            raise ForgeNotFound(ForgeObject.REPOSITORY if await self._repository_missing(call) else missing)
+        raise ForgeRejected(_message(response) or f"HTTP {status}", diagnostic=self._diagnostic(response, call))
 
-    async def _repository_missing(self) -> bool:
+    def _diagnostic(self, response: httpx2.Response, call: _Call) -> ForgeDiagnostic:
+        return diagnostic_of(
+            response.status_code,
+            response.headers,
+            _message(response),
+            documentation_url=_documentation_url(response),
+            operation=call.operation,
+            endpoint=call.endpoint,
+            repository=self._full_name,
+        )
+
+    async def _repository_missing(self, call: _Call) -> bool:
         """Whether the repository itself answers 404 — read at most once a minute. GitHub hides a repository a
-        credential cannot see, so a 404 here means it does not exist or this credential cannot reach it."""
+        credential cannot see, so a 404 here means it does not exist or this credential cannot reach it. A refusal
+        of the probe is ``call``'s, since the probe was made for it."""
         now = self._clock.now()
         if self._probed is not None and now - self._probed[1] < PROBE_MEMO:
             return self._probed[0]
         response = await self._send("GET", self._repo)
         if response.status_code not in (200, 404):
-            await self._fail(response, None)
+            await self._fail(response, None, _Call(call.operation, _PROBE_ENDPOINT))
         missing = response.status_code == 404
         self._probed = (missing, now)
         return missing
@@ -456,7 +526,10 @@ class GitHubLanding:
         except httpx2.HTTPError as exc:
             raise ForgeUnavailable(f"{method} {self._binding.api_url}{path}: {exc}") from exc
         if response.status_code >= 500:
-            raise ForgeUnavailable(f"{method} {self._binding.api_url}{path}: HTTP {response.status_code}")
+            said = _message(response)
+            raise ForgeUnavailable(
+                f"{method} {self._binding.api_url}{path}: HTTP {response.status_code}" + (f": {said}" if said else "")
+            )
         if response.status_code in (403, 429):
             now = self._clock.now()
             resume_at = self._binding.dialect.refusal(response.status_code, response.headers, _message(response), now)
@@ -514,10 +587,19 @@ def _body(response: httpx2.Response) -> Any:
 
 
 def _message(response: httpx2.Response) -> str:
-    body = _body(response)
-    table = as_table(body)
-    message = table.get("message") if table is not None else None
-    return message if isinstance(message, str) else ""
+    """The answer's ``message``, sanitized; empty when it has none."""
+    message = _field(response, "message")
+    return sanitize_forge_text(message) if message is not None else ""
+
+
+def _documentation_url(response: httpx2.Response) -> str | None:
+    return _field(response, "documentation_url") or None
+
+
+def _field(response: httpx2.Response, name: str) -> str | None:
+    table = as_table(_body(response))
+    value = table.get(name) if table is not None else None
+    return value if isinstance(value, str) else None
 
 
 def _authored_at(payload: Any) -> datetime | None:

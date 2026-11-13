@@ -58,6 +58,12 @@ action requires. The hub refuses the visit before the unsupported operation, wri
 artifact, and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the
 forge. The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
 
+`forge-auth-refused` (warning): GitHub refused the credential a call carried with a 401 or 403 that is not a rate
+refusal. A `deliver` step records it once when it escalates the chunk `forge-auth`, and the forge-status pass records it
+once per work source per pass. The event names the repository and forge, the refusal, and GitHub's sanitized answer: the
+operation and route, status, message, documentation URL, and request id. It never carries the token. The remedy is in
+the escalation's detail and the work item's `error`, not the event.
+
 `forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
 before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of
 that forge and secret waits until the refusal lifts. Each is recorded at most once per budget per reset window, naming
