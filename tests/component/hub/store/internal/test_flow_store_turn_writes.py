@@ -189,8 +189,7 @@ def _terminal(handle: ILockedChunkRead, chunk_id: str) -> bool:
 
 
 def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch: int = 0) -> bool:
-    return world.chunks.hub_exec.record_hub_step_transition_locked(
-        handle,
+    return world.chunks.hub_exec.record_hub_step_transition(
         chunk_id,
         from_node_id=_NODE,
         to_node_id="nd_done",
@@ -204,6 +203,7 @@ def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch
         at=world.hub.clock.now(),
         artifacts=[],
         release_route=False,
+        transaction=handle.transaction,
     ).wrote
 
 
@@ -214,8 +214,13 @@ def test_a_verdict_commits_its_transition_with_the_turns_end_and_closure(world: 
 
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
         assert _transition(world, handle, submission.chunk_id)
-        assert world.flows.end_turn_locked(
-            handle, turn_id, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
+        assert world.flows.end_turn(
+            turn_id,
+            outcome="landed",
+            closure="landed",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         ) == (
             FlowFactWritten(
                 _flow_id(submission), FlowChangeKind.TURN_ENDED, submission.submission_id, submission.chunk_id, "landed"
@@ -238,8 +243,13 @@ def test_an_ending_that_fails_writes_neither_its_transition_nor_the_turns_end(wo
 
     with pytest.raises(_Abort), world.chunks.exclusive.locked([submission.chunk_id]) as handle:
         _transition(world, handle, submission.chunk_id)
-        world.flows.end_turn_locked(
-            handle, turn_id, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn_id,
+            outcome="landed",
+            closure="landed",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
         raise _Abort
 
@@ -277,8 +287,13 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
                 detail="crossed",
                 transaction=handle.transaction,
             )
-            world.flows.end_turn_locked(
-                handle, turn_id, outcome="escalated", closure=None, event=None, at=world.hub.clock.now()
+            world.flows.end_turn(
+                turn_id,
+                outcome="escalated",
+                closure=None,
+                event=None,
+                at=world.hub.clock.now(),
+                transaction=handle.transaction,
             )
             if fail:
                 raise _Abort
@@ -299,11 +314,21 @@ def test_a_wait_commits_its_poll_row_with_the_turns_end(world: _World) -> None:
     assert turn_id is not None
 
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-        world.chunks.hub_exec.record_hub_node_poll_locked(
-            handle, submission.chunk_id, node_id=_NODE, epoch=0, kind="pending", at=world.hub.clock.now()
+        world.chunks.hub_exec.record_hub_node_poll(
+            submission.chunk_id,
+            node_id=_NODE,
+            epoch=0,
+            kind="pending",
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
-        world.flows.end_turn_locked(
-            handle, turn_id, outcome="pending", closure=None, event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn_id,
+            outcome="pending",
+            closure=None,
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     assert world.count(s.hub_node_poll) == 1
@@ -316,8 +341,8 @@ def test_consecutive_parked_polls_keep_first_instant_and_advance_latest(world: _
     first = world.hub.clock.now()
     with world.chunks.exclusive.locked([chunk]) as handle:
         for at in (first, first + timedelta(minutes=2), first + timedelta(minutes=4)):
-            world.chunks.hub_exec.record_hub_node_poll_locked(
-                handle, chunk, node_id=_NODE, epoch=0, kind="awaiting-merge", at=at
+            world.chunks.hub_exec.record_hub_node_poll(
+                chunk, node_id=_NODE, epoch=0, kind="awaiting-merge", at=at, transaction=handle.transaction
             )
 
     with world.chunks.exclusive.locked([chunk]) as handle:
@@ -338,13 +363,13 @@ def test_a_fenced_exit_still_ends_the_turn_with_the_closure_withdrawal_for_answe
         assert not _transition(world, handle, submission.chunk_id)
         facts = handle.facts(submission.chunk_id)
         assert facts is not None
-        assert world.flows.end_turn_locked(
-            handle,
+        assert world.flows.end_turn(
             turn_id,
             outcome="landed",
             closure=withdrawal_for(facts, submission),
             event=None,
             at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     assert world.count(s.transitions) == 0
@@ -364,8 +389,13 @@ def test_ending_a_turn_twice_writes_nothing_the_second_time(world: _World) -> No
     for _ in range(2):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
             ends.append(
-                world.flows.end_turn_locked(
-                    handle, turn_id, outcome="cut-off", closure=None, event=overran, at=world.hub.clock.now()
+                world.flows.end_turn(
+                    turn_id,
+                    outcome="cut-off",
+                    closure=None,
+                    event=overran,
+                    at=world.hub.clock.now(),
+                    transaction=handle.transaction,
                 )
             )
 
@@ -380,8 +410,13 @@ def test_a_superseded_turn_closes_its_submission_in_the_same_write(world: _World
     assert turn_id is not None
 
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-        world.flows.end_turn_locked(
-            handle, turn_id, outcome="superseded", closure="superseded", event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn_id,
+            outcome="superseded",
+            closure="superseded",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     assert world.closed(submission) == "superseded"
@@ -573,8 +608,13 @@ def test_a_fenced_turn_whose_answer_closed_nothing_has_no_verdict_on_any_read(
     turn_id = world.take(submission)
     assert turn_id is not None
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-        world.flows.end_turn_locked(
-            handle, turn_id, outcome=outcome, closure=closure, event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn_id,
+            outcome=outcome,
+            closure=closure,
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     flow_id = _flow_id(submission)
@@ -593,8 +633,13 @@ def test_a_turn_whose_answer_closed_its_submission_reads_its_verdict_on_every_re
     turn_id = world.take(submission)
     assert turn_id is not None
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-        world.flows.end_turn_locked(
-            handle, turn_id, outcome="failure", closure="failure", event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn_id,
+            outcome="failure",
+            closure="failure",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     flow_id = _flow_id(submission)
@@ -635,8 +680,13 @@ def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_
             transaction=handle.transaction,
         )
     with world.chunks.exclusive.locked([chunk_id]) as handle:
-        world.flows.end_turn_locked(
-            handle, turn, outcome="superseded", closure="superseded", event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn,
+            outcome="superseded",
+            closure="superseded",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     second = world.submit(chunk_id, _OTHER, generation=1)
@@ -657,8 +707,13 @@ def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_
             transaction=handle.transaction,
         )
     with world.chunks.exclusive.locked([chunk_id]) as handle:
-        world.flows.end_turn_locked(
-            handle, turn, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
+        world.flows.end_turn(
+            turn,
+            outcome="landed",
+            closure="landed",
+            event=None,
+            at=world.hub.clock.now(),
+            transaction=handle.transaction,
         )
 
     record = world.flows.chunk_records([chunk_id])[chunk_id]

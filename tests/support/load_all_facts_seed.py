@@ -283,8 +283,8 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             at=T0,
             transaction=handle.transaction,
         )
-        store.hub_exec.record_hub_node_poll_locked(
-            handle, "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=T0
+        store.hub_exec.record_hub_node_poll(
+            "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=T0, transaction=handle.transaction
         )
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
         store.decisions.record_decision(

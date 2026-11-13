@@ -218,8 +218,7 @@ class _HubStepToDone:
             return
         self._hub.clock.advance(timedelta(seconds=5))
         with self._stores.exclusive.locked([self._chunk_id]) as handle:
-            assert self._stores.hub_exec.record_hub_step_transition_locked(
-                handle,
+            assert self._stores.hub_exec.record_hub_step_transition(
                 self._chunk_id,
                 from_node_id=self._from,
                 to_node_id=RESERVED_TERMINAL,
@@ -233,6 +232,7 @@ class _HubStepToDone:
                 artifacts=[],
                 release_route=True,
                 close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _source: False),
+                transaction=handle.transaction,
             ).wrote
         self.committed = True
 

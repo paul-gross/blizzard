@@ -303,13 +303,13 @@ def test_a_lever_whose_write_rolled_back_publishes_nothing(tmp_path: Path, monke
 def test_a_turn_end_that_rolled_back_publishes_no_frame_for_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     hub = _hub(tmp_path)
     chunk_id = _chunk(hub, _WIDGET)
-    end = FlowStore.end_turn_locked
+    end = FlowStore.end_turn
 
     def end_then_fail(self: FlowStore, *args: Any, **kwargs: Any) -> Any:
         end(self, *args, **kwargs)
         raise RuntimeError("the routing fails after the turn's end")
 
-    monkeypatch.setattr(FlowStore, "end_turn_locked", end_then_fail)
+    monkeypatch.setattr(FlowStore, "end_turn", end_then_fail)
     hub.take_turns()
 
     facts = _facts(hub, chunk_id)

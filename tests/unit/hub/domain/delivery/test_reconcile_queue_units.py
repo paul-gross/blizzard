@@ -123,7 +123,6 @@ def _reconciler(world: _World) -> FlowLineReconciler:
         targets=seam,
         catalogue=seam,
         refusals=seam,
-        exclusive=seam,
         transactions=seam,
         lines=seam,
         clock=FixedClock(_AT),

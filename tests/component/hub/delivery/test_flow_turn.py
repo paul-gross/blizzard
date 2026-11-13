@@ -341,18 +341,18 @@ def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
         time.sleep(1.0)  # past the 0.6s deadline
         return write(self, *args)
 
-    end = FlowStore.end_turn_locked
+    end = FlowStore.end_turn
 
-    def observed(self: FlowStore, handle: Any, turn_id: str, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
+    def observed(self: FlowStore, turn_id: str, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
         seen.append(
             world.hub.services.chunks.artifacts.has_hub_artifact(
                 chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1, name="in-flight"
             )
         )
-        return end(self, handle, turn_id, **kwargs)
+        return end(self, turn_id, **kwargs)
 
     monkeypatch.setattr(TurnRunner, "write_effect", slow)
-    monkeypatch.setattr(FlowStore, "end_turn_locked", observed)
+    monkeypatch.setattr(FlowStore, "end_turn", observed)
 
     world.tick()
 
@@ -445,7 +445,7 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
     world: _World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     chunk_id = world.at_step("test.answer", " \n    with: {choice: [success]}")
-    end = FlowStore.end_turn_locked
+    end = FlowStore.end_turn
     failures = [RuntimeError("connection dropped")]
 
     def failing(self: FlowStore, *args: Any, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
@@ -453,7 +453,7 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
             raise failures.pop()
         return end(self, *args, **kwargs)
 
-    monkeypatch.setattr(FlowStore, "end_turn_locked", failing)
+    monkeypatch.setattr(FlowStore, "end_turn", failing)
 
     world.tick()
     assert world.detail(chunk_id)["current_node_name"] == "step"  # the transition rolled back with the end
@@ -507,7 +507,7 @@ def test_a_chunk_stopped_mid_turn_whose_end_fails_closes_stopped_by_the_sweep(
 
     world.hooked.hook = stop
     world.hooked.answer = Pass(choice="landed")
-    end = FlowStore.end_turn_locked
+    end = FlowStore.end_turn
     failures = [RuntimeError("lock timeout")]
 
     def failing(self: FlowStore, *args: Any, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
@@ -515,7 +515,7 @@ def test_a_chunk_stopped_mid_turn_whose_end_fails_closes_stopped_by_the_sweep(
             raise failures.pop()
         return end(self, *args, **kwargs)
 
-    monkeypatch.setattr(FlowStore, "end_turn_locked", failing)
+    monkeypatch.setattr(FlowStore, "end_turn", failing)
 
     world.tick()
     world.tick()

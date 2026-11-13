@@ -440,7 +440,7 @@ _MERGE_FAILURE = "          description: Failed to land.\n          to: build\n"
 #: Each failure edge a refusal routes, and the routing write it takes: a node edge transitions, a cross-graph edge
 #: migrates, and an edge to a node the graph lacks escalates.
 _FAILURE_ROUTES: dict[str, tuple[type, str]] = {
-    "node": (ChunkHubExecStore, "record_hub_step_transition_locked"),
+    "node": (ChunkHubExecStore, "record_hub_step_transition"),
     "cross-graph": (ChunkMovementStore, "record_migration_locked"),
     "unroutable": (ChunkEscalationsStore, "record_bounce_escalation"),
 }
@@ -628,7 +628,7 @@ def test_a_turns_refusal_whose_end_fails_commits_and_publishes_none_of_it(
     at_merge = _refusal(world, chunk_id, since=0).standing
     since = world.hub.events.latest_id()
     _refuse_at_the_turn(monkeypatch)
-    end_turn = FlowStore.end_turn_locked
+    end_turn = FlowStore.end_turn
     raised: list[str] = []
 
     def end_then_raise(self: FlowStore, *args: Any, **kwargs: Any) -> Any:
@@ -636,7 +636,7 @@ def test_a_turns_refusal_whose_end_fails_commits_and_publishes_none_of_it(
         raised.append(kwargs["outcome"])
         raise TurnEndRefused("the turn's end failed after it ran")
 
-    monkeypatch.setattr(FlowStore, "end_turn_locked", end_then_raise)
+    monkeypatch.setattr(FlowStore, "end_turn", end_then_raise)
     world.tick()
 
     assert raised == [_TURN_OUTCOME[route]]

@@ -24,7 +24,6 @@ from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.no_code import finished_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
@@ -129,13 +128,11 @@ class FlowLineReconciler:
         targets: ChunkTargets,
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
-        exclusive: IChunkExclusiveWrites,
         transactions: IHubTransactions,
         lines: FlowLineFactory,
         clock: IClock,
     ) -> None:
         self._flows = flows
-        self._exclusive = exclusive
         self._transactions = transactions
         self._refusals = refusals
         self._facts = facts
@@ -223,13 +220,21 @@ class FlowLineReconciler:
                 event = self._interrupted(turn, None, node_name=None, withdrawal=None)
                 written = self._flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=event, at=now)
             else:
-                with self._exclusive.locked([sub.chunk_id]) as handle:
-                    withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
+                with self._transactions.begin() as unit:
+                    locked = unit.lock_chunks([sub.chunk_id])
+                    withdrawal = withdrawal_for(
+                        ChunkFacts.or_default(self._facts.load_facts(sub.chunk_id, transaction=locked)), sub
+                    )
                     event = self._interrupted(
                         turn, sub, node_name=node_names.get((sub.chunk_id, sub.node_id)), withdrawal=withdrawal
                     )
-                    written = self._flows.end_turn_locked(
-                        handle, turn.turn_id, outcome=TURN_INTERRUPTED, closure=withdrawal, event=event, at=now
+                    written = self._flows.end_turn(
+                        turn.turn_id,
+                        outcome=TURN_INTERRUPTED,
+                        closure=withdrawal,
+                        event=event,
+                        at=now,
+                        transaction=locked,
                     )
             if written is not None:
                 ends.append(written)

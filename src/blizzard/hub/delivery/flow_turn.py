@@ -51,7 +51,6 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqu
 from blizzard.hub.domain.chunk.no_code import finished_repos
 from blizzard.hub.domain.chunk.ports.artifacts import HubArtifactWrite, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -92,7 +91,7 @@ from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import HUB_DEFAULT_FAILURE_CHOICE, Graph, IReadManyGraphs, Node
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -132,8 +131,11 @@ class TurnEndRefused(Exception):
 class _TurnEnding:
     """The end of one turn, on whichever locked transaction routes its answer."""
 
-    def __init__(self, flows: IWriteFlows, turn: Turn, submission: Submission, clock: IClock) -> None:
+    def __init__(
+        self, flows: IWriteFlows, facts: IReadChunkFactsRepository, turn: Turn, submission: Submission, clock: IClock
+    ) -> None:
         self._flows = flows
+        self._facts = facts
         self._turn = turn
         self._submission = submission
         self._clock = clock
@@ -146,18 +148,28 @@ class _TurnEnding:
         """Let the turn go: whatever would still end it writes nothing."""
         self._abandoned = True
 
-    def end(self, handle: ILockedChunkRead, *, outcome: str, closure: str | None) -> None:
-        self.end_with(handle, outcome=outcome, closure=closure, event=None)
+    def end(self, transaction: LockedTransaction, *, outcome: str, closure: str | None) -> None:
+        self.end_with(transaction, outcome=outcome, closure=closure, event=None)
 
-    def end_with(self, handle: ILockedChunkRead, *, outcome: str, closure: str | None, event: TurnEvent | None) -> None:
-        """End the turn on ``handle`` with ``event``; a ``None`` closure is what ``withdrawal_for`` answers under the
-        lock (``bzh:store-exclusive-write``)."""
+    def end_with(
+        self, transaction: LockedTransaction, *, outcome: str, closure: str | None, event: TurnEvent | None
+    ) -> None:
+        """End the turn in ``transaction`` with ``event``; a ``None`` closure is what ``withdrawal_for`` answers under
+        the lock (``bzh:transaction-participation``)."""
         if self._abandoned:
             raise TurnEndRefused(f"turn {self._turn.turn_id} was let go")
         if closure is None:
-            closure = withdrawal_for(ChunkFacts.or_default(handle.facts(self._submission.chunk_id)), self._submission)
-        written = self._flows.end_turn_locked(
-            handle, self._turn.turn_id, outcome=outcome, closure=closure, event=event, at=self._clock.now()
+            closure = withdrawal_for(
+                ChunkFacts.or_default(self._facts.load_facts(self._submission.chunk_id, transaction=transaction)),
+                self._submission,
+            )
+        written = self._flows.end_turn(
+            self._turn.turn_id,
+            outcome=outcome,
+            closure=closure,
+            event=event,
+            at=self._clock.now(),
+            transaction=transaction,
         )
         if written is None:
             raise TurnEndRefused(f"turn {self._turn.turn_id} has already ended")
@@ -202,7 +214,6 @@ class TurnRunner:
         record: IReadChunkRecordRepository,
         graphs: IReadManyGraphs,
         artifacts: IWriteChunkArtifactsRepository,
-        exclusive: IChunkExclusiveWrites,
         transactions: IHubTransactions,
         router: HubNodeRouter,
         events: EventLogService,
@@ -230,7 +241,6 @@ class TurnRunner:
         self._record = record
         self._graphs = graphs
         self._artifacts = artifacts
-        self._exclusive = exclusive
         self._transactions = transactions
         self._router = router
         self._events = events
@@ -260,7 +270,7 @@ class TurnRunner:
     async def take(self, turn: Turn, submission: Submission) -> None:
         """Answer for ``turn`` until it ends — or, cancelled at shutdown, let it go without writing its end. The
         ``turn-ended`` and ``withdrawn`` facts its end wrote are announced once that end's transaction committed."""
-        ending = _TurnEnding(self._flows, turn, submission, self._clock)
+        ending = _TurnEnding(self._flows, self._facts, turn, submission, self._clock)
         cut_off = TurnCutOff()
         try:
             await self._take(turn, submission, ending, cut_off)
@@ -674,17 +684,18 @@ class TurnRunner:
         self._end_unrouted(turn, submission, event)
 
     def _end_unrouted(self, turn: Turn, submission: Submission, event: TurnEvent) -> None:
-        ending = _TurnEnding(self._flows, turn, submission, self._clock)
+        ending = _TurnEnding(self._flows, self._facts, turn, submission, self._clock)
         try:
-            with self._exclusive.locked([submission.chunk_id]) as handle:
-                ending.end_with(handle, outcome=TURN_CUT_OFF, closure=None, event=event)
+            with self._transactions.begin() as unit:
+                transaction = unit.lock_chunks([submission.chunk_id])
+                ending.end_with(transaction, outcome=TURN_CUT_OFF, closure=None, event=event)
         except TurnEndRefused:
             return
         publish_flow_facts(self._publisher, ending.written)
 
     def _end(self, submission: Submission, ending: _TurnEnding, *, outcome: str, closure: str | None = None) -> None:
-        with self._exclusive.locked([submission.chunk_id]) as handle:
-            ending.end(handle, outcome=outcome, closure=closure)
+        with self._transactions.begin() as unit:
+            ending.end(unit.lock_chunks([submission.chunk_id]), outcome=outcome, closure=closure)
 
     def _answer(self, chunk: Chunk, node: Node, spec: ActionSpec, run: PassRun, *, epoch: int) -> Pass:
         """What a pass that ended as ``run`` answers: its own answer; an overrun waits where the action can and fails
