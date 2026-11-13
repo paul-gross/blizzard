@@ -14,7 +14,6 @@ import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.harness.binary_identity import BinaryIdentity
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -134,35 +133,23 @@ def test_repeat_refresh_within_window_reuses_the_cached_result() -> None:
     assert probe.calls == 1  # no second probe — nothing changed and the window has not elapsed
 
 
-def test_same_service_version_rechecks_health_when_binary_identity_moves_or_disappears() -> None:
-    class Identities:
-        identity: BinaryIdentity | None = BinaryIdentity(Path("/tool"), 1, 1)
-
-        def identify(self, binary: str) -> BinaryIdentity | None:
-            return self.identity
-
-    identities = Identities()
+def test_missing_binary_is_detected_and_recovers_on_health_refresh() -> None:
+    clock = FixedClock(_NOW)
     probe = _FakeProbe()
-    cache = HarnessHealthCache(
-        corpus=CommittedCorpus(),
-        clock=FixedClock(_NOW),
-        probes={_HARNESS_ID: probe},
-        selftest_results=_FakeSelftestResults(),
-        binary_identities=identities,
-        binaries={_HARNESS_ID: "tool"},
-    )
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
     adapter = _FakeAdapter()
-    result = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
-    assert result is not None and result.available
-    cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
-    assert probe.calls == 1
-    identities.identity = BinaryIdentity(Path("/tool"), 2, 1)
-    cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
-    assert probe.calls == 2
-    identities.identity = None
+    initial = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert initial is not None and initial.available
     probe.binary = False
-    result = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
-    assert result is not None and not result.available
+    clock.advance(timedelta(seconds=599))
+    assert cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0") is initial
+    clock.advance(timedelta(seconds=1))
+    missing = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert missing is not None and missing.cause is HarnessHealthCause.MISSING_BINARY
+    probe.binary = True
+    clock.advance(timedelta(seconds=600))
+    recovered = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert recovered is not None and recovered.available
     assert probe.calls == 3
 
 
