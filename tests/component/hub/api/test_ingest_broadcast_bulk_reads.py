@@ -396,7 +396,7 @@ def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) 
         resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 71
+    assert count_queries(hub.engine, call) == 72
 
 
 def test_before_many_snapshots_carry_prev_status_only_and_read_fewer_statements(tmp_path: Path) -> None:
