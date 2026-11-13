@@ -2,14 +2,17 @@
 
 The check runs in the effect writer's thread while every adapter lives on the action loop, so the read is submitted
 there and waited on for at most :data:`COMMIT_CHECK_SECONDS`, the future cancelled when the wait runs out. Every case
-where the forge cannot be asked or cannot say answers ``None``, degrading the commit to a well-formedness check."""
+where the forge cannot be asked or cannot say answers ``None``, degrading the commit to a well-formedness check; a
+credential the forge refused is also logged at ``WARNING`` with the forge's sanitized answer."""
 
 from __future__ import annotations
 
 import concurrent.futures
 import functools
+from dataclasses import asdict
 from typing import Protocol
 
+from blizzard.foundation.logging import get_logger
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
@@ -23,10 +26,12 @@ from blizzard.hub.domain.garden.delivery.validation import CommitResolution, ICo
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgePriority
-from blizzard.hub.forge.landing import IForgeRefs
+from blizzard.hub.forge.landing import ForgeAuthRefused, IForgeRefs
 
 #: The longest the writer waits on the forge for one cited commit.
 COMMIT_CHECK_SECONDS = 10.0
+
+_log = get_logger("blizzard.hub.forge.commit_check")
 
 
 class IForgeRefsSource(Protocol):
@@ -79,6 +84,14 @@ class SeamCommitResolver:
                 presence = future.result(timeout=self._timeout)
             except concurrent.futures.TimeoutError:
                 future.cancel()
+                return None
+            except ForgeAuthRefused as exc:
+                _log.warning(
+                    "forge refused the commit check's credential",
+                    repository_id=str(row.repository_id),
+                    refusal=str(exc.refusal),
+                    diagnostic=asdict(exc.diagnostic),
+                )
                 return None
             return CommitResolution(exists=presence.exists, authored_at=presence.authored_at)
         except Exception:

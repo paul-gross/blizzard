@@ -17,16 +17,19 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     EffectStatus,
+    ForgeAuthReason,
     IEffectSink,
     LandingRecord,
     Marker,
     Pass,
 )
 from blizzard.hub.domain.actions.visit import Visit
-from blizzard.hub.domain.config.repositories import ResolvedRepository
+from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
+from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, refusal_remedy, refusal_sentence
 from blizzard.hub.forge.landing import (
     Comparison,
     ComparisonStatus,
+    ForgeAuthRefused,
     ForgeNotFound,
     ForgeObject,
     ForgeRateLimited,
@@ -150,6 +153,8 @@ class RepoLanding:
         where = f"{self.repo} on forge {self.forge_label}"
         try:
             return await call
+        except ForgeAuthRefused as exc:
+            raise ForgeEscalation(self._auth_refused(exc)) from exc
         except ForgeRejected as exc:
             if exc.reason != ForgeRejected.AUTH:
                 raise
@@ -163,6 +168,26 @@ class RepoLanding:
                 f"this credential ({exc})"
             )
             raise ForgeEscalation(ActionEscalation(EscalationCause.FORGE_CONFIG, detail)) from exc
+
+    def _auth_refused(self, exc: ForgeAuthRefused) -> ActionEscalation:
+        """The ``forge-auth`` escalation of a credential the forge refused: what was refused and why, the forge's own
+        sanitized words, the secret the call carried, and what to do about it."""
+        diagnostic = exc.diagnostic
+        detail = "\n".join(
+            (
+                f"{self.repo} on forge {self.forge_label}: {_operation_sentence(diagnostic)} was refused: "
+                f"{refusal_sentence(exc.refusal)}.",
+                f"GitHub said: {_forge_said(diagnostic)}.",
+                f"Secret {self.record.secret_name}. {refusal_remedy(exc.refusal, diagnostic)}",
+            )
+        )
+        reason = ForgeAuthReason(
+            refusal=exc.refusal,
+            diagnostic=diagnostic,
+            repository=RepositoryId(self.record.record),
+            forge=self.record.forge_id,
+        )
+        return ActionEscalation(EscalationCause.FORGE_AUTH, detail, auth=reason)
 
     async def compare(self, base: str, head: str) -> Comparison | None:
         """The forge's ``base...head`` comparison; ``None`` when the forge refused it or does not know a
@@ -188,6 +213,19 @@ class RepoLanding:
         if tip is None:
             raise LandedRevisionUnknown(f"{where} does not exist, so it has no live tip")
         return tip
+
+
+def _operation_sentence(diagnostic: ForgeDiagnostic) -> str:
+    return f"the `{diagnostic.operation}` call ({diagnostic.endpoint})"
+
+
+def _forge_said(diagnostic: ForgeDiagnostic) -> str:
+    """The forge's quoted message and the answer's status and request id; a request id it did not send is left
+    out."""
+    answer = f"HTTP {diagnostic.status}"
+    if diagnostic.request_id is not None:
+        answer += f", request {diagnostic.request_id}"
+    return f'"{diagnostic.message}" ({answer})'
 
 
 # --- where one repository stands ------------------------------------------------------------------------------------

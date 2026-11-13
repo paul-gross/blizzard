@@ -22,17 +22,19 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.declarations import GitCommits
-from blizzard.hub.domain.actions.effects import LandingRecord, MissingCapability
+from blizzard.hub.domain.actions.effects import ActionEscalation, ForgeAuthReason, LandingRecord, MissingCapability
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     ResolvedRepository,
 )
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
     Change,
@@ -42,6 +44,7 @@ from blizzard.hub.forge.landing import (
     CommitSummary,
     ComparisonStatus,
     FileChange,
+    ForgeAuthRefused,
     ForgeNotFound,
     ForgeObject,
     ForgeRateLimited,
@@ -679,6 +682,70 @@ def test_a_rejected_credential_on_any_call_but_a_re_run_escalates_forge_auth(cal
     assert sink.landings() == []
 
 
+_CHECKS_DIAGNOSTIC = ForgeDiagnostic(
+    status=401,
+    operation="checks",
+    endpoint="GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
+    repository=_WIDGET,
+    message="Bad credentials",
+    documentation_url="https://docs.github.com/rest",
+    request_id="ABCD:1234",
+    accepted_permissions=None,
+)
+
+
+def _refused_checks() -> ForgeAuthRefused:
+    return ForgeAuthRefused(ClassifiedRefusal(AuthRefusal.CREDENTIAL_INVALID, _CHECKS_DIAGNOSTIC))
+
+
+def test_a_refused_check_read_escalates_forge_auth_with_the_forges_answer_and_never_merges() -> None:
+    double = _forge(replies={"checks": [_refused_checks()]})
+    answer, sink = _land(double)
+    assert answer.choice is None and answer.escalation is not None
+    escalation = answer.escalation
+    assert escalation.cause is EscalationCause.FORGE_AUTH
+    assert escalation.auth is not None
+    assert escalation.auth.refusal is AuthRefusal.CREDENTIAL_INVALID
+    assert escalation.auth.diagnostic == _CHECKS_DIAGNOSTIC
+    lines = escalation.detail.splitlines()
+    assert lines[0].startswith(f"{_WIDGET} on forge ")
+    assert "the `checks` call (GET /repos/{owner}/{repo}/commits/{ref}/check-runs) was refused" in lines[0]
+    assert lines[0].endswith("the token is wrong, expired, or revoked.")
+    assert lines[1] == 'GitHub said: "Bad credentials" (HTTP 401, request ABCD:1234).'
+    assert lines[2].startswith("Secret ") and lines[2].endswith("Replace the token, or check the App's installation.")
+    assert "Then run:" not in escalation.detail
+    assert double.named("merge") == [] and sink.landings() == []
+
+
+def test_a_forge_auth_detail_leaves_out_a_request_id_the_forge_did_not_send() -> None:
+    diagnostic = replace(_CHECKS_DIAGNOSTIC, request_id=None)
+    refused = ForgeAuthRefused(ClassifiedRefusal(AuthRefusal.CREDENTIAL_INVALID, diagnostic))
+    answer, _ = _land(_forge(replies={"checks": [refused]}))
+    assert answer.escalation is not None
+    assert 'GitHub said: "Bad credentials" (HTTP 401).' in answer.escalation.detail
+    assert "None" not in answer.escalation.detail
+
+
+@pytest.mark.parametrize("checks", [(), None], ids=["empty", "unreadable"])
+def test_an_empty_or_unreadable_check_list_waits_and_never_merges(checks: tuple[Check, ...] | None) -> None:
+    double = _forge(checks={_SUBMITTED: checks})
+    answer, sink = _land(double)
+    assert answer.choice == "pending" and answer.escalation is None
+    assert double.named("merge") == [] and sink.landings() == []
+
+
+def test_a_forge_auth_reason_goes_with_the_forge_auth_cause_and_only_it() -> None:
+    reason = ForgeAuthReason(
+        refusal=AuthRefusal.CREDENTIAL_INVALID,
+        diagnostic=_CHECKS_DIAGNOSTIC,
+        repository=RepositoryId("re_widget"),
+        forge=ForgeId("frg_github"),
+    )
+    assert ActionEscalation(EscalationCause.FORGE_AUTH, "refused", auth=reason).auth is reason
+    with pytest.raises(ValueError):
+        ActionEscalation(EscalationCause.FORGE_CONFIG, "refused", auth=reason)
+
+
 def test_a_repository_the_forge_does_not_know_at_branch_tip_escalates_forge_config() -> None:
     double = _forge(replies={"branch_tip": [ForgeNotFound(ForgeObject.REPOSITORY)]})
     double.repos[_WIDGET].changes[4] = change(
@@ -1089,6 +1156,49 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     assert _event_kinds(hub).count("forge-capability-missing") == 1
     names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
     assert names.count("hub-log.forge-capability-missing") == 1
+
+
+def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplicate(tmp_path: Path) -> None:
+    double = _forge(_WIDGET, replies={"checks": [_refused_checks()]})
+    hub = _hub(tmp_path, double)
+    chunk_id = _chunk(hub, _WIDGET)
+
+    assert _take(hub, chunk_id) == "escalated"
+    with hub.engine.begin() as conn:
+        rows = conn.execute(
+            hub_scoped(
+                select(s.event_log.c.detail, s.event_log.c.message).where(
+                    s.event_log.c.chunk_id == chunk_id, s.event_log.c.kind == "forge-auth-refused"
+                )
+            )
+        ).all()
+    assert len(rows) == 1
+    detail = json.loads(rows[0].detail)
+    record = next(
+        r for r in hub.services.repository_records.list_all(include_retired=True) if r.fields.repo == "widget"
+    )
+    assert detail["chunk_id"] == chunk_id
+    assert detail["repository_id"] == str(record.repository_id)
+    assert detail["forge_id"] == str(record.fields.forge_id)
+    assert detail["work_source_id"] is None
+    assert detail["refusal"] == "credential-invalid"
+    assert detail["diagnostic"]["request_id"] == "ABCD:1234"
+    assert "Bad credentials" in rows[0].message
+
+    # An escalation of the same visit, raced past the first, takes nothing and records nothing beside it.
+    chunk = hub.services.chunks.record.get(chunk_id)
+    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    node = graph.node_by_name("deliver") if graph is not None else None
+    assert chunk is not None and node is not None
+    reason = ForgeAuthReason(
+        refusal=AuthRefusal.CREDENTIAL_INVALID,
+        diagnostic=_CHECKS_DIAGNOSTIC,
+        repository=record.repository_id,
+        forge=record.fields.forge_id,
+    )
+    escalation = ActionEscalation(EscalationCause.FORGE_AUTH, "refused", auth=reason)
+    assert not hub.services.turns.router.escalate_forge_auth(chunk, node, escalation, reason, epoch=1)
+    assert _event_kinds(hub).count("forge-auth-refused") == 1
 
 
 _DIVERGED_GROUP = (Capability.BRANCHES_MERGE, Capability.REFS_CREATE, Capability.REFS_DELETE)

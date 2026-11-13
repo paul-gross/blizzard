@@ -344,7 +344,7 @@ test('test_pr_ci_routes_conflict_when_updating_a_behind_branch_conflicts', async
   expect(await host.originHead(repo.name, 'main')).toBe(before);
 });
 
-test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ repository, issue, api, forge, runnerHosts }) => {
+test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ repository, issue, api, forge, runnerHosts, hubLog }) => {
   test.slow();
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
@@ -358,9 +358,22 @@ test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ reposi
   const escalated = await drive(host, api, chunk.chunk_id, (s) => s.status === 'needs_human');
   expect(escalated.escalation).not.toBeNull();
   expect(escalated.escalation!.cause).toBe('forge-auth');
-  expect(escalated.escalation!.detail || '').toContain(`${repo.owner}/${repo.name}`);
+  const detail = escalated.escalation!.detail || '';
+  expect(detail).toContain(`${repo.owner}/${repo.name}`);
+  expect(detail).toMatch(/the `[a-z_]+` call \((GET|POST|PUT|PATCH|DELETE) \/repos\//);
+  expect(detail).toContain('HTTP 401');
+  expect(detail).toContain('Bad credentials');
+  expect(detail).toMatch(/request [^\s)]+\)/);
+  expect(detail).toContain('Secret ');
+  expect(detail).not.toContain('Then run:');
   expect(escalated.landed).toBe(false);
   expect(escalated.current_node_name).toBe('deliver');
+  const events = await api.get<{ events: { kind: string; chunk_id: string | null }[] }>(`/api/events?chunk_id=${chunk.chunk_id}&limit=200`);
+  const refused = events.body.events.filter((event) => event.kind === 'forge-auth-refused');
+  expect(refused.map((event) => event.chunk_id)).toEqual([chunk.chunk_id]);
+  expect(JSON.stringify(escalated.escalation)).not.toContain('fixture-token');
+  expect(JSON.stringify(events.body)).not.toContain('fixture-token');
+  expect(hubLog.lines().filter((line) => line.raw.includes('fixture-token'))).toEqual([]);
   await lever(forge, repo, 'token_rejected', 'DELETE');
   const opened = await pulls(forge, repo);
   expect(opened.length).toBeGreaterThan(0);
