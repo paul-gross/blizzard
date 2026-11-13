@@ -27,6 +27,7 @@ from blizzard.hub.domain.garden.runs.history import (
     RunDeliveries,
     RunIdentity,
 )
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 _PROJECT = "proj_test"
@@ -107,7 +108,9 @@ class _FakeChunkFacts:
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         return dict(self.facts)
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         return {chunk_id: f for chunk_id in chunk_ids if (f := self.facts.get(chunk_id)) is not None}
 
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

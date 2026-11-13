@@ -65,7 +65,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         routes=chunks.route,
         records=chunks.record,
         facts=chunks.facts,
-        detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
+        detach=DetachService(route=chunks.route, facts=chunks.facts, transactions=HubTransactions(store), clock=clock),
         retired=retired,
         served_projects=BulkProjectResolver(ProjectStore(store)),
         versions=HubVersionWindow(__version__, VERSION_WINDOW),

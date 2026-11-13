@@ -15,8 +15,8 @@ from typing import cast
 from sqlalchemy import Connection
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
 from blizzard.tools.invariants import hub_invariants
@@ -101,14 +101,14 @@ def test_a_stop_still_releases_the_route_a_claim_won_the_lock_to_create(tmp_path
     entered_record = threading.Event()
     release_record = threading.Event()
     writable_route = cast(IWriteChunkRouteRepository, hub.services.chunks.route)
-    real_record_route_locked = writable_route.record_route_locked
+    real_record_route = writable_route.record_route
 
-    def _blocking_record_route_locked(handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
+    def _blocking_record_route(route: Route, *, token_hash: str, at: datetime, transaction: LockedTransaction) -> str:
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
-        return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
+        return real_record_route(route, token_hash=token_hash, at=at, transaction=transaction)
 
-    writable_route.record_route_locked = _blocking_record_route_locked
+    writable_route.record_route = _blocking_record_route
 
     claim_result: dict[str, int] = {}
 

@@ -69,8 +69,8 @@ class RunnerRegistryStore:
 
     # --- reads --------------------------------------------------------------
 
-    def get_runner(self, runner_id: str) -> RunnerRegistration | None:
-        with self._store.read("get_runner") as conn:
+    def get_runner(self, runner_id: str, *, transaction: Transaction | None = None) -> RunnerRegistration | None:
+        with connection_in(self._store, transaction, "get_runner") as conn:
             return self.get_runner_conn(conn, runner_id)
 
     def is_retired(self, runner_id: str) -> bool:

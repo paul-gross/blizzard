@@ -85,11 +85,11 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     _mint(store, "ch_running")
     seed_promote(store, engine, "ch_running", at=T0)
     with store.exclusive.locked(["ch_running"]) as handle:
-        store.route.record_route_locked(
-            handle,
+        store.route.record_route(
             Route(chunk_id="ch_running", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_running",
             at=T0,
+            transaction=handle.transaction,
         )
 
     _mint(store, "ch_delivering")
@@ -153,11 +153,11 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     _mint(store, "ch_stopped")
     seed_promote(store, engine, "ch_stopped", at=T0)
     with store.exclusive.locked(["ch_stopped"]) as handle:
-        store.route.record_route_locked(
-            handle,
+        store.route.record_route(
             Route(chunk_id="ch_stopped", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_stopped",
             at=T0,
+            transaction=handle.transaction,
         )
     clock.instant = _at(1)
     with store.exclusive.locked(["ch_stopped"]) as handle:
@@ -240,16 +240,18 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     seed_promote(store, engine, "ch_kitchen_sink", at=T0)
     seed_lease(engine, "ch_kitchen_sink", epoch=1, runner_id="r", at=T0)
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.route.record_route_locked(
-            handle,
+        store.route.record_route(
             Route(chunk_id="ch_kitchen_sink", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_ks_1",
             at=T0,
+            transaction=handle.transaction,
         )
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.route.record_route_token_locked(handle, "ch_kitchen_sink", token_hash="th_ks_2", at=_at(1))
+        store.route.record_route_token(
+            "ch_kitchen_sink", token_hash="th_ks_2", at=_at(1), transaction=handle.transaction
+        )
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.route.record_route_released_locked(handle, "ch_kitchen_sink", at=_at(2))
+        store.route.record_route_released("ch_kitchen_sink", at=_at(2), transaction=handle.transaction)
         store.movement.record_requeue_locked(handle, "ch_kitchen_sink", at=_at(2))
     store.usage.record_usage(
         "ch_kitchen_sink",

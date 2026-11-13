@@ -304,5 +304,7 @@ class RequeueService:
             )
             # A detached chunk holds no route: there is nothing to release.
             if handle.route_of(chunk.chunk_id) is not None:
-                self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable
+                self._route.record_route_released(
+                    chunk.chunk_id, at=now, transaction=handle.transaction
+                )  # -> ready, re-leasable
             return requeue_id

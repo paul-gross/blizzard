@@ -102,11 +102,11 @@ def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
 def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.route.record_route_locked(
-            handle,
+        store.route.record_route(
             Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
             token_hash="deadbeef",
             at=_at(1),
+            transaction=handle.transaction,
         )
     row = _row_for(store, "claimed")
     assert row.chunk_id == "ch_1"
@@ -315,7 +315,7 @@ def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
 def test_detached_reads_off_route_released(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.route.record_route_released_locked(handle, "ch_1", at=_at(1))
+        store.route.record_route_released("ch_1", at=_at(1), transaction=handle.transaction)
     row = _row_for(store, "detached")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -327,8 +327,10 @@ def _route_and_release(
 ) -> None:
     route = Route(chunk_id="ch_1", runner_id=runner_id, workspace_id="w1", environment_ids=[], created_at=_at(at))
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.route.record_route_locked(handle, route, token_hash="h", at=_at(at))
-        store.route.record_route_released_locked(handle, "ch_1", at=_at(at + 1), cause=cause, reason=reason)
+        store.route.record_route(route, token_hash="h", at=_at(at), transaction=handle.transaction)
+        store.route.record_route_released(
+            "ch_1", at=_at(at + 1), cause=cause, reason=reason, transaction=handle.transaction
+        )
 
 
 def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path: Path) -> None:

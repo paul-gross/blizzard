@@ -77,9 +77,9 @@ def _rekey_held_between_read_and_write(
     real_route_of = route_repo.route_of
     armed = [True]
 
-    def _held_route_of(cid: str) -> object:
-        route = real_route_of(cid)
-        if armed[0]:
+    def _held_route_of(cid: str, *, transaction: Any = None) -> object:
+        route = real_route_of(cid, transaction=transaction)
+        if armed[0] and transaction is None:
             armed[0] = False
             reached.set()
             assert release.wait(timeout=5), "test never released the rekey"

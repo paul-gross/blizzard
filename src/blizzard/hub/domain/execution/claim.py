@@ -28,11 +28,14 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk
 from blizzard.hub.domain.runners.bindings import WorkEligibility
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
@@ -332,22 +335,28 @@ class ClaimService:
         registry: IReadRunnerRegistry,
         hosts: IReadHostRegistry,
         retired: RetiredRunnerGuard,
-        exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
+        records: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
+        dependencies: IReadChunkDependenciesRepository,
         targets: ChunkTargets,
         clock: IClock,
         label: WorkRefLabel,
     ) -> None:
         self._route = route
         self._artifacts = artifacts
-        # Re-resolves the chunk's graph fresh under the lock — see `_claim_locked`.
+        # Re-resolves the chunk's graph fresh under the lock — see `_claim`.
         self._graphs = graphs
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
-        # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
+        # goes through the locked handle instead (`_claim`'s own re-fetch).
         self._registry = registry
         # The host report the claim re-judges its binding against, read on the locked unit.
         self._hosts = hosts
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        # The one write entry: each decision opens a unit, locks the chunk, and re-reads in it.
+        self._transactions = transactions
+        self._records = records
+        self._facts = facts
+        self._dependencies = dependencies
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired
         # Captures the chunk's repository targets in the route's own locked unit.
@@ -358,10 +367,6 @@ class ClaimService:
     @property
     def registry(self) -> IReadRunnerRegistry:
         return self._registry
-
-    @property
-    def exclusive(self) -> IChunkExclusiveWrites:
-        return self._exclusive
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
@@ -380,9 +385,9 @@ class ClaimService:
         # Checked before the lock: a paused runner is refused regardless of whether it
         # would have won the race, so there is nothing here for the CAS to serialize.
         refuse_paused_runner(self._registry.get_runner(runner_id), runner_id=runner_id)
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            return self._claim_locked(
-                handle,
+        with self._transactions.begin() as unit:
+            return self._claim(
+                unit.lock_chunks([chunk.chunk_id]),
                 chunk,
                 graph,
                 runner_id=runner_id,
@@ -391,9 +396,9 @@ class ClaimService:
                 repository_targets=repository_targets,
             )
 
-    def _claim_locked(
+    def _claim(
         self,
-        handle: ILockedChunkRead,
+        transaction: LockedTransaction,
         chunk: Chunk,
         graph: Graph,
         *,
@@ -404,7 +409,7 @@ class ClaimService:
     ) -> ClaimResult:
         # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
-        current = handle.record(chunk.chunk_id)
+        current = self._records.get(chunk.chunk_id, transaction=transaction)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
             raise ClaimConflict(held_by_runner_id=runner_id)
         if current.graph_id != chunk.graph_id:
@@ -414,21 +419,23 @@ class ClaimService:
             graph = fresh_graph
         chunk = current
 
-        facts = handle.facts(chunk.chunk_id)
+        facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
         # Every guard input is re-read under the lock — a stop, an edge, a completion, or a
         # capability change can land after the pre-lock peek.
-        edges = handle.standing_edges_touching(chunk.chunk_id)
+        edges = self._dependencies.standing_edges_for(chunk.chunk_id, transaction=transaction)
         prerequisites = [e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk.chunk_id]
-        registration = handle.runner_registration(runner_id)
+        registration = self._registry.get_runner(runner_id, transaction=transaction)
         host = (
-            self._hosts.get_host(registration.host_id, transaction=handle.transaction)
+            self._hosts.get_host(registration.host_id, transaction=transaction)
             if registration is not None and registration.host_id is not None
             else None
         )
         ClaimAdmission(chunk, graph, facts).node(
             runner_id=runner_id,
-            existing_route=handle.route_of(chunk.chunk_id),
-            unmet_prerequisite=first_unmet_prerequisite(chunk.chunk_id, edges, handle.facts_for(prerequisites)),
+            existing_route=self._route.route_of(chunk.chunk_id, transaction=transaction),
+            unmet_prerequisite=first_unmet_prerequisite(
+                chunk.chunk_id, edges, self._facts.load_facts_for(prerequisites, transaction=transaction)
+            ),
             registration=registration,
             host=host,
             workspace_id=workspace_id,
@@ -437,7 +444,7 @@ class ClaimService:
         # The runner prepared before it claimed: its environments must stand at the targets this claim fixes for every
         # later lease.
         captured = self._targets.capture_prepared(
-            TargetChunk(chunk.chunk_id, chunk.project_id), repository_targets, at=now, transaction=handle.transaction
+            TargetChunk(chunk.chunk_id, chunk.project_id), repository_targets, at=now, transaction=transaction
         )
         if captured is None:
             raise ClaimDeniedIncompatible(
@@ -454,7 +461,9 @@ class ClaimService:
         # Minted fresh per acquisition: the plaintext is returned once and
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        route_id = self._route.record_route_locked(handle, route, token_hash=TokenHash(route_token).hex, at=now)
+        route_id = self._route.record_route(
+            route, token_hash=TokenHash(route_token).hex, at=now, transaction=transaction
+        )
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         # Envelope assembly stays outside the locked transaction's read set — the
@@ -475,15 +484,18 @@ class ClaimService:
         are re-read under the chunk-row lock (``bzh:store-exclusive-write``): :class:`RekeyDeniedNotHolder` when
         the route moved off ``route``'s runner since the caller read it, :func:`refuse_rekey` for an ended chunk."""
         self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
-        with self._exclusive.locked([route.chunk_id]) as handle:
-            current = handle.route_of(route.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([route.chunk_id])
+            current = self._route.route_of(route.chunk_id, transaction=transaction)
             if current is None or current.runner_id != route.runner_id:
                 raise RekeyDeniedNotHolder(
                     chunk_id=route.chunk_id, holder=None if current is None else current.runner_id
                 )
-            refuse_rekey(current, ChunkFacts.or_default(handle.facts(route.chunk_id)))
+            refuse_rekey(
+                current, ChunkFacts.or_default(self._facts.load_facts(route.chunk_id, transaction=transaction))
+            )
             route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-            self._route.record_route_token_locked(
-                handle, route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now()
+            self._route.record_route_token(
+                route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now(), transaction=transaction
             )
         return route_token

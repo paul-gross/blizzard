@@ -1,8 +1,8 @@
 """ReleaseService (unit tier) — the holder's own release, decided under the chunk's lock and
 written as one ``route.released`` fact carrying its cause and reason.
 
-A fake stands in for the store — only ``route_of``/``facts`` on the locked handle and
-``record_route_released_locked`` are live; every other seam raises loudly if called."""
+A fake stands in for the store — only ``route_of``/``load_facts`` in the locked unit and
+``record_route_released`` are live; every other seam raises loudly if called."""
 
 from __future__ import annotations
 
@@ -24,10 +24,11 @@ from blizzard.hub.domain.chunk.model import (
     RouteReleaseCause,
     RouteTokenMintedFact,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE, ROUTE_TOKEN_WARN
 from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRefused, ReleaseService
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.route import Route
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -43,47 +44,53 @@ _FACTS = ChunkFacts(
 )
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    route: Route | None
-    loaded: ChunkFacts
+class _FakeUnit:
+    def __init__(self, locked_ids: list[list[str]]) -> None:
+        self._locked_ids = locked_ids
 
-    def route_of(self, chunk_id: str) -> Route | None:
-        return self.route
-
-    def facts(self, chunk_id: str) -> ChunkFacts:
-        return self.loaded
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"ReleaseService should not touch handle.{name!r}")
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        self._locked_ids.append(list(chunk_ids))
+        return cast(LockedTransaction, object())
 
 
 @dataclass
-class _FakeExclusiveWrites:
-    route: Route | None
-    facts: ChunkFacts
+class _FakeTransactions:
     locked_ids: list[list[str]] = field(default_factory=list[list[str]])
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
-        self.locked_ids.append(list(chunk_ids))
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.route, self.facts))
+    def begin(self) -> Generator[Transaction]:
+        yield cast(Transaction, _FakeUnit(self.locked_ids))
+
+
+@dataclass
+class _FakeFacts:
+    loaded: ChunkFacts
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts:
+        return self.loaded
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"ReleaseService should not touch facts.{name!r}")
 
 
 @dataclass
 class _FakeRouteRepo:
+    route: Route | None = None
     released: list[tuple[str, datetime, RouteReleaseCause | None, str | None]] = field(
         default_factory=list[tuple[str, datetime, RouteReleaseCause | None, str | None]]
     )
 
-    def record_route_released_locked(
+    def route_of(self, chunk_id: str, *, transaction: Transaction | None = None) -> Route | None:
+        return self.route
+
+    def record_route_released(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
+        transaction: LockedTransaction,
     ) -> int:
         self.released.append((chunk_id, at, cause, reason))
         return 7
@@ -94,15 +101,16 @@ class _FakeRouteRepo:
 
 def _service(
     route: Route | None = _ROUTE, facts: ChunkFacts = _FACTS
-) -> tuple[ReleaseService, _FakeRouteRepo, _FakeExclusiveWrites]:
-    repo = _FakeRouteRepo()
-    exclusive = _FakeExclusiveWrites(route, facts)
+) -> tuple[ReleaseService, _FakeRouteRepo, _FakeTransactions]:
+    repo = _FakeRouteRepo(route)
+    transactions = _FakeTransactions()
     service = ReleaseService(
         route=cast(IWriteChunkRouteRepository, repo),
-        exclusive=cast(IChunkExclusiveWrites, exclusive),
+        facts=cast(IReadChunkFactsRepository, _FakeFacts(facts)),
+        transactions=cast(IHubTransactions, transactions),
         clock=FixedClock(instant=_T0),
     )
-    return service, repo, exclusive
+    return service, repo, transactions
 
 
 def _release(service: ReleaseService, **overrides: Any) -> int:
@@ -118,12 +126,12 @@ def _release(service: ReleaseService, **overrides: Any) -> int:
 
 
 def test_an_admitted_release_writes_one_release_fact_with_its_reason_under_the_lock() -> None:
-    service, repo, exclusive = _service()
+    service, repo, transactions = _service()
 
     released_id = _release(service)
 
     assert released_id == 7
-    assert exclusive.locked_ids == [["chk_1"]]
+    assert transactions.locked_ids == [["chk_1"]]
     assert repo.released == [("chk_1", _T0, RouteReleaseCause.RELEASE, "throttled")]
 
 

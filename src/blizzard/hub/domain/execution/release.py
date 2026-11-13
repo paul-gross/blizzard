@@ -11,10 +11,11 @@ from enum import StrEnum
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, RouteReleaseCause
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.auth.route import RouteToken
 from blizzard.hub.domain.execution.detach import releasable_by
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.runners.route import Route
 
 
@@ -55,10 +56,17 @@ def refuse_release(route: Route | None, facts: ChunkFacts, *, runner_id: str, ep
 class ReleaseService:
     """Give a chunk's route back at its holder's own request."""
 
-    def __init__(self, *, route: IWriteChunkRouteRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        route: IWriteChunkRouteRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._route = route
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def release(
@@ -76,9 +84,10 @@ class ReleaseService:
         Raises :class:`ReleaseRefused` on a route token the live route does not match (under
         ``enforce``) or a refusal :func:`refuse_release` decides. Returns the freshly-written
         ``route_released.id``."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            route = handle.route_of(chunk.chunk_id)
-            facts = ChunkFacts.or_default(handle.facts(chunk.chunk_id))
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            route = self._route.route_of(chunk.chunk_id, transaction=transaction)
+            facts = ChunkFacts.or_default(self._facts.load_facts(chunk.chunk_id, transaction=transaction))
             token_rejection = RouteToken(
                 facts=facts,
                 presented=route_token,
@@ -90,6 +99,10 @@ class ReleaseService:
             refusal = refuse_release(route, facts, runner_id=runner_id, epoch=epoch)
             if refusal is not None:
                 raise ReleaseRefused(chunk.chunk_id, refusal, f"release refused: {refusal}")
-            return self._route.record_route_released_locked(
-                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.RELEASE, reason=reason
+            return self._route.record_route_released(
+                chunk.chunk_id,
+                at=self._clock.now(),
+                cause=RouteReleaseCause.RELEASE,
+                reason=reason,
+                transaction=transaction,
             )

@@ -19,6 +19,7 @@ import pytest
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.runners.route import Route
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
@@ -149,14 +150,14 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
 
     entered_record = threading.Event()
     release_record = threading.Event()
-    real_record_route_locked = _writable_route(hub).record_route_locked
+    real_record_route = _writable_route(hub).record_route
 
-    def _blocking_record_route_locked(handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
+    def _blocking_record_route(route: Route, *, token_hash: str, at: datetime, transaction: LockedTransaction) -> str:
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
-        return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
+        return real_record_route(route, token_hash=token_hash, at=at, transaction=transaction)
 
-    monkeypatch.setattr(_writable_route(hub), "record_route_locked", _blocking_record_route_locked)
+    monkeypatch.setattr(_writable_route(hub), "record_route", _blocking_record_route)
 
     claim_result: dict[str, int] = {}
 

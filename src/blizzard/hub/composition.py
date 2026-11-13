@@ -1116,7 +1116,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # One event-authoring service publishes on the shared broker as it records
     # (``bzh:operational-event-log``).
     event_log = EventLogService(events=chunk_events, publisher=events)
-    detach = DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock)
+    detach = DetachService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = RetiredRunnerGuard(registry=registry_store)
     # A served declaration resolves against the tenant's projects in one read per add or registration.
@@ -1293,7 +1293,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             registry=registry_store,
             hosts=host_store,
             retired=retired,
-            exclusive=chunk_exclusive,
+            transactions=stores.transactions,
+            records=chunk_record,
+            facts=chunk_facts,
+            dependencies=chunk_dependencies,
             targets=chunk_targets,
             clock=clock,
             label=work_ref_label,
@@ -1337,7 +1340,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             events=event_log,
         ),
         detach=detach,
-        release=ReleaseService(route=chunk_route, exclusive=chunk_exclusive, clock=clock),
+        release=ReleaseService(route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         complete=CompleteService(

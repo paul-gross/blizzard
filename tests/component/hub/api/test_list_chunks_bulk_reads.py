@@ -234,9 +234,11 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         self.load_facts_for_calls += 1
-        return super().load_facts_for(chunk_ids)
+        return super().load_facts_for(chunk_ids, transaction=transaction)
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
