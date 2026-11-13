@@ -14,10 +14,9 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 
@@ -56,29 +55,6 @@ class ILockedChunkRead(Protocol):
     def runner_registration(self, runner_id: str) -> RunnerRegistration | None: ...
 
 
-class ILockedWorkRefRead(Protocol):
-    """The guard read resolved on the one connection its pointer locks were taken on.
-    Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds no chunk-row lock,
-    so it cannot satisfy a chunk-row ``*_locked`` write."""
-
-    @property
-    def transaction(self) -> LockedTransaction:
-        """The locked unit this handle reads in, which a repository method taking ``transaction`` joins
-        (``bzh:transaction-participation``)."""
-        ...
-
-    def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
-        """:meth:`~blizzard.hub.domain.chunk.ports.work_refs.IReadChunkWorkRefsRepository.live_holders`,
-        read under the lock."""
-        ...
-
-    def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
-        """Each of ``sources`` mapped to the projects whose standing link draws from it, ordered by id —
-        :meth:`~blizzard.hub.domain.projects.links.IReadProjectLinks.projects_linking_sources`, read under
-        the lock — a source no project links maps to no projects."""
-        ...
-
-
 class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
     writers share."""
@@ -91,17 +67,4 @@ class IChunkExclusiveWrites(Protocol):
         same lock set, then yield the read handle bound to that one connection. A write against a locked
         chunk id goes through a write repository's own ``*_locked`` method, taking this same handle, or a
         method taking its ``transaction``."""
-        ...
-
-    def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[LockKey] = ()
-    ) -> AbstractContextManager[ILockedWorkRefRead]:
-        """Lock every named pointer, first, in sorted order, then yield the read handle bound
-        to that one connection — for a decision whose race has no chunk row yet to lock. Each
-        pointer locks only its own key. With
-        ``project``, its source links' key is taken before any pointer's, the one order every
-        locker of both keeps; a source link or unlink of that project waits for the commit. ``keys`` are
-        declared beside them in the one lock set, in canonical order. A
-        write under the lock goes through a write repository's own ``*_locked`` method, taking
-        this same handle."""
         ...

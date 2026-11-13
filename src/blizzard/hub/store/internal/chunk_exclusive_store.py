@@ -8,12 +8,10 @@ from dataclasses import dataclass
 
 from sqlalchemy import Connection
 
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
-from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
-from blizzard.hub.domain.projects.links import project_source_links_lock
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 
@@ -30,19 +28,11 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, route_of_conn
 
-# Shares the chunk_work_refs_store writes on the same connection; debt pending a domain seam.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-
-# Shares the project_link_store writes on the same connection; debt pending a domain seam.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.project_link_store import projects_linking_sources_conn
-
 # Shares the runner_registry_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import ChunkHandle, WorkRefHandle, connection_for, pointer_lock_key
+from blizzard.hub.store.transactions import ChunkHandle, connection_for
 
 
 @dataclass(frozen=True)
@@ -88,27 +78,6 @@ class LockedChunkTransaction(ChunkHandle):
         return self._registry.get_runner_conn(self.conn, runner_id)
 
 
-@dataclass(frozen=True)
-class LockedWorkRefTransaction(WorkRefHandle):
-    """The concrete pointer-lock handle — :class:`ILockedWorkRefRead`'s adapter, every read
-    resolving on :attr:`conn`, the connection every named pointer's lock row was taken on."""
-
-    _store: ScopedConnections
-    transaction: LockedTransaction
-    _work_refs: ChunkWorkRefsStore
-
-    @property
-    def conn(self) -> Connection:
-        return connection_for(self._store, self.transaction)
-
-    def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
-        return self._work_refs.live_holders_conn(self.conn, pointers)
-
-    def source_links(self, sources: Sequence[str]) -> dict[str, list[ProjectId]]:
-        found = projects_linking_sources_conn(self.conn, sources)
-        return {source: found.get(source, []) for source in dict.fromkeys(sources)}
-
-
 class ChunkExclusiveWrites:
     """Opens the locked write transaction the chunk claim and its excluded writers
     share (``bzh:store-exclusive-write``)."""
@@ -122,7 +91,6 @@ class ChunkExclusiveWrites:
         record: ChunkRecordStore,
         dependencies: ChunkDependenciesStore,
         registry: RunnerRegistryStore,
-        work_refs: ChunkWorkRefsStore,
     ) -> None:
         self._store = store
         self._transactions = transactions
@@ -130,7 +98,6 @@ class ChunkExclusiveWrites:
         self._record = record
         self._dependencies = dependencies
         self._registry = registry
-        self._work_refs = work_refs
 
     @property
     def registry(self) -> RunnerRegistryStore:
@@ -145,17 +112,6 @@ class ChunkExclusiveWrites:
             yield LockedChunkTransaction(
                 self._store, locked, self._facts, self._record, self._dependencies, self._registry
             )
-
-    @contextmanager
-    def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[LockKey] = ()
-    ) -> Generator[ILockedWorkRefRead, None, None]:
-        with self._transactions.begin() as transaction:
-            declared = [LockKey(LockNamespace.WORK_REF, pointer_lock_key(p)) for p in pointers]
-            if project is not None:
-                declared.append(project_source_links_lock(project))
-            locked = transaction.lock_set(keys=[*declared, *keys])
-            yield LockedWorkRefTransaction(self._store, locked, self._work_refs)
 
 
 _exclusive_conforms: type[IChunkExclusiveWrites] = ChunkExclusiveWrites

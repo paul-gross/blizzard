@@ -65,6 +65,5 @@ def build_chunk_stores(
             record=record,
             dependencies=dependencies,
             registry=registry,
-            work_refs=work_refs,
         ),
     )

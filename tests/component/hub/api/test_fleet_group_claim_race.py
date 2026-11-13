@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import cast
 
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import build_hub, ingest
 
 
@@ -32,16 +32,16 @@ def test_a_claim_blocks_while_a_group_holds_the_row_lock_mid_fold(tmp_path: Path
     entered_write = threading.Event()
     release_write = threading.Event()
     work_refs = cast(IWriteChunkWorkRefsRepository, hub.services.chunks.work_refs)
-    real_add_work_refs_locked = work_refs.add_work_refs_locked
+    real_add_work_refs = work_refs.add_work_refs
 
-    def _blocking_add_work_refs_locked(
-        handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    def _blocking_add_work_refs(
+        chunk_id: str, pointers: list[WorkRef], *, at: datetime, transaction: LockedTransaction
     ) -> None:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_add_work_refs_locked(handle, chunk_id, pointers, at=at)
+        return real_add_work_refs(chunk_id, pointers, at=at, transaction=transaction)
 
-    work_refs.add_work_refs_locked = _blocking_add_work_refs_locked
+    work_refs.add_work_refs = _blocking_add_work_refs
 
     group_result: dict[str, object] = {}
 

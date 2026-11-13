@@ -15,10 +15,11 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, IntendedMigration
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, require_live
@@ -249,14 +250,15 @@ class EditService:
         *,
         record: IWriteChunkRecordRepository,
         graphs: IReadGraphRepository,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
         urgencies: IReadUrgencyRepository,
     ) -> None:
         self._record = record
         self._graphs = graphs
         self._urgencies = urgencies
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._facts = facts
+        self._transactions = transactions
 
     def set_graph(self, chunk: Chunk, *, graph: Graph) -> None:
         """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit`."""
@@ -294,11 +296,12 @@ class EditService:
         Facts and record are re-read under the shared row lock, so a prior concurrent edit is neither lost nor
         skews the pin check; an urgency edit also locks and re-reads its urgency, never the settings."""
         keys = [] if edit.urgency is UNSET else [urgency_lock(edit.urgency.urgency_id)]
-        with self._exclusive.locked([chunk.chunk_id], keys=keys) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_set(chunks=[chunk.chunk_id], keys=keys)
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            current = handle.record(chunk.chunk_id)
+            current = self._record.get(chunk.chunk_id, transaction=transaction)
             if current is None:
                 raise ChunkNotFound(chunk.chunk_id)
             plan = plan_edit(
@@ -312,20 +315,22 @@ class EditService:
                 and self._graphs.is_retired(migration_target.graph_id),
                 urgency=None
                 if edit.urgency is UNSET
-                else reread(self._urgencies, URGENCY_FIELD, edit.urgency.urgency_id, transaction=handle.transaction),
+                else reread(self._urgencies, URGENCY_FIELD, edit.urgency.urgency_id, transaction=transaction),
             )
             if plan.graph_id is not None:
-                self._record.set_graph_locked(handle, chunk.chunk_id, graph_id=plan.graph_id)
+                self._record.set_graph(chunk.chunk_id, graph_id=plan.graph_id, transaction=transaction)
             if plan.defaults is not None:
-                self._record.set_defaults_locked(
-                    handle,
+                self._record.set_defaults(
                     chunk.chunk_id,
                     default_model=plan.defaults.model,
                     default_effort=plan.defaults.effort,
                     default_harnesses=plan.defaults.harnesses,
+                    transaction=transaction,
                 )
             if plan.intended_migration is not UNSET:
-                self._record.set_intended_migration_locked(handle, chunk.chunk_id, intended=plan.intended_migration)
+                self._record.set_intended_migration(
+                    chunk.chunk_id, intended=plan.intended_migration, transaction=transaction
+                )
             if plan.urgency_id is not None:
-                self._record.set_urgency(chunk.chunk_id, urgency_id=plan.urgency_id, transaction=handle.transaction)
+                self._record.set_urgency(chunk.chunk_id, urgency_id=plan.urgency_id, transaction=transaction)
         return plan

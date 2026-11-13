@@ -63,9 +63,11 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         self.find_live_holder_calls += 1
         return super().find_live_holder(pointer)
 
-    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
+    def live_holders(
+        self, pointers: Iterable[WorkRef], *, transaction: Transaction | None = None
+    ) -> dict[WorkRef, str]:
         self.live_holders_calls += 1
-        return super().live_holders(pointers)
+        return super().live_holders(pointers, transaction=transaction)
 
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:

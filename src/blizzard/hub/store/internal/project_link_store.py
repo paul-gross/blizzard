@@ -23,6 +23,7 @@ from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
 from blizzard.hub.domain.kernel.locks import LockNamespace
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.links import LINKED_FIELD, IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -41,6 +42,7 @@ from blizzard.hub.store.schema import (
     project_source_links,
 )
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 
 @dataclass(frozen=True)
@@ -348,10 +350,12 @@ class ProjectLinkStore:
             for project_id, standing in standing_of.items()
         }
 
-    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+    def projects_linking_sources(
+        self, work_source_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, list[ProjectId]]:
         if not work_source_ids:
             return {}
-        with self._store.read("projects_linking_sources") as conn:
+        with connection_in(self._store, transaction, "projects_linking_sources") as conn:
             return projects_linking_sources_conn(conn, work_source_ids)
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:

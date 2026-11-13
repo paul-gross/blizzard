@@ -2269,8 +2269,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_work_refs_extra = "ch_hub_work_refs_extra"
     _mint(chunk_work_refs_extra, "1026", at=_ht(96))
     with write.exclusive.locked([chunk_work_refs_extra]) as handle:
-        write.work_refs.add_work_refs_locked(
-            handle, chunk_work_refs_extra, [WorkRef(source="secondary", ref="99")], at=_ht(97)
+        write.work_refs.add_work_refs(
+            chunk_work_refs_extra,
+            [WorkRef(source="secondary", ref="99")],
+            at=_ht(97),
+            transaction=handle.transaction,
         )
 
     # --- hub-owned work items ------------------------------------------------------------------

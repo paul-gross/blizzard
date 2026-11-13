@@ -30,6 +30,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
     ChunksInDifferentProjects,
@@ -73,12 +74,12 @@ def _running_facts() -> ChunkFacts:
 
 @dataclass
 class _FakeWorkRefsRepo:
-    """Only ``add_work_refs_locked`` is live — see module docstring."""
+    """Only ``add_work_refs`` is live — see module docstring."""
 
     added: list[tuple[str, list[WorkRef]]] = field(default_factory=list[tuple[str, list[WorkRef]]])
 
-    def add_work_refs_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    def add_work_refs(
+        self, chunk_id: str, pointers: list[WorkRef], *, at: datetime, transaction: LockedTransaction
     ) -> None:
         self.added.append((chunk_id, pointers))
 

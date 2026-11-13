@@ -24,6 +24,7 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.domain.chunk.model import AnswerOutcome, WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
@@ -252,7 +253,7 @@ def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: 
         stores = build_chunk_stores(
             store, FixedClock(_AT), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
         )
-        with stores.exclusive.locked_work_refs([pointer]):
+        with stores.exclusive.locked([], keys=[work_ref_lock(pointer)]):
             pass
 
     held = [tenant for tenant, _ in _lock_rows(tenants, LockNamespace.WORK_REF)]

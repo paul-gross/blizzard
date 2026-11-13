@@ -87,6 +87,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.chunk.ports.work_sources import (
     IWorkAnnotator,
     IWorkCloser,
@@ -182,7 +183,7 @@ from blizzard.hub.store.scoped import (
     is_tenant_owned,
     statements_of,
 )
-from blizzard.hub.store.transactions import HubTransactions, work_ref_handle_connection
+from blizzard.hub.store.transactions import HubTransactions, connection_for
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -2372,12 +2373,13 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     """Insert ``chunk``'s rows the way ingest does — under its pointers' locks — for a fixture
     that needs a chunk without going through an ingest's guard. A chunk built naming no project
     lands in the tenant's only one."""
-    with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
+    with stores.exclusive.locked([], keys=[work_ref_lock(pointer) for pointer in chunk.work_refs]) as handle:
         if chunk.project_id is None:
             chunk = replace(
-                chunk, project_id=_only_project_on(work_ref_handle_connection(handle, cast(Any, stores.record)._store))
+                chunk,
+                project_id=_only_project_on(connection_for(cast(Any, stores.record)._store, handle.transaction)),
             )
-        stores.record.mint_locked(handle, chunk)
+        stores.record.mint(chunk, transaction=handle.transaction)
 
 
 def _only_project_on(conn: sa.Connection) -> ProjectId:

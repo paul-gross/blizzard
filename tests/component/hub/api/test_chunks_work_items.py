@@ -135,7 +135,9 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     chunk_id = work_refs.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
     assert chunk_id is not None
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
-        work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
+        work_refs.add_work_refs(
+            chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now(), transaction=handle.transaction
+        )
 
     # The proposing runner's name is read at render time, the registry's latest.
     seed_runner(hub, "runner-local", name="r-proposer", register=False)
@@ -194,7 +196,9 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     hub_store = hub_store_connections(hub.engine)
     work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
-        work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
+        work_refs.add_work_refs(
+            chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now(), transaction=handle.transaction
+        )
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 

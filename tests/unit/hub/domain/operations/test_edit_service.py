@@ -29,12 +29,12 @@ from blizzard.hub.domain.chunk.model import (
     RouteReleasedFact,
     TransitionFact,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node, TargetGraphRetired
 from blizzard.hub.domain.kernel.locks import LockKey
-from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
@@ -78,13 +78,13 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``read_facts``/``set_graph_locked``/``set_defaults_locked``/
-    ``set_intended_migration_locked`` are live; anything else is a bug. Not typed
+    """Only ``load_facts``/``get``/``set_graph``/``set_defaults``/
+    ``set_intended_migration``/``set_urgency`` are live; anything else is a bug. Not typed
     against its Protocols directly — callers wrap an instance in
-    :func:`_as_record`/:func:`_as_exclusive` instead."""
+    :func:`_as_record`/:func:`_as_facts` instead."""
 
     facts: ChunkFacts | None
-    #: The locked handle's own ``record`` read — defaults to the chunk under edit itself
+    #: The locked unit's own ``get`` read — defaults to the chunk under edit itself
     #: (the ordinary, non-racing case); a test proving the stale-caller-vs-locked-read
     #: distinction overrides it with a freshly-diverged record. ``None`` means gone under
     #: the lock, matching a real handle's post-deletion/-fold answer.
@@ -100,28 +100,28 @@ class _FakeChunkRepo:
     #: The keys each ``locked`` call declared beside the row.
     keys_locked: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
 
-    def read_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         return self.facts
 
-    def read_record(self, chunk_id: str) -> Chunk | None:
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
         return self.current
 
-    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
+    def set_graph(self, chunk_id: str, *, graph_id: str, transaction: LockedTransaction) -> None:
         self.graphs_set.append((chunk_id, graph_id))
 
-    def set_defaults_locked(
+    def set_defaults(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         default_model: list[str],
         default_effort: str | None,
         default_harnesses: list[str],
+        transaction: LockedTransaction,
     ) -> None:
         self.defaults_set.append((chunk_id, default_model, default_effort, default_harnesses))
 
-    def set_intended_migration_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    def set_intended_migration(
+        self, chunk_id: str, *, intended: IntendedMigration | None, transaction: LockedTransaction
     ) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
 
@@ -133,36 +133,23 @@ class _FakeChunkRepo:
 
 
 @dataclass
-class _FakeLockedChunkRead:
-    """Only ``facts``/``record`` are live — see :class:`_FakeChunkRepo`'s own docstring."""
+class _FakeUnit:
+    """``lock_set`` records the keys declared beside the row on the backing ``repo``."""
 
     repo: _FakeChunkRepo
 
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.repo.read_facts(chunk_id)
-
-    def record(self, chunk_id: str) -> Chunk | None:
-        return self.repo.read_record(chunk_id)
-
-    @property
-    def transaction(self) -> LockedTransaction:
+    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = ()) -> LockedTransaction:
+        self.repo.keys_locked.append(list(keys))
         return cast(LockedTransaction, object())
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"EditService should not touch handle.{name!r}")
 
 
 @dataclass
-class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same ``repo`` backing
-    the record write repository."""
-
+class _FakeTransactions:
     repo: _FakeChunkRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()) -> Generator[ILockedChunkRead]:
-        self.repo.keys_locked.append(list(keys))
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
+    def begin(self) -> Generator[Transaction]:
+        yield cast(Transaction, _FakeUnit(self.repo))
 
 
 def _as_record(repo: _FakeChunkRepo) -> IWriteChunkRecordRepository:
@@ -170,9 +157,9 @@ def _as_record(repo: _FakeChunkRepo) -> IWriteChunkRecordRepository:
     return cast(IWriteChunkRecordRepository, repo)
 
 
-def _as_exclusive(repo: _FakeChunkRepo) -> IChunkExclusiveWrites:
+def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
     """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
-    return cast(IChunkExclusiveWrites, _FakeExclusiveWrites(repo))
+    return cast(IReadChunkFactsRepository, repo)
 
 
 @dataclass
@@ -215,7 +202,8 @@ def _service(
     return EditService(
         record=_as_record(repo),
         graphs=_as_read_graph_repo(graphs or _FakeGraphRepo()),
-        exclusive=_as_exclusive(repo),
+        facts=_as_facts(repo),
+        transactions=cast(IHubTransactions, _FakeTransactions(repo)),
         urgencies=cast(IReadUrgencyRepository, urgencies or _FakeUrgencyRepo()),
     )
 
@@ -416,20 +404,20 @@ def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> 
     repo = _FakeChunkRepo(facts=_ready_facts())
     calls: list[str] = []
 
-    @dataclass
-    class _SpyExclusiveWrites:
+    class _SpyTransactions(_FakeTransactions):
         @contextmanager
-        def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()) -> Generator[ILockedChunkRead]:
+        def begin(self) -> Generator[Transaction]:
             calls.append("acquire")
             try:
-                yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))
+                yield cast(Transaction, _FakeUnit(repo))
             finally:
                 calls.append("release")
 
     service = EditService(
         record=_as_record(repo),
         graphs=_as_read_graph_repo(_FakeGraphRepo()),
-        exclusive=cast(IChunkExclusiveWrites, _SpyExclusiveWrites()),
+        facts=_as_facts(repo),
+        transactions=cast(IHubTransactions, _SpyTransactions(repo)),
         urgencies=cast(IReadUrgencyRepository, _FakeUrgencyRepo()),
     )
 

@@ -20,8 +20,8 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
@@ -42,12 +42,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
-from blizzard.hub.store.transactions import (
-    chunk_handle_connection,
-    connection_for,
-    connection_in,
-    work_ref_handle_connection,
-)
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -308,38 +303,29 @@ class ChunkRecordStore:
         named = [chunk_id for chunk_id, derived in statuses.items() if derived is status]
         return list(self.get_many(named, transaction=transaction).values())
 
-    def mint(self, chunk: Chunk) -> None:
-        """Insert a chunk's rows with no pointer lock held."""
-        with self._store.write("mint") as conn:
-            insert_chunk_rows(conn, chunk)
+    def mint(self, chunk: Chunk, *, transaction: LockedTransaction) -> None:
+        conn = connection_for(self._store, transaction)
+        for pointer in chunk.work_refs:
+            connection_for(self._store, transaction, key=work_ref_lock(pointer))
+        insert_chunk_rows(conn, chunk)
 
-    def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
-        """Insert a freshly minted chunk's rows on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``)."""
-        insert_chunk_rows(work_ref_handle_connection(handle, self._store, *chunk.work_refs), chunk)
-
-    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
-        ``handle``'s already-locked connection (``bzh:store-exclusive-write``)."""
-        self._set_graph_conn(chunk_handle_connection(handle, self._store, chunk_id), chunk_id, graph_id=graph_id)
+    def set_graph(self, chunk_id: str, *, graph_id: str, transaction: LockedTransaction) -> None:
+        self._set_graph_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, graph_id=graph_id)
 
     def _set_graph_conn(self, conn: Connection, chunk_id: str, *, graph_id: str) -> None:
         conn.execute(self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
-    def set_defaults_locked(
+    def set_defaults(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         default_model: list[str],
         default_effort: str | None,
         default_harnesses: list[str],
+        transaction: LockedTransaction,
     ) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses —
-        all three in one write, on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``)."""
         self._set_defaults_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             chunk_id,
             default_model=default_model,
             default_effort=default_effort,
@@ -365,13 +351,11 @@ class ChunkRecordStore:
             )
         )
 
-    def set_intended_migration_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    def set_intended_migration(
+        self, chunk_id: str, *, intended: IntendedMigration | None, transaction: LockedTransaction
     ) -> None:
-        """`src/blizzard/hub/domain/chunk/ports/record.py`'s
-        `IWriteChunkRecordRepository.set_intended_migration_locked`."""
         self._set_intended_migration_conn(
-            chunk_handle_connection(handle, self._store, chunk_id), chunk_id, intended=intended
+            connection_for(self._store, transaction, chunk=chunk_id), chunk_id, intended=intended
         )
 
     def _set_intended_migration_conn(

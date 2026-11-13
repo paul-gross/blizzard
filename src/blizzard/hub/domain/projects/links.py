@@ -25,6 +25,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
@@ -252,9 +253,11 @@ class IReadProjectLinks(Protocol):
         id; a project with none is dropped."""
         ...
 
-    def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
+    def projects_linking_sources(
+        self, work_source_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, list[ProjectId]]:
         """:meth:`projects_linking_source`'s batched sibling: each source's linking projects, ordered by id; a source
-        no project links is dropped."""
+        no project links is dropped. Joins ``transaction`` when one is given."""
         ...
 
     def linked_at(self, project_id: ProjectId, source: str, at: datetime) -> bool:

@@ -20,6 +20,7 @@ import pytest
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.fleet import _flow_namer as flow_namer  # pyright: ignore[reportPrivateUsage]
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, WorkSourceSlug
@@ -449,15 +450,15 @@ def test_the_graph_mint_s_cross_graph_check_is_flat_across_target_counts(graphs_
     assert [w for w in warnings if "g1" in w] and not [w for w in warnings if "g0" in w]
 
 
-def test_the_locked_source_links_answer_every_source_flat_across_source_counts(links_hub: HubHarness) -> None:
+def test_the_transaction_taking_source_links_answer_every_source_flat_across_source_counts(
+    links_hub: HubHarness,
+) -> None:
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
     exclusive = chunk_stores(links_hub.engine, links_hub.clock).exclusive
+    links = links_hub.services.project_links
 
-    with exclusive.locked_work_refs([WorkRef(source=s, ref="1") for s in sources]) as handle:
-        found = handle.source_links([*sources, "wsrc_never"])
-        _flat(links_hub, lambda n: handle.source_links(sources[:n]))
+    with exclusive.locked([], keys=[work_ref_lock(WorkRef(source=s, ref="1")) for s in sources]) as handle:
+        found = links.projects_linking_sources([*sources, "wsrc_never"], transaction=handle.transaction)
+        _flat(links_hub, lambda n: links.projects_linking_sources(sources[:n], transaction=handle.transaction))
 
-    assert found == {
-        **{s: links_hub.services.project_links.projects_linking_source(s) for s in sources},
-        "wsrc_never": [],
-    }
+    assert found == {s: linking for s in sources if (linking := links.projects_linking_source(s))}
