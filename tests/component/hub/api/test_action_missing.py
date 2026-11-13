@@ -19,7 +19,15 @@ from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
-from tests.support.scaffolding import TEST_CATALOGUE, HubHarness, build_hub, hub_scoped, pointer_token, report_lease
+from tests.support.scaffolding import (
+    TEST_CATALOGUE,
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    hub_scoped,
+    pointer_token,
+    report_lease,
+)
 
 _LEGACY_RUN = json.dumps([{"command": "./ship.sh --now", "name": "ship", "produces": None}])
 
@@ -104,20 +112,22 @@ def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id:
     assert graph is not None
     merge = graph.node_by_name("merge")
     assert merge is not None
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id="tr_parked",
-        close_decision=decide_close_enqueue([WorkRef("default", "7")], lambda _: True),
-        chunk_id=chunk_id,
-        from_node_id=build_node_id,
-        to_node_id=merge.node_id,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+            transition_id="tr_parked",
+            close_decision=decide_close_enqueue([WorkRef("default", "7")], lambda _: True),
+            chunk_id=chunk_id,
+            from_node_id=build_node_id,
+            to_node_id=merge.node_id,
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
 
 def _escalations(hub: HubHarness, chunk_id: str) -> list[tuple[int, str, str]]:

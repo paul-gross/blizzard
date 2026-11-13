@@ -532,14 +532,14 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     for submission in (waiting, turning):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
             open_submissions = world.flows.open_flow_submissions(submission.chunk_id, transaction=handle.transaction)
-            written = world.chunks.movement.record_restart_locked(
-                handle,
+            written = world.chunks.movement.record_restart(
                 submission.chunk_id,
                 from_node_id=_NODE,
                 to_node_id=_NODE,
                 by="operator",
                 at=world.hub.clock.now(),
                 waiting=pick_waiting(open_submissions),
+                transaction=handle.transaction,
             )
         reported.append(written.withdrawn)
 

@@ -64,21 +64,23 @@ def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) ->
 
 
 def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None) -> None:
-    store.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id="nd_1",
-        to_node_id=to_node_id,
-        choice_name="ok",
-        epoch=1,
-        runner_id="r1",
-        at=_T0,
-        artifacts=[],
-        close_decision=decide_close_enqueue([], lambda _: True),
-        decision_id=decision_id,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_1",
+            chunk_id="ch_1",
+            from_node_id="nd_1",
+            to_node_id=to_node_id,
+            choice_name="ok",
+            epoch=1,
+            runner_id="r1",
+            at=_T0,
+            artifacts=[],
+            close_decision=decide_close_enqueue([], lambda _: True),
+            decision_id=decision_id,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
 
 def _open_ids(store: ChunkStores) -> list[str]:

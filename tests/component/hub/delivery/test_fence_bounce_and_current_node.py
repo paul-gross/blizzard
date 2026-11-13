@@ -252,8 +252,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
 
     def _land_the_first(handle: object) -> None:
         assert isinstance(handle, LockedChunkTransaction)
-        chunk.stores.movement.record_transition_locked(
-            handle,
+        chunk.stores.movement.record_transition(
             transition_id="tr_raced",
             chunk_id=chunk.chunk_id,
             from_node_id=chunk.nodes["build"],
@@ -266,6 +265,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
             at=chunk.hub.clock.now(),
             artifacts=[],
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
         )
 
     result = held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)

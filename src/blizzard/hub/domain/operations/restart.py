@@ -233,8 +233,7 @@ class RestartService:
                 to_graph_retired=to_graph is not None and self._graphs.is_retired(to_graph.graph_id),
             )
             open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
-            written = self._movement.record_restart_locked(
-                handle,
+            written = self._movement.record_restart(
                 chunk.chunk_id,
                 from_node_id=plan.from_node_id,
                 to_node_id=plan.to_node_id,
@@ -246,6 +245,7 @@ class RestartService:
                 to_graph_id=plan.to_graph_id,
                 note=person_note(note),
                 waiting=waiting(open_submissions),
+                transaction=handle.transaction,
             )
             landed = handle.facts(chunk.chunk_id)
             assert landed is not None

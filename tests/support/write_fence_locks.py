@@ -169,14 +169,14 @@ def stop_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
 
 def restart_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
     def write(handle: ILockedChunkRead) -> None:
-        chunk.stores.movement.record_restart_locked(
-            handle,
+        chunk.stores.movement.record_restart(
             chunk.chunk_id,
             from_node_id=chunk.nodes["build"],
             to_node_id=chunk.nodes["build"],
             by="operator",
             at=chunk.hub.clock.now(),
             waiting=(),
+            transaction=handle.transaction,
         )
 
     return write

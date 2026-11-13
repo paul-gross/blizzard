@@ -117,20 +117,22 @@ def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
 
 def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id=None,
-        to_node_id="nd_b",
-        choice_name="approve",
-        epoch=1,
-        runner_id="runner-a",
-        at=_at(1),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_1",
+            chunk_id="ch_1",
+            from_node_id=None,
+            to_node_id="nd_b",
+            choice_name="approve",
+            epoch=1,
+            runner_id="runner-a",
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -140,20 +142,22 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
 
 def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id=None,
-        to_node_id="nd_b",
-        choice_name=None,
-        epoch=1,
-        runner_id="hub",
-        at=_at(1),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_1",
+            chunk_id="ch_1",
+            from_node_id=None,
+            to_node_id="nd_b",
+            choice_name=None,
+            epoch=1,
+            runner_id="hub",
+            at=_at(1),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "hub"
@@ -163,22 +167,24 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
 
 def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.movement.record_migration(
-        "ch_1",
-        from_node_id=None,
-        from_graph_id="gr_1",
-        to_graph_id="gr_2",
-        landed_node_id=None,
-        choice_name="reroute",
-        model=None,
-        epoch=1,
-        at=_at(1),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_migration(
+            "ch_1",
+            from_node_id=None,
+            from_graph_id="gr_1",
+            to_graph_id="gr_2",
+            landed_node_id=None,
+            choice_name="reroute",
+            model=None,
+            epoch=1,
+            at=_at(1),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "migrated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_2"  # the migration's target graph, not the one migrated out of
@@ -309,7 +315,11 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
 def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.movement.record_requeue_locked(handle, "ch_1", at=_at(1))
+        store.movement.record_requeue(
+            "ch_1",
+            at=_at(1),
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "requeued")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -407,8 +417,14 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
 def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.movement.record_restart_locked(
-            handle, "ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1), waiting=()
+        store.movement.record_restart(
+            "ch_1",
+            from_node_id=None,
+            to_node_id="nd_build",
+            by="alice",
+            at=_at(1),
+            waiting=(),
+            transaction=handle.transaction,
         )
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"

@@ -333,8 +333,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                 )
                 assert stepped.wrote
                 return stepped.close_skipped
-            moved = stores.movement.record_transition_locked(
-                handle,
+            moved = stores.movement.record_transition(
                 transition_id=transition_id,
                 chunk_id=chunk_id,
                 from_node_id=transition_id,
@@ -347,6 +346,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                 at=hub.clock.now(),
                 artifacts=[],
                 close_decision=decision,
+                transaction=handle.transaction,
             )
             assert isinstance(moved, TransitionWrite)
             return moved.close_skipped
@@ -387,8 +387,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
             ).wrote
         else:
             assert isinstance(
-                stores.movement.record_transition_locked(
-                    handle,
+                stores.movement.record_transition(
                     transition_id="tr_abort",
                     chunk_id=chunk_id,
                     from_node_id="node",
@@ -401,6 +400,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                     at=hub.clock.now(),
                     artifacts=[],
                     close_decision=decision,
+                    transaction=handle.transaction,
                 ),
                 TransitionWrite,
             )

@@ -441,7 +441,7 @@ _MERGE_FAILURE = "          description: Failed to land.\n          to: build\n"
 #: migrates, and an edge to a node the graph lacks escalates.
 _FAILURE_ROUTES: dict[str, tuple[type, str]] = {
     "node": (ChunkHubExecStore, "record_hub_step_transition"),
-    "cross-graph": (ChunkMovementStore, "record_migration_locked"),
+    "cross-graph": (ChunkMovementStore, "record_migration"),
     "unroutable": (ChunkEscalationsStore, "record_bounce_escalation"),
 }
 #: The events a refusal along each failure edge records, once.
@@ -705,20 +705,22 @@ def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_u
     assert graph is not None
     merge = graph.node_by_name("merge")
     assert merge is not None
-    cast(IWriteChunkMovementRepository, world.hub.services.chunks.movement).record_transition(
-        transition_id="tr_parked",
-        close_decision=decide_close_enqueue([WorkRef("default", "42")], lambda _: True),
-        chunk_id=chunk_id,
-        from_node_id=build,
-        to_node_id=merge.node_id,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=world.hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(world.hub.engine, world.hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, world.hub.services.chunks.movement).record_transition(
+            transition_id="tr_parked",
+            close_decision=decide_close_enqueue([WorkRef("default", "42")], lambda _: True),
+            chunk_id=chunk_id,
+            from_node_id=build,
+            to_node_id=merge.node_id,
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=world.hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
     world.tick()
     world.driver.wake()

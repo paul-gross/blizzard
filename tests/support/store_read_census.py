@@ -1781,34 +1781,38 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- movement ------------------------------------------------------------------------------
     chunk_transition = "ch_hub_transition"
     _mint(chunk_transition, "1004", at=_ht(35))
-    write.movement.record_transition(
-        transition_id="tr_hub_1",
-        chunk_id=chunk_transition,
-        from_node_id=None,
-        to_node_id=build_node.node_id,
-        choice_name=None,
-        epoch=1,
-        runner_id=HUB_RUNNER_ID,
-        at=_ht(36),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=_close_decision(chunk_transition),
-    )
-    write.movement.record_transition(
-        transition_id="tr_hub_2",
-        chunk_id=chunk_transition,
-        from_node_id=build_node.node_id,
-        to_node_id=deliver_node.node_id,
-        choice_name="pass",
-        epoch=2,
-        runner_id=HUB_RUNNER_ID,
-        at=_ht(37),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=_close_decision(chunk_transition),
-    )
+    with write.exclusive.locked([chunk_transition]) as handle:
+        write.movement.record_transition(
+            transition_id="tr_hub_1",
+            chunk_id=chunk_transition,
+            from_node_id=None,
+            to_node_id=build_node.node_id,
+            choice_name=None,
+            epoch=1,
+            runner_id=HUB_RUNNER_ID,
+            at=_ht(36),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=_close_decision(chunk_transition),
+            transaction=handle.transaction,
+        )
+    with write.exclusive.locked([chunk_transition]) as handle:
+        write.movement.record_transition(
+            transition_id="tr_hub_2",
+            chunk_id=chunk_transition,
+            from_node_id=build_node.node_id,
+            to_node_id=deliver_node.node_id,
+            choice_name="pass",
+            epoch=2,
+            runner_id=HUB_RUNNER_ID,
+            at=_ht(37),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=_close_decision(chunk_transition),
+            transaction=handle.transaction,
+        )
 
     # --- garden / review delivery markers: each store's own replay probe reads these ---------------
     delivery_chunk = "ch_hub_delivery"
@@ -1871,23 +1875,25 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     chunk_migration = "ch_hub_migration"
     _mint(chunk_migration, "1005", at=_ht(40))
-    write.movement.record_migration(
-        chunk_migration,
-        from_node_id=build_node.node_id,
-        from_graph_id=graph.graph_id,
-        to_graph_id=default_graph.graph_id,
-        landed_node_id=None,
-        choice_name=None,
-        decision_id=None,
-        model=None,
-        epoch=1,
-        at=_ht(41),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=_close_decision(chunk_migration),
-    )
+    with write.exclusive.locked([chunk_migration]) as handle:
+        write.movement.record_migration(
+            chunk_migration,
+            from_node_id=build_node.node_id,
+            from_graph_id=graph.graph_id,
+            to_graph_id=default_graph.graph_id,
+            landed_node_id=None,
+            choice_name=None,
+            decision_id=None,
+            model=None,
+            epoch=1,
+            at=_ht(41),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=_close_decision(chunk_migration),
+            transaction=handle.transaction,
+        )
 
     # --- decisions -----------------------------------------------------------------------------
     chunk_decision_1 = "ch_hub_decision_1"

@@ -22,10 +22,10 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite, TransitionWrite
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
@@ -39,9 +39,8 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_epoch_owner,
 )
 from blizzard.hub.store.internal.flow_rows import withdraw_waiting
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import connection_for
 
 
 class ChunkMovementStore:
@@ -85,50 +84,10 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> TransitionWrite | FenceRefusal:
-        with self._store.write("record_transition") as conn:
-            lock_chunk_row(conn, chunk_id)
-            return self._record_transition_conn(
-                conn,
-                transition_id=transition_id,
-                chunk_id=chunk_id,
-                from_node_id=from_node_id,
-                to_node_id=to_node_id,
-                choice_name=choice_name,
-                epoch=epoch,
-                admission=admission,
-                terminal=terminal,
-                claimant=claimant,
-                runner_id=runner_id,
-                at=at,
-                artifacts=artifacts,
-                close_decision=close_decision,
-                decision_id=decision_id,
-            )
-
-    def record_transition_locked(
-        self,
-        handle: ILockedChunkRead,
-        *,
-        transition_id: str,
-        chunk_id: str,
-        from_node_id: str | None,
-        to_node_id: str,
-        choice_name: str | None,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        runner_id: str,
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        close_decision: CloseEnqueueDecision,
-        decision_id: str | None = None,
-    ) -> TransitionWrite | FenceRefusal:
-        """:meth:`record_transition` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_transition_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             transition_id=transition_id,
             chunk_id=chunk_id,
             from_node_id=from_node_id,
@@ -224,62 +183,12 @@ class ChunkMovementStore:
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> MigrationWrite | FenceRefusal | None:
         """See ``src/blizzard/hub/domain/chunk/ports/movement.py``'s
         ``IWriteChunkMovementRepository.record_migration``."""
-        with self._store.write("record_migration") as conn:
-            lock_chunk_row(conn, chunk_id)
-            return self._record_migration_conn(
-                conn,
-                chunk_id,
-                from_node_id=from_node_id,
-                from_graph_id=from_graph_id,
-                to_graph_id=to_graph_id,
-                landed_node_id=landed_node_id,
-                choice_name=choice_name,
-                decision_id=decision_id,
-                model=model,
-                epoch=epoch,
-                admission=admission,
-                terminal=terminal,
-                claimant=claimant,
-                at=at,
-                artifacts=artifacts,
-                close_decision=close_decision,
-                source=source,
-                release_route=release_route,
-                clear_intent=clear_intent,
-                migration_id=migration_id,
-            )
-
-    def record_migration_locked(
-        self,
-        handle: ILockedChunkRead,
-        chunk_id: str,
-        *,
-        from_node_id: str | None,
-        from_graph_id: str,
-        to_graph_id: str,
-        landed_node_id: str | None,
-        choice_name: str | None,
-        decision_id: str | None = None,
-        model: str | None,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        close_decision: CloseEnqueueDecision,
-        source: MigrationSource,
-        release_route: bool = True,
-        clear_intent: bool = False,
-        migration_id: str | None = None,
-    ) -> MigrationWrite | FenceRefusal | None:
-        """:meth:`record_migration` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_migration_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             from_graph_id=from_graph_id,
@@ -386,9 +295,8 @@ class ChunkMovementStore:
             )
         return MigrationWrite(resolved_migration_id)
 
-    def record_restart_locked(
+    def record_restart(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         from_node_id: str | None,
@@ -401,41 +309,9 @@ class ChunkMovementStore:
         to_graph_id: str | None = None,
         note: str | None = None,
         waiting: Sequence[str],
+        transaction: LockedTransaction,
     ) -> LeverWrite:
-        """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
-        the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
-        each flow submission the caller names in ``waiting``."""
-        return self.record_restart_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
-            chunk_id,
-            from_node_id=from_node_id,
-            to_node_id=to_node_id,
-            by=by,
-            at=at,
-            decision_id=decision_id,
-            answered_question_ids=answered_question_ids,
-            answer=answer,
-            to_graph_id=to_graph_id,
-            note=note,
-            waiting=waiting,
-        )
-
-    def record_restart_conn(
-        self,
-        conn: Connection,
-        chunk_id: str,
-        *,
-        from_node_id: str | None,
-        to_node_id: str,
-        by: str,
-        at: datetime,
-        decision_id: str | None,
-        answered_question_ids: Sequence[str],
-        answer: str,
-        to_graph_id: str | None,
-        note: str | None,
-        waiting: Sequence[str],
-    ) -> LeverWrite:
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         withdrawn = withdraw_waiting(conn, waiting, outcome="restarted", at=at)
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
@@ -480,10 +356,16 @@ class ChunkMovementStore:
         key = result.inserted_primary_key
         return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
-    def record_requeue_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None
+    def record_requeue(
+        self,
+        chunk_id: str,
+        *,
+        at: datetime,
+        by: str | None = None,
+        note: str | None = None,
+        transaction: LockedTransaction,
     ) -> int:
-        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         result = conn.execute(
             self._store.insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at, requeued_by=by, note=note)
         )

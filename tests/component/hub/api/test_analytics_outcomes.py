@@ -277,22 +277,24 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _writable_movement(hub).record_migration(
-        chunk_id,
-        from_node_id=nodes["build"],
-        from_graph_id=graph_id,
-        to_graph_id=other_graph_id,
-        landed_node_id=other_nodes["triage"],
-        choice_name="pass",
-        model=None,
-        epoch=1,
-        at=hub.clock.now(),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        _writable_movement(hub).record_migration(
+            chunk_id,
+            from_node_id=nodes["build"],
+            from_graph_id=graph_id,
+            to_graph_id=other_graph_id,
+            landed_node_id=other_nodes["triage"],
+            choice_name="pass",
+            model=None,
+            epoch=1,
+            at=hub.clock.now(),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
+        )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
@@ -311,22 +313,24 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _writable_movement(hub).record_migration(
-        chunk_id,
-        from_node_id=nodes["build"],
-        from_graph_id=graph_id,
-        to_graph_id=other_graph_id,
-        landed_node_id=None,
-        choice_name="pass",
-        model=None,
-        epoch=1,
-        at=hub.clock.now(),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        _writable_movement(hub).record_migration(
+            chunk_id,
+            from_node_id=nodes["build"],
+            from_graph_id=graph_id,
+            to_graph_id=other_graph_id,
+            landed_node_id=None,
+            choice_name="pass",
+            model=None,
+            epoch=1,
+            at=hub.clock.now(),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
+        )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
@@ -346,22 +350,24 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # crashed on graph A, no transition of its own
     report_lease(hub, chunk_id, epoch=2, seq=2)
-    _writable_movement(hub).record_migration(
-        chunk_id,
-        from_node_id=nodes["build"],
-        from_graph_id=graph_id,
-        to_graph_id=other_graph_id,
-        landed_node_id=other_nodes["triage"],
-        choice_name="pass",
-        model=None,
-        epoch=2,
-        at=hub.clock.now(),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        _writable_movement(hub).record_migration(
+            chunk_id,
+            from_node_id=nodes["build"],
+            from_graph_id=graph_id,
+            to_graph_id=other_graph_id,
+            landed_node_id=other_nodes["triage"],
+            choice_name="pass",
+            model=None,
+            epoch=2,
+            at=hub.clock.now(),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 

@@ -66,21 +66,23 @@ def _stop(store: ChunkStores) -> None:
 
 
 def _finish(store: ChunkStores) -> None:
-    store.movement.record_transition(
-        transition_id="tr_1",
-        chunk_id="ch_1",
-        from_node_id="nd_1",
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="ok",
-        epoch=1,
-        runner_id="r1",
-        at=_T0,
-        artifacts=[],
-        close_decision=decide_close_enqueue([], lambda _: True),
-        decision_id=None,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_1",
+            chunk_id="ch_1",
+            from_node_id="nd_1",
+            to_node_id=RESERVED_TERMINAL,
+            choice_name="ok",
+            epoch=1,
+            runner_id="r1",
+            at=_T0,
+            artifacts=[],
+            close_decision=decide_close_enqueue([], lambda _: True),
+            decision_id=None,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
 
 def test_an_unanswered_question_on_a_live_chunk_is_open(tmp_path: Path) -> None:

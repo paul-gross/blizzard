@@ -46,7 +46,7 @@ from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.envelope import Arrival
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from tests.support.completion_facts import (
     AT_BUILD,
@@ -81,7 +81,7 @@ class _Ports:
     transitions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     decisions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     wakes: int = 0
-    migration_handles: list[ILockedChunkRead] = field(default_factory=list[ILockedChunkRead])
+    migration_transactions: list[object] = field(default_factory=list[object])
     refusal: FenceRefusal | None = None
     gate: GateDecision | None = None
 
@@ -96,14 +96,14 @@ class _Ports:
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         return None
 
-    def record_migration_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, **kwargs: Any
+    def record_migration(
+        self, chunk_id: str, *, transaction: LockedTransaction, **kwargs: Any
     ) -> MigrationWrite | FenceRefusal:
-        self.migration_handles.append(handle)
+        self.migration_transactions.append(transaction)
         self.migrations.append({"chunk_id": chunk_id, **kwargs})
         return self.refusal or MigrationWrite("mg_recorded")
 
-    def record_transition_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> TransitionWrite | FenceRefusal:
+    def record_transition(self, *, transaction: LockedTransaction, **kwargs: Any) -> TransitionWrite | FenceRefusal:
         self.transitions.append(kwargs)
         return self.refusal or TransitionWrite()
 
@@ -373,7 +373,7 @@ def test_a_migration_locks_reads_and_writes_the_submitted_chunk_through_the_lock
 
     assert exclusive.locked_ids == [["chk_1"]]
     assert exclusive.handles[0].read_ids == ["chk_1"]
-    assert ports.migration_handles == [exclusive.handles[0]]
+    assert ports.migration_transactions == [exclusive.handles[0]]
 
 
 def test_a_migration_lands_its_artifacts_at_the_node_and_epoch_it_left() -> None:

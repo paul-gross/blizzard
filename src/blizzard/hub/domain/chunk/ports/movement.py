@@ -13,8 +13,8 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 
 @domain_model
@@ -71,8 +71,10 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> TransitionWrite | FenceRefusal:
-        """One node-step's transition and its artifacts, written atomically
+        """One node-step's transition and its artifacts, written in ``transaction``, a unit that locks
+        ``chunk_id`` (``bzh:transaction-participation``), atomically
         behind the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is
         returned. ``decision_id`` is set only on a gate-resolving transition."""
         ...
@@ -99,68 +101,18 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
+        transaction: LockedTransaction,
     ) -> MigrationWrite | FenceRefusal | None:
-        """Record a cross-graph migration atomically and idempotently per ``(chunk_id, from_node_id, epoch)``,
+        """Record a cross-graph migration in ``transaction``, a unit that locks ``chunk_id``
+        (``bzh:transaction-participation``), atomically and idempotently per ``(chunk_id, from_node_id, epoch)``,
         behind the write fence (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id``
         re-pin, the route release (unless ``release_route`` is ``False``), the step's ``artifacts``, and — when
         ``clear_intent`` — the intent clear. Returns the :class:`MigrationWrite`, ``None`` on replay, or the
         :class:`FenceRefusal` that wrote nothing."""
         ...
 
-    def record_transition_locked(
+    def record_restart(
         self,
-        handle: ILockedChunkRead,
-        *,
-        transition_id: str,
-        chunk_id: str,
-        from_node_id: str | None,
-        to_node_id: str,
-        choice_name: str | None,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        runner_id: str,
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        close_decision: CloseEnqueueDecision,
-        decision_id: str | None = None,
-    ) -> TransitionWrite | FenceRefusal:
-        """:meth:`record_transition` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
-        the caller's guard reads and this write share one lock."""
-        ...
-
-    def record_migration_locked(
-        self,
-        handle: ILockedChunkRead,
-        chunk_id: str,
-        *,
-        from_node_id: str | None,
-        from_graph_id: str,
-        to_graph_id: str,
-        landed_node_id: str | None,
-        choice_name: str | None,
-        decision_id: str | None = None,
-        model: str | None,
-        epoch: int,
-        admission: EpochAdmission,
-        terminal: bool,
-        claimant: Claimant | None = None,
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        close_decision: CloseEnqueueDecision,
-        source: MigrationSource,
-        release_route: bool = True,
-        clear_intent: bool = False,
-        migration_id: str | None = None,
-    ) -> MigrationWrite | FenceRefusal | None:
-        """:meth:`record_migration` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
-        the caller's guard reads and this write share one lock."""
-        ...
-
-    def record_restart_locked(
-        self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         from_node_id: str | None,
@@ -173,10 +125,11 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         to_graph_id: str | None = None,
         note: str | None = None,
         waiting: Sequence[str],
+        transaction: LockedTransaction,
     ) -> LeverWrite:
         """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``,
-        at a fence epoch this call derives one above the chunk's newest — on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``). One write with the
+        at a fence epoch this call derives one above the chunk's newest — in ``transaction``, a unit that
+        locks ``chunk_id`` (``bzh:transaction-participation``). One write with the
         answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set —
         the migration fact re-pinning the chunk there and the standing intent that clears
         with it, so no crash leaves the move half-applied. Each flow submission the caller names
@@ -184,11 +137,17 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         moves. Returns the ``chunk_restarts.id``, with the ``withdrawn`` flow facts it wrote."""
         ...
 
-    def record_requeue_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None
+    def record_requeue(
+        self,
+        chunk_id: str,
+        *,
+        at: datetime,
+        by: str | None = None,
+        note: str | None = None,
+        transaction: LockedTransaction,
     ) -> int:
-        """Record a ``requeue.recorded`` fact — supersedes an open escalation — on
-        ``handle``'s already-locked connection (``bzh:store-exclusive-write``), atomically
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation — in ``transaction``, a unit that
+        locks ``chunk_id`` (``bzh:transaction-participation``), atomically
         with the route release it always accompanies.
 
         Returns the freshly-written ``requeues.id``."""

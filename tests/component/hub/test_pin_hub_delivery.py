@@ -19,7 +19,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support.github_double import GitHubDouble
 from tests.support.pin_hub_delivery_world import mint_and_claim, writable
-from tests.support.scaffolding import HubHarness, build_hub, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, report_lease
 
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 
@@ -43,20 +43,22 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         )
         for branch, commit in (("feat/from-e1", "a"), ("feat/from-e2", "b"))
     ]
-    writable(hub).record_transition(
-        transition_id="tr_seed_deliver",
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-        chunk_id=chunk_id,
-        from_node_id=None,
-        to_node_id=nodes["deliver"],
-        choice_name=None,
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=rows,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        writable(hub).record_transition(
+            transition_id="tr_seed_deliver",
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            chunk_id=chunk_id,
+            from_node_id=None,
+            to_node_id=nodes["deliver"],
+            choice_name=None,
+            epoch=1,
+            runner_id="r1",
+            at=hub.clock.now(),
+            artifacts=rows,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
 
 def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the_tick(tmp_path: Path) -> None:

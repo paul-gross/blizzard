@@ -325,35 +325,37 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
 
     def migrate(epoch: int) -> MigrationWrite | FenceRefusal | None:
         terminal = ChunkFacts.terminal_verdict(chunk.stores.facts.load_facts(chunk.chunk_id))
-        return chunk.stores.movement.record_migration(
-            chunk.chunk_id,
-            from_node_id=chunk.nodes["build"],
-            from_graph_id="gr_from",
-            to_graph_id="gr_to",
-            landed_node_id=None,
-            choice_name="pass",
-            model=None,
-            epoch=epoch,
-            admission=EpochAdmission.CURRENT,
-            terminal=terminal,
-            at=hub.clock.now(),
-            artifacts=[
-                StoredArtifact(
-                    kind=ArtifactKind.ASSET,
-                    name="notes",
-                    data="n",
-                    repo=None,
-                    forge=None,
-                    artifact_id="art_fence",
-                    chunk_id=chunk.chunk_id,
-                    node_id=chunk.nodes["build"],
-                    node_name="build",
-                    epoch=epoch,
-                )
-            ],
-            source=MigrationSource.AUTHORED_EDGE,
-            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-        )
+        with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
+            return chunk.stores.movement.record_migration(
+                chunk.chunk_id,
+                from_node_id=chunk.nodes["build"],
+                from_graph_id="gr_from",
+                to_graph_id="gr_to",
+                landed_node_id=None,
+                choice_name="pass",
+                model=None,
+                epoch=epoch,
+                admission=EpochAdmission.CURRENT,
+                terminal=terminal,
+                at=hub.clock.now(),
+                artifacts=[
+                    StoredArtifact(
+                        kind=ArtifactKind.ASSET,
+                        name="notes",
+                        data="n",
+                        repo=None,
+                        forge=None,
+                        artifact_id="art_fence",
+                        chunk_id=chunk.chunk_id,
+                        node_id=chunk.nodes["build"],
+                        node_name="build",
+                        epoch=epoch,
+                    )
+                ],
+                source=MigrationSource.AUTHORED_EDGE,
+                close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+                transaction=handle.transaction,
+            )
 
     assert migrate(1) == FenceRefusal.stale(1, latest=2)
     chunk.stop()

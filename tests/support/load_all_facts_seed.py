@@ -94,20 +94,22 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
 
     _mint(store, "ch_delivering")
     seed_promote(store, engine, "ch_delivering", at=T0)
-    store.movement.record_transition(
-        transition_id="tr_delivering",
-        chunk_id="ch_delivering",
-        from_node_id=None,
-        to_node_id="nd_g1_hub",
-        choice_name=None,
-        epoch=1,
-        runner_id="r",
-        at=T0,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_delivering"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_delivering",
+            chunk_id="ch_delivering",
+            from_node_id=None,
+            to_node_id="nd_g1_hub",
+            choice_name=None,
+            epoch=1,
+            runner_id="r",
+            at=T0,
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     _mint(store, "ch_waiting")
     seed_promote(store, engine, "ch_waiting", at=T0)
@@ -178,56 +180,62 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
 
     _mint(store, "ch_done_terminal")
     seed_promote(store, engine, "ch_done_terminal", at=T0)
-    store.movement.record_transition(
-        transition_id="tr_terminal",
-        chunk_id="ch_done_terminal",
-        from_node_id="nd_g1_runner",
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="go",
-        epoch=1,
-        runner_id="r",
-        at=T0,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_done_terminal"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_terminal",
+            chunk_id="ch_done_terminal",
+            from_node_id="nd_g1_runner",
+            to_node_id=RESERVED_TERMINAL,
+            choice_name="go",
+            epoch=1,
+            runner_id="r",
+            at=T0,
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     # AC4: movement facts spanning two graphs — a transition on gr_1, then a migration
     # landing on gr_2's hub node. The executor for that landing must resolve against
     # gr_2, not the chunk's gr_1 mint pin.
     _mint(store, "ch_multigraph", graph_id="gr_1")
     seed_promote(store, engine, "ch_multigraph", at=T0)
-    store.movement.record_transition(
-        transition_id="tr_multigraph",
-        chunk_id="ch_multigraph",
-        from_node_id=None,
-        to_node_id="nd_g1_runner",
-        choice_name=None,
-        epoch=1,
-        runner_id="r",
-        at=T0,
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
-    store.movement.record_migration(
-        "ch_multigraph",
-        from_node_id="nd_g1_runner",
-        from_graph_id="gr_1",
-        to_graph_id="gr_2",
-        landed_node_id="nd_g2_hub",
-        choice_name="go",
-        model=None,
-        epoch=2,
-        at=_at(1),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_multigraph"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_multigraph",
+            chunk_id="ch_multigraph",
+            from_node_id=None,
+            to_node_id="nd_g1_runner",
+            choice_name=None,
+            epoch=1,
+            runner_id="r",
+            at=T0,
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
+    with store.exclusive.locked(["ch_multigraph"]) as handle:
+        store.movement.record_migration(
+            "ch_multigraph",
+            from_node_id="nd_g1_runner",
+            from_graph_id="gr_1",
+            to_graph_id="gr_2",
+            landed_node_id="nd_g2_hub",
+            choice_name="go",
+            model=None,
+            epoch=2,
+            at=_at(1),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
     _mint(store, "ch_grouped")
@@ -257,7 +265,11 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         )
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
         store.route.record_route_released("ch_kitchen_sink", at=_at(2), transaction=handle.transaction)
-        store.movement.record_requeue_locked(handle, "ch_kitchen_sink", at=_at(2))
+        store.movement.record_requeue(
+            "ch_kitchen_sink",
+            at=_at(2),
+            transaction=handle.transaction,
+        )
     store.usage.record_usage(
         "ch_kitchen_sink",
         node_id="nd_g1_runner",
@@ -318,14 +330,14 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         "ch_kitchen_sink", at=T0, close_decision=decide_close_enqueue([], lambda _: True)
     )
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.movement.record_restart_locked(
-            handle,
+        store.movement.record_restart(
             "ch_kitchen_sink",
             from_node_id="nd_g1_runner",
             to_node_id="nd_g1_runner",
             by="op",
             at=_at(3),
             waiting=(),
+            transaction=handle.transaction,
         )
 
 

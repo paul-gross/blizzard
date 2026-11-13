@@ -108,20 +108,22 @@ class _Fixture:
         self.clock = FixedClock(_NOW)
         self.corpus = build_hub_scoped_reads(hub_level_connections(self.engine)).corpus
         seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        self.chunks.movement.record_transition(
-            transition_id="tr_1",
-            close_decision=decide_close_enqueue([], lambda _: True),
-            chunk_id="ch_1",
-            from_node_id=None,
-            to_node_id="nd_build",
-            choice_name=None,
-            epoch=1,
-            runner_id="r1",
-            at=_NOW,
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-        )
+        with self.chunks.exclusive.locked(["ch_1"]) as handle:
+            self.chunks.movement.record_transition(
+                transition_id="tr_1",
+                close_decision=decide_close_enqueue([], lambda _: True),
+                chunk_id="ch_1",
+                from_node_id=None,
+                to_node_id="nd_build",
+                choice_name=None,
+                epoch=1,
+                runner_id="r1",
+                at=_NOW,
+                artifacts=[],
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
+                transaction=handle.transaction,
+            )
         self.service = EventDerivationService(
             extractors=shipped_extractors(),
             events=self.events,
@@ -143,20 +145,22 @@ class _Fixture:
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
         seed_chunk_record(self.chunks, Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        self.chunks.movement.record_transition(
-            transition_id=f"tr_{chunk_id}",
-            close_decision=decide_close_enqueue([], lambda _: True),
-            chunk_id=chunk_id,
-            from_node_id=None,
-            to_node_id=node_id,
-            choice_name=None,
-            epoch=1,
-            runner_id="r1",
-            at=_NOW,
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-        )
+        with self.chunks.exclusive.locked([chunk_id]) as handle:
+            self.chunks.movement.record_transition(
+                transition_id=f"tr_{chunk_id}",
+                close_decision=decide_close_enqueue([], lambda _: True),
+                chunk_id=chunk_id,
+                from_node_id=None,
+                to_node_id=node_id,
+                choice_name=None,
+                epoch=1,
+                runner_id="r1",
+                at=_NOW,
+                artifacts=[],
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
+                transaction=handle.transaction,
+            )
 
     def drop_chunk_row(self, chunk_id: str) -> None:
         """The breach ``hub:segment-chunk-resolves`` names, injected directly: sqlite

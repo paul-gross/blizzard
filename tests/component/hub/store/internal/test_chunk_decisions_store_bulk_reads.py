@@ -71,21 +71,23 @@ def _resolve(
 def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
     """Closes ``decision_id`` — the movement fact `decision_for_chunk`'s
     ``_not_closed_clause`` reads to drop it from a chunk's live decision."""
-    store.movement.record_transition(
-        transition_id=transition_id,
-        chunk_id=chunk_id,
-        from_node_id="nd_1",
-        to_node_id="nd_2",
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=_T0,
-        artifacts=[],
-        decision_id=decision_id,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked([chunk_id]) as handle:
+        store.movement.record_transition(
+            transition_id=transition_id,
+            chunk_id=chunk_id,
+            from_node_id="nd_1",
+            to_node_id="nd_2",
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=_T0,
+            artifacts=[],
+            decision_id=decision_id,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
 
 def test_list_open_decisions_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
