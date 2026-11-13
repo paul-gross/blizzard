@@ -101,11 +101,7 @@
   }
 </ng-template>
 <ng-template #url>
-  @if (detail().card.url; as href) {
-    <a class="runner-url" [href]="href" target="_blank" rel="noopener noreferrer">{{ href }}</a>
-  } @else {
-    —
-  }
+  <app-host-origin-fact [origin]="urlOrigin()" />
 </ng-template>
 <ng-template #token>
   @if (detail().card.enrolled) {

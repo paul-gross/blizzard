@@ -27,6 +27,7 @@
         @case ('host') {
           <app-host-detail
             [detail]="sel"
+            [origin]="hostOrigin()"
             [canPause]="canPause()"
             [pendingRunnerIds]="pendingRunnerIds()"
             (togglePause)="toggle($event)"

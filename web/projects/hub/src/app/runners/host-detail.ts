@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, viewChild } from '@angular/core';
 
 import { KitAsyncState, KitBadge, KitBeacon, type KitFact, KitFactList, KitPanel, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { HostOriginFact } from './host-origin-fact';
+import { type HostOrigin, plainOrigin } from './host-origin.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import type { HostDetailVm } from './fleet-page.model';
 import { connectionState, hostLight } from './connection-status.model';
@@ -20,13 +22,15 @@ import { StatusLight } from './status-light';
 @Component({
   selector: 'app-host-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, HostVerbBar, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, StatusLight, SubscriptionPaceGroup],
+  imports: [FleetRunnerRow, HostOriginFact, HostVerbBar, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitPanel, StatusLight, SubscriptionPaceGroup],
   templateUrl: './host-detail.html',
   styleUrls: ['./fleet-detail.css', './host-detail.css'],
 })
 export class HostDetail {
   readonly detail = input.required<HostDetailVm>();
   readonly verbs = input<HostVerbsVm>(NO_HOST_VERBS);
+  /** How the URL fact renders, probed by the container; unset shows the host's `url` as a plain link. */
+  readonly origin = input<HostOrigin | null>(null);
   readonly canPause = input(false);
   readonly pendingRunnerIds = input<readonly string[]>([]);
 
@@ -50,6 +54,8 @@ export class HostDetail {
     { label: 'Token', template: this.token(), testid: 'fleet-fact-token' },
     { label: 'Agents', template: this.agents(), testid: 'fleet-fact-agents' },
   ]);
+
+  protected readonly urlOrigin = computed(() => this.origin() ?? plainOrigin(this.detail().card.url));
 
   protected readonly light = computed(() => hostLight(this.detail().card.online, this.detail().card.connection));
 

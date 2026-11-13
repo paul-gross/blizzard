@@ -76,6 +76,7 @@ const CARD: HostCard = {
   connection: 'online',
   reportLabel: 'seen 4s ago',
   url: null,
+  urls: [],
   enrolled: true,
   registeredAt: null,
   addedAt: '2026-01-01T00:00:00Z',

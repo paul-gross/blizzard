@@ -10,6 +10,8 @@ import { HostDetail } from './host-detail';
 import { groupHostRows } from './host-rows.model';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
+import { hostProbeTarget } from './host-origin.model';
+import { injectHostOrigin } from './host-origin.query';
 import { injectRunnerRows } from './runner-rows';
 import { type RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
@@ -63,6 +65,9 @@ export class RunnersPage {
 
   /** The opened host or hostless runner — the desktop Fleet tab's own resolution of `:id`. */
   protected readonly selection = computed(() => resolveSelection(groupHostRows(this.rows(), this.cards()), this.selectedId()));
+
+  /** The opened host's URL fact: its declared origins probed from this browser. */
+  protected readonly hostOrigin = injectHostOrigin(() => hostProbeTarget(this.selection()));
 
   /** The page's last pause/resume failure, or `null` ("report, don't swallow") — reset at the
    * start of every new attempt. */

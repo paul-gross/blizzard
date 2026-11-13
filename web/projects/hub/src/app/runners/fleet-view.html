@@ -41,6 +41,7 @@
           <app-host-detail
             [detail]="sel"
             [verbs]="hostVerbs()"
+            [origin]="hostOrigin()"
             [canPause]="canPause()"
             [pendingRunnerIds]="pendingRunnerIds()"
             (hostVerb)="hostVerb.emit($event)"

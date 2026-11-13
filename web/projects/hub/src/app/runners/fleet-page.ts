@@ -12,6 +12,8 @@ import { groupHostRows } from './host-rows.model';
 import { injectHostVerbs } from './host-verbs';
 import type { HostVerbEvent } from './host-verbs.model';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
+import { hostProbeTarget } from './host-origin.model';
+import { injectHostOrigin } from './host-origin.query';
 import { injectRunnerRows } from './runner-rows';
 import { type RunnerRow } from './runner-rows.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
@@ -53,6 +55,7 @@ export class FleetPage {
   );
   protected readonly list = computed(() => fleetList(this.groups()));
   protected readonly selection = computed(() => resolveSelection(this.groups(), this.selectedId()));
+  protected readonly hostOrigin = injectHostOrigin(() => hostProbeTarget(this.selection()));
 
   protected readonly actionError = signal<string | null>(null);
   private readonly hostVerbs = injectHostVerbs((message) => this.actionError.set(message));

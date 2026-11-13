@@ -27,6 +27,7 @@ function card(over: Partial<HostCard> = {}): HostCard {
     workspaces: [],
     subscriptionPaces: [],
     url: 'https://atlas.example',
+    urls: ['https://atlas.example'],
     enrolled: true,
     registeredAt: '2026-01-02T03:04:05Z',
     addedAt: '2026-01-01T00:00:00Z',
