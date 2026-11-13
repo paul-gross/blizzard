@@ -27,6 +27,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     count_queries,
     count_rows_read,
@@ -682,8 +683,11 @@ def test_two_edits_from_the_same_stale_view_each_keep_the_field_they_did_not_nam
         at=_NOW,
     )
 
-    store.edit("gprop_1", GardenProposalEdit(title="new title"))
-    store.edit("gprop_1", GardenProposalEdit(body="new body"))
+    connections = hub_store_connections(engine)
+    with proposal_unit(connections, "gprop_1") as transaction:
+        store.edit("gprop_1", GardenProposalEdit(title="new title"), transaction=transaction)
+    with proposal_unit(connections, "gprop_1") as transaction:
+        store.edit("gprop_1", GardenProposalEdit(body="new body"), transaction=transaction)
 
     after = store.get("gprop_1")
     assert after is not None

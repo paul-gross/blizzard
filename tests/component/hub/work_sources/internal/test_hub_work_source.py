@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_sources import WorkItemGoneError
 from blizzard.hub.domain.garden.findings.model import FindingExitService
+from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
@@ -975,6 +976,7 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
             project_id=ProjectId(default_project(engine)),
             reason=None,
             closed_by="operator",
+            lock=garden_proposal_lock("gp_1"),
         )
 
     assert {created.value.field_name, accepted.value.field_name} == {field_name}

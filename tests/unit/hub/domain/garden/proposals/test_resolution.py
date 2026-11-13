@@ -36,6 +36,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     RoutineProposalState,
 )
 from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 _PROJECT = "proj_test"
 
@@ -108,7 +109,7 @@ class _FakeClosures:
         default_factory=dict[tuple[str, str], GardenProposalClosure]
     )
 
-    def get(self, proposal_id: str) -> GardenProposalClosure | None:
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
         raise NotImplementedError
 
     def get_many(self, proposal_ids: object) -> dict[str, GardenProposalClosure]:

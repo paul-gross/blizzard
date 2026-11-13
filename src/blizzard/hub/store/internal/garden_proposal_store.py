@@ -29,9 +29,11 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalState,
     IWriteGardenProposalRepository,
     RoutineProposalState,
+    garden_proposal_lock,
     garden_proposal_state,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.kernel.unset import UnsetType
 
 # Shares the finding adapter's locking and scope queries in one transaction.
@@ -39,6 +41,7 @@ from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.store.internal.finding_store import findings_outside_project
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
@@ -149,24 +152,7 @@ class GardenProposalStore:
             project_id=project_id,
         )
 
-    def is_closed(self, conn: Any, proposal_id: str) -> bool:
-        """Whether `proposal_id` already carries a closure. Locks the proposal's own row
-        before reading closures
-        (`tests/component/hub/store/test_garden_proposal_closure_race.py::test_is_closed_locks_the_proposal_row_before_reading_closures`)."""
-        stmts = statements_of(conn)
-        conn.execute(
-            stmts.update(garden_proposals)
-            .where(garden_proposals.c.proposal_id == proposal_id)
-            .values(proposal_id=proposal_id)
-        )
-        already = conn.execute(
-            stmts.select(garden_proposal_closures, garden_proposal_closures.c.id).where(
-                garden_proposal_closures.c.proposal_id == proposal_id
-            )
-        ).first()
-        return already is not None
-
-    def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
+    def edit(self, proposal_id: str, edit: GardenProposalEdit, *, transaction: LockedTransaction) -> GardenProposal:
         """Writes only the columns `edit` gives — an `UNSET` one stays out of the `SET`, so
         a concurrent edit of another column survives."""
         given = {
@@ -174,48 +160,40 @@ class GardenProposalStore:
             for column, value in (("title", edit.title), ("class_", edit.class_), ("body", edit.body))
             if not isinstance(value, UnsetType)
         }
-        with self._store.write("edit") as conn:
-            if self.is_closed(conn, proposal_id):
-                return None
-            if given:
-                conn.execute(
-                    self._store.update(garden_proposals)
-                    .where(garden_proposals.c.proposal_id == proposal_id)
-                    .values(given)
-                )
-            return self._reread(conn, proposal_id)
+        conn = connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id))
+        if given:
+            conn.execute(
+                self._store.update(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id).values(given)
+            )
+        return self._reread(conn, proposal_id)
 
-    def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        with self._store.write("attach") as conn:
-            if self.is_closed(conn, proposal_id):
-                return None
-            linked = set(self._findings(conn, proposal_id))
-            for finding_id in finding_ids:
-                if finding_id in linked:
-                    raise GardenProposalFindingAlreadyLinkedError(proposal_id, finding_id)
-            row = conn.execute(
-                self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
-            ).one()
-            if finding_ids:
-                _refuse_another_projects_findings(conn, finding_ids, row.project_id)
-                conn.execute(
-                    self._store.insert(garden_proposal_findings),
-                    [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
-                )
-            return self._of(row, self._findings(conn, proposal_id))
+    def attach(self, proposal_id: str, finding_ids: Sequence[str], *, transaction: LockedTransaction) -> GardenProposal:
+        conn = connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id))
+        linked = set(self._findings(conn, proposal_id))
+        for finding_id in finding_ids:
+            if finding_id in linked:
+                raise GardenProposalFindingAlreadyLinkedError(proposal_id, finding_id)
+        row = conn.execute(
+            self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
+        ).one()
+        if finding_ids:
+            _refuse_another_projects_findings(conn, finding_ids, row.project_id)
+            conn.execute(
+                self._store.insert(garden_proposal_findings),
+                [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
+            )
+        return self._of(row, self._findings(conn, proposal_id))
 
-    def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        with self._store.write("detach") as conn:
-            if self.is_closed(conn, proposal_id):
-                return None
-            if finding_ids:
-                conn.execute(
-                    self._store.delete(garden_proposal_findings).where(
-                        garden_proposal_findings.c.proposal_id == proposal_id,
-                        garden_proposal_findings.c.finding_id.in_(finding_ids),
-                    )
+    def detach(self, proposal_id: str, finding_ids: Sequence[str], *, transaction: LockedTransaction) -> GardenProposal:
+        conn = connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id))
+        if finding_ids:
+            conn.execute(
+                self._store.delete(garden_proposal_findings).where(
+                    garden_proposal_findings.c.proposal_id == proposal_id,
+                    garden_proposal_findings.c.finding_id.in_(finding_ids),
                 )
-            return self._reread(conn, proposal_id)
+            )
+        return self._reread(conn, proposal_id)
 
     def _reread(self, conn: Connection, proposal_id: str) -> GardenProposal:
         """The proposal as it now stands — the tail `edit` and `detach` share."""

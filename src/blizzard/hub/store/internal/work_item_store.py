@@ -27,8 +27,9 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthorKind,
     WorkRef,
 )
+from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s
@@ -44,7 +45,7 @@ from blizzard.hub.store.internal.garden_proposal_closure_store import insert_gar
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 class WorkItemStore:
@@ -296,36 +297,36 @@ class WorkItemStore:
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> HubWorkItem | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
-        ``chunk``'s own rows in ``transaction``, or on one connection of their own without one —
-        :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
+        ``chunk``'s own rows in ``transaction``, which holds the proposal's key —
+        :meth:`create_with_chunk`'s shape plus the closure row, inserted first so an
         already-closed proposal mints nothing."""
-        with connection_in(self._store, transaction, "accept_create", write=True) as conn:
-            if not insert_garden_proposal_closure_row(
-                conn,
-                proposal_id=proposal_id,
-                closure=GardenProposalClosureKind.ACCEPTED,
-                reason=reason,
-                closed_by=closed_by,
-                at=at,
-                item_outcome=GardenProposalItemOutcome.MINTED,
-                pointer=pointer,
-            ):
-                return None
-            work_item_id = self._insert_item(
-                conn,
-                source=pointer.source,
-                ref=pointer.ref,
-                title=title,
-                body=body,
-                author=author,
-                stated_priority=None,
-                at=at,
-                project_id=chunk.project_id,
-            )
-            insert_chunk_rows(conn, chunk)
+        conn = connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id))
+        if not insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=reason,
+            closed_by=closed_by,
+            at=at,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            pointer=pointer,
+        ):
+            return None
+        work_item_id = self._insert_item(
+            conn,
+            source=pointer.source,
+            ref=pointer.ref,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=None,
+            at=at,
+            project_id=chunk.project_id,
+        )
+        insert_chunk_rows(conn, chunk)
         return HubWorkItem(
             work_item_id=work_item_id,
             project_id=chunk.project_id,

@@ -6,7 +6,7 @@ from typing import Protocol
 
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor, WorkRef
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 
 class IReadWorkItemRepository(Protocol):
@@ -94,8 +94,8 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> HubWorkItem | None:
-        """Atomically mint the item, chunk and proposal closure, or return None if already closed; joins
-        ``transaction`` when given, else opens its own write."""
+        """Atomically mint the item, chunk and proposal closure in ``transaction``, which holds the proposal's
+        own key, or return None if already closed (insert-if-absent)."""
         ...

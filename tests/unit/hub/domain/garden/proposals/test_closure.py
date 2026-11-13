@@ -26,9 +26,11 @@ from blizzard.hub.domain.garden.proposals.closure import (
     IWriteGardenProposalClosureRepository,
     compose_minted_body,
 )
-from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed
+from blizzard.hub.domain.garden.proposals.model import GardenProposal, GardenProposalAlreadyClosed, garden_proposal_lock
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from tests.support.fake_transactions import FakeTransactions
 
 _PROJECT = "proj_test"
 
@@ -87,16 +89,20 @@ class _FakeGardenProposalClosureRepo:
         default_factory=list[tuple[str, str | None, str, datetime]]
     )
 
-    def get(self, proposal_id: str) -> GardenProposalClosure | None:
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
         return self.closure
 
-    def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
+    def record_pass(
+        self, proposal_id: str, *, reason: str, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
         if self.closure is not None:
             return False
         self.passed.append((proposal_id, reason, closed_by, at))
         return True
 
-    def record_accept_decline(self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime) -> bool:
+    def record_accept_decline(
+        self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
         if self.closure is not None:
             return False
         self.declined.append((proposal_id, reason, closed_by, at))
@@ -108,13 +114,17 @@ def _as_write_repo(repo: _FakeGardenProposalClosureRepo) -> IWriteGardenProposal
 
 
 def _service(
-    repo: _FakeGardenProposalClosureRepo, *, items: WorkItemEditService | None = None
+    repo: _FakeGardenProposalClosureRepo,
+    *,
+    items: WorkItemEditService | None = None,
+    transactions: FakeTransactions | None = None,
 ) -> GardenProposalClosureService:
     return GardenProposalClosureService(
         closures=_as_write_repo(repo),
         items=items if items is not None else _no_mint_items(),
         default_graph=_untouched_default_graph,
         clock=FixedClock(instant=_T0),
+        transactions=transactions if transactions is not None else FakeTransactions(),
     )
 
 
@@ -260,3 +270,14 @@ def test_compose_returns_the_body_unchanged_when_findings_is_empty() -> None:
     body = compose_minted_body("the case", [])
 
     assert body == "the case"
+
+
+def test_pass_and_a_declining_accept_each_declare_the_proposal_key() -> None:
+    transactions = FakeTransactions()
+    _service(_FakeGardenProposalClosureRepo(), transactions=transactions).pass_(_proposal(), reason="no", by="u1")
+    _service(_FakeGardenProposalClosureRepo(), transactions=transactions).accept(
+        _proposal(), reason=None, by="u1", body=None, mint=False, findings=[]
+    )
+
+    key = garden_proposal_lock(_proposal().proposal_id)
+    assert transactions.locked_keys == [[key], [key]]

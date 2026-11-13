@@ -1589,7 +1589,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(
-            proposals=garden_proposal_store, closures=garden_proposal_closure_store, clock=clock
+            proposals=garden_proposal_store,
+            closures=garden_proposal_closure_store,
+            clock=clock,
+            transactions=stores.transactions,
         ),
         garden_proposal_closures=garden_proposal_closure_store,
         garden_proposal_closure=GardenProposalClosureService(
@@ -1597,6 +1600,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             items=stores.work_item_edits,
             default_graph=lambda: graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=default_graph_yaml),
             clock=clock,
+            transactions=stores.transactions,
         ),
         routine_garden_proposals=RoutineGardenProposalReader(
             proposals=garden_proposal_store, closures=garden_proposal_closure_store

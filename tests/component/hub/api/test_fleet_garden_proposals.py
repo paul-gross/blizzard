@@ -19,6 +19,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
+from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -79,9 +80,11 @@ def _seed_proposal(hub: HubHarness, proposal_id: str, *, routine_name: str = _RO
 
 
 def _pass_proposal(hub: HubHarness, proposal_id: str) -> None:
-    GardenProposalClosureStore(hub_store_connections(hub.engine)).record_pass(
-        proposal_id, reason="not worth it", closed_by="u_1", at=_NOW
-    )
+    connections = hub_store_connections(hub.engine)
+    with proposal_unit(connections, proposal_id) as transaction:
+        GardenProposalClosureStore(connections).record_pass(
+            proposal_id, reason="not worth it", closed_by="u_1", at=_NOW, transaction=transaction
+        )
 
 
 def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:

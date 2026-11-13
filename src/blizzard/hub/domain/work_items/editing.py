@@ -28,6 +28,7 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
@@ -216,19 +217,20 @@ class WorkItemEditService:
         project_id: ProjectId,
         reason: str | None,
         closed_by: str,
+        lock: LockKey,
         urgency: Urgency | None = None,
     ) -> CreatedWorkItem | None:
         """A garden-proposal acceptance's mint path: :meth:`create`'s guard sequence into the reserved hub
-        source and the proposal's ``project_id``, writing the item, its chunk, and the closure row on one
-        connection. Raises as
-        :meth:`create` does; returns ``None`` when already closed."""
+        source and the proposal's ``project_id``, writing the item, its chunk, and the closure row in one unit
+        that also declares ``lock``, the proposal's own key its caller names. Raises as :meth:`create` does;
+        returns ``None`` when already closed."""
         text = WorkItemText.of(title=title, body=body)
         pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
         )
         ahead = self._default.ahead(stated=urgency)
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=ahead.lock_keys())
+            locked = transaction.lock_set(keys=[*ahead.lock_keys(), lock])
             chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
             item = self._items.accept_create(
                 proposal_id=proposal_id,

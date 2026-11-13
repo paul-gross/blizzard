@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, NoReturn, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import (
@@ -21,6 +21,8 @@ from blizzard.foundation.garden_proposals import (
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.findings.model import Finding
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 if TYPE_CHECKING:
@@ -29,6 +31,12 @@ if TYPE_CHECKING:
     from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IReadGardenProposalClosureRepository
     from blizzard.hub.domain.garden.routines import Routine
     from blizzard.hub.domain.projects.model import Project
+
+
+def garden_proposal_lock(proposal_id: str) -> LockKey:
+    """The keyed lock on the garden proposal ``proposal_id`` (``bzh:transaction-graduation``): every unit editing,
+    linking, unlinking, or closing the proposal declares it, and decides on its closure re-read under it."""
+    return LockKey(LockNamespace.GARDEN_PROPOSAL, proposal_id)
 
 
 class DuplicateProposalFindingError(ValueError):
@@ -453,25 +461,23 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         when a finding belongs to a project other than `project_id`. `findings` may be empty."""
         ...
 
-    def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
+    def edit(self, proposal_id: str, edit: GardenProposalEdit, *, transaction: LockedTransaction) -> GardenProposal:
         """Write only the fields `edit` gives, in place (no edit-history table), leaving
-        every `UNSET` column as it stands; `None` when `proposal_id` already carries a
-        closure. Locks the proposal's own row before checking, so a close racing in
-        cannot land in the gap. `edit`'s given fields
-        arrive already stripped and validated."""
+        every `UNSET` column as it stands, in `transaction`, which holds
+        :func:`garden_proposal_lock` — the caller has already refused a closed proposal under it.
+        `edit`'s given fields arrive already stripped and validated."""
         ...
 
-    def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        """Link `finding_ids` to `proposal_id`; `None` when already closed, the same
-        row-locked check `edit` uses. Raises :class:`GardenProposalFindingAlreadyLinkedError`
-        when a finding is already linked, re-read under that same lock, and
-        :class:`GardenProposalFindingOtherProjectError` when one belongs to a project other than
+    def attach(self, proposal_id: str, finding_ids: Sequence[str], *, transaction: LockedTransaction) -> GardenProposal:
+        """Link `finding_ids` to `proposal_id` in `transaction`, which holds :func:`garden_proposal_lock`.
+        Raises :class:`GardenProposalFindingAlreadyLinkedError` when a finding is already linked, re-read in
+        that unit, and :class:`GardenProposalFindingOtherProjectError` when one belongs to a project other than
         the proposal's. `finding_ids` may be empty."""
         ...
 
-    def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        """Unlink `finding_ids` from `proposal_id`; `None` when already
-        closed, the same row-locked check `edit` uses. `finding_ids` may be empty."""
+    def detach(self, proposal_id: str, finding_ids: Sequence[str], *, transaction: LockedTransaction) -> GardenProposal:
+        """Unlink `finding_ids` from `proposal_id` in `transaction`, which holds
+        :func:`garden_proposal_lock`. `finding_ids` may be empty."""
         ...
 
 
@@ -503,9 +509,9 @@ class GardenProposalEdit:
 
 class GardenProposalAuthoring:
     """The operator-facing verbs — `create_operator`, `edit`, `attach`, `detach` — over already-loaded
-    objects. Every refusal is :class:`GardenProposal`'s own; this service loads the closure, mints the id
-    and instant, writes, and turns a close that raced in under the row lock into
-    :class:`GardenProposalAlreadyClosed`."""
+    objects. Every refusal is :class:`GardenProposal`'s own; this service mints the id and instant, and for
+    each change declares the proposal's :func:`garden_proposal_lock`, re-reads its closure under it, decides,
+    and writes in that one unit."""
 
     def __init__(
         self,
@@ -513,10 +519,12 @@ class GardenProposalAuthoring:
         proposals: IWriteGardenProposalRepository,
         closures: IReadGardenProposalClosureRepository,
         clock: IClock,
+        transactions: IHubTransactions,
     ) -> None:
         self._proposals = proposals
         self._closures = closures
         self._clock = clock
+        self._transactions = transactions
 
     @property
     def proposals(self) -> IWriteGardenProposalRepository:
@@ -567,32 +575,27 @@ class GardenProposalAuthoring:
     def edit(self, proposal: GardenProposal, edit: GardenProposalEdit) -> GardenProposal:
         """Apply only `edit`'s given fields (:meth:`GardenProposal.edit_fields`), so a
         field it leaves out keeps a concurrent edit's value."""
-        fields = proposal.edit_fields(edit, closure=self._closures.get(proposal.proposal_id))
-        updated = self._proposals.edit(proposal.proposal_id, fields)
-        if updated is None:
-            self._raise_already_closed(proposal.proposal_id)
-        return updated
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            closure = self._closures.get(proposal.proposal_id, transaction=locked)
+            fields = proposal.edit_fields(edit, closure=closure)
+            return self._proposals.edit(proposal.proposal_id, fields, transaction=locked)
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
         """Link `findings` to `proposal` (:meth:`GardenProposal.attachable`)."""
-        finding_ids = proposal.attachable(findings, closure=self._closures.get(proposal.proposal_id))
-        updated = self._proposals.attach(proposal.proposal_id, finding_ids)
-        if updated is None:
-            self._raise_already_closed(proposal.proposal_id)
-        return updated
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            closure = self._closures.get(proposal.proposal_id, transaction=locked)
+            finding_ids = proposal.attachable(findings, closure=closure)
+            return self._proposals.attach(proposal.proposal_id, finding_ids, transaction=locked)
 
     def detach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
         """Unlink `findings` from `proposal` (:meth:`GardenProposal.detachable`)."""
-        finding_ids = proposal.detachable(findings, closure=self._closures.get(proposal.proposal_id))
-        updated = self._proposals.detach(proposal.proposal_id, finding_ids)
-        if updated is None:
-            self._raise_already_closed(proposal.proposal_id)
-        return updated
-
-    def _raise_already_closed(self, proposal_id: str) -> NoReturn:
-        closure = self._closures.get(proposal_id)
-        assert closure is not None
-        raise GardenProposalAlreadyClosed(proposal_id, closure)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            closure = self._closures.get(proposal.proposal_id, transaction=locked)
+            finding_ids = proposal.detachable(findings, closure=closure)
+            return self._proposals.detach(proposal.proposal_id, finding_ids, transaction=locked)
 
 
 class RoutineGardenProposalReader:

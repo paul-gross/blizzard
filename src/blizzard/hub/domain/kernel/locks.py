@@ -17,6 +17,7 @@ class LockNamespace(StrEnum):
     CADENCE_ERRAND = "cadence_errand"
     FLOW = "flow"
     FORGE = "forge"
+    GARDEN_PROPOSAL = "garden_proposal"
     GRAPH_NAME = "graph_name"
     PROJECT_SOURCE_LINKS = "project-source-links"
     QUEUE_RANKING = "queue_ranking"
