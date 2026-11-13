@@ -21,10 +21,14 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
+from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.domain.config.forges import ForgeId, forge_lock
 from blizzard.hub.domain.config.secrets import secret_lock
+from blizzard.hub.domain.garden.findings.model import finding_lock
+from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.operations.delete import work_item_lock
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
@@ -101,6 +105,21 @@ _SECRET = secret_lock("tok_proof")
 _FORGE_RETIRE: _LockSet = ([], [_FORGE])
 _SECRET_RETIRE: _LockSet = ([], [_SECRET])
 _REFERRER_ENABLE: _LockSet = ([], [_FORGE, _SECRET])
+#: A proposal edit against a proposal closure, both on the proposal's key, each way round: the closure the edit
+#: re-reads under the key is the one that stands when it writes.
+_PROPOSAL = garden_proposal_lock("gpr_proof")
+_PROPOSAL_EDIT: _LockSet = ([], [_PROPOSAL])
+_PROPOSAL_CLOSE: _LockSet = ([], [_PROPOSAL])
+#: A chunk delete — the chunk's row, then the work item's key — against a work-item withdraw on that key alone, each
+#: way round: the withdraw never commits between the delete's closure re-read and its write.
+_ITEM = work_item_lock(WorkRef("hub", "wi_proof"))
+_DELETE_CHUNK: _LockSet = (["a"], [_ITEM])
+_WITHDRAW_ITEM: _LockSet = ([], [_ITEM])
+#: A garden delivery — the plan's chunk row, then the finding's key — against a finding verb on that key alone, each
+#: way round.
+_FINDING = finding_lock("fnd_proof")
+_DELIVER: _LockSet = (["a"], [_FINDING])
+_FINDING_VERB: _LockSet = ([], [_FINDING])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -126,6 +145,12 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "repository enable, then forge retire": (_REFERRER_ENABLE, _FORGE_RETIRE),
     "secret retire, then work-source enable": (_SECRET_RETIRE, _REFERRER_ENABLE),
     "work-source enable, then secret retire": (_REFERRER_ENABLE, _SECRET_RETIRE),
+    "proposal edit, then proposal closure": (_PROPOSAL_EDIT, _PROPOSAL_CLOSE),
+    "proposal closure, then proposal edit": (_PROPOSAL_CLOSE, _PROPOSAL_EDIT),
+    "chunk delete, then work-item withdraw": (_DELETE_CHUNK, _WITHDRAW_ITEM),
+    "work-item withdraw, then chunk delete": (_WITHDRAW_ITEM, _DELETE_CHUNK),
+    "garden delivery, then finding verb": (_DELIVER, _FINDING_VERB),
+    "finding verb, then garden delivery": (_FINDING_VERB, _DELIVER),
 }
 
 
