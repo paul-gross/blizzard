@@ -31,7 +31,7 @@ from blizzard.hub.store.scoped import (
     statements_of,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
-from tests.support.scaffolding import close_tenant
+from tests.support.scaffolding import capture_statements, close_tenant
 
 TEN_A = TenantId("ten_A")
 TEN_B = TenantId("ten_B")
@@ -456,6 +456,21 @@ def test_a_write_on_a_closed_tenant_is_refused_inside_its_transaction(
     with other.write("test") as conn:
         conn.execute(other.insert(notes).values(chunk_id="c9", body="b-later"))
     assert _all_notes(hub)[-1] == (TEN_B, "b-later")
+
+
+def test_a_write_reads_the_deletion_fact_in_a_statement_after_it_locks_the_tenant_row(
+    engine: Engine, scoped: ScopedConnections
+) -> None:
+    # Under READ COMMITTED each statement takes a fresh snapshot, so the read that refuses a closed tenant must follow
+    # the lock statement: a write that waited on a closing transaction's row lock then sees that close's commit.
+    with capture_statements(engine) as statements, scoped.write("test"):
+        pass
+
+    texts = [" ".join(sql.split()) for sql, _ in statements]
+    lock = next(i for i, sql in enumerate(texts) if sql.startswith("UPDATE tenants "))
+    read = next(i for i, sql in enumerate(texts) if "tenant_deletions" in sql)
+    assert "tenant_deletions" not in texts[lock]
+    assert lock < read
 
 
 def test_a_write_on_a_drained_tenant_is_refused(

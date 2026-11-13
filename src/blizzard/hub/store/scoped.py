@@ -39,15 +39,15 @@ The stamp is also guarded at execute: a statement run through a scoped connectio
 tenant-owned table and carries ``tenant_id`` among its execute-time parameters is refused, since an
 ``executemany`` row's own ``tenant_id`` would override the builder's stamp.
 
-A ``write`` opens by locking the scope's tenant row on the condition that the tenant is still
-open — one statement that both takes the store's write lock and reads ``tenant_deletions`` under
-it — and raises :class:`TenantClosed` when the tenant is closed (:class:`UnknownTenant` when no
-tenant has the id). On SQLite that statement is the transaction's first write, so the driver's
-deferred ``BEGIN`` precedes it and the read runs under the single writer lock: a close either
-committed before it, and is seen, or waits for the writer's commit. The one write that cannot lock its
-tenant's row is the one that creates it: ``founding`` opens by inserting that row instead. The writes a closed
-tenant still takes — its deletion's drain and completion — open with ``teardown``, which locks the tenant's
-deletion fact instead, on the condition that the deletion is still underway."""
+A ``write`` opens by locking the scope's tenant row, then reading ``tenant_deletions`` in a statement of its own, and
+raises :class:`TenantClosed` when the tenant is closed (:class:`UnknownTenant` when no tenant has the id). The lock
+statement is the transaction's first write, so on SQLite the driver's deferred ``BEGIN`` precedes it and the read runs
+under the single writer lock; on Postgres a write that waited on a close's row lock takes a fresh snapshot for the
+read, which sees the close that committed meanwhile. Either way a close either committed before the read, and is seen,
+or waits for the writer's commit. The one write that cannot lock its tenant's row is the one that creates it:
+``founding`` opens by inserting that row instead. The writes a closed tenant still takes — its deletion's drain and
+completion — open with ``teardown``, which locks the tenant's deletion fact instead, on the condition that the deletion
+is still underway."""
 
 from __future__ import annotations
 
@@ -298,18 +298,17 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
             yield self._bind(conn)
 
     def _lock_open_tenant(self, conn: Connection) -> None:
-        """Lock the scope's tenant row if the tenant is open, as the transaction's first
-        statement: a no-op ``UPDATE`` whose condition reads ``tenant_deletions``. On SQLite the
-        ``UPDATE`` takes the single writer lock before its condition is read, so no close can
-        commit between the check and the caller's writes. Only when it matches no row does a
-        second read tell a closed tenant from an unknown one."""
+        """Lock the scope's tenant row, then refuse the write if the tenant is closed, as the transaction's first
+        statements: a no-op ``UPDATE`` of the row, and after it a separate read of ``tenant_deletions``. The read is its
+        own statement because under Postgres' READ COMMITTED each statement takes a fresh snapshot: a condition inside
+        the ``UPDATE`` would be evaluated on the snapshot taken before the write waited on a closing transaction's row
+        lock, and so would miss that close's commit. On SQLite the ``UPDATE`` takes the single writer lock, so no close
+        can commit between the lock and the caller's writes. A tenant with no row but a deletion fact is a drained one,
+        closed; with neither it is unknown."""
         tenant = self.scope.tenant
+        locked = conn.execute(sa.update(s.tenants).where(s.tenants.c.tenant_id == tenant).values(name=s.tenants.c.name))
         closed = sa.exists().where(s.tenant_deletions.c.tenant_id == tenant)
-        locked = conn.execute(
-            sa.update(s.tenants).where(s.tenants.c.tenant_id == tenant, ~closed).values(name=s.tenants.c.name)
-        )
-        if locked.rowcount == 1:
-            return
         if conn.execute(sa.select(closed)).scalar_one():
             raise TenantClosed(tenant)
-        raise UnknownTenant(tenant)
+        if locked.rowcount != 1:
+            raise UnknownTenant(tenant)

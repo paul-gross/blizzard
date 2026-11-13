@@ -5,29 +5,39 @@ from __future__ import annotations
 import os
 import signal
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 from structlog import get_logger
 
+from blizzard.foundation.clock import FixedClock
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
 from blizzard.hub.domain.urgency.services import default_lock_keys
+from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 
 _TENANT = "uow_proof"
 _TIMEOUT = 10.0
+_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+_PROBE_NAMESPACE = "proof"
 
 
 class _CompatibleGuard(ScopedConnections):
@@ -229,14 +239,331 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
         tx.lock_chunk_row, tx.lock_keys = original_chunk, original_keys
 
 
+class _Events:
+    """A stand-in for the hub event log: the proof reads no events."""
+
+    def record(self, **_: object) -> None:
+        return None
+
+
+def _unit_pid(transaction: object) -> int:
+    """The backend pid of the connection a unit's transaction holds."""
+    return _pid(cast("Any", transaction).unit.conn)
+
+
+def _wait_for_blocked_by(engine: Engine, holder: int) -> None:
+    """Wait until some backend is blocked by backend ``holder``."""
+    deadline = time.monotonic() + _TIMEOUT
+    with engine.connect() as conn:
+        while time.monotonic() < deadline:
+            blocked = conn.execute(
+                sa.text("SELECT pid FROM pg_stat_activity WHERE :holder = ANY(pg_blocking_pids(pid))"),
+                {"holder": holder},
+            ).all()
+            if blocked:
+                return
+            time.sleep(0.02)
+    raise RuntimeError(f"no backend blocked on backend {holder}")
+
+
+class _Hub:
+    """The production pieces over one migrated engine, as ``composition`` wires them."""
+
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
+        self.errors = HubStoreErrorFactory(get_logger("uow_postgres"))
+        self.connections = HubStoreConnections(engine, self.errors)
+        self.store = TenantTeardownStore(self.connections)
+        self.teardown = TenantTeardown(
+            teardowns=self.store,
+            units=self.unit,
+            closed=lambda _tenant: None,
+            events=_Events(),
+            clock=_CLOCK,
+        )
+
+    def scoped(self, tenant: str) -> ScopedConnections:
+        return self.connections.scoped(StoreScope(TenantId(tenant)))
+
+    def unit(self, tenant: TenantId) -> tx.HubTransactions:
+        return tx.HubTransactions(self.scoped(tenant))
+
+    def create_tenant(self, tenant: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(
+                sa.insert(s.tenants).values(tenant_id=tenant, name=tenant, created_at=_CLOCK.now(), created_by="proof")
+            )
+
+    def probe_rows(self, tenant: str) -> int:
+        with self.engine.connect() as conn:
+            return int(
+                conn.execute(
+                    sa.select(sa.func.count())
+                    .select_from(s.keyed_locks)
+                    .where(s.keyed_locks.c.tenant_id == tenant, s.keyed_locks.c.namespace == _PROBE_NAMESPACE)
+                ).scalar_one()
+            )
+
+
+class _Threads:
+    """Named worker threads whose outcomes (the exception each ended on, or ``None``) are kept by name."""
+
+    def __init__(self) -> None:
+        self.outcomes: dict[str, BaseException | None] = {}
+        self.threads: list[threading.Thread] = []
+
+    def start(self, name: str, target: Callable[[], object]) -> None:
+        def run() -> None:
+            try:
+                target()
+                self.outcomes[name] = None
+            except BaseException as exc:
+                self.outcomes[name] = exc
+
+        thread = threading.Thread(target=run, name=name, daemon=True)
+        self.threads.append(thread)
+        thread.start()
+
+    def join(self) -> None:
+        for thread in self.threads:
+            thread.join(_TIMEOUT)
+            if thread.is_alive():
+                raise RuntimeError(f"thread {thread.name} did not finish")
+
+
+def _writes_a_probe(hub: _Hub, tenant: str, key: str, hold: Callable[[int], None] | None = None) -> None:
+    """A scoped write that locks one key (inserting its ``keyed_locks`` row) and then holds, if asked."""
+    with hub.unit(TenantId(tenant)).begin() as unit:
+        unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+        if hold is not None:
+            hold(_unit_pid(unit))
+
+
+def _close_holding(hub: _Hub, tenant: str, held: threading.Event, release: threading.Event, pids: dict[str, int]):
+    """Close ``tenant`` through the production teardown, holding after the deletion fact is written, before commit."""
+    original = hub.store.close
+
+    def close(transaction: Any, tenant: TenantId, *, by: str, at: datetime) -> None:
+        original(transaction, tenant, by=by, at=at)
+        pids["closer"] = _unit_pid(transaction)
+        held.set()
+        if not release.wait(_TIMEOUT):
+            raise TimeoutError("close was not released")
+
+    vars(hub.store)["close"] = close
+    return lambda: hub.teardown.close(TenantId(tenant), by="proof")
+
+
+def _case_closed_tenant_write_holds(hub: _Hub) -> None:
+    """A write holds its tenant's row while a close of the tenant waits: the write commits, then the close closes."""
+    tenant = "closing_after_write"
+    hub.create_tenant(tenant)
+    held, release = threading.Event(), threading.Event()
+    pids: dict[str, int] = {}
+    threads = _Threads()
+
+    def hold(pid: int) -> None:
+        pids["writer"] = pid
+        held.set()
+        if not release.wait(_TIMEOUT):
+            raise TimeoutError("write was not released")
+
+    threads.start("write", lambda: _writes_a_probe(hub, tenant, "w", hold))
+    try:
+        if not held.wait(_TIMEOUT):
+            raise RuntimeError(f"write failed to hold: {threads.outcomes}")
+        outcome: list[CloseOutcome] = []
+        threads.start("close", lambda: outcome.append(hub.teardown.close(TenantId(tenant), by="proof")))
+        _wait_for_blocked_by(hub.engine, pids["writer"])
+    finally:
+        release.set()
+        threads.join()
+    failures = {name: exc for name, exc in threads.outcomes.items() if exc is not None}
+    if failures:
+        raise RuntimeError(f"expected both to complete: {failures}")
+    if hub.probe_rows(tenant) != 1 or outcome != [CloseOutcome.CLOSED]:
+        raise RuntimeError(f"the write did not commit before the close: rows={hub.probe_rows(tenant)} close={outcome}")
+
+
+def _case_closed_tenant_close_holds(hub: _Hub) -> None:
+    """A close holds the tenant's row while a write waits: the write refuses ``TenantClosed`` and writes nothing."""
+    tenant = "closing_before_write"
+    hub.create_tenant(tenant)
+    held, release = threading.Event(), threading.Event()
+    pids: dict[str, int] = {}
+    threads = _Threads()
+    threads.start("close", _close_holding(hub, tenant, held, release, pids))
+    try:
+        if not held.wait(_TIMEOUT):
+            raise RuntimeError(f"close failed to hold: {threads.outcomes}")
+        threads.start("write", lambda: _writes_a_probe(hub, tenant, "w"))
+        _wait_for_blocked_by(hub.engine, pids["closer"])
+    finally:
+        release.set()
+        threads.join()
+        vars(hub.store).pop("close", None)
+    if threads.outcomes.get("close") is not None:
+        raise RuntimeError(f"the close failed: {threads.outcomes['close']!r}")
+    refusal = threads.outcomes.get("write")
+    if not isinstance(refusal, TenantClosed):
+        raise RuntimeError(f"a write that waited on a committed close was not refused: {refusal!r}")
+    if hub.probe_rows(tenant):
+        raise RuntimeError("a refused write left a row in the closed tenant")
+
+
+def _case_two_closes_last_tenants(hub: _Hub) -> None:
+    """Two closes of the last two open tenants: one commits, the other refuses ``LastTenant``."""
+    first_tenant, second_tenant = "last_one", "last_two"
+    hub.create_tenant(first_tenant)
+    hub.create_tenant(second_tenant)
+    with hub.engine.connect() as conn:
+        open_now = (
+            conn.execute(
+                sa.select(s.tenants.c.tenant_id).where(
+                    ~sa.exists().where(s.tenant_deletions.c.tenant_id == s.tenants.c.tenant_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for other in open_now:
+        if other not in (first_tenant, second_tenant):
+            hub.teardown.close(TenantId(other), by="proof")
+    held, release = threading.Event(), threading.Event()
+    pids: dict[str, int] = {}
+    threads = _Threads()
+    threads.start("first", _close_holding(hub, first_tenant, held, release, pids))
+    try:
+        if not held.wait(_TIMEOUT):
+            raise RuntimeError(f"first close failed to hold: {threads.outcomes}")
+        vars(hub.store).pop("close", None)
+        threads.start("second", lambda: hub.teardown.close(TenantId(second_tenant), by="proof"))
+        _wait_for_blocked_by(hub.engine, pids["closer"])
+    finally:
+        release.set()
+        threads.join()
+        vars(hub.store).pop("close", None)
+    if threads.outcomes.get("first") is not None:
+        raise RuntimeError(f"the first close failed: {threads.outcomes['first']!r}")
+    if not isinstance(threads.outcomes.get("second"), LastTenant):
+        raise RuntimeError(f"the second close was not refused LastTenant: {threads.outcomes.get('second')!r}")
+    if hub.store.deletion(TenantId(second_tenant)) is not None:
+        raise RuntimeError("both of the last two tenants closed")
+
+
+def _case_drain_under_foreign_keys(hub: _Hub) -> None:
+    """A tenant with a row in every table it owns drains and completes with foreign keys enforced."""
+    from hub_tenant_seed import seed_tenant
+
+    tenant = "draining"
+    hub.create_tenant("draining_spare")
+    hub.create_tenant(tenant)
+    connections = hub.scoped(tenant)
+    with connections.write("seed_tenant") as conn:
+        seed_tenant(connections, conn)
+    with hub.engine.connect() as conn:
+        empty = [
+            table.name
+            for table in DRAIN_ORDER
+            if conn.execute(
+                sa.select(sa.literal(1)).select_from(table).where(table.c.tenant_id == tenant).limit(1)
+            ).first()
+            is None
+        ]
+    if empty:
+        raise RuntimeError(f"the seed left tables of DRAIN_ORDER with no row of the tenant: {empty}")
+    hub.teardown.close(TenantId(tenant), by="proof")
+    hub.teardown.advance(TenantId(tenant), budget=1_000_000)
+    with hub.engine.connect() as conn:
+        left = [
+            table.name
+            for table in DRAIN_ORDER
+            if conn.execute(
+                sa.select(sa.literal(1)).select_from(table).where(table.c.tenant_id == tenant).limit(1)
+            ).first()
+            is not None
+        ]
+        present = conn.execute(sa.select(s.tenants.c.tenant_id).where(s.tenants.c.tenant_id == tenant)).first()
+    deletion = hub.store.deletion(TenantId(tenant))
+    if left or present is not None or deletion is None or deletion.deleted_at is None:
+        raise RuntimeError(f"the drain left rows in {left}, tenant row {present}, deletion {deletion}")
+
+
+def _case_different_keys_do_not_exclude(hub: _Hub) -> None:
+    """Two units of one tenant declaring different keys, with a guard that takes no tenant-row lock: neither waits."""
+    tenant = "keys_apart"
+    hub.create_tenant(tenant)
+    scope = StoreScope(TenantId(tenant))
+    store = _CompatibleGuard(hub.engine, hub.errors, scope)
+    held, release, second_done = threading.Event(), threading.Event(), threading.Event()
+    threads = _Threads()
+
+    def write(key: str, hold: bool) -> None:
+        with tx.HubTransactions(store).begin() as unit:
+            unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+            if hold:
+                held.set()
+                if not release.wait(_TIMEOUT):
+                    raise TimeoutError("first writer was not released")
+            else:
+                second_done.set()
+
+    threads.start("first", lambda: write("k1", True))
+    try:
+        if not held.wait(_TIMEOUT):
+            raise RuntimeError(f"first writer failed to hold: {threads.outcomes}")
+        threads.start("second", lambda: write("k2", False))
+        if not second_done.wait(_TIMEOUT):
+            raise RuntimeError("a unit declaring a different key waited on the first")
+    finally:
+        release.set()
+        threads.join()
+    failures = {name: exc for name, exc in threads.outcomes.items() if exc is not None}
+    if failures or hub.probe_rows(tenant) != 2:
+        raise RuntimeError(f"expected both units to commit their keys: {failures}, rows={hub.probe_rows(tenant)}")
+
+
+_MIGRATED_CASES: dict[str, Callable[[_Hub], None]] = {
+    "closed tenant, write holds then close": _case_closed_tenant_write_holds,
+    "closed tenant, close holds then write": _case_closed_tenant_close_holds,
+    "two closes of the last two open tenants": _case_two_closes_last_tenants,
+    "drain under foreign keys": _case_drain_under_foreign_keys,
+    "different keyed locks do not exclude": _case_different_keys_do_not_exclude,
+}
+
+
+def _run_migrated_cases(url: str) -> list[str]:
+    """Run the cases that need the migrated hub schema; the names of those that failed."""
+    from tests.rehearsal.stores import postgres_database
+
+    failed: list[str] = []
+    with tempfile.TemporaryDirectory() as root, postgres_database(url) as database:
+        Migrations(HubConfig(root=Path(root), db_url=database), _CLOCK).runner.upgrade("head")
+        engine = sa.create_engine(database, connect_args={"options": "-c lock_timeout=7000 -c statement_timeout=9000"})
+        try:
+            hub = _Hub(engine)
+            for name, case in _MIGRATED_CASES.items():
+                try:
+                    case(hub)
+                except Exception as exc:
+                    print(f"FAIL {name}: {exc!r}")
+                    failed.append(name)
+                else:
+                    print(f"PASS {name}: migrated schema")
+        finally:
+            engine.dispose()
+    return failed
+
+
 def main() -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from tests.rehearsal.stores import postgres_database
 
     url = os.environ.get("BLIZZARD_UOW_POSTGRES_URL")
     if not url:
         raise RuntimeError("BLIZZARD_UOW_POSTGRES_URL must name a disposable-capable Postgres server")
-    signal.alarm(90)
+    from tests.rehearsal.stores import postgres_database
+
+    signal.alarm(300)
     with postgres_database(url) as database:
         engine = sa.create_engine(database, connect_args={"options": "-c lock_timeout=7000 -c statement_timeout=9000"})
         try:
@@ -269,6 +596,9 @@ def main() -> None:
                 _run_pair(engine, kind=kind, production_guard=False)
         finally:
             engine.dispose()
+    failed = _run_migrated_cases(url)
+    if failed:
+        raise SystemExit(f"FAILED: {', '.join(failed)}")
 
 
 if __name__ == "__main__":
