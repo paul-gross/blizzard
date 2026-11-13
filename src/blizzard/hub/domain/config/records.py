@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import ClassVar, Protocol, Self
 
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
+from blizzard.hub.domain.kernel.locks import LockKey
 
 
 class ConfiguredRecord(Protocol):
@@ -45,3 +46,7 @@ class ConfiguredLink(ConfiguredRecord, Protocol):
     def linked(self) -> bool: ...
 
     def target(self) -> str: ...
+
+    def lock(self) -> LockKey | None:
+        """The keyed lock a write of the link relies on, or ``None`` when it relies on none."""
+        ...

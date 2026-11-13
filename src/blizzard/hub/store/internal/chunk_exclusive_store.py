@@ -12,6 +12,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, W
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
+from blizzard.hub.domain.projects.links import project_source_links_lock
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -152,7 +153,7 @@ class ChunkExclusiveWrites:
         with self._transactions.begin() as transaction:
             declared = [LockKey(LockNamespace.WORK_REF, pointer_lock_key(p)) for p in pointers]
             if project is not None:
-                declared.append(LockKey(LockNamespace.PROJECT_SOURCE_LINKS, project))
+                declared.append(project_source_links_lock(project))
             locked = transaction.lock_set(keys=[*declared, *keys])
             yield LockedWorkRefTransaction(self._store, locked, self._work_refs)
 

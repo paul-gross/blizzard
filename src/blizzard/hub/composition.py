@@ -962,6 +962,7 @@ def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offer
         cipher=cipher,
         apply_writer=stores.config_apply,
         import_writer=stores.config_import,
+        transactions=stores.transactions,
         clock=stores.clock,
     )
 

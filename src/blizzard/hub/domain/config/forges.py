@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug, derive_slug
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
@@ -42,6 +43,12 @@ KNOWN_FORGE_KINDS = frozenset({"github"})
 FORGE_KIND_CAPABILITIES: Mapping[str, frozenset[Capability]] = {
     "github": frozenset(Capability),
 }
+
+
+def forge_lock(forge_id: ForgeId) -> LockKey:
+    """The keyed lock on ``forge_id``'s forge (``bzh:transaction-graduation``): a unit writing the forge, or a record
+    naming it, declares it."""
+    return LockKey(LockNamespace.FORGE, forge_id)
 
 
 class OriginRefusal(StrEnum):

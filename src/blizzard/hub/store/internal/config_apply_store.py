@@ -1,8 +1,8 @@
 """SQLAlchemy adapter for the declarative apply (package-private).
 
-One ``store.write`` declares the plan's keyed locks once, in their canonical order, then executes every planned write
-through the same per-operation bodies the per-record adapters run, and the first refusal rolls the whole apply back. A
-dry run is that transaction with a rollback after the last write (``bzh:config-apply``)."""
+The writes run in the caller's unit, which declared the plan's keyed locks, through the same per-operation bodies the
+per-record adapters run; the first refusal raises out of the unit and rolls the whole apply back
+(``bzh:config-apply``)."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
-from blizzard.hub.domain.kernel.locks import LockKey
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink, project_source_links_lock
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict
 from blizzard.hub.domain.urgency.declarations import SettingsWrite, UrgencyOrderWrite, UrgencyWrite
@@ -79,9 +79,9 @@ from blizzard.hub.store.internal import urgency_store as urgency_writes
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.internal.landing_seqs import require_landing_seq
-from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 #: What a write's in-transaction checks raise; each is located at its document entry.
 _REFUSALS = (
@@ -124,10 +124,6 @@ def _taken(record: object) -> Exception:
     return RepositorySlugTaken(record.slug)
 
 
-class _DryRunRollback(Exception):
-    """Raised after the last write of a dry run so ``write`` rolls the transaction back."""
-
-
 class ConfigApplyStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
@@ -136,38 +132,33 @@ class ConfigApplyStore:
         self,
         writes: Sequence[PlannedWrite],
         *,
-        dry_run: bool,
+        transaction: LockedTransaction,
         positions: Sequence[PlannedPosition] = (),
-        locks: Sequence[LockKey] = (),
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
-        try:
-            with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
-                for lock in sorted(set(locks)):
-                    lock_keys(conn, lock.namespace, [lock.key])
-                if (stale := urgency_writes.stale_revision(conn, guards)) is not None:
-                    guard, current = stale
-                    moved = ConfigRevisionConflict("urgency", guard.slug, current=current)
-                    raise ApplyEntryRefused(guard.section, guard.index, moved)
-                order = _UrgencyOrderSeq()
-                for write in writes:
-                    try:
-                        self._run(conn, write, order)
-                    except IntegrityError as exc:  # a concurrent create won the race
-                        cause = _taken(write.record)
-                        raise ApplyEntryRefused(write.section, write.index, cause) from exc
-                    except _REFUSALS as exc:
-                        raise ApplyEntryRefused(write.section, write.index, exc) from exc
-                for project_positions in _by_project(positions):
-                    try:
-                        _append_positions(conn, project_positions)
-                    except _REFUSALS as exc:
-                        entry = project_positions[0]
-                        raise ApplyEntryRefused(entry.section, entry.index, exc) from exc
-                if dry_run:
-                    raise _DryRunRollback
-        except _DryRunRollback:
-            return
+        conn = connection_for(self._store, transaction)
+        for write in writes:
+            if isinstance(write.record, SourceLink):
+                connection_for(self._store, transaction, key=project_source_links_lock(write.record.project_id))
+        if (stale := urgency_writes.stale_revision(conn, guards)) is not None:
+            guard, current = stale
+            moved = ConfigRevisionConflict("urgency", guard.slug, current=current)
+            raise ApplyEntryRefused(guard.section, guard.index, moved)
+        order = _UrgencyOrderSeq()
+        for write in writes:
+            try:
+                self._run(conn, write, order)
+            except IntegrityError as exc:  # a concurrent create won the race
+                cause = _taken(write.record)
+                raise ApplyEntryRefused(write.section, write.index, cause) from exc
+            except _REFUSALS as exc:
+                raise ApplyEntryRefused(write.section, write.index, exc) from exc
+        for project_positions in _by_project(positions):
+            try:
+                _append_positions(conn, project_positions)
+            except _REFUSALS as exc:
+                entry = project_positions[0]
+                raise ApplyEntryRefused(entry.section, entry.index, exc) from exc
 
     @staticmethod
     def _run(conn: Connection, write: PlannedWrite, order: _UrgencyOrderSeq) -> None:

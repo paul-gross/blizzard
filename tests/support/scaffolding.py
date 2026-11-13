@@ -609,6 +609,7 @@ def config_authoring(
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        transactions=HubTransactions(store),
         clock=clock,
     )
 

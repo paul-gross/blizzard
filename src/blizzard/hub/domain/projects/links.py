@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
@@ -35,6 +36,12 @@ BASE_BRANCH_FIELD = "base_branch"
 
 #: Characters no git branch name holds.
 _REFUSED_BRANCH_CHARACTERS = frozenset("~^:?*[\\")
+
+
+def project_source_links_lock(project_id: str) -> LockKey:
+    """The keyed lock on ``project_id``'s source links (``bzh:transaction-graduation``): every source link or unlink
+    of the project takes it."""
+    return LockKey(LockNamespace.PROJECT_SOURCE_LINKS, project_id)
 
 
 def parse_base_branch(raw: str) -> str:
@@ -86,6 +93,11 @@ class _Link:
     def target(self) -> str:
         raise NotImplementedError
 
+    def lock(self) -> LockKey | None:
+        """The keyed lock a write of the link relies on — a source link's project's; a repository link relies on
+        none."""
+        return None
+
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""
         lifecycle.require_revision(if_match, self.revision, kind=self.LABEL, key=f"{self.project_id}/{self.target()}")
@@ -130,6 +142,9 @@ class SourceLink(_Link):
 
     def target(self) -> str:
         return self.work_source_id
+
+    def lock(self) -> LockKey | None:
+        return project_source_links_lock(self.project_id)
 
     @classmethod
     def new(

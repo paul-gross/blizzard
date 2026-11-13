@@ -16,8 +16,15 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.secrets.sealing import SealedValue, uncovered_key_ids
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.changes import ConfigChange, RecordRef
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
+
+
+def secret_lock(name: str) -> LockKey:
+    """The keyed lock on the secret ``name`` (``bzh:transaction-graduation``): a unit writing the secret, or a record
+    naming it, declares it."""
+    return LockKey(LockNamespace.SECRET, name)
 
 
 class SecretNameError(ValueError):

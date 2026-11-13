@@ -183,6 +183,7 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        transactions=HubTransactions(store),
         clock=FixedClock(_AT),
     )
 

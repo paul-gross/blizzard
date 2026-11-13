@@ -71,7 +71,12 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     require_known_provider,
 )
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.kernel.unset import UnsetType
+
+
+class _Rollback(Exception):
+    """Raised out of a unit that must leave nothing behind — a dry run, or an import recorded first."""
 
 
 class ConfigAuthoring:
@@ -86,9 +91,11 @@ class ConfigAuthoring:
         cipher: ISecretCipher,
         apply_writer: IConfigApplyWriter,
         import_writer: IConfigImportWriter,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
-        """``offers`` answers what a repository's forge offers its landing policy."""
+        """``offers`` answers what a repository's forge offers its landing policy; ``transactions`` opens the one unit
+        an apply or an import runs in."""
         self._work_sources = work_sources
         self._repositories = repositories
         self._forges = forges
@@ -97,6 +104,7 @@ class ConfigAuthoring:
         self._cipher = cipher
         self._apply_writer = apply_writer
         self._import_writer = import_writer
+        self._transactions = transactions
         self._clock = clock
 
     # --- Forges ------------------------------------------------------------------
@@ -294,14 +302,21 @@ class ConfigAuthoring:
     def apply(
         self, declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, dry_run: bool
     ) -> tuple[EntryOutcome, ...]:
-        """Reconcile ``declaration`` against ``stored`` and commit every write in one transaction, or
-        — under ``dry_run`` — run that same transaction and roll it back. The outcomes are the same either way."""
+        """Reconcile ``declaration`` against ``stored`` and commit every write in one unit declaring the plan's locks,
+        or — under ``dry_run`` — run that same unit and roll it back. The outcomes are the same either way."""
         plan = reconcile(declaration, stored, ctx, at=self._clock.now())
         self._require_planned_offered(plan)
         if plan.writes or plan.positions:
-            self._apply_writer.apply(
-                plan.writes, dry_run=dry_run, positions=plan.positions, locks=plan.locks, guards=plan.guards
-            )
+            try:
+                with self._transactions.begin() as transaction:
+                    locked = transaction.lock_set(keys=plan.locks)
+                    self._apply_writer.apply(
+                        plan.writes, transaction=locked, positions=plan.positions, guards=plan.guards
+                    )
+                    if dry_run:
+                        raise _Rollback
+            except _Rollback:
+                pass
         return plan.outcomes
 
     # --- Carry-over --------------------------------------------------------------
@@ -351,7 +366,12 @@ class ConfigAuthoring:
             fact=plan.fact,
             links=linked,
         )
-        if not self._import_writer.write(imported):
+        try:
+            with self._transactions.begin() as transaction:
+                locked = transaction.lock_set(keys=imported.locks())
+                if not self._import_writer.write(imported, transaction=locked):
+                    raise _Rollback
+        except _Rollback:
             return ImportResult(ImportStatus.ALREADY_IMPORTED)
         return ImportResult(ImportStatus.IMPORTED, plan.outcomes)
 

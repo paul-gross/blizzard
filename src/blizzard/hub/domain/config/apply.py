@@ -33,6 +33,7 @@ from blizzard.hub.domain.config.forges import (
     ForgeId,
     ForgeKindImmutable,
     canonical_fields,
+    forge_lock,
     merge,
 )
 from blizzard.hub.domain.config.records import (
@@ -46,6 +47,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryId,
 )
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
     ConfiguredWorkSource,
@@ -54,6 +56,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
 )
 from blizzard.hub.domain.kernel.locks import LockKey
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 PROJECTS_SECTION = "projects"
 SECRETS_SECTION = "secrets"
@@ -295,23 +298,39 @@ class StoredConfig:
 
 
 class IConfigApplyWriter(Protocol):
-    """Commits every planned write in one transaction."""
+    """Runs every planned write in the caller's unit, which declared the plan's :attr:`ApplyPlan.locks`."""
 
     def apply(
         self,
         writes: Sequence[PlannedWrite],
         *,
-        dry_run: bool,
+        transaction: LockedTransaction,
         positions: Sequence[PlannedPosition] = (),
-        locks: Sequence[LockKey] = (),
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
-        """Declare ``locks`` once and refuse the entry of the first of ``guards`` whose urgency moved, then run each
-        write through the same in-transaction checks its per-record verb runs, in order, then append each of
-        ``positions`` while its project's landing-order sequence stands at its ``from_seq``.
-        With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
-        the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
+        """Refuse the entry of the first of ``guards`` whose urgency moved, then run each write through the same
+        in-transaction checks its per-record verb runs, in order, then append each of ``positions`` while its
+        project's landing-order sequence stands at its ``from_seq``. The first refusal raises
+        :class:`ApplyEntryRefused`, and the caller's unit rolls back."""
         ...
+
+
+def _write_locks(writes: Sequence[PlannedWrite]) -> set[LockKey]:
+    """The keys this section's ``writes`` rely on: each forge a forge write writes, and each forge and secret a
+    work-source or repository write names."""
+    keys: set[LockKey] = set()
+    for write in writes:
+        record = write.record
+        if isinstance(record, ConfiguredForge):
+            keys.add(forge_lock(record.forge_id))
+        elif isinstance(record, ConfiguredWorkSource):
+            keys.add(forge_lock(record.fields.forge_id))
+            if record.fields.secret is not None:
+                keys.add(secret_lock(record.fields.secret))
+        elif isinstance(record, ConfiguredRepository):
+            keys.add(forge_lock(record.fields.forge_id))
+            keys.add(secret_lock(record.fields.secret_name))
+    return keys
 
 
 def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, at: datetime) -> ApplyPlan:
@@ -341,7 +360,16 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         writes=tuple(plan.writes),
         outcomes=tuple(plan.outcomes),
         positions=declaration.projects.positions,
-        locks=tuple(sorted({*declaration.urgencies.locks, *declaration.reference_locks})),
+        locks=tuple(
+            sorted(
+                {
+                    *declaration.projects.locks,
+                    *declaration.urgencies.locks,
+                    *declaration.reference_locks,
+                    *_write_locks(plan.writes),
+                }
+            )
+        ),
         guards=declaration.reference_guards,
     )
 
