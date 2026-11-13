@@ -19,9 +19,8 @@ from blizzard.hub.domain.garden.review.materialize import ReviewFindingsPlan
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, TransactionMisuse
 from blizzard.hub.store.internal.flow_store import FlowStore
-from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
-from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.transactions import HubTransactions
+from tests.support.delivery_writes import GardenDeliveryWrites, ReviewFindingsWrites
 from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, hub_store_connections, ingest
 
 _NO_REFS = CloseEnqueueDecision(closable=frozenset(), skipped=frozenset())
@@ -144,14 +143,14 @@ def _garden(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> o
         deltas=[],
         proposals=[],
     )
-    return GardenDeliveryStore(hub_store_connections(hub.engine)).deliver(
+    return GardenDeliveryWrites(hub_store_connections(hub.engine)).deliver(
         plan, admission=_AT, terminal=False, transaction=transaction
     )
 
 
 def _review(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> object:
     plan = ReviewFindingsPlan(chunk_id=chunk_id, node_id="nd_review", node_name="review", epoch=1, at=hub.clock.now())
-    return ReviewFindingsStore(hub_store_connections(hub.engine)).deliver(
+    return ReviewFindingsWrites(hub_store_connections(hub.engine)).deliver(
         plan, admission=_AT, terminal=False, transaction=transaction
     )
 

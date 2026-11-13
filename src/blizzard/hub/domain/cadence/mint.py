@@ -17,13 +17,15 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.errands import Errand, ErrandKey, ErrandRun
 from blizzard.hub.domain.cadence.model import AttentionFacts
 from blizzard.hub.domain.cadence.ports import IReadErrandRunsRepository, errand_lock
-from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor
+from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, work_ref_lock
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository
+from blizzard.hub.domain.garden.run_mint import mint_run
 from blizzard.hub.domain.garden.runs.run import RunPlan, plan_run
 from blizzard.hub.domain.garden.scopes import Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
@@ -110,15 +112,16 @@ class ErrandPlanning:
         }
 
 
-def mint_lock_keys(key: ErrandKey, *, promote: bool, urgencies: Sequence[LockKey]) -> list[LockKey]:
+def mint_lock_keys(key: ErrandKey, *, promote: bool, urgencies: Sequence[LockKey], pointer: WorkRef) -> list[LockKey]:
     """The keyed locks an errand's mint takes: its errand's, for a promoting chore both lists' ranking locks, as
-    the queue's own promote takes them, and ``urgencies`` — the settings' and those of the urgencies its chain names,
-    as every mint takes them. The store takes them in
-    canonical order: errand, then ranking, then urgency."""
+    the queue's own promote takes them, ``urgencies`` — the settings' and those of the urgencies its chain names,
+    as every mint takes them — and the fresh chunk's ``pointer`` key, which its mint requires. The store takes
+    them in canonical order."""
     return [
         errand_lock(key),
         *((READY_RANKING_LOCK, BACKLOG_RANKING_LOCK) if promote else ()),
         *urgencies,
+        work_ref_lock(pointer),
     ]
 
 
@@ -150,9 +153,10 @@ class CadenceMint:
         self,
         *,
         items: IWriteWorkItemRepository,
+        run_contexts: IWriteRunContextRepository,
         work_refs: IReadChunkWorkRefsRepository,
         runs: IReadErrandRunsRepository,
-        record: IReadChunkRecordRepository,
+        record: IWriteChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
         facts: IReadChunkFactsRepository,
         transactions: IHubTransactions,
@@ -161,6 +165,7 @@ class CadenceMint:
     ) -> None:
         self._default = default
         self._items = items
+        self._run_contexts = run_contexts
         self._work_refs = work_refs
         self._runs = runs
         self._record = record
@@ -175,9 +180,9 @@ class CadenceMint:
         allocated before the transaction, so a crash between them, or a lost re-read inside it, burns that one ref and
         nothing more.
 
-        One lock declaration takes the errand's lock and, for a promoting chore, both lists' ranking locks, beside
-        the fresh chunk's id, which names no row yet and so contends with nothing but is what the promote write
-        requires the unit to lock."""
+        One lock declaration takes the errand's lock, the fresh pointer's, and, for a promoting chore, both lists'
+        ranking locks, beside the fresh chunk's id, which names no row yet and so contends with nothing but is what
+        the promote write requires the unit to lock."""
         plan = plan_errand(errand, inputs)
         routine = inputs.routine
         pointer, draft, at = prepare_mint(
@@ -196,12 +201,15 @@ class CadenceMint:
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(
                 chunks=[draft.chunk_id] if promote else [],
-                keys=mint_lock_keys(errand.key, promote=promote, urgencies=ahead.lock_keys()),
+                keys=mint_lock_keys(errand.key, promote=promote, urgencies=ahead.lock_keys(), pointer=pointer),
             )
             if run_moved(judged, self._runs.last_runs([errand.key], transaction=locked).get(errand.key)):
                 return None
             chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
-            item = self._items.create_run_with_chunk(
+            item = mint_run(
+                self._items,
+                self._record,
+                self._run_contexts,
                 pointer=pointer,
                 title=plan.title,
                 body=plan.charge,

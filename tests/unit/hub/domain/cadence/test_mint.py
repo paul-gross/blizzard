@@ -1,5 +1,5 @@
 """The cadence mint's pure decisions: which holder a run reads, whether a re-read run moved, and the lock set's
-canonical order — errand, then ranking."""
+canonical order — errand, then ranking — and the minted pointer's key."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from datetime import UTC, datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.cadence.errands import ErrandKey, ErrandRun, LastRun, holder_of
 from blizzard.hub.domain.cadence.mint import mint_lock_keys, run_moved
-from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.services import default_lock_keys
@@ -19,6 +20,7 @@ _LIVE = ChunkFacts(minted=True)
 _STOPPED = ChunkFacts(minted=True, stopped=True, stopped_at=_AT)
 _KEY = ErrandKey("chr_1", "scp_1")
 _URGENCY = UrgencyId("urg_1")
+_POINTER = WorkRef(source="hub", ref="7")
 
 
 def _run(work_item_id: str, *, holder: ChunkFacts | None) -> ErrandRun:
@@ -52,13 +54,24 @@ def test_a_run_moved_when_it_is_another_or_unfinished_or_newly_there() -> None:
 
 
 def test_the_lock_set_sorts_the_errand_ahead_of_the_ranking_and_urgency_locks() -> None:
-    promoting = mint_lock_keys(_KEY, promote=True, urgencies=default_lock_keys(_URGENCY))
+    promoting = mint_lock_keys(_KEY, promote=True, urgencies=default_lock_keys(_URGENCY), pointer=_POINTER)
     defaults = default_lock_keys(_URGENCY)
 
     assert sorted(promoting)[0].namespace is LockNamespace.CADENCE_ERRAND
     assert sorted(promoting)[1:3] == sorted([READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
-    assert set(promoting[1:]) == {READY_RANKING_LOCK, BACKLOG_RANKING_LOCK, *defaults}
-    assert mint_lock_keys(_KEY, promote=False, urgencies=default_lock_keys(_URGENCY)) == [promoting[0], *defaults]
+    assert set(promoting[1:]) == {READY_RANKING_LOCK, BACKLOG_RANKING_LOCK, *defaults, work_ref_lock(_POINTER)}
+    assert mint_lock_keys(_KEY, promote=False, urgencies=default_lock_keys(_URGENCY), pointer=_POINTER) == [
+        promoting[0],
+        *defaults,
+        work_ref_lock(_POINTER),
+    ]
     assert mint_lock_keys(
-        ErrandKey("a,b", "c"), promote=False, urgencies=default_lock_keys(_URGENCY)
-    ) != mint_lock_keys(ErrandKey("a", "b,c"), promote=False, urgencies=default_lock_keys(_URGENCY))
+        ErrandKey("a,b", "c"), promote=False, urgencies=default_lock_keys(_URGENCY), pointer=_POINTER
+    ) != mint_lock_keys(ErrandKey("a", "b,c"), promote=False, urgencies=default_lock_keys(_URGENCY), pointer=_POINTER)
+
+
+def test_the_lock_set_locks_the_minted_chunks_pointer() -> None:
+    for promote in (True, False):
+        keys = mint_lock_keys(_KEY, promote=promote, urgencies=default_lock_keys(_URGENCY), pointer=_POINTER)
+
+        assert [key for key in keys if key.namespace is LockNamespace.WORK_REF] == [work_ref_lock(_POINTER)]

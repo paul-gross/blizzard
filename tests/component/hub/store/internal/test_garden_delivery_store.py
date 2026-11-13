@@ -1,5 +1,5 @@
-"""``GardenDeliveryStore`` — the garden-delivery-materialization repository
-(component tier). Migrated-to-head sqlite-on-disk — the
+"""``GardenDeliveryStore`` — the garden-delivery-materialization repository — driven through
+``write_delivery_plan`` over the hub's own repositories (component tier). Migrated-to-head sqlite-on-disk — the
 ``tests/component/hub/store/internal/test_garden_proposal_store.py`` shape."""
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     NewProposal,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -34,6 +33,7 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
+from tests.support.delivery_writes import GardenDeliveryWrites
 from tests.support.finding_units import delivery_unit
 from tests.support.scaffolding import (
     chunk_unit,
@@ -53,7 +53,7 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="dry_run")
 
 
-def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryStore, Engine]:
+def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> tuple[GardenDeliveryWrites, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
@@ -77,7 +77,7 @@ def _store_and_engine(tmp_path: Path, *, enforce_foreign_keys: bool = False) -> 
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
     store_connections = hub_store_connections(engine)
-    return GardenDeliveryStore(store_connections), engine
+    return GardenDeliveryWrites(store_connections), engine
 
 
 def _full_plan(project_id: str, *, at: datetime = _NOW) -> DeliveryPlan:

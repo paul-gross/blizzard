@@ -12,11 +12,16 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.work_items.editing import mint_item
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     default_project,
     hub_store_connections,
@@ -50,15 +55,19 @@ def _seed(store: WorkItemStore, engine: Engine, *, source: str, chunk_id: str) -
         minted_at=_NOW,
         project_id=ProjectId(default_project(engine)),
     )
-    return store.create_with_chunk(
-        pointer=pointer,
-        title="t",
-        body="b",
-        author=WorkItemAuthor.user("usr_1"),
-        stated_priority=None,
-        at=_NOW,
-        chunk=chunk,
-    )
+    with HubTransactions(store.store).begin() as unit:
+        return mint_item(
+            store,
+            ChunkRecordStore(store.store, FixedClock(_NOW)),
+            pointer=pointer,
+            title="t",
+            body="b",
+            author=WorkItemAuthor.user("usr_1"),
+            stated_priority=None,
+            at=_NOW,
+            chunk=chunk,
+            transaction=unit.lock_set(keys=[work_ref_lock(pointer)]),
+        )
 
 
 def test_get_many_matches_get_across_two_sources_an_unknown_ref_and_an_unseen_source(tmp_path: Path) -> None:

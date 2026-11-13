@@ -40,43 +40,43 @@ from blizzard.hub.domain.urgency.declarations import SettingsWrite, UrgencyOrder
 from blizzard.hub.domain.urgency.model import UrgencySlugTaken
 from blizzard.hub.domain.urgency.order import UrgencyOrderConflict
 
-# Shares the cadence adapter's create, edit, and lifecycle bodies on the caller's connection.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import cadence_store as cadence_writes
 
-# Shares forge resolution and insertion on the caller's connection.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import forge_record_store as forge_writes
 
-# Shares the project_link_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_link_store as link_writes
 
-# Shares the project_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_store as project_writes
 
-# Shares the repository_record_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 
-# Shares the routine adapter's revision and link writes.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import routine_store as routine_writes
 
-# Resolves or creates scope ids on the caller's connection.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import scope_store as scope_writes
 
-# Shares the tenant settings' edit body on the caller's connection.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import tenant_settings_store as settings_writes
 
-# Shares the urgency adapter's create, edit, and position bodies on the caller's connection.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import urgency_store as urgency_writes
 
-# Shares the work_source_record_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.internal.landing_seqs import require_landing_seq

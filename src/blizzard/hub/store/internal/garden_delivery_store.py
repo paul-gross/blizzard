@@ -1,12 +1,12 @@
 """SQLAlchemy adapter for the garden-delivery materialization seam (package-private).
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-
-inversion``). One ``store.write`` transaction per :meth:`GardenDeliveryStore.deliver`
-call — every row a :class:`DeliveryPlan` carries, plus its own idempotence marker, land
-together or not at all."""
+inversion``). Owns the delivery's idempotence marker, its fence, and the idempotence and guard
+reads a :class:`DeliveryPlan` is admitted by, all in the caller's locked unit; every row the plan
+mints is written by the repository that owns it."""
 
 from __future__ import annotations
 
-import json
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Row
@@ -18,30 +18,18 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
+    DeliverySurvivors,
     IReadGardenDeliveryRepository,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.garden.findings.model import finding_lock
-from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.chunk_rows import fence, next_artifact_seq
 
-# Shares the finding adapter's guard and scope queries in one transaction.
+# Reads the finding adapter's guard and project queries in the caller's unit.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.finding_store import findings_outside_project, moved_findings
-
-# Resolves or creates scope ids on the caller's connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.scope_store import scope_ids_of
-from blizzard.hub.store.schema import (
-    artifacts,
-    finding_facts,
-    finding_sets,
-    findings,
-    garden_proposal_findings,
-    garden_proposals,
-)
+from blizzard.hub.store.schema import artifacts, finding_facts, finding_sets, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import connection_for
 
@@ -51,7 +39,7 @@ _DELIVERED_MARKER_NAME = "garden-delivered"
 class GardenDeliveryStore:
     """Read-write garden-delivery-materialization adapter over the hub store engine. No
     clock (`bzh:injected-clock`) — every timestamp arrives already stamped on
-    `DeliveryPlan.at`, so this adapter makes no time decisions, only insert decisions."""
+    `DeliveryPlan.at`, so this adapter makes no time decisions."""
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
@@ -73,11 +61,11 @@ class GardenDeliveryStore:
             )
         ).first()
 
-    def deliver(
+    def admit(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
-    ) -> DeliveryOutcome:
+    ) -> DeliveryOutcome | DeliverySurvivors:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
-        # `deliver`'s guard judges a state no verb can move until this transaction ends.
+        # `admit`'s guard judges a state no verb can move until this transaction ends.
         for finding_id in sorted(plan.expect):
             connection_for(self._store, transaction, key=finding_lock(finding_id))
         already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
@@ -154,118 +142,26 @@ class GardenDeliveryStore:
             }
             surviving_proposals = [p for p in plan.proposals if (p.source_artifact_id, p.ref) not in already_delivered]
 
-        new_findings = [f for d in surviving_deltas for f in d.new_findings]
         facts = [fact for d in surviving_deltas for fact in d.facts]
         # Only facts that will actually be inserted: a dropped, already-materialized delta's ops
         # write nothing, so a finding they name moving is no reason to refuse.
         written = {fact.finding_id for fact in facts}
         if moved_findings(conn, {fid: state for fid, state in plan.expect.items() if fid in written}):
             return DeliveryOutcome.GUARD_LOST
-        finding_set_rows = [d.finding_set for d in surviving_deltas]
-        # Every delta names the run's own scope (validation), stored before the run was minted;
-        # a slug the run's project does not hold maps to no id, which the NOT NULL link refuses.
-        scope_ids = (
-            scope_ids_of(
-                conn,
-                [f.scope_slug for f in new_findings] + [fs.scope_slug for fs in finding_set_rows],
-                plan.run.project_id,
-            )
-            if new_findings or finding_set_rows
-            else {}
+        return DeliverySurvivors(
+            deltas=surviving_deltas,
+            proposals=surviving_proposals,
+            ref_substitutions=ref_substitutions,
+            uninserted_finding_ids=uninserted_finding_ids,
         )
 
-        if new_findings:
-            conn.execute(
-                self._store.insert(findings).values(project_id=plan.run.project_id),
-                [
-                    {
-                        "finding_id": f.finding_id,
-                        "routine_name": f.routine_name,
-                        "scope_id": scope_ids.get(f.scope_slug),
-                        "scope_slug": f.scope_slug,
-                        "class_": f.class_,
-                        "locus": f.locus,
-                        "summary": f.summary,
-                        "introduced": f.introduced,
-                        "introduced_at": f.introduced_at,
-                        "source": "routine",
-                    }
-                    for f in new_findings
-                ],
-            )
-        if finding_set_rows:
-            conn.execute(
-                self._store.insert(finding_sets).values(project_id=plan.run.project_id),
-                [
-                    {
-                        "finding_set_id": fs.finding_set_id,
-                        "artifact_id": fs.artifact_id,
-                        "chunk_id": plan.chunk_id,
-                        "scope_id": scope_ids.get(fs.scope_slug),
-                        "scope_slug": fs.scope_slug,
-                        "routine_name": plan.run.routine_name,
-                        "revisions": json.dumps(fs.revisions),
-                        "measurement": fs.measurement,
-                    }
-                    for fs in finding_set_rows
-                ],
-            )
-        if facts:
-            conn.execute(
-                self._store.insert(finding_facts),
-                [
-                    {
-                        "finding_id": fact.finding_id,
-                        "kind": fact.kind,
-                        "recorded_at": plan.at,
-                        "note": fact.note,
-                        "finding_set_id": fact.finding_set_id,
-                        "ref": fact.ref,
-                        "actor": fact.actor,
-                    }
-                    for fact in facts
-                ],
-            )
-        if surviving_proposals:
-            conn.execute(
-                self._store.insert(garden_proposals).values(project_id=plan.run.project_id),
-                [
-                    {
-                        "proposal_id": p.proposal_id,
-                        "origin": "routine-run",
-                        "routine_name": p.routine_name,
-                        "created_by": None,
-                        "class_": p.class_,
-                        "title": p.title,
-                        "body": p.body,
-                        "source_artifact_id": p.source_artifact_id,
-                        "ref": p.ref,
-                        "created_at": plan.at,
-                    }
-                    for p in surviving_proposals
-                ],
-            )
-            # An unresolved citation names a finding this visit never inserted, so its
-            # link is dropped like the delta was rather than pointing at nothing.
-            links = [
-                {"proposal_id": p.proposal_id, "finding_id": ref_substitutions.get(finding_id, finding_id)}
-                for p in surviving_proposals
-                for finding_id in p.finding_ids
-                if finding_id in ref_substitutions or finding_id not in uninserted_finding_ids
-            ]
-            if links:
-                cited = [link["finding_id"] for link in links]
-                outside = findings_outside_project(conn, cited, plan.run.project_id)
-                if outside:
-                    raise GardenDeliveryRejected(
-                        f"finding {outside[0]!r} belongs to another project than routine "
-                        f"{plan.run.routine_name!r}'s — nothing was written",
-                        GardenDeliveryFault.PROPOSALS,
-                    )
-                conn.execute(self._store.insert(garden_proposal_findings), links)
+    def findings_outside_project(
+        self, finding_ids: Sequence[str], project_id: str, *, transaction: LockedTransaction
+    ) -> list[str]:
+        return findings_outside_project(connection_for(self._store, transaction), finding_ids, project_id)
 
-        # Always written, even when every delta was already materialized: this visit
-        # is a genuinely new (chunk_id, node_id, epoch) and owes its idempotence key.
+    def record_marker(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
         conn.execute(
             self._store.insert(artifacts).values(
                 artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
@@ -282,9 +178,6 @@ class GardenDeliveryStore:
                 seq=next_artifact_seq(conn, plan.chunk_id),
             )
         )
-        if surviving_deltas or surviving_proposals:
-            return DeliveryOutcome.RECORDED
-        return DeliveryOutcome.ALREADY_RECORDED
 
 
 _garden_delivery_store_conforms: type[IWriteGardenDeliveryRepository] = GardenDeliveryStore

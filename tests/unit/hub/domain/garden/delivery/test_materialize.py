@@ -6,6 +6,7 @@ one finding_set entry and zero finding/fact entries (``bzh:domain-core``, the
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -16,15 +17,24 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
     DeliveryPlan,
+    DeliverySurvivors,
     GardenDelivery,
     IWriteGardenDeliveryRepository,
 )
-from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery
-from blizzard.hub.domain.garden.findings.model import finding_lock
+from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected, ValidatedDelivery
+from blizzard.hub.domain.garden.findings.model import (
+    FindingFactInsert,
+    FindingInsert,
+    FindingSet,
+    IWriteFindingRepository,
+    IWriteFindingSetRepository,
+    finding_lock,
+)
 from blizzard.hub.domain.garden.formats import (
     DeliveredDelta,
     FindingAddOp,
@@ -32,8 +42,10 @@ from blizzard.hub.domain.garden.formats import (
     FindingObservedOp,
     ProposalCandidate,
 )
+from blizzard.hub.domain.garden.proposals.model import DeliveredProposal, IWriteGardenProposalRepository
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.fake_chunk_facts import FakeStatusFacts
 from tests.support.fake_transactions import FakeTransactions
@@ -63,19 +75,53 @@ _NODE = Node(
 
 @dataclass
 class _FakeGardenDeliveryRepo:
+    """The delivery, finding, finding-set, and proposal repositories at once, recording each write in order."""
+
     delivered: list[DeliveryPlan] = field(default_factory=list[DeliveryPlan])
     outcome: DeliveryOutcome = DeliveryOutcome.RECORDED
+    #: Finding ids `findings_outside_project` reports as stored in another project.
+    foreign: list[str] = field(default_factory=list[str])
 
     terminals: list[bool] = field(default_factory=list[bool])
     written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+    writes: list[tuple[str, object]] = field(default_factory=list[tuple[str, object]])
 
-    def deliver(
+    def admit(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
-    ) -> DeliveryOutcome:
+    ) -> DeliveryOutcome | DeliverySurvivors:
         self.delivered.append(plan)
         self.terminals.append(terminal)
         self.written_in.append(transaction)
-        return self.outcome
+        if self.outcome is not DeliveryOutcome.RECORDED:
+            return self.outcome
+        return DeliverySurvivors(deltas=plan.deltas, proposals=plan.proposals)
+
+    def findings_outside_project(
+        self, finding_ids: Sequence[str], project_id: str, *, transaction: LockedTransaction
+    ) -> list[str]:
+        return sorted(set(finding_ids) & set(self.foreign))
+
+    def record_marker(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        self.writes.append(("marker", plan.chunk_id))
+
+    # An empty batch writes no row, so only a non-empty one is recorded.
+    def insert_many(
+        self, rows: Sequence[FindingInsert] | Sequence[FindingSet], *, transaction: LockedTransaction
+    ) -> None:
+        if rows:
+            self.writes.append(("finding_sets" if isinstance(rows[0], FindingSet) else "findings", list(rows)))
+
+    def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
+        if rows:
+            self.writes.append(("finding_facts", list(rows)))
+
+    def insert_delivered(self, proposals: Sequence[DeliveredProposal], *, transaction: LockedTransaction) -> None:
+        if proposals:
+            self.writes.append(("proposals", list(proposals)))
+
+    def link_findings(self, links: Sequence[tuple[str, str]], *, transaction: LockedTransaction) -> None:
+        if links:
+            self.writes.append(("links", list(links)))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -83,6 +129,23 @@ class _FakeGardenDeliveryRepo:
 
 def _as_write_repo(repo: _FakeGardenDeliveryRepo) -> IWriteGardenDeliveryRepository:
     return cast(IWriteGardenDeliveryRepository, repo)
+
+
+def _service(
+    repo: _FakeGardenDeliveryRepo,
+    *,
+    facts: IReadChunkFactsRepository | None = None,
+    transactions: FakeTransactions | None = None,
+) -> GardenDelivery:
+    return GardenDelivery(
+        delivery=_as_write_repo(repo),
+        findings=cast(IWriteFindingRepository, repo),
+        finding_sets=cast(IWriteFindingSetRepository, repo),
+        proposals=cast(IWriteGardenProposalRepository, repo),
+        facts=facts if facts is not None else FakeStatusFacts().as_port(),
+        transactions=transactions if transactions is not None else FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
 
 
 def _fin() -> str:
@@ -106,12 +169,7 @@ def _proposal(*, findings: list[str]) -> ProposalCandidate:
 
 def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
@@ -159,12 +217,7 @@ def test_deliver_threads_a_resolved_introduced_at_onto_the_new_finding() -> None
     """`validated.introduced_at` is keyed `(repo, sha)` — the same pair `check_delta`
     resolved during validation — never re-resolved here."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     commit_at = datetime(2025, 12, 25, tzinfo=UTC)
     delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(
@@ -181,12 +234,7 @@ def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() ->
     """A missing entry (never resolved — no forge, ambiguous repo count) reads as
     unattributed, never a `KeyError`."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], introduced_at={})
 
@@ -198,12 +246,7 @@ def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() ->
 
 def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(
         scope="runner",
         findings=[FindingObservedOp(id="fin_1"), FindingGoneOp(id="fin_2", note="fixed upstream")],
@@ -226,12 +269,7 @@ def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> 
     completes that exit rather than merely flagging it — the settling fact carries the
     actor of the `delivered` fact it confirms, never `None`."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(
         run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", "u_1")}
@@ -250,12 +288,7 @@ def test_deliver_a_gone_op_against_a_finding_absent_from_gone_settlements_stays_
     ordinary case, a merely-live finding the run could not find — records the flag as
     before, carrying no actor."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
@@ -270,12 +303,7 @@ def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too()
     gates the settlement, not the actor being truthy, so this must still complete the
     exit rather than falling through to a plain `gone` flag."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", findings=[FindingGoneOp(id="fin_1", note="no longer reproduces")])
     validated = ValidatedDelivery(
         run=_RUN, deltas=[delta], proposals=[], gone_settlements={"fin_1": ("resolved", None)}
@@ -293,12 +321,7 @@ def test_deliver_gives_a_citable_finding_the_delta_leaves_unnamed_no_fact() -> N
     """`gone_settlements` spans every citable finding in the bucket, but a finding the run's
     delta does not name keeps its last word — only the ops the delta carries become facts."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id="fin_1")])
     validated = ValidatedDelivery(
         run=_RUN,
@@ -315,12 +338,7 @@ def test_deliver_gives_a_citable_finding_the_delta_leaves_unnamed_no_fact() -> N
 
 def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_facts() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", revisions={}, measurement="12 findings", findings=[])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
 
@@ -337,12 +355,7 @@ def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_fac
 
 def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta_a = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(locus="a.py:1")])
     delta_b = DeliveredDelta(
         scope="runner",
@@ -376,12 +389,7 @@ def test_deliver_over_two_deltas_groups_each_deltas_own_rows_separately() -> Non
 
 def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     fin_1, fin_2 = _fin(), _fin()
     proposal = _proposal(findings=[fin_1, fin_2])
     validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[proposal], proposal_sources=["docket"])
@@ -409,12 +417,7 @@ def test_deliver_resolves_a_proposals_ref_citation_against_the_id_its_own_add_op
     id — a proposal citing that `ref` lands with the actual minted id in its link
     rows, never the submission-local spelling."""
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     delta = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
     proposal = _proposal(findings=["new-1"])
     validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[proposal], proposal_sources=["docket"])
@@ -436,12 +439,7 @@ def test_deliver_resolves_a_proposals_ref_citation_against_the_id_its_own_add_op
 
 def test_deliver_resolves_a_proposal_mixing_a_ref_and_a_prior_runs_live_id() -> None:
     repo = _FakeGardenDeliveryRepo()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     prior_live = _fin()
     delta = DeliveredDelta(scope="runner", findings=[_add(locus="a.py:1", ref="new-1")])
     proposal = _proposal(findings=[prior_live, "new-1"])
@@ -463,12 +461,7 @@ def test_deliver_resolves_a_proposal_mixing_a_ref_and_a_prior_runs_live_id() -> 
 
 def test_deliver_returns_the_repository_outcome() -> None:
     repo = _FakeGardenDeliveryRepo(outcome=DeliveryOutcome.ALREADY_RECORDED)
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[])
@@ -479,12 +472,7 @@ def test_deliver_returns_the_repository_outcome() -> None:
 def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk_and_every_expected_finding() -> None:
     repo = _FakeGardenDeliveryRepo()
     transactions = FakeTransactions()
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=transactions,
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo, transactions=transactions)
     delta = DeliveredDelta(
         scope="runner",
         revisions={"blizzard": "a" * 40},
@@ -517,12 +505,7 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
 ) -> None:
     repo = _FakeGardenDeliveryRepo()
     status_facts = FakeStatusFacts(facts)
-    service = GardenDelivery(
-        delivery=_as_write_repo(repo),
-        facts=status_facts.as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo, facts=status_facts.as_port())
     delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add()])
 
     service.deliver(
@@ -535,3 +518,53 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
 
     assert repo.terminals == [terminal]
     assert status_facts.transactions == repo.written_in
+
+
+def test_deliver_writes_findings_then_sets_then_facts_then_proposals_then_links_then_the_marker() -> None:
+    repo = _FakeGardenDeliveryRepo()
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(ref="r1")])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[_proposal(findings=["r1"])])
+
+    outcome = _service(repo).deliver(
+        validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"], proposal_artifact_ids=["art_p"]
+    )
+
+    assert outcome is DeliveryOutcome.RECORDED
+    assert [kind for kind, _ in repo.writes] == [
+        "findings",
+        "finding_sets",
+        "finding_facts",
+        "proposals",
+        "links",
+        "marker",
+    ]
+    plan = repo.delivered[0]
+    finding_id = plan.deltas[0].new_findings[0].finding_id
+    assert repo.writes[4] == ("links", [(plan.proposals[0].proposal_id, finding_id)])
+
+
+def test_deliver_refuses_a_citation_of_another_projects_finding_before_any_link_or_marker() -> None:
+    foreign = _fin()
+    repo = _FakeGardenDeliveryRepo(foreign=[foreign])
+    validated = ValidatedDelivery(run=_RUN, deltas=[], proposals=[_proposal(findings=[foreign])])
+
+    with pytest.raises(GardenDeliveryRejected, match=foreign) as exc:
+        _service(repo).deliver(
+            validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=[], proposal_artifact_ids=["art_p"]
+        )
+
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
+    assert "nothing was written" in str(exc.value)
+    assert [kind for kind, _ in repo.writes] == ["proposals"]
+
+
+@pytest.mark.parametrize(
+    "outcome", [DeliveryOutcome.ALREADY_RECORDED, DeliveryOutcome.FENCED, DeliveryOutcome.GUARD_LOST]
+)
+def test_deliver_a_refused_admission_writes_nothing(outcome: DeliveryOutcome) -> None:
+    repo = _FakeGardenDeliveryRepo(outcome=outcome)
+    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add()])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
+
+    assert _service(repo).deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"]) is outcome
+    assert repo.writes == []

@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 from structlog.testing import capture_logs
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -19,8 +19,10 @@ from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
 from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal import scope_store
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.schema import config_changes, scope_lifecycle_facts, scopes
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import default_project, hub_store_connections, migrated_hub_at, seed_project
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -107,6 +109,64 @@ def test_ensure_on_an_existing_slug_reads_back_the_existing_row_and_writes_nothi
     assert stored is not None
     assert stored.description == "original"
     assert len(_changes(engine)) == 1
+
+
+def test_ensure_joining_a_unit_commits_with_it_and_reads_back_a_stored_slug_unchanged(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    first = _ensure(store, project, "blizzard", description="original")
+
+    with HubTransactions(hub_store_connections(engine)).begin() as unit:
+        fresh, fresh_change = _mint(project, "fresh", description="joined")
+        minted = store.ensure(fresh, change=fresh_change, transaction=unit)
+        stored, stored_change = _mint(project, "blizzard", description="clobber attempt")
+        reread = store.ensure(stored, change=stored_change, transaction=unit)
+
+    assert minted == fresh
+    assert reread == first
+    assert store.get(project, "fresh") == fresh
+    assert _changes(engine) == [("scope", "blizzard", 1, "create"), ("scope", "fresh", 1, "create")]
+
+
+def test_ensure_losing_a_race_inside_a_unit_rolls_back_only_its_savepoint_and_reads_back_the_winner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A racing mint commits the slug between the existence check and the insert: the unique index refuses the
+    insert, only its savepoint rolls back, and the unit's earlier and later writes still commit."""
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    winner = _ensure(store, project, "blizzard", description="winner")
+    checked = scope_store.ensure_scope
+
+    def unchecked(conn: Connection, mint: tuple[Scope, ConfigChange]) -> bool:
+        record, _ = mint
+        conn.execute(
+            scope_store.statements_of(conn)
+            .insert(scopes)
+            .values(
+                scope_id=record.scope_id,
+                project_id=record.project_id,
+                slug=record.slug,
+                description=record.description,
+                created_at=record.created_at,
+                revision=record.revision,
+            )
+        )
+        return True
+
+    with HubTransactions(hub_store_connections(engine)).begin() as unit:
+        before, before_change = _mint(project, "before")
+        store.ensure(before, change=before_change, transaction=unit)
+        monkeypatch.setattr(scope_store, "ensure_scope", unchecked)
+        loser, loser_change = _mint(project, "blizzard", description="loser")
+        reread = store.ensure(loser, change=loser_change, transaction=unit)
+        monkeypatch.setattr(scope_store, "ensure_scope", checked)
+        after, after_change = _mint(project, "after")
+        store.ensure(after, change=after_change, transaction=unit)
+
+    assert reread == winner
+    assert [slug for _, slug, _, _ in _changes(engine)] == ["blizzard", "before", "after"]
+    assert store.get(project, "after") == after
 
 
 def test_update_writes_the_description_revision_and_change_together(tmp_path: Path) -> None:

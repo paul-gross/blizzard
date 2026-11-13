@@ -1,8 +1,8 @@
-"""``GardenProposalClosureStore`` and ``WorkItemStore.accept_create`` (component tier).
-The pass and accept-declining-to-mint writes are idempotent per
-``proposal_id`` at the store level — the second call of either writes nothing — and
-accept-with-mint atomically writes the closure, the item, and its resting chunk
-together, inserted first so an already-closed proposal mints nothing a second time.
+"""``GardenProposalClosureStore`` and the minting accept's unit (component tier).
+The pass, accept-declining-to-mint, and accept-with-mint writes are idempotent per
+``proposal_id`` at the store level — the second call of any writes nothing — and
+``GardenProposalClosureService.accept`` writes the closure, the item, and its resting chunk
+in one unit, the closure first so an already-closed proposal mints nothing a second time.
 Each write runs in a unit holding the proposal's key."""
 
 from __future__ import annotations
@@ -10,21 +10,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import select
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
 from blizzard.foundation.store import batching as batching_module
-from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef, mint_chunk
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.garden.proposals.closure import (
+    GardenProposalClosure,
+    GardenProposalClosureService,
+    IWriteGardenProposalClosureRepository,
+)
+from blizzard.hub.domain.garden.proposals.model import GardenProposalAlreadyClosed
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -34,13 +39,13 @@ from blizzard.hub.store.internal.garden_proposal_closure_store import (
 )
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,
     default_project,
-    default_urgency,
     hub_scoped,
     hub_store_connections,
     stamp,
@@ -330,99 +335,124 @@ def test_get_unknown_proposal_is_none(tmp_path: Path) -> None:
     assert GardenProposalClosureStore(hub_store_connections(hub.engine)).get("gprop_ghost") is None
 
 
-def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempotent(tmp_path: Path) -> None:
+def test_record_accept_mint_round_trips_naming_the_item_and_is_idempotent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_proposal(hub)
-    graph = hub.services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
-    store = hub_store_connections(hub.engine)
-    items = cast(IWriteWorkItemRepository, WorkItemStore(store))
-    author = WorkItemAuthor.user("u1")
-    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk(
-        [pointer],
-        graph_id=graph.graph_id,
-        at=_NOW,
-        project_id=ProjectId(default_project(hub.engine)),
-        urgency_id=default_urgency(hub.engine),
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+    pointer = WorkRef(source="hub", ref="7")
+
+    first = _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_accept_mint(
+            "gprop_1", pointer=pointer, reason=None, closed_by="u1", at=_NOW, transaction=t
+        ),
+    )
+    second = _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_accept_mint(
+            "gprop_1", pointer=WorkRef(source="hub", ref="8"), reason="again", closed_by="u2", at=_NOW, transaction=t
+        ),
     )
 
-    with proposal_unit(store, "gprop_1") as t:
-        first = items.accept_create(
-            proposal_id="gprop_1",
-            pointer=pointer,
-            title="t",
-            body="b",
-            author=author,
-            at=_NOW,
-            chunk=chunk,
-            reason=None,
-            closed_by="u1",
-            transaction=t,
-        )
-    assert first is not None
-    assert items.get("hub", pointer.ref) is not None
-    closure = GardenProposalClosureStore(store).get("gprop_1")
+    assert first is True
+    assert second is False
+    closure = closures.get("gprop_1")
     assert closure is not None
     assert closure.closure is GardenProposalClosureKind.ACCEPTED
     assert closure.item_outcome is GardenProposalItemOutcome.MINTED
-    assert closure.source == "hub" and closure.ref == pointer.ref
+    assert closure.source == "hub" and closure.ref == "7"
+    assert closure.closed_by == "u1"
 
-    with proposal_unit(store, "gprop_1") as t:
-        second = items.accept_create(
-            proposal_id="gprop_1",
-            pointer=pointer,
-            title="t",
-            body="b",
-            author=author,
-            at=_NOW,
-            chunk=chunk,
-            reason=None,
-            closed_by="u1",
-            transaction=t,
-        )
-    assert second is None  # already closed — nothing minted a second time
 
+class _StaleBeforeTheUnit:
+    """The real closure store, except its read before the accept's unit misses a closure that lands before the
+    unit opens — the race the unit's insert-if-absent closes."""
+
+    def __init__(self, closures: GardenProposalClosureStore) -> None:
+        self._closures = closures
+
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
+        return self._closures.get(proposal_id, transaction=transaction) if transaction is not None else None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._closures, name)
+
+
+def _closure_service(hub: HubHarness, closures: IWriteGardenProposalClosureRepository) -> GardenProposalClosureService:
+    store = hub_store_connections(hub.engine)
+    graph = hub.services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    return GardenProposalClosureService(
+        closures=closures,
+        items=hub.services.garden_proposal_closure.items,
+        default_graph=lambda: graph,
+        clock=FixedClock(_NOW),
+        transactions=HubTransactions(store),
+    )
+
+
+def _hub_chunk_refs(hub: HubHarness) -> list[str]:
+    with hub.engine.connect() as conn:
+        rows = conn.execute(hub_scoped(select(s.chunk_work_refs).where(s.chunk_work_refs.c.source == "hub"))).all()
+    return [row.ref for row in rows]
+
+
+def _closure_rows(hub: HubHarness, proposal_id: str) -> int:
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            hub_scoped(select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == "gprop_1"))
+            hub_scoped(
+                select(s.garden_proposal_closures).where(s.garden_proposal_closures.c.proposal_id == proposal_id)
+            )
         ).all()
-    assert len(rows) == 1
+    return len(rows)
 
 
-def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_path: Path) -> None:
+def test_a_minting_accept_writes_the_closure_item_and_chunk_together(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_proposal(hub)
-    graph = hub.services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    store = hub_store_connections(hub.engine)
+    proposal = GardenProposalStore(store).get("gprop_1")
+    assert proposal is not None
+    service = _closure_service(hub, GardenProposalClosureStore(store))
+
+    accepted = service.accept(proposal, reason=None, by="u1", body=None, mint=True, findings=[])
+
+    closure = GardenProposalClosureStore(store).get("gprop_1")
+    assert closure is not None
+    assert closure == accepted.closure
+    assert closure.closure is GardenProposalClosureKind.ACCEPTED
+    assert closure.item_outcome is GardenProposalItemOutcome.MINTED
+    assert closure.source == "hub" and closure.ref is not None
+    item = WorkItemStore(store).get("hub", closure.ref)
+    assert item is not None and item.title == proposal.title
+    assert accepted.chunk_id is not None
+    assert _hub_chunk_refs(hub) == [closure.ref]
+    assert _closure_rows(hub, "gprop_1") == 1
+
+
+def test_a_minting_accept_of_a_proposal_closed_before_its_unit_raises_and_writes_nothing_further(
+    tmp_path: Path,
+) -> None:
+    """A pass lands after the accept's own read and before its unit: the closure insert finds it, so the unit
+    writes no item, no chunk, and no second closure, and the accept refuses naming the closure that won."""
+    hub = build_hub(tmp_path)
+    _seed_proposal(hub)
     store = hub_store_connections(hub.engine)
     closures = GardenProposalClosureStore(store)
+    proposal = GardenProposalStore(store).get("gprop_1")
+    assert proposal is not None
     _in_unit(
         hub,
         "gprop_1",
         lambda t: closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW, transaction=t),
     )
-    items = cast(IWriteWorkItemRepository, WorkItemStore(store))
-    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk(
-        [pointer],
-        graph_id=graph.graph_id,
-        at=_NOW,
-        project_id=ProjectId(default_project(hub.engine)),
-        urgency_id=default_urgency(hub.engine),
-    )
+    service = _closure_service(hub, cast(IWriteGardenProposalClosureRepository, _StaleBeforeTheUnit(closures)))
 
-    with proposal_unit(store, "gprop_1") as t:
-        result = items.accept_create(
-            proposal_id="gprop_1",
-            pointer=pointer,
-            title="t",
-            body="b",
-            author=WorkItemAuthor.user("u1"),
-            at=_NOW,
-            chunk=chunk,
-            reason=None,
-            closed_by="u1",
-            transaction=t,
-        )
+    with pytest.raises(GardenProposalAlreadyClosed) as refused:
+        service.accept(proposal, reason=None, by="u1", body=None, mint=True, findings=[])
 
-    assert result is None
-    assert items.get("hub", pointer.ref) is None
+    assert refused.value.closure.closure is GardenProposalClosureKind.PASSED
+    assert WorkItemStore(store).list("hub") == []
+    assert _hub_chunk_refs(hub) == []
+    assert _closure_rows(hub, "gprop_1") == 1

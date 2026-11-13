@@ -24,6 +24,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -31,6 +32,7 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 
 def _in_project(project_id: str | None) -> ColumnElement[bool]:
@@ -161,10 +163,21 @@ class ScopeStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
-        """Insert ``record`` in its own transaction; a racing second mint of the slug in its project gets
-        ``IntegrityError`` on ``uq_scopes_project_slug`` and reads back the winner instead —
-        never overwriting the description the winner minted, and writing no change row."""
+    def ensure(self, record: Scope, *, change: ConfigChange, transaction: Transaction | None = None) -> Scope:
+        """Insert ``record`` in its own transaction, or in ``transaction`` under a savepoint; a racing second mint of
+        the slug in its project gets ``IntegrityError`` on ``uq_scopes_project_slug`` and reads back the winner
+        instead — never overwriting the description the winner minted, and writing no change row."""
+        if transaction is not None:
+            with connection_in(self._store, transaction, "ensure", write=True) as conn:
+                try:
+                    with conn.begin_nested():
+                        inserted = ensure_scope(conn, (record, change))
+                    if inserted:
+                        return record
+                except IntegrityError:
+                    pass
+                row = conn.execute(_named(self._store, record.project_id, record.slug)).one()
+                return self._of(row, retired=_is_retired(conn, row.scope_id))
         try:
             with self._store.write("ensure", expect=(IntegrityError,)) as conn:
                 inserted = ensure_scope(conn, (record, change))

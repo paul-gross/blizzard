@@ -1,9 +1,9 @@
 """``WorkItemStore`` — the hub-owned work item repository (component tier).
 
-Exercises ``create_with_chunk``/``close``/``get`` through the read/write Protocol split
+Exercises ``create``/``close``/``get`` through the read/write Protocol split
 (``bzh:repository-split``): every write is read back through the read variant alone.
 There is no chunkless filing path — a fixture here allocates a ref then
-inserts item + chunk together, mirroring production's own two-step mint."""
+mints item + chunk together in one unit (``mint_item``), mirroring production's own two-step mint."""
 
 from __future__ import annotations
 
@@ -14,15 +14,20 @@ from typing import cast
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.work_items.editing import mint_item
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     default_project,
     hub_store_connections,
@@ -201,10 +206,52 @@ def test_closures_names_each_items_closure_and_omits_a_missing_one(tmp_path: Pat
 
 
 # --------------------------------------------------------------------------- #
-# ``create_with_chunk`` — the composite write
+# ``create`` and the mint pair over it
 
 
-def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path: Path) -> None:
+def _mint_pair(
+    store: WorkItemStore, engine: Engine, *, pointer: WorkRef, title: str, body: str, chunk: Chunk
+) -> HubWorkItem:
+    """:func:`mint_item` over ``store`` and a real chunk-record store, in a unit declaring the chunk's pointer keys."""
+    with HubTransactions(store.store).begin() as unit:
+        return mint_item(
+            store,
+            ChunkRecordStore(store.store, FixedClock(_NOW)),
+            pointer=pointer,
+            title=title,
+            body=body,
+            author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+            stated_priority=None,
+            at=_NOW,
+            chunk=chunk,
+            transaction=unit.lock_set(keys=[work_ref_lock(p) for p in chunk.work_refs]),
+        )
+
+
+def test_create_writes_only_the_item(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = ProjectId(default_project(engine))
+
+    created = store.create(
+        pointer=WorkRef(source="hub", ref="1"),
+        title="t",
+        body="b",
+        author=WorkItemAuthor.user("usr_1"),
+        stated_priority="high",
+        at=_NOW,
+        project_id=project,
+    )
+
+    assert store.get("hub", "1") == created
+    assert created.project_id == project
+    assert created.stated_priority == "high"
+    scoped = hub_store_connections(engine)
+    with engine.begin() as conn:
+        assert conn.execute(scoped.select(s.chunks)).all() == []
+        assert conn.execute(scoped.select(s.chunk_work_refs)).all() == []
+
+
+def test_the_mint_pair_inserts_the_item_and_the_chunk_rows_together(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     pointer = WorkRef(source="hub", ref="1")
     chunk = Chunk(
@@ -215,15 +262,7 @@ def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path
         project_id=ProjectId(default_project(engine)),
     )
 
-    created = store.create_with_chunk(
-        pointer=pointer,
-        title="widget is broken",
-        body="steps to repro",
-        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
-        stated_priority=None,
-        at=_NOW,
-        chunk=chunk,
-    )
+    created = _mint_pair(store, engine, pointer=pointer, title="widget is broken", body="steps to repro", chunk=chunk)
 
     assert created.source == "hub"
     assert created.ref == "1"
@@ -240,8 +279,8 @@ def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path
         assert [(row.chunk_id, row.source, row.ref) for row in ref_rows] == [("ch_1", "hub", "1")]
 
 
-def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_chunk_write(tmp_path: Path) -> None:
-    """A store failure inside the composite write leaves no row durable — proven against
+def test_the_mint_pair_rolls_back_the_item_and_the_chunk_rows_on_a_failing_chunk_write(tmp_path: Path) -> None:
+    """A store failure inside the mint pair's unit leaves no row durable — proven against
     the real engine, since a rollback is not observable through a seam double."""
     store, engine = _store_and_engine(tmp_path)
     # The second pointer's NOT NULL `ref` fails the write only once the `chunks` row has
@@ -257,15 +296,7 @@ def test_create_with_chunk_rolls_back_the_item_and_the_chunk_rows_on_a_failing_c
     )
 
     with pytest.raises(HubStoreError):
-        store.create_with_chunk(
-            pointer=pointer,
-            title="t",
-            body="b",
-            author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
-            stated_priority=None,
-            at=_NOW,
-            chunk=chunk,
-        )
+        _mint_pair(store, engine, pointer=pointer, title="t", body="b", chunk=chunk)
 
     assert store.get("hub", "1") is None
     scoped = hub_store_connections(engine)

@@ -23,7 +23,8 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthor,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, work_ref_lock
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.garden.routines import (
     Routine,
     RoutineGraphUnresolvedError,
 )
+from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.domain.garden.runs.run import (
     RoutineRetiredError,
     RunService,
@@ -165,7 +167,7 @@ class _FakeItems:
         self.next_ref += 1
         return ref
 
-    def create_run_with_chunk(self, **kwargs: Any) -> HubWorkItem:
+    def create(self, **kwargs: Any) -> HubWorkItem:
         self.calls.append(kwargs)
         record = HubWorkItem(
             work_item_id="wi_1",
@@ -182,6 +184,23 @@ class _FakeItems:
             run_mode=kwargs["run_mode"],
         )
         return record
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"should not touch {name!r}")
+
+
+@dataclass
+class _FakeRunWrites:
+    """The run mint's chunk and run-context writes, each recorded with the unit it joined."""
+
+    chunks: list[tuple[Chunk, object]] = field(default_factory=list[tuple[Chunk, object]])
+    contexts: list[tuple[str, RunContext, object]] = field(default_factory=list[tuple[str, RunContext, object]])
+
+    def mint(self, chunk: Chunk, *, transaction: object) -> None:
+        self.chunks.append((chunk, transaction))
+
+    def record(self, work_item_id: str, context: RunContext, *, transaction: object = None) -> None:
+        self.contexts.append((work_item_id, context, transaction))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -226,7 +245,7 @@ class _FakeDefault:
         return MintAhead(default_id=_DEFAULT_URGENCY)
 
     def resolve(self, ahead: MintAhead, transaction: _FakeUnit) -> _Urgency:
-        assert transaction.keys == ahead.lock_keys(), "the chain is resolved under its locks"
+        assert set(ahead.lock_keys()) <= set(transaction.keys), "the chain is resolved under its locks"
         return _Urgency(_DEFAULT_URGENCY)
 
 
@@ -239,7 +258,7 @@ def _service(
     finding_sets: _FakeFindingSets | None = None,
     items: _FakeItems | None = None,
     chunks: _FakeChunks | None = None,
-) -> tuple[RunService, _FakeItems, _FakeScopes, _FakeChunks]:
+) -> tuple[RunService, _FakeItems, _FakeScopes, _FakeChunks, _FakeRunWrites, _FakeTransactions]:
     clock = FixedClock(instant=_T0)
     routines = routines or _FakeRoutines()
     scopes = scopes or _FakeScopes()
@@ -248,6 +267,8 @@ def _service(
     finding_sets = finding_sets or _FakeFindingSets()
     items = items or _FakeItems()
     chunks = chunks or _FakeChunks()
+    writes = _FakeRunWrites()
+    transactions = _FakeTransactions()
     service = RunService(
         routines=cast(IReadRoutineRepository, routines),
         scopes=cast(IReadScopeRepository, scopes),
@@ -255,12 +276,14 @@ def _service(
         graphs=cast(IReadGraphRepository, graphs),
         finding_sets=cast(IReadFindingSetRepository, finding_sets),
         items=cast(IWriteWorkItemRepository, items),
+        chunks=cast(IWriteChunkRecordRepository, writes),
+        run_contexts=cast(IWriteRunContextRepository, writes),
         work_refs=cast(IReadChunkWorkRefsRepository, chunks),
         clock=clock,
         default=cast(TenantDefault, _FakeDefault()),
-        transactions=cast(IHubTransactions, _FakeTransactions()),
+        transactions=cast(IHubTransactions, transactions),
     )
-    return service, items, scopes, chunks
+    return service, items, scopes, chunks, writes, transactions
 
 
 _AUTHOR = WorkItemAuthor.user("usr_1")
@@ -289,9 +312,9 @@ class _RetiringItems(_FakeItems):
 
     routines: _FakeRoutines = field(default_factory=_FakeRoutines)
 
-    def create_run_with_chunk(self, **kwargs: Any) -> HubWorkItem:
+    def create(self, **kwargs: Any) -> HubWorkItem:
         self.routines.retired.add(_ROUTINE.routine_id)
-        return super().create_run_with_chunk(**kwargs)
+        return super().create(**kwargs)
 
 
 def test_a_retire_landing_mid_mint_neither_refuses_nor_unwinds_the_run() -> None:
@@ -394,30 +417,50 @@ def test_run_full_mode_never_downgrades_even_with_no_baseline() -> None:
 
 
 def test_run_threads_the_routines_model_and_effort_defaults_onto_the_chunk() -> None:
-    service, items, *_ = _service()
+    service, _, _, _, writes, _ = _service()
 
     service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    chunk = items.calls[0]["chunk"]
+    chunk, _ = writes.chunks[0]
     assert chunk.default_model == ["opus"]
     assert chunk.default_effort == "high"
 
 
 def test_run_mints_the_chunk_into_the_routines_own_project() -> None:
-    service, items, *_ = _service()
+    service, items, _, _, writes, _ = _service()
 
     service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note="first", author=_AUTHOR)
 
-    assert items.calls[0]["chunk"].project_id == _PROJECT == items.calls[0]["project_id"]
+    chunk, _ = writes.chunks[0]
+    _, context, _ = writes.contexts[0]
+    assert chunk.project_id == _PROJECT == items.calls[0]["project_id"] == context.project_id
 
 
 def test_run_mints_the_chunk_with_the_default_urgency_read_inside_its_unit() -> None:
-    service, items, *_ = _service()
+    service, items, _, _, writes, _ = _service()
 
     service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
 
-    assert items.calls[0]["chunk"].urgency_id == _DEFAULT_URGENCY
+    chunk, _ = writes.chunks[0]
+    assert chunk.urgency_id == _DEFAULT_URGENCY
     assert items.calls[0]["transaction"] is not None
+
+
+def test_run_writes_the_item_chunk_and_run_context_in_one_unit_locking_the_pointer() -> None:
+    service, items, _, _, writes, transactions = _service()
+
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note=None, author=_AUTHOR)
+
+    [unit] = transactions.units
+    chunk, chunk_unit = writes.chunks[0]
+    [(work_item_id, context, context_unit)] = writes.contexts
+    assert items.calls[0]["transaction"] is chunk_unit is context_unit is unit
+    assert work_ref_lock(result.item.pointer) in unit.keys
+    assert chunk.work_refs == [result.item.pointer]
+    assert work_item_id == result.item.work_item_id
+    assert context == RunContext(
+        routine_name=_ROUTINE.slug, scope_slug=_DEFAULT_SCOPE.slug, mode="full", project_id=_PROJECT
+    )
 
 
 def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_holder() -> None:

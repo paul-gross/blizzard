@@ -21,8 +21,9 @@ from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.transactions import HubTransactions
@@ -128,6 +129,9 @@ def garden_delivery_recorder(hub: HubHarness) -> GardenDeliveryRecorder:
         buckets=FindingBucketReader(FindingStore(connections)),
         materialize=GardenDelivery(
             delivery=GardenDeliveryStore(connections),
+            findings=FindingStore(connections),
+            finding_sets=FindingSetStore(connections),
+            proposals=GardenProposalStore(connections),
             facts=chunk_stores(hub.engine, hub.clock).facts,
             transactions=HubTransactions(connections),
             clock=hub.clock,

@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 @domain_model
@@ -39,6 +40,7 @@ class IReadRunContextRepository(Protocol):
 class IWriteRunContextRepository(IReadRunContextRepository, Protocol):
     """Adds the run-context writes."""
 
-    def record(self, work_item_id: str, context: RunContext) -> None:
-        """Record ``context`` as ``work_item_id``'s run identity."""
+    def record(self, work_item_id: str, context: RunContext, *, transaction: Transaction | None = None) -> None:
+        """Record ``context`` as ``work_item_id``'s run identity; joins ``transaction`` when given, else opens its
+        own write."""
         ...

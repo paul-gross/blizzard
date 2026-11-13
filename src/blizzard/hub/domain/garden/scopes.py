@@ -29,6 +29,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.lifecycle import field_changes, require_revision, transition
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project
 
@@ -222,10 +223,11 @@ class IWriteScopeRepository(IReadScopeRepository, Protocol):
     """Adds the scope writes; each write commits its ``change`` in the same transaction as the
     record write."""
 
-    def ensure(self, record: Scope, *, change: ConfigChange) -> Scope:
+    def ensure(self, record: Scope, *, change: ConfigChange, transaction: Transaction | None = None) -> Scope:
         """Insert ``record`` with its ``create`` change if its slug is unseen in its project;
         otherwise read back the stored scope (and its id) unchanged and write nothing — first-write-wins, never
-        overwriting a stored description."""
+        overwriting a stored description. Joining ``transaction``, a racing mint of the slug rolls back only the
+        insert's savepoint, and the unit reads back the winner."""
         ...
 
     def update(self, record: Scope, *, from_revision: int, change: ConfigChange) -> Scope:

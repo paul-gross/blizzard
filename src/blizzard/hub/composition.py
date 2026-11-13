@@ -748,6 +748,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
             record=chunk_stores.record,
+            chunks=chunk_stores.record,
             facts=chunk_stores.facts,
             clock=clock,
             delete=delete,
@@ -1201,7 +1202,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         artifacts=chunk_artifacts,
         buckets=finding_bucket,
         materialize=GardenDelivery(
-            delivery=garden_delivery_store, facts=chunk_facts, transactions=stores.transactions, clock=clock
+            delivery=garden_delivery_store,
+            findings=finding_store,
+            finding_sets=finding_set_store,
+            proposals=garden_proposal_store,
+            facts=chunk_facts,
+            transactions=stores.transactions,
+            clock=clock,
         ),
         formats=garden_formats,
         resolve_commit_for=commit_resolver_for,
@@ -1209,7 +1216,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     review_findings = ReviewFindingsRecorder(
         artifacts=chunk_artifacts,
         materialize=ReviewFindingsMaterialize(
-            delivery=review_findings_store, facts=chunk_facts, transactions=stores.transactions, clock=clock
+            delivery=review_findings_store,
+            findings=finding_store,
+            scopes=scope_store,
+            facts=chunk_facts,
+            transactions=stores.transactions,
+            clock=clock,
         ),
         formats=garden_formats,
     )
@@ -1564,12 +1576,16 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         routines=routine_store,
         routine_scopes=routine_scope_store,
-        routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
+        routine_scope_membership=RoutineScopeMembership(
+            routines=routine_store, routine_scopes=routine_scope_store, clock=clock
+        ),
         routine_authoring=RoutineAuthoring(
             routines=routine_store,
             graphs=graph_store,
+            scopes=scope_store,
             scope_registry=scope_registry,
             urgencies=urgency_references,
+            transactions=stores.transactions,
             clock=clock,
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
@@ -1586,6 +1602,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
         cadence_mint=CadenceMint(
             items=work_item_store,
+            run_contexts=run_context_store,
             work_refs=chunk_work_refs,
             runs=errand_runs_store,
             record=chunk_record,
@@ -1602,6 +1619,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             graphs=graph_store,
             finding_sets=finding_set_store,
             items=work_item_store,
+            chunks=chunk_record,
+            run_contexts=run_context_store,
             work_refs=chunk_work_refs,
             clock=clock,
             default=tenant_default,

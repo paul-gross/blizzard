@@ -122,6 +122,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     DeltaMaterialization,
     IReadGardenDeliveryRepository,
     NewFindingSet,
+    write_delivery_plan,
 )
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
@@ -133,6 +134,7 @@ from blizzard.hub.domain.garden.review.materialize import (
     NewReviewFinding,
     NewReviewFindingFact,
     ReviewFindingsPlan,
+    write_review_plan,
 )
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
@@ -220,6 +222,7 @@ from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
+from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
@@ -1847,7 +1850,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         project_id=garden_project, routine_name="gardening", scope_slug=scope_a.slug, mode="dry_run"
     )
     with chunk_unit(store_connections, delivery_chunk) as unit:
-        garden_delivery_store.deliver(
+        write_delivery_plan(
             DeliveryPlan(
                 chunk_id=delivery_chunk,
                 node_id=deliver_node.node_id,
@@ -1868,12 +1871,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 ],
                 proposals=[],
             ),
+            delivery=garden_delivery_store,
+            findings=finding_store,
+            finding_sets=finding_set_store,
+            proposals=garden_proposal_store,
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             transaction=unit,
         )
     with chunk_unit(store_connections, delivery_chunk) as unit:
-        review_findings_store.deliver(
+        write_review_plan(
             ReviewFindingsPlan(
                 chunk_id=delivery_chunk,
                 node_id=deliver_node.node_id,
@@ -1893,6 +1900,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 ],
                 facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
             ),
+            delivery=review_findings_store,
+            findings=finding_store,
+            scopes=ScopeStore(store_connections),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             transaction=unit,

@@ -4,7 +4,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Slug u
 by :class:`~blizzard.hub.domain.garden.routines.RoutineAuthoring`; ``uq_routines_project_slug`` backstops
 a concurrent create, its ``IntegrityError`` re-raised as ``RoutineSlugTakenError``, never swallowed.
 The default and linked scopes are stored by ``scope_id`` and read back as slugs, each resolved within
-the routine's project. Every write commits its change row — and a default scope's mint — in the same transaction."""
+the routine's project. Every write — a scope link or unlink among them — commits its change row in the same
+transaction."""
 
 from __future__ import annotations
 
@@ -23,7 +24,6 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineSlugTakenError
-from blizzard.hub.domain.garden.scopes import ScopeMint
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.model import UrgencyId
 
@@ -32,9 +32,9 @@ from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 
-# Resolves or creates scope ids on the caller's connection.
+# Resolves scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
+from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 from blizzard.hub.store.transactions import connection_in, create_in_unit
@@ -214,12 +214,9 @@ class RoutineStore:
         routine: Routine,
         *,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
         def insert(conn: Connection) -> None:
-            if scope_mint is not None:
-                ensure_scope(conn, scope_mint)
             insert_routine(conn, routine, change)
 
         if transaction is not None:
@@ -249,7 +246,6 @@ class RoutineStore:
         *,
         from_revision: int,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
         with (
@@ -257,9 +253,26 @@ class RoutineStore:
             if transaction is not None
             else self._store.write("update", expect=(ConfigRevisionConflict,))
         ) as conn:
-            if scope_mint is not None:
-                ensure_scope(conn, scope_mint)
             update_routine(conn, routine, from_revision, change)
+        return routine
+
+    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
+            move_revision(conn, routine, from_revision)
+            link_scope(conn, routine, scope_slug, at=change.recorded_at)
+            append_change(conn, change)
+        return routine
+
+    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        with self._store.write("unlink", expect=(ConfigRevisionConflict,)) as conn:
+            move_revision(conn, routine, from_revision)
+            conn.execute(
+                self._store.delete(routine_scopes).where(
+                    routine_scopes.c.routine_id == routine.routine_id,
+                    routine_scopes.c.scope_id == scope_id_of(self._store, scope_slug, routine.project_id),
+                )
+            )
+            append_change(conn, change)
         return routine
 
     def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:

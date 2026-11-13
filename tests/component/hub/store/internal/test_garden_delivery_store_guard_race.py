@@ -29,9 +29,9 @@ from blizzard.hub.domain.garden.findings.model import (
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
 from blizzard.hub.store.transactions import HubTransactions
+from tests.support.delivery_writes import GardenDeliveryWrites
 from tests.support.finding_units import delivery_unit
 from tests.support.scaffolding import (
     chunk_unit,
@@ -50,7 +50,7 @@ _LATER = _NOW.replace(hour=13)
 _RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="full")
 
 
-def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryStore, Engine]:
+def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryWrites, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
@@ -65,7 +65,7 @@ def _world(tmp_path: Path) -> tuple[FindingStore, GardenDeliveryStore, Engine]:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
     connections = hub_store_connections(engine)
-    return FindingStore(connections), GardenDeliveryStore(connections), engine
+    return FindingStore(connections), GardenDeliveryWrites(connections), engine
 
 
 def _add_finding(findings: FindingStore, project_id: str, finding_id: str) -> None:

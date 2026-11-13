@@ -480,6 +480,32 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         :func:`garden_proposal_lock`. `finding_ids` may be empty."""
         ...
 
+    def insert_delivered(self, proposals: Sequence[DeliveredProposal], *, transaction: LockedTransaction) -> None:
+        """Insert every routine-run proposal row a garden delivery mints, in ``transaction``, with no link row."""
+        ...
+
+    def link_findings(self, links: Sequence[tuple[str, str]], *, transaction: LockedTransaction) -> None:
+        """Insert every ``(proposal_id, finding_id)`` link row in ``transaction``; the caller has already refused a
+        finding of another project."""
+        ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeliveredProposal:
+    """One fully-formed routine-run ``garden_proposals`` row a garden delivery mints, keyed for idempotence on
+    ``(source_artifact_id, ref)``."""
+
+    proposal_id: str
+    project_id: str
+    routine_name: str
+    class_: str
+    title: str
+    body: str
+    source_artifact_id: str
+    ref: str
+    created_at: datetime
+
 
 @domain_model
 @dataclass(frozen=True)

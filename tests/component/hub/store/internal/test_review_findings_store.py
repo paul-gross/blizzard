@@ -1,5 +1,5 @@
-"""``ReviewFindingsStore`` — the review-findings-materialization repository
-(component tier). Migrated-to-head sqlite-on-disk — the
+"""``ReviewFindingsStore`` — the review-findings-materialization repository — driven through
+``write_review_plan`` over the hub's own repositories (component tier). Migrated-to-head sqlite-on-disk — the
 ``tests/component/hub/store/internal/test_garden_delivery_store.py`` shape."""
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
-from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.schema import artifacts, chunks, config_changes, finding_facts, findings, scopes
 from blizzard.hub.store.scoped import ScopedStatements
+from tests.support.delivery_writes import ReviewFindingsWrites
 from tests.support.scaffolding import (
     chunk_unit,
     hub_scoped,
@@ -36,7 +36,7 @@ from tests.support.scaffolding import (
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _store_and_engine(tmp_path: Path) -> tuple[ReviewFindingsStore, Engine]:
+def _store_and_engine(tmp_path: Path) -> tuple[ReviewFindingsWrites, Engine]:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     migrated_hub_at(db_url)
     engine = create_engine_from_url(db_url)
@@ -45,7 +45,7 @@ def _store_and_engine(tmp_path: Path) -> tuple[ReviewFindingsStore, Engine]:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_1", graph_id="gr_1", at=_NOW)
     store_connections = hub_store_connections(engine)
-    return ReviewFindingsStore(store_connections), engine
+    return ReviewFindingsWrites(store_connections), engine
 
 
 def _plan(*, chunk_id: str = "ch_1", node_id: str = "nd_1", epoch: int = 1, at: datetime = _NOW) -> ReviewFindingsPlan:

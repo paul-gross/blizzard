@@ -59,8 +59,8 @@ def insert_garden_proposal_closure_row(
 
 
 class GardenProposalClosureStore:
-    """Read-write garden-proposal-closure adapter over the hub store engine — the pass
-    and accept-declining-to-mint writes, plus every closure read."""
+    """Read-write garden-proposal-closure adapter over the hub store engine — the pass,
+    accept-declining-to-mint, and accept-with-mint writes, plus every closure read."""
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
@@ -149,6 +149,27 @@ class GardenProposalClosureStore:
             at=at,
             item_outcome=GardenProposalItemOutcome.DECLINED,
             pointer=None,
+        )
+
+    def record_accept_mint(
+        self,
+        proposal_id: str,
+        *,
+        pointer: WorkRef,
+        reason: str | None,
+        closed_by: str,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> bool:
+        return insert_garden_proposal_closure_row(
+            connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id)),
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=reason,
+            closed_by=closed_by,
+            at=at,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            pointer=pointer,
         )
 
     @staticmethod

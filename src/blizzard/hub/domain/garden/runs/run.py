@@ -17,7 +17,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
-from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, work_ref_lock
 from blizzard.hub.domain.garden.findings.model import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.garden.routines import (
     IReadRoutineRepository,
@@ -26,6 +27,8 @@ from blizzard.hub.domain.garden.routines import (
     RoutineVerb,
     require_graph_resolves,
 )
+from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository
+from blizzard.hub.domain.garden.run_mint import mint_run
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -207,6 +210,8 @@ class RunService:
         graphs: IReadGraphRepository,
         finding_sets: IReadFindingSetRepository,
         items: IWriteWorkItemRepository,
+        chunks: IWriteChunkRecordRepository,
+        run_contexts: IWriteRunContextRepository,
         work_refs: IReadChunkWorkRefsRepository,
         clock: IClock,
         default: TenantDefault,
@@ -220,6 +225,8 @@ class RunService:
         self._graphs = graphs
         self._finding_sets = finding_sets
         self._items = items
+        self._chunks = chunks
+        self._run_contexts = run_contexts
         self._work_refs = work_refs
         self._clock = clock
 
@@ -262,9 +269,12 @@ class RunService:
         )
         ahead = self._default.ahead(stated=urgency, routine=routine.default_urgency_id)
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=ahead.lock_keys())
+            locked = transaction.lock_set(keys=[*ahead.lock_keys(), work_ref_lock(pointer)])
             chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
-            item = self._items.create_run_with_chunk(
+            item = mint_run(
+                self._items,
+                self._chunks,
+                self._run_contexts,
                 pointer=pointer,
                 title=plan.title,
                 body=plan.charge,

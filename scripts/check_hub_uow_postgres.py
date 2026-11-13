@@ -69,12 +69,17 @@ _LockSet = tuple[list[str], list[LockKey]]
 
 _RETIRING = UrgencyId("urg_proof")
 #: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, both
-#: ranking locks, and the default ``urg_proof``'s, beside the promoted chunk and both ranking locks — run each way
-#: round. Each first writer holds every lock it declares, so the second blocks on the ranking locks and lands only
-#: once the first commits.
+#: ranking locks, the default ``urg_proof``'s, and the fresh pointer's, beside the promoted chunk and both ranking
+#: locks — run each way round. Each first writer holds every lock it declares, so the second blocks on the ranking
+#: locks and lands only once the first commits.
 _MINT: _LockSet = (
     ["n"],
-    mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True, urgencies=default_lock_keys(_RETIRING)),
+    mint_lock_keys(
+        ErrandKey("chr_proof", "scp_proof"),
+        promote=True,
+        urgencies=default_lock_keys(_RETIRING),
+        pointer=WorkRef(source="hub", ref="proof"),
+    ),
 )
 _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
 #: A retire of ``urg_proof`` against each default-taking mint and a settings edit, both orders, on the settings' lock.

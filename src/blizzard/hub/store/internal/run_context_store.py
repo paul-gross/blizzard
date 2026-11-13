@@ -10,12 +10,14 @@ from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark
 from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 
-# Resolves or creates scope ids on the caller's connection.
+# Resolves scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 
 def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
@@ -80,8 +82,8 @@ class RunContextStore:
             ),
         )
 
-    def record(self, work_item_id: str, context: RunContext) -> None:
-        with self._store.write("record") as conn:
+    def record(self, work_item_id: str, context: RunContext, *, transaction: Transaction | None = None) -> None:
+        with connection_in(self._store, transaction, "record", write=True) as conn:
             insert_run_context_row(conn, work_item_id, context)
 
 
