@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -18,6 +19,7 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, last_moved_at, withdrawal_for
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -1007,6 +1009,7 @@ class SlugNotCurrentAndFormer(HubQueryCheck):
         ("repository", hub.repositories, hub.repository_former_slugs, "repository_id"),
         ("work source", hub.work_sources, hub.work_source_former_slugs, "work_source_id"),
         ("forge", hub.forges, hub.forge_former_slugs, "forge_id"),
+        ("credential", hub.credentials, hub.credential_former_slugs, "credential_id"),
     )
 
     def run(self) -> list[Violation]:
@@ -1200,14 +1203,15 @@ class ForgeReferenceStanding(HubQueryCheck):
 
 class ForgeReferencesInTenant(HubQueryCheck):
     """``hub:forge-references-in-tenant`` — every stored reference to a forge names a forge that exists, of the
-    reference's own tenant: the repositories' and work sources' ``forge_id``, the forge's former slugs and lifecycle
-    facts, and the change rows keyed by a forge id. A single-column foreign key holds that the forge exists, never
-    that it is of the referrer's tenant, so this read holds the tenant."""
+    reference's own tenant: the repositories', work sources', and credentials' ``forge_id``, the forge's former slugs
+    and lifecycle facts, and the change rows keyed by a forge id. A single-column foreign key holds that the forge
+    exists, never that it is of the referrer's tenant, so this read holds the tenant."""
 
     #: Each referring table, its key column for a message, and its column naming the forge.
     REFERRING: ClassVar[tuple[tuple[Table, str, str], ...]] = (
         (hub.repositories, "repository_id", "forge_id"),
         (hub.work_sources, "work_source_id", "forge_id"),
+        (hub.credentials, "credential_id", "forge_id"),
         (hub.forge_former_slugs, "slug", "forge_id"),
         (hub.forge_lifecycle_facts, "id", "forge_id"),
     )
@@ -1238,6 +1242,213 @@ class ForgeReferencesInTenant(HubQueryCheck):
             "hub:forge-references-in-tenant",
             f"{table} row {key} of tenant {tenant} names forge {forge_id}, not a forge of its tenant",
         )
+
+
+#: Each record that may act with a credential: its table, its id column, and the noun a message names it by.
+_CREDENTIAL_REFERRERS: tuple[tuple[Table, str, str], ...] = (
+    (hub.repositories, "repository_id", "repository"),
+    (hub.work_sources, "work_source_id", "work source"),
+)
+
+
+@dataclass(frozen=True)
+class _CredentialReferrer:
+    """One stored record naming a credential, as the credential checks read it."""
+
+    tenant_id: str
+    noun: str
+    record_id: str
+    forge_id: str
+    secret_name: str | None
+    credential_id: str
+
+
+def _credential_referrers(check: HubQueryCheck) -> list[_CredentialReferrer]:
+    """Every repository and work source that names a credential, in table then id order."""
+    referrers: list[_CredentialReferrer] = []
+    for table, key, noun in _CREDENTIAL_REFERRERS:
+        query = select(
+            table.c.tenant_id, table.c[key], table.c.forge_id, table.c.secret_name, table.c.credential_id
+        ).where(table.c.credential_id.is_not(None))
+        referrers.extend(
+            _CredentialReferrer(row.tenant_id, noun, row[1], row.forge_id, row.secret_name, row.credential_id)
+            for row in check.rows(query.order_by(table.c[key]))
+        )
+    return referrers
+
+
+def _held_credentials(check: HubQueryCheck) -> dict[tuple[str, str], Row[Any]]:
+    """Every stored credential, by its tenant and id."""
+    credentials = hub.credentials
+    return {
+        (row.tenant_id, row.credential_id): row
+        for row in check.rows(
+            select(
+                credentials.c.tenant_id,
+                credentials.c.credential_id,
+                credentials.c.forge_id,
+                credentials.c.binding,
+                credentials.c.secret_name,
+                credentials.c.settings,
+                credentials.c.authority,
+            )
+        )
+    }
+
+
+class CredentialReferencesInTenant(HubQueryCheck):
+    """``hub:credential-references-in-tenant`` — every repository's and work source's ``credential_id``, and every
+    change row keyed by a credential id, names a credential of the reference's own tenant. The referrers' column
+    carries no foreign key, so only a read shows one naming another tenant's credential, or none at all."""
+
+    def run(self) -> list[Violation]:
+        credentials = hub.credentials
+        tenant_of = {
+            row.credential_id: row.tenant_id
+            for row in self.rows(select(credentials.c.credential_id, credentials.c.tenant_id))
+        }
+        violations = [
+            self._violation(f"{referrer.noun} {referrer.record_id}", referrer.tenant_id, referrer.credential_id)
+            for referrer in _credential_referrers(self)
+            if tenant_of.get(referrer.credential_id) != referrer.tenant_id
+        ]
+        changes = hub.config_changes
+        keyed = select(changes.c.id, changes.c.tenant_id, changes.c.record_key).where(
+            changes.c.record_kind == "credential"
+        )
+        violations.extend(
+            self._violation(f"config_changes row {row.id}", row.tenant_id, row.record_key)
+            for row in self.rows(keyed.order_by(changes.c.id))
+            if tenant_of.get(row.record_key) != row.tenant_id
+        )
+        return violations
+
+    @staticmethod
+    def _violation(subject: str, tenant: str, credential_id: str) -> Violation:
+        return Violation(
+            "hub:credential-references-in-tenant",
+            f"tenant {tenant}: {subject} names credential {credential_id}, not a credential of its tenant",
+        )
+
+
+class CredentialForgeMatches(HubQueryCheck):
+    """``hub:credential-forge-matches`` — a record acting with a credential is on that credential's forge. A
+    reference naming no credential of its tenant is ``hub:credential-references-in-tenant``'s to report."""
+
+    def run(self) -> list[Violation]:
+        held = _held_credentials(self)
+        violations: list[Violation] = []
+        for referrer in _credential_referrers(self):
+            credential = held.get((referrer.tenant_id, referrer.credential_id))
+            if credential is not None and credential.forge_id != referrer.forge_id:
+                violations.append(
+                    Violation(
+                        "hub:credential-forge-matches",
+                        f"tenant {referrer.tenant_id}: {referrer.noun} {referrer.record_id} is on forge "
+                        f"{referrer.forge_id} and names credential {referrer.credential_id} of forge "
+                        f"{credential.forge_id}",
+                    )
+                )
+        return violations
+
+
+class CredentialSecretMirrored(HubQueryCheck):
+    """``hub:credential-secret-mirrored`` — a record acting with a credential carries that credential's
+    ``secret_name`` in its own, so a reader of the record's secret reads the credential's."""
+
+    def run(self) -> list[Violation]:
+        held = _held_credentials(self)
+        violations: list[Violation] = []
+        for referrer in _credential_referrers(self):
+            credential = held.get((referrer.tenant_id, referrer.credential_id))
+            if credential is not None and credential.secret_name != referrer.secret_name:
+                violations.append(
+                    Violation(
+                        "hub:credential-secret-mirrored",
+                        f"tenant {referrer.tenant_id}: {referrer.noun} {referrer.record_id} reads secret "
+                        f"{referrer.secret_name} and names credential {referrer.credential_id} of secret "
+                        f"{credential.secret_name}",
+                    )
+                )
+        return violations
+
+
+def _retired_secrets(check: HubQueryCheck) -> set[tuple[str, str]]:
+    """Every (tenant, secret name) whose newest lifecycle fact retires it; a secret's name is unique only within its
+    tenant."""
+    facts = hub.secret_lifecycle_facts
+    newest = select(func.max(facts.c.id).label("id")).group_by(facts.c.tenant_id, facts.c.name).subquery()
+    return {
+        (row.tenant_id, row.name)
+        for row in check.rows(
+            select(facts.c.tenant_id, facts.c.name)
+            .join(newest, facts.c.id == newest.c.id)
+            .where(facts.c.retired.is_(True))
+        )
+    }
+
+
+class CredentialReferenceStanding(HubQueryCheck):
+    """``hub:credential-reference-standing`` — an enabled record acting with a credential names an enabled one,
+    whose forge is enabled and whose secret is active. A reference naming no credential of its tenant is
+    ``hub:credential-references-in-tenant``'s to report."""
+
+    def run(self) -> list[Violation]:
+        held = _held_credentials(self)
+        retired_credentials = _retired_keys(self, hub.credential_lifecycle_facts, "credential_id")
+        retired_forges = _retired_keys(self, hub.forge_lifecycle_facts, "forge_id")
+        retired_secrets = _retired_secrets(self)
+        retired_records = _retired_keys(self, hub.repository_lifecycle_facts, "repository_id") | _retired_keys(
+            self, hub.work_source_lifecycle_facts, "work_source_id"
+        )
+        violations: list[Violation] = []
+        for referrer in _credential_referrers(self):
+            credential = held.get((referrer.tenant_id, referrer.credential_id))
+            if credential is None or referrer.record_id in retired_records:
+                continue
+            subject = (
+                f"tenant {referrer.tenant_id}: {referrer.noun} {referrer.record_id} is enabled and names credential "
+                f"{referrer.credential_id}"
+            )
+            if referrer.credential_id in retired_credentials:
+                violations.append(self._violation(f"{subject}, which is retired"))
+            if credential.forge_id in retired_forges:
+                violations.append(self._violation(f"{subject}, whose forge {credential.forge_id} is retired"))
+            if (referrer.tenant_id, credential.secret_name) in retired_secrets:
+                violations.append(self._violation(f"{subject}, whose secret {credential.secret_name} is retired"))
+        return violations
+
+    @staticmethod
+    def _violation(detail: str) -> Violation:
+        return Violation("hub:credential-reference-standing", detail)
+
+
+class CredentialAuthorityDerived(HubQueryCheck):
+    """``hub:credential-authority-derived`` — a credential's stored ``authority`` is what its binding derives from
+    its stored secret and settings; no door writes it, so any other value was written around the record."""
+
+    def run(self) -> list[Violation]:
+        violations: list[Violation] = []
+        for (tenant, credential_id), row in sorted(_held_credentials(self).items()):
+            binding = CREDENTIAL_BINDINGS.get(row.binding)
+            if binding is None:
+                violations.append(
+                    self._violation(f"tenant {tenant}: credential {credential_id} names unknown binding {row.binding}")
+                )
+                continue
+            derived = binding.authority(row.secret_name, json.loads(row.settings))
+            if derived != row.authority:
+                violations.append(
+                    self._violation(
+                        f"tenant {tenant}: credential {credential_id} holds authority {row.authority}, but its "
+                        f"binding {row.binding} derives {derived}"
+                    )
+                )
+        return violations
+
+    @staticmethod
+    def _violation(detail: str) -> Violation:
+        return Violation("hub:credential-authority-derived", detail)
 
 
 def _earliest_links(check: HubQueryCheck, facts: Table, name: str) -> dict[tuple[str, str], datetime]:
@@ -1453,6 +1664,11 @@ class HubInvariants:
                     WorkSourceReferencesInTenant(conn),
                     ForgeReferenceStanding(conn),
                     ForgeReferencesInTenant(conn),
+                    CredentialReferencesInTenant(conn),
+                    CredentialForgeMatches(conn),
+                    CredentialSecretMirrored(conn),
+                    CredentialReferenceStanding(conn),
+                    CredentialAuthorityDerived(conn),
                     ChunkSourcesLinked(conn),
                     LandedRepositoryLinked(conn),
                     LandingPositionOnLink(conn),
