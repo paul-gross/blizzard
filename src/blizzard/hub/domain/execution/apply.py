@@ -398,8 +398,7 @@ class ApplyService:
                 )
                 if refused is not None:
                     return refused
-                transitioned = self._movement.record_transition_locked(
-                    handle,
+                transitioned = self._movement.record_transition(
                     transition_id=fresh_transition_id,
                     chunk_id=chunk.chunk_id,
                     from_node_id=from_node.node_id,
@@ -414,6 +413,7 @@ class ApplyService:
                     artifacts=artifact_rows,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
+                    transaction=handle.transaction,
                 )
                 if isinstance(transitioned, FenceRefusal):
                     return ApplyResult.failure(transitioned.detail)
@@ -581,8 +581,7 @@ class ApplyService:
                 )
                 if refused is not None:
                     return refused
-                outcome = self._movement.record_migration_locked(
-                    handle,
+                outcome = self._movement.record_migration(
                     chunk.chunk_id,
                     from_node_id=from_node.node_id,
                     from_graph_id=from_node.graph_id,
@@ -602,6 +601,7 @@ class ApplyService:
                     release_route=landing.releases_route,
                     clear_intent=landing.clear_intent,
                     migration_id=migration_id,
+                    transaction=handle.transaction,
                 )
                 if isinstance(outcome, FenceRefusal):
                     return ApplyResult.failure(outcome.detail)

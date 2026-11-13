@@ -125,22 +125,24 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
-    wrote = chunks.record_migration(
-        chunk_id,
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        from_node_id=node_id,
-        from_graph_id=source_graph_id,
-        to_graph_id=target_graph_id,
-        landed_node_id="nd_landed",
-        choice_name="migrate",
-        model="claude-sonnet-5",
-        epoch=1,
-        source=MigrationSource.AUTHORED_EDGE,
-        at=hub.clock.now(),
-        artifacts=[_artifact(chunk_id, node_id)],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=source_graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id="nd_landed",
+            choice_name="migrate",
+            model="claude-sonnet-5",
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[_artifact(chunk_id, node_id)],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
     assert wrote is not None
     chunk = hub.services.chunks.record.get(chunk_id)
@@ -168,22 +170,24 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     source_graph_id = pre_migration.graph_id
 
     def do_migrate() -> MigrationWrite | FenceRefusal | None:
-        return chunks.record_migration(
-            chunk_id,
-            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-            from_node_id=node_id,
-            from_graph_id=source_graph_id,
-            to_graph_id=target_graph_id,
-            landed_node_id="nd_landed",
-            choice_name="migrate",
-            model=None,
-            epoch=1,
-            source=MigrationSource.AUTHORED_EDGE,
-            at=hub.clock.now(),
-            artifacts=[_artifact(chunk_id, node_id)],
-            admission=EpochAdmission.AT_OR_ABOVE,
-            terminal=False,
-        )
+        with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+            return chunks.record_migration(
+                chunk_id,
+                close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+                from_node_id=node_id,
+                from_graph_id=source_graph_id,
+                to_graph_id=target_graph_id,
+                landed_node_id="nd_landed",
+                choice_name="migrate",
+                model=None,
+                epoch=1,
+                source=MigrationSource.AUTHORED_EDGE,
+                at=hub.clock.now(),
+                artifacts=[_artifact(chunk_id, node_id)],
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
+                transaction=handle.transaction,
+            )
 
     assert do_migrate() is not None
     assert chunks.accepted_migration(chunk_id, from_node_id=node_id, epoch=1) is True
@@ -221,22 +225,24 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
     source_graph_id = pre_migration.graph_id
 
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
-    wrote = chunks.record_migration(
-        chunk_id,
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        from_node_id=node_id,
-        from_graph_id=source_graph_id,
-        to_graph_id=target_graph_id,
-        landed_node_id=landed["node_id"],
-        choice_name="migrate",
-        model=None,
-        epoch=1,
-        source=MigrationSource.AUTHORED_EDGE,
-        at=hub.clock.now(),
-        artifacts=[_artifact(chunk_id, node_id)],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=source_graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id=landed["node_id"],
+            choice_name="migrate",
+            model=None,
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[_artifact(chunk_id, node_id)],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     assert wrote is not None
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)
@@ -302,23 +308,25 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
     armed = hub.services.chunks.record.get(chunk_id)
     assert armed is not None and armed.intended_migration == intent
 
-    wrote = chunks.record_migration(
-        chunk_id,
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        from_node_id=node_id,
-        from_graph_id=source_graph_id,
-        to_graph_id=target_graph_id,
-        landed_node_id="nd_landed",
-        choice_name="migrate",
-        model=None,
-        epoch=1,
-        source=MigrationSource.AUTHORED_EDGE,
-        at=hub.clock.now(),
-        artifacts=[_artifact(chunk_id, node_id)],
-        clear_intent=True,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=source_graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id="nd_landed",
+            choice_name="migrate",
+            model=None,
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[_artifact(chunk_id, node_id)],
+            clear_intent=True,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     assert wrote is not None
 
     chunk = hub.services.chunks.record.get(chunk_id)
@@ -345,24 +353,26 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
         record.set_intended_migration(chunk_id, intended=intent, transaction=handle.transaction)
 
-    wrote = chunks.record_migration(
-        chunk_id,
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        from_node_id=node_id,
-        from_graph_id=source_graph_id,
-        to_graph_id=target_graph_id,
-        landed_node_id="nd_landed",
-        choice_name="migrate",
-        model=None,
-        epoch=1,
-        source=MigrationSource.AUTHORED_EDGE,
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        # clear_intent defaults False — an ordinary #90 authored-choice migration,
-        # which carries no intent of its own to clear.
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=source_graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id="nd_landed",
+            choice_name="migrate",
+            model=None,
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            # clear_intent defaults False — an ordinary #90 authored-choice migration,
+            # which carries no intent of its own to clear.
+            transaction=handle.transaction,
+        )
     assert wrote is not None
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
@@ -397,24 +407,26 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
         record.set_intended_migration(chunk_id, intended=intent, transaction=handle.transaction)
 
-    wrote = chunks.record_migration(
-        chunk_id,
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        from_node_id=node_id,
-        from_graph_id=source_graph_id,
-        to_graph_id=target_graph_id,
-        landed_node_id=landed["node_id"],
-        choice_name="migrate",
-        model=None,
-        epoch=1,
-        source=MigrationSource.AUTHORED_EDGE,
-        at=hub.clock.now(),
-        artifacts=[],
-        release_route=False,
-        clear_intent=True,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        wrote = chunks.record_migration(
+            chunk_id,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            from_node_id=node_id,
+            from_graph_id=source_graph_id,
+            to_graph_id=target_graph_id,
+            landed_node_id=landed["node_id"],
+            choice_name="migrate",
+            model=None,
+            epoch=1,
+            source=MigrationSource.AUTHORED_EDGE,
+            at=hub.clock.now(),
+            artifacts=[],
+            release_route=False,
+            clear_intent=True,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     assert wrote is not None
 
     chunk = hub.services.chunks.record.get(chunk_id)

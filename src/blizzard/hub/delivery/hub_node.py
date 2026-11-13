@@ -571,8 +571,7 @@ class HubNodeRouter:
         """The migration onto ``landing`` at the visit's own ``epoch`` — it mints none — a standing intent staying
         parked, and the landed node's gate opened. ``artifacts`` ride on the migration's own transaction. Answers the
         close-skip events it wrote, to publish once the transaction commits."""
-        outcome = self._movement.record_migration_locked(
-            handle,
+        outcome = self._movement.record_migration(
             chunk.chunk_id,
             from_node_id=node.node_id,
             from_graph_id=node.graph_id,
@@ -592,6 +591,7 @@ class HubNodeRouter:
             clear_intent=landing.clear_intent,
             migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
             close_decision=close,
+            transaction=handle.transaction,
         )
         close_skipped: tuple[int, ...] = ()
         wrote = isinstance(outcome, MigrationWrite)

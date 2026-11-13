@@ -13,9 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from sqlalchemy import Connection
-
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from tests.support.scaffolding import build_hub, ingest
 
@@ -34,27 +33,26 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
     entered_write = threading.Event()
     release_write = threading.Event()
     movement = cast(ChunkMovementStore, hub.services.chunks.movement)
-    real_record_restart_conn = movement.record_restart_conn
+    real_record_restart = movement.record_restart
 
-    def _blocking_record_restart_conn(
-        conn: Connection,
+    def _blocking_record_restart(
         chunk_id: str,
         *,
         from_node_id: str | None,
         to_node_id: str,
         by: str,
         at: datetime,
-        decision_id: str | None,
-        answered_question_ids: Sequence[str],
-        answer: str,
-        to_graph_id: str | None,
-        note: str | None,
+        decision_id: str | None = None,
+        answered_question_ids: Sequence[str] = (),
+        answer: str = "",
+        to_graph_id: str | None = None,
+        note: str | None = None,
         waiting: Sequence[str],
+        transaction: LockedTransaction,
     ) -> LeverWrite:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the restart's write"
-        return real_record_restart_conn(
-            conn,
+        return real_record_restart(
             chunk_id,
             from_node_id=from_node_id,
             to_node_id=to_node_id,
@@ -66,9 +64,10 @@ def test_a_claim_blocks_while_a_restart_holds_the_row_lock_mid_write(tmp_path: P
             to_graph_id=to_graph_id,
             note=note,
             waiting=waiting,
+            transaction=transaction,
         )
 
-    movement.record_restart_conn = _blocking_record_restart_conn
+    movement.record_restart = _blocking_record_restart
 
     restart_result: dict[str, int] = {}
 

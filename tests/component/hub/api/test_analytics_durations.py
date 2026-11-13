@@ -24,6 +24,7 @@ from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    chunk_stores,
     claim_route,
     report_lease,
     seed_session,
@@ -396,22 +397,24 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
     hub.clock.advance(timedelta(seconds=1))
     complete_node(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="pass")  # graph A: build -> review
 
-    _writable(hub).record_migration(
-        chunk_id,
-        from_node_id=nodes["review"],
-        from_graph_id=graph_id,
-        to_graph_id=other_graph_id,
-        landed_node_id=other_nodes["triage"],
-        choice_name="migrate",
-        model=None,
-        epoch=2,
-        at=hub.clock.now(),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        _writable(hub).record_migration(
+            chunk_id,
+            from_node_id=nodes["review"],
+            from_graph_id=graph_id,
+            to_graph_id=other_graph_id,
+            landed_node_id=other_nodes["triage"],
+            choice_name="migrate",
+            model=None,
+            epoch=2,
+            at=hub.clock.now(),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
+        )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=3, seq=2)
     hub.clock.advance(timedelta(seconds=1))

@@ -32,6 +32,7 @@ from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
     build_hub,
+    chunk_stores,
     create_repositories,
     default_tenant,
     emitted_events,
@@ -91,22 +92,24 @@ def _seed_at_deliver(
     ]
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id=f"tr_seed_{chunk_id}",
-        close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
-        chunk_id=chunk_id,
-        from_node_id=None,
-        to_node_id=nodes[at],
-        choice_name=None,
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=rows,
-        admission=__import__(
-            "blizzard.hub.domain.chunk.ports.fence", fromlist=["EpochAdmission"]
-        ).EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+            transition_id=f"tr_seed_{chunk_id}",
+            close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
+            chunk_id=chunk_id,
+            from_node_id=None,
+            to_node_id=nodes[at],
+            choice_name=None,
+            epoch=1,
+            runner_id="r1",
+            at=hub.clock.now(),
+            artifacts=rows,
+            admission=__import__(
+                "blizzard.hub.domain.chunk.ports.fence", fromlist=["EpochAdmission"]
+            ).EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 

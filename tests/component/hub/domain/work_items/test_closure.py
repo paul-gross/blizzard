@@ -39,6 +39,7 @@ from tests.support.scaffolding import (
     HubHarness,
     WorkSourceRegistry,
     build_hub,
+    chunk_stores,
     chunk_unit,
     count_queries,
     emitted_events,
@@ -519,20 +520,22 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id="tr_seed_terminal",
-        chunk_id=chunk_id,
-        from_node_id=None,
-        to_node_id=RESERVED_TERMINAL,
-        choice_name=None,
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+            transition_id="tr_seed_terminal",
+            chunk_id=chunk_id,
+            from_node_id=None,
+            to_node_id=RESERVED_TERMINAL,
+            choice_name=None,
+            epoch=1,
+            runner_id="r1",
+            at=hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
+            transaction=handle.transaction,
+        )
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None

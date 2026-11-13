@@ -135,8 +135,7 @@ def test_a_decision_resubmitted_past_its_pre_lock_probe_on_a_since_stopped_chunk
 
 
 def _migrate(chunk: Chunk, handle: ILockedChunkRead, *, from_node: str) -> MigrationWrite | FenceRefusal | None:
-    return chunk.stores.movement.record_migration_locked(
-        handle,
+    return chunk.stores.movement.record_migration(
         chunk.chunk_id,
         from_node_id=chunk.nodes[from_node],
         from_graph_id="gr_from",
@@ -151,6 +150,7 @@ def _migrate(chunk: Chunk, handle: ILockedChunkRead, *, from_node: str) -> Migra
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         close_decision=_CLOSE,
+        transaction=handle.transaction,
     )
 
 

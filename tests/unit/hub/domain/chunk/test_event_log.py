@@ -217,7 +217,11 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             transaction=handle.transaction,
         )
     with store.exclusive.locked(["ch_c"]) as handle:
-        store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
+        store.movement.record_requeue(
+            "ch_c",
+            at=_at(20),
+            transaction=handle.transaction,
+        )
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
     with store.exclusive.locked(["ch_d"]) as handle:
@@ -269,20 +273,22 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             detail=None,
             transaction=handle.transaction,
         )
-    store.movement.record_transition(
-        transition_id="tr_f1",
-        chunk_id="ch_f",
-        from_node_id=None,
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=_at(20),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with store.exclusive.locked(["ch_f"]) as handle:
+        store.movement.record_transition(
+            transition_id="tr_f1",
+            chunk_id="ch_f",
+            from_node_id=None,
+            to_node_id=RESERVED_TERMINAL,
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=_at(20),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.
     ch_f_facts = store.facts.load_facts("ch_f")

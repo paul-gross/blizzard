@@ -297,8 +297,8 @@ class RequeueService:
             if not facts.admits(ChunkVerb.REQUEUE):
                 raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
             now = self._clock.now()
-            requeue_id = self._movement.record_requeue_locked(  # supersedes escalation
-                handle, chunk.chunk_id, at=now, by=by, note=person_note(note)
+            requeue_id = self._movement.record_requeue(  # supersedes escalation
+                chunk.chunk_id, at=now, by=by, note=person_note(note), transaction=handle.transaction
             )
             # A detached chunk holds no route: there is nothing to release.
             if handle.route_of(chunk.chunk_id) is not None:

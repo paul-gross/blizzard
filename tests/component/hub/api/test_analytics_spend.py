@@ -28,7 +28,7 @@ from tests.support.analytics_spend_world import (
     seeded_hub,
 )
 from tests.support.hub_request_auth import seed_enrolled
-from tests.support.scaffolding import FakeWorkSource, build_hub, claim_route, seed_session, seed_user
+from tests.support.scaffolding import FakeWorkSource, build_hub, chunk_stores, claim_route, seed_session, seed_user
 
 #: Every route this module holds to the auth triad — one list, three sweeps over it.
 _ROUTES = [
@@ -150,22 +150,24 @@ def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_
     claim_route(hub, chunk_id)
     push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_migration(
-        chunk_id,
-        from_node_id=nodes["build"],
-        from_graph_id=graph_id,
-        to_graph_id=other_graph_id,
-        landed_node_id=other_nodes["triage"],
-        choice_name="migrate",
-        model=None,
-        epoch=2,
-        at=hub.clock.now(),
-        artifacts=[],
-        source=MigrationSource.AUTHORED_EDGE,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_migration(
+            chunk_id,
+            from_node_id=nodes["build"],
+            from_graph_id=graph_id,
+            to_graph_id=other_graph_id,
+            landed_node_id=other_nodes["triage"],
+            choice_name="migrate",
+            model=None,
+            epoch=2,
+            at=hub.clock.now(),
+            artifacts=[],
+            source=MigrationSource.AUTHORED_EDGE,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            transaction=handle.transaction,
+        )
 
     resp = hub.client.get("/api/analytics/spend/graphs", headers=_cookie(token))
 

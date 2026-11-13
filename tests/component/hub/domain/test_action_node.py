@@ -13,7 +13,7 @@ from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.store import schema as s
-from tests.support.scaffolding import build_hub, default_tenant, pointer_token, report_lease
+from tests.support.scaffolding import build_hub, chunk_stores, default_tenant, pointer_token, report_lease
 
 # Component — hub-advance re-drives a chunk waiting at a node naming an action
 
@@ -67,20 +67,22 @@ def test_the_flow_driver_re_drives_a_chunk_waiting_at_an_action_node_once_its_hi
     assert deliver is not None
     assert deliver.action == "land"
     # Stand at `deliver`, waiting, as a pass that answered `pending` with a hint leaves it.
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id="tr_test_deliver",
-        close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
-        chunk_id=chunk_id,
-        from_node_id=build_node_id,
-        to_node_id=deliver.node_id,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-        terminal=False,
-    )
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+            transition_id="tr_test_deliver",
+            close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
+            chunk_id=chunk_id,
+            from_node_id=build_node_id,
+            to_node_id=deliver.node_id,
+            choice_name="pass",
+            epoch=1,
+            runner_id="r1",
+            at=hub.clock.now(),
+            artifacts=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     hint = hub.clock.now() + timedelta(minutes=5)
     with hub.engine.begin() as conn:
         conn.execute(
