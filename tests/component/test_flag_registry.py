@@ -65,7 +65,7 @@ def test_a_host_over_the_packaged_registry_answers_an_empty_map_and_keeps_its_he
     try:
         with TestClient(hosted.app) as client:
             assert client.get("/api/flags").json() == {"flags": {}, "overridden": []}
-            assert set(client.get("/api/health").json()) == {"status", "service", "version"}
+            assert set(client.get("/api/health").json()) == {"status", "service", "version", "host_id"}
     finally:
         hosted.close()
         host.close()

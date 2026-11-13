@@ -3795,6 +3795,42 @@
         "title": "HarnessTelemetryStatus",
         "type": "object"
       },
+      "HealthResponse": {
+        "description": "The wire shape of a liveness answer.",
+        "properties": {
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "host_id"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
       "HeartbeatRequest": {
         "description": "A worker's heartbeat: the lease it inherited at spawn (``BLIZZARD_LEASE_ID``).",
         "properties": {
@@ -8732,11 +8768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Health Api Health Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             },

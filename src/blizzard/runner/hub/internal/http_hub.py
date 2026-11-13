@@ -740,6 +740,7 @@ class HttpHostHubClient:
         body = HostReportRequest(
             url=report.url,
             redirect_uris=list(report.redirect_uris),
+            urls=list(report.urls),
             workspaces=[
                 HostWorkspace(workspace_id=w.workspace_id, env_capacity=w.env_capacity) for w in report.workspaces
             ],

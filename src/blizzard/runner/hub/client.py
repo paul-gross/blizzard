@@ -172,6 +172,8 @@ class HostReport:
 
     url: str | None = None
     redirect_uris: tuple[str, ...] = ()
+    #: Every public origin, in declaration order; ``url`` is the first.
+    urls: tuple[str, ...] = ()
     workspaces: tuple[HostReportedWorkspace, ...] = ()
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
 

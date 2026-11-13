@@ -78,6 +78,8 @@ export interface HostCard {
   readonly subscriptionPaces: readonly SubscriptionPace[];
   /** The host's own wire facts, for the Fleet tab's Connection section. */
   readonly url: string | null;
+  /** Every origin the host declares, in declaration order; the board probes these. */
+  readonly urls: readonly string[];
   readonly enrolled: boolean;
   readonly registeredAt: string | null;
   readonly addedAt: string;
@@ -233,6 +235,7 @@ export function foldHostCards(
         workspaces: hostWorkspaceRows(host, workspaceInUse(hostRunners, chunks)),
         subscriptionPaces: hostSubscriptionPaces(host, nowMs, (id) => names.get(id) ?? id),
         url: host.url ?? null,
+        urls: host.urls ?? [],
         enrolled: host.enrolled,
         registeredAt: host.registered_at ?? null,
         addedAt: host.added_at,

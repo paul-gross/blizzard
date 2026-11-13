@@ -133,6 +133,11 @@ differing only in scheme or in an explicit-versus-default port — are refused a
 value, an entry carrying a path, userinfo, or a non-numeric port, and two entries naming one browser origin all fail at
 config load rather than surfacing later as an opaque unregistered-redirect_uri refusal.
 
+The board links a host's first declared origin that answers as that host, by probing each origin's `GET /api/health`
+from the browser. The runner admits that cross-origin read from its `hub_url` origin only, so `hub_url` must be the hub
+origin the browser shows the board on — a `hub_url` naming a different spelling of the hub (an internal address, say)
+leaves every origin unverified and the board shows the host as unreachable.
+
 Registration happens on the runner's reconciliation tick: a widened set reaches the hub on the first tick after a
 restart, and a login attempted before that tick is refused as an unregistered redirect URI.
 

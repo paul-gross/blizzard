@@ -59,6 +59,7 @@ export function hostRegistryView(overrides: Pick<HostRegistryView, 'host_id'> & 
     subscription_usage: [],
     subscriptions: [],
     url: null,
+    urls: [],
     workspaces: [],
     ...overrides,
   };

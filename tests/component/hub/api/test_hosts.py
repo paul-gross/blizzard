@@ -210,6 +210,27 @@ def test_the_report_replaces_what_the_hub_holds_whole(tmp_path: Path) -> None:
     assert view["connection"] == "online"
 
 
+def test_a_reports_urls_read_back_in_order_beside_the_unchanged_url(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    added = _add_host(hub)
+    urls = ["http://box.local:9000", "http://box.tail:9000"]
+
+    hub.client.post("/api/fleet/host", json={**_REPORT, "urls": urls}, headers=_bearer(added["token"]))
+
+    view = hub.client.get(f"/api/hosts/{added['host_id']}").json()
+    assert view["urls"] == urls
+    assert view["url"] == "http://box.local:9000"
+
+
+def test_a_report_without_urls_reads_back_as_its_one_url(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    added = _add_host(hub)
+
+    hub.client.post("/api/fleet/host", json=_REPORT, headers=_bearer(added["token"]))
+
+    assert hub.client.get(f"/api/hosts/{added['host_id']}").json()["urls"] == ["http://box.local:9000"]
+
+
 def test_a_reported_name_another_live_host_holds_is_not_recorded(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _add_host(hub, "alpha")

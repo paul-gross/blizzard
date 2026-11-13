@@ -1,0 +1,15 @@
+@if (href(); as link) {
+  <a class="runner-url" data-testid="host-origin-link" [href]="link" target="_blank" rel="noopener noreferrer">{{ link }}</a>
+} @else {
+  @switch (origin().kind) {
+    @case ('pending') {
+      <span class="mut" data-testid="host-origin-pending">Checking…</span>
+    }
+    @case ('unreachable') {
+      <span class="mut" data-testid="host-origin-unreachable">Unreachable</span>
+    }
+    @default {
+      —
+    }
+  }
+}

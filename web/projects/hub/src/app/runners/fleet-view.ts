@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { KitAsyncState, type KitAsyncStateValue, KitMasterDetail, KitPanel, KitSelectRow, KitErrorLine } from 'fleet';
 import type { FleetList, FleetSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
+import type { HostOrigin } from './host-origin.model';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
 import type { HostVerbEvent, HostVerbsVm } from './host-verbs.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
@@ -27,6 +28,7 @@ export class FleetView {
   readonly selection = input<FleetSelection | null>(null);
   readonly selectedId = input<string | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
+  readonly hostOrigin = input<HostOrigin | null>(null);
   readonly canPause = input(false);
   readonly pendingRunnerIds = input<readonly string[]>([]);
   readonly actionError = input<string | null>(null);

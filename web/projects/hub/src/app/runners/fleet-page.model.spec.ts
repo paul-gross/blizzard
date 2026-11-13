@@ -14,6 +14,7 @@ function card(id: string, over: Partial<HostCard> = {}): HostCard {
     workspaces: [],
     subscriptionPaces: [],
     url: 'https://box.example',
+    urls: ['https://box.example'],
     enrolled: true,
     registeredAt: '2026-01-02T03:04:05Z',
     addedAt: '2026-01-01T00:00:00Z',

@@ -126,6 +126,7 @@ from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+from blizzard.runner.public_origins import HubOrigin
 from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
@@ -453,6 +454,8 @@ def create_app(
         else DISABLED_TELEMETRY,
     )
     app.state.config = config
+    # Decided once: the one cross-origin caller `GET /api/health` admits.
+    app.state.hub_origin = HubOrigin.of(config.hub_url)
     app.state.host_stepper = host_stepper
     # The runner half of the invariant checker; absent, `GET /api/host/invariants` answers 503.
     app.state.host_invariants = host_invariants

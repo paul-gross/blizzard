@@ -23,6 +23,7 @@ function host(over: Partial<HostRegistryView> = {}): HostRegistryView {
     subscription_usage: [],
     subscriptions: [],
     url: null,
+    urls: [],
     workspaces: [],
     ...over,
   };

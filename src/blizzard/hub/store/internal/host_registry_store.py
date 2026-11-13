@@ -30,6 +30,7 @@ from blizzard.hub.domain.runners.host import (
     IWriteHostRegistry,
     RunnerAlreadyHosted,
     RunnerNotUnderHost,
+    origins_of,
 )
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import DeclaredSubscription
@@ -212,6 +213,7 @@ class HostRegistryStore:
             "last_seen_at": at,
             "url": report.url,
             "redirect_uris": json.dumps(list(report.redirect_uris)),
+            "urls": json.dumps(list(report.urls)),
             "workspaces": json.dumps(
                 [{"workspace_id": w.workspace_id, "env_capacity": w.env_capacity} for w in report.workspaces]
             ),
@@ -399,6 +401,7 @@ class HostRegistryStore:
             last_seen_at=row.last_seen_at,
             url=row.url,
             redirect_uris=tuple(redirect_uris),
+            urls=origins_of(json.loads(row.urls) if row.urls else None, row.url),
             workspaces=tuple(
                 HostWorkspace(workspace_id=w["workspace_id"], env_capacity=w.get("env_capacity")) for w in workspaces
             ),

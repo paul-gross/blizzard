@@ -119,6 +119,7 @@ def registry_view(
         last_seen_at=_iso_or_none(host.last_seen_at),
         url=host.url,
         redirect_uris=list(host.redirect_uris),
+        urls=list(host.urls),
         workspaces=[HostWorkspace(workspace_id=w.workspace_id, env_capacity=w.env_capacity) for w in host.workspaces],
         subscriptions=[
             RunnerSubscriptionDeclaration(slug=d.slug, name=d.name, provider=d.provider) for d in host.subscriptions

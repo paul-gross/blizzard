@@ -48,6 +48,7 @@ from blizzard.runner.lifecycle.takeover import TakeoverService
 from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
+from blizzard.runner.public_origins import HubOrigin
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
@@ -385,6 +386,11 @@ class RunnerWiring:
         """The identity the host's first answered report recorded."""
         identity: ICurrentHostIdentity | None = self._seam("host_identity")
         return identity if identity is not None else HostIdentityHolder()
+
+    def hub_origin(self) -> HubOrigin:
+        """The origin the host admits cross-origin on its liveness probe; admits nothing when unwired."""
+        origin: HubOrigin | None = self._seam("hub_origin")
+        return origin if origin is not None else HubOrigin()
 
     def maybe_identity_check(self) -> IIdentityOnContact | None:
         return self._seam("identity_check")

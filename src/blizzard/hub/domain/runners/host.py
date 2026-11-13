@@ -135,6 +135,16 @@ class HostReport:
     redirect_uris: tuple[str, ...]
     workspaces: tuple[HostWorkspace, ...]
     subscriptions: tuple[DeclaredSubscription, ...]
+    #: Every origin the host answers on, in declaration order — already derived by :func:`origins_of`.
+    urls: tuple[str, ...] = ()
+
+
+def origins_of(urls: Sequence[str] | None, url: str | None) -> tuple[str, ...]:
+    """The origins a host answers on. An absent ``urls`` is a reporter that predates the list: it answered on its
+    one ``url``, or on nothing when it has none. The one rule both a report and a read of a pre-change row apply."""
+    if urls is not None:
+        return tuple(urls)
+    return (url,) if url else ()
 
 
 @domain_model
@@ -160,6 +170,8 @@ class Host:
     last_seen_at: datetime | None = None
     url: str | None = None
     redirect_uris: tuple[str, ...] = ()
+    #: Every origin the host answers on, in declaration order; ``url`` is the canonical one.
+    urls: tuple[str, ...] = ()
     workspaces: tuple[HostWorkspace, ...] = ()
     subscriptions: tuple[DeclaredSubscription, ...] = ()
     #: The enrolled bearer token's sha256 hex digest — never the plaintext. ``None`` for an unenrolled host.
@@ -225,6 +237,7 @@ class Host:
             or (name is not None and name != self.name)
             or reported.url != self.url
             or reported.redirect_uris != self.redirect_uris
+            or reported.urls != self.urls
             or reported.workspaces != self.workspaces
             or reported.subscriptions != self.subscriptions
         )

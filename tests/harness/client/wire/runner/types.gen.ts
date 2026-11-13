@@ -2098,6 +2098,30 @@ export type HarnessTelemetryStatus = {
 };
 
 /**
+ * HealthResponse
+ *
+ * The wire shape of a liveness answer.
+ */
+export type HealthResponse = {
+    /**
+     * Host Id
+     */
+    host_id: string | null;
+    /**
+     * Service
+     */
+    service: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Version
+     */
+    version: string;
+};
+
+/**
  * HeartbeatRequest
  *
  * A worker's heartbeat: the lease it inherited at spawn (``BLIZZARD_LEASE_ID``).
@@ -4876,13 +4900,9 @@ export type HealthApiHealthGetData = {
 
 export type HealthApiHealthGetResponses = {
     /**
-     * Response Health Api Health Get
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: string;
-    };
+    200: HealthResponse;
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];

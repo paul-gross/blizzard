@@ -104,6 +104,7 @@ const CARD: HostCard = {
   connection: RunnerConnection.ONLINE,
   reportLabel: 'seen 4s ago',
   url: 'https://build-box-with-a-long-hostname.example.internal:8443',
+  urls: ['https://build-box-with-a-long-hostname.example.internal:8443'],
   enrolled: true,
   registeredAt: '2026-01-02T03:04:05Z',
   addedAt: '2026-01-01T00:00:00Z',
@@ -239,6 +240,34 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
         const box = link.getBoundingClientRect();
         expect(box.height, `${width}px: a held chunk is not finger-sized`).toBeGreaterThanOrEqual(32);
         expect(box.right, `${width}px: a held chunk overflows its runner`).toBeLessThanOrEqual(runner.getBoundingClientRect().right + 1);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+  it.each([1280, 390, 320])('renders every URL fact state inside its column at %ipx', async (width) => {
+    await page.viewport(width, 900);
+    await loadDesignTokens();
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      const states = [
+        { kind: 'verified', href: 'https://a-very-long-hostname-for-the-build-box.example.internal:8443/' },
+        { kind: 'plain', href: CARD.url! },
+        { kind: 'pending' },
+        { kind: 'unreachable' },
+        { kind: 'none' },
+      ] as const;
+      for (const origin of states) {
+        fixture.componentRef.setInput('origin', origin);
+        await fixture.whenStable();
+        const fact = root.querySelector<HTMLElement>('[data-testid="fleet-fact-url"]')!;
+        expect(fact.textContent, `${width}px: ${origin.kind}`).toContain(
+          { verified: 'example.internal', plain: 'example.internal', pending: 'Checking', unreachable: 'Unreachable', none: '—' }[origin.kind],
+        );
+        expect(root.scrollWidth, `${width}px: ${origin.kind} overflows`).toBeLessThanOrEqual(root.clientWidth);
+        expect(fact.scrollWidth, `${width}px: ${origin.kind} fact overflows`).toBeLessThanOrEqual(fact.clientWidth + 1);
       }
     } finally {
       root.remove();

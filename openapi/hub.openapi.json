@@ -14437,6 +14437,13 @@
             ],
             "title": "Url"
           },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          },
           "workspaces": {
             "default": [],
             "items": {
@@ -14457,6 +14464,7 @@
           "last_seen_at",
           "url",
           "redirect_uris",
+          "urls",
           "workspaces",
           "subscriptions",
           "enrolled",
@@ -14509,6 +14517,20 @@
               }
             ],
             "title": "Url"
+          },
+          "urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urls"
           },
           "version": {
             "anyOf": [

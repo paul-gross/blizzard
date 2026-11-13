@@ -2415,6 +2415,9 @@ hosts = Table(
     Column("url", Text, nullable=True),
     # The panel's sign-in callbacks, JSON `list[str]`, replaced whole on each report.
     Column("redirect_uris", Text, nullable=True),
+    # Every origin the panel answers on, JSON `list[str]` in declaration order, replaced whole on each report.
+    # `NULL` for a row written before the column; it reads as the one `url`.
+    Column("urls", Text, nullable=True),
     # JSON `list[dict]` of `{workspace_id, env_capacity}`, replaced whole on each report.
     Column("workspaces", Text, nullable=True),
     # The subscription roster, JSON `list[dict]` of `{slug, name, provider}`, replaced whole on each report.

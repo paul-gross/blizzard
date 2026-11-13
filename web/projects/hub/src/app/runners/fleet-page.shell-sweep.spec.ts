@@ -97,6 +97,7 @@ const card = (id: string, name: string, over: Partial<HostCard> = {}): HostCard 
   connection: 'online',
   reportLabel: 'seen 4s ago',
   url: 'https://build-host.example.com:8431',
+  urls: ['https://build-host.example.com:8431'],
   enrolled: true,
   registeredAt: NOW,
   addedAt: NOW,

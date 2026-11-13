@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.runner.public_origins import PublicOrigins
+from blizzard.runner.public_origins import HubOrigin, PublicOrigins
 
 _CALLBACK = "/api/auth/callback"
 
@@ -187,3 +187,25 @@ def test_an_entry_with_an_unparseable_port_fails_at_load() -> None:
 def test_a_malformed_arriving_host_selects_nothing_rather_than_raising() -> None:
     origins = PublicOrigins.of("https://runner.example:8431")
     assert origins.select("runner.example:notaport") is None
+
+
+@pytest.mark.parametrize(
+    ("hub_url", "origin", "admitted"),
+    [
+        ("https://hub.example", "https://hub.example", True),
+        ("https://hub.example:443", "https://hub.example", True),
+        ("http://hub.example:80/", "http://hub.example", True),
+        ("HTTPS://Hub.Example/some/path", "https://hub.example", True),
+        ("http://127.0.0.1:8430", "http://127.0.0.1:8430", True),
+        ("http://127.0.0.1:8430", "http://127.0.0.1:8431", False),
+        ("https://hub.example", "http://hub.example", False),
+        ("https://hub.example", None, False),
+        ("", "", False),
+        ("", "null", False),
+        ("not a url", "not a url", False),
+    ],
+)
+def test_the_hub_origin_admits_only_the_browser_serialization_of_the_hub_url(
+    hub_url: str, origin: str | None, admitted: bool
+) -> None:
+    assert HubOrigin.of(hub_url).admits(origin) is admitted

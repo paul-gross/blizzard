@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261113_0900_credentials",
+  "head_revision": "20261113_0900_host_urls",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -5467,6 +5467,12 @@
           "type": "Text"
         },
         "url": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
+        "urls": {
           "deprecated": null,
           "nullable": true,
           "server_default": false,
