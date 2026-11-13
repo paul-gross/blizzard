@@ -22,6 +22,7 @@ from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.graph.actions import ArtifactFormat, HubActionCatalogue
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 class GraphParseError(ValueError):
@@ -1032,7 +1033,7 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         """
         ...
 
-    def is_retired(self, graph_id: str) -> bool:
+    def is_retired(self, graph_id: str, *, transaction: Transaction | None = None) -> bool:
         """Whether ``graph_id``'s newest lifecycle fact reads retired.
 
         ``False`` for a ``graph_id`` with no lifecycle fact at all — every freshly

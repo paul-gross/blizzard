@@ -37,6 +37,7 @@ from blizzard.hub.domain.graph.model import (
     SessionDecl,
 )
 from blizzard.hub.domain.kernel.locks import LockNamespace
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_retired_select
 from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
@@ -50,6 +51,7 @@ from blizzard.hub.store.schema import (
     graphs,
 )
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_in
 
 
 @adapter_model
@@ -592,8 +594,8 @@ class GraphStore:
             is not None
         )
 
-    def is_retired(self, graph_id: str) -> bool:
-        with self._store.read("is_retired") as conn:
+    def is_retired(self, graph_id: str, *, transaction: Transaction | None = None) -> bool:
+        with connection_in(self._store, transaction, "is_retired") as conn:
             return self._is_retired(conn, graph_id)
 
     def _is_retired(self, conn: Connection, graph_id: str) -> bool:

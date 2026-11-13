@@ -1341,7 +1341,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             movement=chunk_movement,
             decisions=chunk_decisions,
             escalations=chunk_escalations,
-            exclusive=chunk_exclusive,
             transactions=stores.transactions,
             route=chunk_route,
             artifacts=chunk_artifacts,
@@ -1362,7 +1361,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             closer_available=lambda source: work_sources.closer(source) is not None,
             events=event_log,
         ),
-        requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
+        requeue=RequeueService(
+            movement=chunk_movement, route=chunk_route, facts=chunk_facts, transactions=stores.transactions, clock=clock
+        ),
         restart=RestartService(
             movement=chunk_movement,
             submissions=stores.flows,
@@ -1370,7 +1371,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             graphs=graph_store,
             clock=clock,
-            exclusive=chunk_exclusive,
+            transactions=stores.transactions,
+            record=chunk_record,
             closer_available=lambda source: work_sources.closer(source) is not None,
             events=event_log,
         ),
@@ -1447,7 +1449,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         group=GroupService(
             work_refs=chunk_work_refs,
             dependencies=chunk_dependencies,
-            exclusive=chunk_exclusive,
+            transactions=stores.transactions,
+            facts=chunk_facts,
+            record=chunk_record,
             clock=clock,
             cycle_lock=stores.cycle_lock,
         ),
