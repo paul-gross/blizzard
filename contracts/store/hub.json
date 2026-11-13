@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261112_0900_repair_repository_targets",
+  "head_revision": "20261113_0900_repair_hub_locks",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
