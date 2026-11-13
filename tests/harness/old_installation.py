@@ -17,7 +17,7 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.compat.releases import parse_releases
 from blizzard.tools.release_install import Installation, install
 from tests.rehearsal.installation import Leg, baseline_daemon_port, shape_host_file
-from tests.rehearsal.test_upgrade_rehearsal import Rehearsal, forge_publishes
+from tests.rehearsal.journey import Rehearsal, forge_publishes
 from tests.support.fleet_launchers import mock_bin_dir, run_forge
 from tests.support.fleet_world import mint_world
 from tests.support.scaffolding import url_of

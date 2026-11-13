@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from tests.harness.old_installation import register_shutdown
-from tests.rehearsal.test_upgrade_rehearsal import Rehearsal
+from tests.rehearsal.journey import Rehearsal
 
 
 def test_runner_stops_before_hub() -> None:

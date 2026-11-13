@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { type APIRequestContext, expect, mergeTests } from '@playwright/test';
 import { clockEnv, RANK, type SessionHolder } from './clock-stack';
@@ -467,7 +468,10 @@ export const oldInstallationTest = test.extend<{ oldInstallation: import('./old-
   isolation: 'common',
   oldInstallation: async ({ playwright }, use, testInfo) => {
     const { startOldInstallation } = await import('./old-installation');
-    const world = await startOldInstallation(testInfo.outputPath('old-installation'), playwright, testInfo);
-    try { await use(world); } finally { await world.close(); }
+    const root = fs.mkdtempSync(path.join(process.env.BLIZZARD_TMPDIR ?? os.tmpdir(), 'old-installation-'));
+    try {
+      const world = await startOldInstallation(root, playwright, testInfo);
+      try { await use(world); } finally { await world.close(); }
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   },
 });

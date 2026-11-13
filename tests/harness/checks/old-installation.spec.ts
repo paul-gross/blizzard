@@ -1,12 +1,16 @@
 import { expect, oldInstallationTest as test } from '../fixtures';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 test.setTimeout(300_000);
 
 test('old installation owns a migrated hub and an enrolled real release runner', async ({ oldInstallation }) => {
   const { api, runnerId, runnerPid, runnerBin, tag } = oldInstallation;
   expect(tag).toMatch(/^v/);
-  expect(fs.realpathSync(runnerBin)).toContain('old-installation/venv/');
+  expect(fs.realpathSync(runnerBin)).toMatch(/old-installation-[^/]+\/venv\//);
+  if (process.env.BLIZZARD_TMPDIR) {
+    expect(path.relative(fs.realpathSync(process.env.BLIZZARD_TMPDIR), fs.realpathSync(runnerBin))).not.toMatch(/^\.\./);
+  }
   expect(() => process.kill(runnerPid, 0)).not.toThrow();
   expect((await api.get('/api/ready')).status).toBe(200);
   const projects = await api.get('/api/projects');

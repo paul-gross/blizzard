@@ -18,7 +18,7 @@ from tests.support.repo_files import repo_root
 #: Files under ``tests/`` whose subject is a pre-action document or a hub that cannot read ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(
     {
-        "rehearsal/test_upgrade_rehearsal.py",
+        "rehearsal/journey.py",
         "unit/hub/domain/graph/test_legacy_run.py",
     }
 )
@@ -109,7 +109,7 @@ def test_only_the_allowlist_authors_a_run_step() -> None:
 def test_a_planted_run_step_outside_the_allowlist_is_found(tmp_path: Path, source: str) -> None:
     (tmp_path / "test_planted.py").write_text(source)
     (tmp_path / "rehearsal").mkdir()
-    (tmp_path / "rehearsal" / "test_upgrade_rehearsal.py").write_text(source)
+    (tmp_path / "rehearsal" / "journey.py").write_text(source)
 
     assert run_step_authors(tmp_path) - RUN_STEP_ALLOWLIST == {"test_planted.py"}
 
