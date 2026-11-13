@@ -6,6 +6,10 @@
 # published wheel, seeds it, and upgrades it to the caller's candidate wheel on one store
 # backend. What a leg asserts is owned by the tier itself, `tests/rehearsal/`.
 #
+# A leg checks the mock out twice. The baseline's own mock seeds the release and drives its
+# worker; the mock forge comes from the run's own mock, as every other tier's does, because it
+# stands in for GitHub and the candidate hub reads GitHub's current API from it.
+#
 # A supported release is rehearsed only once it has a published GitHub Release: a tag whose
 # release run went red never published a wheel. The matrix is never empty: with no supported
 # release, `releases` emits one leg with an empty baseline, which reports that there is nothing to rehearse and passes, so a
@@ -100,6 +104,10 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           baseline: ${{ matrix.baseline }}
+      - name: resolve and checkout the forge's blizzard-mock (the run's own)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          path: blizzard-mock-forge
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -108,14 +116,17 @@ jobs:
           cache-dependency-glob: |
             uv.lock
             ../blizzard-mock/uv.lock
+            ../blizzard-mock-forge/uv.lock
       - name: git identity for fixture/forge git operations
         run: |
           git config --global user.email "ci@blizzard.local"
           git config --global user.name "blizzard CI"
       - name: provision blizzard (the test process reflects Postgres stores)
         run: cd blizzard && uv sync --extra postgres
-      - name: provision blizzard-mock (mock forge + mock-data CLI + mock-claude-code)
+      - name: provision blizzard-mock (mock-data CLI + mock-claude-code)
         run: cd blizzard-mock && uv sync
+      - name: provision the forge's blizzard-mock (mock forge)
+        run: cd blizzard-mock-forge && uv sync
       - name: fetch the candidate wheel
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -127,6 +138,7 @@ jobs:
           BLIZZARD_REHEARSAL_BASELINE: ${{ matrix.baseline }}
           BLIZZARD_REHEARSAL_CANDIDATE: ${{ runner.temp }}/candidate
           BLIZZARD_REHEARSAL_PG_URL: ${{ matrix.backend == 'postgres' && 'postgresql://postgres:postgres@localhost:5432/postgres' || '' }}
+          BLIZZARD_REHEARSAL_FORGE_BIN: ${{ github.workspace }}/blizzard-mock-forge/.venv/bin
           BACKEND: ${{ matrix.backend }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

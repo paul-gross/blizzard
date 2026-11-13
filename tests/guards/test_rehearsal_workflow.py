@@ -83,6 +83,19 @@ def test_each_leg_is_one_release_on_one_backend() -> None:
     assert mock["with"] == {"baseline": "${{ matrix.baseline }}"}
 
 
+def test_the_forge_runs_from_the_runs_own_mock_not_the_baselines() -> None:
+    """The candidate hub reads the forge's current API, which a baseline's tagged mock predates."""
+    resolved = [
+        s["with"]
+        for s in _workflow()["jobs"]["leg"]["steps"]
+        if s.get("uses") == "./blizzard/.github/actions/resolve-mock-ref"
+    ]
+    assert {"path": "blizzard-mock-forge"} in resolved
+    run = _step("leg", lambda s: "pytest -m rehearsal" in str(s.get("run", "")))
+    assert run["env"]["BLIZZARD_REHEARSAL_FORGE_BIN"] == "${{ github.workspace }}/blizzard-mock-forge/.venv/bin"
+    assert any(s.get("run") == "cd blizzard-mock-forge && uv sync" for s in _workflow()["jobs"]["leg"]["steps"])
+
+
 def test_a_leg_with_no_baseline_says_so_and_passes() -> None:
     run = _step("leg", lambda s: "pytest -m rehearsal" in str(s.get("run", "")))["run"]
     assert "no release is supported" in run.split("pytest")[0]

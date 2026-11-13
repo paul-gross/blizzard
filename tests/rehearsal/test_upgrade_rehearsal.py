@@ -59,6 +59,8 @@ _BASELINE = "BLIZZARD_REHEARSAL_BASELINE"
 _CANDIDATE = "BLIZZARD_REHEARSAL_CANDIDATE"
 _PG_URL = "BLIZZARD_REHEARSAL_PG_URL"
 _ROOT = "BLIZZARD_REHEARSAL_ROOT"
+_MOCK_BIN = "BLIZZARD_REHEARSAL_MOCK_BIN"
+_FORGE_BIN = "BLIZZARD_REHEARSAL_FORGE_BIN"
 
 pytestmark = [
     pytest.mark.rehearsal,
@@ -184,17 +186,21 @@ def test_a_supported_release_upgrades_to_the_candidate_and_walks_back(
     server_url = os.environ.get(_PG_URL)
     if backend == "postgres" and not server_url:
         pytest.skip(f"{_PG_URL} is unset, so the Postgres backend is not rehearsed")
-    named_mock = os.environ.get("BLIZZARD_REHEARSAL_MOCK_BIN")
+    named_mock = os.environ.get(_MOCK_BIN)
     mock_bin = Path(named_mock) if named_mock else mock_bin_dir()
     if mock_bin is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    # The forge stands in for GitHub, which never rolls back to the baseline's day, so the candidate hub
+    # reads its current API; the baseline's own mock still seeds the release and drives its worker.
+    named_forge = os.environ.get(_FORGE_BIN)
+    forge_bin = Path(named_forge) if named_forge else mock_bin
     root = work_root / f"{baseline_tag}-{backend}"
     baseline = install(
         baseline_tag, download_release(baseline_tag, work_root / "releases" / baseline_tag), root / "venv"
     )
     with ExitStack() as stack:
         db_url = stack.enter_context(postgres_database(server_url)) if server_url and backend == "postgres" else None
-        _Rehearsal(Leg(baseline_tag, backend), baseline, candidate, mock_bin, root, db_url, stack).run()
+        _Rehearsal(Leg(baseline_tag, backend), baseline, candidate, mock_bin, forge_bin, root, db_url, stack).run()
         if server_url and backend == "postgres":
             _reflect_an_empty_postgres_store(Leg(baseline_tag, backend), candidate, root, server_url, stack)
 
@@ -211,9 +217,11 @@ def _reflect_an_empty_postgres_store(
         raise leg.fail("postgres reflection", "the migrated store is not the committed document:\n" + "\n".join(drift))
 
 
-def _forge_publishes(mock_bin: Path) -> bool:
+def _forge_publishes(forge_bin: Path) -> bool:
     """Whether the checked-out ``blizzard-mock`` forge takes ``--listening-file`` (a baseline's own tag may not)."""
-    help_text = subprocess.run([str(mock_bin / "blizzard-mock-forge"), "--help"], capture_output=True, text=True).stdout
+    help_text = subprocess.run(
+        [str(forge_bin / "blizzard-mock-forge"), "--help"], capture_output=True, text=True
+    ).stdout
     return "--listening-file" in help_text
 
 
@@ -226,11 +234,13 @@ class _Rehearsal:
         baseline: Installation,
         candidate: Installation,
         mock_bin: Path,
+        forge_bin: Path,
         root: Path,
         db_url: str | None,
         stack: ExitStack,
     ) -> None:
         self.leg, self.baseline, self.candidate, self.mock_bin, self.root = leg, baseline, candidate, mock_bin, root
+        self.forge_bin = forge_bin
         self.stack = stack
         # The hub and the work host first start under the baseline, which cannot bind ``--port 0``.
         self.hub = Hub(root / "hub", db_url, baseline_daemon_port())
@@ -246,9 +256,9 @@ class _Rehearsal:
         self.workspace = world.workspace
         self.forge = self.stack.enter_context(
             run_forge(
-                self.mock_bin,
+                self.forge_bin,
                 world.origins,
-                pinned_port=None if _forge_publishes(self.mock_bin) else baseline_daemon_port(),
+                pinned_port=None if _forge_publishes(self.forge_bin) else baseline_daemon_port(),
             )
         )
         self.forge_api = url_of(self.forge)
