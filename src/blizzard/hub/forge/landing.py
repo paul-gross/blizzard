@@ -15,6 +15,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 
 
 class ComparisonStatus(StrEnum):
@@ -201,7 +202,9 @@ class ForgeNotFound(ForgeError):
 
 
 class ForgeRejected(ForgeError):
-    """A refusal the forge explained: ``reason`` is one of the named reasons, or the forge's own message."""
+    """A refusal the forge explained: ``reason`` is one of the named reasons, or the forge's own message.
+    ``diagnostic`` is the forge's sanitized answer, carried by a policy refusal — ``protected``, ``method``, or one the
+    forge's own message names — and ``None`` for any other."""
 
     AUTH = "auth"
     CONFLICT = "conflict"
@@ -209,9 +212,20 @@ class ForgeRejected(ForgeError):
     PROTECTED = "protected"
     METHOD = "method"
 
-    def __init__(self, reason: str, message: str = "") -> None:
+    def __init__(self, reason: str, message: str = "", *, diagnostic: ForgeDiagnostic | None = None) -> None:
         super().__init__(f"{reason}: {message}" if message and message != reason else reason)
         self.reason = reason
+        self.diagnostic = diagnostic
+
+
+class ForgeAuthRefused(ForgeRejected):
+    """The forge refused the credential the call carried: ``reason`` stays :attr:`ForgeRejected.AUTH`, and
+    ``refusal`` says why."""
+
+    def __init__(self, classified: ClassifiedRefusal) -> None:
+        super().__init__(ForgeRejected.AUTH, diagnostic=classified.diagnostic)
+        self.refusal: AuthRefusal = classified.refusal
+        self.diagnostic: ForgeDiagnostic = classified.diagnostic
 
 
 class ForgeUnavailable(ForgeError):

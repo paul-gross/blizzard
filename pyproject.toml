@@ -133,6 +133,8 @@ dev = [
     # Runs the published newest-copy views in tests/unit/hub/egress/test_contract.py; a hard dependency,
     # because a skipped run would pass the check without running it.
     "duckdb>=1.1.0",
+    # The property tests (the forge-text sanitizer).
+    "hypothesis>=6.170.15",
 ]
 # `mise run mutation` (blizzard:mutation) — never installed into .venv. mutmut pulls in
 # textual, and through it rich, which `uv run` would otherwise leave in the default

@@ -8,6 +8,7 @@ build/
 .mutation-env/
 *.whl
 .pytest_cache/
+.hypothesis/
 .ruff_cache/
 
 # mise run mutation's working tree and report (blizzard:mutation).
