@@ -9,7 +9,7 @@ from enum import Enum
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.artifact.model import StoredArtifact
 
@@ -53,7 +53,7 @@ def eligibility(
     first = observation(markers, epoch, repository, sha)
     if first is None:
         return EligibilityDecision(Eligibility.RECORD)
-    if now - first >= GRACE:
+    if as_utc(now) - as_utc(first) >= GRACE:
         return EligibilityDecision(Eligibility.ESCALATE, first)
     return EligibilityDecision(Eligibility.WAIT)
 
@@ -70,7 +70,7 @@ def observation(markers: tuple[StoredArtifact, ...], epoch: int, repository: str
     name = marker_name(repository, sha)
     return next(
         (
-            datetime.fromisoformat(json.loads(row.data)["at"])
+            as_utc(datetime.fromisoformat(json.loads(row.data)["at"]))
             for row in markers
             if row.epoch == epoch and row.name == name
         ),

@@ -1,7 +1,7 @@
 """Durable empty observations are scoped to the repository, revision and visit epoch."""
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -89,3 +89,27 @@ def test_eligibility_decisions_are_scoped_and_require_a_current_empty_read() -> 
     assert decide(sha="sha2") is Eligibility.RECORD
     assert decide(at=now + timedelta(minutes=9, seconds=59)) is Eligibility.WAIT
     assert decide(at=now + timedelta(minutes=10)) is Eligibility.ESCALATE
+
+
+@pytest.mark.parametrize("marker_naive,now_naive", [(True, False), (False, True), (True, True), (False, False)])
+@pytest.mark.parametrize("minutes,outcome", [(9, Eligibility.WAIT), (10, Eligibility.ESCALATE)])
+def test_eligibility_coerces_observation_and_now_to_utc(
+    marker_naive: bool, now_naive: bool, minutes: int, outcome: Eligibility
+) -> None:
+    first = datetime(2026, 1, 2, tzinfo=UTC)
+    stamp = first.replace(tzinfo=None) if marker_naive else first.astimezone(timezone(timedelta(hours=2)))
+    marker = _row(
+        ArtifactKind.ASSET,
+        marker_name("re_1", "sha1"),
+        f'{{"at": "{stamp.isoformat()}"}}',
+    )
+    now = first + timedelta(minutes=minutes)
+    if now_naive:
+        now = now.replace(tzinfo=None)
+    decision = eligibility(
+        green=False, empty=True, allow_no_ci=False, markers=(marker,), epoch=1, repository="re_1", sha="sha1", now=now
+    )
+    assert decision.outcome is outcome
+    if outcome is Eligibility.ESCALATE:
+        assert decision.first == first
+        assert decision.first is not None and decision.first.tzinfo is not None

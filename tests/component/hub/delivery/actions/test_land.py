@@ -41,6 +41,7 @@ from blizzard.hub.forge.landing import (
     ChangeState,
     Check,
     CheckOutcome,
+    CheckSource,
     CommitSummary,
     ComparisonStatus,
     FileChange,
@@ -408,9 +409,37 @@ def test_a_re_run_the_forge_did_not_answer_writes_no_marker_and_is_asked_again_n
 
 def test_a_forge_that_cannot_re_run_checks_skips_the_re_run_and_answers_inherited_failure() -> None:
     double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
-    answer, _ = _land(double, offered=frozenset(Capability) - {Capability.CHECKS_RERUN})
+    answer, sink = _land(double, offered=frozenset(Capability) - {Capability.CHECKS_RERUN})
     assert answer.choice == "inherited-failure"
     assert double.named("rerun_check") == []
+    assert "re-run" not in sink.markers()["delivery-findings"]
+    assert not any("after a re-run" in line for line in answer.log)
+
+
+def test_inherited_status_has_no_rerun_signature_even_with_a_same_named_check_run_marker() -> None:
+    status = replace(_failing(), source=CheckSource.STATUS)
+    double = _forge(checks={_SUBMITTED: (status,), "main": (status,)})
+    visit = _visit(markers=(f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}",))
+    answer, sink = _land(double, visit)
+    assert answer.choice == "inherited-failure"
+    assert double.named("rerun_check") == []
+    findings = sink.markers()["delivery-findings"]
+    assert "Inherited from the base (not this change):" in findings
+    assert "build: failure — https://ci/1" in findings
+    assert "re-run" not in findings and "signature" not in findings
+
+
+def test_mixed_inherited_failures_only_report_the_recorded_check_run_signature() -> None:
+    status = replace(_failing("external"), source=CheckSource.STATUS)
+    build = _failing()
+    double = _forge(checks={_SUBMITTED: (build, status), "main": (build, status)})
+    signature = f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}"
+    answer, sink = _land(double, _visit(markers=(signature,)))
+    assert answer.choice == "inherited-failure"
+    assert double.named("rerun_check") == []
+    findings = sink.markers()["delivery-findings"]
+    assert f"re-run signature: {signature}" in findings
+    assert f"ci-rerun/{_WIDGET}/external/{_SUBMITTED}" not in findings
 
 
 def test_a_re_run_check_still_red_answers_inherited_failure() -> None:
@@ -419,7 +448,7 @@ def test_a_re_run_check_still_red_answers_inherited_failure() -> None:
     answer, sink = _land(double, visit)
     assert answer.choice == "inherited-failure"
     findings = sink.markers()["delivery-findings"]
-    assert "Inherited from the base — re-run once, still failing (not this change):" in findings
+    assert "Inherited from the base (not this change):" in findings
     assert f"signature: ci-rerun/{_WIDGET}/build/{_SUBMITTED}" in findings
     assert "base branch: main" in findings
     assert double.named("rerun_check") == []

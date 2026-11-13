@@ -247,11 +247,16 @@ async def failed_checks(
             "name": check.name,
             "conclusion": check.detail,
             "details_url": check.details_url,
-            "signature": rerun_marker(repo.repo, check.name, head),
+            **(
+                {"signature": rerun_marker(repo.repo, check.name, head)}
+                if check.source is CheckSource.CHECK_RUN
+                and rerun_marker(repo.repo, check.name, head) in run.visit.marker_names()
+                else {}
+            ),
         }
         for check in failing
     ]
-    run.say(f"{repo.repo}'s failing checks are still inherited from the base after a re-run — repair the base")
+    run.say(f"{repo.repo}'s failing checks are inherited from the base — repair the base")
     return Inherited(({**identity, "decision": INHERITED_FAILURE, "base_branch": repo.base_branch, "checks": rows},))
 
 
@@ -308,12 +313,13 @@ class _Failed(_Section):
 
 
 class _InheritedFailed(_Section):
-    label = "Inherited from the base — re-run once, still failing (not this change):"
+    label = "Inherited from the base (not this change):"
 
     def rows(self) -> Iterator[str]:
         for check in self.record["checks"]:
             yield f"  - {check['name']}: {check['conclusion']} — {check['details_url']}"
-            yield f"    signature: {check['signature']}"
+            if "signature" in check:
+                yield f"    re-run signature: {check['signature']}"
         yield f"  base branch: {self.record['base_branch']}"
 
 
