@@ -103,7 +103,13 @@ def test_service_observation_refreshes_independently_and_invalidates_binary() ->
     assert versions.get("service", service) == "2"
     assert binary.get("tool", lambda: "wrong") == "binary"
     identities.identity = BinaryIdentity(Path("/bin/tool"), 2, 10)
-    assert versions.get("service", service) == "3"
+    assert versions.get("service", service) == "2"
+    assert binary.get("tool", lambda: "moved") == "moved"
+    identities.identity = None
+    assert versions.get("service", service) == "2"
+    assert binary.get("tool", lambda: None) is None
+    identities.identity = BinaryIdentity(Path("/other/tool"), 3, 10)
+    assert binary.get("tool", lambda: "new path") == "new path"
     versions.forget("service")
-    assert versions.get("service", service) == "4"
+    assert versions.get("service", service) == "3"
     assert binary.get("tool", lambda: "new") == "new"

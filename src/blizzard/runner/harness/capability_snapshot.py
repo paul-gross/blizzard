@@ -82,7 +82,7 @@ class HarnessVersionCache:
 
     Binary probes are cached below lifecycle observations, so an adapter is called on
     every read unless it has separately declared an answering service. The latter keeps
-    its refresh cadence, but a changed or missing binary invalidates its observation.
+    its own refresh cadence independently of binary identity.
     """
 
     clock: IClock
@@ -90,25 +90,19 @@ class HarnessVersionCache:
     binary_versions: BinaryVersionCache | None = None
     binaries: Mapping[str, str] = field(default_factory=dict[str, str])
     service_harnesses: frozenset[str] = frozenset()
-    _observed: dict[str, tuple[str | None, datetime, BinaryIdentity]] = field(
-        default_factory=dict[str, tuple[str | None, datetime, BinaryIdentity]], compare=False
+    _observed: dict[str, tuple[str | None, datetime]] = field(
+        default_factory=dict[str, tuple[str | None, datetime]], compare=False
     )
 
     def get(self, harness_id: str, observe: Callable[[], str | None]) -> str | None:
-        binary = self.binaries.get(harness_id)
-        if harness_id not in self.service_harnesses or binary is None or self.binary_versions is None:
-            return observe()
-        identity = self.binary_versions.identities.identify(binary)
-        if identity is None:
-            self._observed.pop(harness_id, None)
+        if harness_id not in self.service_harnesses:
             return observe()
         now = self.clock.now()
         cached = self._observed.get(harness_id)
-        if cached is not None and cached[2] == identity and (now - cached[1]).total_seconds() < self.refresh_seconds:
+        if cached is not None and (now - cached[1]).total_seconds() < self.refresh_seconds:
             return cached[0]
         version = observe()
-        if self.binary_versions.identities.identify(binary) == identity:
-            self._observed[harness_id] = (version, now, identity)
+        self._observed[harness_id] = (version, now)
         return version
 
     def forget(self, harness_id: str) -> None:

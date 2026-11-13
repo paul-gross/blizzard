@@ -1099,8 +1099,6 @@ def _build_runner(
                 corpus=corpus,
                 selftest_results=stores.selftest_results,
                 configured_tiers=configured_tiers(sections),
-                binary_identities=binary_versions.identities,
-                binaries={section.harness_id: section.binary for section in sections if section.enabled},
             )
             capability_versions = HarnessVersionCache(
                 clock=clock,
