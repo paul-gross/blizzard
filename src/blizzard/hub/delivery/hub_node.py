@@ -882,10 +882,12 @@ class HubNodeRouter:
         *,
         forge: ConfiguredForge,
         epoch: int,
+        credential: str | None = None,
         ending: ITurnEnd = NO_TURN,
     ) -> None:
         """Escalate a visit whose forge lacks what the action needs, before its pass or mid-pass: only an operator
-        can change what a forge offers or what an action asks of it. ``explanation`` is the caller's human account.
+        can change what a forge offers or what an action asks of it. ``explanation`` is the caller's human account;
+        ``credential`` the slug of the credential the repository acts with, ``None`` when it names none.
         Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
         detail = explanation
         close_decision = self._close_decision(chunk)
@@ -921,6 +923,7 @@ class HubNodeRouter:
                     "capability": str(missing.first),
                     "repository": target.record,
                     "forge": forge.fields.api_base,
+                    "credential": credential,
                 },
                 at=self._clock.now(),
             )

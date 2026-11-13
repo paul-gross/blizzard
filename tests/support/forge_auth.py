@@ -9,16 +9,20 @@ import httpx2
 import pytest
 
 from blizzard.foundation.secrets.value import SecretValue
-from blizzard.hub.domain.config.credentials import CredentialUnavailable, ResolvedCredential
+from blizzard.hub.domain.config.credentials import CredentialId, CredentialUnavailable, ResolvedCredential
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope, IForgeAuthorizations
 from blizzard.hub.forge.internal.github_auth import github_token_authorization
 
 
-def token_authorization(token: str = "tok", *, secret_name: str = "gh") -> ForgeAuthorization:
-    """The authorization a repository naming no credential acts with over secret ``secret_name`` holding ``token``."""
-    credential = ResolvedCredential(
-        credential_id=None,
+def token_authorization(
+    token: str = "tok", *, secret_name: str = "gh", credential: str | None = None
+) -> ForgeAuthorization:
+    """The authorization a repository acts with over secret ``secret_name`` holding ``token``: as the ``github.token``
+    credential slugged ``credential`` when one is named, else naming no credential."""
+    resolved = ResolvedCredential(
+        credential_id=CredentialId(f"cred_{credential}") if credential is not None else None,
+        slug=credential,
         forge_id=ForgeId("frg_github"),
         binding="github.token",
         secret_name=secret_name,
@@ -26,7 +30,7 @@ def token_authorization(token: str = "tok", *, secret_name: str = "gh") -> Forge
         revision=None,
         authority=f"secret/{secret_name}",
     )
-    return github_token_authorization(credential, SecretValue(token), FORGE_KIND_CAPABILITIES["github"])
+    return github_token_authorization(resolved, SecretValue(token), FORGE_KIND_CAPABILITIES["github"])
 
 
 def sent_header(auth: httpx2.Auth | None) -> str | None:

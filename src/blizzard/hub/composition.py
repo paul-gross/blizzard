@@ -92,10 +92,9 @@ from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
-from blizzard.hub.domain.config.forges import IReadForgeRepository
+from blizzard.hub.domain.config.forges import ForgeKindOffers, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
@@ -968,15 +967,16 @@ def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveCon
     )
 
 
-def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offers: IForgeOffers) -> ConfigAuthoring:
+def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> ConfigAuthoring:
     """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and checking a
-    repository's landing policy against what ``offers`` says its forge offers."""
+    repository's landing policy against what its forge's kind offers — configuration, never the runtime offer, so a
+    write reveals no secret."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
         forges=stores.forge_records,
         credentials=stores.credential_records,
-        offers=offers,
+        offers=ForgeKindOffers(),
         secrets=stores.secrets,
         cipher=cipher,
         apply_writer=stores.config_apply,
@@ -1179,7 +1179,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     cadence_store = CadenceStore(tenant_connections)
     urgency_references = UrgencyReferences(urgencies=stores.urgencies, transactions=stores.transactions)
     errand_runs_store = ErrandRunsStore(tenant_connections)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, offers=forges)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)

@@ -22,8 +22,9 @@ from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, sanitize_forge_text
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
-from blizzard.hub.forge.internal.github_refusals import classify_auth_refusal, diagnostic_of
+from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (
+    OPERATION_CAPABILITY,
     Change,
     ChangeListing,
     ChangeState,
@@ -495,6 +496,8 @@ class GitHubLanding:
                     operation=call.operation,
                     endpoint=call.endpoint,
                     repository=self._full_name,
+                    credential=self._credential,
+                    withheld=self._withheld(call),
                 )
             )
         if status == 404 and missing is not None:
@@ -510,7 +513,18 @@ class GitHubLanding:
             operation=call.operation,
             endpoint=call.endpoint,
             repository=self._full_name,
+            credential=self._credential,
         )
+
+    @property
+    def _credential(self) -> CallCredential:
+        authorization = self._binding.authorization
+        return CallCredential(authorization.credential_slug, authorization.binding, authorization.variant)
+
+    def _withheld(self, call: _Call) -> bool:
+        """Whether ``call`` needs a capability the authorization it carries does not offer."""
+        capability = OPERATION_CAPABILITY.get(call.operation)
+        return capability is not None and capability not in self._binding.authorization.offered
 
     async def _repository_missing(self, call: _Call) -> bool:
         """Whether the repository itself answers 404 — read at most once a minute. GitHub hides a repository a

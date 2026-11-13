@@ -93,9 +93,11 @@ owns the pre-flight check an upgrade runs first.
 
 ## The rate budget
 
-The hub keeps one rate budget per forge and secret — a source or repository with no secret shares the forge's anonymous
-budget — in memory, shared by every caller that reaches the forge under that key: a `deliver` step's landing, the commit
-check, and each work source's forge-status labels, closes and fetches. The budget learns from the `X-RateLimit-Limit`,
+The hub keeps one rate budget per forge and token authority — for a token held in a secret, the authority is
+`secret/<name>`, and a source or repository with no secret shares the forge's anonymous budget — in memory, shared by
+every caller that reaches the forge under that key: every repository and work source acting as that token, a `deliver`
+step's landing, the commit check, and each work source's forge-status labels, closes and fetches. Every write a
+`deliver` step sends as one token on one forge goes out one at a time. The budget learns from the `X-RateLimit-Limit`,
 `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers the forge answers with, and once its remaining falls it turns
 the least important callers away before a request is sent, so each one waits for the reset rather than spending the last
 of the budget and failing:
@@ -121,7 +123,7 @@ Nothing is listed before the forge has answered.
 
 The hub records `forge-budget-low` (warning) when a budget's remaining first falls low enough to turn a caller away, and
 `forge-rate-limited` (warning) when the forge first refuses one for its rate — each at most once per budget per reset
-window, naming the forge, the secret, the bucket, the last remaining and limit, and the reset
+window, naming the forge, the authority, the secret, the bucket, the last remaining and limit, and the reset
 ([observability.md](./observability.md#the-operational-event-log)). A notice lost to a restart is not recorded.
 
 ## A missing capability
@@ -131,11 +133,14 @@ set of them. `land`, for one, reads refs, compares revisions, opens, updates and
 Before a `deliver` step's pass, the hub checks every resolved repository's forge against the action's list. A policy may
 also need an operation only some work reveals, such as the branch operations a diverged fast-forward landing uses; the
 hub checks those when it finds the need, before any unsupported mutation. A repository whose forge lacks one refuses the
-visit: the hub records a `forge-capability-missing` event naming the capability, the repository, and the forge, writes a
-`hub-log.forge-capability-missing` artifact, and escalates the chunk to a person with cause `forge-capability-missing`.
-A step that needs a forge handle reveals credentials only for the repositories that handle serves. Only an operator can
-change what a forge offers, so the remedy is a forge of a kind that offers the capability, or an action that does not
-ask for it.
+visit: the hub records a `forge-capability-missing` event naming the capability, the repository, the forge, and the
+credential the repository acts with (`null` when it names only a secret), writes a `hub-log.forge-capability-missing`
+artifact, and escalates the chunk to a person with cause `forge-capability-missing`. What a forge offers is narrowed per
+repository by the token it uses: a fine-grained GitHub token is not offered `checks.read`, so a repository on one lacks
+it even on a forge whose kind offers it, and the artifact names the token
+([repositories.md](./repositories.md#the-forge-token)). A step that needs a forge handle reveals credentials only for
+the repositories that handle serves. Only an operator can change what a forge offers, so the remedy is a forge of a kind
+that offers the capability, a token that can use it, or an action that does not ask for it.
 
 An action can live without some operations, unlike the necessities above. `land` re-runs a failing check once only when
 the forge offers it, and otherwise routes the failure as it would after one re-run.

@@ -140,8 +140,18 @@ class ForgeRegistry:
         return self._authorizations
 
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
-        """What ``forge`` offers, for ``repository`` when one is named; every forge is its kind's set for now."""
-        return self._capabilities[forge.kind]
+        """What ``forge`` offers: its kind's set, narrowed for ``repository`` when one is named to what the
+        authorization it acts with can do there. :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable`
+        when that repository's credential or secret is unknown or retired."""
+        kind = self._capabilities[forge.kind]
+        if repository is None:
+            return kind
+        return kind & self._built(repository).authorization.offered
+
+    def authorization(self, repository: RepositoryId) -> ForgeAuthorization:
+        """The authorization ``repository`` acts with, as its adapter was built from;
+        :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable` as :meth:`offered` raises it."""
+        return self._built(repository).authorization
 
     def refs(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeRefs:
         built = self._built(repository)

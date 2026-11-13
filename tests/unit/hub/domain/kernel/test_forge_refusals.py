@@ -144,5 +144,14 @@ def test_the_event_detail_carries_the_refusal_and_the_whole_diagnostic() -> None
             "documentation_url": None,
             "request_id": "ABCD:1234",
             "accepted_permissions": None,
+            "credential": None,
+            "binding": None,
+            "variant": None,
         },
     }
+
+
+def test_an_unsupported_token_remedy_names_the_capability_the_call_needed() -> None:
+    remedy = refusal_remedy(AuthRefusal.TOKEN_UNSUPPORTED, _diagnostic(), capability="checks.read")
+
+    assert remedy == "Use a classic token or a GitHub App, or a landing policy that does not need `checks.read`."
