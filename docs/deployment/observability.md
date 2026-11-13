@@ -236,8 +236,8 @@ mode = "stepped"
 
 `timed`, the default, runs a pass at boot and then on the sweep's timer. `stepped` starts no timer and runs no boot
 pass: the sweep passes only when a route below asks it to. Any other value refuses boot with an error naming the key. A
-mode set for a sweep this hub does not build, such as `trace_export` with tracing off, changes nothing. A file with no
-`[sweeps]` table runs every sweep on its timer.
+mode set for a sweep this hub does not build, such as `trace_export` with tracing off, changes nothing. These are boot
+settings: edit the file and restart to change them.
 
 ### Running a pass on request
 

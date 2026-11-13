@@ -13,6 +13,7 @@ from blizzard.foundation.toml_emit import json_literal
 from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import HubSettingsFooting
 from tests.support.scaffolding import (
     HubHarness,
@@ -172,6 +173,22 @@ def test_apply_diff_resolves_defaults_for_absent_and_unset_entries(tmp_path: Pat
     response = client.post(path + "/apply", json={"action_pass_seconds": 6})
     diff = response.json()["outcomes"][0]["diff"][0]
     assert (diff["field"], diff["old"], diff["new"]) == ("action_pass_seconds", 300, 6)
+
+
+def test_transcript_caps_show_effective_defaults_and_overrides(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    defaults = TranscriptCaps()
+    rows = {r["key"]: r for r in client.get(path).json()["settings"]}
+    for name in ("record_max_bytes", "chunk_budget_max_bytes", "runner_daily_rate_max_bytes"):
+        row = rows[f"transcripts.{name}"]
+        assert (row["value"], row["source"]) == (getattr(defaults, name), "default")
+    response = client.post(path + "/apply", json={"transcripts": {"record_max_bytes": 1024}})
+    diff = response.json()["outcomes"][0]["diff"][0]
+    assert (diff["old"], diff["new"]) == (defaults.record_max_bytes, 1024)
+    response = client.patch(path, headers={"If-Match": "1"}, json={"unset": ["transcripts.record_max_bytes"]})
+    row = next(r for r in response.json()["settings"] if r["key"] == "transcripts.record_max_bytes")
+    assert (row["value"], row["source"]) == (defaults.record_max_bytes, "default")
 
 
 def test_request_validation_matches_declared_problem(tmp_path: Path) -> None:

@@ -15,16 +15,16 @@ from tests.support.config_inputs import hub_runtime_of, init_hub
 
 def test_host_seeds_and_restarts_from_stored_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     init_hub(tmp_path)
-    seen: list[bool] = []
+    seen: list[tuple[bool, int]] = []
 
     def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
-        seen.append(config.follow_latest)
+        seen.append((config.follow_latest, config.action_pass_seconds))
         if len(seen) == 1:
             revision = settings.reader.snapshot().revision
             from blizzard.foundation.settings_record.vocabulary import Change
 
             settings.authoring.apply(
-                Change("edit", sets={"follow_latest": True}), if_match=revision, door="api", actor="test"
+                Change("edit", sets={"action_pass_seconds": 45}), if_match=revision, door="api", actor="test"
             )
 
     monkeypatch.setattr(runtime, "_serve", serve)
@@ -32,10 +32,14 @@ def test_host_seeds_and_restarts_from_stored_values(tmp_path: Path, monkeypatch:
     result = cli.invoke(runtime.host, ["--dir", str(tmp_path)])
     assert result.exit_code == 0, repr(result.exception)
     path = tmp_path / "blizzard-hub.toml"
-    path.write_text(path.read_text().replace("follow_latest = false", 'follow_latest = "invalid"'))
+    path.write_text(
+        path.read_text()
+        .replace("follow_latest = false", "follow_latest = true")
+        .replace("action_pass_seconds = 300", 'action_pass_seconds = "invalid"')
+    )
     result = cli.invoke(runtime.host, ["--dir", str(tmp_path)])
     assert result.exit_code == 0, repr(result.exception)
-    assert seen == [False, True]
+    assert seen == [(False, 300), (True, 45)]
 
 
 def test_host_refuses_behind_head_before_seeding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,6 +53,32 @@ def test_host_refuses_behind_head_before_seeding(tmp_path: Path, monkeypatch: py
     result = CliRunner().invoke(runtime.host, ["--dir", str(tmp_path)])
     assert result.exit_code != 0
     assert "migrate" in result.output
+
+
+def test_invalid_late_seed_can_be_corrected_before_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    init_hub(tmp_path)
+    path = tmp_path / "blizzard-hub.toml"
+    path.write_text(
+        path.read_text()
+        .replace("annotation_interval_seconds = 120", "annotation_interval_seconds = 45")
+        .replace("action_pass_seconds = 300", "action_pass_seconds = -1")
+    )
+    seen: list[tuple[int, int]] = []
+
+    def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+        seen.append((config.annotation_interval_seconds, config.action_pass_seconds))
+
+    monkeypatch.setattr(runtime, "_serve", serve)
+    cli = CliRunner()
+    assert cli.invoke(runtime.host, ["--dir", str(tmp_path)]).exit_code != 0
+    path.write_text(
+        path.read_text()
+        .replace("annotation_interval_seconds = 45", "annotation_interval_seconds = 60")
+        .replace("action_pass_seconds = -1", "action_pass_seconds = 12")
+    )
+    result = cli.invoke(runtime.host, ["--dir", str(tmp_path)])
+    assert result.exit_code == 0, repr(result.exception)
+    assert seen == [(60, 12)]
 
 
 def test_migrate_ignores_only_values_already_stored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,3 +135,36 @@ def test_migrate_keeps_external_database_guard(tmp_path: Path) -> None:
     assert result.exit_code != 0
     assert "outside this directory" in result.output
     assert not (tmp_path / "outside.db").exists()
+
+
+def test_legacy_stored_boot_value_does_not_override_file_or_migrate_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blizzard.foundation.settings_record.vocabulary import Change
+
+    init_hub(tmp_path)
+    seen: list[bool] = []
+
+    def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+        seen.append(config.follow_latest)
+        if len(seen) == 1:
+            settings.store.apply(
+                Change("edit", sets={"follow_latest": False}),
+                if_match=settings.reader.snapshot().revision,
+                door="api",
+                actor="test",
+            )
+
+    monkeypatch.setattr(runtime, "_serve", serve)
+    cli = CliRunner()
+    first = cli.invoke(runtime.host, ["--dir", str(tmp_path)])
+    assert first.exit_code == 0, repr(first.exception)
+    path = tmp_path / "blizzard-hub.toml"
+    path.write_text(path.read_text().replace("follow_latest = false", "follow_latest = true"))
+    second = cli.invoke(runtime.host, ["--dir", str(tmp_path)])
+    assert second.exit_code == 0, repr(second.exception)
+    assert seen == [False, True]
+    path.write_text(path.read_text().replace("follow_latest = true", 'follow_latest = "invalid"'))
+    result = cli.invoke(runtime.migrate_cmd, ["--dir", str(tmp_path)])
+    assert result.exit_code != 0
+    assert "follow_latest" in result.output

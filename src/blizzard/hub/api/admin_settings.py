@@ -19,6 +19,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
+from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (
@@ -86,7 +87,7 @@ def _view(settings: HubSettingsGraph) -> HubSettingsView:
         rows.append(
             HubSettingRow(
                 key=key.path,
-                value=thaw(entry.value if source == "entry" and entry else key.default),
+                value=thaw(entry.value if source == "entry" and entry else _default(key.path, key.default)),
                 source=source,
                 lifetime=key.lifetime.value,
                 revision=metadata[0] if metadata else None,
@@ -103,6 +104,15 @@ def _invalid(exc: SettingsInvalid) -> NoReturn:
 
 def _effective(entry: Entry | None, default: object) -> object:
     return thaw(default if entry is None or entry.at_default else entry.value)
+
+
+def _default(path: str, default: object) -> object:
+    caps = TranscriptCaps()
+    return {
+        "transcripts.record_max_bytes": caps.record_max_bytes,
+        "transcripts.chunk_budget_max_bytes": caps.chunk_budget_max_bytes,
+        "transcripts.runner_daily_rate_max_bytes": caps.runner_daily_rate_max_bytes,
+    }.get(path, default)
 
 
 @router.get("", response_model=HubSettingsView)
@@ -194,8 +204,8 @@ def apply_document(
                 diff=[
                     FieldChangeView(
                         field=key,
-                        old=_effective(field.old, declaration.default),
-                        new=_effective(field.new, declaration.default),
+                        old=_effective(field.old, _default(key, declaration.default)),
+                        new=_effective(field.new, _default(key, declaration.default)),
                     )
                 ]
                 if field

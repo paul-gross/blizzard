@@ -4,6 +4,9 @@ Every committed write to a stored forge, work source, repository, secret, projec
 urgency, the urgency order, or the tenant's settings appends one row to the hub's change log, in the same transaction as
 the write. A write that changes nothing appends nothing.
 
+This is the tenant configuration log. Hub-wide operational settings have their own
+[settings history](./hub-settings.md#documents-and-history) and are not included here.
+
 ## Reading the log
 
 ```bash

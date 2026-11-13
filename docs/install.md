@@ -27,7 +27,10 @@ override that points the deployment at a locally built image instead of the publ
 and environment-variable reference lives in [`packaging/docker/README.md`](../packaging/docker/README.md).
 
 `blizzard-hub.toml` is bind-mounted read-only from `packaging/docker/` and is declarative rather than scaffolded. Its
-`trusted_proxies` names this compose network's subnet, which is what makes Caddy's forwarded headers trusted.
+`trusted_proxies` names this compose network's subnet, which is what makes Caddy's forwarded headers trusted. On first
+start, explicitly stated live settings seed the store; subsequent edits do not override stored live entries. Boot
+settings remain in the file and take effect on restart. See [hub settings](./deployment/hub-settings.md) for live
+changes and [upgrade](./upgrade.md#hub-settings-boundary) for seeding and rollback.
 
 ## Pin and verify the image
 

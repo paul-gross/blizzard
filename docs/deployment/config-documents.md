@@ -10,6 +10,9 @@ blizzard hub config apply config.yaml
 blizzard hub config export --format json > config.json
 ```
 
+This is a **tenant** document: its `settings` section sets the tenant default urgency, not hub-wide operational
+settings. For those, use the separate TOML [hub settings document](./hub-settings.md#documents-and-history).
+
 ## The document
 
 ```yaml

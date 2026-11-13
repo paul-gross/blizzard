@@ -29,13 +29,14 @@ owns what that assumption still costs.
 
 ### Standing the machine up
 
-| File                                                       | When to read                                                                                                                                                                                       |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deployment/install.md`](./deployment/install.md)         | You are installing the wheel, seeding each daemon's runtime directory, and dropping the units — plus the config renames and migration notes an upgrade owes                                        |
-| [`deployment/runner-auth.md`](./deployment/runner-auth.md) | You are adding a runner or a host, rotating or revoking a token, or re-running `runner init` — machine identity, not human login                                                                   |
-| [`deployment/human-auth.md`](./deployment/human-auth.md)   | You are putting operators behind SSO: the `[auth]` table, who may sign in and why one is refused, the superuser bootstrap, roles, runner-side federation, and what a TLS-terminating proxy changes |
-| [`deployment/tenants.md`](./deployment/tenants.md)         | You are running several fleets on one hub, or managing who belongs to one: tenants, hub administrators, members, invitations, and `--tenant`                                                       |
-| [`deployment/secrets.md`](./deployment/secrets.md)         | You are storing a credential in the hub, choosing where its encryption key lives, or rotating that key                                                                                             |
+| File                                                         | When to read                                                                                                                                                                                       |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deployment/install.md`](./deployment/install.md)           | You are installing the wheel, seeding each daemon's runtime directory, and dropping the units — plus the config renames and migration notes an upgrade owes                                        |
+| [`deployment/hub-settings.md`](./deployment/hub-settings.md) | You are inspecting or changing hub-wide operational settings, exporting live values, or distinguishing stored live settings from restart-based boot configuration                                  |
+| [`deployment/runner-auth.md`](./deployment/runner-auth.md)   | You are adding a runner or a host, rotating or revoking a token, or re-running `runner init` — machine identity, not human login                                                                   |
+| [`deployment/human-auth.md`](./deployment/human-auth.md)     | You are putting operators behind SSO: the `[auth]` table, who may sign in and why one is refused, the superuser bootstrap, roles, runner-side federation, and what a TLS-terminating proxy changes |
+| [`deployment/tenants.md`](./deployment/tenants.md)           | You are running several fleets on one hub, or managing who belongs to one: tenants, hub administrators, members, invitations, and `--tenant`                                                       |
+| [`deployment/secrets.md`](./deployment/secrets.md)           | You are storing a credential in the hub, choosing where its encryption key lives, or rotating that key                                                                                             |
 
 ### Configuring what workers do
 

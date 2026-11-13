@@ -194,7 +194,7 @@ def test_a_supported_release_upgrades_to_the_candidate_and_walks_back(
     )
     with ExitStack() as stack:
         db_url = stack.enter_context(postgres_database(server_url)) if server_url and backend == "postgres" else None
-        _Rehearsal(Leg(baseline_tag, backend), baseline, candidate, mock_bin, root, db_url, stack).run()
+        Rehearsal(Leg(baseline_tag, backend), baseline, candidate, mock_bin, root, db_url, stack).run()
         if server_url and backend == "postgres":
             _reflect_an_empty_postgres_store(Leg(baseline_tag, backend), candidate, root, server_url, stack)
 
@@ -211,13 +211,13 @@ def _reflect_an_empty_postgres_store(
         raise leg.fail("postgres reflection", "the migrated store is not the committed document:\n" + "\n".join(drift))
 
 
-def _forge_publishes(mock_bin: Path) -> bool:
+def forge_publishes(mock_bin: Path) -> bool:
     """Whether the checked-out ``blizzard-mock`` forge takes ``--listening-file`` (a baseline's own tag may not)."""
     help_text = subprocess.run([str(mock_bin / "blizzard-mock-forge"), "--help"], capture_output=True, text=True).stdout
     return "--listening-file" in help_text
 
 
-class _Rehearsal:
+class Rehearsal:
     """One leg's daemons, stores, and the facts recorded at step 1 that every later step is held to."""
 
     def __init__(
@@ -248,7 +248,7 @@ class _Rehearsal:
             run_forge(
                 self.mock_bin,
                 world.origins,
-                pinned_port=None if _forge_publishes(self.mock_bin) else baseline_daemon_port(),
+                pinned_port=None if forge_publishes(self.mock_bin) else baseline_daemon_port(),
             )
         )
         self.forge_api = url_of(self.forge)
@@ -278,7 +278,7 @@ class _Rehearsal:
         self.seeded_hub_keys = {table: set(rows) for table, rows in seeded.items()}
         self.seed_rows = seeded_only(read_rows(self.seed.store_url, self.runner_contract))
         self.seeded_chunks = [ast.literal_eval(row["chunk_id"]) for row in seeded.get("chunks", {}).values()]
-        self._stand_up_the_project(client)
+        self.stand_up_the_project(client)
         self.work.scaffold(self.baseline)
         shape_host_file(
             self.work, name="rehearsal-work", hub_url=self.hub.url, project=_PROJECT,
@@ -288,7 +288,7 @@ class _Rehearsal:
         self.work.init(self.baseline, self.hub.url)
         self.work.start(self.baseline, self.hub.url)
         assert self.forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
-        self.held = self._ingest(client, "held in delivering")
+        self.held = self.ingest(client, "held in delivering")
         self._await(
             client,
             self.held,
@@ -302,7 +302,7 @@ class _Rehearsal:
         step = "2 upgrade the hub"
         self.hub.stop()
         self.hub_rows = self._seeded_hub_rows()
-        self._migrate(step, self.hub.migrate(self.candidate), "hub migrate")
+        self.migrate(step, self.hub.migrate(self.candidate), "hub migrate")
         client = self._client(self.hub.start(self.candidate))
         self._hold_views(client, step)
         probe = subprocess.run(
@@ -316,8 +316,23 @@ class _Rehearsal:
     def keep_the_old_runner(self) -> None:
         step = "3 keep the old runner"
         client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
+        settings = client.get("/api/admin/settings")
+        if settings.status_code != 200:
+            raise self._fail(step, f"reading live settings failed: {settings.status_code} {settings.text}")
+        edited = client.patch(
+            "/api/admin/settings",
+            headers={"If-Match": str(settings.json()["revision"])},
+            json={"set": {"action_pass_seconds": 5}},
+        )
+        if edited.status_code != 200:
+            raise self._fail(step, f"writing live settings failed: {edited.status_code} {edited.text}")
+        current = client.get("/api/admin/settings")
+        if current.status_code != 200 or not any(
+            setting["key"] == "action_pass_seconds" and setting["value"] == 5 for setting in current.json()["settings"]
+        ):
+            raise self._fail(step, f"live setting not retained: {current.status_code} {current.text}")
         assert self.forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
-        self._await_landed(client, self._ingest(client, "the baseline runner against the candidate hub"), step)
+        self._await_landed(client, self.ingest(client, "the baseline runner against the candidate hub"), step)
         self._await_landed(client, self.held, step)
         self._rehearse_refusals(client, step)
 
@@ -343,7 +358,7 @@ class _Rehearsal:
             host_file.write_text(original.replace(f'hub_url = "{self.hub.url}"', f'hub_url = "{proxy}"'))
             try:
                 self.work.start(self.baseline, proxy)
-                waiting = self._ingest(client, "claim refused in flight")
+                waiting = self.ingest(client, "claim refused in flight")
                 if not observed.wait(_TIMEOUT):
                     raise self._fail(step, "runner never sent a claim through the pause proxy")
                 assert answers[0][0] == 403, answers
@@ -372,24 +387,24 @@ class _Rehearsal:
 
     def _other_claim_refusals(self, client: httpx2.Client, token: str, runner_id: str, step: str) -> None:
         self.work.stop()
-        not_ready = self._ingest(client, "not ready", promote=False)
+        not_ready = self.ingest(client, "not ready", promote=False)
         self._release_refusal_probe(token, not_ready, "not_ready", "not_ready", step)
 
-        prerequisite = self._ingest(client, "prerequisite", promote=False)
-        dependent = self._ingest(client, "dependent", promote=False)
+        prerequisite = self.ingest(client, "prerequisite", promote=False)
+        dependent = self.ingest(client, "dependent", promote=False)
         edge = {"prerequisite_chunk_id": prerequisite, "by": "rehearsal"}
         declared = client.post(f"/api/chunks/{dependent}/dependencies", json=edge)
         assert declared.status_code == 202, declared.text
         assert client.post(f"/api/chunks/{dependent}/promote").status_code == 202
         self._release_refusal_probe(token, dependent, "dependency", prerequisite, step)
 
-        incompatible = self._ingest(client, "incompatible", promote=False)
+        incompatible = self.ingest(client, "incompatible", promote=False)
         patched = client.patch(f"/api/chunks/{incompatible}", json={"default_harnesses": ["unavailable-harness"]})
         assert patched.status_code == 202, patched.text
         assert client.post(f"/api/chunks/{incompatible}/promote").status_code == 202
         self._release_refusal_probe(token, incompatible, "incompatible", runner_id, step)
 
-        conflict = self._ingest(client, "conflict")
+        conflict = self.ingest(client, "conflict")
         claim = client.post(
             "/api/fleet/routes", headers={"Authorization": f"Bearer {token}"},
             json={"chunk_id": conflict, "workspace_id": self.workspace_id, "environment_ids": []},
@@ -423,10 +438,10 @@ class _Rehearsal:
         step = "4 upgrade the runner"
         self.work.stop()
         for host in (self.work, self.seed):
-            self._migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
+            self.migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
         self.work.start(self.candidate, self.hub.url)
         client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
-        self._await_landed(client, self._ingest(client, "the candidate runner"), step)
+        self._await_landed(client, self.ingest(client, "the candidate runner"), step)
 
     # ------------------------------------------------------------------ the store walk
 
@@ -435,9 +450,9 @@ class _Rehearsal:
         self.hub.stop()
         self.work.stop()
         hub_head, runner_head = self.hub_contract["head_revision"], self.runner_contract["head_revision"]
-        self._migrate(step, self.hub.migrate(self.candidate, down=hub_head), f"hub migrate --down {hub_head}")
+        self.migrate(step, self.hub.migrate(self.candidate, down=hub_head), f"hub migrate --down {hub_head}")
         for host in (self.work, self.seed):
-            self._migrate(step, host.migrate(self.candidate, down=runner_head), f"runner migrate --down {runner_head}")
+            self.migrate(step, host.migrate(self.candidate, down=runner_head), f"runner migrate --down {runner_head}")
         losses = [
             *(f"hub store: {loss}" for loss in row_losses(self.hub_rows, self._seeded_hub_rows())),
             *(f"seed runner store: {loss}" for loss in row_losses(self.seed_rows, read_rows(self.seed.store_url, self.runner_contract))),
@@ -454,7 +469,7 @@ class _Rehearsal:
                     step, f"chunk {chunk_id} landed before the walk reads back as {detail.get('status')!r}"
                 )
         # The seeded version walks back as the baseline wrote it — from 0.2, carried onto `land` and back to its `run:`.
-        carried = self._ingest(client, "the baseline hub on the walked-back version")
+        carried = self.ingest(client, "the baseline hub on the walked-back version")
         pinned = client.get(f"/api/chunks/{carried}").json().get("graph_id")
         if pinned != self.graph_id:
             raise self._fail(step, f"chunk {carried} pinned {pinned!r}, not the carried version {self.graph_id!r}")
@@ -463,15 +478,15 @@ class _Rehearsal:
         step = "walk forward"
         self.hub.stop()
         self.work.stop()
-        self._migrate(step, self.hub.migrate(self.candidate), "hub migrate")
+        self.migrate(step, self.hub.migrate(self.candidate), "hub migrate")
         for host in (self.work, self.seed):
-            self._migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
+            self.migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
         self.hub.start(self.candidate).close()
         self.work.start(self.candidate, self.hub.url)
 
     # ------------------------------------------------------------------ helpers
 
-    def _stand_up_the_project(self, client: httpx2.Client) -> None:
+    def stand_up_the_project(self, client: httpx2.Client) -> None:
         """The journey's own project, source, and repository, so the working runner never claims a seeded chunk."""
         created = client.post("/api/projects", json={"name": "Rehearsal", "slug": _PROJECT})
         assert created.status_code == 201, created.text
@@ -487,7 +502,7 @@ class _Rehearsal:
         assert minted.status_code == 201, minted.text
         self.graph_id = minted.json()["graph_id"]
 
-    def _ingest(self, client: httpx2.Client, title: str, *, promote: bool = True) -> str:
+    def ingest(self, client: httpx2.Client, title: str, *, promote: bool = True) -> str:
         issue = self.forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": title})
         assert issue.status_code == 201, issue.text
         ingested = client.post(
@@ -537,7 +552,7 @@ class _Rehearsal:
             for table, keys in self.seeded_hub_keys.items()
         }
 
-    def _migrate(self, step: str, done: subprocess.CompletedProcess[str], what: str) -> None:
+    def migrate(self, step: str, done: subprocess.CompletedProcess[str], what: str) -> None:
         if done.returncode != 0:
             raise self._fail(step, f"{what} failed:\n{done.stdout}\n{done.stderr}")
 

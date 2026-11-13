@@ -84,21 +84,39 @@ def test_seed_only_absent_preserves_tombstone_and_atomic_values(tmp_path: Path) 
     store = HubSettingsStore(
         hub_level_connections(engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), footing.validate
     )
-    file = {"follow_latest": True, "trusted_proxies": ["127.0.0.1"]}
+    file = {"action_pass_seconds": 45, "annotation_interval_seconds": 12, "trusted_proxies": ["127.0.0.1"]}
     store.seed(setting_keys(HUB_REGISTRY), footing.file_view(file))
     first = store.snapshot()
-    assert first.entries["follow_latest"] == Entry(True)
-    assert first.entries["trusted_proxies"] == Entry(("127.0.0.1",))
+    assert first.entries["action_pass_seconds"] == Entry(45)
+    assert "trusted_proxies" not in first.entries
     assert first.revision == 2
-    store.apply(Change("edit", unsets=frozenset({"follow_latest"})), if_match=2, door="api", actor="operator")
-    store.seed(
-        setting_keys(HUB_REGISTRY), footing.file_view({"follow_latest": True, "public_url": "https://example.com"})
-    )
+    store.apply(Change("edit", unsets=frozenset({"action_pass_seconds"})), if_match=2, door="api", actor="operator")
+    store.seed(setting_keys(HUB_REGISTRY), footing.file_view({"action_pass_seconds": 90, "route_token_mode": "warn"}))
     restarted = store.snapshot()
-    assert restarted.entries["follow_latest"] == Entry(None, True)
-    assert footing.resolve(restarted.entries).follow_latest is False
-    assert restarted.entries["public_url"] == Entry("https://example.com")
+    assert restarted.entries["action_pass_seconds"] == Entry(None, True)
+    assert footing.resolve(restarted.entries).action_pass_seconds == 300
+    assert restarted.entries["route_token_mode"] == Entry("warn")
     assert restarted.revision == 4
+
+
+def test_seed_validates_all_missing_file_values_before_first_commit(tmp_path: Path) -> None:
+    from blizzard.foundation.flags import FlagRegistry
+    from blizzard.hub.config_keys import HUB_REGISTRY
+    from blizzard.hub.settings.footing import HubSettingsFooting, setting_keys
+
+    _, engine = migrate_to(tmp_path, "head")
+    footing = HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
+    store = HubSettingsStore(
+        hub_level_connections(engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), footing.validate
+    )
+    keys = setting_keys(HUB_REGISTRY)
+    with pytest.raises(SettingsInvalid):
+        store.seed(keys, footing.file_view({"annotation_interval_seconds": 45, "action_pass_seconds": -1}))
+    assert store.snapshot().revision == 0
+    assert not store.snapshot().entries
+    store.seed(keys, footing.file_view({"annotation_interval_seconds": 60, "action_pass_seconds": 12}))
+    assert store.snapshot().entries == {"action_pass_seconds": Entry(12), "annotation_interval_seconds": Entry(60)}
+    assert store.revision() == 2
 
 
 def test_two_writers_one_wins(tmp_path: Path) -> None:
