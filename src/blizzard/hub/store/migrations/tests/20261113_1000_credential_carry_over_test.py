@@ -144,7 +144,8 @@ def _credentials(engine: sa.Engine) -> dict[tuple[str, str], tuple[str, str, int
 def _links(engine: sa.Engine) -> dict[str, str | None]:
     rows = query(
         engine,
-        "SELECT repository_id, credential_id FROM repositories UNION SELECT work_source_id, credential_id FROM work_sources",
+        "SELECT repository_id, credential_id FROM repositories "
+        "UNION SELECT work_source_id, credential_id FROM work_sources",
     )
     return dict(rows)
 
