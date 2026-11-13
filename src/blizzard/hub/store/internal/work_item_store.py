@@ -14,36 +14,21 @@ from typing import Any
 from sqlalchemy import Connection, Row, desc
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.model import (
-    Chunk,
-    ErrandMark,
     HubWorkItem,
     WorkItemAuthor,
     WorkItemAuthorKind,
     WorkRef,
 )
-from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
-from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.operations.delete import IHubItemWithdrawals, work_item_lock
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import (
-    insert_chunk_rows,
-)
-
-# Inserts the proposal closure in the work-item write's transaction.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
-
-# Inserts the run context in the work-item write's transaction.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.run_context_store import insert_run_context_row
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import connection_for, connection_in
 
@@ -102,7 +87,7 @@ class WorkItemStore:
                         result[WorkRef(source=row.source, ref=row.ref)] = self._record(row)
         return result
 
-    def create_with_chunk(
+    def create(
         self,
         *,
         pointer: WorkRef,
@@ -111,14 +96,13 @@ class WorkItemStore:
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
-        chunk: Chunk,
+        project_id: ProjectId | None,
+        routine_name: str | None = None,
+        scope_slug: str | None = None,
+        run_mode: str | None = None,
         transaction: Transaction | None = None,
     ) -> HubWorkItem:
-        """Insert the item row and ``chunk``'s own rows on one connection — ``transaction``'s when given, else
-        one ``engine.begin()`` — the mechanism behind
-        :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.create_with_chunk`'s
-        atomicity contract."""
-        with connection_in(self._store, transaction, "create_with_chunk", write=True) as conn:
+        with connection_in(self._store, transaction, "create", write=True) as conn:
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -128,12 +112,14 @@ class WorkItemStore:
                 author=author,
                 stated_priority=stated_priority,
                 at=at,
-                project_id=chunk.project_id,
+                project_id=project_id,
+                routine_name=routine_name,
+                scope_slug=scope_slug,
+                run_mode=run_mode,
             )
-            insert_chunk_rows(conn, chunk)
         return HubWorkItem(
             work_item_id=work_item_id,
-            project_id=chunk.project_id,
+            project_id=project_id,
             source=pointer.source,
             ref=pointer.ref,
             title=title,
@@ -142,72 +128,10 @@ class WorkItemStore:
             stated_priority=stated_priority,
             created_at=at,
             edited_at=at,
-        )
-
-    def create_run_with_chunk(
-        self,
-        *,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        routine_name: str,
-        scope_slug: str,
-        run_mode: str,
-        project_id: str,
-        at: datetime,
-        chunk: Chunk,
-        errand: ErrandMark | None = None,
-        transaction: Transaction | None = None,
-    ) -> HubWorkItem:
-        """:meth:`create_with_chunk` plus the run's own identity row
-        (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`), marked
-        with ``errand`` when given, and the item's run columns, on one connection — the caller's
-        ``transaction`` when it passes one, else a write of its own: a routine run's own one-act
-        mint. No promote rows are written: the chunk rests ``not_ready``."""
-        with connection_in(self._store, transaction, "create_run_with_chunk", write=True) as conn:
-            work_item_id = self._insert_item(
-                conn,
-                source=pointer.source,
-                ref=pointer.ref,
-                title=title,
-                body=body,
-                author=author,
-                stated_priority=None,
-                at=at,
-                project_id=chunk.project_id,
-                routine_name=routine_name,
-                scope_slug=scope_slug,
-                run_mode=run_mode,
-            )
-            insert_chunk_rows(conn, chunk)
-            insert_run_context_row(
-                conn,
-                work_item_id,
-                RunContext(
-                    routine_name=routine_name,
-                    scope_slug=scope_slug,
-                    mode=run_mode,
-                    project_id=project_id,
-                    errand=errand,
-                ),
-            )
-        record = HubWorkItem(
-            work_item_id=work_item_id,
-            project_id=chunk.project_id,
-            source=pointer.source,
-            ref=pointer.ref,
-            title=title,
-            body=body,
-            author=author,
-            stated_priority=None,
-            created_at=at,
-            edited_at=at,
             routine_name=routine_name,
             scope_slug=scope_slug,
             run_mode=run_mode,
         )
-        return record
 
     @staticmethod
     def _insert_item(
@@ -220,7 +144,7 @@ class WorkItemStore:
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
-        project_id: str | None,
+        project_id: ProjectId | None,
         routine_name: str | None = None,
         scope_slug: str | None = None,
         run_mode: str | None = None,
@@ -315,61 +239,6 @@ class WorkItemStore:
             statements_of(conn).select(s.work_items).where(s.work_items.c.source == source, s.work_items.c.ref == ref)
         ).one()
         return WorkItemStore._record(row)
-
-    def accept_create(
-        self,
-        *,
-        proposal_id: str,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        at: datetime,
-        chunk: Chunk,
-        reason: str | None,
-        closed_by: str,
-        transaction: LockedTransaction,
-    ) -> HubWorkItem | None:
-        """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
-        ``chunk``'s own rows in ``transaction``, which holds the proposal's key —
-        :meth:`create_with_chunk`'s shape plus the closure row, inserted first so an
-        already-closed proposal mints nothing."""
-        conn = connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id))
-        if not insert_garden_proposal_closure_row(
-            conn,
-            proposal_id=proposal_id,
-            closure=GardenProposalClosureKind.ACCEPTED,
-            reason=reason,
-            closed_by=closed_by,
-            at=at,
-            item_outcome=GardenProposalItemOutcome.MINTED,
-            pointer=pointer,
-        ):
-            return None
-        work_item_id = self._insert_item(
-            conn,
-            source=pointer.source,
-            ref=pointer.ref,
-            title=title,
-            body=body,
-            author=author,
-            stated_priority=None,
-            at=at,
-            project_id=chunk.project_id,
-        )
-        insert_chunk_rows(conn, chunk)
-        return HubWorkItem(
-            work_item_id=work_item_id,
-            project_id=chunk.project_id,
-            source=pointer.source,
-            ref=pointer.ref,
-            title=title,
-            body=body,
-            author=author,
-            stated_priority=None,
-            created_at=at,
-            edited_at=at,
-        )
 
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:

@@ -5,8 +5,9 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IReadWorkItemRepository(Protocol):
@@ -26,13 +27,13 @@ class IReadWorkItemRepository(Protocol):
 
 
 class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
-    """Read-write work item operations; creation also mints a resting chunk."""
+    """Read-write work item operations."""
 
     def allocate_ref(self, source: str) -> str:
         """Allocate a never-reused ref in its own transaction; gaps are allowed."""
         ...
 
-    def create_with_chunk(
+    def create(
         self,
         *,
         pointer: WorkRef,
@@ -41,31 +42,15 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         author: WorkItemAuthor,
         stated_priority: str | None,
         at: datetime,
-        chunk: Chunk,
+        project_id: ProjectId | None,
+        routine_name: str | None = None,
+        scope_slug: str | None = None,
+        run_mode: str | None = None,
         transaction: Transaction | None = None,
     ) -> HubWorkItem:
-        """Insert the item and its chunk atomically using an allocated ref; joins ``transaction`` when given, else
-        opens its own write."""
-        ...
-
-    def create_run_with_chunk(
-        self,
-        *,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        routine_name: str,
-        scope_slug: str,
-        run_mode: str,
-        project_id: str,
-        at: datetime,
-        chunk: Chunk,
-        errand: ErrandMark | None = None,
-        transaction: Transaction | None = None,
-    ) -> HubWorkItem:
-        """Atomically insert the item, resting chunk and routine run identity, marked with ``errand``
-        when a cadence mints it; joins ``transaction`` when given, else opens its own write."""
+        """Insert the open item at an allocated ref in ``project_id``, its chunk's project, writing only the item;
+        ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own columns, ``None`` for every other item.
+        Joins ``transaction`` when given, else opens its own write."""
         ...
 
     def edit(
@@ -93,22 +78,4 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
         """Write the item's withdrawn closure unconditionally in ``transaction``, which must hold the item's
         ``work_item_lock``: the caller has re-read it open under that key."""
-        ...
-
-    def accept_create(
-        self,
-        *,
-        proposal_id: str,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        at: datetime,
-        chunk: Chunk,
-        reason: str | None,
-        closed_by: str,
-        transaction: LockedTransaction,
-    ) -> HubWorkItem | None:
-        """Atomically mint the item, chunk and proposal closure in ``transaction``, which holds the proposal's
-        own key, or return None if already closed (insert-if-absent)."""
         ...

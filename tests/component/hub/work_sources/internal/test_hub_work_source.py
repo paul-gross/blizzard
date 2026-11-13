@@ -24,9 +24,9 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_sources import WorkItemGoneError
 from blizzard.hub.domain.garden.findings.model import FindingExitService
-from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.route import Route
@@ -83,6 +83,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
         items=items,
         work_refs=chunks.work_refs,
         record=chunks.record,
+        chunks=chunks.record,
         facts=chunks.facts,
         clock=clock,
         delete=delete,
@@ -875,6 +876,7 @@ def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock, engine:
         items=items,
         work_refs=chunks.work_refs,
         record=chunks.record,
+        chunks=chunks.record,
         facts=chunks.facts,
         clock=clock,
         delete=delete,
@@ -959,7 +961,7 @@ def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_p
 def test_every_minting_door_refuses_a_blank_title_or_body(
     tmp_path: Path, title: str, body: str, field_name: str
 ) -> None:
-    """The operator create and the garden accept-create both hold the item's non-blank text invariant, before any ref is allocated."""
+    """The operator create and the garden accept's mint draft both hold the item's non-blank text invariant, before any ref is allocated."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
     edits = _edits(items, chunks, clock, engine)
     graph = _graph(engine)
@@ -976,16 +978,8 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
             project_id=ProjectId(default_project(engine)),
         )
     with pytest.raises(WorkItemFieldBlank) as accepted:
-        edits.accept_create(
-            "gp_1",
-            title=title,
-            body=body,
-            author=author,
-            graph=graph,
-            project_id=ProjectId(default_project(engine)),
-            reason=None,
-            closed_by="operator",
-            lock=garden_proposal_lock("gp_1"),
+        edits.draft_mint(
+            RESERVED_HUB_SOURCE_NAME, title=title, body=body, graph=graph, project_id=ProjectId(default_project(engine))
         )
 
     assert {created.value.field_name, accepted.value.field_name} == {field_name}

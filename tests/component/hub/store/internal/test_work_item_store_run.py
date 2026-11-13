@@ -1,9 +1,10 @@
-"""``WorkItemStore.create_run_with_chunk`` — a routine run's own one-act mint
+"""``mint_run`` over the real stores — a routine run's own one-act mint of its item, chunk, and run context
 (component tier). Mirrors ``tests/component/hub/store/internal/test_work_item_store.py``'s shape; the chunk lands
 ``not_ready``, with no promote fact and no queue position."""
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, WorkItemAuthor, WorkItemAuthorKind, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_refs import work_ref_lock
+from blizzard.hub.domain.garden.run_mint import mint_run
+from blizzard.hub.domain.kernel.transactions import Transaction, TransactionMisuse
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -45,8 +49,41 @@ def _chunk(engine: Engine, pointer: WorkRef) -> Chunk:
     )
 
 
-def _mint(items: WorkItemStore, engine: Engine, chunk: Chunk, *, author: WorkItemAuthor, **kwargs: Any) -> None:
-    items.create_run_with_chunk(
+def _write_run(
+    items: WorkItemStore,
+    chunks: ChunkStores,
+    run_context: RunContextStore,
+    *,
+    chunk: Chunk,
+    transaction: Transaction | None = None,
+    **fields: Any,
+) -> None:
+    """:func:`mint_run` in ``transaction``'s unit, else a unit of its own, declaring the chunk's pointer keys."""
+    with nullcontext(transaction) if transaction is not None else HubTransactions(items.store).begin() as unit:
+        mint_run(
+            items,
+            chunks.record,
+            run_context,
+            chunk=chunk,
+            transaction=unit.lock_set(keys=[work_ref_lock(pointer) for pointer in chunk.work_refs]),
+            **fields,
+        )
+
+
+def _mint(
+    items: WorkItemStore,
+    chunks: ChunkStores,
+    run_context: RunContextStore,
+    engine: Engine,
+    chunk: Chunk,
+    *,
+    author: WorkItemAuthor,
+    **kwargs: Any,
+) -> None:
+    _write_run(
+        items,
+        chunks,
+        run_context,
         project_id=default_project(engine),
         pointer=chunk.work_refs[0],
         title="gardening run (full)",
@@ -73,7 +110,7 @@ def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore
 
 
 def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> None:
-    items, _chunks, run_context, engine = _stores(tmp_path)
+    items, chunks, run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk(
         [pointer],
@@ -85,7 +122,10 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
         default_effort="high",
     )
 
-    items.create_run_with_chunk(
+    _write_run(
+        items,
+        chunks,
+        run_context,
         project_id=default_project(engine),
         pointer=pointer,
         title="gardening run (full)",
@@ -113,7 +153,7 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
 
 
 def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
-    items, chunks, _run_context, engine = _stores(tmp_path)
+    items, chunks, run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk(
         [pointer],
@@ -125,7 +165,10 @@ def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) ->
         default_effort="high",
     )
 
-    items.create_run_with_chunk(
+    _write_run(
+        items,
+        chunks,
+        run_context,
         project_id=default_project(engine),
         pointer=pointer,
         title="t",
@@ -167,7 +210,10 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     )
 
     with pytest.raises(HubStoreError):
-        items.create_run_with_chunk(
+        _write_run(
+            items,
+            chunks,
+            run_context,
             project_id=default_project(engine),
             pointer=pointer,
             title="t",
@@ -188,10 +234,10 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
 
 
 def test_a_hand_started_run_carries_no_errand_mark(tmp_path: Path) -> None:
-    items, _chunks, run_context, engine = _stores(tmp_path)
+    items, chunks, run_context, engine = _stores(tmp_path)
     chunk = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
 
-    _mint(items, engine, chunk, author=WorkItemAuthor.user("usr_1"))
+    _mint(items, chunks, run_context, engine, chunk, author=WorkItemAuthor.user("usr_1"))
 
     run = run_context.for_chunk(chunk)
     assert run is not None
@@ -199,12 +245,20 @@ def test_a_hand_started_run_carries_no_errand_mark(tmp_path: Path) -> None:
 
 
 def test_a_cadence_minted_run_round_trips_its_mark_and_its_author(tmp_path: Path) -> None:
-    items, _chunks, run_context, engine = _stores(tmp_path)
+    items, chunks, run_context, engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = _chunk(engine, pointer)
     author = WorkItemAuthor.cadence("cad_1", "chr_1")
 
-    _mint(items, engine, chunk, author=author, errand=ErrandMark(cadence_id="cad_1", chore_id="chr_1"))
+    _mint(
+        items,
+        chunks,
+        run_context,
+        engine,
+        chunk,
+        author=author,
+        errand=ErrandMark(cadence_id="cad_1", chore_id="chr_1"),
+    )
 
     run = run_context.for_chunk(chunk)
     assert run is not None
@@ -222,12 +276,49 @@ def test_a_supplied_unit_carries_the_write_and_its_rollback_takes_it_back(tmp_pa
     dropped = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
 
     with transactions.begin() as unit:
-        _mint(items, engine, kept, author=WorkItemAuthor.cadence("cad_1", "chr_1"), transaction=unit)
+        _mint(
+            items, chunks, run_context, engine, kept, author=WorkItemAuthor.cadence("cad_1", "chr_1"), transaction=unit
+        )
     with pytest.raises(RuntimeError), transactions.begin() as unit:
-        _mint(items, engine, dropped, author=WorkItemAuthor.cadence("cad_1", "chr_1"), transaction=unit)
+        _mint(
+            items,
+            chunks,
+            run_context,
+            engine,
+            dropped,
+            author=WorkItemAuthor.cadence("cad_1", "chr_1"),
+            transaction=unit,
+        )
         raise RuntimeError("abort")
 
     assert run_context.for_chunk(kept) is not None
     assert chunks.record.get(kept.chunk_id) is not None
     assert items.get("hub", dropped.work_refs[0].ref) is None
     assert chunks.record.get(dropped.chunk_id) is None
+
+
+def test_a_unit_missing_the_pointers_key_is_refused_and_writes_nothing(tmp_path: Path) -> None:
+    items, chunks, run_context, engine = _stores(tmp_path)
+    chunk = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
+
+    with pytest.raises(TransactionMisuse), HubTransactions(items.store).begin() as unit:
+        mint_run(
+            items,
+            chunks.record,
+            run_context,
+            pointer=chunk.work_refs[0],
+            title="t",
+            body="b",
+            author=WorkItemAuthor.user("usr_1"),
+            project_id=default_project(engine),
+            routine_name="gardening",
+            scope_slug="blizzard",
+            run_mode="full",
+            at=_NOW,
+            chunk=chunk,
+            transaction=unit.lock_set(keys=[]),
+        )
+
+    assert items.get("hub", chunk.work_refs[0].ref) is None
+    assert chunks.record.get(chunk.chunk_id) is None
+    assert run_context.for_chunk(chunk) is None

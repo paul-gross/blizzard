@@ -71,6 +71,7 @@ from blizzard.hub.composition import (
     build_hub_core,
     build_services,
     default_forge_registry,
+    tenant_transactions,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
@@ -151,6 +152,7 @@ from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.settings import TenantSettings
+from blizzard.hub.domain.work_items.editing import mint_item
 from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
@@ -158,6 +160,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -2607,18 +2610,29 @@ def seed_work_item(
     at: datetime,
     project_id: ProjectId | None = None,
 ) -> HubWorkItem:
-    """Seed one hub-owned work item plus its resting chunk, through a :class:`WorkItemStore` over
-    ``connections``, in ``project_id`` — the tenant's only project when ``None`` — mirroring production's own
-    two-step mint (``WorkItemEditService.create``): there is no chunkless filing path to seed around. Callers
-    still seed ``graph_id``'s own row first (``seed_graph``); this only seeds the item and its chunk."""
+    """Seed one hub-owned work item plus its resting chunk, through a :class:`WorkItemStore` and a
+    :class:`ChunkRecordStore` over ``connections``, in ``project_id`` — the tenant's only project when ``None`` —
+    mirroring production's own mint (``WorkItemEditService.create``): the ref allocated first, then the mint pair in
+    one unit locking the pointer. There is no chunkless filing path to seed around. Callers still seed
+    ``graph_id``'s own row first (``seed_graph``); this only seeds the item and its chunk."""
     store = WorkItemStore(connections)
     ref = store.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
     project = project_id if project_id is not None else ProjectId(_only_project_of(connections))
     chunk = Chunk(chunk_id=f"ch_{ref}", graph_id=graph_id, work_refs=[pointer], minted_at=at, project_id=project)
-    return store.create_with_chunk(
-        pointer=pointer, title=title, body=body, author=author, stated_priority=stated_priority, at=at, chunk=chunk
-    )
+    with tenant_transactions(connections).begin() as transaction:
+        return mint_item(
+            store,
+            ChunkRecordStore(connections, FixedClock(at)),
+            pointer=pointer,
+            title=title,
+            body=body,
+            author=author,
+            stated_priority=stated_priority,
+            at=at,
+            chunk=chunk,
+            transaction=transaction.lock_set(keys=[work_ref_lock(pointer)]),
+        )
 
 
 @contextmanager

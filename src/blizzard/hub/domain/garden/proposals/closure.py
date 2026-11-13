@@ -26,6 +26,7 @@ from blizzard.hub.domain.garden.proposals.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import Urgency
@@ -229,8 +230,8 @@ class IReadGardenProposalClosureRepository(Protocol):
 
 
 class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository, Protocol):
-    """Read-write garden-proposal-closure access — the pass and accept-declining-to-mint
-    writes."""
+    """Read-write garden-proposal-closure access — the pass, accept-declining-to-mint, and
+    accept-with-mint writes."""
 
     def record_pass(
         self, proposal_id: str, *, reason: str, closed_by: str, at: datetime, transaction: LockedTransaction
@@ -245,6 +246,21 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
         """Insert the accepted-declining-to-mint closure row in `transaction`, which holds
         :func:`garden_proposal_lock`. Returns ``False`` and writes nothing when `proposal_id` already carries a
         closure — insert-if-absent."""
+        ...
+
+    def record_accept_mint(
+        self,
+        proposal_id: str,
+        *,
+        pointer: WorkRef,
+        reason: str | None,
+        closed_by: str,
+        at: datetime,
+        transaction: LockedTransaction,
+    ) -> bool:
+        """Insert the accepted-and-minted closure row naming ``pointer``, the item the accept mints, in
+        `transaction`, which holds :func:`garden_proposal_lock`. Returns ``False`` and writes nothing when
+        `proposal_id` already carries a closure — insert-if-absent."""
         ...
 
 
@@ -330,20 +346,28 @@ class GardenProposalClosureService:
         accept = MintingAccept.of(
             proposal, self._closures.get(proposal.proposal_id), reason=reason, body=body, findings=findings
         )
-        minted = self._items.accept_create(
-            proposal.proposal_id,
+        drafted = self._items.draft_mint(
+            RESERVED_HUB_SOURCE_NAME,
             title=accept.title,
             body=accept.body,
-            author=WorkItemAuthor.user(by),
             graph=self._default_graph(),
             project_id=ProjectId(proposal.project_id),
-            reason=accept.reason,
-            closed_by=by,
-            lock=garden_proposal_lock(proposal.proposal_id),
             urgency=urgency,
         )
-        if minted is None:
-            self._raise_already_closed(proposal.proposal_id, None)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[*drafted.lock_keys(), garden_proposal_lock(proposal.proposal_id)])
+            if not self._closures.record_accept_mint(
+                proposal.proposal_id,
+                pointer=drafted.pointer,
+                reason=accept.reason,
+                closed_by=by,
+                at=drafted.at,
+                transaction=locked,
+            ):
+                self._raise_already_closed(proposal.proposal_id, locked)
+            minted = self._items.mint_drafted(
+                drafted, author=WorkItemAuthor.user(by), stated_priority=None, transaction=locked
+            )
         return AcceptedGardenProposal(
             closure=GardenProposalClosure.accepted_minting(accept, minted.item, by=by), chunk_id=minted.chunk_id
         )
