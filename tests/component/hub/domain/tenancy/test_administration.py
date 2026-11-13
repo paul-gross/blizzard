@@ -40,6 +40,7 @@ from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
@@ -272,6 +273,7 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
                 HubStoreErrorFactory(structlog.get_logger("test")),
             ),
         ),
+        units=lambda tenant: HubTransactions(hub_level_connections(hub.engine).scoped(StoreScope(tenant))),
         mint_packaged=mint_then_fail,
         changed=hub.hub_services.tenants.open_tenants.refresh,
         pick=first_color,

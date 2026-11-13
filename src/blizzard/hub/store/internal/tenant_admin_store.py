@@ -21,6 +21,8 @@ from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTran
 from blizzard.hub.auth.memberships import MembershipFact
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import IWriteProjectRepository
 from blizzard.hub.domain.tenancy.administration import (
     ITenantCreation,
@@ -48,6 +50,7 @@ from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStor
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_for
 from blizzard.hub.tenancy import StoreScope, TenantId
 
 _t = s.tenants.c
@@ -131,16 +134,14 @@ class TenantAdministrationStore:
             ).all()
         return [_tenant(row) for row in rows]
 
-    def rename(self, tenant: TenantId, name: str) -> Tenant | None:
-        with self._store.write("rename_tenant") as conn:
-            row = conn.execute(
-                update(s.tenants)
-                .where(_t.tenant_id == tenant, ~_DELETING)
-                .values(name=name)
-                .returning(_t.tenant_id, _t.name, _t.created_at, _t.created_by)
-            ).one_or_none()
-        if row is None:
-            return None
+    def rename(self, transaction: Transaction, tenant: TenantId, name: str) -> Tenant:
+        conn = connection_for(self._store.scoped(StoreScope(tenant)), transaction)
+        row = conn.execute(
+            update(s.tenants)
+            .where(_t.tenant_id == tenant)
+            .values(name=name)
+            .returning(_t.tenant_id, _t.name, _t.created_at, _t.created_by)
+        ).one()
         return Tenant(
             tenant_id=TenantId(row.tenant_id),
             name=row.name,
@@ -151,7 +152,7 @@ class TenantAdministrationStore:
 
     @contextmanager
     def create(self, tenant: TenantId, *, name: str, at: datetime, by: str) -> Generator[ITenantCreation, None, None]:
-        with self._identity.begin() as writes:
+        with self._identity.begin(hub=[HubLock.TENANT_LIFECYCLE]) as writes:
             connections = writes.tenant_connections(StoreScope(tenant))
             with connections.founding("create_tenant", name=name, created_at=at, created_by=by):
                 pass

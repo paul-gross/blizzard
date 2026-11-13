@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import Placement
@@ -54,7 +55,9 @@ class _FakeChunkRepo:
     def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
-    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:
+    def lock_set(
+        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+    ) -> LockedTransaction:
         self.locks.append((sorted(chunks), list(keys)))
         return cast(LockedTransaction, self)
 

@@ -34,6 +34,7 @@ from blizzard.hub.auth.models import (
 )
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.auth.service import PROVIDER_LOGIN_STATE_KIND, AuthService
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 
@@ -234,7 +235,7 @@ class _FakeTransactions:
         self.writes = writes
 
     @contextmanager
-    def begin(self) -> Generator[IdentityWrites]:
+    def begin(self, *, hub: Sequence[HubLock] = ()) -> Generator[IdentityWrites]:
         yield self.writes
 
 

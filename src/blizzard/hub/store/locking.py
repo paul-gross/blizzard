@@ -2,9 +2,11 @@
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import statements_of
 
@@ -27,3 +29,19 @@ def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
             except IntegrityError:
                 pass
         conn.execute(stmts.update(lock).where(named).values(key=key))
+
+
+class HubLockMissing(RuntimeError):
+    """Raised when a hub lock's seeded row is absent: the store was never migrated to the revision that seeds it."""
+
+    def __init__(self, lock: HubLock) -> None:
+        super().__init__(f"the hub store holds no {lock.value} lock row; run `blizzard hub migrate` before writing")
+        self.lock = lock
+
+
+def lock_hub(conn: Connection, lock: HubLock) -> None:
+    """Take a hub-level lock: a no-op ``UPDATE`` of its seeded row. Never inserts — a missing row means the store was
+    not migrated (``bzh:manual-migrations``)."""
+    locked = conn.execute(sa.update(s.hub_locks).where(s.hub_locks.c.name == lock.value).values(name=lock.value))
+    if locked.rowcount == 0:
+        raise HubLockMissing(lock)

@@ -669,12 +669,17 @@ class TenantStores:
         return self.connections.scope
 
 
+def tenant_transactions(connections: ScopedConnections) -> HubTransactions:
+    """The one place a tenant's ordinary unit-of-work opener is constructed."""
+    return HubTransactions(connections)
+
+
 def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> TenantStores:
     """Build the :class:`TenantStores` of the tenant ``connections`` is scoped to."""
     registry = RunnerRegistryStore(connections)
     hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
-    transactions = HubTransactions(connections)
+    transactions = tenant_transactions(connections)
     chunk_stores = build_chunk_stores(connections, clock, registry=registry, transactions=transactions)
     cycle_lock = threading.Lock()
     delete = DeleteService(
@@ -1866,8 +1871,14 @@ def build_services(
     hub_admins = HubAdministrators(
         hub_admins=hub_admin_store, users=user_store, transactions=identity_transactions, clock=clock
     )
+
+    def tenant_unit(tenant: TenantId) -> HubTransactions:
+        # The tenant's ordinary unit of work, opened by the domain for a rename or a close.
+        return tenant_transactions(store_connections.scoped(StoreScope(tenant)))
+
     tenant_admin = TenantAdministration(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
+        units=tenant_unit,
         mint_packaged=packaged_minter(clock, YAML_CODEC, actions.catalogue),
         changed=open_tenants.refresh,
         pick=color_pick,
@@ -1881,7 +1892,13 @@ def build_services(
         open_tenants.refresh()
 
     teardown_store = TenantTeardownStore(store_connections)
-    tenant_teardown = TenantTeardown(teardowns=teardown_store, closed=forget_closed, events=hub_event_log, clock=clock)
+    tenant_teardown = TenantTeardown(
+        teardowns=teardown_store,
+        units=tenant_unit,
+        closed=forget_closed,
+        events=hub_event_log,
+        clock=clock,
+    )
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     login_throttle = login_throttle or LoginThrottleConfig()

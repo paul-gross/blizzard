@@ -6,13 +6,13 @@ not at all:
 transaction, committed when the block exits and rolled back when it raises. A tenant-owned write the same change makes
 — the fact that an invitation was accepted, a new tenant's own rows — joins that transaction through
 :attr:`IdentityWrites.tenant_connections`, and lands or rolls back with the identity writes. Units of work serialize:
-each takes the identity lock before its first read, so a rule checked inside one — the last hub administrator, a
+each takes the ``IDENTITY`` lock before its first read, so a rule checked inside one — the last hub administrator, a
 tenant's last admin — still holds when its writes commit. The concrete adapter lives at
 ``src/blizzard/hub/auth/internal/identity_transaction.py`` (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
@@ -24,6 +24,7 @@ from blizzard.hub.auth.memberships import IWriteMembershipRepository
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope
 
@@ -50,7 +51,8 @@ class IdentityWrites:
 class IIdentityTransactions(Protocol):
     """Opens identity units of work."""
 
-    def begin(self) -> AbstractContextManager[IdentityWrites]:
-        """One transaction over every identity write, holding the identity lock from its first statement: committed
-        when the block exits, rolled back when it raises."""
+    def begin(self, *, hub: Sequence[HubLock] = ()) -> AbstractContextManager[IdentityWrites]:
+        """One transaction over every identity write, holding the ``IDENTITY`` lock from its first statement and then
+        each lock in ``hub`` (only ``TENANT_LIFECYCLE`` is admitted): committed when the block exits, rolled back when
+        it raises."""
         ...

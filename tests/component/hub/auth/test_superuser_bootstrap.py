@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import insert, select
@@ -192,10 +193,10 @@ def _before_the_claims_unit(monkeypatch: pytest.MonkeyPatch, step: Callable[[], 
     """Run ``step`` once, after the claim's unlocked check and before its unit of work takes the identity lock."""
     begin = IdentityTransactions.begin
 
-    def begin_after_step(self: IdentityTransactions):
+    def begin_after_step(self: IdentityTransactions, **named: Any):
         monkeypatch.setattr(IdentityTransactions, "begin", begin)
         step()
-        return begin(self)
+        return begin(self, **named)
 
     monkeypatch.setattr(IdentityTransactions, "begin", begin_after_step)
 

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.domain.kernel.transactions import (
     GraduationError,
     IHubTransactions,
@@ -17,7 +18,7 @@ from blizzard.hub.domain.kernel.transactions import (
     Transaction,
     TransactionMisuse,
 )
-from blizzard.hub.store.locking import lock_chunk_row, lock_keys
+from blizzard.hub.store.locking import lock_chunk_row, lock_hub, lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -30,6 +31,7 @@ class _Unit:
         self.graduated = False
         self.chunks: frozenset[str] = frozenset()
         self.keys: frozenset[tuple[str, str]] = frozenset()
+        self.hub: frozenset[HubLock] = frozenset()
 
     def account(self, *args: Any, **kwargs: Any) -> None:
         self.statements = True
@@ -45,19 +47,30 @@ class _Transaction:
     def lock_keys(self, namespace: str, keys: Sequence[str]) -> LockedTransaction:
         return self.lock_set(keys=[(namespace, key) for key in keys])
 
-    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:
+    def lock_set(
+        self,
+        *,
+        chunks: Sequence[str] = (),
+        keys: Sequence[tuple[str, str]] = (),
+        hub: Sequence[HubLock] = (),
+    ) -> LockedTransaction:
         unit = self.unit
         if not unit.active:
             raise TransactionMisuse("transaction is no longer active")
         if unit.statements or unit.graduated:
             raise GraduationError("locks must be declared once before repository statements")
+        if any(lock is not HubLock.TENANT_LIFECYCLE for lock in hub):
+            raise TransactionMisuse("a tenant unit may name only the tenant lifecycle lock")
         unit.graduated = True
+        unit.hub = frozenset(hub)
         unit.chunks = frozenset(chunks)
         unit.keys = frozenset(keys)
         for chunk_id in sorted(unit.chunks):
             lock_chunk_row(unit.conn, chunk_id)
         for namespace, key in sorted(unit.keys):
             lock_keys(unit.conn, namespace, [key])
+        for lock in sorted(unit.hub):
+            lock_hub(unit.conn, lock)
         return _LockedTransaction(unit)
 
 
@@ -122,6 +135,7 @@ def connection_for(
     *,
     chunk: str | None = None,
     key: tuple[str, str] | None = None,
+    hub: HubLock | None = None,
 ) -> Connection:
     """Resolve a token only for its originating store, lifetime, and requested lock coverage."""
     if not isinstance(transaction, _Transaction):
@@ -135,6 +149,8 @@ def connection_for(
         raise TransactionMisuse("transaction does not lock this chunk")
     if key is not None and (not isinstance(transaction, _LockedTransaction) or key not in unit.keys):
         raise TransactionMisuse("transaction does not lock this key")
+    if hub is not None and (not isinstance(transaction, _LockedTransaction) or hub not in unit.hub):
+        raise TransactionMisuse("transaction does not lock this hub lock")
     return unit.conn
 
 

@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from typing import Protocol
 
+from blizzard.hub.domain.kernel.locks import HubLock
+
 
 class TransactionMisuse(RuntimeError):
     """A transaction was used outside its lifetime or without the required authority."""
@@ -27,7 +29,16 @@ class Transaction(Protocol):
 
     def lock_keys(self, namespace: str, keys: Sequence[str]) -> "LockedTransaction": ...
 
-    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> "LockedTransaction": ...
+    def lock_set(
+        self,
+        *,
+        chunks: Sequence[str] = (),
+        keys: Sequence[tuple[str, str]] = (),
+        hub: Sequence[HubLock] = (),
+    ) -> "LockedTransaction":
+        """Declare the unit's locks, taken in order: chunks, then keys, then ``hub``. A tenant unit may name only
+        ``TENANT_LIFECYCLE`` in ``hub``."""
+        ...
 
 
 class LockedTransaction(Transaction, Protocol):
