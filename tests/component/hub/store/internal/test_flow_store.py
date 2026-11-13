@@ -444,12 +444,12 @@ def test_the_rows_a_turn_reads_for_earlier_terms_do_not_grow_with_the_visits_his
 def test_new_epoch_takes_new_allow_no_ci_terms(world: _World, flows: FlowStore) -> None:
     first = world.submit("ch_1")
     assert first is not None
-    turn = _turn(flows, first.submission_id, (_TERMS_A,))
+    turn = _turn(world, first, (_TERMS_A,))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
     next_visit = world.submit("ch_1", epoch=2)
     assert next_visit is not None
     changed = LandingTerms("repo_a", "merge-on-checks", None, 1.0, False)
-    _turn(flows, next_visit.submission_id, (changed,))
+    _turn(world, next_visit, (changed,))
     assert flows.terms_of(next_visit.submission_id) == {"repo_a": changed}
 
 
@@ -457,10 +457,10 @@ def test_requeue_in_same_epoch_retains_allow_no_ci_terms(world: _World, flows: F
     first = world.submit("ch_1")
     assert first is not None
     original = LandingTerms("repo_a", "merge-on-checks", None, 1.0, True)
-    turn = _turn(flows, first.submission_id, (original,))
+    turn = _turn(world, first, (original,))
     flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
     requeued = world.submit("ch_1", generation=1)
     assert requeued is not None
     changed = LandingTerms("repo_a", "merge-on-checks", None, 1.0, False)
-    _turn(flows, requeued.submission_id, (changed,))
+    _turn(world, requeued, (changed,))
     assert flows.terms_of(requeued.submission_id) == {"repo_a": original}
