@@ -7,9 +7,10 @@ runner-held one."""
 
 from __future__ import annotations
 
+import json
+
 # The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
-import json
 import threading
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
