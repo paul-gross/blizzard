@@ -7,6 +7,7 @@ that key."""
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import NewType, Protocol
@@ -22,6 +23,7 @@ from blizzard.hub.domain.config.changes import (
     FieldChange,
     RecordKind,
 )
+from blizzard.hub.domain.config.credential_naming import CredentialId, credential_lock, require_link_kept
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId, forge_lock
 from blizzard.hub.domain.config.secrets import secret_lock
@@ -30,7 +32,7 @@ from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 WorkSourceId = NewType("WorkSourceId", str)
@@ -42,15 +44,19 @@ KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 #: Providers whose items cannot be read without a credential.
 PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})
 
+#: The credential bindings each provider can act with; a provider absent here acts with none.
+PROVIDER_BINDINGS: Mapping[str, frozenset[str]] = {"github": frozenset({"github.token"})}
+
 _GITHUB_LOCATOR = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("provider", "locator", "forge_id", "annotate", "secret")
 #: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
 #: recorded by its id under ``forge``, as every reference is held.
-_DIFF_FIELDS = ("slug", "name", "provider", "locator", "forge", "annotate", "secret")
-#: The wire name a field's change is listed under, where it differs from the field's own.
-_DIFF_NAMES = {"forge": "forge_id"}
+#: The credential is recorded by its id under ``credential``.
+_DIFF_FIELDS = ("slug", "name", "provider", "locator", "forge", "annotate", "secret", "credential")
+#: The field a change listed under a wire name reads, where it differs from the wire name.
+_DIFF_NAMES = {"forge": "forge_id", "credential": "credential_id"}
 
 
 class WorkSourceSlugTaken(Exception):
@@ -133,28 +139,36 @@ type IWorkSourceLookup = IIdOrSlugLookup[WorkSourceId, WorkSourceSlug, Configure
 @dataclass(frozen=True)
 class WorkSourceFields:
     """The mutable fields of a work source: its provider and locator, the forge whose tracker it reads, by id — of the
-    provider's kind — and its credential."""
+    provider's kind — and its credential: ``credential_id`` is the one it acts with, ``None`` on a record no write has
+    yet named one for, and ``secret`` mirrors that credential's secret."""
 
     provider: str
     locator: str
     forge_id: ForgeId
     annotate: bool
     secret: str | None
+    credential_id: CredentialId | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class WorkSourceDraft:
-    """A work source's fields before its forge is resolved — every field but the forge."""
+    """A work source's fields before its forge and credential are resolved — every field but the forge, with the old
+    ``secret`` field ``None`` when the write sent none."""
 
     provider: str
     locator: str
     annotate: bool
     secret: str | None
 
-    def on(self, forge_id: ForgeId) -> WorkSourceFields:
-        """The fields of a work source reading its tracker on the forge ``forge_id``."""
-        return WorkSourceFields(self.provider, self.locator, forge_id, self.annotate, self.secret)
+    def on(
+        self, forge_id: ForgeId, *, credential_id: CredentialId | None = None, secret: str | None = None
+    ) -> WorkSourceFields:
+        """The fields of a work source reading its tracker on the forge ``forge_id``, acting with ``credential_id`` and
+        its ``secret`` when one is given, else with the draft's own secret."""
+        return WorkSourceFields(
+            self.provider, self.locator, forge_id, self.annotate, secret or self.secret, credential_id
+        )
 
 
 @domain_model
@@ -176,10 +190,14 @@ class ConfiguredWorkSource:
     retired: bool = False
 
     def locks(self) -> list[LockKey]:
-        """The keyed locks a write of the work source relies on: the forge's it names, and the secret's when it names
-        one."""
-        secret = self.fields.secret
-        return [forge_lock(self.fields.forge_id), *([] if secret is None else [secret_lock(secret)])]
+        """The keyed locks a write of the work source relies on: the forge's it names, and the secret's and the
+        credential's when it names one."""
+        secret, credential = self.fields.secret, self.fields.credential_id
+        return [
+            forge_lock(self.fields.forge_id),
+            *([] if secret is None else [secret_lock(secret)]),
+            *([] if credential is None else [credential_lock(credential)]),
+        ]
 
     @classmethod
     def new(
@@ -216,10 +234,20 @@ class ConfiguredWorkSource:
         self, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[ConfiguredWorkSource, ConfigChange] | None:
         """Apply a sparse edit, legal from either state. The revision check comes first, even
-        for an edit that changes nothing; an empty diff never re-validates the stored fields."""
+        for an edit that changes nothing; an empty diff never re-validates the stored fields. On a record naming a
+        credential, an edit naming none may move neither its forge nor its secret
+        (:func:`~blizzard.hub.domain.config.credential_naming.require_link_kept`)."""
         self.require_revision(if_match)
         slug, name = merge_labels(self, edit)
-        edited = replace(self, slug=slug, name=name, fields=merge(self.fields, edit))
+        fields = merge(self.fields, edit)
+        require_link_kept(
+            self.fields.credential_id,
+            edit.credential_id,
+            (self.fields.forge_id, fields.forge_id),
+            (self.fields.secret, fields.secret),
+            secret_field="secret",
+        )
+        edited = replace(self, slug=slug, name=name, fields=fields)
         changes = diff(self, edited)
         if not changes:
             return None
@@ -271,6 +299,7 @@ class WorkSourceEdit:
     forge_id: ForgeId | UnsetType = UNSET
     annotate: bool | UnsetType = UNSET
     secret: str | None | UnsetType = UNSET
+    credential_id: CredentialId | UnsetType = UNSET
 
 
 def is_built_in(key: str) -> bool:
@@ -312,6 +341,7 @@ def merge(current: WorkSourceFields, edit: WorkSourceEdit) -> WorkSourceFields:
         forge_id=_merged_required("forge_id", current.forge_id, edit.forge_id),
         annotate=_merged_required("annotate", current.annotate, edit.annotate),
         secret=current.secret if edit.secret is UNSET else edit.secret,
+        credential_id=current.credential_id if isinstance(edit.credential_id, UnsetType) else edit.credential_id,
     )
 
 
@@ -371,6 +401,13 @@ class IReadWorkSourceRepository(Protocol):
 
     def resolve(self, value: str) -> ConfiguredWorkSource | None:
         """The work source an id or slug names (:func:`resolve_work_source_reference`)."""
+        ...
+
+    def naming_credential(
+        self, credential_id: CredentialId, *, transaction: Transaction | None = None
+    ) -> list[ConfiguredWorkSource]:
+        """Every work source acting with ``credential_id``, retired ones included, ordered by slug — read in
+        ``transaction`` when one is given."""
         ...
 
 

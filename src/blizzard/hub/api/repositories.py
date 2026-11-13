@@ -126,7 +126,7 @@ def create_repository(
     try:
         record = services.config_authoring.create_repository_naming(
             request.slug, request.name, draft, forge_choice(request, services), change_context(identity, door)
-        )
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (RepositorySlugTaken, RepositoryCoordinateTaken) as exc:
@@ -164,7 +164,7 @@ def patch_repository(
     try:
         edited = services.config_authoring.edit_repository_naming(
             record, edit, forge_choice(request, services), change_context(identity, door), if_match=if_match
-        )
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, RepositoryCoordinateTaken, RepositorySlugTaken) as exc:

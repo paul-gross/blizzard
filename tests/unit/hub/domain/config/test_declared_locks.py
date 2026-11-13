@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -17,6 +17,7 @@ from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.apply import (
+    ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
     ForgeDeclaration,
@@ -38,6 +39,7 @@ from blizzard.hub.domain.config.carry_over import (
     SealedSecretWrite,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
+from blizzard.hub.domain.config.credential_naming import CredentialConflict, CredentialId, credential_lock
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, forge_lock
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import (
@@ -134,6 +136,46 @@ def test_an_apply_plan_writing_nothing_beside_its_urgencies_declares_their_keys_
     plan = reconcile(ConfigDeclaration(urgencies=ApplyPlan(locks=_URGENCY_LOCKS)), _STORED, _CTX, at=_AT)
 
     assert plan.locks == tuple(sorted(_URGENCY_LOCKS))
+
+
+_LINKED = ConfiguredRepository(
+    repository_id=RepositoryId("repo_demo"),
+    slug="demo",
+    name="demo",
+    fields=replace(_REPO, credential_id=CredentialId("cred_demo")),
+    revision=2,
+    created_at=_AT,
+    created_by="op",
+)
+
+
+def _linked_edit(edit: RepositoryEdit) -> ConfigDeclaration:
+    """A document editing the stored repository ``demo``, which acts with the credential ``cred_demo``."""
+    return ConfigDeclaration(
+        repositories=(RepositoryDeclaration("demo", None, _LINKED.fields, edit, _LINKED.repository_id),),
+        urgencies=ApplyPlan(locks=_URGENCY_LOCKS),
+    )
+
+
+def test_an_apply_plan_editing_a_repository_naming_a_credential_declares_the_credential_s_key() -> None:
+    stored = replace(_STORED, repositories={"demo": _LINKED})
+
+    plan = reconcile(_linked_edit(RepositoryEdit(base_branch="main")), stored, _CTX, at=_AT)
+
+    assert plan.locks == tuple(
+        sorted({*_URGENCY_LOCKS, forge_lock(_GHE), secret_lock("repo-tok"), credential_lock(CredentialId("cred_demo"))})
+    )
+
+
+def test_an_apply_entry_moving_the_secret_of_a_repository_naming_a_credential_is_refused_at_its_entry() -> None:
+    stored = replace(
+        _STORED, repositories={"demo": _LINKED}, secrets={**_STORED.secrets, "other-tok": RecordState.ACTIVE}
+    )
+
+    with pytest.raises(ApplyEntryRefused) as caught:
+        reconcile(_linked_edit(RepositoryEdit(secret_name="other-tok")), stored, _CTX, at=_AT)
+
+    assert isinstance(caught.value.__cause__, CredentialConflict)
 
 
 def _forge() -> tuple[ConfiguredForge, Any]:

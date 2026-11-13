@@ -20,15 +20,14 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.credential_naming import CredentialId, credential_lock
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialAuthorityTaken,
     CredentialFields,
-    CredentialId,
     CredentialSlug,
     CredentialSlugTaken,
     IWriteCredentialRepository,
-    credential_lock,
     resolve_credential_reference,
 )
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
@@ -277,6 +276,24 @@ class CredentialRecordStore:
 
     def resolve(self, value: str) -> ConfiguredCredential | None:
         return resolve_credential_reference(value, self)
+
+    def get_by_authority(
+        self, forge_id: ForgeId, authority: str, *, transaction: Transaction | None = None
+    ) -> ConfiguredCredential | None:
+        with connection_in(self._store, transaction, "get_by_authority") as conn:
+            row = conn.execute(
+                statements_of(conn)
+                .select(credentials)
+                .where(credentials.c.forge_id == forge_id, credentials.c.authority == authority)
+            ).first()
+            return None if row is None else _reconstituted(conn, row)
+
+    def held_slugs(self, *, transaction: Transaction | None = None) -> frozenset[str]:
+        with connection_in(self._store, transaction, "held_slugs") as conn:
+            stmts = statements_of(conn)
+            current = conn.execute(stmts.select(credentials, credentials.c.slug)).scalars()
+            former = conn.execute(stmts.select(credential_former_slugs, credential_former_slugs.c.slug)).scalars()
+            return frozenset([*current, *former])
 
 
 def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredCredential:

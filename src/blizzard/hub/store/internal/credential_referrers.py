@@ -13,7 +13,8 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
-from blizzard.hub.domain.config.credentials import CredentialId, ICredentialReferences
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import ICredentialReferences
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (

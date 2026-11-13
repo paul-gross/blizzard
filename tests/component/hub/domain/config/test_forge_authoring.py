@@ -149,7 +149,7 @@ def test_an_address_field_on_an_edit_is_refused_naming_the_records_forge(world: 
     forge = world.ghe()
     source = world.authoring.create_work_source_naming(
         "demo", None, _SOURCE, ForgeChoice(forge="ghe", named=forge), _CLI
-    )
+    ).record
     choice = ForgeChoice(moved=(MovedField("api_base", GITHUB_API_BASE),))
     with pytest.raises(FieldMovedToForge, match="forge ghe"):
         world.authoring.edit_work_source_naming(source, WorkSourceEdit(annotate=True), choice, _CLI)
@@ -171,7 +171,7 @@ def test_a_work_source_naming_its_forge_needs_one_of_its_providers_kind(world: _
     forge = world.ghe()
     source = world.authoring.create_work_source_naming(
         "demo", None, _SOURCE, ForgeChoice(forge="ghe", named=forge), _CLI
-    )
+    ).record
     assert source.fields.forge_id == forge.forge_id
     with pytest.raises(ForgeUnavailable, match="forge nope is unknown"):
         world.authoring.create_work_source_naming("other", None, _SOURCE, ForgeChoice(forge="nope"), _CLI)

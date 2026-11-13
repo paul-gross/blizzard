@@ -236,7 +236,7 @@ def create_work_source(
     try:
         record = services.config_authoring.create_work_source_naming(
             request.slug, request.name, draft, forge_choice(request, services), change_context(identity, door)
-        )
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
@@ -275,7 +275,7 @@ def patch_work_source(
     try:
         edited = services.config_authoring.edit_work_source_naming(
             record, edit, forge_choice(request, services), change_context(identity, door), if_match=if_match
-        )
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:

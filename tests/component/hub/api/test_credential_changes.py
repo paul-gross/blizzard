@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialEdit
+from blizzard.hub.domain.config.credentials import (
+    CredentialDraft,
+    CredentialEdit,
+)
 from blizzard.hub.domain.config.forges import ForgeFields
 from tests.support.scaffolding import FIXTURE_FORGE_SECRET, HubHarness, build_hub, ensure_fixture_secret
 

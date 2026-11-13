@@ -78,10 +78,14 @@ class ForgeCapabilityMissing(ConfigFieldError):
 
     code = "forge_capability_missing"
 
-    def __init__(self, policy: LandingPolicy, forge: str, missing: Iterable[Capability]) -> None:
+    def __init__(
+        self, policy: LandingPolicy, forge: str, missing: Iterable[Capability], *, credential: str | None = None
+    ) -> None:
         self.missing = tuple(sorted(missing))
+        self.credential = credential
         names = ", ".join(self.missing)
-        super().__init__("landing_policy", f"policy {policy} needs {names}, which forge {forge} doesn't offer")
+        through = "" if credential is None else f" through credential {credential}"
+        super().__init__("landing_policy", f"policy {policy} needs {names}, which forge {forge} doesn't offer{through}")
 
 
 def parse_policy(raw: str) -> LandingPolicy:
@@ -98,11 +102,14 @@ def missing_capabilities(policy: LandingPolicy, offered: frozenset[Capability]) 
     return POLICY_CAPABILITIES[policy].requires - offered
 
 
-def require_offered(policy: LandingPolicy, offered: frozenset[Capability], *, forge: str) -> None:
-    """:class:`ForgeCapabilityMissing` when ``offered`` lacks any capability ``policy`` requires."""
+def require_offered(
+    policy: LandingPolicy, offered: frozenset[Capability], *, forge: str, credential: str | None = None
+) -> None:
+    """:class:`ForgeCapabilityMissing` when ``offered`` — what ``forge`` offers, through ``credential`` when one is
+    named — lacks any capability ``policy`` requires."""
     missing = missing_capabilities(policy, offered)
     if missing:
-        raise ForgeCapabilityMissing(policy, forge, missing)
+        raise ForgeCapabilityMissing(policy, forge, missing, credential=credential)
 
 
 def landing_sort_key(position: float | None, slug: str) -> tuple[bool, float, str]:

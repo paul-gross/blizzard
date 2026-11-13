@@ -19,6 +19,7 @@ from tests.support.scaffolding import (
     build_hub,
     count_queries,
     ensure_fixture_secret,
+    retire_credential,
     seed_session,
     seed_user,
 )
@@ -102,9 +103,12 @@ def test_coded_fields_collisions_and_retirement_refs(hub: HubHarness) -> None:
     conflict = hub.client.post("/api/forges/ghe/retire")
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["code"] == "forge_in_use"
-    assert conflict.json()["detail"]["referrers"] == detail["repositories"] + detail["work_sources"]
+    referrers = conflict.json()["detail"]["referrers"]
+    assert [ref["kind"] for ref in referrers[:1]] == ["credential"]
+    assert referrers[1:] == detail["repositories"] + detail["work_sources"]
     assert hub.client.post("/api/repositories/demo/retire").status_code == 200
     assert hub.client.post("/api/work-sources/issues/retire").status_code == 200
+    retire_credential(hub.services, FIXTURE_FORGE_SECRET)
     assert hub.client.post("/api/forges/ghe/retire").json()["retired"] is True
     assert hub.client.get("/api/forges").json()["forges"] == []
     assert (
@@ -129,7 +133,8 @@ def test_forge_diff_labels_are_current_and_missing_ids_remain_null(hub: HubHarne
         },
     )
     assert repository.status_code == 201, repository.text
-    assert hub.client.patch("/api/repositories/demo", json={"forge": "other"}).status_code == 200
+    moved = hub.client.patch("/api/repositories/demo", json={"forge": "other", "secret_name": FIXTURE_FORGE_SECRET})
+    assert moved.status_code == 200, moved.text
     assert hub.client.patch("/api/forges/other", json={"slug": "renamed", "name": "Second Forge"}).status_code == 200
     changes = hub.client.get("/api/config/changes", params={"record_kind": "repository"}).json()["changes"]
     forge_diff = next(diff for diff in changes[0]["diff"] if diff["field"] == "forge")

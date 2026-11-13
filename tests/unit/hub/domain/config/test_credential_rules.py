@@ -15,13 +15,13 @@ from blizzard.hub.domain.config.credential_bindings import (
     FINE_GRAINED_WITHHELD,
     CredentialSettingsInvalid,
 )
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialBindingImmutable,
     CredentialBindingUnknown,
     CredentialDraft,
     CredentialEdit,
-    CredentialId,
     binding_named,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict

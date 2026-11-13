@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.cli import hub as hub_group
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import retire_credential
 from tests.support.worker_http import Bound, bind_stubs
 
 _HUB = "http://hub.local:8421"
@@ -116,6 +117,7 @@ def test_retire_enable_and_the_change_log(client: TestClient) -> None:
     assert "retired" in _repo(["retire", "blizzard"]).output
     assert "blizzard" not in _repo(["list"]).output
     assert "blizzard" in _repo(["list", "--include-retired"]).output
+    retire_credential(client, "gh-test")
     assert _cli("secret", ["retire", "gh-test"]).exit_code == 0
     refused = _repo(["enable", "blizzard"])
     assert refused.exit_code != 0

@@ -265,6 +265,10 @@ def test_two_tenants_hold_a_credential_alike_and_each_reads_and_writes_only_its_
     assert second.store.get(stranger.credential_id) == retired_stranger
     with hub.engine.connect() as conn:
         rows = conn.execute(
-            hub_scoped(sa.select(credentials.c.tenant_id, credentials.c.name, credentials.c.revision))
+            hub_scoped(
+                sa.select(credentials.c.tenant_id, credentials.c.name, credentials.c.revision).where(
+                    credentials.c.name == "deploy-old"
+                )
+            )
         ).all()
     assert sorted(rows) == sorted([(tenants[0].tenant, "deploy-old", 2), (tenants[1].tenant, "deploy-old", 3)])

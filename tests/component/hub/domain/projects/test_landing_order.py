@@ -69,7 +69,7 @@ class _World:
 
     def _repository(self, name: str) -> ConfiguredRepository:
         draft = RepositoryDraft(owner="acme", repo=name, base_branch="main", secret_name="forge-token")
-        return self.config.create_repository_naming(name, None, draft, _on_github(self.engine), OP)
+        return self.config.create_repository_naming(name, None, draft, _on_github(self.engine), OP).record
 
     def order(self) -> list[tuple[str, float | None]]:
         return [(link.slug, link.position) for link in self.positions.landing_links(self.project.project_id).links]

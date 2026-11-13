@@ -26,6 +26,7 @@ from blizzard.hub.domain.config.changes import (
     FieldChange,
     RecordKind,
 )
+from blizzard.hub.domain.config.credential_naming import CredentialId, credential_lock, require_link_kept
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, forge_lock
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, PARKING_POLICIES, parse_policy
@@ -34,7 +35,7 @@ from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 RepositoryId = NewType("RepositoryId", str)
@@ -44,10 +45,10 @@ _FIELDS = ("forge_id", "owner", "repo", "base_branch", "secret_name")
 #: The landing fields, listed after the text fields.
 _LANDING_FIELDS = ("landing_policy", "park_timeout_hours", "allow_no_ci")
 #: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
-#: recorded by its id under ``forge``, as every reference is held.
-_DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:], *_LANDING_FIELDS)
-#: The wire name a field's change is listed under, where it differs from the field's own.
-_DIFF_NAMES = {"forge": "forge_id"}
+#: recorded by its id under ``forge``, as every reference is held, and the credential by its id under ``credential``.
+_DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:], *_LANDING_FIELDS, "credential")
+#: The field a change listed under a wire name reads, where it differs from the wire name.
+_DIFF_NAMES = {"forge": "forge_id", "credential": "credential_id"}
 
 
 class RepositorySlugTaken(Exception):
@@ -116,7 +117,9 @@ type IRepositoryLookup = IIdOrSlugLookup[RepositoryId, RepositorySlug, Configure
 @dataclass(frozen=True)
 class RepositoryFields:
     """The mutable fields of a repository: the forge it lives on, by id, its coordinate and credential there, and how
-    work lands into it. ``park_timeout_hours`` of ``None`` is unset, read as the default."""
+    work lands into it. ``park_timeout_hours`` of ``None`` is unset, read as the default. ``credential_id`` is the
+    credential it acts with — ``None`` on a record no write has yet named one for — and ``secret_name`` mirrors that
+    credential's secret."""
 
     forge_id: ForgeId
     owner: str
@@ -126,32 +129,38 @@ class RepositoryFields:
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     park_timeout_hours: int | None = None
     allow_no_ci: bool = False
+    credential_id: CredentialId | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class RepositoryDraft:
-    """A repository's fields before its forge is resolved — every field but the forge."""
+    """A repository's fields before its forge and credential are resolved — every field but the forge, with the old
+    ``secret_name`` field ``None`` when the write sent none."""
 
     owner: str
     repo: str
     base_branch: str
-    secret_name: str
+    secret_name: str | None
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     park_timeout_hours: int | None = None
     allow_no_ci: bool = False
 
-    def on(self, forge_id: ForgeId) -> RepositoryFields:
-        """The fields of a repository on the forge ``forge_id``."""
+    def on(
+        self, forge_id: ForgeId, *, credential_id: CredentialId | None = None, secret_name: str = ""
+    ) -> RepositoryFields:
+        """The fields of a repository on the forge ``forge_id``, acting with ``credential_id`` and its ``secret_name``
+        when one is given, else with the draft's own secret."""
         return RepositoryFields(
             forge_id,
             self.owner,
             self.repo,
             self.base_branch,
-            self.secret_name,
+            secret_name or self.secret_name or "",
             self.landing_policy,
             self.park_timeout_hours,
             self.allow_no_ci,
+            credential_id,
         )
 
 
@@ -176,8 +185,14 @@ class ConfiguredRepository:
     retired_at: datetime | None = None
 
     def locks(self) -> list[LockKey]:
-        """The keyed locks a write of the repository relies on: the forge's and the secret's it names."""
-        return [forge_lock(self.fields.forge_id), secret_lock(self.fields.secret_name)]
+        """The keyed locks a write of the repository relies on: the forge's and the secret's it names, and the
+        credential's when it names one."""
+        credential = self.fields.credential_id
+        return [
+            forge_lock(self.fields.forge_id),
+            secret_lock(self.fields.secret_name),
+            *([] if credential is None else [credential_lock(credential)]),
+        ]
 
     @classmethod
     def new(
@@ -214,10 +229,19 @@ class ConfiguredRepository:
         self, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[ConfiguredRepository, ConfigChange] | None:
         """Apply a sparse edit, legal from either state. The revision check comes first, even
-        for an edit that changes nothing; an empty diff never re-validates the stored fields."""
+        for an edit that changes nothing; an empty diff never re-validates the stored fields. On a record naming a
+        credential, an edit naming none may move neither its forge nor its secret (:func:`require_link_kept`)."""
         self.require_revision(if_match)
         slug, name = merge_labels(self, edit)
-        edited = replace(self, slug=slug, name=name, fields=merge(self.fields, edit))
+        fields = merge(self.fields, edit)
+        require_link_kept(
+            self.fields.credential_id,
+            edit.credential_id,
+            (self.fields.forge_id, fields.forge_id),
+            (self.fields.secret_name, fields.secret_name),
+            secret_field="secret_name",
+        )
+        edited = replace(self, slug=slug, name=name, fields=fields)
         changes = diff(self, edited)
         if not changes:
             return None
@@ -261,7 +285,7 @@ class RepositoryRef:
 @dataclass(frozen=True)
 class RepositoryEdit:
     """A sparse edit: :data:`UNSET` leaves a field; ``None`` clears ``park_timeout_hours`` and is refused on every
-    other field."""
+    other field — ``credential_id`` among them, so a write never unlinks a record from its credential."""
 
     slug: str | None | UnsetType = UNSET
     name: str | None | UnsetType = UNSET
@@ -273,6 +297,7 @@ class RepositoryEdit:
     landing_policy: LandingPolicy | None | UnsetType = UNSET
     park_timeout_hours: int | None | UnsetType = UNSET
     allow_no_ci: bool | None | UnsetType = UNSET
+    credential_id: CredentialId | None | UnsetType = UNSET
 
 
 @domain_model
@@ -530,6 +555,7 @@ def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
         landing_policy=policy,
         park_timeout_hours=timeout,
         allow_no_ci=_merged_required("allow_no_ci", current.allow_no_ci, edit.allow_no_ci),
+        credential_id=_merged_required("credential", current.credential_id, edit.credential_id),
     )
 
 
@@ -589,6 +615,13 @@ class IReadRepositoryRecordRepository(Protocol):
 
     def resolve(self, value: str) -> ConfiguredRepository | None:
         """The repository an id or slug names (:func:`resolve_repository_reference`)."""
+        ...
+
+    def naming_credential(
+        self, credential_id: CredentialId, *, transaction: Transaction | None = None
+    ) -> list[ConfiguredRepository]:
+        """Every repository acting with ``credential_id``, retired ones included, ordered by slug — read in
+        ``transaction`` when one is given."""
         ...
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import NewType, Protocol
+from typing import Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
@@ -25,25 +25,17 @@ from blizzard.hub.domain.config.changes import (
     RecordRef,
 )
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS, CredentialBinding
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, forge_lock
 from blizzard.hub.domain.config.references import referred_forge
 from blizzard.hub.domain.config.secrets import SecretMetadata, secret_lock
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
-from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
-
-CredentialId = NewType("CredentialId", str)
-
-
-def credential_lock(credential_id: CredentialId) -> LockKey:
-    """The keyed lock on ``credential_id``'s credential (``bzh:transaction-graduation``): a unit writing the
-    credential, or a record naming it, declares it."""
-    return LockKey(LockNamespace.CREDENTIAL, credential_id)
-
 
 # --- Refusals --------------------------------------------------------------------------------------------------------
 
@@ -104,6 +96,8 @@ class CredentialSecretUnavailable(ConfigFieldError):
 
     def __init__(self, secret: str, *, retired: bool) -> None:
         super().__init__("secret", f"secret {secret} is {'retired' if retired else 'unknown'}")
+        self.secret = secret
+        self.retired = retired
 
 
 def require_unused(slug: str, referrers: list[RecordRef]) -> None:
@@ -404,6 +398,17 @@ class IReadCredentialRepository(Protocol):
 
     def resolve(self, value: str) -> ConfiguredCredential | None:
         """The credential an id or slug names (:func:`resolve_credential_reference`)."""
+        ...
+
+    def get_by_authority(
+        self, forge_id: ForgeId, authority: str, *, transaction: Transaction | None = None
+    ) -> ConfiguredCredential | None:
+        """The credential on ``forge_id`` acting as ``authority``, retired or not — read in ``transaction`` when one
+        is given."""
+        ...
+
+    def held_slugs(self, *, transaction: Transaction | None = None) -> frozenset[str]:
+        """Every slug a credential of the tenant holds now or has left — read in ``transaction`` when one is given."""
         ...
 
 
