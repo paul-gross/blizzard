@@ -60,11 +60,13 @@ test.describe('a cadence on a fresh hub with cadences on', () => {
   });
 
   test('a moment mints its errand once, and none before it', async ({ api, clock, project }) => {
+    // Start inside the two-minute window that previously skipped the imminent moment.
+    await clock.set(new Date(nextAt(new Date(clock.now().getTime() + 30_000), 20).getTime() - 30_000));
     const start = clock.now();
     await cadence(api, project.slug, { schedule: { cron: '0 20 * * *', zone: 'UTC' } });
-    const moment = nextAt(new Date(start.getTime() + 120_000), 20);
+    const moment = nextAt(start, 20);
 
-    await clock.set(new Date(moment.getTime() - 60_000));
+    await clock.set(new Date(moment.getTime() - 1000));
     await api.sweep('cadence');
     expect(await runs(api, clock, start)).toEqual([]);
 
@@ -80,7 +82,7 @@ test.describe('a cadence on a fresh hub with cadences on', () => {
     const lifecycle = testHub.lifecycle!;
 
     await lifecycle.stop();
-    await clock.set(new Date(nextAt(new Date(start.getTime() + 120_000), 20).getTime() + 3600_000));
+    await clock.set(new Date(nextAt(start, 20).getTime() + 3600_000));
     await lifecycle.start();
     await api.sweep('cadence');
 
@@ -108,7 +110,7 @@ test.describe('a cadence on a fresh hub with cadences on', () => {
   test('a ten-day spacing beside a nightly moment mints every tenth night', async ({ api, clock, project }) => {
     const start = clock.now();
     await cadence(api, project.slug, { schedule: { cron: '0 20 * * *', zone: 'UTC' }, spacing: '10d', anchor: 'scheduled' });
-    const first = nextAt(new Date(start.getTime() + 120_000), 20);
+    const first = nextAt(start, 20);
 
     await clock.set(first);
     await api.sweep('cadence');
