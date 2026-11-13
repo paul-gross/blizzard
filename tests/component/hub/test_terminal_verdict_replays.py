@@ -175,8 +175,7 @@ def test_a_migration_replayed_on_a_since_stopped_chunk_answers_as_recorded_and_a
 
 
 def _hub_step(chunk: Chunk, handle: ILockedChunkRead, *, epoch: int, transition_id: str) -> bool:
-    return chunk.stores.hub_exec.record_hub_step_transition_locked(
-        handle,
+    return chunk.stores.hub_exec.record_hub_step_transition(
         chunk.chunk_id,
         from_node_id=chunk.nodes["review"],
         to_node_id=chunk.nodes["build"],
@@ -190,6 +189,7 @@ def _hub_step(chunk: Chunk, handle: ILockedChunkRead, *, epoch: int, transition_
         artifacts=[],
         release_route=False,
         close_decision=_CLOSE,
+        transaction=handle.transaction,
     ).wrote
 
 

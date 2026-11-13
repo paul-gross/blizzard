@@ -315,8 +315,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
     def transition(target: str, transition_id: str) -> tuple[int, ...]:
         with stores.exclusive.locked([chunk_id]) as handle:
             if hub_step:
-                stepped = stores.hub_exec.record_hub_step_transition_locked(
-                    handle,
+                stepped = stores.hub_exec.record_hub_step_transition(
                     chunk_id,
                     from_node_id=transition_id,
                     to_node_id=target,
@@ -330,6 +329,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                     artifacts=[],
                     release_route=False,
                     close_decision=decision,
+                    transaction=handle.transaction,
                 )
                 assert stepped.wrote
                 return stepped.close_skipped
@@ -369,8 +369,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
     decision = CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset())
     with pytest.raises(RuntimeError), stores.exclusive.locked([chunk_id]) as handle:
         if hub_step:
-            assert stores.hub_exec.record_hub_step_transition_locked(
-                handle,
+            assert stores.hub_exec.record_hub_step_transition(
                 chunk_id,
                 from_node_id="node",
                 to_node_id="done",
@@ -384,6 +383,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                 artifacts=[],
                 release_route=False,
                 close_decision=decision,
+                transaction=handle.transaction,
             ).wrote
         else:
             assert isinstance(

@@ -19,7 +19,6 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten, OpenSubmission
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.delivery.flows import (
@@ -60,7 +59,7 @@ from blizzard.hub.store.internal.flow_rows import (
 )
 from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 _sub = s.flow_submissions
 _held = s.flow_submission_flows
@@ -466,17 +465,17 @@ class FlowStore:
         for flow in flows:
             connection_for(self._store, transaction, key=flow_lock(flow))
 
-    def end_turn_locked(
+    def end_turn(
         self,
-        handle: ILockedChunkRead,
         turn_id: str,
         *,
         outcome: str,
         closure: str | None,
         event: TurnEvent | None,
         at: datetime,
+        transaction: LockedTransaction,
     ) -> tuple[FlowFactWritten, ...] | None:
-        conn = chunk_handle_connection(handle, self._store)
+        conn = connection_for(self._store, transaction)
         submission_id = conn.execute(
             self._store.select(_turns, _turns.c.submission_id).where(_turns.c.turn_id == turn_id)
         ).scalar_one_or_none()
@@ -484,7 +483,7 @@ class FlowStore:
             chunk_id = conn.execute(
                 self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission_id)
             ).scalar_one()
-            chunk_handle_connection(handle, self._store, chunk_id)
+            connection_for(self._store, transaction, chunk=chunk_id)
         ended = end_turn(conn, turn_id, outcome=outcome, at=at)
         if ended is None:
             return None

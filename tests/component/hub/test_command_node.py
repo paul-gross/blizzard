@@ -179,8 +179,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
 
     stores = chunk_stores(hub.engine, hub.clock)
     with stores.exclusive.locked([chunk_id]) as handle:
-        recorded = stores.hub_exec.record_hub_step_transition_locked(
-            handle,
+        recorded = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=merge_node.node_id,
             to_node_id="done",
@@ -194,6 +193,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             release_route=True,
             admission=EpochAdmission.ABOVE,
             terminal=terminal_under_lock(stores.facts, chunk_id, transaction=handle.transaction),
+            transaction=handle.transaction,
         ).wrote
 
     assert recorded is False

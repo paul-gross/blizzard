@@ -588,8 +588,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
 
     stores = chunk_stores(hub.engine, hub.clock)
     with stores.exclusive.locked([chunk_id]) as handle:
-        wrote = stores.hub_exec.record_hub_step_transition_locked(
-            handle,
+        wrote = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=plan_node,
             to_node_id=build_node,
@@ -603,6 +602,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            transaction=handle.transaction,
         ).wrote
 
     assert wrote is False
@@ -618,8 +618,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
 
     stores = chunk_stores(hub.engine, hub.clock)
     with stores.exclusive.locked([chunk_id]) as handle:
-        wrote = stores.hub_exec.record_hub_step_transition_locked(
-            handle,
+        wrote = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=plan_node,
             to_node_id="done",
@@ -633,6 +632,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            transaction=handle.transaction,
         ).wrote
 
     assert wrote is True

@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status. Timestamps arrive already stamped
 (``bzh:injected-clock``).
 
-``record_hub_step_transition_locked`` writes on its caller's one locked connection — the
+``record_hub_step_transition`` writes on its caller's one locked connection — the
 shared row helpers below are plain function calls on that same connection, never a
 second one."""
 
@@ -18,10 +18,10 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import HubStepTransitionWrite, IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
@@ -33,7 +33,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_hub_lease,
 )
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import connection_for
 
 
 class ChunkHubExecStore:
@@ -43,9 +43,8 @@ class ChunkHubExecStore:
         self._store = store
         self._clock = clock
 
-    def record_hub_step_transition_locked(
+    def record_hub_step_transition(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         from_node_id: str,
@@ -60,9 +59,10 @@ class ChunkHubExecStore:
         artifacts: list[StoredArtifact],
         release_route: bool,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> HubStepTransitionWrite:
         return self._transition_conn(
-            chunk_handle_connection(handle, self._store, chunk_id),
+            connection_for(self._store, transaction, chunk=chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             to_node_id=to_node_id,
@@ -151,19 +151,19 @@ class ChunkHubExecStore:
             return HubStepTransitionWrite(wrote=True, close_skipped=close_skipped)
         return HubStepTransitionWrite(wrote=True)
 
-    def record_hub_node_poll_locked(
+    def record_hub_node_poll(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         node_id: str,
         epoch: int,
         kind: WaitKind,
         at: datetime,
+        transaction: LockedTransaction,
         next_poll_at: datetime | None = None,
     ) -> None:
-        """Record a wait on the locked connection, coalescing consecutive parked polls."""
-        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        """Record a wait in ``transaction``, coalescing consecutive parked polls."""
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         if kind == "awaiting-merge":
             previous = conn.execute(
                 self._store.select(s.hub_node_poll)

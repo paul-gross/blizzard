@@ -2067,13 +2067,17 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_hub_exec_live, "1013", at=_ht(61))
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
-        write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(64)
+        write.hub_exec.record_hub_node_poll(
+            chunk_hub_exec_released,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            kind="pending",
+            at=_ht(64),
+            transaction=handle.transaction,
         )
     hub_exec_close_decision = _close_decision(chunk_hub_exec_released)
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
-        write.hub_exec.record_hub_step_transition_locked(
-            handle,
+        write.hub_exec.record_hub_step_transition(
             chunk_hub_exec_released,
             from_node_id=deliver_node.node_id,
             to_node_id="done",
@@ -2087,10 +2091,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=hub_exec_close_decision,
+            transaction=handle.transaction,
         )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
-        write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(68)
+        write.hub_exec.record_hub_node_poll(
+            chunk_hub_exec_live,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            kind="pending",
+            at=_ht(68),
+            transaction=handle.transaction,
         )
 
     # --- delivery + close intents -----------------------------------------------------------------

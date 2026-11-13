@@ -11,7 +11,6 @@ from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
@@ -196,21 +195,22 @@ class IWriteFlows(IReadFlows, Protocol):
         and a resubmission keeps what the visit took."""
         ...
 
-    def end_turn_locked(
+    def end_turn(
         self,
-        handle: ILockedChunkRead,
         turn_id: str,
         *,
         outcome: str,
         closure: str | None,
         event: TurnEvent | None,
         at: datetime,
+        transaction: LockedTransaction,
     ) -> tuple[FlowFactWritten, ...] | None:
-        """End the open turn ``outcome`` on ``handle``'s locked connection (``bzh:store-exclusive-write``), with a
+        """End the open turn ``outcome`` in ``transaction``, which locks the turn's submission's chunk
+        (``bzh:transaction-participation``), with a
         ``turn-ended`` fact per held flow, ``event`` in the event log, and the submission closed ``closure`` — a
         verdict, or what ``withdrawal_for`` answers under the same lock — unless already closed. The writes routing
-        the answer take this handle, so all commit together or not at all. Answers every flow fact it wrote, for the
-        caller to announce once the handle's transaction commits — ``None``, writing nothing, if it has ended."""
+        the answer join the same unit, so all commit together or not at all. Answers every flow fact it wrote, for the
+        caller to announce once the unit commits — ``None``, writing nothing, if it has ended."""
         ...
 
     def record_landing(
