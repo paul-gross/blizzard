@@ -98,8 +98,16 @@ jobs:
         uses: ./blizzard/.github/actions/resolve-mock-ref
         with:
           sha: ${{ needs.mock-ref.outputs.sha }}
-      - uses: astral-sh/setup-uv@v6
+      - name: Python for uv bootstrap
+        uses: actions/setup-python@v5
         with:
+          python-version: "3.12"
+      - name: Install uv and restore its cache
+        id: setup-uv
+        continue-on-error: true
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.6"
           enable-cache: true
           python-version: "3.12"
           working-directory: blizzard
@@ -109,6 +117,11 @@ jobs:
           cache-dependency-glob: |
             uv.lock
             ../blizzard-mock/uv.lock
+      - name: Install uv from PyPI if GitHub setup failed
+        if: steps.setup-uv.outcome == 'failure'
+        run: python -m pip install 'uv==0.13.6'
+      - name: Confirm uv is available
+        run: uv --version
       - name: git identity for fixture/forge git operations
         run: |
           git config --global user.email "ci@blizzard.local"
