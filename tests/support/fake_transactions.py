@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import cast
 
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 
 
@@ -19,11 +19,11 @@ class _FakeUnit:
     def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
         return self.lock_set(chunks=chunk_ids)
 
-    def lock_keys(self, namespace: str, keys: Sequence[str]) -> LockedTransaction:
-        return self.lock_set(keys=[(namespace, key) for key in keys])
+    def lock_keys(self, namespace: LockNamespace, keys: Sequence[str]) -> LockedTransaction:
+        return self.lock_set(keys=[LockKey(namespace, key) for key in keys])
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> LockedTransaction:
         self.owner.locked_chunks.append(list(chunks))
         return cast(LockedTransaction, self)

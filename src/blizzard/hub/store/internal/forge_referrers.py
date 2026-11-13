@@ -13,6 +13,8 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
+from blizzard.hub.domain.config.forges import ForgeId, IForgeReferences
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,
@@ -20,7 +22,8 @@ from blizzard.hub.store.schema import (
     work_source_lifecycle_facts,
     work_sources,
 )
-from blizzard.hub.store.scoped import statements_of
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 #: Each referring kind: its record table, its lifecycle-fact table, the id column keying both, and the slug column
 #: labelling a record.
@@ -54,3 +57,19 @@ def active_referrers(conn: Connection, forge_ids: list[str]) -> dict[str, list[R
         for row in rows:
             found[row.forge_id].append(RecordRef(kind, row[1], row.label))
     return found
+
+
+class ForgeReferrersStore:
+    """The forge referrers adapter over the hub store."""
+
+    def __init__(self, store: ScopedConnections) -> None:
+        self._store = store
+
+    def referrers_of(
+        self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None
+    ) -> dict[ForgeId, list[RecordRef]]:
+        with connection_in(self._store, transaction, "referrers_of") as conn:
+            return {ForgeId(forge_id): refs for forge_id, refs in active_referrers(conn, list(forge_ids)).items()}
+
+
+_forge_references_conforms: type[IForgeReferences] = ForgeReferrersStore

@@ -1,9 +1,8 @@
 """SQLAlchemy adapter for the legacy-config carry-over (package-private).
 
-One ``store.write`` runs the whole import through the per-record create bodies — so each keeps its
-in-transaction checks —, links what it created through the link bodies, and appends the ``config_import``
-fact last. The fact is re-checked first inside
-the same transaction, so two racing imports write once."""
+The caller's unit, which declared the import's keyed locks, runs the whole import through the per-record create bodies —
+so each keeps its in-transaction checks —, links what it created through the link bodies, and appends the
+``config_import`` fact last. The fact is re-checked first inside the same unit, so two racing imports write once."""
 
 from __future__ import annotations
 
@@ -28,6 +27,7 @@ from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.records import ConfiguredLink
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
 from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 # Shares forge resolution and insertion on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -45,11 +45,12 @@ from blizzard.hub.store.internal import repository_record_store as repository_wr
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 
-# Serializes secret availability with the secret adapter's row lock.
+# Shares the secret create body on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_for
 
 #: What a create body's in-transaction checks raise when a concurrent write took its claim first.
 _REFUSALS = (
@@ -61,10 +62,6 @@ _REFUSALS = (
     RepositorySlugTaken,
     RepositoryCoordinateTaken,
 )
-
-
-class _AlreadyImported(Exception):
-    """Raised inside the transaction when an import was recorded first, so nothing commits."""
 
 
 def _recorded(conn: Connection) -> bool:
@@ -101,38 +98,50 @@ class ConfigImportStore:
             ).all()
         return [CommitCoordinate(forge=row.forge, repo=row.repo) for row in rows]
 
-    def write(self, imported: LegacyImport) -> bool:
-        try:
-            with self._store.write("import", expect=(_AlreadyImported, LegacyImportRefused)) as conn:
-                if _recorded(conn):
-                    raise _AlreadyImported
-                for secret in imported.secrets:
-                    try:
-                        insert_secret(
-                            conn,
-                            secret.name,
-                            sealed=secret.sealed,
-                            at=secret.change.recorded_at,
-                            by=secret.change.actor,
-                            change=secret.change,
-                        )
-                    except IntegrityError as exc:  # a concurrent create won the race
-                        raise LegacyImportRefused(f"secret {secret.name} was created while importing") from exc
-                try:
-                    for forge, change in imported.forges:
-                        forge_writes.insert_forge(conn, forge, change)
-                    for source, change in imported.work_sources:
-                        work_source_writes.insert_record(conn, source, change)
-                    for repository, change in imported.repositories:
-                        repository_writes.insert_record(conn, repository, change)
-                except _REFUSALS as exc:
-                    raise LegacyImportRefused(str(exc)) from exc
-                for link, change in imported.links:
-                    _insert_link(conn, link, change)
-                _append_fact(conn, imported.fact)
-        except _AlreadyImported:
+    def write(self, imported: LegacyImport, *, transaction: LockedTransaction) -> bool:
+        conn = connection_for(self._store, transaction)
+        relied_on = [
+            *(key for source, _ in imported.work_sources for key in source.locks()),
+            *(key for repository, _ in imported.repositories for key in repository.locks()),
+            *(lock for link, _ in imported.links if (lock := link.lock()) is not None),
+        ]
+        for key in relied_on:
+            connection_for(self._store, transaction, key=key)
+        if _recorded(conn):
             return False
+        for secret in imported.secrets:
+            try:
+                insert_secret(
+                    conn,
+                    secret.name,
+                    sealed=secret.sealed,
+                    at=secret.change.recorded_at,
+                    by=secret.change.actor,
+                    change=secret.change,
+                )
+            except IntegrityError as exc:  # a concurrent create won the race
+                raise LegacyImportRefused(f"secret {secret.name} was created while importing") from exc
+        try:
+            for forge, change in imported.forges:
+                forge_writes.insert_forge(conn, forge, change)
+            for source, change in imported.work_sources:
+                _raise_verdict(imported, source.work_source_id)
+                work_source_writes.insert_record(conn, source, change)
+            for repository, change in imported.repositories:
+                _raise_verdict(imported, repository.repository_id)
+                repository_writes.insert_record(conn, repository, change)
+        except _REFUSALS as exc:
+            raise LegacyImportRefused(str(exc)) from exc
+        for link, change in imported.links:
+            _insert_link(conn, link, change)
+        _append_fact(conn, imported.fact)
         return True
+
+
+def _raise_verdict(imported: LegacyImport, record_id: str) -> None:
+    """Raise the refusal the domain judged the record ``record_id`` earns, where its write would run."""
+    if (verdict := imported.verdicts.get(record_id)) is not None:
+        raise verdict
 
 
 def _insert_link(conn: Connection, link: ConfiguredLink, change: ConfigChange) -> None:

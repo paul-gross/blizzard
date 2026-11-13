@@ -14,7 +14,8 @@ an apply or an import plans — is checked against what :class:`IForgeOffers` sa
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
@@ -27,6 +28,7 @@ from blizzard.hub.domain.config.apply import (
     ConfigDeclaration,
     EntryOutcome,
     IConfigApplyWriter,
+    PlannedWrite,
     StoredConfig,
     reconcile,
 )
@@ -43,7 +45,7 @@ from blizzard.hub.domain.config.carry_over import (
     SealedSecretWrite,
     plan_import,
 )
-from blizzard.hub.domain.config.changes import ChangeContext
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ISecretReferences
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice, resolve_forge
 from blizzard.hub.domain.config.forges import (
@@ -51,10 +53,18 @@ from blizzard.hub.domain.config.forges import (
     ForgeEdit,
     ForgeFields,
     ForgeId,
+    IForgeReferences,
     IWriteForgeRepository,
+    forge_lock,
+    require_unused,
 )
 from blizzard.hub.domain.config.landing_policies import require_offered
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys
+from blizzard.hub.domain.config.references import (
+    references_refusal,
+    require_repository_references,
+    require_work_source_references,
+)
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
@@ -62,7 +72,13 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryEdit,
     RepositoryFields,
 )
-from blizzard.hub.domain.config.secrets import IWriteSecretRepository, SecretMetadata, SecretName
+from blizzard.hub.domain.config.secrets import (
+    IWriteSecretRepository,
+    SecretMetadata,
+    SecretName,
+    require_unreferenced,
+    secret_lock,
+)
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
@@ -71,7 +87,13 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     require_known_provider,
 )
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.kernel.unset import UnsetType
+
+
+class _Rollback(Exception):
+    """Raised out of a unit that must leave nothing behind — a dry run, or an import recorded first."""
 
 
 class ConfigAuthoring:
@@ -86,9 +108,14 @@ class ConfigAuthoring:
         cipher: ISecretCipher,
         apply_writer: IConfigApplyWriter,
         import_writer: IConfigImportWriter,
+        transactions: IHubTransactions,
+        secret_references: ISecretReferences,
+        forge_references: IForgeReferences,
         clock: IClock,
     ) -> None:
-        """``offers`` answers what a repository's forge offers its landing policy."""
+        """``offers`` answers what a repository's forge offers its landing policy; ``transactions`` opens the unit
+        each write runs in, and ``secret_references`` and ``forge_references`` read, in it, the records naming a secret
+        or a forge being retired."""
         self._work_sources = work_sources
         self._repositories = repositories
         self._forges = forges
@@ -97,6 +124,9 @@ class ConfigAuthoring:
         self._cipher = cipher
         self._apply_writer = apply_writer
         self._import_writer = import_writer
+        self._transactions = transactions
+        self._secret_references = secret_references
+        self._forge_references = forge_references
         self._clock = clock
 
     # --- Forges ------------------------------------------------------------------
@@ -115,9 +145,15 @@ class ConfigAuthoring:
         if decided is None:
             return record
         edited, change = decided
-        return self._forges.update(
-            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
-        )
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[forge_lock(record.forge_id)])
+            return self._forges.update(
+                edited,
+                from_revision=record.revision,
+                left_slug=record.slug_left_for(edited),
+                change=change,
+                transaction=locked,
+            )
 
     def retire_forge(
         self, record: ConfiguredForge, ctx: ChangeContext, *, if_match: int | None = None
@@ -138,9 +174,20 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        return self._forges.record_lifecycle(
-            moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
-        )
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[forge_lock(record.forge_id)])
+            if retired:
+                referrers = self._forge_references.referrers_of([record.forge_id], transaction=locked)
+                require_unused(moved.slug, referrers[record.forge_id])
+            return self._forges.record_lifecycle(
+                moved,
+                retired=retired,
+                from_revision=record.revision,
+                at=now,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
 
     def _resolve(self, choice: ForgeChoice, *, provider: str | None, current: ForgeId | None) -> ConfiguredForge | None:
         """:func:`resolve_forge` against the tenant's forges, for a create when ``current`` is ``None``."""
@@ -186,7 +233,8 @@ class ConfigAuthoring:
         self, slug: str, name: str | None, fields: WorkSourceFields, ctx: ChangeContext
     ) -> ConfiguredWorkSource:
         record, change = ConfiguredWorkSource.new(slug, name, fields, ctx, at=self._clock.now())
-        return self._work_sources.create(record, change=change)
+        with self._work_source_unit(record, change.op) as locked:
+            return self._work_sources.create(record, change=change, transaction=locked)
 
     def edit_work_source(
         self, record: ConfiguredWorkSource, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None = None
@@ -195,9 +243,14 @@ class ConfigAuthoring:
         if decided is None:
             return record
         edited, change = decided
-        return self._work_sources.update(
-            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
-        )
+        with self._work_source_unit(edited, change.op) as locked:
+            return self._work_sources.update(
+                edited,
+                from_revision=record.revision,
+                left_slug=record.slug_left_for(edited),
+                change=change,
+                transaction=locked,
+            )
 
     def retire_work_source(
         self, record: ConfiguredWorkSource, ctx: ChangeContext, *, if_match: int | None = None
@@ -217,9 +270,16 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        return self._work_sources.record_lifecycle(
-            moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
-        )
+        with self._work_source_unit(moved, change.op) as locked:
+            return self._work_sources.record_lifecycle(
+                moved,
+                retired=retired,
+                from_revision=record.revision,
+                at=now,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
 
     # --- Repositories ------------------------------------------------------------
 
@@ -252,7 +312,8 @@ class ConfigAuthoring:
     ) -> ConfiguredRepository:
         record, change = ConfiguredRepository.new(slug, name, fields, ctx, at=self._clock.now())
         self._require_offered(record, self._forges.get(record.fields.forge_id), created=True)
-        return self._repositories.create(record, change=change)
+        with self._repository_unit(record, change.op) as locked:
+            return self._repositories.create(record, change=change, transaction=locked)
 
     def edit_repository(
         self, record: ConfiguredRepository, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None = None
@@ -263,9 +324,14 @@ class ConfigAuthoring:
         edited, change = decided
         if not isinstance(edit.landing_policy, UnsetType) or edited.fields.forge_id != record.fields.forge_id:
             self._require_offered(edited, self._forges.get(edited.fields.forge_id), created=False)
-        return self._repositories.update(
-            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
-        )
+        with self._repository_unit(edited, change.op) as locked:
+            return self._repositories.update(
+                edited,
+                from_revision=record.revision,
+                left_slug=record.slug_left_for(edited),
+                change=change,
+                transaction=locked,
+            )
 
     def retire_repository(
         self, record: ConfiguredRepository, ctx: ChangeContext, *, if_match: int | None = None
@@ -285,23 +351,72 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        return self._repositories.record_lifecycle(
-            moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
-        )
+        with self._repository_unit(moved, change.op) as locked:
+            return self._repositories.record_lifecycle(
+                moved,
+                retired=retired,
+                from_revision=record.revision,
+                at=now,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
+
+    # --- The unit a referrer write runs in -------------------------------------
+
+    @contextmanager
+    def _work_source_unit(self, record: ConfiguredWorkSource, op: ChangeOp) -> Generator[LockedTransaction]:
+        """The unit the ``op`` write of ``record`` runs in: it declares the keys of the forge and secret ``record``
+        names, then judges, under them, whether it may name them."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=sorted(record.locks()))
+            if op is not ChangeOp.RETIRE:
+                require_work_source_references(record, op, *self._named_facts(record.locks(), locked))
+            yield locked
+
+    @contextmanager
+    def _repository_unit(self, record: ConfiguredRepository, op: ChangeOp) -> Generator[LockedTransaction]:
+        """The unit the ``op`` write of ``record`` runs in, as :meth:`_work_source_unit` opens one."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=sorted(record.locks()))
+            if op is not ChangeOp.RETIRE:
+                require_repository_references(record, op, *self._named_facts(record.locks(), locked))
+            yield locked
+
+    def _named_facts(
+        self, keys: Iterable[LockKey], locked: LockedTransaction
+    ) -> tuple[dict[ForgeId, ConfiguredForge], dict[str, SecretMetadata]]:
+        """The forges and secrets ``keys`` lock, each read in ``locked``."""
+        held = set(keys)
+        forge_ids = sorted(ForgeId(key.key) for key in held if key.namespace is LockNamespace.FORGE)
+        names = sorted(key.key for key in held if key.namespace is LockNamespace.SECRET)
+        forges = dict(self._forges.get_many(forge_ids, transaction=locked)) if forge_ids else {}
+        secrets = dict(self._secrets.get_many(names, transaction=locked)) if names else {}
+        return forges, secrets
 
     # --- Apply -------------------------------------------------------------------
 
     def apply(
         self, declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, dry_run: bool
     ) -> tuple[EntryOutcome, ...]:
-        """Reconcile ``declaration`` against ``stored`` and commit every write in one transaction, or
-        — under ``dry_run`` — run that same transaction and roll it back. The outcomes are the same either way."""
+        """Reconcile ``declaration`` against ``stored`` and commit every write in one unit declaring the plan's locks,
+        or — under ``dry_run`` — run that same unit and roll it back. The outcomes are the same either way."""
         plan = reconcile(declaration, stored, ctx, at=self._clock.now())
         self._require_planned_offered(plan)
         if plan.writes or plan.positions:
-            self._apply_writer.apply(
-                plan.writes, dry_run=dry_run, positions=plan.positions, locks=plan.locks, guards=plan.guards
-            )
+            try:
+                with self._transactions.begin() as transaction:
+                    locked = transaction.lock_set(keys=plan.locks)
+                    self._apply_writer.apply(
+                        self._judged(plan.writes, locked),
+                        transaction=locked,
+                        positions=plan.positions,
+                        guards=plan.guards,
+                    )
+                    if dry_run:
+                        raise _Rollback
+            except _Rollback:
+                pass
         return plan.outcomes
 
     # --- Carry-over --------------------------------------------------------------
@@ -351,9 +466,44 @@ class ConfigAuthoring:
             fact=plan.fact,
             links=linked,
         )
-        if not self._import_writer.write(imported):
+        try:
+            with self._transactions.begin() as transaction:
+                locked = transaction.lock_set(keys=imported.locks())
+                if not self._import_writer.write(self._judged_import(imported, locked), transaction=locked):
+                    raise _Rollback
+        except _Rollback:
             return ImportResult(ImportStatus.ALREADY_IMPORTED)
         return ImportResult(ImportStatus.IMPORTED, plan.outcomes)
+
+    def _judged(self, writes: Sequence[PlannedWrite], locked: LockedTransaction) -> tuple[PlannedWrite, ...]:
+        """``writes``, each carrying the refusal its write earns for the forge and secret it names, read under the
+        apply's keys with the apply's own forge writes — every one ahead of any referrer — landed over them."""
+        forges, secrets = self._named_facts(
+            (key for write in writes if isinstance(write.record, _REFERRERS) for key in write.record.locks()), locked
+        )
+        forges.update(
+            {write.record.forge_id: write.record for write in writes if isinstance(write.record, ConfiguredForge)}
+        )
+        return tuple(
+            replace(write, verdict=references_refusal(write.record, write.change.op, forges, secrets))
+            for write in writes
+        )
+
+    def _judged_import(self, imported: LegacyImport, locked: LockedTransaction) -> LegacyImport:
+        """``imported``, carrying the refusal each work source and repository it creates earns for the forge and
+        secret it names, read under the import's keys with the import's own secrets and forges landed over them."""
+        records = [*(source for source, _ in imported.work_sources), *(repo for repo, _ in imported.repositories)]
+        forges, secrets = self._named_facts((key for record in records for key in record.locks()), locked)
+        forges.update({forge.forge_id: forge for forge, _ in imported.forges})
+        for secret in imported.secrets:
+            at, by = secret.change.recorded_at, secret.change.actor
+            secrets[secret.name] = SecretMetadata(secret.name, 1, at, by, at, retired=False)
+        verdicts = {
+            _record_id(record): refused
+            for record in records
+            if (refused := references_refusal(record, ChangeOp.CREATE, forges, secrets)) is not None
+        }
+        return replace(imported, verdicts=verdicts)
 
     # --- Capabilities ------------------------------------------------------------
 
@@ -417,5 +567,20 @@ class ConfigAuthoring:
         change = secret_lifecycle.lifecycle_change(record, ctx, retired_now=record.retired, retired=retired, at=now)
         if change is None:
             return False
-        self._secrets.record_lifecycle(record.name, retired=retired, at=now, by=ctx.actor, change=change)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[secret_lock(record.name)])
+            if retired:
+                referrers = self._secret_references.referrers_of([record.name], transaction=locked)
+                require_unreferenced(record.name, referrers[record.name])
+            self._secrets.record_lifecycle(
+                record.name, retired=retired, at=now, by=ctx.actor, change=change, transaction=locked
+            )
         return True
+
+
+#: The records whose writes name a forge and a secret.
+_REFERRERS = (ConfiguredWorkSource, ConfiguredRepository)
+
+
+def _record_id(record: ConfiguredWorkSource | ConfiguredRepository) -> str:
+    return record.work_source_id if isinstance(record, ConfiguredWorkSource) else record.repository_id

@@ -28,6 +28,7 @@ from blizzard.hub.domain.garden.runs.run import RunPlan, plan_run
 from blizzard.hub.domain.garden.scopes import Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.operations.promote import ready_members
 from blizzard.hub.domain.operations.queue import (
@@ -109,7 +110,7 @@ class ErrandPlanning:
         }
 
 
-def mint_lock_keys(key: ErrandKey, *, promote: bool, urgencies: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
+def mint_lock_keys(key: ErrandKey, *, promote: bool, urgencies: Sequence[LockKey]) -> list[LockKey]:
     """The keyed locks an errand's mint takes: its errand's, for a promoting chore both lists' ranking locks, as
     the queue's own promote takes them, and ``urgencies`` — the settings' and those of the urgencies its chain names,
     as every mint takes them. The store takes them in

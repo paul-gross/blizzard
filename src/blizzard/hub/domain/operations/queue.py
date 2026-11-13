@@ -45,6 +45,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsReposit
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel import float_slots
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RunnerCapability
@@ -313,7 +314,7 @@ _REORDER_VERB: Mapping[QueueList, ChunkVerb] = {
 
 
 #: The keyed lock each list's ranking decisions serialize on (``bzh:ranking-is-per-list``).
-_RANKING_LOCK: Mapping[QueueList, tuple[str, str]] = {
+_RANKING_LOCK: Mapping[QueueList, LockKey] = {
     QueueList.READY: READY_RANKING_LOCK,
     QueueList.NOT_READY: BACKLOG_RANKING_LOCK,
 }

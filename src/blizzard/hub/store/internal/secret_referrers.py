@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ISecretReferences, RecordKind, RecordRef
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,
@@ -20,6 +21,7 @@ from blizzard.hub.store.schema import (
     work_sources,
 )
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in
 
 #: Each referring kind: its record table, its lifecycle-fact table, the id column keying both, and the slug column
 #: labelling a record.
@@ -61,8 +63,8 @@ class SecretReferrersStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def referrers_of(self, names: list[str]) -> dict[str, list[RecordRef]]:
-        with self._store.read("referrers_of") as conn:
+    def referrers_of(self, names: list[str], *, transaction: Transaction | None = None) -> dict[str, list[RecordRef]]:
+        with connection_in(self._store, transaction, "referrers_of") as conn:
             return active_referrers(conn, names)
 
 

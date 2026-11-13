@@ -40,7 +40,7 @@ from blizzard.hub.domain.garden.runs.run import (
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.services import MintAhead, TenantDefault
@@ -199,10 +199,10 @@ class _FakeUnit:
     """A unit that records the keys it declared and hands itself back as the locked unit."""
 
     def __init__(self) -> None:
-        self.keys: list[tuple[str, str]] = []
+        self.keys: list[LockKey] = []
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> _FakeUnit:
         self.keys.extend(keys)
         return self

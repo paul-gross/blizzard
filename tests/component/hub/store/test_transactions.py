@@ -12,6 +12,7 @@ from structlog import get_logger
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import GraduationError, TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
@@ -65,16 +66,20 @@ def test_graduation_counts_borrowed_statements_and_rejects_reuse(store: ScopedCo
         with pytest.raises(GraduationError):
             unit.lock_chunks(["a"])
     with service.begin() as unit:
-        locked = unit.lock_keys("n", ["a"])
+        locked = unit.lock_keys(LockNamespace.FLOW, ["a"])
         with pytest.raises(GraduationError):
-            locked.lock_keys("n", ["b"])
+            locked.lock_keys(LockNamespace.FLOW, ["b"])
         with pytest.raises(TransactionMisuse):
             tx.connection_for(store, unit)
-        assert tx.connection_for(store, locked, key=("n", "a")) is not None
+        assert tx.connection_for(store, locked, key=LockKey(LockNamespace.FLOW, "a")) is not None
         with pytest.raises(TransactionMisuse):
-            tx.connection_for(store, locked, key=("n", "b"))
+            tx.connection_for(store, locked, key=LockKey(LockNamespace.FLOW, "b"))
     with pytest.raises(TransactionMisuse):
         tx.connection_for(store, locked)
+
+
+#: Two real namespaces sorting as "a" before "z" — the order the lock set takes them in.
+ERRAND, WORK = LockNamespace.CADENCE_ERRAND, LockNamespace.WORK_REF
 
 
 def test_lock_set_is_sorted_and_scope_is_checked(store: ScopedConnections, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,7 +88,7 @@ def test_lock_set_is_sorted_and_scope_is_checked(store: ScopedConnections, monke
     def record_chunk_lock(conn: sa.Connection, chunk: str) -> None:
         calls.append(("chunk", chunk))
 
-    def record_key_locks(conn: sa.Connection, namespace: str, keys: Sequence[str]) -> None:
+    def record_key_locks(conn: sa.Connection, namespace: LockNamespace, keys: Sequence[str]) -> None:
         calls.append((namespace, *keys))
 
     monkeypatch.setattr(tx, "lock_chunk_row", record_chunk_lock)
@@ -92,8 +97,10 @@ def test_lock_set_is_sorted_and_scope_is_checked(store: ScopedConnections, monke
     same = HubStoreConnections(engine, store.errors).scoped(store.scope)
     other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
     with tx.HubTransactions(store).begin() as unit:
-        locked = unit.lock_set(chunks=["b", "a", "b"], keys=[("z", "a"), ("a", "z"), ("a", "a")])
-        assert calls == [("chunk", "a"), ("chunk", "b"), ("a", "a"), ("a", "z"), ("z", "a")]
+        locked = unit.lock_set(
+            chunks=["b", "a", "b"], keys=[LockKey(WORK, "a"), LockKey(ERRAND, "z"), LockKey(ERRAND, "a")]
+        )
+        assert calls == [("chunk", "a"), ("chunk", "b"), (ERRAND, "a"), (ERRAND, "z"), (WORK, "a")]
         assert tx.connection_for(store, locked, chunk="a") is not None
         assert tx.connection_for(same, locked, chunk="a") is not None
         with pytest.raises(TransactionMisuse):

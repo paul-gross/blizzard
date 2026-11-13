@@ -18,6 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.kernel import id_or_slug
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
@@ -339,7 +340,7 @@ class UrgencyLifecycle:
         self,
         urgency: Urgency,
         ctx: ChangeContext,
-        keys: Sequence[tuple[str, str]],
+        keys: Sequence[LockKey],
         chunk_ids: frozenset[str],
         *,
         move_to: MoveTo | None,
@@ -519,7 +520,7 @@ class MintAhead:
     default_id: UrgencyId
     links: ChainLinks[UrgencyId] = field(default_factory=ChainLinks[UrgencyId])
 
-    def lock_keys(self) -> list[tuple[str, str]]:
+    def lock_keys(self) -> list[LockKey]:
         named = set(self.links.named()) - {self.default_id}
         return [*default_lock_keys(self.default_id), *sorted(urgency_lock(urgency_id) for urgency_id in named)]
 
@@ -603,6 +604,6 @@ class UrgencyReferences:
             yield locked
 
 
-def default_lock_keys(default_id: UrgencyId) -> list[tuple[str, str]]:
+def default_lock_keys(default_id: UrgencyId) -> list[LockKey]:
     """The keyed locks a mint writing the default ``default_id`` declares: the settings' and the urgency's."""
     return [tenant_settings_lock(), urgency_lock(default_id)]

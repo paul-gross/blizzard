@@ -10,7 +10,9 @@ from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
+from blizzard.hub.domain.projects.links import project_source_links_lock
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -34,10 +36,7 @@ from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 
 # Shares the project_link_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.project_link_store import (
-    PROJECT_SOURCE_LINKS_LOCK_NAMESPACE,
-    projects_linking_sources_conn,
-)
+from blizzard.hub.store.internal.project_link_store import projects_linking_sources_conn
 
 # Shares the runner_registry_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -110,9 +109,6 @@ class LockedWorkRefTransaction(WorkRefHandle):
         return {source: found.get(source, []) for source in dict.fromkeys(sources)}
 
 
-_POINTER_LOCK_NAMESPACE = "work_ref"
-
-
 class ChunkExclusiveWrites:
     """Opens the locked write transaction the chunk claim and its excluded writers
     share (``bzh:store-exclusive-write``)."""
@@ -142,7 +138,7 @@ class ChunkExclusiveWrites:
 
     @contextmanager
     def locked(
-        self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
+        self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()
     ) -> Generator[ILockedChunkRead, None, None]:
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(chunks=chunk_ids, keys=keys)
@@ -152,12 +148,12 @@ class ChunkExclusiveWrites:
 
     @contextmanager
     def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[tuple[str, str]] = ()
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[LockKey] = ()
     ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._transactions.begin() as transaction:
-            declared = [(_POINTER_LOCK_NAMESPACE, pointer_lock_key(p)) for p in pointers]
+            declared = [LockKey(LockNamespace.WORK_REF, pointer_lock_key(p)) for p in pointers]
             if project is not None:
-                declared.append((PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, project))
+                declared.append(project_source_links_lock(project))
             locked = transaction.lock_set(keys=[*declared, *keys])
             yield LockedWorkRefTransaction(self._store, locked, self._work_refs)
 

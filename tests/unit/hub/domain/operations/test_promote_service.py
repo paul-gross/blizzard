@@ -19,7 +19,7 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, PauseFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.domain.operations.queue import Placement
@@ -47,16 +47,14 @@ class _FakeChunkRepo:
     promoted_return: int = 1
     paused: dict[str, Chunk] = field(default_factory=dict[str, Chunk])
     paused_facts: dict[str, ChunkFacts] = field(default_factory=dict[str, ChunkFacts])
-    locks: list[tuple[list[str], list[tuple[str, str]]]] = field(
-        default_factory=list[tuple[list[str], list[tuple[str, str]]]]
-    )
+    locks: list[tuple[list[str], list[LockKey]]] = field(default_factory=list[tuple[list[str], list[LockKey]]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> LockedTransaction:
         self.locks.append((sorted(chunks), list(keys)))
         return cast(LockedTransaction, self)

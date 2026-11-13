@@ -11,33 +11,31 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.mark import Icon
 from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import PositionFact, UrgencyOrder
 from blizzard.hub.domain.urgency.settings import TenantSettings
 
-#: One urgency's keyed lock, keyed by its id: every write setting something to the urgency, and its retire, take it.
-URGENCY_LOCK_NAMESPACE = "urgency"
-#: The tenant's urgency set's keyed lock, on one fixed key: a create and each reorder take it.
-URGENCY_ORDER_LOCK_NAMESPACE = "urgency_order"
-#: The tenant's settings' keyed lock, on one fixed key: every change of the default, every retire, and every mint
-#: take it, so the default holds still under a mint.
-TENANT_SETTINGS_LOCK_NAMESPACE = "tenant_settings"
-
 _SINGLETON_KEY = "tenant"
 
 
-def urgency_lock(urgency_id: UrgencyId) -> tuple[str, str]:
-    return URGENCY_LOCK_NAMESPACE, urgency_id
+def urgency_lock(urgency_id: UrgencyId) -> LockKey:
+    """One urgency's keyed lock, keyed by its id: every write setting something to the urgency, and its retire, take
+    it."""
+    return LockKey(LockNamespace.URGENCY, urgency_id)
 
 
-def urgency_order_lock() -> tuple[str, str]:
-    return URGENCY_ORDER_LOCK_NAMESPACE, _SINGLETON_KEY
+def urgency_order_lock() -> LockKey:
+    """The tenant's urgency set's keyed lock, on one fixed key: a create and each reorder take it."""
+    return LockKey(LockNamespace.URGENCY_ORDER, _SINGLETON_KEY)
 
 
-def tenant_settings_lock() -> tuple[str, str]:
-    return TENANT_SETTINGS_LOCK_NAMESPACE, _SINGLETON_KEY
+def tenant_settings_lock() -> LockKey:
+    """The tenant's settings' keyed lock, on one fixed key: every change of the default, every retire, and every mint
+    take it, so the default holds still under a mint."""
+    return LockKey(LockNamespace.TENANT_SETTINGS, _SINGLETON_KEY)
 
 
 class IReadUrgencyRepository(Protocol):

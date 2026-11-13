@@ -40,7 +40,7 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
@@ -241,10 +241,10 @@ class _FakeUrgencies:
 
 @dataclass
 class _FakeUnit:
-    keys: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    keys: list[LockKey] = field(default_factory=list[LockKey])
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> _FakeUnit:
         self.keys.extend(keys)
         return self

@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 class Door(StrEnum):
@@ -222,7 +223,8 @@ class IReadConfigChanges(Protocol):
 class ISecretReferences(Protocol):
     """The active configured records that name a secret."""
 
-    def referrers_of(self, names: list[str]) -> dict[str, list[RecordRef]]:
+    def referrers_of(self, names: list[str], *, transaction: Transaction | None = None) -> dict[str, list[RecordRef]]:
         """For each name, its active referencing records, ordered by kind then key
-        (``bzh:bulk-reconstitution``); a name nothing references maps to ``[]``."""
+        (``bzh:bulk-reconstitution``); a name nothing references maps to ``[]``. Read in ``transaction`` when one is
+        given (``bzh:transaction-participation``)."""
         ...

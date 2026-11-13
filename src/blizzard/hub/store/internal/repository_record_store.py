@@ -4,7 +4,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 from the append-only ``repository_lifecycle_facts`` table, newest-fact-wins per id
 (``bzh:facts-not-status``). Every write commits its change row in the same transaction.
 
-Every write takes the named forge's row lock after the tenant's, refuses a forge that is gone or retired."""
+Every write runs in the caller's unit, which declares the keyed locks of the forge and the secret the repository
+names; whether it may name them is the domain's judgment, not this adapter's."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -25,27 +26,24 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryCoordinateTaken,
     RepositoryFields,
     RepositoryId,
-    RepositorySecretUnavailable,
     RepositorySlug,
     RepositorySlugTaken,
     resolve_repository_reference,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 
-# Shares forge resolution on the caller's connection.
+# Shares the forge read on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.forge_record_store import referred_forge, standing_forge
+from blizzard.hub.store.internal.forge_record_store import standing_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
-
-# Serializes secret availability with the secret adapter's row lock.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
@@ -60,13 +58,6 @@ def retirements(conn: Connection, ids: list[RepositoryId] | None = None) -> dict
         ):
             found[row.repository_id] = row.set_at
     return found
-
-
-def _check_secret(conn: Connection, secret: str) -> None:
-    lock_secret_row(conn, secret)
-    retired = secret_unavailable(conn, secret)
-    if retired is not None:
-        raise RepositorySecretUnavailable(secret, retired=retired)
 
 
 def _coordinate_holder(conn: Connection, record: ConfiguredRepository) -> str | None:
@@ -106,11 +97,8 @@ def _columns(record: ConfiguredRepository) -> dict[str, object]:
 
 
 def insert_record(conn: Connection, record: ConfiguredRepository, change: ConfigChange) -> None:
-    """The create body, inside the caller's transaction. :class:`RepositorySecretUnavailable`,
-    :class:`RepositorySlugTaken` or :class:`RepositoryCoordinateTaken` when refused, and the forge refusals of
-    :func:`referred_forge`."""
-    referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
-    _check_secret(conn, record.fields.secret_name)
+    """The create body, inside the caller's transaction. :class:`RepositorySlugTaken` or
+    :class:`RepositoryCoordinateTaken` when refused."""
     _SLUGS.claim(conn, record.repository_id, record.slug)
     holder = _coordinate_holder(conn, record)
     if holder is not None:
@@ -133,8 +121,6 @@ def update_record(
     conn: Connection, record: ConfiguredRepository, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
-    referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
-    _check_secret(conn, record.fields.secret_name)
     if left_slug is not None:
         _SLUGS.claim(conn, record.repository_id, record.slug)
     holder = _coordinate_holder(conn, record)
@@ -163,11 +149,7 @@ def record_lifecycle_fact(
     by: str,
     change: ConfigChange,
 ) -> None:
-    """The retire/enable body, inside the caller's transaction. Enabling re-checks the forge, refusing
-    :class:`~blizzard.hub.domain.config.forges.ForgeRetired` while it is retired, and the secret."""
-    if not retired:
-        referred_forge(conn, record.fields.forge_id, enabled=True, enabling=True)
-        _check_secret(conn, record.fields.secret_name)
+    """The retire/enable body, inside the caller's transaction."""
     moved = conn.execute(
         statements_of(conn)
         .update(repositories)
@@ -184,6 +166,12 @@ def record_lifecycle_fact(
     append_change(conn, change)
 
 
+def _lost_race(conn: Connection, record: ConfiguredRepository) -> RepositoryCoordinateTaken | RepositorySlugTaken:
+    """The refusal a write that lost the coordinate or the slug to a concurrent one reads as, on ``conn``."""
+    holder = _coordinate_holder(conn, record)
+    return _coordinate_taken(conn, record, holder) if holder is not None else RepositorySlugTaken(record.slug)
+
+
 def _revision(conn: Connection, repository_id: str) -> int:
     return conn.execute(
         statements_of(conn)
@@ -198,20 +186,15 @@ class RepositoryRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
+    def create(
+        self, record: ConfiguredRepository, *, change: ConfigChange, transaction: LockedTransaction
+    ) -> ConfiguredRepository:
+        conn = self._connection(transaction, record)
         try:
-            with self._store.write(
-                "create",
-                expect=(
-                    ConfigFieldError,
-                    RepositorySlugTaken,
-                    RepositoryCoordinateTaken,
-                    IntegrityError,
-                ),
-            ) as conn:
+            with conn.begin_nested():
                 insert_record(conn, record, change)
         except IntegrityError as exc:
-            raise self._lost_race(record) from exc
+            raise _lost_race(conn, record) from exc
         return record
 
     def update(
@@ -221,28 +204,15 @@ class RepositoryRecordStore:
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredRepository:
+        conn = self._connection(transaction, record)
         try:
-            with self._store.write(
-                "update",
-                expect=(
-                    ConfigFieldError,
-                    RepositoryCoordinateTaken,
-                    RepositorySlugTaken,
-                    ConfigRevisionConflict,
-                    IntegrityError,
-                ),
-            ) as conn:
+            with conn.begin_nested():
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
-            raise self._lost_race(record) from exc
+            raise _lost_race(conn, record) from exc
         return record
-
-    def _lost_race(self, record: ConfiguredRepository) -> RepositoryCoordinateTaken | RepositorySlugTaken:
-        """The refusal for a concurrent write that took the coordinate or the slug first, decided by a fresh read."""
-        with self._store.read("lost_race") as conn:
-            holder = _coordinate_holder(conn, record)
-            return _coordinate_taken(conn, record, holder) if holder is not None else RepositorySlugTaken(record.slug)
 
     def record_lifecycle(
         self,
@@ -253,12 +223,17 @@ class RepositoryRecordStore:
         at: datetime,
         by: str,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredRepository:
-        with self._store.write("record_lifecycle", expect=(ConfigFieldError, ConfigRevisionConflict)) as conn:
-            record_lifecycle_fact(
-                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
-            )
+        conn = self._connection(transaction, record)
+        record_lifecycle_fact(conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change)
         return record
+
+    def _connection(self, transaction: LockedTransaction, record: ConfiguredRepository) -> Connection:
+        """``transaction``'s connection, which must lock every key ``record`` names."""
+        for key in record.locks():
+            connection_for(self._store, transaction, key=key)
+        return connection_for(self._store, transaction)
 
     def get(self, repository_id: RepositoryId) -> ConfiguredRepository | None:
         return self.get_many([repository_id]).get(repository_id)

@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.urgency.model import MoveTo, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IWriteUrgencyChunks, IWriteUrgencyRepository
@@ -35,7 +35,7 @@ class _Transactions:
         yield cast(Transaction, self)
 
     def lock_set(
-        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> Transaction:
         self.chunk_sets.append(list(chunks))
         return cast(Transaction, self)

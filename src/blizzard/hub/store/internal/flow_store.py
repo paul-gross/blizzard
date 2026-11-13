@@ -40,6 +40,7 @@ from blizzard.hub.domain.delivery.flows import (
     Withdrawal,
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import write_landing_rows
@@ -65,8 +66,6 @@ _closures = s.flow_submission_closures
 _turns = s.hub_turns
 _facts = s.flow_facts
 _terms = s.flow_submission_terms
-#: The ``keyed_locks`` namespace a turn takes its flows' resources under.
-_FLOW_LOCK_NAMESPACE = "flow"
 
 
 class FlowStore:
@@ -416,7 +415,7 @@ class FlowStore:
             if row is None:
                 return None
             flows = flows_held(conn, [submission_id]).get(submission_id, ())
-            lock_keys(conn, _FLOW_LOCK_NAMESPACE, [flow.resource for flow in flows])
+            lock_keys(conn, LockNamespace.FLOW, [flow.resource for flow in flows])
             closed = conn.execute(
                 self._store.select(_closures, _closures.c.submission_id).where(
                     _closures.c.submission_id == submission_id

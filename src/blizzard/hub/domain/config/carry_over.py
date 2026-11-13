@@ -13,7 +13,7 @@ writes — so a ``BZ_FORGE_URL`` spelled differently from a stored forge's origi
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -25,7 +25,7 @@ from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ConfiguredForge
+from blizzard.hub.domain.config.forges import ConfiguredForge, forge_lock
 from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_BASE_BRANCH,
     ENV_FORGE_OWNER,
@@ -47,9 +47,11 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     RepositoryName,
 )
-from blizzard.hub.domain.config.secrets import SecretName, SecretNameError
+from blizzard.hub.domain.config.secrets import SecretName, SecretNameError, secret_lock
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceDraft, WorkSourceId, WorkSourceName
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import derive_slug
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 #: Every row the import writes is attributed to this actor, through this door.
 MIGRATION_CONTEXT = ChangeContext(actor="migration", door=Door.MIGRATION)
@@ -161,6 +163,19 @@ class LegacyImport:
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
     links: tuple[tuple[ConfiguredLink, ConfigChange], ...] = ()
+    #: The refusal each work source or repository created earns for the forge and secret it names, by the record's id,
+    #: judged under the import's keys; the writer raises it where that record's write would run.
+    verdicts: Mapping[str, ConfigFieldError] = field(default_factory=dict[str, ConfigFieldError])
+
+    def locks(self) -> list[LockKey]:
+        """The keys the import's unit declares, in canonical order: each forge it creates or a record names, each
+        secret it creates or a record names, and each project whose source links it writes."""
+        keys = {forge_lock(forge.forge_id) for forge, _ in self.forges}
+        keys.update(secret_lock(secret.name) for secret in self.secrets)
+        for record in (*(source for source, _ in self.work_sources), *(repo for repo, _ in self.repositories)):
+            keys.update(record.locks())
+        keys.update(lock for link, _ in self.links if (lock := link.lock()) is not None)
+        return sorted(keys)
 
 
 class ImportStatus(StrEnum):
@@ -202,9 +217,10 @@ class IImportLinks(Protocol):
 
 
 class IConfigImportWriter(IReadConfigImports, Protocol):
-    def write(self, imported: LegacyImport) -> bool:
-        """Commit every write and the fact in one transaction; ``False``, writing nothing, when an import
-        was recorded first. :class:`LegacyImportRefused` when a write's in-transaction check refuses it."""
+    def write(self, imported: LegacyImport, *, transaction: LockedTransaction) -> bool:
+        """Run every write and the fact in the caller's unit, which declared :meth:`LegacyImport.locks`; ``False``,
+        writing nothing, when an import was recorded first. :class:`LegacyImportRefused` when a write's
+        in-transaction check refuses it."""
         ...
 
 

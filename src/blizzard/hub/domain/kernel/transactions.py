@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey, LockNamespace
 
 
 class TransactionMisuse(RuntimeError):
@@ -27,13 +27,13 @@ class Transaction(Protocol):
 
     def lock_chunks(self, chunk_ids: Sequence[str]) -> "LockedTransaction": ...
 
-    def lock_keys(self, namespace: str, keys: Sequence[str]) -> "LockedTransaction": ...
+    def lock_keys(self, namespace: LockNamespace, keys: Sequence[str]) -> "LockedTransaction": ...
 
     def lock_set(
         self,
         *,
         chunks: Sequence[str] = (),
-        keys: Sequence[tuple[str, str]] = (),
+        keys: Sequence[LockKey] = (),
         hub: Sequence[HubLock] = (),
     ) -> "LockedTransaction":
         """Declare the unit's locks, taken in order: chunks, then keys, then ``hub``. A tenant unit may name only

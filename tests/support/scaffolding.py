@@ -105,12 +105,13 @@ from blizzard.hub.domain.config.forges import (
     ForgeKindOffers,
     canonical_origin,
     forge_for_origin,
+    forge_lock,
     origin_identity,
     suffixed_slug,
 )
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import RepositoryDraft
-from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
+from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName, secret_lock
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
@@ -118,6 +119,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -158,6 +160,7 @@ from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -165,6 +168,7 @@ from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
@@ -242,7 +246,7 @@ class SeedingTranscriptSegmentStore(TranscriptSegmentStore):
         self._units = HubTransactions(store)
 
     @contextmanager
-    def _own_unit(self, locks: list[tuple[str, str]]) -> Generator[LockedTransaction]:
+    def _own_unit(self, locks: list[LockKey]) -> Generator[LockedTransaction]:
         with self._units.begin() as transaction:
             yield transaction.lock_set(keys=locks)
 
@@ -608,6 +612,9 @@ def config_authoring(
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        transactions=HubTransactions(store),
+        secret_references=SecretReferrersStore(store),
+        forge_references=ForgeReferrersStore(store),
         clock=clock,
     )
 
@@ -623,7 +630,15 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
 
 
 @contextmanager
-def ranking_unit(engine: Engine, *, lock: tuple[str, str] = READY_RANKING_LOCK) -> Generator[LockedTransaction]:
+def keyed_unit(engine: Engine, keys: Iterable[LockKey]) -> Generator[LockedTransaction]:
+    """A hub unit over ``engine`` graduated on ``keys`` — the authority a write straight through a store requires, for
+    a test seeding records past the domain's verbs."""
+    with HubTransactions(hub_store_connections(engine)).begin() as transaction:
+        yield transaction.lock_set(keys=sorted(set(keys)))
+
+
+@contextmanager
+def ranking_unit(engine: Engine, *, lock: LockKey = READY_RANKING_LOCK) -> Generator[LockedTransaction]:
     """A hub unit over ``engine`` graduated on one list's ranking ``lock`` — the authority a
     position write requires, for a test seeding positions straight through the queue store."""
     with HubTransactions(hub_store_connections(engine)).begin() as transaction:
@@ -1641,7 +1656,8 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
             secret=FIXTURE_FORGE_SECRET,
         )
         record, change = ConfiguredWorkSource.new(name, None, fields, OP, at=at, work_source_id=WorkSourceId(name))
-        stores.create(record, change=change)
+        with keyed_unit(engine, [forge_lock(fields.forge_id), secret_lock(FIXTURE_FORGE_SECRET)]) as unit:
+            stores.create(record, change=change, transaction=unit)
         if link:
             link_project(engine, source=name)
 

@@ -16,8 +16,16 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.secrets.sealing import SealedValue, uncovered_key_ids
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.changes import ConfigChange, RecordRef
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9-]+$")
+
+
+def secret_lock(name: str) -> LockKey:
+    """The keyed lock on the secret ``name`` (``bzh:transaction-graduation``): a unit writing the secret, or a record
+    naming it, declares it."""
+    return LockKey(LockNamespace.SECRET, name)
 
 
 class SecretNameError(ValueError):
@@ -138,8 +146,9 @@ class ISecretCatalog(Protocol):
 
     def get(self, name: str) -> SecretMetadata | None: ...
 
-    def get_many(self, names: list[str]) -> dict[str, SecretMetadata]:
-        """Every named secret that exists, keyed by name (``bzh:bulk-reconstitution``)."""
+    def get_many(self, names: list[str], *, transaction: Transaction | None = None) -> dict[str, SecretMetadata]:
+        """Every named secret that exists, keyed by name (``bzh:bulk-reconstitution``) — read in ``transaction`` when
+        one is given (``bzh:transaction-participation``)."""
         ...
 
     def list_all(self) -> list[SecretMetadata]: ...
@@ -173,10 +182,10 @@ class IWriteSecretRepository(ISecretCatalog, Protocol):
         with it; :class:`SecretRevisionConflict` when the stored revision has moved."""
         ...
 
-    def record_lifecycle(self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange) -> None:
-        """Append the lifecycle fact and ``change`` in one transaction. Retiring is refused
-        with :class:`SecretReferenced` when an active record names the secret, checked in
-        that same transaction."""
+    def record_lifecycle(
+        self, name: str, *, retired: bool, at: datetime, by: str, change: ConfigChange, transaction: LockedTransaction
+    ) -> None:
+        """Append the lifecycle fact and ``change`` in ``transaction``, which locks the secret."""
         ...
 
 

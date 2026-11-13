@@ -17,6 +17,7 @@ from sqlalchemy.sql import ClauseElement, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.domain.observability.transcripts import (
     TranscriptSlice,
@@ -263,7 +264,7 @@ def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     ids=["lane only", "chunk only", "another runner's lane"],
 )
 def test_a_segment_write_is_refused_by_a_unit_not_locking_its_chunk_and_its_runners_lane(
-    tmp_path: Path, locks: list[tuple[str, str]]
+    tmp_path: Path, locks: list[LockKey]
 ) -> None:
     connections = hub_store_connections(_migrated_engine(tmp_path))
     store = TranscriptSegmentStore(connections)

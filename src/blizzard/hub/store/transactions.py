@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
-from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import (
     GraduationError,
     IHubTransactions,
@@ -30,7 +30,7 @@ class _Unit:
         self.statements = False
         self.graduated = False
         self.chunks: frozenset[str] = frozenset()
-        self.keys: frozenset[tuple[str, str]] = frozenset()
+        self.keys: frozenset[LockKey] = frozenset()
         self.hub: frozenset[HubLock] = frozenset()
 
     def account(self, *args: Any, **kwargs: Any) -> None:
@@ -44,14 +44,14 @@ class _Transaction:
     def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
         return self.lock_set(chunks=chunk_ids)
 
-    def lock_keys(self, namespace: str, keys: Sequence[str]) -> LockedTransaction:
-        return self.lock_set(keys=[(namespace, key) for key in keys])
+    def lock_keys(self, namespace: LockNamespace, keys: Sequence[str]) -> LockedTransaction:
+        return self.lock_set(keys=[LockKey(namespace, key) for key in keys])
 
     def lock_set(
         self,
         *,
         chunks: Sequence[str] = (),
-        keys: Sequence[tuple[str, str]] = (),
+        keys: Sequence[LockKey] = (),
         hub: Sequence[HubLock] = (),
     ) -> LockedTransaction:
         unit = self.unit
@@ -67,8 +67,8 @@ class _Transaction:
         unit.keys = frozenset(keys)
         for chunk_id in sorted(unit.chunks):
             lock_chunk_row(unit.conn, chunk_id)
-        for namespace, key in sorted(unit.keys):
-            lock_keys(unit.conn, namespace, [key])
+        for lock_key in sorted(unit.keys):
+            lock_keys(unit.conn, lock_key.namespace, [lock_key.key])
         for lock in sorted(unit.hub):
             lock_hub(unit.conn, lock)
         return _LockedTransaction(unit)
@@ -107,7 +107,7 @@ def work_ref_handle_connection(handle: ILockedWorkRefRead, store: ScopedConnecti
         raise TransactionMisuse("invalid work-ref lock handle")
     conn = connection_for(store, handle.transaction)
     for pointer in pointers:
-        connection_for(store, handle.transaction, key=("work_ref", pointer_lock_key(pointer)))
+        connection_for(store, handle.transaction, key=LockKey(LockNamespace.WORK_REF, pointer_lock_key(pointer)))
     return conn
 
 
@@ -134,7 +134,7 @@ def connection_for(
     transaction: Transaction,
     *,
     chunk: str | None = None,
-    key: tuple[str, str] | None = None,
+    key: LockKey | None = None,
     hub: HubLock | None = None,
 ) -> Connection:
     """Resolve a token only for its originating store, lifetime, and requested lock coverage."""

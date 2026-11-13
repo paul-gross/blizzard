@@ -22,6 +22,9 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.config.forges import ForgeId, forge_lock
+from blizzard.hub.domain.config.secrets import secret_lock
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
@@ -37,7 +40,7 @@ from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTena
 _TENANT = "uow_proof"
 _TIMEOUT = 10.0
 _CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
-_PROBE_NAMESPACE = "proof"
+_PROBE_NAMESPACE = LockNamespace.FLOW
 
 
 class _CompatibleGuard(ScopedConnections):
@@ -58,7 +61,7 @@ class _CompatibleGuard(ScopedConnections):
             raise TenantClosed(self.scope.tenant)
 
 
-_LockSet = tuple[list[str], list[tuple[str, str]]]
+_LockSet = tuple[list[str], list[LockKey]]
 
 _RETIRING = UrgencyId("urg_proof")
 #: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, both
@@ -90,6 +93,14 @@ _ENABLE: _LockSet = ([], [urgency_order_lock(), urgency_lock(_RETIRING)])
 #: A stop or an operator complete of ``a`` — the chunk row alone — against the retire, each way round: every write
 #: that finishes a chunk takes its row lock, so no chunk the retire moves finishes between its re-read and its move.
 _FINISH: _LockSet = (["a"], [])
+#: A forge retire — the forge's key — against an enable of a repository naming it — the forge's and its secret's keys —
+#: and a secret retire against an enable of a work source naming it, each way round: the shared key serializes them, so
+#: a retire never commits between a referrer's enable judging the forge or secret live and its write.
+_FORGE = forge_lock(ForgeId("frg_proof"))
+_SECRET = secret_lock("tok_proof")
+_FORGE_RETIRE: _LockSet = ([], [_FORGE])
+_SECRET_RETIRE: _LockSet = ([], [_SECRET])
+_REFERRER_ENABLE: _LockSet = ([], [_FORGE, _SECRET])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -111,12 +122,16 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "complete, then urgency retire": (_FINISH, _RETIRE),
     "urgency enable, then reorder": (_ENABLE, _REORDER),
     "reorder, then urgency enable": (_REORDER, _ENABLE),
+    "forge retire, then repository enable": (_FORGE_RETIRE, _REFERRER_ENABLE),
+    "repository enable, then forge retire": (_REFERRER_ENABLE, _FORGE_RETIRE),
+    "secret retire, then work-source enable": (_SECRET_RETIRE, _REFERRER_ENABLE),
+    "work-source enable, then secret retire": (_REFERRER_ENABLE, _SECRET_RETIRE),
 }
 
 
-def _canonical(chunks: Sequence[str], keys: Sequence[tuple[str, str]]) -> list[str]:
+def _canonical(chunks: Sequence[str], keys: Sequence[LockKey]) -> list[str]:
     """The order the store takes a lock set in: chunk ids, then keys by namespace and key."""
-    return [*sorted(chunks), *(f"{namespace}/{key}" for namespace, key in sorted(keys))]
+    return [*sorted(chunks), *(f"{lock.namespace}/{lock.key}" for lock in sorted(keys))]
 
 
 def _pid(conn: Connection) -> int:
@@ -169,7 +184,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
     def chunk_lock(conn: Connection, chunk_id: str) -> None:
         observe(conn, chunk_id, lambda: original_chunk(conn, chunk_id))
 
-    def key_lock(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
+    def key_lock(conn: Connection, namespace: LockNamespace, keys: Sequence[str]) -> None:
         observe(conn, f"{namespace}/{keys[0]}", lambda: original_keys(conn, namespace, keys))
 
     def writer(reverse: bool) -> None:
@@ -181,7 +196,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
                 elif kind == "chunks":
                     unit.lock_chunks(["b", "a"] if reverse else ["a", "b"])
                 else:
-                    keys = [("z", "b"), ("a", "a")]
+                    keys = [LockKey(LockNamespace.WORK_REF, "b"), LockKey(LockNamespace.CADENCE_ERRAND, "a")]
                     unit.lock_set(keys=keys if reverse else list(reversed(keys)))
         except BaseException as exc:
             failures.append(exc)
@@ -226,7 +241,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
         if sets is not None:
             expected_by = {worker: _canonical(*sets[index]) for index, worker in enumerate(("first", "second"))}
         else:
-            expected = ["a", "b"] if kind == "chunks" else ["a/a", "z/b"]
+            expected = ["a", "b"] if kind == "chunks" else ["cadence_errand/a", "work_ref/b"]
             expected_by = {"first": expected, "second": expected}
         if acquired != expected_by:
             raise RuntimeError(f"noncanonical lock order: {acquired}")
@@ -334,7 +349,7 @@ class _Threads:
 def _writes_a_probe(hub: _Hub, tenant: str, key: str, hold: Callable[[int], None] | None = None) -> None:
     """A scoped write that locks one key (inserting its ``keyed_locks`` row) and then holds, if asked."""
     with hub.unit(TenantId(tenant)).begin() as unit:
-        unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+        unit.lock_set(keys=[LockKey(_PROBE_NAMESPACE, key)])
         if hold is not None:
             hold(_unit_pid(unit))
 
@@ -500,7 +515,7 @@ def _case_different_keys_do_not_exclude(hub: _Hub) -> None:
 
     def write(key: str, hold: bool) -> None:
         with tx.HubTransactions(store).begin() as unit:
-            unit.lock_set(keys=[(_PROBE_NAMESPACE, key)])
+            unit.lock_set(keys=[LockKey(_PROBE_NAMESPACE, key)])
             if hold:
                 held.set()
                 if not release.wait(_TIMEOUT):
@@ -586,7 +601,9 @@ def main() -> None:
                 conn.execute(sa.text("INSERT INTO tenants VALUES (:tenant, 'proof')"), {"tenant": _TENANT})
                 conn.execute(sa.text("INSERT INTO chunks VALUES (:tenant, 'a'), (:tenant, 'b')"), {"tenant": _TENANT})
                 conn.execute(
-                    sa.text("INSERT INTO keyed_locks VALUES (:tenant, 'a', 'a'), (:tenant, 'z', 'b')"),
+                    sa.text(
+                        "INSERT INTO keyed_locks VALUES (:tenant, 'cadence_errand', 'a'), (:tenant, 'work_ref', 'b')"
+                    ),
                     {"tenant": _TENANT},
                 )
             _run_pair(engine, kind="chunks", production_guard=False)

@@ -33,6 +33,7 @@ from blizzard.hub.domain.config.forges import (
     ForgeId,
     ForgeKindImmutable,
     canonical_fields,
+    forge_lock,
     merge,
 )
 from blizzard.hub.domain.config.records import (
@@ -53,6 +54,8 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     WorkSourceId,
 )
+from blizzard.hub.domain.kernel.locks import LockKey
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 PROJECTS_SECTION = "projects"
 SECRETS_SECTION = "secrets"
@@ -201,6 +204,9 @@ class PlannedWrite:
     record: ConfiguredRecord
     from_revision: int | None
     change: ConfigChange
+    #: The refusal the write earns for the forge and secret it names, judged under the apply's keys; the writer raises
+    #: it where the write would run.
+    verdict: ConfigFieldError | None = None
 
 
 @domain_model
@@ -240,7 +246,7 @@ class ApplyPlan:
     #: The landing-order facts, committed after ``writes`` so a link the plan creates stands before its position.
     positions: tuple[PlannedPosition, ...] = ()
     #: The keyed locks the writer declares, in their canonical order, before its first write.
-    locks: tuple[tuple[str, str], ...] = ()
+    locks: tuple[LockKey, ...] = ()
     #: The urgencies the writes newly name, checked under ``locks`` before the first write.
     guards: tuple[UrgencyReferenceGuard, ...] = ()
 
@@ -261,7 +267,7 @@ class ConfigDeclaration:
     cadences: tuple[RecordDeclaration, ...] = ()
     #: The urgencies the routine and cadence writes newly name; their locks are declared beside the urgency sections'.
     reference_guards: tuple[UrgencyReferenceGuard, ...] = ()
-    reference_locks: tuple[tuple[str, str], ...] = ()
+    reference_locks: tuple[LockKey, ...] = ()
 
 
 @domain_model
@@ -294,23 +300,34 @@ class StoredConfig:
 
 
 class IConfigApplyWriter(Protocol):
-    """Commits every planned write in one transaction."""
+    """Runs every planned write in the caller's unit, which declared the plan's :attr:`ApplyPlan.locks`."""
 
     def apply(
         self,
         writes: Sequence[PlannedWrite],
         *,
-        dry_run: bool,
+        transaction: LockedTransaction,
         positions: Sequence[PlannedPosition] = (),
-        locks: Sequence[tuple[str, str]] = (),
         guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
-        """Declare ``locks`` once and refuse the entry of the first of ``guards`` whose urgency moved, then run each
-        write through the same in-transaction checks its per-record verb runs, in order, then append each of
-        ``positions`` while its project's landing-order sequence stands at its ``from_seq``.
-        With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
-        the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
+        """Refuse the entry of the first of ``guards`` whose urgency moved, then run each write through the same
+        in-transaction checks its per-record verb runs, in order, then append each of ``positions`` while its
+        project's landing-order sequence stands at its ``from_seq``. The first refusal raises
+        :class:`ApplyEntryRefused`, and the caller's unit rolls back."""
         ...
+
+
+def _write_locks(writes: Sequence[PlannedWrite]) -> set[LockKey]:
+    """The keys this section's ``writes`` rely on: each forge a forge write writes, and each forge and secret a
+    work-source or repository write names."""
+    keys: set[LockKey] = set()
+    for write in writes:
+        record = write.record
+        if isinstance(record, ConfiguredForge):
+            keys.add(forge_lock(record.forge_id))
+        elif isinstance(record, ConfiguredWorkSource | ConfiguredRepository):
+            keys.update(record.locks())
+    return keys
 
 
 def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, at: datetime) -> ApplyPlan:
@@ -340,7 +357,16 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         writes=tuple(plan.writes),
         outcomes=tuple(plan.outcomes),
         positions=declaration.projects.positions,
-        locks=tuple(sorted({*declaration.urgencies.locks, *declaration.reference_locks})),
+        locks=tuple(
+            sorted(
+                {
+                    *declaration.projects.locks,
+                    *declaration.urgencies.locks,
+                    *declaration.reference_locks,
+                    *_write_locks(plan.writes),
+                }
+            )
+        ),
         guards=declaration.reference_guards,
     )
 

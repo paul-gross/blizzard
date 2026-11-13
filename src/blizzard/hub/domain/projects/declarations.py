@@ -34,6 +34,7 @@ from blizzard.hub.domain.config.work_sources import (
     require_configurable,
 )
 from blizzard.hub.domain.kernel import id_or_slug
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import Slug
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.color import ColorPick, decide_color, parse_color
@@ -264,7 +265,12 @@ def plan_projects(
         except ConfigFieldError as exc:
             raise ApplyEntryRefused(PROJECTS_SECTION, index, exc) from exc
     return ProjectsPlan(
-        section=ApplyPlan(tuple(writes), tuple(outcomes), tuple(positions)),
+        section=ApplyPlan(
+            tuple(writes),
+            tuple(outcomes),
+            tuple(positions),
+            locks=tuple(sorted({lock for write in writes if (lock := _link_lock(write.record)) is not None})),
+        ),
         projects=tuple(sorted(current.values(), key=lambda p: p.slug)),
         former=stored.former,
     )
@@ -566,3 +572,8 @@ _repository_link_record_conforms: type[ConfiguredLink] = RepositoryLink
 
 
 _import_links_conforms: type[IImportLinks] = ImportLinks
+
+
+def _link_lock(record: object) -> LockKey | None:
+    """The key a planned link write relies on (:meth:`SourceLink.lock`); ``None`` for any other write."""
+    return record.lock() if isinstance(record, SourceLink | RepositoryLink) else None

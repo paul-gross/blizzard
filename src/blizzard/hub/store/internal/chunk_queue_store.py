@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.ports.queue import (
     READY_RANKING_LOCK,
     IWriteChunkQueueRepository,
 )
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -114,7 +115,7 @@ class ChunkQueueStore:
         )
 
     def _ranked_chunk_connection(
-        self, transaction: LockedTransaction, chunk_id: str, ranking_lock: tuple[str, str]
+        self, transaction: LockedTransaction, chunk_id: str, ranking_lock: LockKey
     ) -> Connection:
         """``transaction``'s connection, refused unless it locks both ``chunk_id`` and ``ranking_lock``."""
         connection_for(self._store, transaction, key=ranking_lock)

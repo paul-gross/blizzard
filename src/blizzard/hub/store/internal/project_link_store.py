@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.projects.links import LINKED_FIELD, IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -64,14 +65,11 @@ LINK_KINDS: Mapping[RecordKind, LinkKind] = {
     RecordKind.PROJECT_REPOSITORY_LINK: _REPOSITORIES,
 }
 
-#: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
-#: unlink takes its project's key.
-PROJECT_SOURCE_LINKS_LOCK_NAMESPACE = "project-source-links"
-
 
 def _lock_source_links(conn: Connection, kind: LinkKind, project_id: str) -> None:
+    """Every source link or unlink takes its project's key in the project-source-links namespace."""
     if kind is _SOURCES:
-        lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project_id])
+        lock_keys(conn, LockNamespace.PROJECT_SOURCE_LINKS, [project_id])
 
 
 def _append_fact(
@@ -93,9 +91,8 @@ def _append_fact(
 
 
 def insert_link(conn: Connection, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
-    """The first-link body, inside the caller's transaction: the link at revision 1, its linked fact, the change —
-    a source link under its project's lock."""
-    _lock_source_links(conn, kind, project_id)
+    """The first-link body, inside the caller's transaction, which holds a source link's project's lock: the link at
+    revision 1, its linked fact, the change."""
     conn.execute(
         statements_of(conn).insert(kind.links).values({"project_id": project_id, kind.column: name, "revision": 1})
     )
@@ -106,12 +103,11 @@ def insert_link(conn: Connection, kind: LinkKind, project_id: str, name: str, ch
 def record_link(
     conn: Connection, link: SourceLink | RepositoryLink, *, from_revision: int, change: ConfigChange
 ) -> None:
-    """The edit/unlink/relink body, inside the caller's transaction: compare-and-set ``link``'s revision, writing a
-    repository link's own base branch, append a standing fact when the change moves the link's standing, and append
-    the change — a source link under its project's lock."""
+    """The edit/unlink/relink body, inside the caller's transaction, which holds a source link's project's lock:
+    compare-and-set ``link``'s revision, writing a repository link's own base branch, append a standing fact when the
+    change moves the link's standing, and append the change."""
     kind = LINK_KINDS[link.KIND]
     project_id, name = link.project_id, link.target()
-    _lock_source_links(conn, kind, project_id)
     links = kind.links
     update = (
         statements_of(conn)
@@ -264,6 +260,7 @@ class ProjectLinkStore:
     def _create(self, operation: str, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
         try:
             with self._store.write(operation, expect=(IntegrityError,)) as conn:
+                _lock_source_links(conn, kind, project_id)
                 insert_link(conn, kind, project_id, name, change)
         except IntegrityError as exc:  # a concurrent first link of the same pair landed first
             raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=1) from exc
@@ -272,6 +269,7 @@ class ProjectLinkStore:
         self, operation: str, link: SourceLink | RepositoryLink, from_revision: int, change: ConfigChange
     ) -> None:
         with self._store.write(operation, expect=(ConfigRevisionConflict,)) as conn:
+            _lock_source_links(conn, LINK_KINDS[link.KIND], link.project_id)
             record_link(conn, link, from_revision=from_revision, change=change)
 
     # --- reads ---

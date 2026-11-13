@@ -4,9 +4,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 ``forge_lifecycle_facts`` table, newest-fact-wins per id (``bzh:facts-not-status``). Every write commits its change row
 in the same transaction, and every address it stores is canonical.
 
-A forge's row is locked as a secret's is (:func:`lock_forge_row`): its retire and enable, and every repository or
-work-source write naming it, take the lock first, so a retire and an enable racing on one forge wait for each other's
-commit."""
+An edit, a retire and an enable run in the caller's unit, which declares the forge's keyed lock; every repository or
+work-source write naming the forge declares it too, so a retire and an enable racing on one forge wait for each other's
+commit. Whether a forge may be retired is the domain's judgment, not this adapter's."""
 
 from __future__ import annotations
 
@@ -25,22 +25,19 @@ from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeFields,
     ForgeId,
-    ForgeInUse,
     ForgeOriginTaken,
-    ForgeRetired,
     ForgeSlug,
     ForgeSlugTaken,
-    ForgeUnavailable,
     IWriteForgeRepository,
     canonical_origin,
-    require_unused,
+    forge_lock,
     resolve_forge_reference,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.forge_referrers import active_referrers
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
@@ -49,22 +46,16 @@ from blizzard.hub.store.schema import (
     forges,
 )
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 _SLUGS = SlugTables(forges, forge_former_slugs, "forge_id", ForgeSlugTaken)
-
-
-def lock_forge_row(conn: Connection, forge_id: str) -> None:
-    """Take the named forge row's write lock, as the first statement after the scoped write's tenant-row lock and
-    before any guard read (``bzh:store-exclusive-write``). A forge's retire and enable and every referrer write take
-    it, so one waits for the other's commit. A missing forge matches no row, and the caller's unknown-forge refusal
-    still fires."""
-    conn.execute(statements_of(conn).update(forges).where(forges.c.forge_id == forge_id).values(forge_id=forge_id))
 
 
 @adapter_model
 @dataclass(frozen=True)
 class StandingForge:
-    """What a referrer's write reads of the forge it names: its addresses, kind, slug, and whether it is retired."""
+    """What a repository write reads of the forge it names to label a taken coordinate: its addresses, kind, slug,
+    and whether it is retired."""
 
     forge_id: str
     slug: str
@@ -85,21 +76,6 @@ def standing_forge(conn: Connection, forge_id: str) -> StandingForge | None:
         return None
     retired = forge_id in _retired_ids(conn, [ForgeId(forge_id)])
     return StandingForge(row.forge_id, row.slug, row.kind, row.api_base, row.web_base, retired)
-
-
-def referred_forge(conn: Connection, forge_id: str, *, enabled: bool, enabling: bool = False) -> StandingForge:
-    """The forge a repository or work-source write names, under its row lock: :class:`ForgeUnavailable` when it does
-    not exist, or is retired while the record written is ``enabled``; :class:`ForgeRetired` when ``enabling`` a record
-    onto a retired forge. A retired record keeps naming the forge it named, retired or not."""
-    lock_forge_row(conn, forge_id)
-    forge = standing_forge(conn, forge_id)
-    if forge is None:
-        raise ForgeUnavailable("forge", f"forge {forge_id} is unknown")
-    if forge.retired and enabling:
-        raise ForgeRetired(forge.slug, forge.api_base)
-    if forge.retired and enabled:
-        raise ForgeUnavailable("forge", f"forge {forge.label} is retired")
-    return forge
 
 
 def _retired_ids(conn: Connection, ids: list[ForgeId] | None = None) -> set[str]:
@@ -155,7 +131,6 @@ def update_forge(
     conn: Connection, record: ConfiguredForge, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
-    lock_forge_row(conn, record.forge_id)
     if left_slug is not None:
         _SLUGS.claim(conn, record.forge_id, record.slug)
     holder = _origin_holder(conn, record)
@@ -184,11 +159,7 @@ def record_forge_lifecycle(
     by: str,
     change: ConfigChange,
 ) -> None:
-    """The retire/enable body, inside the caller's transaction, under the forge's row lock. Retiring refuses
-    :class:`ForgeInUse` while an enabled record names the forge."""
-    lock_forge_row(conn, record.forge_id)
-    if retired:
-        require_unused(record.slug, active_referrers(conn, [record.forge_id])[record.forge_id])
+    """The retire/enable body, inside the caller's transaction."""
     moved = conn.execute(
         statements_of(conn)
         .update(forges)
@@ -209,6 +180,12 @@ def _revision(conn: Connection, forge_id: str) -> int:
     return conn.execute(
         statements_of(conn).select(forges, forges.c.revision).where(forges.c.forge_id == forge_id)
     ).scalar_one()
+
+
+def _lost_race(conn: Connection, record: ConfiguredForge) -> ForgeOriginTaken | ForgeSlugTaken:
+    """The refusal a write that lost the origin or the slug to a concurrent one reads as, on ``conn``."""
+    holder = _origin_holder(conn, record)
+    return ForgeOriginTaken(record.fields.api_base, holder=holder) if holder else ForgeSlugTaken(record.slug)
 
 
 def forge_holding(conn: Connection, api_base: str) -> ConfiguredForge | None:
@@ -232,22 +209,26 @@ class ForgeRecordStore:
         return record
 
     def update(
-        self, record: ConfiguredForge, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredForge,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredForge:
+        conn = connection_for(self._store, transaction, key=forge_lock(record.forge_id))
         try:
-            with self._store.write(
-                "update", expect=(ForgeSlugTaken, ForgeOriginTaken, ConfigRevisionConflict, IntegrityError)
-            ) as conn:
+            with conn.begin_nested():
                 update_forge(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
-            raise self._lost_race(record) from exc
+            raise _lost_race(conn, record) from exc
         return record
 
     def _lost_race(self, record: ConfiguredForge) -> ForgeOriginTaken | ForgeSlugTaken:
         """The refusal for a concurrent write that took the origin or the slug first, decided by a fresh read."""
         with self._store.read("lost_race") as conn:
-            holder = _origin_holder(conn, record)
-        return ForgeOriginTaken(record.fields.api_base, holder=holder) if holder else ForgeSlugTaken(record.slug)
+            return _lost_race(conn, record)
 
     def record_lifecycle(
         self,
@@ -258,21 +239,22 @@ class ForgeRecordStore:
         at: datetime,
         by: str,
         change: ConfigChange,
+        transaction: LockedTransaction,
     ) -> ConfiguredForge:
-        with self._store.write("record_lifecycle", expect=(ForgeInUse, ConfigRevisionConflict)) as conn:
-            record_forge_lifecycle(
-                conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change
-            )
+        conn = connection_for(self._store, transaction, key=forge_lock(record.forge_id))
+        record_forge_lifecycle(conn, record, retired=retired, from_revision=from_revision, at=at, by=by, change=change)
         return record
 
     def get(self, forge_id: ForgeId) -> ConfiguredForge | None:
         return self.get_many([forge_id]).get(forge_id)
 
-    def get_many(self, forge_ids: list[ForgeId]) -> dict[ForgeId, ConfiguredForge]:
+    def get_many(
+        self, forge_ids: list[ForgeId], *, transaction: Transaction | None = None
+    ) -> dict[ForgeId, ConfiguredForge]:
         if not forge_ids:
             return {}
         found: dict[ForgeId, ConfiguredForge] = {}
-        with self._store.read("get_many") as conn:
+        with connection_in(self._store, transaction, "get_many") as conn:
             retired = _retired_ids(conn, forge_ids)
             for batch in id_batches(forge_ids):
                 rows = conn.execute(self._store.select(forges).where(forges.c.forge_id.in_(batch))).all()

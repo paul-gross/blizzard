@@ -33,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILo
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node, TargetGraphRetired
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.operations.edit import (
@@ -97,7 +98,7 @@ class _FakeChunkRepo:
     )
     urgencies_set: list[tuple[str, UrgencyId]] = field(default_factory=list[tuple[str, UrgencyId]])
     #: The keys each ``locked`` call declared beside the row.
-    keys_locked: list[list[tuple[str, str]]] = field(default_factory=list[list[tuple[str, str]]])
+    keys_locked: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
 
     def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
@@ -159,7 +160,7 @@ class _FakeExclusiveWrites:
     repo: _FakeChunkRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()) -> Generator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()) -> Generator[ILockedChunkRead]:
         self.repo.keys_locked.append(list(keys))
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
 
@@ -418,9 +419,7 @@ def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> 
     @dataclass
     class _SpyExclusiveWrites:
         @contextmanager
-        def locked(
-            self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
-        ) -> Generator[ILockedChunkRead]:
+        def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()) -> Generator[ILockedChunkRead]:
             calls.append("acquire")
             try:
                 yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))

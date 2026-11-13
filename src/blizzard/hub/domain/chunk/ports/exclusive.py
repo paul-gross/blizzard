@@ -15,6 +15,7 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
+from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
@@ -83,7 +84,7 @@ class IChunkExclusiveWrites(Protocol):
     writers share."""
 
     def locked(
-        self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
+        self, chunk_ids: Sequence[str], *, keys: Sequence[LockKey] = ()
     ) -> AbstractContextManager[ILockedChunkRead]:
         """Lock every named row, first, in sorted chunk-id order (closes cross-writer
         deadlock on Postgres — ``bzh:store-exclusive-write``), then ``keys`` in canonical order in the
@@ -93,7 +94,7 @@ class IChunkExclusiveWrites(Protocol):
         ...
 
     def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[tuple[str, str]] = ()
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[LockKey] = ()
     ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each

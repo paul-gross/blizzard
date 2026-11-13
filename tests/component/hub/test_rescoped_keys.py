@@ -31,6 +31,7 @@ from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, Forg
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
@@ -38,9 +39,11 @@ from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
@@ -182,6 +185,9 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        transactions=HubTransactions(store),
+        secret_references=SecretReferrersStore(store),
+        forge_references=ForgeReferrersStore(store),
         clock=FixedClock(_AT),
     )
 
@@ -220,7 +226,7 @@ def test_each_tenants_hub_source_numbers_its_work_items_from_one(tenants: _Tenan
     assert [second.allocate_ref("hub"), second.allocate_ref("hub"), first.allocate_ref("hub")] == ["1", "2", "3"]
 
 
-def _lock_rows(tenants: _Tenants, namespace: str) -> list[tuple[str, str]]:
+def _lock_rows(tenants: _Tenants, namespace: LockNamespace) -> list[tuple[str, str]]:
     locks = schema.keyed_locks
     with tenants.engine.connect() as conn:
         rows = conn.execute(
@@ -234,7 +240,9 @@ def test_two_tenants_locking_one_graph_name_each_hold_their_own_lock_row(tenants
         with GraphStore(scoped_connections(tenants.engine, tenant)).locked_name("release"):
             pass
 
-    assert _lock_rows(tenants, "graph_name") == sorted([(tenants.first, "release"), (tenants.second, "release")])
+    assert _lock_rows(tenants, LockNamespace.GRAPH_NAME) == sorted(
+        [(tenants.first, "release"), (tenants.second, "release")]
+    )
 
 
 def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: _Tenants) -> None:
@@ -247,7 +255,7 @@ def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: 
         with stores.exclusive.locked_work_refs([pointer]):
             pass
 
-    held = [tenant for tenant, _ in _lock_rows(tenants, "work_ref")]
+    held = [tenant for tenant, _ in _lock_rows(tenants, LockNamespace.WORK_REF)]
     assert held == sorted([tenants.first, tenants.second])
 
 

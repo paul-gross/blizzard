@@ -10,18 +10,17 @@ from typing import Protocol
 from blizzard.hub.domain.cadence.errands import ErrandKey, ErrandRun
 from blizzard.hub.domain.cadence.model import Cadence
 from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.tenancy import TenantId
 
-#: The keyed-lock namespace of an errand (``bzh:transaction-graduation``): the cadence mint locks its errand under
-#: it, so two mints of one errand decide one after the other.
-ERRAND_LOCK_NAMESPACE = "cadence_errand"
 
-
-def errand_lock(key: ErrandKey) -> tuple[str, str]:
-    """The keyed lock on ``key``'s errand — keyed on its chore and scope ids without separator collisions."""
-    return ERRAND_LOCK_NAMESPACE, json.dumps([key.chore_id, key.scope_id])
+def errand_lock(key: ErrandKey) -> LockKey:
+    """The keyed lock on ``key``'s errand (``bzh:transaction-graduation``) — keyed on its chore and scope ids without
+    separator collisions. The cadence mint locks its errand under it, so two mints of one errand decide one after the
+    other."""
+    return LockKey(LockNamespace.CADENCE_ERRAND, json.dumps([key.chore_id, key.scope_id]))
 
 
 class IReadCadenceRepository(Protocol):

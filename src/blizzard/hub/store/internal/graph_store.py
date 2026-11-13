@@ -36,6 +36,7 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
+from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_retired_select
 from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
@@ -261,9 +262,6 @@ EDGES = EdgeRow()
 NODES = NodeRow()
 
 
-_GRAPH_NAME_LOCK_NAMESPACE = "graph_name"
-
-
 @dataclass(frozen=True)
 class LockedGraphName:
     """The concrete name-lock handle — :class:`ILockedGraphNameRead`'s adapter, every read
@@ -288,7 +286,7 @@ class GraphStore:
     @contextmanager
     def locked_name(self, name: str) -> Generator[ILockedGraphNameRead, None, None]:
         with self._store.write("locked_graph_name") as conn:
-            lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
+            lock_keys(conn, LockNamespace.GRAPH_NAME, [name])
             yield LockedGraphName(conn, self)
 
     def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
