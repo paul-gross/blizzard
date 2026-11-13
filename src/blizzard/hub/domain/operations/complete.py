@@ -14,9 +14,11 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 def is_completion_replay(facts: ChunkFacts) -> bool:
@@ -32,18 +34,22 @@ class CompleteService:
         *,
         lifecycle: IWriteChunkLifecycleRepository,
         submissions: IReadChunkFlowSubmissions,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        record: IReadChunkRecordRepository,
+        transactions: IHubTransactions,
         clock: IClock,
         closer_available: Callable[[str], bool],
         events: EventLogService,
     ) -> None:
         self._lifecycle = lifecycle
         self._submissions = submissions
+        self._facts = facts
+        self._record = record
         self._events = events
         self._clock = clock
         self._closer_available = closer_available
         # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
 
     def complete(self, chunk: Chunk, *, by: str) -> LeverWrite | None:
         """Append ``chunk.completed``, release the chunk's live route, and close ``completed`` each of its
@@ -54,23 +60,24 @@ class CompleteService:
         ``withdrawn`` flow facts, for the caller to announce once committed; the close-skip events it wrote are
         published here, once the unit has committed. Raises :class:`ChunkNotFound` for a chunk gone under the lock.
         ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if is_completion_replay(facts):
                 return None
-            current = handle.record(chunk.chunk_id)
+            current = self._record.get(chunk.chunk_id, transaction=transaction)
             if current is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
-            written = self._lifecycle.record_completion_locked(
-                handle,
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=transaction)
+            written = self._lifecycle.record_completion(
                 chunk.chunk_id,
                 by=by,
                 at=self._clock.now(),
                 close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
                 waiting=waiting(open_submissions),
+                transaction=transaction,
             )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         return written

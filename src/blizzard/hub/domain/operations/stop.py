@@ -12,9 +12,10 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 class ChunkNotStoppable(Exception):
@@ -40,14 +41,16 @@ class StopService:
         *,
         lifecycle: IWriteChunkLifecycleRepository,
         submissions: IReadChunkFlowSubmissions,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._lifecycle = lifecycle
         self._submissions = submissions
+        self._facts = facts
         self._clock = clock
         # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
 
     def stop(self, chunk: Chunk, *, by: str) -> LeverWrite:
         """Append ``chunk.stopped``, release the chunk's live route, and close ``stopped`` each of its flow
@@ -58,12 +61,17 @@ class StopService:
         gone under the lock. Returns the ``chunk_stopped`` id and the ``withdrawn`` flow facts, for the caller to
         announce once committed. ``at`` is stamped from the injected clock after the row lock is taken, never before
         it."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             require_stoppable(chunk.chunk_id, facts)
-            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
-            return self._lifecycle.record_stop_locked(
-                handle, chunk.chunk_id, by=by, at=self._clock.now(), waiting=waiting(open_submissions)
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=transaction)
+            return self._lifecycle.record_stop(
+                chunk.chunk_id,
+                by=by,
+                at=self._clock.now(),
+                waiting=waiting(open_submissions),
+                transaction=transaction,
             )

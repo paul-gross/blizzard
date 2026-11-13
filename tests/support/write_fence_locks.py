@@ -160,8 +160,8 @@ def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable
 
 def stop_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
     def write(handle: ILockedChunkRead) -> None:
-        chunk.stores.lifecycle.record_stop_locked(
-            handle, chunk.chunk_id, by="operator", at=chunk.hub.clock.now(), waiting=()
+        chunk.stores.lifecycle.record_stop(
+            chunk.chunk_id, by="operator", at=chunk.hub.clock.now(), waiting=(), transaction=handle.transaction
         )
 
     return write

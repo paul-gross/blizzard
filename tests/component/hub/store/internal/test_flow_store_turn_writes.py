@@ -541,8 +541,12 @@ def test_a_lever_closes_exactly_the_submissions_it_names(world: _World) -> None:
 
     for submission, names in ((named, [named.submission_id]), (unnamed, [])):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-            world.chunks.lifecycle.record_stop_locked(
-                handle, submission.chunk_id, by="operator", at=world.hub.clock.now(), waiting=names
+            world.chunks.lifecycle.record_stop(
+                submission.chunk_id,
+                by="operator",
+                at=world.hub.clock.now(),
+                waiting=names,
+                transaction=handle.transaction,
             )
 
     assert world.closed(named) == "stopped"

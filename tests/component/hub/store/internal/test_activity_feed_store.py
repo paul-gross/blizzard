@@ -380,7 +380,7 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_1", by="alice", at=_T0, waiting=())
+        store.lifecycle.record_stop("ch_1", by="alice", at=_T0, waiting=(), transaction=handle.transaction)
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -390,8 +390,13 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_completion_locked(
-            handle, "ch_1", by="alice", at=_T0, close_decision=decide_close_enqueue([], lambda _: True), waiting=()
+        store.lifecycle.record_completion(
+            "ch_1",
+            by="alice",
+            at=_T0,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            waiting=(),
+            transaction=handle.transaction,
         )
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"

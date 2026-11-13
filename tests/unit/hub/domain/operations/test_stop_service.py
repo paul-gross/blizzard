@@ -1,13 +1,13 @@
 """StopService (unit tier) — terminal operator abandonment, facts only.
 
 A fake stands in for the lifecycle store and the locked-transaction seam — only
-``record_stop_locked`` and the handle's ``facts`` read are meaningfully implemented; every
-other seam raises loudly if called. The route release is owned by ``record_stop_locked``'s
+``record_stop`` and the locked ``load_facts`` read are meaningfully implemented; every
+other seam raises loudly if called. The route release is owned by ``record_stop``'s
 own locked transaction, never this layer. The service stamps ``at`` from its injected clock
 once the row lock is held, never before it (``bzh:store-exclusive-write`` — a claim
 winning the row lock first must never see a release stamped before it); the fake lock
 advances the clock while it waits so the stamp pins that ordering. The terminal-status guard is re-derived from the locked
-handle's own ``facts`` read, never a pre-lock snapshot — mirrors ``DeleteService``'s own
+transaction's own ``load_facts`` read, never a pre-lock snapshot — mirrors ``DeleteService``'s own
 fake shape (``tests/unit/hub/domain/operations/test_delete_service.py``)."""
 
 from __future__ import annotations
@@ -33,10 +33,10 @@ from blizzard.hub.domain.chunk.model import (
     RouteCreatedFact,
     TransitionFact,
 )
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable, StopService
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -46,16 +46,17 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``record_stop_locked`` is live; anything else is a bug."""
+    """Only ``record_stop`` is live; anything else is a bug."""
 
     stopped: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     stamps: list[datetime] = field(default_factory=list[datetime])
 
     waiting: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
 
-    def record_stop_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str]
+    def record_stop(
+        self, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str], transaction: LockedTransaction
     ) -> LeverWrite:
+        assert transaction is _UNIT, "the stop is written on the unit's locked transaction"
         self.stopped.append((chunk_id, by))
         self.waiting.append(tuple(waiting))
         self.stamps.append(at)
@@ -65,7 +66,7 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"StopService should not touch {name!r}")
 
 
-_UNIT = cast(Transaction, object())
+_UNIT = cast(LockedTransaction, object())
 
 
 @dataclass
@@ -83,37 +84,38 @@ class _FakeFlowSubmissions:
         )
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    chunk_facts: ChunkFacts | None
-    transaction: Transaction = _UNIT
+class _FakeUnit:
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        return _UNIT
 
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
+
+@dataclass
+class _FakeFacts:
+    chunk_facts: ChunkFacts | None
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        assert transaction is _UNIT, "the terminal guard is re-derived on the locked transaction"
         return self.chunk_facts
 
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"StopService should not touch handle.{name!r}")
-
 
 @dataclass
-class _FakeExclusiveWrites:
-    chunk_facts: ChunkFacts | None
+class _FakeTransactions:
     clock: FixedClock
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
+    def begin(self) -> Generator[Transaction]:
         self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
+        yield cast(Transaction, _FakeUnit())
 
 
 def _service(facts: ChunkFacts | None) -> tuple[StopService, _FakeChunkRepo]:
     repo = _FakeChunkRepo()
     clock = FixedClock(_T0)
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, clock))
     service = StopService(
         lifecycle=cast(IWriteChunkLifecycleRepository, repo),
         submissions=_FakeFlowSubmissions(),
-        exclusive=exclusive,
+        facts=cast(IReadChunkFactsRepository, _FakeFacts(facts)),
+        transactions=cast(IHubTransactions, _FakeTransactions(clock)),
         clock=clock,
     )
     return service, repo

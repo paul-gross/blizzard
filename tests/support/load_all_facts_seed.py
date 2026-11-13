@@ -161,19 +161,19 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         )
     clock.instant = _at(1)
     with store.exclusive.locked(["ch_stopped"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_stopped", by="op", at=_at(1), waiting=())
+        store.lifecycle.record_stop("ch_stopped", by="op", at=_at(1), waiting=(), transaction=handle.transaction)
 
     _mint(store, "ch_done_completed")
     seed_promote(store, engine, "ch_done_completed", at=T0)
     clock.instant = T0
     with store.exclusive.locked(["ch_done_completed"]) as handle:
-        store.lifecycle.record_completion_locked(
-            handle,
+        store.lifecycle.record_completion(
             "ch_done_completed",
             by="op",
             at=T0,
             close_decision=decide_close_enqueue([], lambda _: True),
             waiting=(),
+            transaction=handle.transaction,
         )
 
     _mint(store, "ch_done_terminal")

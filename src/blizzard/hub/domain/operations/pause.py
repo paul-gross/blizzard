@@ -11,8 +11,9 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 class ChunkNotPausable(Exception):
@@ -37,12 +38,18 @@ class PauseService:
     """Set or clear a chunk's operator pause brake without touching its route."""
 
     def __init__(
-        self, *, lifecycle: IWriteChunkLifecycleRepository, exclusive: IChunkExclusiveWrites, clock: IClock
+        self,
+        *,
+        lifecycle: IWriteChunkLifecycleRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
     ) -> None:
         self._lifecycle = lifecycle
+        self._facts = facts
         self._clock = clock
         # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
 
     def pause(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.paused``; raises :class:`ChunkNotPausable` outside :attr:`ChunkVerb.PAUSE`'s window
@@ -50,12 +57,15 @@ class PauseService:
 
         The status is re-derived under the row lock, so a status change since the caller's read is
         honored. Returns the freshly-written ``chunk_pause_facts.id``."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             require_pausable(chunk.chunk_id, facts)
-            return self._lifecycle.record_pause_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
+            return self._lifecycle.record_pause(
+                chunk.chunk_id, paused=True, by=by, at=self._clock.now(), transaction=transaction
+            )
 
     def resume(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.resumed`` — idempotent, never refused (:attr:`ChunkVerb.RESUME`).

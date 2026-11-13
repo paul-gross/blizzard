@@ -62,7 +62,7 @@ def _open_ids(store: ChunkStores) -> list[str]:
 
 def _stop(store: ChunkStores) -> None:
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0, waiting=())
+        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=handle.transaction)
 
 
 def _finish(store: ChunkStores) -> None:
