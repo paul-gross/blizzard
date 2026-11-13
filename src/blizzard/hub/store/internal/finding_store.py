@@ -23,7 +23,9 @@ from blizzard.hub.domain.garden.findings.model import (
     FactEntry,
     Finding,
     FindingFact,
+    FindingFactInsert,
     FindingFactSummary,
+    FindingInsert,
     FindingPage,
     FindingSet,
     IWriteFindingRepository,
@@ -39,7 +41,7 @@ from blizzard.hub.store.internal.newest_fact import newer_row_exists
 
 # Resolves or creates scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.scope_store import scope_id_of
+from blizzard.hub.store.internal.scope_store import scope_id_of, scope_ids_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 from blizzard.hub.store.transactions import connection_for
@@ -268,6 +270,54 @@ class FindingStore:
                 return moved
         self._insert_facts(conn, entries)
         return []
+
+    def insert_many(self, rows: Sequence[FindingInsert], *, transaction: LockedTransaction) -> None:
+        if not rows:
+            return
+        conn = connection_for(self._store, transaction)
+        for project_id in sorted({row.project_id for row in rows}):
+            of_project = [row for row in rows if row.project_id == project_id]
+            scope_ids = scope_ids_of(conn, [row.scope_slug for row in of_project], project_id)
+            conn.execute(
+                self._store.insert(findings).values(project_id=project_id),
+                [
+                    {
+                        "finding_id": row.finding_id,
+                        "routine_name": row.routine_name,
+                        "scope_id": scope_ids.get(row.scope_slug),
+                        "scope_slug": row.scope_slug,
+                        "class_": row.class_,
+                        "locus": row.locus,
+                        "summary": row.summary,
+                        "introduced": row.introduced,
+                        "introduced_at": row.introduced_at,
+                        "source": row.source,
+                        "severity": row.severity,
+                        "raised_by_chunk_id": row.raised_by_chunk_id,
+                    }
+                    for row in of_project
+                ],
+            )
+
+    def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
+        if not rows:
+            return
+        conn = connection_for(self._store, transaction)
+        conn.execute(
+            self._store.insert(finding_facts),
+            [
+                {
+                    "finding_id": row.finding_id,
+                    "kind": row.kind,
+                    "recorded_at": row.recorded_at,
+                    "note": row.note,
+                    "finding_set_id": row.finding_set_id,
+                    "ref": row.ref,
+                    "actor": row.actor,
+                }
+                for row in rows
+            ],
+        )
 
     def _insert_facts(self, conn: Connection, entries: Sequence[FactEntry]) -> None:
         conn.execute(
@@ -571,6 +621,30 @@ class FindingSetStore:
             measurement=measurement,
             project_id=project_id,
         )
+
+    def insert_many(self, sets: Sequence[FindingSet], *, transaction: LockedTransaction) -> None:
+        if not sets:
+            return
+        conn = connection_for(self._store, transaction)
+        for project_id in sorted({fs.project_id for fs in sets}):
+            of_project = [fs for fs in sets if fs.project_id == project_id]
+            scope_ids = scope_ids_of(conn, [fs.scope_slug for fs in of_project], project_id)
+            conn.execute(
+                self._store.insert(finding_sets).values(project_id=project_id),
+                [
+                    {
+                        "finding_set_id": fs.finding_set_id,
+                        "artifact_id": fs.artifact_id,
+                        "chunk_id": fs.chunk_id,
+                        "scope_id": scope_ids.get(fs.scope_slug),
+                        "scope_slug": fs.scope_slug,
+                        "routine_name": fs.routine_name,
+                        "revisions": json.dumps(fs.revisions),
+                        "measurement": fs.measurement,
+                    }
+                    for fs in of_project
+                ],
+            )
 
     def get(self, finding_set_id: str) -> FindingSet | None:
         with self._store.read("get") as conn:

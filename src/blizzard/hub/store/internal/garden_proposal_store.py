@@ -20,6 +20,7 @@ from blizzard.foundation.garden_proposals import (
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.garden.proposals.model import (
+    DeliveredProposal,
     GardenProposal,
     GardenProposalCounts,
     GardenProposalEdit,
@@ -194,6 +195,39 @@ class GardenProposalStore:
                 )
             )
         return self._reread(conn, proposal_id)
+
+    def insert_delivered(self, proposals: Sequence[DeliveredProposal], *, transaction: LockedTransaction) -> None:
+        if not proposals:
+            return
+        conn = connection_for(self._store, transaction)
+        for project_id in sorted({p.project_id for p in proposals}):
+            conn.execute(
+                self._store.insert(garden_proposals).values(project_id=project_id),
+                [
+                    {
+                        "proposal_id": p.proposal_id,
+                        "origin": GardenProposalOrigin.ROUTINE_RUN.value,
+                        "routine_name": p.routine_name,
+                        "created_by": None,
+                        "class_": p.class_,
+                        "title": p.title,
+                        "body": p.body,
+                        "source_artifact_id": p.source_artifact_id,
+                        "ref": p.ref,
+                        "created_at": p.created_at,
+                    }
+                    for p in proposals
+                    if p.project_id == project_id
+                ],
+            )
+
+    def link_findings(self, links: Sequence[tuple[str, str]], *, transaction: LockedTransaction) -> None:
+        if not links:
+            return
+        connection_for(self._store, transaction).execute(
+            self._store.insert(garden_proposal_findings),
+            [{"proposal_id": proposal_id, "finding_id": finding_id} for proposal_id, finding_id in links],
+        )
 
     def _reread(self, conn: Connection, proposal_id: str) -> GardenProposal:
         """The proposal as it now stands — the tail `edit` and `detach` share."""

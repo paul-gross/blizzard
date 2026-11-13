@@ -511,6 +511,49 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         it, nothing is written and those ids are returned."""
         ...
 
+    def insert_many(self, rows: Sequence[FindingInsert], *, transaction: LockedTransaction) -> None:
+        """Insert every ``findings`` row in ``transaction``, each linked to its scope by slug within its project;
+        a slug that project does not hold maps to no scope id, which the ``NOT NULL`` link refuses."""
+        ...
+
+    def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
+        """Insert every ``finding_facts`` row in ``transaction``, each attributed to its finding set when it names
+        one — the set's own row lands first."""
+        ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class FindingInsert:
+    """One fully-formed ``findings`` row a delivery mints — id already minted (`bzh:domain-takes-objects`)."""
+
+    finding_id: str
+    project_id: str
+    routine_name: str | None  # `None` for `source="review"`
+    scope_slug: str
+    class_: str
+    locus: str
+    summary: str
+    introduced: str | None
+    introduced_at: datetime | None
+    source: str  # "routine" or "review"
+    severity: str | None = None
+    raised_by_chunk_id: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class FindingFactInsert:
+    """One fully-formed ``finding_facts`` row a delivery mints, attributed to the finding set that carried it."""
+
+    finding_id: str
+    kind: str
+    recorded_at: datetime
+    finding_set_id: str | None
+    note: str | None = None
+    ref: str | None = None
+    actor: str | None = None
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -729,4 +772,8 @@ class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
         measurement: str | None,
     ) -> FindingSet:
         """Insert the set row — one per artifact (its own `uq`-backed unique FK)."""
+        ...
+
+    def insert_many(self, sets: Sequence[FindingSet], *, transaction: LockedTransaction) -> None:
+        """Insert every set row in ``transaction``, each linked to its scope by slug within its project."""
         ...

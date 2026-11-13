@@ -19,11 +19,25 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
-from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery, is_finding_id_shaped, single_repo_of
-from blizzard.hub.domain.garden.findings.model import finding_lock
+from blizzard.hub.domain.garden.delivery.validation import (
+    GardenDeliveryRejected,
+    ValidatedDelivery,
+    is_finding_id_shaped,
+    single_repo_of,
+)
+from blizzard.hub.domain.garden.findings.model import (
+    FindingFactInsert,
+    FindingInsert,
+    FindingSet,
+    IWriteFindingRepository,
+    IWriteFindingSetRepository,
+    finding_lock,
+)
 from blizzard.hub.domain.garden.formats import FindingAddOp, FindingGoneOp, FindingObservedOp
+from blizzard.hub.domain.garden.proposals.model import DeliveredProposal, IWriteGardenProposalRepository
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 
@@ -134,6 +148,31 @@ class DeliveryPlan:
     expect: dict[str, str] = field(default_factory=dict[str, str])
 
 
+@domain_model
+@dataclass(frozen=True)
+class DeliverySurvivors:
+    """What of a :class:`DeliveryPlan` is still owed once its marker, fence, idempotence, and guard reads pass —
+    the deltas and proposals no earlier visit materialized, and how a surviving proposal's citations resolve."""
+
+    deltas: list[DeltaMaterialization]
+    proposals: list[NewProposal]
+    #: A dropped delta's freshly minted finding id -> the id the earlier visit recorded for the same ref.
+    ref_substitutions: dict[str, str] = field(default_factory=dict[str, str])
+    #: Every finding a dropped delta minted this visit, which is never inserted.
+    uninserted_finding_ids: set[str] = field(default_factory=set[str])
+
+    def links(self) -> list[tuple[str, str]]:
+        """Every ``(proposal_id, finding_id)`` link the surviving proposals owe. An unresolved citation names a
+        finding this visit never inserted, so its link is dropped like the delta was rather than pointing at
+        nothing."""
+        return [
+            (p.proposal_id, self.ref_substitutions.get(finding_id, finding_id))
+            for p in self.proposals
+            for finding_id in p.finding_ids
+            if finding_id in self.ref_substitutions or finding_id not in self.uninserted_finding_ids
+        ]
+
+
 # --- Repository seam (I-prefix — bzh:repository-split) ---------------------------
 
 
@@ -142,24 +181,34 @@ class IReadGardenDeliveryRepository(Protocol):
 
     def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
         """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
-        check :meth:`IWriteGardenDeliveryRepository.deliver` makes."""
+        check :meth:`IWriteGardenDeliveryRepository.admit` makes."""
         ...
 
 
 class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
-    """Materialize one :class:`DeliveryPlan`, atomically and idempotently, keyed on the
-    ``(chunk_id, node_id, epoch)`` marker the plan carries. The findings in ``plan.expect`` are
-    re-checked under their keyed locks before any fact lands; one that moved yields
-    ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
-    project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
+    """The delivery's own marker, its fence, and the idempotence and guard reads, keyed on the
+    ``(chunk_id, node_id, epoch)`` marker the plan carries. Every row a delivery mints is written by
+    the repository that owns it."""
 
-    def deliver(
+    def admit(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
-    ) -> DeliveryOutcome:
-        """Written in ``transaction``, a unit that locks ``plan.chunk_id`` and the :func:`finding_lock` of every
-        finding in ``plan.expect``. A delta whose ``artifact_id`` is already materialized is skipped, and a proposal's
-        citation of a ref in it resolves to the id minted then; a proposal already present by
-        ``(source_artifact_id, ref)`` is not re-inserted."""
+    ) -> DeliveryOutcome | DeliverySurvivors:
+        """Read in ``transaction``, a unit that locks ``plan.chunk_id`` and the :func:`finding_lock` of every
+        finding in ``plan.expect``: ``ALREADY_RECORDED`` when the marker exists, ``FENCED`` when the fence refuses,
+        ``GUARD_LOST`` when a finding a surviving fact names moved off its expected state, else what survives. A
+        delta whose ``artifact_id`` is already materialized is dropped, and a proposal's citation of a ref in it
+        resolves to the id minted then; a proposal already present by ``(source_artifact_id, ref)`` is dropped."""
+        ...
+
+    def findings_outside_project(
+        self, finding_ids: Sequence[str], project_id: str, *, transaction: LockedTransaction
+    ) -> list[str]:
+        """The ids among ``finding_ids`` stored in a project other than ``project_id``, sorted, read in
+        ``transaction``."""
+        ...
+
+    def record_marker(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        """Write the ``(chunk_id, node_id, epoch)`` marker in ``transaction``, which locks ``plan.chunk_id``."""
         ...
 
 
@@ -276,20 +325,134 @@ def delivery_replay_outcome(*, recorded: bool) -> DeliveryOutcome | None:
     return DeliveryOutcome.ALREADY_RECORDED if recorded else None
 
 
+def write_delivery_plan(
+    plan: DeliveryPlan,
+    *,
+    delivery: IWriteGardenDeliveryRepository,
+    findings: IWriteFindingRepository,
+    finding_sets: IWriteFindingSetRepository,
+    proposals: IWriteGardenProposalRepository,
+    admission: EpochAdmission,
+    terminal: bool,
+    transaction: LockedTransaction,
+) -> DeliveryOutcome:
+    """Materialize ``plan`` in ``transaction``, a unit that locks ``plan.chunk_id`` and the :func:`finding_lock` of
+    every finding in ``plan.expect``: ``findings``, then ``finding_sets``, then ``finding_facts`` (each fact
+    references its set), then proposals and their links, the marker last. A proposal citing a finding stored in a
+    project other than ``plan.run``'s raises :class:`GardenDeliveryRejected` naming it, before any link row, and the
+    unit rolls everything back."""
+    admitted = delivery.admit(plan, admission=admission, terminal=terminal, transaction=transaction)
+    if isinstance(admitted, DeliveryOutcome):
+        return admitted
+    project_id = plan.run.project_id
+    findings.insert_many(
+        [
+            FindingInsert(
+                finding_id=f.finding_id,
+                project_id=project_id,
+                routine_name=f.routine_name,
+                scope_slug=f.scope_slug,
+                class_=f.class_,
+                locus=f.locus,
+                summary=f.summary,
+                introduced=f.introduced,
+                introduced_at=f.introduced_at,
+                source="routine",
+            )
+            for d in admitted.deltas
+            for f in d.new_findings
+        ],
+        transaction=transaction,
+    )
+    finding_sets.insert_many(
+        [
+            FindingSet(
+                finding_set_id=d.finding_set.finding_set_id,
+                artifact_id=d.finding_set.artifact_id,
+                chunk_id=plan.chunk_id,
+                scope_slug=d.finding_set.scope_slug,
+                routine_name=plan.run.routine_name,
+                revisions=d.finding_set.revisions,
+                measurement=d.finding_set.measurement,
+                project_id=project_id,
+            )
+            for d in admitted.deltas
+        ],
+        transaction=transaction,
+    )
+    findings.insert_facts(
+        [
+            FindingFactInsert(
+                finding_id=fact.finding_id,
+                kind=fact.kind,
+                recorded_at=plan.at,
+                finding_set_id=fact.finding_set_id,
+                note=fact.note,
+                ref=fact.ref,
+                actor=fact.actor,
+            )
+            for d in admitted.deltas
+            for fact in d.facts
+        ],
+        transaction=transaction,
+    )
+    proposals.insert_delivered(
+        [
+            DeliveredProposal(
+                proposal_id=p.proposal_id,
+                project_id=project_id,
+                routine_name=p.routine_name,
+                class_=p.class_,
+                title=p.title,
+                body=p.body,
+                source_artifact_id=p.source_artifact_id,
+                ref=p.ref,
+                created_at=plan.at,
+            )
+            for p in admitted.proposals
+        ],
+        transaction=transaction,
+    )
+    links = admitted.links()
+    if links:
+        outside = delivery.findings_outside_project(
+            [finding_id for _, finding_id in links], project_id, transaction=transaction
+        )
+        if outside:
+            raise GardenDeliveryRejected(
+                f"finding {outside[0]!r} belongs to another project than routine "
+                f"{plan.run.routine_name!r}'s — nothing was written",
+                GardenDeliveryFault.PROPOSALS,
+            )
+        proposals.link_findings(links, transaction=transaction)
+    # Always written, even when every delta was already materialized: this visit
+    # is a genuinely new (chunk_id, node_id, epoch) and owes its idempotence key.
+    delivery.record_marker(plan, transaction=transaction)
+    if admitted.deltas or admitted.proposals:
+        return DeliveryOutcome.RECORDED
+    return DeliveryOutcome.ALREADY_RECORDED
+
+
 class GardenDelivery:
     """Turns a Phase-2 :class:`ValidatedDelivery` into a :class:`DeliveryPlan`
-    (:func:`build_delivery_plan`, at the clock's instant) and hands it to the store, one
-    call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
+    (:func:`build_delivery_plan`, at the clock's instant) and writes it in one unit through
+    :func:`write_delivery_plan` — every id minted before a repository sees it (`bzh:domain-takes-objects`)."""
 
     def __init__(
         self,
         *,
         delivery: IWriteGardenDeliveryRepository,
+        findings: IWriteFindingRepository,
+        finding_sets: IWriteFindingSetRepository,
+        proposals: IWriteGardenProposalRepository,
         facts: IReadChunkFactsRepository,
         transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._delivery = delivery
+        self._findings = findings
+        self._finding_sets = finding_sets
+        self._proposals = proposals
         self._facts = facts
         self._transactions = transactions
         self._clock = clock
@@ -323,8 +486,12 @@ class GardenDelivery:
         )
         with self._transactions.begin() as unit:
             locked = unit.lock_set(chunks=[plan.chunk_id], keys=[finding_lock(fid) for fid in sorted(plan.expect)])
-            return self._delivery.deliver(
+            return write_delivery_plan(
                 plan,
+                delivery=self._delivery,
+                findings=self._findings,
+                finding_sets=self._finding_sets,
+                proposals=self._proposals,
                 admission=EpochAdmission.AT_OR_ABOVE,
                 terminal=terminal_under_lock(self._facts, plan.chunk_id, transaction=locked),
                 transaction=locked,

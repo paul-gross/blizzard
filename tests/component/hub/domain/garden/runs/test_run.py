@@ -333,7 +333,7 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
 def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_slug: str) -> None:
     """A prior run's own delivered finding set — a chunk + artifact row plus the
     ``finding_sets`` row itself, seeded directly rather than through its real writer
-    (``GardenDeliveryStore.deliver``), which this test has no delivery plan to drive."""
+    (``write_delivery_plan``), which this test has no delivery plan to drive."""
     now = datetime(2026, 7, 1, tzinfo=UTC)
     with hub.engine.begin() as conn:
         conn.execute(s.chunks.insert().values(stamp(s.chunks, chunk_id="ch_prior", graph_id=graph_id, minted_at=now)))

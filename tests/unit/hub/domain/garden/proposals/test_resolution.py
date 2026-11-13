@@ -26,6 +26,8 @@ from blizzard.hub.domain.garden.findings.model import (
     Finding,
     FindingExitService,
     FindingFact,
+    FindingFactInsert,
+    FindingInsert,
     FindingPage,
 )
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure
@@ -270,6 +272,12 @@ class _RecordingWriteRepo(_FakeFindings):
     ) -> list[str]:
         self.batches.append(list(entries))
         return []
+
+    def insert_many(self, rows: Sequence[FindingInsert], *, transaction: LockedTransaction) -> None:
+        raise NotImplementedError
+
+    def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
+        raise NotImplementedError
 
 
 def _resolution(

@@ -5,6 +5,7 @@ delta yields an empty plan (the ``tests/unit/hub/domain/garden/delivery/test_mat
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -15,22 +16,28 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRef
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.garden.findings.model import FindingFactInsert, FindingInsert, IWriteFindingRepository
 from blizzard.hub.domain.garden.formats import DeferredReviewEntry
 from blizzard.hub.domain.garden.review.materialize import (
     IWriteReviewFindingsRepository,
+    ReviewAdmission,
     ReviewFindingsMaterialize,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
+from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Node
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from tests.support.fake_chunk_facts import FakeStatusFacts
 from tests.support.fake_transactions import FakeTransactions
 from tests.support.garden_artifacts import deferred_entry
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_PROJECT = "proj_test"
 
 _CHUNK = Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[WorkRef(source="default", ref="1")], minted_at=_T0)
 _NODE = Node(
@@ -50,19 +57,37 @@ _NODE = Node(
 
 @dataclass
 class _FakeReviewFindingsRepo:
+    """The review-delivery, finding, and scope repositories at once, recording each write in order."""
+
     delivered: list[ReviewFindingsPlan] = field(default_factory=list[ReviewFindingsPlan])
     outcome: ReviewFindingsOutcome = ReviewFindingsOutcome.RECORDED
 
     terminals: list[bool] = field(default_factory=list[bool])
     written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+    writes: list[tuple[str, object]] = field(default_factory=list[tuple[str, object]])
 
-    def deliver(
+    def admit(
         self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
-    ) -> ReviewFindingsOutcome:
+    ) -> ReviewFindingsOutcome | ReviewAdmission:
         self.delivered.append(plan)
         self.terminals.append(terminal)
         self.written_in.append(transaction)
-        return self.outcome
+        if self.outcome is not ReviewFindingsOutcome.RECORDED:
+            return self.outcome
+        return ReviewAdmission(project_id=_PROJECT)
+
+    def ensure(self, record: Scope, *, change: ConfigChange, transaction: Transaction | None = None) -> Scope:
+        self.writes.append(("scope", (record.project_id, record.slug, transaction)))
+        return record
+
+    def insert_many(self, rows: Sequence[FindingInsert], *, transaction: LockedTransaction) -> None:
+        self.writes.append(("findings", list(rows)))
+
+    def insert_facts(self, rows: Sequence[FindingFactInsert], *, transaction: LockedTransaction) -> None:
+        self.writes.append(("finding_facts", list(rows)))
+
+    def record_marker(self, plan: ReviewFindingsPlan, *, transaction: LockedTransaction) -> None:
+        self.writes.append(("marker", plan.chunk_id))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -70,6 +95,22 @@ class _FakeReviewFindingsRepo:
 
 def _as_write_repo(repo: _FakeReviewFindingsRepo) -> IWriteReviewFindingsRepository:
     return cast(IWriteReviewFindingsRepository, repo)
+
+
+def _service(
+    repo: _FakeReviewFindingsRepo,
+    *,
+    facts: IReadChunkFactsRepository | None = None,
+    transactions: FakeTransactions | None = None,
+) -> ReviewFindingsMaterialize:
+    return ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        findings=cast(IWriteFindingRepository, repo),
+        scopes=cast(IWriteScopeRepository, repo),
+        facts=facts if facts is not None else FakeStatusFacts().as_port(),
+        transactions=transactions if transactions is not None else FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
 
 
 def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> DeferredReviewEntry:
@@ -88,12 +129,7 @@ def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "shou
 
 def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     validated = ValidatedReviewFindings(deferred=[_deferred()])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -127,12 +163,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> No
 
 def test_deliver_on_an_empty_delta_yields_an_empty_plan() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     validated = ValidatedReviewFindings(deferred=[])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -145,12 +176,7 @@ def test_deliver_on_an_empty_delta_yields_an_empty_plan() -> None:
 
 def test_deliver_over_two_entries_mints_two_distinct_findings() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     validated = ValidatedReviewFindings(deferred=[_deferred(ref="F1"), _deferred(ref="F2", scope="other")])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -164,12 +190,7 @@ def test_deliver_over_two_entries_mints_two_distinct_findings() -> None:
 
 def test_deliver_returns_the_repository_outcome() -> None:
     repo = _FakeReviewFindingsRepo(outcome=ReviewFindingsOutcome.ALREADY_RECORDED)
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(instant=_T0),
-    )
+    service = _service(repo)
     validated = ValidatedReviewFindings(deferred=[])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -180,12 +201,7 @@ def test_deliver_returns_the_repository_outcome() -> None:
 def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk() -> None:
     repo = _FakeReviewFindingsRepo()
     transactions = FakeTransactions()
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts().as_port(),
-        transactions=transactions,
-        clock=FixedClock(_T0),
-    )
+    service = _service(repo, transactions=transactions)
 
     service.deliver(ValidatedReviewFindings(deferred=[]), chunk=_CHUNK, node=_NODE, epoch=1)
 
@@ -206,14 +222,34 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
 ) -> None:
     repo = _FakeReviewFindingsRepo()
     status_facts = FakeStatusFacts(facts)
-    service = ReviewFindingsMaterialize(
-        delivery=_as_write_repo(repo),
-        facts=status_facts.as_port(),
-        transactions=FakeTransactions(),
-        clock=FixedClock(_T0),
-    )
+    service = _service(repo, facts=status_facts.as_port())
 
     service.deliver(ValidatedReviewFindings(deferred=[]), chunk=_CHUNK, node=_NODE, epoch=1)
 
     assert repo.terminals == [terminal]
     assert status_facts.transactions == repo.written_in
+
+
+def test_deliver_mints_each_named_scope_in_the_unit_then_writes_findings_then_facts_then_the_marker() -> None:
+    repo = _FakeReviewFindingsRepo()
+    validated = ValidatedReviewFindings(
+        deferred=[_deferred(ref="F1"), _deferred(ref="F2", scope="other"), _deferred(ref="F3")]
+    )
+
+    outcome = _service(repo).deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
+
+    assert outcome is ReviewFindingsOutcome.RECORDED
+    assert [kind for kind, _ in repo.writes] == ["scope", "scope", "findings", "finding_facts", "marker"]
+    assert repo.writes[0] == ("scope", (_PROJECT, "blizzard", repo.written_in[0]))
+    assert repo.writes[1] == ("scope", (_PROJECT, "other", repo.written_in[0]))
+
+
+@pytest.mark.parametrize("outcome", [ReviewFindingsOutcome.ALREADY_RECORDED, ReviewFindingsOutcome.FENCED])
+def test_deliver_a_refused_admission_writes_nothing(outcome: ReviewFindingsOutcome) -> None:
+    repo = _FakeReviewFindingsRepo(outcome=outcome)
+
+    assert (
+        _service(repo).deliver(ValidatedReviewFindings(deferred=[_deferred()]), chunk=_CHUNK, node=_NODE, epoch=1)
+        is outcome
+    )
+    assert repo.writes == []

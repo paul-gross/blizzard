@@ -17,8 +17,10 @@ from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
+from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
@@ -98,6 +100,8 @@ def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = EPOCH) -> Delivered:
         artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
         materialize=ReviewFindingsMaterialize(
             delivery=ReviewFindingsStore(connections),
+            findings=FindingStore(connections),
+            scopes=ScopeStore(connections),
             facts=chunk_stores(hub.engine, hub.clock).facts,
             transactions=HubTransactions(connections),
             clock=hub.clock,
