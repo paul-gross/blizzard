@@ -183,8 +183,7 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     at = _NOW + timedelta(hours=1)
 
     with exclusive.locked(["ch_dependent", "ch_prereq", "ch_survivor"]) as handle:
-        grouped_ids = dependencies.record_fold_locked(
-            handle,
+        grouped_ids = dependencies.record_fold(
             [
                 FoldTarget(
                     chunk_id="ch_prereq",
@@ -195,6 +194,7 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
             grouped_into="ch_survivor",
             by="fold",
             at=at,
+            transaction=handle.transaction,
         )
 
     assert grouped_ids["ch_prereq"] > 0
@@ -234,8 +234,7 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
     at = _NOW + timedelta(hours=1)
 
     with pytest.raises(HubStoreError), exclusive.locked(["ch_a", "ch_b", "ch_survivor"]) as handle:
-        dependencies.record_fold_locked(
-            handle,
+        dependencies.record_fold(
             [
                 FoldTarget(chunk_id="ch_a", release=[], mint=[]),
                 # A `None` dependent id fails the NOT NULL column only after ch_a's row
@@ -245,6 +244,7 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
             grouped_into="ch_survivor",
             by="fold",
             at=at,
+            transaction=handle.transaction,
         )
 
     with engine.connect() as conn:

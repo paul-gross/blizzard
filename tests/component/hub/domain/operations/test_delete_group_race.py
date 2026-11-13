@@ -22,7 +22,7 @@ from typing import cast
 
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
@@ -50,16 +50,21 @@ def test_a_delete_blocks_while_a_fold_holds_the_shared_lock_mid_rewrite(tmp_path
     entered_write = threading.Event()
     release_write = threading.Event()
     dependencies = _writable_dependencies(hub)
-    real_record_fold_locked = dependencies.record_fold_locked
+    real_record_fold = dependencies.record_fold
 
-    def _blocking_record_fold_locked(
-        handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    def _blocking_record_fold(
+        targets: list[FoldTarget],
+        *,
+        grouped_into: str,
+        by: str,
+        at: datetime,
+        transaction: LockedTransaction,
     ) -> dict[str, int]:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold_locked(handle, targets, grouped_into=grouped_into, by=by, at=at)
+        return real_record_fold(targets, grouped_into=grouped_into, by=by, at=at, transaction=transaction)
 
-    dependencies.record_fold_locked = _blocking_record_fold_locked
+    dependencies.record_fold = _blocking_record_fold
 
     group_result: dict[str, object] = {}
 

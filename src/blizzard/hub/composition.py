@@ -1360,7 +1360,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,
-            exclusive=chunk_exclusive,
+            facts=chunk_facts,
+            lifecycle=chunk_lifecycle,
+            transactions=stores.transactions,
             clock=clock,
             cycle_lock=stores.cycle_lock,
         ),

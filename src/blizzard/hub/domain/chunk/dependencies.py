@@ -21,7 +21,9 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts, ChunkVerb, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 class DependentNotEditable(Exception):
@@ -129,13 +131,17 @@ class DependencyService:
         self,
         *,
         dependencies: IWriteChunkDependenciesRepository,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        lifecycle: IReadChunkLifecycleRepository,
+        transactions: IHubTransactions,
         clock: IClock,
         cycle_lock: threading.Lock,
     ) -> None:
         self._dependencies = dependencies
-        # ``bzh:store-exclusive-write`` — the row lock over the two named chunks.
-        self._exclusive = exclusive
+        self._facts = facts
+        self._lifecycle = lifecycle
+        # ``bzh:store-exclusive-write`` — the unit that row-locks the two named chunks.
+        self._transactions = transactions
         self._clock = clock
         # The residual per-tenant lock: row locks alone cannot
         # close a race between two declares closing a cycle through chunks neither one
@@ -152,13 +158,14 @@ class DependencyService:
         Reads the standing edges, the dependent's facts, and the prerequisite's ephemerality under
         the lock, and writes whatever :func:`decide_declare` decides."""
         prerequisite_id = prerequisite.chunk_id
-        with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite_id]) as handle:
+        with self._cycle_lock, self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([dependent.chunk_id, prerequisite_id])
             decision = decide_declare(
-                handle.standing_edges(),
+                self._dependencies.list_standing_edges(transaction=transaction),
                 dependent=dependent,
-                dependent_facts=handle.facts(dependent.chunk_id),
+                dependent_facts=self._facts.load_facts(dependent.chunk_id, transaction=transaction),
                 prerequisite_chunk_id=prerequisite_id,
-                prerequisite_ephemeral=handle.is_ephemeral(prerequisite_id),
+                prerequisite_ephemeral=self._lifecycle.is_ephemeral(prerequisite_id, transaction=transaction),
             )
             if isinstance(decision, DependencyEdge):
                 return decision
@@ -167,7 +174,7 @@ class DependencyService:
                 decision.prerequisite_chunk_id,
                 by=by,
                 at=self._clock.now(),
-                transaction=handle.transaction,
+                transaction=transaction,
             )
 
     def release(self, edge: DependencyEdge, *, by: str) -> DependencyEdge:

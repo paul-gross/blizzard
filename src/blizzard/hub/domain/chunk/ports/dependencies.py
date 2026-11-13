@@ -10,7 +10,6 @@ from typing import NamedTuple, Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DependencyEdge
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 
@@ -40,8 +39,8 @@ class IReadChunkDependenciesRepository(Protocol):
     fleet's standing edges, the standing edge for one ordered pair, one chunk's own
     standing edges in either role, and the standing edges of a set of dependents."""
 
-    def list_standing_edges(self) -> list[DependencyEdge]:
-        """Every currently-unreleased edge across the fleet."""
+    def list_standing_edges(self, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
+        """Every currently-unreleased edge across the fleet; on ``transaction``'s unit when given."""
         ...
 
     def standing_edge(self, dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge | None:
@@ -97,12 +96,18 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
         this ordered pair. A no-op returning ``None`` when no edge stands."""
         ...
 
-    def record_fold_locked(
-        self, handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    def record_fold(
+        self,
+        targets: list[FoldTarget],
+        *,
+        grouped_into: str,
+        by: str,
+        at: datetime,
+        transaction: LockedTransaction,
     ) -> dict[str, int]:
         """Fold every target's dependency edges per its own release/mint split, atomically
-        with recording each target's own ``chunk.grouped`` row, on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``). The split and the
+        with recording each target's own ``chunk.grouped`` row, in a unit whose
+        ``transaction`` locks ``grouped_into`` and every target (``bzh:store-exclusive-write``). The split and the
         resulting set's cycle check are already done. Returns each target chunk id's
         freshly-inserted ``chunk_grouped.id``."""
         ...

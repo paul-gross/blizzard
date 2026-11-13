@@ -12,11 +12,12 @@ from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, is_ephemeral_id, next_route_seq, route_of_conn
 from blizzard.hub.store.internal.flow_rows import withdraw_waiting
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_in
 
 
 class ChunkLifecycleStore:
@@ -25,8 +26,8 @@ class ChunkLifecycleStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def is_ephemeral(self, chunk_id: str) -> bool:
-        with self._store.read("is_ephemeral") as conn:
+    def is_ephemeral(self, chunk_id: str, *, transaction: Transaction | None = None) -> bool:
+        with connection_in(self._store, transaction, "is_ephemeral") as conn:
             return is_ephemeral_id(conn, chunk_id)
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
