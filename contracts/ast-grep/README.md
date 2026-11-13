@@ -153,7 +153,8 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   - Matches an absolute or relative import of a `*_store` module, by `from` or plain `import`, including
     `from . import x_store`. Shared plumbing modules (`chunk_rows`, `newest_fact`, `store.locking`,
     `store.transactions`) are not adapters and do not match.
-  - Existing imports carry a reasoned `ast-grep-ignore` at the site as recorded debt; a new one fails the gate.
+  - A remaining import carries a reasoned `ast-grep-ignore` at the site naming what it does: a read, a shared helper, or
+    a declared exception of `engineering:adapters-stay-apart`. A new one without that reasoning fails the gate.
 
 - **`bzh:store-no-for-update`** (`rules/store-no-for-update.yml`) — a guarded write never takes its lock with
   `.with_for_update()`: it renders nothing on SQLite. The prose home is the `bzh:store-exclusive-write` rule's **Do** in

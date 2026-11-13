@@ -39,7 +39,7 @@ from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 
-# Resolves or creates scope ids on the caller's connection.
+# Resolves scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of, scope_ids_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings

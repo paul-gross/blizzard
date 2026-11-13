@@ -34,19 +34,19 @@ from blizzard.hub.domain.urgency.ports import IWriteTenantSettings, IWriteUrgenc
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
-# Shares the graph_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: tenant admin writes every tenant fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.graph_store import GraphStore
 
-# Shares the project_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: tenant admin writes every tenant fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_store import ProjectStore
 
-# Shares the tenant_settings_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: tenant admin writes every tenant fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 
-# Shares the urgency_store writes on the same connection; debt pending a domain seam.
+# A declared exception of engineering:adapters-stay-apart: tenant admin writes every tenant fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.scoped import ScopedConnections

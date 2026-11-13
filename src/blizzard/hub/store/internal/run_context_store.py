@@ -13,7 +13,7 @@ from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, R
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 
-# Resolves or creates scope ids on the caller's connection.
+# Resolves scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

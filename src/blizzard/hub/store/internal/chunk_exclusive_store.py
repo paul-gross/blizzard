@@ -15,7 +15,7 @@ from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTran
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
 
-# Shares the chunk_dependencies_store writes on the same connection; debt pending a domain seam.
+# Reads chunk dependencies on the same connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 
@@ -23,12 +23,12 @@ from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenci
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 
-# Shares the chunk_record_store writes on the same connection; debt pending a domain seam.
+# Reads chunk records on the same connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import is_ephemeral_id, route_of_conn
 
-# Shares the runner_registry_store writes on the same connection; debt pending a domain seam.
+# Reads the runner registry on the same connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections

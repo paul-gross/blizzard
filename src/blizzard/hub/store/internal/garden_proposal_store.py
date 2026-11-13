@@ -37,7 +37,7 @@ from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.kernel.unset import UnsetType
 
-# Shares the finding adapter's locking and scope queries in one transaction.
+# Reads the finding adapter's project-scope query in the caller's unit.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.finding_store import findings_outside_project
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
