@@ -380,7 +380,7 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_1", by="alice", at=_T0)
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="alice", at=_T0, waiting=())
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -391,7 +391,7 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
         store.lifecycle.record_completion_locked(
-            handle, "ch_1", by="alice", at=_T0, close_decision=decide_close_enqueue([], lambda _: True)
+            handle, "ch_1", by="alice", at=_T0, close_decision=decide_close_enqueue([], lambda _: True), waiting=()
         )
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
@@ -403,7 +403,7 @@ def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
         store.movement.record_restart_locked(
-            handle, "ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1)
+            handle, "ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1), waiting=()
         )
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"

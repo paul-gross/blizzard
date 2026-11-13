@@ -6,6 +6,7 @@ status. Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
@@ -48,11 +49,13 @@ class ChunkLifecycleStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    def record_stop_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str]
+    ) -> LeverWrite:
         """`src/blizzard/hub/domain/chunk/ports/lifecycle.py`'s `IWriteChunkLifecycleRepository.record_stop_locked`.
 
         The route check runs on the same connection (:func:`route_of_conn`), so there is no
-        read-then-write race; a submission mid-turn is left to the turn's end."""
+        read-then-write race."""
         conn = chunk_handle_connection(handle, self._store, chunk_id)
         result = conn.execute(
             self._store.insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by)
@@ -63,12 +66,19 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        withdrawn = withdraw_waiting(conn, chunk_id, outcome="stopped", at=at)
+        withdrawn = withdraw_waiting(conn, waiting, outcome="stopped", at=at)
         key = result.inserted_primary_key
         return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
     def record_completion_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/lifecycle.py``'s
         ``IWriteChunkLifecycleRepository.record_completion_locked``.
@@ -84,7 +94,7 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        withdrawn = withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
+        withdrawn = withdraw_waiting(conn, waiting, outcome="completed", at=at)
         close_skipped = enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         key = result.inserted_primary_key
         return LeverWrite(int(key[0]) if key is not None else 0, withdrawn, close_skipped)

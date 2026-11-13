@@ -99,7 +99,7 @@ def test_a_gate_a_transition_closed_undecided_leaves_the_open_list(tmp_path: Pat
 def test_a_gate_on_a_stopped_chunk_leaves_the_open_list(tmp_path: Path) -> None:
     store = _store_with_gate(tmp_path)
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0, waiting=())
 
     assert _open_ids(store) == []
 
@@ -113,7 +113,7 @@ def test_a_gate_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tm
 
 def _stop(store: ChunkStores) -> None:
     with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0)
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="op", at=_T0, waiting=())
 
 
 def _finish(store: ChunkStores) -> None:

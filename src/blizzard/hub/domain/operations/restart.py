@@ -15,11 +15,12 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
-from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository, Node
@@ -174,6 +175,7 @@ class RestartService:
         self,
         *,
         movement: IWriteChunkMovementRepository,
+        submissions: IReadChunkFlowSubmissions,
         decisions: IWriteChunkDecisionsRepository,
         facts: IReadChunkFactsRepository,
         graphs: IReadGraphRepository,
@@ -183,6 +185,7 @@ class RestartService:
         events: EventLogService,
     ) -> None:
         self._movement = movement
+        self._submissions = submissions
         self._events = events
         self._decisions = decisions
         # Read for the gate decision's terminal verdict, under the unit's lock.
@@ -229,6 +232,7 @@ class RestartService:
                 to_graph=to_graph,
                 to_graph_retired=to_graph is not None and self._graphs.is_retired(to_graph.graph_id),
             )
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
             written = self._movement.record_restart_locked(
                 handle,
                 chunk.chunk_id,
@@ -241,6 +245,7 @@ class RestartService:
                 answer=plan.answer,
                 to_graph_id=plan.to_graph_id,
                 note=person_note(note),
+                waiting=waiting(open_submissions),
             )
             landed = handle.facts(chunk.chunk_id)
             assert landed is not None

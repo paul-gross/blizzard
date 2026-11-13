@@ -173,24 +173,13 @@ def end_turn(
 
 
 def withdraw_waiting(
-    conn: Connection, chunk_id: str, *, outcome: Withdrawal, at: datetime
+    conn: Connection, submission_ids: Sequence[str], *, outcome: Withdrawal, at: datetime
 ) -> tuple[FlowFactWritten, ...]:
-    """Close ``outcome`` every open submission of the chunk that has no open turn — a lever's withdrawal. One with an
-    open turn is left to that turn's end, which asks ``withdrawal_for`` and closes it the same way. Answers the
-    ``withdrawn`` facts it wrote."""
-    stmts = statements_of(conn)
-    open_ids = conn.execute(
-        stmts.select(_sub, _sub.c.submission_id)
-        .where(
-            _sub.c.chunk_id == chunk_id,
-            ~stmts.exists(_closures, _closures.c.submission_id == _sub.c.submission_id),
-            ~stmts.exists(_turns, _turns.c.submission_id == _sub.c.submission_id, _turns.c.ended_at.is_(None)),
-        )
-        .order_by(_sub.c.arrival)
-    ).scalars()
+    """Close ``outcome`` each of ``submission_ids``, in the order given — a lever's withdrawal of the submissions its
+    caller named waiting. Answers the ``withdrawn`` facts it wrote."""
     return tuple(
         fact
-        for submission_id in list(open_ids)
+        for submission_id in submission_ids
         for fact in close_submission(conn, submission_id, outcome=outcome, at=at) or ()
     )
 

@@ -24,7 +24,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite, OpenSubmission
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -36,6 +36,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable, StopService
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -50,8 +51,13 @@ class _FakeChunkRepo:
     stopped: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     stamps: list[datetime] = field(default_factory=list[datetime])
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    waiting: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
+
+    def record_stop_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, waiting: Sequence[str]
+    ) -> LeverWrite:
         self.stopped.append((chunk_id, by))
+        self.waiting.append(tuple(waiting))
         self.stamps.append(at)
         return LeverWrite(len(self.stopped))
 
@@ -59,9 +65,28 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"StopService should not touch {name!r}")
 
 
+_UNIT = cast(Transaction, object())
+
+
+@dataclass
+class _FakeFlowSubmissions:
+    """The chunk's open submissions — one mid-turn between two waiting — read only in the handle's unit."""
+
+    def open_flow_submissions(
+        self, chunk_id: str, *, transaction: Transaction | None = None
+    ) -> tuple[OpenSubmission, ...]:
+        assert transaction is _UNIT, "the waiting set is read on the handle's transaction"
+        return (
+            OpenSubmission(submission_id="fs_1", turn_open=False),
+            OpenSubmission(submission_id="fs_2", turn_open=True),
+            OpenSubmission(submission_id="fs_3", turn_open=False),
+        )
+
+
 @dataclass
 class _FakeLockedChunkRead:
     chunk_facts: ChunkFacts | None
+    transaction: Transaction = _UNIT
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.chunk_facts
@@ -85,7 +110,12 @@ def _service(facts: ChunkFacts | None) -> tuple[StopService, _FakeChunkRepo]:
     repo = _FakeChunkRepo()
     clock = FixedClock(_T0)
     exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, clock))
-    service = StopService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive, clock=clock)
+    service = StopService(
+        lifecycle=cast(IWriteChunkLifecycleRepository, repo),
+        submissions=_FakeFlowSubmissions(),
+        exclusive=exclusive,
+        clock=clock,
+    )
     return service, repo
 
 
@@ -205,3 +235,12 @@ def test_stop_stamps_at_after_the_row_lock_is_taken() -> None:
     service.stop(_CHUNK, by="operator")
 
     assert repo.stamps == [_T0 + _LOCK_WAIT]
+
+
+def test_stop_names_the_waiting_submissions_it_read_on_the_handle_unit() -> None:
+    """The stop withdraws the submissions waiting their turn, in arrival order; one mid-turn is left to its turn."""
+    service, repo = _service(_delivering_facts())
+
+    service.stop(_CHUNK, by="operator")
+
+    assert repo.waiting == [("fs_1", "fs_3")]

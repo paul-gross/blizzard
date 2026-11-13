@@ -400,10 +400,11 @@ class ChunkMovementStore:
         answer: str = "",
         to_graph_id: str | None = None,
         note: str | None = None,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
         the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
-        each of the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end."""
+        each flow submission the caller names in ``waiting``."""
         return self.record_restart_conn(
             chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
@@ -416,6 +417,7 @@ class ChunkMovementStore:
             answer=answer,
             to_graph_id=to_graph_id,
             note=note,
+            waiting=waiting,
         )
 
     def record_restart_conn(
@@ -432,8 +434,9 @@ class ChunkMovementStore:
         answer: str,
         to_graph_id: str | None,
         note: str | None,
+        waiting: Sequence[str],
     ) -> LeverWrite:
-        withdrawn = withdraw_waiting(conn, chunk_id, outcome="restarted", at=at)
+        withdrawn = withdraw_waiting(conn, waiting, outcome="restarted", at=at)
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
             already = conn.execute(

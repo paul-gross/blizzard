@@ -12,9 +12,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
-from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 
 
@@ -30,12 +31,14 @@ class CompleteService:
         self,
         *,
         lifecycle: IWriteChunkLifecycleRepository,
+        submissions: IReadChunkFlowSubmissions,
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
         closer_available: Callable[[str], bool],
         events: EventLogService,
     ) -> None:
         self._lifecycle = lifecycle
+        self._submissions = submissions
         self._events = events
         self._clock = clock
         self._closer_available = closer_available
@@ -60,12 +63,14 @@ class CompleteService:
             current = handle.record(chunk.chunk_id)
             if current is None:
                 raise ChunkNotFound(chunk.chunk_id)
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
             written = self._lifecycle.record_completion_locked(
                 handle,
                 chunk.chunk_id,
                 by=by,
                 at=self._clock.now(),
                 close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
+                waiting=waiting(open_submissions),
             )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         return written

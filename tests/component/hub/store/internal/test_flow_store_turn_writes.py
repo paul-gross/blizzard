@@ -16,7 +16,8 @@ import pytest
 from sqlalchemy import Table, func, select
 
 from blizzard.foundation.hub_event_types import FlowChangeKind
-from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten, OpenSubmission
+from blizzard.hub.domain.chunk.flow_writes import waiting as pick_waiting
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -495,6 +496,7 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     reported: list[tuple[FlowFactWritten, ...]] = []
     for submission in (waiting, turning):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+            open_submissions = world.flows.open_flow_submissions(submission.chunk_id, transaction=handle.transaction)
             written = world.chunks.movement.record_restart_locked(
                 handle,
                 submission.chunk_id,
@@ -502,6 +504,7 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
                 to_node_id=_NODE,
                 by="operator",
                 at=world.hub.clock.now(),
+                waiting=pick_waiting(open_submissions),
             )
         reported.append(written.withdrawn)
 
@@ -515,6 +518,35 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     ]
     assert world.closed(waiting) == "restarted"
     assert world.closed(turning) is None
+
+
+def test_a_chunks_open_submissions_answer_whether_each_has_a_turn_open(world: _World) -> None:
+    chunk_id = world.chunk("12")
+    waiting = world.submit(chunk_id, _MAIN)
+    with world.chunks.exclusive.locked([chunk_id]) as handle:
+        before = world.flows.open_flow_submissions(chunk_id, transaction=handle.transaction)
+    assert world.take(waiting) is not None
+
+    assert before == (OpenSubmission(submission_id=waiting.submission_id, turn_open=False),)
+    assert world.flows.open_flow_submissions(chunk_id) == (
+        OpenSubmission(submission_id=waiting.submission_id, turn_open=True),
+    )
+
+
+def test_a_lever_closes_exactly_the_submissions_it_names(world: _World) -> None:
+    """The write judges no turn: it closes a named submission even mid-turn, and leaves an unnamed waiting one."""
+    named = world.submit(world.chunk("12"), _MAIN)
+    unnamed = world.submit(world.chunk("13"), _OTHER)
+    assert world.take(named) is not None
+
+    for submission, names in ((named, [named.submission_id]), (unnamed, [])):
+        with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
+            world.chunks.lifecycle.record_stop_locked(
+                handle, submission.chunk_id, by="operator", at=world.hub.clock.now(), waiting=names
+            )
+
+    assert world.closed(named) == "stopped"
+    assert world.closed(unnamed) is None
 
 
 def test_a_visits_standing_counts_the_open_arrivals_ahead_of_it(world: _World) -> None:

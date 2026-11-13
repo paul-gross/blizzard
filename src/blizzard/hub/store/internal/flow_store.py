@@ -17,10 +17,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten, OpenSubmission
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.delivery.flows import (
     NOT_VERDICTS,
     TURN_INTERRUPTED,
@@ -425,6 +426,23 @@ class FlowStore:
         self._take_terms(conn, row, flows, terms)
         return turn
 
+    def open_flow_submissions(
+        self, chunk_id: str, *, transaction: Transaction | None = None
+    ) -> tuple[OpenSubmission, ...]:
+        with connection_in(self._store, transaction, "open_flow_submissions") as conn:
+            open_turn = self._store.exists(
+                _turns, _turns.c.submission_id == _sub.c.submission_id, _turns.c.ended_at.is_(None)
+            )
+            rows = conn.execute(
+                self._store.select(_sub, _sub.c.submission_id, _sub.c.arrival, open_turn.label("turn_open")).where(
+                    _sub.c.chunk_id == chunk_id, self._open()
+                )
+            ).all()
+            return tuple(
+                OpenSubmission(submission_id=r.submission_id, turn_open=bool(r.turn_open))
+                for r in sorted(rows, key=lambda r: r.arrival)
+            )
+
     def queue_standing(self, submission_id: str, *, transaction: Transaction) -> QueueStanding | None:
         conn = connection_for(self._store, transaction)
         row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
@@ -735,3 +753,4 @@ def _terms_of(row: Row[Any]) -> LandingTerms:
 
 _flows_conforms: type[IWriteFlows] = FlowStore
 _flow_views_conforms: type[IReadFlowViews] = FlowStore
+_chunk_flow_submissions_conforms: type[IReadChunkFlowSubmissions] = FlowStore

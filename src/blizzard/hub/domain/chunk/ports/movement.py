@@ -172,15 +172,16 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         answer: str = "",
         to_graph_id: str | None = None,
         note: str | None = None,
+        waiting: Sequence[str],
     ) -> LeverWrite:
         """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``,
         at a fence epoch this call derives one above the chunk's newest — on ``handle``'s
         already-locked connection (``bzh:store-exclusive-write``). One write with the
         answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set —
         the migration fact re-pinning the chunk there and the standing intent that clears
-        with it, so no crash leaves the move half-applied. Every flow submission of the chunk
-        waiting its turn closes ``restarted`` in the same write; one mid-turn is left to the
-        turn's end. Returns the ``chunk_restarts.id``, with the ``withdrawn`` flow facts it wrote."""
+        with it, so no crash leaves the move half-applied. Each flow submission the caller names
+        in ``waiting`` closes ``restarted`` in the same write, in that order, before the epoch
+        moves. Returns the ``chunk_restarts.id``, with the ``withdrawn`` flow facts it wrote."""
         ...
 
     def record_requeue_locked(

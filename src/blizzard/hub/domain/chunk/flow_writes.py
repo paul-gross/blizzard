@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.hub_event_types import FlowChangeKind
@@ -47,3 +47,18 @@ class LeverWrite:
     fact_id: int
     withdrawn: tuple[FlowFactWritten, ...] = ()
     close_skipped: tuple[int, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class OpenSubmission:
+    """One of a chunk's open flow submissions, and whether it has a turn open."""
+
+    submission_id: str
+    turn_open: bool
+
+
+def waiting(submissions: Sequence[OpenSubmission]) -> tuple[str, ...]:
+    """The ids of the submissions waiting their turn — those with no turn open — in the order given. A lever closes
+    these; one with a turn open is left to its turn's end, which closes it the same way."""
+    return tuple(submission.submission_id for submission in submissions if not submission.turn_open)

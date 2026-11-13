@@ -71,6 +71,7 @@ from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRep
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
+from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
@@ -2782,6 +2783,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
     (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
     (IReadFlows, "queue_standing"): _queue_standing,
+    (IReadChunkFlowSubmissions, "open_flow_submissions"): lambda w: FlowStore(
+        w.store_connections, w.clock
+    ).open_flow_submissions(w.flow_chunk),
     (IReadFlows, "terms_of"): lambda w: w.hub.services.flows.terms_of(w.flow_submission_id),
     (IReadFlows, "first_turn_at"): lambda w: w.hub.services.flows.first_turn_at(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
