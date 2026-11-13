@@ -19,8 +19,12 @@ def test_restart_rolls_back_movement_when_gate_arrival_fails(tmp_path: Path, mon
     graph = hub.services.graphs.get(chunk.graph_id)
     assert graph is not None
     before = hub.services.chunks.facts.load_facts(chunk_id)
+    assert before is not None
 
-    def fail(*args: Any, **kwargs: Any) -> tuple[int, ...]:
+    def fail(decisions: Any, facts: Any, transaction: Any, clock: Any, **kwargs: Any) -> tuple[int, ...]:
+        landed = facts.load_facts(chunk_id, transaction=transaction)
+        assert landed is not None
+        assert len(landed.restarts) == len(before.restarts) + 1
         raise RuntimeError("gate failed")
 
     monkeypatch.setattr(restart_module, "open_graph_gate_on_arrival", fail)
