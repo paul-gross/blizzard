@@ -10,9 +10,9 @@ from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
     ICompatibilityCorpus,
@@ -84,7 +84,7 @@ class OpenCodeHealthProbe:
         *,
         auth_path: Path | None,
         corpus: ICompatibilityCorpus,
-        versions: VersionProbe,
+        versions: IVersionProbe,
         store_path: Path | None = None,
     ) -> None:
         self._binary = binary

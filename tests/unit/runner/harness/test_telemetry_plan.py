@@ -279,13 +279,28 @@ def _launched_envs(
     )
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     kinds: dict[str, Callable[[], object]] = {
-        "spawn": lambda: adapter.spawn(envelope, preamble, session_hint="sess"),
-        "resume": lambda: adapter.spawn(envelope, preamble, session_hint=None, resume_from="sess"),
+        "spawn": lambda: adapter.spawn(
+            envelope, preamble, session_hint="sess", session_settings=adapter.launch_settings()
+        ),
+        "resume": lambda: adapter.spawn(
+            envelope, preamble, session_hint=None, resume_from="sess", session_settings=adapter.launch_settings()
+        ),
         "nudge": lambda: adapter.resume_with_message(
-            str(tmp_path), "sess", "go on", preamble=preamble, chunk_id="ch_1"
+            str(tmp_path),
+            "sess",
+            "go on",
+            preamble=preamble,
+            chunk_id="ch_1",
+            session_settings=adapter.launch_settings(),
         ),
         "judge": lambda: adapter.judge(
-            str(tmp_path), "sess", "judge it", str(tmp_path / "j.out"), preamble=preamble, chunk_id="ch_1"
+            str(tmp_path),
+            "sess",
+            "judge it",
+            str(tmp_path / "j.out"),
+            preamble=preamble,
+            chunk_id="ch_1",
+            session_settings=adapter.launch_settings(),
         ),
     }
     envs: dict[str, dict[str, str]] = {}

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from blizzard.foundation.roles import collaborator
+from blizzard.runner.harness.capability_snapshot import BinaryVersionCache
 from blizzard.runner.harness.declaration import HarnessSection, IHarnessDeclaration, IVersionSelectedDeclaration
 
 
@@ -18,6 +19,20 @@ class IVersionProbe(Protocol):
     def binary_present(self, binary: str) -> bool: ...
 
     def observe_version(self, binary: str) -> str | None: ...
+
+
+class CachedVersionProbe:
+    """A binary probe sharing successful evidence with selection, adapters and health."""
+
+    def __init__(self, probe: IVersionProbe, versions: BinaryVersionCache) -> None:
+        self._probe = probe
+        self._versions = versions
+
+    def binary_present(self, binary: str) -> bool:
+        return self._probe.binary_present(binary)
+
+    def observe_version(self, binary: str) -> str | None:
+        return self._versions.get(binary, lambda: self._probe.observe_version(binary))
 
 
 type HarnessFamilies = Mapping[str, Sequence[IHarnessDeclaration[Any]]]
@@ -42,8 +57,9 @@ class BindingSelection:
 def select_declaration(
     family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection, versions: IVersionProbe
 ) -> IHarnessDeclaration[Any]:
-    """The declaration of ``family`` binding ``section``'s binary, probed once when the family holds several and the
-    binary is there to run; the first otherwise, whose health reports the binary missing."""
+    """Choose the family's declaration using version evidence when needed; otherwise choose the first.
+
+    The probe may reuse successful evidence; health reports a missing binary."""
     if len(family) == 1 or not section.enabled:
         return family[0]
     candidates = [cast(IVersionSelectedDeclaration[Any], declaration) for declaration in family]

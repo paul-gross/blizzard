@@ -17,6 +17,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.json_value import JsonObject, decode_json
+from blizzard.runner.harness.session_settings import SessionEnvironment
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.process.child_env import AllowlistedEnv
 
@@ -99,7 +100,7 @@ def build_identity_env(
     preamble: WorkerPreamble,
     chunk_id: str,
     session_id: str,
-    worker_env: AllowlistedEnv,
+    worker_env: AllowlistedEnv | SessionEnvironment,
     *,
     elicitation: bool = False,
 ) -> dict[str, str]:

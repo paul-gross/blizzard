@@ -131,7 +131,9 @@ class IHarnessRegistry(
 
 
 class HarnessRegistry:
-    """An immutable-in-practice registry of explicitly configured harness bindings."""
+    """A harness set's immutable-in-practice registry of explicitly configured bindings.
+
+    See ``bzh:pluggable-seams`` for binding lifetime."""
 
     def __init__(self, bindings: Mapping[str, HarnessBinding] | None = None) -> None:
         self._bindings = dict(bindings or {})

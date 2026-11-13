@@ -13,6 +13,7 @@ from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
@@ -97,6 +98,10 @@ class OpenCodeTwoDeclaration:
         return OPENCODE_HARNESS_ID
 
     @property
+    def service_version(self) -> bool:
+        return True
+
+    @property
     def normalizer_version(self) -> str:
         return NORMALIZER_VERSION
 
@@ -129,6 +134,7 @@ class OpenCodeTwoDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
+        versions: IVersionProbe | None = None,
     ) -> HarnessAssembly:
         """This runner's adapter and its one health probe, sharing one service keeper and one version hold — the
         hold refuses a version either observes for as long as this runner's composition lasts. The keeper, the
@@ -161,11 +167,13 @@ class OpenCodeTwoDeclaration:
             worker_env=shared.worker_env,
             launcher=launcher,
             keeper=keeper,
-            versions=VersionProbe(children, shared.worker_env.tool()),
+            versions=versions or VersionProbe(children, shared.worker_env.tool()),
             hold=hold,
             request_dir=shared.root / REQUEST_DIRNAME,
             clock=clock,
             transcript_source=transcript_source,
+            transcript_root=shared.transcripts_root,
+            bundle_path=str(shared.bundle.path) if shared.bundle is not None else None,
             orphaner=orphaner,
             binary=section.binary,
             driver_command=driver_command(),
@@ -180,7 +188,7 @@ class OpenCodeTwoDeclaration:
             keeper=keeper,
             hold=hold,
             corpus=corpus,
-            versions=VersionProbe(children, shared.worker_env.tool()),
+            versions=versions or VersionProbe(children, shared.worker_env.tool()),
             model_aliases=section.model_aliases,
             effort_aliases=section.effort_aliases,
         )

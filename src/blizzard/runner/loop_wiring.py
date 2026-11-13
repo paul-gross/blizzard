@@ -26,7 +26,8 @@ from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.capability_snapshot import default_harness_id
+from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, WorkerInvocation
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
@@ -100,13 +101,15 @@ class LoopWiring:
         graph: RunnerProcess,
         *,
         tracer: IPlatformTracer | None = None,
+        harness_set: HarnessSet | None = None,
     ) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
         the caller owns the ``httpx2.Client`` behind ``hub``.
 
         ``tracer`` is the tick's span seam, absent by default."""
         config = self.config
-        stores, workspaces, harnesses, clock = graph.stores, graph.workspaces, graph.harnesses, graph.clock
+        selected = harness_set or graph.harness_sets.current
+        stores, workspaces, harnesses, clock = graph.stores, graph.workspaces, selected.registry, graph.clock
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
         default_id = default_harness_id(harnesses)
@@ -212,6 +215,7 @@ class LoopWiring:
                 workspaces=workspaces,
                 harnesses=harnesses,
                 invocation_boundaries=stores.invocation_boundaries,
+                invocation_harnesses=graph.harness_sets,
                 transcripts_wired=True,
                 events=graph.events,
             ),
@@ -220,7 +224,7 @@ class LoopWiring:
                 harnesses=harnesses,
                 transcripts_wired=True,
             ),
-            harness_selector=HarnessSelector(harnesses=harnesses, health=graph.health),
+            harness_selector=HarnessSelector(harnesses=harnesses, health=selected.health),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
                 clock=clock,
@@ -232,11 +236,11 @@ class LoopWiring:
             transcripts_wired=True,
             events=graph.events,
             harnesses=harnesses,
-            # Built once here, long-lived across every tick `PeriodicDriver._run` drives on this context.
-            harness_versions=HarnessVersionCache(clock=clock),
-            # Mirrors `harness_versions`: built once, long-lived across every tick.
-            harness_health=graph.health,
-            # Mirrors `harness_versions`: built once, long-lived across every tick.
+            harness_sets=graph.harness_sets,
+            # The selected set owns these caches across ticks.
+            harness_versions=selected.versions,
+            harness_health=selected.health,
+            # Built once here, long-lived across every tick on this context.
             retention_passes=RetentionPasses(),
             tracer=tracer or NoopPlatformTracer(),
         )
@@ -299,6 +303,16 @@ class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
 class _OrphanScope:
     harnesses: IHarnessRegistry
     stores: RunnerStores
+    invocation_harnesses: IInvocationHarnesses | None = None
+
+    def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
+        generation = self.stores.liveness.lease_generation(lease_id)
+        owner = (
+            self.invocation_harnesses.find(WorkerInvocation(lease_id, generation))
+            if self.invocation_harnesses is not None
+            else None
+        )
+        return owner.registry if owner is not None else self.harnesses
 
 
 @dataclass(frozen=True)
@@ -315,6 +329,7 @@ class ResumeMarking:
     harnesses: IHarnessRegistry
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
     sleep: Callable[[float], None] = time.sleep
+    invocation_harnesses: IInvocationHarnesses | None = None
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully, then drain their workers:
@@ -329,7 +344,9 @@ class ResumeMarking:
     def _drain(self) -> None:
         marked_ids = self.stores.resume_intent.resume_intent_lease_ids()
         leases = [lease for lease in self.stores.lease_record.list_active_leases() if lease.lease_id in marked_ids]
-        orphan = partial(orphan_session, _OrphanScope(self.harnesses, self.stores), via="shutdown")
+        orphan = partial(
+            orphan_session, _OrphanScope(self.harnesses, self.stores, self.invocation_harnesses), via="shutdown"
+        )
         ShutdownDrain(process=self.process, clock=self.clock, sleep=self.sleep, orphan=orphan).run(leases)
 
     def on_startup(self) -> int:
@@ -342,7 +359,10 @@ class ResumeMarking:
     def reconcile_sessions(self) -> int:
         """Stop every turn a crash left running without its worker, returning how many — run after
         :meth:`recover_takeovers` (so an interrupted takeover no longer holds) and before any restart resume."""
-        return SessionReconcile(self.stores, self.harnesses, self.process).run()
+        registry = (
+            self.invocation_harnesses.current.registry if self.invocation_harnesses is not None else self.harnesses
+        )
+        return SessionReconcile(self.stores, registry, self.process).run()
 
     def recover_takeovers(self) -> int:
         """Finish and end every takeover a crash interrupted mid-entry — run after :meth:`on_startup` (whose
@@ -357,7 +377,19 @@ class ResumeMarking:
 
 
 class RunnerStepper:
-    def __init__(self, config: RunnerConfig, *, process_graph: RunnerProcess) -> None:
+    """Own the timeout-keyed loop context and retire clients only when both passes are idle.
+
+    Admission and retirement acquire tick, trace, then build locks in that order; construction
+    alone holds the build lock. ``bzh:steppable-loop`` owns the loop seam.
+    """
+
+    def __init__(
+        self,
+        config: RunnerConfig,
+        *,
+        process_graph: RunnerProcess,
+        timeout: Callable[[], float] = lambda: _HTTP_TIMEOUT,
+    ) -> None:
         self._wiring = LoopWiring.of(config, broker=process_graph.host.events)
         self._graph = process_graph
         self._tick_lock = StepLock()
@@ -365,6 +397,11 @@ class RunnerStepper:
         self._build = threading.Lock()
         self._client: httpx2.Client | None = None
         self._ctx: LoopContext | None = None
+        self._ctx_harness_set: HarnessSet | None = None
+        self._timeout = timeout
+        self._client_timeout: float | None = None
+        self._retired: list[httpx2.Client] = []
+        self._closed = False
 
     @property
     def wiring(self) -> LoopWiring:
@@ -374,10 +411,17 @@ class RunnerStepper:
         return self._graph.trace_sweep is not None
 
     def request(self) -> PassResult:
+        try:
+            return self._request()
+        finally:
+            self._retire_idle()
+
+    def _request(self) -> PassResult:
         with ExitStack() as held:
             held.enter_context(self._tick_lock.hold())
             if self.traces():
                 held.enter_context(self._trace_lock.hold())
+            self._ensure_open()
             clock = self._graph.clock
             started_at = clock.now()
             faults: list[Exception] = []
@@ -393,30 +437,58 @@ class RunnerStepper:
     def timed_tick(self) -> None:
         try:
             with self._tick_lock.hold():
+                self._ensure_open()
                 self._tick()
         except TickInProgress:
             _log.info("tick skipped; another pass is in progress", runner_name=self._wiring.config.name)
         except Exception as exc:  # a bad tick must not kill the daemon
             _log.error("tick failed", detail=str(exc))
+        finally:
+            self._retire_idle()
 
     def timed_trace_sweep(self) -> None:
         try:
             with self._trace_lock.hold():
+                self._ensure_open()
                 self._sweep_traces()
         except TickInProgress:
             _log.info("lease trace sweep skipped; another pass is in progress")
         except Exception as exc:
             get_logger("blizzard.runner.trace_export").error("lease trace sweep failed", detail=str(exc))
+        finally:
+            self._retire_idle()
 
     def quiesce(self) -> None:
-        self._tick_lock.wait_idle()
+        with self._tick_lock.hold_idle(), self._trace_lock.hold_idle(), self._build:
+            self._close_retired()
 
     def close(self) -> None:
-        with self._build:
+        with self._tick_lock.hold_idle(), self._trace_lock.hold_idle(), self._build:
+            self._closed = True
+            self._close_retired()
             if self._client is not None:
                 self._client.close()
                 self._client = None
             self._ctx = None
+            self._ctx_harness_set = None
+
+    def _close_retired(self) -> None:
+        for client in self._retired:
+            client.close()
+        self._retired.clear()
+
+    def _ensure_open(self) -> None:
+        with self._build:
+            if self._closed:
+                raise RuntimeError("runner stepper is closed")
+
+    def _retire_idle(self) -> None:
+        # Called after releasing the pass lock: never recursively acquire it.
+        try:
+            with self._tick_lock.hold(), self._trace_lock.hold(), self._build:
+                self._close_retired()
+        except TickInProgress:
+            pass
 
     def _tick(self) -> None:
         tick(self._context())
@@ -427,18 +499,41 @@ class RunnerStepper:
 
     def _context(self) -> LoopContext:
         with self._build:
-            if self._ctx is None:
+            if self._closed:
+                raise RuntimeError("runner stepper is closed")
+            timeout = self._timeout()
+            selected = self._graph.harness_sets.current
+            if self._ctx is None or self._client_timeout != timeout:
                 config = self._wiring.config
                 client = httpx2.Client(
-                    base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
+                    base_url=config.hub_url, timeout=timeout, auth=HeldTokenAuth(self._graph.hub_token)
                 )
-                self._graph.platform_tracing.instrument_client(client)
                 try:
-                    self._ctx = self._wiring.context(HttpHubClient(client), self._graph, tracer=self._graph.tracer)
+                    self._graph.platform_tracing.instrument_client(client)
+                    ctx = self._wiring.context(
+                        HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
+                    )
                 except BaseException:
                     client.close()
                     raise
+                if self._client is not None:
+                    self._retired.append(self._client)
                 self._client = client
+                self._client_timeout = timeout
+                self._ctx = ctx
+                self._ctx_harness_set = selected
+            elif self._ctx_harness_set is not selected:
+                self._ctx = replace(
+                    self._ctx,
+                    harnesses=selected.registry,
+                    harness_selector=HarnessSelector(harnesses=selected.registry, health=selected.health),
+                    sessions=replace(self._ctx.sessions, harnesses=selected.registry),
+                    usage=replace(self._ctx.usage, harnesses=selected.registry),
+                    harness_versions=selected.versions,
+                    harness_health=selected.health,
+                    capabilities=None,
+                )
+                self._ctx_harness_set = selected
             return self._ctx
 
 

@@ -44,17 +44,27 @@ def test_real_child_process_receives_effective_bundle_on_every_launch(tmp_path: 
     )
     preamble = _preamble(str(workdir), stdout_path=str(tmp_path / "fresh.jsonl"))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    fresh = adapter.spawn(envelope, preamble, None)
+    fresh = adapter.spawn(envelope, preamble, None, session_settings=adapter.launch_settings())
     fresh.confirm_durable()
     fresh_handle = fresh.await_identity(5)
     wait_for_exit(fresh_handle.pid)
-    resumed = adapter.spawn(envelope, preamble, None, resume_from=fresh_handle.session_id)
+    resumed = adapter.spawn(
+        envelope, preamble, None, resume_from=fresh_handle.session_id, session_settings=adapter.launch_settings()
+    )
     resumed.confirm_durable()
     wait_for_exit(resumed.pid)
-    nudge = adapter.resume_with_message(str(workdir), fresh_handle.session_id, "continue")
+    nudge = adapter.resume_with_message(
+        str(workdir), fresh_handle.session_id, "continue", session_settings=adapter.launch_settings()
+    )
     nudge.confirm_durable()
     wait_for_exit(nudge.pid)
-    judge = adapter.judge(str(workdir), fresh_handle.session_id, "assess", str(tmp_path / "judge.jsonl"))
+    judge = adapter.judge(
+        str(workdir),
+        fresh_handle.session_id,
+        "assess",
+        str(tmp_path / "judge.jsonl"),
+        session_settings=adapter.launch_settings(),
+    )
     judge.confirm_durable()
     wait_for_exit(judge.pid)
 
@@ -78,7 +88,12 @@ def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path, spa
     adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending = adapter.spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint="hint",
+        session_settings=adapter.launch_settings(),
+    )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 
@@ -97,7 +112,10 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path, spawn_e
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(
-        envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint-never-honored"
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint="hint-never-honored",
+        session_settings=adapter.launch_settings(),
     )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
@@ -123,6 +141,7 @@ def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path, spawn_ex
         envelope,
         _preamble(str(workdir), stdout_path=str(stdout_path), stderr_path=str(stderr_path)),
         session_hint="hint",
+        session_settings=adapter.launch_settings(),
     )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
@@ -139,7 +158,12 @@ def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: P
     adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending = adapter.spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint="hint",
+        session_settings=adapter.launch_settings(),
+    )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
@@ -156,7 +180,12 @@ def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(
     adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending = adapter.spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint="hint",
+        session_settings=adapter.launch_settings(),
+    )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
@@ -355,7 +384,11 @@ def test_resume_spawn_never_performs_the_handshake(tmp_path: Path, spawn_executo
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(
-        envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint=None, resume_from="ses_prior"
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint=None,
+        resume_from="ses_prior",
+        session_settings=adapter.launch_settings(),
     )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
@@ -372,14 +405,24 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(
     workdir.mkdir()
     adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
 
-    judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
+    judge_handle = adapter.judge(
+        str(workdir),
+        "ses_recorded",
+        "assess",
+        str(workdir / "judge-output.json"),
+        session_settings=adapter.launch_settings(),
+    )
     judge_handle.confirm_durable()  # real component tests stand in for `Judgement._elicit`'s own call
     wait_for_exit(judge_handle.pid)
     output = Path(workdir / "judge-output.json").read_text()
     assert adapter.parse_verdict(output) == "pass"
 
     resumed = adapter.resume_with_message(
-        str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
+        str(workdir),
+        "ses_recorded",
+        "continue",
+        stdout_path=str(workdir / "nudge.out"),
+        session_settings=adapter.launch_settings(),
     )
     resumed.confirm_durable()  # component tests stand in for `_wake`'s call (src/blizzard/runner/lifecycle/dormant.py)
     wait_for_exit(resumed.pid)
@@ -396,7 +439,12 @@ def test_spawn_launches_through_the_process_launcher_with_its_own_group(
     adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
-    pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
+    pending = adapter.spawn(
+        envelope,
+        _preamble(str(workdir), stdout_path=str(stdout_path)),
+        session_hint="hint",
+        session_settings=adapter.launch_settings(),
+    )
     pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 

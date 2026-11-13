@@ -197,7 +197,13 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
             )
             start = len(_Provider.requests)
             handle = adapter.spawn(
-                envelope, preamble, None, resume_from=session, model="stub/stub", compaction_window=window
+                envelope,
+                preamble,
+                None,
+                resume_from=session,
+                model="stub/stub",
+                compaction_window=window,
+                session_settings=adapter.launch_settings(model="stub/stub", compaction_window=window),
             )
             handle.confirm_durable()
             if session is None:

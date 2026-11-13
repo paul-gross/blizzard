@@ -36,7 +36,9 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     workdir.mkdir()
     adapter = _adapter(spawn_executor, binary=str(dump_script))
 
-    handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
+    handle = adapter.judge(
+        str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"), session_settings=adapter.launch_settings()
+    )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -62,7 +64,13 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path, 
     )
 
     handle = adapter.judge(
-        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
+        str(workdir),
+        "sess-9",
+        "assess",
+        str(workdir / "judge-output.json"),
+        preamble=preamble,
+        chunk_id="ch_9",
+        session_settings=adapter.launch_settings(),
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
@@ -90,7 +98,13 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(
     )
 
     handle = adapter.judge(
-        str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
+        str(workdir),
+        "sess-9",
+        "assess",
+        str(workdir / "judge-output.json"),
+        preamble=preamble,
+        chunk_id="ch_9",
+        session_settings=adapter.launch_settings(),
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
@@ -111,7 +125,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     workdir.mkdir()
     adapter = _adapter(spawn_executor, binary=str(dump_script))
 
-    resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
+    resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver", session_settings=adapter.launch_settings())
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
 
@@ -138,7 +152,14 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(
         lease_token="fresh-resume-token",
     )
 
-    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed = adapter.resume_with_message(
+        str(workdir),
+        "sess-9",
+        "continue",
+        preamble=preamble,
+        chunk_id="ch_9",
+        session_settings=adapter.launch_settings(),
+    )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
 
@@ -164,7 +185,14 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(
         local_api_url="http://127.0.0.1:8431",
     )
 
-    resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    resumed = adapter.resume_with_message(
+        str(workdir),
+        "sess-9",
+        "continue",
+        preamble=preamble,
+        chunk_id="ch_9",
+        session_settings=adapter.launch_settings(),
+    )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
 
@@ -225,7 +253,9 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path, spawn_executor: 
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123").await_identity(0)
+    handle = adapter.spawn(
+        envelope, preamble, session_hint="sess-123", session_settings=adapter.launch_settings()
+    ).await_identity(0)
 
     assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
     assert handle.pid > 0
@@ -289,7 +319,12 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
 
     assert adapter.observe_version() is None  # bounded — never waits out the hang
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sess-123",
+        session_settings=adapter.launch_settings(prompt_prefix=preamble.prompt_prefix),
+    )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -311,7 +346,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path, spawn_executor: Executor)
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123", session_settings=adapter.launch_settings())
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -332,7 +367,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path, s
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123", session_settings=adapter.launch_settings())
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -346,7 +381,13 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path, spawn_executor: Ex
     adapter = _adapter(spawn_executor, binary=binary)
     output_path = str(workdir / "judge-output.json")
 
-    handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
+    handle = adapter.judge(
+        str(workdir),
+        "sess-123",
+        "Assess the build. Reply <Choice>name</Choice>.",
+        output_path,
+        session_settings=adapter.launch_settings(),
+    )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -363,7 +404,11 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path, s
     adapter = _adapter(spawn_executor, binary=binary, permission_mode="bypassPermissions")
 
     handle = adapter.judge(
-        str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
+        str(workdir),
+        "sess-123",
+        "Assess. Reply <Choice>name</Choice>.",
+        str(workdir / "judge-output.json"),
+        session_settings=adapter.launch_settings(),
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
@@ -380,7 +425,9 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path, s
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(spawn_executor, binary=binary, settings_path=str(settings))
 
-    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-123", "continue where you left off", session_settings=adapter.launch_settings()
+    )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
 
@@ -401,7 +448,13 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
     )
 
     resumed = adapter.resume_with_message(
-        str(workdir), "sess-123", "continue", model="sonnet", effort="high", compaction_window="150k"
+        str(workdir),
+        "sess-123",
+        "continue",
+        model="sonnet",
+        effort="high",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="sonnet", effort="high", compaction_window="150k"),
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
@@ -415,6 +468,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
         model="sonnet",
         effort="high",
         compaction_window="150k",
+        session_settings=adapter.launch_settings(model="sonnet", effort="high", compaction_window="150k"),
     )
     judge_handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(judge_handle.pid)
@@ -448,7 +502,12 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path, spawn_
         prompt_prefix="PREAMBLE-TABLE",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sess-123",
+        session_settings=adapter.launch_settings(prompt_prefix=preamble.prompt_prefix),
+    )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -472,7 +531,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123", session_settings=adapter.launch_settings())
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -544,7 +603,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path, spaw
         stdout_path=str(stdout_path),
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage", session_settings=adapter.launch_settings())
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -568,7 +627,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path, spawn
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage", session_settings=adapter.launch_settings())
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(handle.pid)
 
@@ -583,7 +642,11 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     adapter = _adapter(spawn_executor, binary=binary)
 
     resumed = adapter.resume_with_message(
-        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+        str(workdir),
+        "sess-usage",
+        "deliver the answer",
+        stdout_path=str(stdout_path),
+        session_settings=adapter.launch_settings(),
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)
@@ -606,7 +669,11 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(
     adapter = _adapter(spawn_executor, binary=binary)
 
     resumed = adapter.resume_with_message(
-        str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
+        str(workdir),
+        "sess-usage",
+        "deliver the answer",
+        stdout_path=str(stdout_path),
+        session_settings=adapter.launch_settings(),
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     wait_for_exit(resumed.pid)

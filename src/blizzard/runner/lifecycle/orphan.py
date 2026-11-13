@@ -42,14 +42,16 @@ def orphan_resultless_exit(ctx: OrphanContext, lease: Lease, output: str, *, via
     if session is None:
         return
     try:
-        usable = ctx.harnesses.lifecycle_and_verdict(session.harness_id).has_usable_output(output)
+        resolve = getattr(ctx, "harnesses_for_lease", None)
+        harnesses = resolve(lease.lease_id) if resolve is not None else ctx.harnesses
+        usable = harnesses.lifecycle_and_verdict(session.harness_id).has_usable_output(output)
     except (UnknownHarnessError, UnavailableHarnessError):
         return
     if not usable:
         orphan_session(ctx, lease, via=via)
 
 
-def orphan_session(ctx: OrphanContext, lease: Lease, *, via: str) -> None:
+def orphan_session(ctx: OrphanContext, lease: Lease, *, via: str, judge: bool = False) -> None:
     """Hand ``lease``'s session to its owner's ``orphan``; never raises. A lease with no session, one whose owner
     cannot be resolved, or one an open takeover holds is left alone."""
     session = lease.session
@@ -60,7 +62,9 @@ def orphan_session(ctx: OrphanContext, lease: Lease, *, via: str) -> None:
         takeover = ctx.stores.takeover.open_takeover_for_chunk(lease.chunk_id)
         if takeover is not None and takeover.holds(lease.chunk_id, lease.epoch):
             return
-        ctx.harnesses.lifecycle(session.harness_id).orphan(session.session_id)
+        resolve = getattr(ctx, "harnesses_for_judge" if judge else "harnesses_for_lease", None)
+        harnesses = resolve(lease.lease_id) if resolve is not None else ctx.harnesses
+        harnesses.lifecycle(session.harness_id).orphan(session.session_id)
     except (UnknownHarnessError, UnavailableHarnessError) as exc:
         _log.warning(
             "orphaned session's owner unavailable — left to reconcile",

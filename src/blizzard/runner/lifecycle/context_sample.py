@@ -114,7 +114,8 @@ class ContextSampleSweep:
         if not ContextSampleState.sample_due(state, now=now, interval=interval):
             return
         try:
-            source = ctx.transcript_source_for(session)
+            resolve = getattr(ctx, "lease_transcript_source", None)
+            source = resolve(lease.lease_id, session) if resolve is not None else ctx.transcript_source_for(session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # A read-only side lane: never escalates on its own, only skips this one lease's
             # sample for this tick — its own dispatch path (a wake, a judgement) escalates it.

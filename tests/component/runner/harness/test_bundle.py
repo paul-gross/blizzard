@@ -7,16 +7,15 @@ import hashlib
 import json
 import os
 import shutil
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, TypedDict
 
 import pytest
 from click.testing import CliRunner
 
-from blizzard.cli.collaborators import CliCollaborators
+import blizzard.runner.composition as runner_composition
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.cli.runtime import InitCollaborators
+from blizzard.runner.cli import runtime as cli_runtime
 from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, HarnessComposition, companion_path
 from blizzard.runner.harness.claude_code.bundle import composer
@@ -31,10 +30,6 @@ from tests.support.harness_bundle import bundle as _bundle
 from tests.support.harness_bundle import runtime as _runtime
 from tests.support.host_files import load_runner_config
 from tests.support.runner_init_fakes import FakeInitHub, init_runner
-
-
-def _http_collaborators(**overrides: Any) -> InitCollaborators:
-    return replace(InitCollaborators.http(CliCollaborators.production().client_factory), **overrides)
 
 
 def test_composed_opencode_config_preserves_settings_and_denials(tmp_path: Path) -> None:
@@ -363,25 +358,25 @@ def test_tick_with_a_malformed_bundle_exits_naming_the_path(tmp_path: Path) -> N
     assert "tick complete" not in result.output
 
 
-def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path) -> None:
+def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = _bundle(tmp_path)
     (bundle / "claude-code" / "stray").write_text("x")
     runtime = _runtime(tmp_path, bundle)
     started: list[str] = []
 
-    def build(*args: object, **kwargs: object) -> None:
-        started.append("built")
+    def serve(*args: object, **kwargs: object) -> None:
+        started.append("served")
 
-    collaborators = _http_collaborators(build_host_process=build)
+    monkeypatch.setattr(cli_runtime, "_serve_host", serve)
 
-    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime), "--port", "0"], obj=collaborators)
+    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime), "--port", "0"])
 
     assert result.exit_code != 0
     assert str(bundle / "claude-code" / "stray") in result.output
     assert started == []
 
 
-def test_host_publishes_before_building_the_process(tmp_path: Path) -> None:
+def test_host_publishes_during_process_assembly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = _bundle(tmp_path)
     runtime = _runtime(tmp_path, bundle)
     seen: list[Path | None] = []
@@ -390,13 +385,51 @@ def test_host_publishes_before_building_the_process(tmp_path: Path) -> None:
         seen.append(published_snapshot(runtime))
         raise RuntimeError("stop here")
 
-    result = CliRunner().invoke(
-        runner_group, ["host", "--dir", str(runtime), "--port", "0"], obj=_http_collaborators(build_host_process=stop)
-    )
+    monkeypatch.setattr(cli_runtime, "_serve_host", stop)
+    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime), "--port", "0"])
 
     assert isinstance(result.exception, RuntimeError)
     assert seen[0] is not None
     assert "harness config bundle" in result.output
+
+
+@pytest.mark.parametrize("command", ["host", "tick"])
+def test_runtime_assembles_one_selected_and_published_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path, bundle)
+    selections: list[object] = []
+    publications: list[Any] = []
+    select = runner_composition.select_harness_bindings
+    publish = runner_composition.publish_harness_bundle
+
+    def count_select(*args: Any, **kwargs: Any) -> Any:
+        result = select(*args, **kwargs)
+        selections.append(result)
+        return result
+
+    def count_publish(*args: Any, **kwargs: Any) -> Any:
+        assert kwargs["selection"] is selections[0]
+        result = publish(*args, **kwargs)
+        publications.append(result)
+        return result
+
+    monkeypatch.setattr(runner_composition, "select_harness_bindings", count_select)
+    monkeypatch.setattr(runner_composition, "publish_harness_bundle", count_publish)
+
+    def serve(*args: object, **kwargs: object) -> None:
+        pass
+
+    if command == "host":
+        monkeypatch.setattr(cli_runtime, "_serve_host", serve)
+    args = [command, "--dir", str(runtime)]
+    if command == "host":
+        args += ["--port", "0"]
+    result = CliRunner().invoke(runner_group, args)
+    assert result.exit_code == 0, result.output
+    assert len(selections) == len(publications) == 1
+    assert publications[0].path == published_snapshot(runtime)
 
 
 def test_a_tick_refused_over_a_foreign_store_publishes_no_bundle(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:

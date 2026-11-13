@@ -14,8 +14,13 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.harness_set import JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessLifecycleAndVerdictRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
@@ -216,6 +221,9 @@ class Judgement:
         """Resume-once: an exit with `produces:` unmet is resumed, not judged — no verdict
         elicited, no attempt failed, and no `checks:` run."""
         lease = self.lease
+        dormant = DormantSession(self.ctx, lease)
+        if not dormant.drain_before_resume():
+            return
         _log.warning(
             "resuming premature exit for unattached produces names",
             node=self.envelope.node.node_name,
@@ -227,7 +235,7 @@ class Judgement:
         # The nudge's own boundary, riding `record_nudge_fired`'s own
         # pre-resume transaction — no new window, so no new crash point brackets it.
         start_position, start_unreadable = self.ctx.resolve_boundary_start(
-            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id
+            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id, lease_id=lease.lease_id
         )
         self.ctx.stores.invocation_boundaries.record_boundary_open(
             lease_id=lease.lease_id,
@@ -241,7 +249,7 @@ class Judgement:
             opened_at=self.ctx.clock.now(),
         )
         _CP_NUDGE_AFTER_FIRED_FACT.reached()
-        DormantSession(self.ctx, lease).resume_on_unmet_produces(produces.nudge_message(missing), self.bindings)
+        dormant.resume_on_unmet_produces(produces.nudge_message(missing), self.bindings, transcript_drained=True)
 
     def collect(self, elicitation: PendingElicitation) -> None:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
@@ -321,6 +329,7 @@ class Judgement:
             self._judged(output)
             self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
             self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
+            self._release_judge(generation)
         # BACK_OFF: backing off in place — the next tick's `backing_off_facts` picks it up.
 
     def _fail_stale(self, elicitation: PendingElicitation) -> None:
@@ -349,6 +358,8 @@ class Judgement:
             start=StartKind.CONTINUATION, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id
         ):
             return
+        if not self.current_launch_available():
+            return
         _log.warning(
             "elicitation lost — relaunching, no retry consumed",
             chunk_id=lease.chunk_id,
@@ -356,8 +367,13 @@ class Judgement:
             relaunch_count=elicitation.relaunch_count,
         )
         # The lost judge's turn may still run on the session the relaunch prompts again.
-        orphan_session(self.ctx, lease, via="judge-lost")
+        orphan_session(self.ctx, lease, via="judge-lost", judge=True)
         self._relaunch(elicitation)
+
+    def _release_judge(self, generation: int) -> None:
+        owners = getattr(self.ctx, "harness_sets", None)
+        if owners is not None:
+            owners.release_judges(self.lease.lease_id, generation)
 
     def _relaunch(self, elicitation: PendingElicitation) -> None:
         """Re-launch a lost elicitation into a fresh output file (never a second document
@@ -425,6 +441,8 @@ class Judgement:
         leaves a record REAP's staleness absorbs. A launch over a standing record restarts the bound and
         sweeps the prior record's output files first."""
         lease = self.lease
+        if not self.current_launch_available():
+            return
         if self.known_elicitation is not None:
             standing = self.known_elicitation.standing
         else:
@@ -438,7 +456,7 @@ class Judgement:
         # The judgement's own boundary, riding `record_elicitation_launch`'s own
         # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
         start_position, start_unreadable = self.ctx.resolve_boundary_start(
-            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id
+            self.session, self.bindings[0].workdir, self.bindings[0].workspace_id, lease_id=lease.lease_id
         )
         generation = (
             self.generation
@@ -476,21 +494,58 @@ class Judgement:
             # that closure — no other runner can resume this exact session to relaunch on.
             return
         binding = self.bindings[0]
-        handle, _ = Spawner(self.ctx).launching(
-            session.harness_id,
-            harness.observe_version,
-            lambda: harness.judge(
-                SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
-                session.session_id,
-                message,
-                output_path,
-                preamble=Spawner(self.ctx).preamble(lease, self.bindings),
-                chunk_id=lease.chunk_id,
-                effort=lease.resolved_effort,
-                model=lease.resolved_model,
-                compaction_window=lease.resolved_compaction_window,
-            ),
+        owners = getattr(self.ctx, "harness_sets", None)
+        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+        key = JudgeInvocation(lease.lease_id, generation)
+        settings = harness.launch_settings(
+            lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
         )
+        if owners is not None:
+            worker = WorkerInvocation(lease.lease_id, generation)
+            if owners.find(worker) is None:
+                # Restart cannot restore the previous in-memory owner. Anchor the
+                # session to the newly composed set before its first judge.
+                owners.retain(worker)
+            try:
+                current_harness = owners.current.registry.lifecycle_and_verdict(session.harness_id)
+            except (UnknownHarnessError, UnavailableHarnessError):
+                # A replacement between admission and launch must not silently
+                # substitute the retained set's stale launch values.
+                return
+            current_settings = current_harness.launch_settings(
+                lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
+            )
+            owners.retire_judge(lease.lease_id, generation)
+            selected = owners.retain_for(key, worker)
+            try:
+                harness = selected.registry.lifecycle_and_verdict(session.harness_id)
+                origin = harness.launch_settings(
+                    lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
+                )
+                settings = current_settings.for_session(origin)
+            except BaseException:
+                owners.release(key)
+                raise
+        try:
+            handle, _ = Spawner(self.ctx).launching(
+                session.harness_id,
+                harness.observe_version,
+                lambda: harness.judge(
+                    SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
+                    session.session_id,
+                    message,
+                    output_path,
+                    preamble=Spawner(self.ctx).preamble(lease, self.bindings),
+                    chunk_id=lease.chunk_id,
+                    session_settings=settings,
+                ),
+                selected=owners.lookup(key) if owners is not None else None,
+            )
+        except BaseException:
+            if owners is not None:
+                owners.release(key)
+            raise
+
         try:
             self.ctx.stores.elicitations.record_elicitation_started(
                 lease.lease_id,
@@ -499,14 +554,44 @@ class Judgement:
                 process_start_time=handle.process_start_time,
                 pgid=handle.pgid,
             )
-        except Exception:
+        except BaseException:
             # A plain raise never disarms the trampoline on its own — kill it explicitly, as `Spawner.spawn`
             # does; an `ElicitationNotRecorded` leaves nothing to track the judge by, so it is reaped too.
-            self.ctx.process.kill_group(handle.pgid)
-            orphan_session(self.ctx, lease, via="judge-record-failed")
+            try:
+                self.ctx.process.kill_group(handle.pgid)
+                orphan_session(self.ctx, lease, via="judge-record-failed", judge=True)
+            finally:
+                if owners is not None:
+                    owners.release(key)
             raise
+
         # Disarm only now this record is durable — `collect` can re-adopt it past here.
-        handle.confirm_durable()
+        try:
+            handle.confirm_durable()
+        except BaseException:
+            try:
+                self.ctx.process.kill_group(handle.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(key)
+            raise
+
+    def current_launch_available(self) -> bool:
+        """Defer a judge when current launch values cannot be resolved by exact owner."""
+        owners = getattr(self.ctx, "harness_sets", None)
+        if owners is None:
+            return True
+        try:
+            owners.current.registry.lifecycle_and_verdict(self.session.harness_id)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            _log.warning(
+                "judge deferred: current launch settings unavailable",
+                lease_id=self.lease.lease_id,
+                harness_id=self.session.harness_id,
+                detail=str(exc),
+            )
+            return False
+        return True
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —
@@ -518,7 +603,7 @@ class Judgement:
         # verdict-less fail does not discard the spend the attempt genuinely burned.
         self.ctx.usage.record_attempt(lease, self.bindings, judge_output=output)
 
-        harness = self.ctx.harnesses.lifecycle_and_verdict(self.session.harness_id)
+        harness = self._judge_harnesses().lifecycle_and_verdict(self.session.harness_id)
         verdict = Verdict.of(harness.parse_verdict(output), self.envelope.node.choices)
         selected = verdict.selected
         if selected is None:
@@ -641,7 +726,17 @@ class Judgement:
         :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
         when it is unknown or unavailable."""
         try:
-            return self.ctx.harnesses.lifecycle_and_verdict(session.harness_id)
+            return self._judge_harnesses().lifecycle_and_verdict(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             Attempt(self.ctx, self.lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return None
+
+    def _judge_harnesses(self) -> IHarnessLifecycleAndVerdictRegistry:
+        owners = getattr(self.ctx, "harness_sets", None)
+        if owners is not None:
+            generation = self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
+            owner = owners.find(JudgeInvocation(self.lease.lease_id, generation))
+            if owner is not None:
+                return owner.registry
+        resolve = getattr(self.ctx, "harnesses_for_judge", None)
+        return resolve(self.lease.lease_id) if resolve is not None else self.ctx.harnesses

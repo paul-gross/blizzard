@@ -157,7 +157,9 @@ def opencode_bundle_layout(worker_config_path: Path) -> HarnessLayout:
     def compose_against_worker_config(composition: HarnessComposition) -> None:
         compose(composition, worker_config_path)
 
-    return replace(OPENCODE_BUNDLE_LAYOUT, compose=compose_against_worker_config)
+    return replace(
+        OPENCODE_BUNDLE_LAYOUT, compose=compose_against_worker_config, composition_inputs=(worker_config_path,)
+    )
 
 
 def compose(composition: HarnessComposition, worker_config_path: Path) -> None:

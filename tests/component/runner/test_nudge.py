@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict, Unpack
+from unittest.mock import Mock
 
 import pytest
 
@@ -19,9 +20,12 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
-from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
+from blizzard.runner.harness.session_settings import SessionSettings
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptPosition
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
@@ -29,6 +33,7 @@ from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import (
     CountingAttachmentStore,
@@ -38,6 +43,7 @@ from tests.support.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeTranscriptSource,
     FakeWorktreeGit,
     SqlAlchemyRunnerStore,
     make_context,
@@ -115,6 +121,7 @@ class _AttachingOnResumeHarness(FakeHarness):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
         resumed = super().resume_with_message(
             session_cwd,
@@ -126,6 +133,7 @@ class _AttachingOnResumeHarness(FakeHarness):
             model=model,
             effort=effort,
             compaction_window=compaction_window,
+            session_settings=session_settings,
         )
         seed_attachment(
             self._store,
@@ -184,6 +192,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings | None = None,
     ) -> ResumeHandle:
         resumed = super().resume_with_message(
             session_cwd,
@@ -195,6 +204,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
             model=model,
             effort=effort,
             compaction_window=compaction_window,
+            session_settings=session_settings,
         )
         seed_git_commit_declaration(
             self._store,
@@ -301,6 +311,54 @@ def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> 
     preamble, chunk_id = harness.resumed_identity[0]
     assert preamble is not None and preamble.lease_id == "lease_r" and preamble.lease_token
     assert chunk_id == "ch_1"
+
+
+def test_nudge_defers_failed_drain_and_uses_retained_source_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
+    )
+    old_source = FakeTranscriptSource(tail_positions_by_session={"sess-a": TranscriptPosition("old-tail")})
+    new_source = FakeTranscriptSource(tail_positions_by_session={"sess-a": TranscriptPosition("new-tail")})
+    handle = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
+    old_harness = FakeHarness(handle=handle, verdict=None, transcript_source=old_source)
+    new_harness = FakeHarness(handle=handle, verdict=None, transcript_source=new_source)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=old_harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+        clock=FixedClock(_NOW),
+    )
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses)
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
+    )
+    new = Mock(spec=HarnessSet, registry=registry, versions=None)
+    sets = HarnessSets(Mock(side_effect=[old, new]))
+    sets.select(HarnessAssemblyKey((1,)))
+    previous = WorkerInvocation("lease_r", 1)
+    sets.retain(previous)
+    sets.select(HarnessAssemblyKey((2,)))
+    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    monkeypatch.setattr(TranscriptPump, "pump_lease", Mock(side_effect=[False, True]))
+
+    Advance(ctx).run()
+    assert not store.nudge_fired("lease_r", 1)
+    assert sets.lookup(previous) is old
+    assert new_harness.resumed == []
+
+    Advance(ctx).run()
+    boundary = store.boundary("lease_r", 2, "nudge")
+    assert boundary is not None and boundary.start_position == "old-tail"
+    assert len(new_harness.resumed) == 1
+    assert sets.find(previous) is None
 
 
 def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Path) -> None:

@@ -18,18 +18,18 @@ Code version is never run through an offline classification, so nothing about it
 observed. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
 (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
-regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
-fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
-pays it a few times an hour, not every tick — every `tick_seconds`, 30 by default (`blizzard-host.toml`); short enough
-that an in-place binary upgrade is noticed well within an operator's own deploy window) — never once per tick, and never
-for a binary that isn't on `PATH` at all. A recorded session's owner resolves against this runner's own bindings:
-**unknown** means the session was recorded under a harness id this runner build doesn't ship at all — the remedy is to
-run a runner version that binds that id, on the runner holding the chunk, never to substitute another harness.
-**unavailable** means the id is bound but this runner can't supply the specific capability being asked of it — resuming
-or judging versus reading its transcript. Both `claude_code` and `opencode` bind every capability the registry knows to
-ask for today, so this never fires for either; the loop's own usage-recording and session-rotation call sites still
-treat an `unavailable` binding as their ordinary "no fallback transcript" outcome, never a crash, for whichever future
-capability gap reintroduces one. Either shows up as an `owner-unresolvable` event, which
+regardless of whether anything ever spawns under it: each bound binary's successful version observation is reused while
+its resolved path, size, and modification time remain unchanged; a changed fingerprint or explicit invalidation prompts
+a fresh probe. Health and applicable service-version observations refresh on read after ten minutes; a changed or
+missing binary also invalidates them, and health can refresh earlier when its version or self-test result changes. A
+missing binary is not treated as a reusable successful observation. A recorded session's owner resolves against this
+runner's own bindings: **unknown** means the session was recorded under a harness id this runner build doesn't ship at
+all — the remedy is to run a runner version that binds that id, on the runner holding the chunk, never to substitute
+another harness. **unavailable** means the id is bound but this runner can't supply the specific capability being asked
+of it — resuming or judging versus reading its transcript. Both `claude_code` and `opencode` bind every capability the
+registry knows to ask for today, so this never fires for either; the loop's own usage-recording and session-rotation
+call sites still treat an `unavailable` binding as their ordinary "no fallback transcript" outcome, never a crash, for
+whichever future capability gap reintroduces one. Either shows up as an `owner-unresolvable` event, which
 [observability.md](./observability.md) owns reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
@@ -110,8 +110,8 @@ The supported material is copied, with symlinks dereferenced, into an immutable 
 symlink to the published snapshot, replaced atomically; a failed publish leaves `current` and every earlier snapshot in
 place, and an unchanged bundle reuses its snapshot. A file's permission bits are part of its content: a change to only a
 file's mode (for example `chmod +x` on a plugin script) publishes a new snapshot, and the copy keeps the mode. Changes
-to the bundle take effect on the next restart, and a turn already running keeps the snapshot it started with. Old
-snapshots are not pruned.
+to the bundle take effect on the next restart, and a turn already running keeps the snapshot it started with.
+Internally, launches receive the concrete snapshot path rather than following `current`. Old snapshots are not pruned.
 
 `blizzard runner harness status --dir <runtime root>` prints the autonomy value and where it comes from, any Claude Code
 config conflict, the configured `config_dir`, each harness's source directory and the entry points present, the resolved

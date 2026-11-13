@@ -19,6 +19,7 @@ from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.overload import ProviderOverload
+from blizzard.runner.harness.session_settings import SessionSettings
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
@@ -135,6 +136,17 @@ class IHarnessWorkerLifecycle(Protocol):
     ``session_cwd`` is the session's spawn cwd, whatever it resolved to: a harness
     scoping sessions to their launch directory never completes a turn run from anywhere else."""
 
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        """Capture the launch values for one invocation."""
+        ...
+
     def spawn(
         self,
         envelope: Envelope,
@@ -145,6 +157,7 @@ class IHarnessWorkerLifecycle(Protocol):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> PendingWorkerHandle:
         """Start a headless worker; return its pending handle — pid, start time, and
         process group, before identity is confirmed. ``model``/``effort``/
@@ -177,6 +190,7 @@ class IHarnessWorkerLifecycle(Protocol):
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> ResumeHandle:
         """Headless resume-with-message; returns the new launch's pid and its REAL,
         launcher-recorded process group, never a caller-inferred ``pgid=pid``. Kill
@@ -198,6 +212,7 @@ class IHarnessWorkerLifecycle(Protocol):
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> WorkerHandle:
         """Launch the judgement prompt into the session and return immediately — the
         detached half of the launch/collect elicitation.

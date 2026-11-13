@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, tzinfo
 from pathlib import Path
+from typing import cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -60,18 +61,26 @@ from blizzard.runner.environments.workspaces import (
 )
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.binding_selection import BindingSelection
+from blizzard.runner.harness.binding_selection import BindingSelection, CachedVersionProbe
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.capability_snapshot import default_harness_id
+from blizzard.runner.harness.capability_snapshot import BinaryVersionCache, HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.harness_set import HarnessAssemblyInputs, HarnessAssemblyKey, HarnessSet, HarnessSets
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.health_cache import HarnessHealthCache
+from blizzard.runner.harness.internal.binary_identity import ToolBinaryIdentity
+from blizzard.runner.harness.internal.bundle_publisher import bundle_source_identity
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import (
+    HarnessSections,
+    HarnessSettings,
     build_production_harnesses,
+    bundle_composition_inputs,
     combined_telemetry_plan,
     configured_tiers,
     declared_telemetry_names,
+    publish_harness_bundle,
     select_harness_bindings,
 )
 from blizzard.runner.host_config import (
@@ -322,8 +331,7 @@ class RunnerProcess:
     #: The one host-kind write a runner holds, over ``connections``: an unregistered host's sampled attempt, whose
     #: outbound report is this runner's row.
     external_usage_attempts: IWriteExternalUsageAttemptRepository
-    harnesses: HarnessRegistry
-    health: HarnessHealthCache
+    harness_sets: HarnessSets
     executor: ThreadPoolExecutor
     #: Whether OpenTelemetry's own variables enable lease tracing, read once for this runner.
     trace_settings: TracingSettings
@@ -343,8 +351,6 @@ class RunnerProcess:
     identity_client: httpx2.Client
     #: The host's broker, stamping this runner's id on every runner-scoped event; ``None`` on a host with none.
     events: IRunnerEventPublisher | None
-    #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
-    harness_telemetry: HarnessTelemetryPlan = field(default_factory=HarnessTelemetryPlan)
     #: This runner's own resolved flags: its ``runner`` flags at the host's overrides, and its ``fleet`` flags as its
     #: hub last answered them.
     flags: FlagsHolder = field(default_factory=lambda: FlagsHolder(resolve_flags(FlagRegistry(), "runner", {}).flags))
@@ -352,6 +358,18 @@ class RunnerProcess:
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
+
+    @property
+    def harnesses(self) -> HarnessRegistry:
+        return self.harness_sets.current.registry
+
+    @property
+    def health(self) -> HarnessHealthCache:
+        return self.harness_sets.current.health
+
+    @property
+    def harness_telemetry(self) -> HarnessTelemetryPlan:
+        return self.harness_sets.current.telemetry
 
     @property
     def runner_id(self) -> str:
@@ -425,7 +443,10 @@ class RunnerProcess:
         try:
             self.executor.shutdown(wait=True)
         finally:
-            self.identity_client.close()
+            try:
+                self.identity_client.close()
+            finally:
+                self.harness_sets.clear()
 
     def close(self) -> None:
         try:
@@ -592,6 +613,7 @@ def build_host_process(
     events: EventBroker | None = None,
     bundles: Mapping[str, BundleSnapshot | None] | None = None,
     selections: Mapping[str, BindingSelection] | None = None,
+    publish_bundles: bool = False,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
@@ -633,6 +655,7 @@ def build_host_process(
                     graph,
                     bundle=(bundles or {}).get(built.id),
                     selection=(selections or {}).get(built.id),
+                    publish_bundle=publish_bundles,
                     environ=environ,
                     trace_exporter=trace_exporter,
                     identity=None,
@@ -659,6 +682,7 @@ def build_runner_process(
     events: EventBroker | None = None,
     bundle: BundleSnapshot | None = None,
     selection: BindingSelection | None = None,
+    publish_bundle: bool = False,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
@@ -691,6 +715,7 @@ def build_runner_process(
             graph,
             bundle=bundle,
             selection=selection,
+            publish_bundle=publish_bundle,
             environ=environ,
             trace_exporter=trace_exporter,
             identity=identity,
@@ -712,6 +737,7 @@ def add_runner(
     runner_id: str,
     bundle: BundleSnapshot | None = None,
     selection: BindingSelection | None = None,
+    publish_bundle: bool = False,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
 ) -> RunnerProcess:
@@ -721,6 +747,7 @@ def add_runner(
         host,
         bundle=bundle,
         selection=selection,
+        publish_bundle=publish_bundle,
         environ=environ,
         trace_exporter=trace_exporter,
         identity=None,
@@ -921,12 +948,32 @@ def _identity_remedy(config: RunnerConfig, runner_id: str) -> str:
     )
 
 
+def harness_assembly_key(inputs: HarnessAssemblyInputs) -> HarnessAssemblyKey:
+    """Observe the external identities used by a prospective harness assembly."""
+    identities = ToolBinaryIdentity(inputs.worker_env.tool())
+    return HarnessAssemblyKey(
+        values=(inputs,),
+        binary_identities=tuple(
+            (section.harness_id, identities.identify(section.binary)) for section in inputs.sections if section.enabled
+        ),
+        bundle_source_identity=(
+            bundle_source_identity(
+                inputs.config_dir,
+                bundle_composition_inputs(HarnessSections(inputs.sections), autonomy=inputs.autonomy, root=inputs.root),
+            )
+            if inputs.publish and inputs.config_dir is not None
+            else inputs.bundle
+        ),
+    )
+
+
 def _build_runner(
     config: RunnerConfig,
     host: HostProcess,
     *,
     bundle: BundleSnapshot | None,
     selection: BindingSelection | None,
+    publish_bundle: bool,
     environ: Mapping[str, str] | None,
     trace_exporter: ITraceExporter | None,
     identity: RunnerIdentityHolder | None,
@@ -934,8 +981,10 @@ def _build_runner(
     token: ResolvedToken | None,
     closes_host: bool,
 ) -> RunnerProcess:
-    """One runner over ``host``'s engine, its stores bound to ``runner_id`` before anything reads or writes them;
-    ``selection`` is the bindings its start chose, chosen here when none was."""
+    """Compose one runner and its harness-set builder over ``host``'s engine.
+
+    Stores bind to ``runner_id`` before use. A supplied ``selection`` overrides selection in the builder;
+    ``bzh:pluggable-seams`` owns binding lifetime."""
     if runner_id is None:
         raise ConfigError(f"runner {config.name} has no id: bind it to the hub-minted id of its [[runner]] entry")
     identity = identity or RunnerIdentityHolder()
@@ -955,43 +1004,102 @@ def _build_runner(
         runner_environ = os.environ if environ is None else environ
         tracing = TracingSettings.of(runner_environ)
         harness_settings = replace(config.harness_settings(tracing), runner_id=runner_id)
-        selection = selection or select_harness_bindings(
-            config.harness_sections, worker_env=harness_settings.worker_env, children=host.children
-        )
-        telemetry_enabled = config.tracing.harness_telemetry and platform_tracing.enabled
-        plan = combined_telemetry_plan(
-            harness_settings,
-            selection=selection,
+        assembly_inputs = HarnessAssemblyInputs(
+            root=harness_settings.root,
+            autonomy=harness_settings.autonomy,
+            config_dir=harness_settings.config_dir,
+            worker_env=harness_settings.worker_env,
+            transcripts_root=harness_settings.transcripts_root,
+            sections=harness_settings.sections.sections,
+            runner_id=runner_id,
+            telemetry_enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
+            runner_environ=tuple(sorted(runner_environ.items())),
+            publish=publish_bundle,
             bundle=bundle,
-            harness_telemetry_enabled=telemetry_enabled,
-            runner_environ=runner_environ,
         )
-        # One corpus for the cache and the probes alike, so both admit against the same committed manifests.
-        corpus = CommittedCorpus()
-        harnesses, probes = build_production_harnesses(
-            harness_settings,
-            selection=selection,
-            executor=executor,
-            process=host.process,
-            children=host.children,
-            clock=clock,
-            monotonic_clock=host.monotonic_clock,
-            spawn_roots=bound_spawn_roots(config, host.workspaces),
-            corpus=corpus,
-            bundle=bundle,
-            harness_telemetry_enabled=telemetry_enabled,
-            runner_environ=runner_environ,
-        )
-        default_id = default_harness_id(harnesses)
-        if default_id is not None:
-            harnesses.transcript_source(default_id)
-        health = HarnessHealthCache(
-            clock=clock,
-            probes=probes,
-            corpus=corpus,
-            selftest_results=stores.selftest_results,
-            configured_tiers=configured_tiers(config.harness_sections),
-        )
+        version_env = assembly_inputs.worker_env.tool()
+        binary_versions = BinaryVersionCache(ToolBinaryIdentity(version_env))
+
+        def assemble(key: HarnessAssemblyKey) -> HarnessSet:
+            nonlocal version_env, binary_versions
+            inputs = cast(HarnessAssemblyInputs, key.values[0])
+            sections = HarnessSections(inputs.sections)
+            settings = HarnessSettings(
+                inputs.root,
+                inputs.autonomy,
+                inputs.config_dir,
+                inputs.worker_env,
+                inputs.transcripts_root,
+                sections,
+                inputs.runner_id,
+            )
+            tool_env = inputs.worker_env.tool()
+            if tool_env != version_env:
+                version_env = tool_env
+                binary_versions = binary_versions.with_identities(ToolBinaryIdentity(tool_env))
+            versions = CachedVersionProbe(VersionProbe(host.children, tool_env), binary_versions)
+            chosen = selection or select_harness_bindings(
+                sections, worker_env=inputs.worker_env, children=host.children, versions=versions
+            )
+            snapshot = inputs.bundle
+            if inputs.publish and inputs.config_dir is not None and snapshot is None:
+                snapshot = publish_harness_bundle(
+                    inputs.config_dir,
+                    inputs.root,
+                    autonomy=inputs.autonomy,
+                    sections=sections,
+                    selection=chosen,
+                )
+            environment = dict(inputs.runner_environ)
+            plan = combined_telemetry_plan(
+                settings,
+                selection=chosen,
+                bundle=snapshot,
+                harness_telemetry_enabled=inputs.telemetry_enabled,
+                runner_environ=environment,
+            )
+            corpus = CommittedCorpus()
+            harnesses, probes = build_production_harnesses(
+                settings,
+                selection=chosen,
+                executor=executor,
+                process=host.process,
+                children=host.children,
+                clock=clock,
+                monotonic_clock=host.monotonic_clock,
+                spawn_roots=bound_spawn_roots(config, host.workspaces),
+                corpus=corpus,
+                bundle=snapshot,
+                harness_telemetry_enabled=inputs.telemetry_enabled,
+                runner_environ=environment,
+                versions=versions,
+            )
+            default_id = default_harness_id(harnesses)
+            if default_id is not None:
+                harnesses.transcript_source(default_id)
+            health = HarnessHealthCache(
+                clock=clock,
+                probes=probes,
+                corpus=corpus,
+                selftest_results=stores.selftest_results,
+                configured_tiers=configured_tiers(sections),
+                binary_identities=binary_versions.identities,
+                binaries={section.harness_id: section.binary for section in sections if section.enabled},
+            )
+            capability_versions = HarnessVersionCache(
+                clock=clock,
+                binary_versions=binary_versions,
+                binaries={section.harness_id: section.binary for section in sections if section.enabled},
+                service_harnesses=frozenset(
+                    section.harness_id
+                    for section in sections
+                    if section.enabled and chosen.of(section.harness_id).service_version
+                ),
+            )
+            return HarnessSet(chosen, snapshot, harnesses, probes, health, plan, capability_versions)
+
+        harness_sets = HarnessSets(assemble)
+        harness_sets.select(harness_assembly_key(assembly_inputs))
         exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None
         trace_sweep = (
             LeaseTraceSweep(
@@ -1021,8 +1129,7 @@ def _build_runner(
             connections=connections,
             stores=stores,
             external_usage_attempts=ExternalUsageStore(connections),
-            harnesses=harnesses,
-            health=health,
+            harness_sets=harness_sets,
             executor=executor,
             trace_settings=tracing,
             trace_sweep=trace_sweep,
@@ -1038,7 +1145,6 @@ def _build_runner(
             hub_token=hub_token,
             identity_client=identity_client,
             events=RunnerEventPublisher.over(host.events, runner_id),
-            harness_telemetry=plan,
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
         )

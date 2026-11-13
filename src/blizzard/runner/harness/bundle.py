@@ -60,6 +60,8 @@ class HarnessLayout:
     entry_points: tuple[EntryPoint, ...]
     #: Rewrites the staged copy in place before the snapshot is named; raising aborts the publish.
     compose: Callable[[HarnessComposition], None] | None = None
+    #: External files the compose hook reads, included in the assembly identity.
+    composition_inputs: tuple[Path, ...] = ()
 
 
 @domain_model

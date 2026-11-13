@@ -1057,3 +1057,148 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         )
     finally:
         hosted.close()
+
+
+def test_stepper_reuses_timeout_and_defers_retirement_until_both_passes_idle(tmp_path: Path) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        with stepper._trace_lock.hold():  # pyright: ignore[reportPrivateUsage]
+            original = stepper._context()  # pyright: ignore[reportPrivateUsage]
+            client = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert client is not None
+            assert stepper._context() is original  # pyright: ignore[reportPrivateUsage]
+            timeout[0] = 10.0
+            assert stepper._context() is not original  # pyright: ignore[reportPrivateUsage]
+            stepper._retire_idle()  # pyright: ignore[reportPrivateUsage]
+            assert not client.is_closed
+        stepper.quiesce()
+        assert client.is_closed
+        replacement = stepper._client  # pyright: ignore[reportPrivateUsage]
+        stepper.close()
+        stepper.close()
+        assert replacement is not None and replacement.is_closed
+        with pytest.raises(RuntimeError, match="closed"):
+            stepper._context()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_stepper_failed_rebuild_closes_candidate_and_preserves_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        original = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        client = stepper._client  # pyright: ignore[reportPrivateUsage]
+        candidates: list[httpx2.Client] = []
+
+        def fail_instrument(candidate: httpx2.Client) -> None:
+            candidates.append(candidate)
+            raise RuntimeError("instrumentation failed")
+
+        monkeypatch.setattr(graph.platform_tracing, "instrument_client", fail_instrument)
+        timeout[0] = 10.0
+        with pytest.raises(RuntimeError, match="instrumentation failed"):
+            stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(candidates) == 1 and candidates[0].is_closed
+        assert client is not None and not client.is_closed
+        timeout[0] = 30.0
+        assert stepper._context() is original  # pyright: ignore[reportPrivateUsage]
+        stepper.close()
+
+
+def test_stepper_retirement_waits_for_concurrent_trace_borrower(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    entered, release = threading.Event(), threading.Event()
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        original = stepper._client  # pyright: ignore[reportPrivateUsage]
+        assert original is not None
+
+        def sweep() -> None:
+            entered.set()
+            assert release.wait(10)
+            assert not original.is_closed
+
+        def no_tick(_ctx: LoopContext) -> None:
+            pass
+
+        monkeypatch.setattr(stepper, "_sweep_traces", sweep)
+        monkeypatch.setattr(loop_wiring, "tick", no_tick)
+        thread = threading.Thread(target=stepper.timed_trace_sweep)
+        thread.start()
+        try:
+            assert entered.wait(10)
+            timeout[0] = 10.0
+            stepper.timed_tick()
+            assert not original.is_closed
+            assert stepper._client is not original  # pyright: ignore[reportPrivateUsage]
+        finally:
+            release.set()
+            thread.join(10)
+            stepper.close()
+        assert not thread.is_alive()
+        assert original.is_closed
+
+
+def test_stepper_close_waits_for_tick_and_refuses_subsequent_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    entered, release, closing, closed = (threading.Event() for _ in range(4))
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph)
+
+        def tick_held(_ctx: LoopContext) -> None:
+            entered.set()
+            assert release.wait(10)
+            client = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert client is not None and not client.is_closed
+
+        def close() -> None:
+            closing.set()
+            stepper.close()
+            closed.set()
+
+        monkeypatch.setattr(loop_wiring, "tick", tick_held)
+        worker = threading.Thread(target=stepper.timed_tick)
+        closer = threading.Thread(target=close)
+        worker.start()
+        try:
+            assert entered.wait(10)
+            closer.start()
+            assert closing.wait(10)
+            assert not closed.wait(0.05)
+        finally:
+            release.set()
+            worker.join(10)
+            closer.join(10)
+        assert closed.is_set()
+        with pytest.raises(RuntimeError, match="closed"):
+            stepper.request()
+
+
+def test_stepper_failed_context_wiring_closes_candidate_and_can_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph)
+        clients: list[httpx2.Client | httpx2.AsyncClient] = []
+        monkeypatch.setattr(graph.platform_tracing, "instrument_client", clients.append)
+        real_context = LoopWiring.context
+        with monkeypatch.context() as patch:
+            patch.setattr(LoopWiring, "context", _failing(real_context, "wiring failed"))
+            with pytest.raises(RuntimeError, match="wiring failed"):
+                stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(clients) == 1 and clients[0].is_closed
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(clients) == 2 and not clients[1].is_closed
+        stepper.close()
+        assert clients[1].is_closed

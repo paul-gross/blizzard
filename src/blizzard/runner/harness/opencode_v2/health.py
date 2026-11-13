@@ -13,8 +13,8 @@ from packaging.version import InvalidVersion, Version
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
     ICompatibilityCorpus,
@@ -51,7 +51,7 @@ class OpenCodeTwoHealthProbe:
         keeper: IServiceKeeper,
         hold: VersionHold,
         corpus: ICompatibilityCorpus,
-        versions: VersionProbe,
+        versions: IVersionProbe,
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
     ) -> None:

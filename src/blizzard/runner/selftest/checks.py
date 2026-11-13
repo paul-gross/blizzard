@@ -127,7 +127,10 @@ class Spawn:
     def of(cls, scratch: Scratch) -> Spawn:
         try:
             pending = scratch.adapter.spawn(
-                cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
+                cls._envelope(),
+                cls._preamble(scratch.workdir),
+                session_hint=scratch.session_id,
+                session_settings=scratch.adapter.launch_settings(),
             )
             pending.confirm_durable()  # no durable record here to threaten — disarm now
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
@@ -186,7 +189,13 @@ class Judge(Check):
         scratch = self.scratch
         output_path = os.path.join(scratch.workdir, ".selftest-judge-output")
         try:
-            handle = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT, output_path)
+            handle = scratch.adapter.judge(
+                scratch.workdir,
+                scratch.session_id,
+                _JUDGEMENT_PROMPT,
+                output_path,
+                session_settings=scratch.adapter.launch_settings(),
+            )
         except Exception as exc:
             return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
         handle.confirm_durable()  # no durable record here to threaten — disarm now
@@ -204,7 +213,11 @@ class Resume(Check):
             # Never the bare `""` default: it would inherit the daemon's own stdout.
             stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
             resumed = scratch.adapter.resume_with_message(
-                scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
+                scratch.workdir,
+                scratch.session_id,
+                _RESUME_MESSAGE,
+                stdout_path=stdout_path,
+                session_settings=scratch.adapter.launch_settings(),
             )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")

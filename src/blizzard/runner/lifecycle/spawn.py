@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
@@ -28,6 +28,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.harness_set import HarnessSet, WorkerInvocation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
@@ -236,7 +237,7 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     @property
     def tracer(self) -> IPlatformTracer: ...
     def resolve_boundary_start(
-        self, session: SessionReference, workdir: str | None, workspace_id: str | None
+        self, session: SessionReference, workdir: str | None, workspace_id: str | None, *, lease_id: str | None = None
     ) -> tuple[str | None, bool]: ...
 
 
@@ -359,13 +360,18 @@ class Spawner:
         # A retry (`Attempt.requeue`) or a recovery mints under its own prior owner — not a selection
         # candidate. Every other fresh mint, a rotated pool's replacement included, reaches the selector
         # or its no-set fallback.
+        owners = getattr(self.ctx, "harness_sets", None)
+        current = owners.current if owners is not None else None
         source = mint_owner_source(resume_from, harness_id, envelope.node)
         if source is MintOwnerSource.RESUME and resume_from is not None:
             owner = resume_from.harness_id
         elif source is MintOwnerSource.EXPLICIT and harness_id is not None:
             owner = harness_id
         elif source is MintOwnerSource.SELECT:
-            selection = self.ctx.harness_selector.select(envelope.node)
+            selector = (
+                HarnessSelector(current.registry, current.health) if current is not None else self.ctx.harness_selector
+            )
+            selection = selector.select(envelope.node)
             if selection.harness_id is None:
                 self.escalate_no_acceptable_harness(
                     chunk_id,
@@ -379,14 +385,14 @@ class Spawner:
         else:
             # Same registry-order default `capability_snapshot` advertises;
             # `None` (a no-bindings registry) resolves below like any unresolvable owner.
-            owner = default_harness_id(self.ctx.harnesses) or ""
+            owner = default_harness_id(current.registry if current is not None else self.ctx.harnesses) or ""
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
         harness = self._resolve_harness(owner, via=via)
         if harness is None:
             return
         now = self.ctx.clock.now()
-        resumed = self.ctx.sessions.resumption(resume_from)
+        resumed = self._sessions().resumption(resume_from)
         lease = self._mint(chunk_id, envelope, resume=resumed, harness_id=owner, at=now)
         _CP_AFTER_MINT.reached()
         workspace_id = self.lease_workspace(chunk_id)
@@ -418,6 +424,16 @@ class Spawner:
             opened_at=now,
         )
         _CP_AFTER_BOUNDARY.reached()
+        # Retain before starting the process: identity discovery can block and the
+        # current set may be replaced while the child is still unidentified.
+        invocation = WorkerInvocation(lease.lease_id, self.generation(lease.lease_id))
+        if owners is not None:
+            selected = owners.retain(invocation)
+            try:
+                harness = selected.registry.lifecycle(owner)
+            except BaseException:
+                owners.release(invocation)
+                raise
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         try:
@@ -429,19 +445,23 @@ class Spawner:
                     self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
                     session_hint=str(uuid.uuid4()),
                     resume_from=resume_from.session_id if resume_from is not None else None,
-                    model=lease.model,
-                    effort=lease.effort,
-                    compaction_window=lease.compaction_window,
+                    session_settings=harness.launch_settings(
+                        lease.model, lease.effort, lease.compaction_window, prompt_prefix=rendered.text
+                    ),
                 ),
             )
         except LaunchVersionRefusedError as exc:
             # Nothing launched, and another launch could only be refused again: the minted lease
             # escalates unspent rather than being left for REAP to fail as a retry.
+            if owners is not None:
+                owners.release(invocation)
             self._escalate_version_refused(lease.lease_id, exc, via=via)
             return
         except HarnessSpawnError as exc:
             # Surface the launch-time failure then RE-RAISE: nothing was ever
             # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
+            if owners is not None:
+                owners.release(invocation)
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,
                 lease_id=lease.lease_id,
@@ -449,6 +469,10 @@ class Spawner:
                 command="spawn harness worker",
                 stderr_tail=str(exc),
             )
+            raise
+        except BaseException:
+            if owners is not None:
+                owners.release(invocation)
             raise
         _CP_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
         try:
@@ -462,14 +486,26 @@ class Spawner:
                 spawned_at=now,
                 harness_id=owner,
             )
-        except Exception:
+        except BaseException:
             # Unlike an OS crash, a plain raise here never disarms the trampoline on its
             # own — kill it explicitly instead.
-            self.ctx.process.kill_group(pending.pgid)
+            try:
+                self.ctx.process.kill_group(pending.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
             raise
         _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
         # Disarmed only now — a crash before this line still kills the worker outright.
-        pending.confirm_durable()
+        try:
+            pending.confirm_durable()
+        except BaseException:
+            try:
+                self.ctx.process.kill_group(pending.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
+            raise
         # Still blocks the tick pass on one lease — unlike `judge()`'s already-identified,
         # pollable-later wait, there is no durable record shape yet for this one; bound kept short instead.
         try:
@@ -477,7 +513,11 @@ class Spawner:
         except WorkerIdentityError as exc:
             # A real, durably-provisional process — kill it and mark it unidentified;
             # the lease stays OPEN until REAP's sweep closes it via `Attempt.fail` (a retry).
-            self.ctx.process.kill_group(pending.pgid)
+            try:
+                self.ctx.process.kill_group(pending.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
             failed_at = self.ctx.clock.now()
             self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=failed_at)
             OutboundFacts(self.ctx).command_failed(
@@ -489,6 +529,13 @@ class Spawner:
                 at=failed_at,
             )
             raise HarnessSpawnError(str(exc)) from exc
+        except BaseException:
+            try:
+                self.ctx.process.kill_group(pending.pgid)
+            finally:
+                if owners is not None:
+                    owners.release(invocation)
+            raise
         _CP_AFTER_IDENTITY.reached()  # identity known; not yet the authoritative record
         spawned_session = SessionReference(owner, handle.session_id)
         self.ctx.stores.liveness.record_identified_spawn(
@@ -524,7 +571,7 @@ class Spawner:
             self.ctx.workspaces.spawn_root(self.lease_workspace(chunk_id)),
             environments[0].workdir if environments else None,
         ).path
-        resume = self.ctx.sessions.resolve_resume(chunk_id, envelope.node, spawn_cwd)
+        resume = self._sessions().resolve_resume(chunk_id, envelope.node, spawn_cwd)
         if resume.owner_unresolvable is not None:
             session, exc = resume.owner_unresolvable
             self._escalate_unresolvable_resume_owner(chunk_id, envelope, session, exc, via=via)
@@ -549,7 +596,7 @@ class Spawner:
         if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it
         now = self.ctx.clock.now()
-        resumed = self.ctx.sessions.resumption(session)
+        resumed = self._sessions().resumption(session)
         minted = self._mint(chunk_id, envelope, resume=resumed, harness_id=session.harness_id, at=now, retries_max=0)
         _CP_AFTER_MINT.reached()
         lease = self.ctx.stores.lease_record.active_lease(minted.lease_id)
@@ -633,7 +680,9 @@ class Spawner:
         moments earlier this same call; what still fails here is only a same-tick race or a
         fresh mint's own default."""
         try:
-            return self.ctx.harnesses.lifecycle(harness_id)
+            owners = getattr(self.ctx, "harness_sets", None)
+            registry = owners.current.registry if owners is not None else self.ctx.harnesses
+            return registry.lifecycle(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "spawn blocked by unavailable harness owner",
@@ -649,42 +698,75 @@ class Spawner:
         binding = self.ctx.stores.environments.newest_binding_for_chunk(chunk_id)
         return binding.workspace_id if binding is not None else None
 
-    def advertised_version(self, harness_id: str, observe: Callable[[], str | None]) -> str | None:
+    def advertised_version(
+        self, harness_id: str, observe: Callable[[], str | None], *, selected: HarnessSet | None = None
+    ) -> str | None:
         """The version this runner advertises for ``harness_id``, which every launch records: the cross-tick cache's
         when the loop wires one, else observed now."""
-        versions = self.ctx.harness_versions
+        owners = getattr(self.ctx, "harness_sets", None)
+        versions = (
+            selected.versions
+            if selected is not None
+            else (owners.current.versions if owners is not None else self.ctx.harness_versions)
+        )
         return versions.get(harness_id, observe) if versions is not None else observe()
 
     def launching[T](
-        self, harness_id: str, observe: Callable[[], str | None], launch: Callable[[], T]
+        self,
+        harness_id: str,
+        observe: Callable[[], str | None],
+        launch: Callable[[], T],
+        *,
+        selected: HarnessSet | None = None,
     ) -> tuple[T, str | None]:
         """Launch on ``harness_id``'s advertised version, returning the launch with the version it ran on. A launch
         refused because that version changed has the next snapshot observe it afresh and recalculate its
         availability, then relaunches once on the version just observed — an in-range change clears there. A second
         refusal raises :class:`LaunchVersionRefusedError`. The refusal precedes every durable write and start, so the
         relaunch repeats nothing."""
-        version = self.advertised_version(harness_id, observe)
+        version = self.advertised_version(harness_id, observe, selected=selected)
         try:
             return launch(), version
         except HarnessVersionChangedError:
-            self._forget_version(harness_id)
-        version = self.advertised_version(harness_id, observe)
+            self._forget_version(harness_id, selected=selected)
+        version = self.advertised_version(harness_id, observe, selected=selected)
         try:
             return launch(), version
         except HarnessVersionChangedError as exc:
-            self._forget_version(harness_id)
+            self._forget_version(harness_id, selected=selected)
             raise LaunchVersionRefusedError(harness_id, str(exc)) from exc
 
-    def _forget_version(self, harness_id: str) -> None:
-        if self.ctx.harness_versions is not None:
-            self.ctx.harness_versions.forget(harness_id)
-        if self.ctx.harness_health is not None:
-            self.ctx.harness_health.invalidate(harness_id)
+    def _forget_version(self, harness_id: str, *, selected: HarnessSet | None = None) -> None:
+        owners = getattr(self.ctx, "harness_sets", None)
+        versions = (
+            selected.versions
+            if selected is not None
+            else (owners.current.versions if owners is not None else self.ctx.harness_versions)
+        )
+        health = (
+            selected.health
+            if selected is not None
+            else (owners.current.health if owners is not None else self.ctx.harness_health)
+        )
+        if versions is not None:
+            versions.forget(harness_id)
+        if health is not None:
+            health.invalidate(harness_id)
 
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the
         durably-recorded count, read *before* that start's own ``record_spawn`` lands."""
         return self.ctx.stores.liveness.lease_generation(lease_id) + 1
+
+    def _sessions(self) -> SessionResolver:
+        owners = getattr(self.ctx, "harness_sets", None)
+        if owners is None:
+            return self.ctx.sessions
+        return replace(
+            self.ctx.sessions,
+            harnesses=owners.current.registry,
+            transcript_for_lease=getattr(self.ctx, "lease_transcript_source", None),
+        )
 
     def stdout_path(self, lease_id: str) -> str:
         return self.ctx.worker_files.stdout_path(lease_id, self.generation(lease_id))
@@ -729,7 +811,7 @@ class Spawner:
         node = envelope.node
         budget = resolved_retries_max(retries_max, node.retries_max, self.ctx.config.default_retries_max)
         model, effort, compaction_window = (
-            self.ctx.sessions.session_stamps(node, resume, harness_id=harness_id)
+            self._sessions().session_stamps(node, resume, harness_id=harness_id)
             if harness_id is not None
             else (None, None, None)
         )

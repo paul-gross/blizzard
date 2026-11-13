@@ -126,7 +126,12 @@ class Runner:
             local_api_url="http://127.0.0.1:1",
         )
         try:
-            self.adapter.spawn(make_envelope("chunk_1", "build", node_id="node_1", choices=[]), preamble, None)
+            self.adapter.spawn(
+                make_envelope("chunk_1", "build", node_id="node_1", choices=[]),
+                preamble,
+                None,
+                session_settings=self.adapter.launch_settings(),
+            )
         except HarnessVersionChangedError:
             return True
         raise AssertionError("a launch the hold should have refused was not")
