@@ -20,8 +20,8 @@ from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import (
+    IReadRoutineScopeRepository,
     IWriteRoutineRepository,
-    IWriteRoutineScopeRepository,
     Routine,
     RoutineAuthoring,
     RoutineDefaultScopeUnlinkError,
@@ -89,13 +89,20 @@ _CTX = ChangeContext(actor="usr_1", door=Door.CLI)
 
 @dataclass
 class _FakeScopeRepo:
-    """Only ``get`` is live — a routine's default-scope mint commits through the routine repo."""
+    """Only ``get`` and ``ensure`` are live; ``ensure`` records each mint beside the unit it joined."""
 
     stored: dict[str, Scope] = field(default_factory=dict[str, Scope])
+    mints: list[ScopeMint] = field(default_factory=list[ScopeMint])
+    units: list[Transaction | None] = field(default_factory=list[Transaction | None])
 
     def get(self, project_id: str, slug: str) -> Scope | None:
         stored = self.stored.get(slug)
         return stored if stored is not None and stored.project_id == project_id else None
+
+    def ensure(self, record: Scope, *, change: ConfigChange, transaction: Transaction | None = None) -> Scope:
+        self.mints.append((record, change))
+        self.units.append(transaction)
+        return record
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -107,7 +114,8 @@ def _as_write_scopes(fake: _FakeScopeRepo) -> IWriteScopeRepository:
 
 @dataclass
 class _FakeRoutineScopeRepo:
-    """A plain in-memory ``(routine_id, scope_slug)`` set; link/unlink record their change."""
+    """A plain in-memory ``(routine_id, scope_slug)`` set the routine fake's writes move; each link or unlink
+    records its change."""
 
     linked: set[tuple[str, str]] = field(default_factory=set[tuple[str, str]])
     changes: list[tuple[int, ConfigChange]] = field(default_factory=list[tuple[int, ConfigChange]])
@@ -115,31 +123,20 @@ class _FakeRoutineScopeRepo:
     def list_scopes(self, routine_id: str) -> list[str]:
         return sorted(slug for rid, slug in self.linked if rid == routine_id)
 
-    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        self.linked.add((routine.routine_id, scope_slug))
-        self.changes.append((from_revision, change))
-        return routine
 
-    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        self.linked.discard((routine.routine_id, scope_slug))
-        self.changes.append((from_revision, change))
-        return routine
-
-
-def _as_write_routine_scopes(fake: _FakeRoutineScopeRepo) -> IWriteRoutineScopeRepository:
-    return cast(IWriteRoutineScopeRepository, fake)
+def _as_read_routine_scopes(fake: _FakeRoutineScopeRepo) -> IReadRoutineScopeRepository:
+    return cast(IReadRoutineScopeRepository, fake)
 
 
 @dataclass
 class _FakeRoutineRepo:
-    """Stores routines in memory; each write records its change and any default-scope
-    mint, and links the default into ``joins`` — the one-transaction shape of the real store."""
+    """Stores routines in memory; each write records its change and links the default into ``joins`` — the
+    one-transaction shape of the real store; link and unlink move ``joins`` and record there."""
 
     joins: _FakeRoutineScopeRepo = field(default_factory=_FakeRoutineScopeRepo)
     by_id: dict[str, Routine] = field(default_factory=dict[str, Routine])
     by_slug: dict[str, Routine] = field(default_factory=dict[str, Routine])
     changes: list[ConfigChange] = field(default_factory=list[ConfigChange])
-    mints: list[ScopeMint] = field(default_factory=list[ScopeMint])
     updates: list[int] = field(default_factory=list[int])
     recorded: list[tuple[str, bool, int, str]] = field(default_factory=list[tuple[str, bool, int, str]])
     units: list[Transaction | None] = field(default_factory=list[Transaction | None])
@@ -151,13 +148,11 @@ class _FakeRoutineRepo:
         routine = self.by_slug.get(slug)
         return routine if routine is not None and routine.project_id == project_id else None
 
-    def _write(self, routine: Routine, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
+    def _write(self, routine: Routine, change: ConfigChange) -> Routine:
         self.by_id[routine.routine_id] = routine
         self.by_slug[routine.slug] = routine
         self.joins.linked.add((routine.routine_id, routine.default_scope_slug))
         self.changes.append(change)
-        if scope_mint is not None:
-            self.mints.append(scope_mint)
         return routine
 
     def create(
@@ -165,11 +160,10 @@ class _FakeRoutineRepo:
         routine: Routine,
         *,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
         self.units.append(transaction)
-        return self._write(routine, change, scope_mint)
+        return self._write(routine, change)
 
     def update(
         self,
@@ -177,12 +171,21 @@ class _FakeRoutineRepo:
         *,
         from_revision: int,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
         self.updates.append(from_revision)
         self.units.append(transaction)
-        return self._write(routine, change, scope_mint)
+        return self._write(routine, change)
+
+    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        self.joins.linked.add((routine.routine_id, scope_slug))
+        self.joins.changes.append((from_revision, change))
+        return routine
+
+    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        self.joins.linked.discard((routine.routine_id, scope_slug))
+        self.joins.changes.append((from_revision, change))
+        return routine
 
     def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:
         return [r for r in self.by_id.values() if r.default_urgency_id == urgency_id]
@@ -197,7 +200,7 @@ class _FakeRoutineRepo:
         transaction: Transaction,
     ) -> bool:
         self.updates.append(from_revision)
-        self._write(routine, change, None)
+        self._write(routine, change)
         return True
 
     def record_lifecycle(
@@ -271,17 +274,26 @@ def _authoring(
     clock = FixedClock(instant=_T0)
     routines = _FakeRoutineRepo()
     scopes = scopes or _FakeScopeRepo()
+    units = cast(IHubTransactions, transactions or _FakeTransactions())
     authoring = RoutineAuthoring(
         routines=_as_write_routines(routines),
         graphs=_as_read_graphs(graphs or _FakeGraphs()),
+        scopes=_as_write_scopes(scopes),
         scope_registry=ScopeRegistry(scopes=_as_write_scopes(scopes), clock=clock),
         urgencies=UrgencyReferences(
             urgencies=cast(IReadUrgencyRepository, urgencies or _FakeUrgencies()),
-            transactions=cast(IHubTransactions, transactions or _FakeTransactions()),
+            transactions=units,
         ),
+        transactions=units,
         clock=clock,
     )
     return authoring, routines, scopes, routines.joins
+
+
+def _stored_default() -> _FakeScopeRepo:
+    """A scope repository already holding the default scope ``_create`` names, so a create mints nothing."""
+    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT)
+    return _FakeScopeRepo(stored={"blizzard": stored})
 
 
 def _create(authoring: RoutineAuthoring, **overrides: Any) -> Routine:
@@ -366,12 +378,12 @@ def test_create_with_only_a_slug_takes_the_slug_as_its_name() -> None:
 
 
 def test_create_stating_a_malformed_slug_is_refused_naming_it() -> None:
-    authoring, routines, _, _ = _authoring()
+    authoring, routines, scopes, _ = _authoring()
 
     with pytest.raises(RoutineSlugError, match="Bad Slug"):
         _create(authoring, slug="Bad Slug")
     assert routines.by_id == {}
-    assert routines.mints == []
+    assert scopes.mints == []
 
 
 def test_create_with_only_a_name_does_not_shape_check_the_slug_it_takes() -> None:
@@ -415,30 +427,80 @@ def test_create_naming_an_unresolved_graph_is_refused_naming_it() -> None:
 
 
 def test_create_naming_an_unseen_default_scope_mints_it_in_the_same_write() -> None:
-    authoring, routines, _, _ = _authoring()
+    authoring, _, scopes, _ = _authoring()
 
     routine = _create(authoring)
 
-    [(scope, change)] = routines.mints
+    [(scope, change)] = scopes.mints
     assert (scope.slug, change.record_kind, change.op) == ("blizzard", RecordKind.SCOPE, ChangeOp.CREATE)
     assert routine.default_scope_slug == "blizzard"
 
 
-def test_create_naming_a_stored_default_scope_mints_nothing() -> None:
-    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT)
-    authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": stored}))
+def test_create_minting_its_default_scope_lands_the_mint_and_the_routine_in_one_unlocked_unit() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, scopes, _ = _authoring(transactions=transactions)
 
     _create(authoring)
 
-    assert routines.mints == []
+    [unit] = transactions.opened
+    assert unit.keys == []
+    assert scopes.units == [unit]
+    assert routines.units == [unit]
+
+
+def test_create_minting_its_default_scope_and_naming_an_urgency_lands_both_in_the_urgencys_unit() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, scopes, _ = _authoring(
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
+    )
+
+    _create(authoring, default_urgency=urgency("urgent"))
+
+    [unit] = transactions.opened
+    assert unit.keys == [urgency_lock(_URGENT)]
+    assert scopes.units == [unit]
+    assert routines.units == [unit]
+
+
+def test_create_neither_minting_nor_naming_an_urgency_opens_no_unit() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, scopes, _ = _authoring(transactions=transactions, scopes=_stored_default())
+
+    _create(authoring)
+
+    assert transactions.opened == []
+    assert scopes.mints == []
+    assert routines.units == [None]
+
+
+def test_edit_minting_a_new_default_scope_lands_the_mint_and_the_update_in_one_unit() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, scopes, _ = _authoring(transactions=transactions, scopes=_stored_default())
+    routine = _create(authoring)
+
+    authoring.edit(routine, RoutineEdit(default_scope_slug=ScopeSlug.parse("other")), _CTX)
+
+    [unit] = transactions.opened
+    assert [scope.slug for scope, _ in scopes.mints] == ["other"]
+    assert scopes.units == [unit]
+    assert routines.units[-1] is unit
+
+
+def test_create_naming_a_stored_default_scope_mints_nothing() -> None:
+    stored = Scope(scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT)
+    authoring, _, scopes, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": stored}))
+
+    _create(authoring)
+
+    assert scopes.mints == []
 
 
 def test_create_naming_an_unseen_default_scope_mints_it_with_a_blank_description() -> None:
-    authoring, routines, _, _ = _authoring()
+    authoring, _, scopes, _ = _authoring()
 
     _create(authoring)
 
-    [(scope, _)] = routines.mints
+    [(scope, _)] = scopes.mints
     assert scope.description == ""
 
 
@@ -446,25 +508,25 @@ def test_create_with_a_retired_default_scope_is_not_refused_and_mints_nothing() 
     retired = Scope(
         scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT, retired=True
     )
-    authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": retired}))
+    authoring, _, scopes, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": retired}))
 
     routine = _create(authoring)
 
     assert routine.default_scope_slug == "blizzard"
-    assert routines.mints == []
+    assert scopes.mints == []
 
 
 def test_edit_to_a_retired_default_scope_is_not_refused_and_mints_nothing() -> None:
     retired = Scope(
         scope_id="scp_other", slug="other", description="", created_at=_T0, project_id=_PROJECT, retired=True
     )
-    authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"other": retired}))
+    authoring, _, scopes, _ = _authoring(scopes=_FakeScopeRepo(stored={"other": retired}))
     routine = _create(authoring)
 
     edited = authoring.edit(routine, RoutineEdit(default_scope_slug=ScopeSlug.parse("other")), _CTX)
 
     assert edited.default_scope_slug == "other"
-    assert [scope.slug for scope, _ in routines.mints] == ["blizzard"]
+    assert [scope.slug for scope, _ in scopes.mints] == ["blizzard"]
 
 
 def test_create_with_no_harnesses_preference_mints_empty() -> None:
@@ -483,13 +545,13 @@ def test_create_carries_a_harnesses_preference() -> None:
 
 @pytest.mark.parametrize("entries", [[" "], ["claude_code", " claude_code "]])
 def test_create_refuses_invalid_harnesses_before_minting_scope(entries: list[str]) -> None:
-    authoring, routines, _, _ = _authoring()
+    authoring, routines, scopes, _ = _authoring()
 
     with pytest.raises(InvalidHarnesses):
         _create(authoring, default_harnesses=entries)
 
     assert routines.by_id == {}
-    assert routines.mints == []
+    assert scopes.mints == []
 
 
 def test_create_normalizes_harnesses() -> None:
@@ -583,7 +645,9 @@ def test_edit_clears_default_effort_with_null() -> None:
 def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() -> None:
     transactions = _FakeTransactions()
     authoring, routines, _, _ = _authoring(
-        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}),
+        transactions=transactions,
+        scopes=_stored_default(),
     )
     routine = _create(authoring)
 
@@ -598,7 +662,9 @@ def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() 
 def test_edit_clearing_the_default_urgency_with_null_opens_no_unit() -> None:
     transactions = _FakeTransactions()
     authoring, routines, _, _ = _authoring(
-        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}),
+        transactions=transactions,
+        scopes=_stored_default(),
     )
     routine = _create(authoring, default_urgency=urgency("urgent"))
 
@@ -694,7 +760,7 @@ def test_edit_with_a_stale_if_match_is_refused_naming_the_current_revision() -> 
 
 @pytest.mark.parametrize("entries", [["  "], ["codex", " codex "]])
 def test_edit_refuses_invalid_harnesses_before_minting_scope(entries: list[str]) -> None:
-    authoring, routines, _, _ = _authoring()
+    authoring, routines, scopes, _ = _authoring()
     routine = _create(authoring)
 
     with pytest.raises(InvalidHarnesses):
@@ -703,7 +769,7 @@ def test_edit_refuses_invalid_harnesses_before_minting_scope(entries: list[str])
         )
 
     assert routines.updates == []
-    assert [scope.slug for scope, _ in routines.mints] == ["blizzard"]
+    assert [scope.slug for scope, _ in scopes.mints] == ["blizzard"]
 
 
 def test_edit_naming_an_unresolved_graph_is_refused_naming_it() -> None:
@@ -758,14 +824,14 @@ def test_create_links_the_default_scope_into_the_routines_own_set() -> None:
 
 
 def test_edit_links_the_new_default_scope_but_does_not_unlink_the_old_one() -> None:
-    authoring, routines, _, routine_scopes = _authoring()
+    authoring, _, scopes, routine_scopes = _authoring()
     routine = _create(authoring)
 
     edited = authoring.edit(routine, RoutineEdit(default_scope_slug=ScopeSlug.parse("other")), _CTX)
 
     assert edited.default_scope_slug == "other"
     assert routine_scopes.list_scopes(routine.routine_id) == ["blizzard", "other"]
-    assert [scope.slug for scope, _ in routines.mints] == ["blizzard", "other"]
+    assert [scope.slug for scope, _ in scopes.mints] == ["blizzard", "other"]
 
 
 class _RoutineFields(TypedDict, total=False):
@@ -812,7 +878,11 @@ class TestRoutineScopeMembership:
         return Scope(scope_id=f"scp_{slug}", slug=slug, description="", created_at=_T0, project_id=_PROJECT)
 
     def _membership(self, repo: _FakeRoutineScopeRepo) -> RoutineScopeMembership:
-        return RoutineScopeMembership(routine_scopes=_as_write_routine_scopes(repo), clock=FixedClock(instant=_T0))
+        return RoutineScopeMembership(
+            routines=_as_write_routines(_FakeRoutineRepo(joins=repo)),
+            routine_scopes=_as_read_routine_scopes(repo),
+            clock=FixedClock(instant=_T0),
+        )
 
     def test_link_is_an_edit_of_scopes_moving_the_revision(self) -> None:
         repo = _FakeRoutineScopeRepo(linked={("rtn_1", "blizzard")})

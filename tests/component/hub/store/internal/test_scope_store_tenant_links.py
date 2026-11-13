@@ -103,7 +103,7 @@ def _tenant(engine: Engine, tenant: TenantId, label: str) -> _Tenant:
         project_id=project,
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, routine.name, routine.revision, ChangeOp.CREATE, (), _AT)
-    RoutineStore(conns).create(routine, change=change, scope_mint=None)
+    RoutineStore(conns).create(routine, change=change)
     _seed(conns, s.work_items, label, work_item_id=f"wi_{label}")
     RunContextStore(conns).record(
         f"wi_{label}",
@@ -229,12 +229,13 @@ def test_each_tenants_reads_see_only_its_own_attachments(store: _Store) -> None:
 def test_unlinking_in_one_tenant_leaves_the_other_tenants_link(store: _Store) -> None:
     second = _mint_scope(store.first.conns, store.first.project, "web", "")
     links = RoutineScopeStore(store.first.conns)
-    routine = RoutineStore(store.first.conns).get("rtn_first")
+    routines = RoutineStore(store.first.conns)
+    routine = routines.get("rtn_first")
     assert routine is not None
-    linked = links.link(_next(routine), "web", from_revision=routine.revision, change=_edit(_next(routine)))
+    linked = routines.link(_next(routine), "web", from_revision=routine.revision, change=_edit(_next(routine)))
     assert links.list_scopes("rtn_first") == [_SLUG, "web"]
 
-    links.unlink(_next(linked), _SLUG, from_revision=linked.revision, change=_edit(_next(linked)))
+    routines.unlink(_next(linked), _SLUG, from_revision=linked.revision, change=_edit(_next(linked)))
 
     assert links.list_scopes("rtn_first") == ["web"]
     assert _scope_ids(store.engine, s.routine_scopes, "scope_id", store.first.tenant) == {second.scope_id}

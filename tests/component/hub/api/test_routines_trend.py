@@ -41,7 +41,7 @@ def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug:
         project_id=default_project(hub.engine),
     )
     change = ConfigChange.of(_CTX, RecordKind.ROUTINE, name, 1, ChangeOp.CREATE, (), routine.created_at)
-    RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
+    RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change)
 
 
 def _seed_finding(

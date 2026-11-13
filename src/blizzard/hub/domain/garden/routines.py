@@ -7,7 +7,8 @@ unseen default scope and requires the named graph resolve to an enabled mint."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -27,10 +28,17 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.brake import ANY_STATE, ENABLED_ONLY, BrakeState, BrakeVerb
-from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeRegistry, ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.garden.scopes import (
+    IWriteScopeRepository,
+    Scope,
+    ScopeMint,
+    ScopeRegistry,
+    ScopeSlug,
+    ScopeSlugError,
+)
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
@@ -397,20 +405,17 @@ class IReadRoutineRepository(Protocol):
 
 
 class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
-    """Adds the routine writes; each write commits its ``change`` — and a ``scope_mint``'s own change
-    — in the same transaction."""
+    """Adds the routine writes; each write commits its ``change`` in the same transaction as the record write."""
 
     def create(
         self,
         routine: Routine,
         *,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
-        """Insert the routine row, mint its default scope when ``scope_mint`` is given, and
-        link that default into the routine's set. A ``slug`` another routine already holds —
-        a create that lost the race to it — raises :class:`RoutineSlugTakenError`."""
+        """Insert the routine row and link its default scope into the routine's set. A ``slug`` another routine
+        already holds — a create that lost the race to it — raises :class:`RoutineSlugTakenError`."""
         ...
 
     def update(
@@ -419,12 +424,20 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
         *,
         from_revision: int,
         change: ConfigChange,
-        scope_mint: ScopeMint | None,
         transaction: Transaction | None = None,
     ) -> Routine:
-        """Compare-and-set ``from_revision``, writing everything but ``slug``/``routine_id``,
-        minting the default scope when ``scope_mint`` is given, and linking the default into
-        the routine's set; :class:`ConfigRevisionConflict` when the stored revision has moved."""
+        """Compare-and-set ``from_revision``, writing everything but ``slug``/``routine_id`` and linking the default
+        into the routine's set; :class:`ConfigRevisionConflict` when the stored revision has moved."""
+        ...
+
+    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        """Link the scope ``scope_slug`` names in ``routine``'s project into its set as one compare-and-set on
+        ``from_revision``."""
+        ...
+
+    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        """Unlink ``scope_slug`` from ``routine``'s set as one compare-and-set on
+        ``from_revision``, committing ``change`` with it."""
         ...
 
     def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:
@@ -452,7 +465,7 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
         ...
 
 
-# --- The routine_scopes join seam (I-prefix, read/write split — bzh:repository-split) ---
+# --- The routine_scopes join reads (I-prefix — bzh:repository-split); its writes are the routine's ---
 
 
 class IReadRoutineScopeRepository(Protocol):
@@ -479,20 +492,6 @@ class IReadRoutineScopeRepository(Protocol):
         ...
 
 
-class IWriteRoutineScopeRepository(IReadRoutineScopeRepository, Protocol):
-    """Adds the ``routine_scopes`` join writes; each write moves the routine's revision and
-    commits ``change`` with it."""
-
-    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        """Link the scope ``scope_slug`` names in ``routine``'s project into its set as one compare-and-set on
-        ``from_revision``."""
-        ...
-
-    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        """Unlink ``scope_slug`` from ``routine``'s set as one compare-and-set on ``from_revision``."""
-        ...
-
-
 class RoutineAuthoring:
     """Create and edit a routine, minting its default scope on demand and linking it into
     the routine's own `routine_scopes` set, so the default is always a member of that set. A write naming a default
@@ -503,15 +502,32 @@ class RoutineAuthoring:
         *,
         routines: IWriteRoutineRepository,
         graphs: IReadGraphRepository,
+        scopes: IWriteScopeRepository,
         scope_registry: ScopeRegistry,
         urgencies: UrgencyReferences,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._routines = routines
         self._graphs = graphs
+        self._scopes = scopes
         self._scope_registry = scope_registry
         self._urgencies = urgencies
+        self._transactions = transactions
         self._clock = clock
+
+    @contextmanager
+    def _unit(self, scope_mint: ScopeMint | None, named: Mapping[str, UrgencyId]) -> Generator[Transaction | None]:
+        """The unit a routine write joins: the urgency's locked unit when it names one, else a plain unit when it
+        mints its default scope, else none. The scope mint lands in it first, so a refused routine write leaves it
+        unwritten."""
+        with (
+            self._transactions.begin() if scope_mint is not None and not named else self._urgencies.held(named)
+        ) as transaction:
+            if scope_mint is not None:
+                record, change = scope_mint
+                self._scopes.ensure(record, change=change, transaction=transaction)
+            yield transaction
 
     def _resolves(self, graph_name: str) -> bool:
         return self._graphs.get_enabled_by_name(graph_name) is not None
@@ -553,8 +569,8 @@ class RoutineAuthoring:
             at=self._clock.now(),
         )
         routine.require_own_scope(scope)
-        with self._urgencies.held(_named(urgency_id)) as transaction:
-            return self._routines.create(routine, change=change, scope_mint=scope_mint, transaction=transaction)
+        with self._unit(scope_mint, _named(urgency_id)) as transaction:
+            return self._routines.create(routine, change=change, transaction=transaction)
 
     def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
         """Apply a sparse edit. Graph resolution and default-scope minting run only when their
@@ -573,10 +589,8 @@ class RoutineAuthoring:
             scope, scope_mint = self._scope_registry.resolve(routine.project_id, edit.default_scope_slug, ctx)
             routine.require_own_scope(scope)
         named = None if edited.default_urgency_id == routine.default_urgency_id else edited.default_urgency_id
-        with self._urgencies.held(_named(named)) as transaction:
-            return self._routines.update(
-                edited, from_revision=routine.revision, change=change, scope_mint=scope_mint, transaction=transaction
-            )
+        with self._unit(scope_mint, _named(named)) as transaction:
+            return self._routines.update(edited, from_revision=routine.revision, change=change, transaction=transaction)
 
 
 def _named(urgency_id: UrgencyId | None) -> dict[str, UrgencyId]:
@@ -611,7 +625,10 @@ class RoutineScopeMembership:
     already-resolved `Routine` and `Scope` objects (`bzh:domain-takes-objects`). Each is a
     routine ``edit`` whose diff field is ``scopes``; one that changes nothing writes nothing."""
 
-    def __init__(self, *, routine_scopes: IWriteRoutineScopeRepository, clock: IClock) -> None:
+    def __init__(
+        self, *, routines: IWriteRoutineRepository, routine_scopes: IReadRoutineScopeRepository, clock: IClock
+    ) -> None:
+        self._routines = routines
         self._routine_scopes = routine_scopes
         self._clock = clock
 
@@ -624,7 +641,7 @@ class RoutineScopeMembership:
         if decided is None:
             return routine
         moved, change = decided
-        return self._routine_scopes.link(moved, scope.slug, from_revision=routine.revision, change=change)
+        return self._routines.link(moved, scope.slug, from_revision=routine.revision, change=change)
 
     def unlink(self, routine: Routine, scope: Scope, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
         """Unlink `scope` from `routine`'s set; a no-op if it is not linked. Refused when
@@ -638,7 +655,7 @@ class RoutineScopeMembership:
         if decided is None:
             return routine
         moved, change = decided
-        return self._routine_scopes.unlink(moved, scope.slug, from_revision=routine.revision, change=change)
+        return self._routines.unlink(moved, scope.slug, from_revision=routine.revision, change=change)
 
 
 class RoutineLifecycle:

@@ -1,12 +1,15 @@
 """``RoutineStore`` — the routine repository (component tier).
 
 Each write commits the row, its revision compare-and-set, any lifecycle fact or
-``routine_scopes`` link, a minted default scope, and every change row in one transaction.
+``routine_scopes`` link or unlink, and its change row in one transaction; a minted default scope joins the
+routine write's unit through ``ScopeStore.ensure``.
 Migrated-to-head sqlite-on-disk — the ``tests/component/hub/store/internal/test_work_item_store.py`` shape."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Generator
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, Unpack
@@ -19,11 +22,13 @@ from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigCh
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import default_project, hub_scoped, hub_store_connections, migrated_hub_at, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -78,8 +83,18 @@ def _change(routine: Routine, op: ChangeOp = ChangeOp.CREATE) -> ConfigChange:
     return ConfigChange.of(_CTX, RecordKind.ROUTINE, routine.name, routine.revision, op, (), _NOW)
 
 
-def _create(store: RoutineStore, routine: Routine, *, scope_mint: ScopeMint | None = None) -> Routine:
-    return store.create(routine, change=_change(routine), scope_mint=scope_mint)
+def _create(store: RoutineStore, routine: Routine) -> Routine:
+    return store.create(routine, change=_change(routine))
+
+
+@contextmanager
+def _minting(engine: Engine, mint: ScopeMint) -> Generator[Transaction]:
+    """A unit holding ``mint``'s scope ensure, which the routine write then joins."""
+    connections = hub_store_connections(engine)
+    with HubTransactions(connections).begin() as unit:
+        record, change = mint
+        ScopeStore(connections).ensure(record, change=change, transaction=unit)
+        yield unit
 
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
@@ -129,7 +144,9 @@ def test_create_with_a_scope_mint_commits_the_scope_and_both_changes(tmp_path: P
     project = default_project(engine)
     mint = Scope.new(ScopeSlug.parse("fresh"), "", _CTX, at=_NOW, project_id=project)
 
-    _create(store, _routine(project, default_scope_slug="fresh"), scope_mint=mint)
+    routine = _routine(project, default_scope_slug="fresh")
+    with _minting(engine, mint) as unit:
+        store.create(routine, change=_change(routine), transaction=unit)
 
     assert ScopeStore(hub_store_connections(engine)).get(project, "fresh") is not None
     assert _changes(engine) == [("scope", "fresh", 1, "create"), ("routine", "nightly", 1, "create")]
@@ -142,7 +159,9 @@ def test_a_refused_create_leaves_its_scope_mint_unwritten(tmp_path: Path) -> Non
     mint = Scope.new(ScopeSlug.parse("fresh"), "", _CTX, at=_NOW, project_id=project)
 
     with pytest.raises(RoutineSlugTakenError):
-        _create(store, _routine(project, routine_id="rtn_2", default_scope_slug="fresh"), scope_mint=mint)
+        refused = _routine(project, routine_id="rtn_2", default_scope_slug="fresh")
+        with _minting(engine, mint) as unit:
+            store.create(refused, change=_change(refused), transaction=unit)
 
     assert ScopeStore(hub_store_connections(engine)).get(project, "fresh") is None
     assert len(_changes(engine)) == 1
@@ -211,7 +230,7 @@ def test_update_changes_everything_but_name_and_id_and_moves_the_revision(tmp_pa
         revision=2,
     )
 
-    store.update(edited, from_revision=1, change=_change(edited, ChangeOp.EDIT), scope_mint=None)
+    store.update(edited, from_revision=1, change=_change(edited, ChangeOp.EDIT))
 
     assert store.get("rtn_1") == edited
     assert _changes(engine)[-1] == ("routine", "nightly", 2, "edit")
@@ -224,7 +243,8 @@ def test_update_to_a_minted_default_links_it_and_commits_its_create(tmp_path: Pa
     edited = replace(routine, default_scope_slug="fresh", revision=2)
     mint = Scope.new(ScopeSlug.parse("fresh"), "", _CTX, at=_NOW, project_id=project)
 
-    store.update(edited, from_revision=1, change=_change(edited, ChangeOp.EDIT), scope_mint=mint)
+    with _minting(engine, mint) as unit:
+        store.update(edited, from_revision=1, change=_change(edited, ChangeOp.EDIT), transaction=unit)
 
     assert RoutineScopeStore(hub_store_connections(engine)).list_scopes("rtn_1") == ["blizzard", "fresh"]
     assert _changes(engine)[1:] == [("scope", "fresh", 1, "create"), ("routine", "nightly", 2, "edit")]
@@ -237,8 +257,8 @@ def test_update_from_a_moved_revision_conflicts_and_writes_nothing(tmp_path: Pat
     edited = replace(routine, graph_name="beta", default_scope_slug="fresh", revision=2)
     mint = Scope.new(ScopeSlug.parse("fresh"), "", _CTX, at=_NOW, project_id=project)
 
-    with pytest.raises(ConfigRevisionConflict) as exc_info:
-        store.update(edited, from_revision=4, change=_change(edited, ChangeOp.EDIT), scope_mint=mint)
+    with pytest.raises(ConfigRevisionConflict) as exc_info, _minting(engine, mint) as unit:
+        store.update(edited, from_revision=4, change=_change(edited, ChangeOp.EDIT), transaction=unit)
 
     assert exc_info.value.current == 1
     assert store.get("rtn_1") == routine
@@ -297,15 +317,38 @@ def test_retired_ids_and_list_all_reflect_only_the_newest_fact_per_routine(tmp_p
     assert {r.routine_id: r.retired for r in store.list_all()} == {"rtn_a": True, "rtn_b": False}
 
 
-# --- RoutineScopeStore (the routine_scopes join) --------------------
+# --- Routine scope links: RoutineStore writes them, RoutineScopeStore reads them ----
 
 
-def _routine_scope_store(tmp_path: Path) -> tuple[RoutineScopeStore, Routine, Engine]:
+@dataclass(frozen=True)
+class _Links:
+    """The routine adapter's link writes beside the join's reads, over one hub."""
+
+    routines: RoutineStore
+    reads: RoutineScopeStore
+
+    def list_scopes(self, routine_id: str) -> list[str]:
+        return self.reads.list_scopes(routine_id)
+
+    def links_for(self, routine_ids: list[str]) -> dict[str, dict[str, datetime | None]]:
+        return self.reads.links_for(routine_ids)
+
+    def list_routines(self, scope_id: str) -> list[str]:
+        return self.reads.list_routines(scope_id)
+
+    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        return self.routines.link(routine, scope_slug, from_revision=from_revision, change=change)
+
+    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
+        return self.routines.unlink(routine, scope_slug, from_revision=from_revision, change=change)
+
+
+def _routine_scope_store(tmp_path: Path) -> tuple[_Links, Routine, Engine]:
     routine_store, engine = _store_and_engine(tmp_path)
     routine = _create(routine_store, _routine(default_project(engine)))
     with engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="other", description="", created_at=_NOW)))
-    return RoutineScopeStore(hub_store_connections(engine)), routine, engine
+    return _Links(routine_store, RoutineScopeStore(hub_store_connections(engine))), routine, engine
 
 
 def _scope_id(engine: Engine, slug: str) -> str:
@@ -314,7 +357,7 @@ def _scope_id(engine: Engine, slug: str) -> str:
     return scope.scope_id
 
 
-def _relink(store: RoutineScopeStore, routine: Routine, slug: str, *, link: bool) -> Routine:
+def _relink(store: _Links, routine: Routine, slug: str, *, link: bool) -> Routine:
     linked = store.list_scopes(routine.routine_id)
     scopes = [*linked, slug] if link else [x for x in linked if x != slug]
     transition = routine.with_scopes(linked, scopes, _CTX, if_match=None, at=_NOW)
@@ -355,9 +398,7 @@ def test_each_link_is_stamped_when_written_and_a_relink_keeps_the_first_stamp(tm
     edit = ConfigChange.of(
         _CTX, RecordKind.ROUTINE, edited.name, edited.revision, ChangeOp.EDIT, (), later + timedelta(hours=1)
     )
-    RoutineStore(hub_store_connections(engine)).update(
-        edited, from_revision=moved.revision, change=edit, scope_mint=None
-    )
+    RoutineStore(hub_store_connections(engine)).update(edited, from_revision=moved.revision, change=edit)
 
     assert _linked_at(engine) == {"blizzard": _NOW, "other": later}
 

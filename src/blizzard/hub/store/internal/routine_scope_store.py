@@ -1,7 +1,6 @@
-"""SQLAlchemy adapter for the routine_scopes join repository seam (package-private).
+"""SQLAlchemy adapter for the routine_scopes join reads (package-private).
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). A link or unlink
-is a routine edit: it moves the routine's revision by compare-and-set and commits its
-change row in the same transaction as the join write (``bzh:configured-record``). A link is
+is a routine edit, written by the routine adapter (``bzh:configured-record``). A link is
 stored by ``scope_id`` and read back as the scope's slug, joined within the tenant."""
 
 from __future__ import annotations
@@ -12,21 +11,7 @@ from datetime import datetime
 from sqlalchemy.sql.selectable import Join
 
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
-
-# Appends the config audit record on the caller's connection, atomically with the write.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.config_change_store import append_change
-
-# Shares the routine adapter's revision and link writes.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.routine_store import link_scope, move_revision
-
-# Resolves or creates scope ids on the caller's connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.scope_store import scope_id_of
+from blizzard.hub.domain.garden.routines import IReadRoutineScopeRepository
 from blizzard.hub.store.schema import routine_scopes, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
@@ -37,7 +22,7 @@ def _links(stmts: ScopedStatements) -> Join:
 
 
 class RoutineScopeStore:
-    """Read-write ``routine_scopes`` adapter over the hub store engine."""
+    """Read-only ``routine_scopes`` adapter over the hub store engine."""
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
@@ -92,24 +77,5 @@ class RoutineScopeStore:
             ).all()
         return [row.routine_id for row in rows]
 
-    def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
-            move_revision(conn, routine, from_revision)
-            link_scope(conn, routine, scope_slug, at=change.recorded_at)
-            append_change(conn, change)
-        return routine
 
-    def unlink(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
-        with self._store.write("unlink", expect=(ConfigRevisionConflict,)) as conn:
-            move_revision(conn, routine, from_revision)
-            conn.execute(
-                self._store.delete(routine_scopes).where(
-                    routine_scopes.c.routine_id == routine.routine_id,
-                    routine_scopes.c.scope_id == scope_id_of(self._store, scope_slug, routine.project_id),
-                )
-            )
-            append_change(conn, change)
-        return routine
-
-
-_routine_scope_store_conforms: type[IWriteRoutineScopeRepository] = RoutineScopeStore
+_routine_scope_store_conforms: type[IReadRoutineScopeRepository] = RoutineScopeStore

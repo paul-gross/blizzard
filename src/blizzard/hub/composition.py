@@ -1552,12 +1552,16 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         routines=routine_store,
         routine_scopes=routine_scope_store,
-        routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
+        routine_scope_membership=RoutineScopeMembership(
+            routines=routine_store, routine_scopes=routine_scope_store, clock=clock
+        ),
         routine_authoring=RoutineAuthoring(
             routines=routine_store,
             graphs=graph_store,
+            scopes=scope_store,
             scope_registry=scope_registry,
             urgencies=urgency_references,
+            transactions=stores.transactions,
             clock=clock,
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
