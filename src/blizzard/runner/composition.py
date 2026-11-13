@@ -891,8 +891,8 @@ _HOST_HUB_TIMEOUT_SECONDS = 10.0
 def host_report(
     config: RunnerConfig, workspaces: IWorkspaceProviders, subscriptions: Sequence[SubscriptionDeclaration]
 ) -> HostReport:
-    """What the host reports about itself: its first public URL, the panel's sign-in callback URIs, each workspace
-    with the environments it holds, and the subscriptions it declares."""
+    """What the host reports about itself: every public URL in declaration order, the panel's sign-in callback URIs,
+    each workspace with the environments it holds, and the subscriptions it declares."""
     reported: list[HostReportedWorkspace] = []
     for workspace in config.workspaces:
         provider = workspaces.provider(workspace.id)
@@ -904,6 +904,7 @@ def host_report(
     return HostReport(
         url=config.public_url or None,
         redirect_uris=config.redirect_uris,
+        urls=config.public_origins.urls,
         workspaces=tuple(reported),
         subscriptions=tuple(
             HubSubscriptionDeclaration(slug=declared.slug, name=declared.name, provider=declared.provider)

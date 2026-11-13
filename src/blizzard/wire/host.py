@@ -38,6 +38,8 @@ class HostReportRequest(BaseModel):
     name: str | None = None
     url: str | None = None
     redirect_uris: list[str] = []
+    #: Every origin the host answers on, in declaration order; ``None`` from a host that predates the list.
+    urls: list[str] | None = None
     workspaces: list[HostWorkspace] = []
     subscriptions: list[RunnerSubscriptionDeclaration] = []
     #: The blizzard version the host runs; ``None`` from a host that predates the handshake.
@@ -112,6 +114,8 @@ class HostRegistryView(WireModel):
     last_seen_at: str | None = None
     url: str | None = None
     redirect_uris: list[str] = []
+    #: Every origin the host answers on, in declaration order; the first is `url`.
+    urls: list[str]
     workspaces: list[HostWorkspace] = []
     subscriptions: list[RunnerSubscriptionDeclaration] = []
     #: Whether the host holds a bearer token.

@@ -8603,6 +8603,10 @@ export type HostRegistryView = {
      */
     url: string | null;
     /**
+     * Urls
+     */
+    urls: Array<string>;
+    /**
      * Workspaces
      */
     workspaces: Array<HostWorkspace>;
@@ -8632,6 +8636,10 @@ export type HostReportRequest = {
      * Url
      */
     url?: string | null;
+    /**
+     * Urls
+     */
+    urls?: Array<string> | null;
     /**
      * Version
      */

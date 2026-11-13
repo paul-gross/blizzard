@@ -214,11 +214,11 @@ no host verbs. Retire, revoke-token and enroll are desktop-only.
 A host that holds a host token is **registered**; one that holds none is unchanged, runs one runner, and that runner
 reports itself as it always has. A registered host:
 
-- **Reports itself on every host tick.** It posts its first `public_url`, the panel's sign-in callback URIs, each
-  workspace with the environments it holds, and the `[[subscription]]` roster it declares to `POST /api/fleet/host`, and
-  its runners stop sending a roster of their own. It reports once before any runner ticks, so a runner the hub has
-  released from the host never claims across a restart while the hub answers; a report that fails or times out starts
-  the runners anyway.
+- **Reports itself on every host tick.** It posts every `public_url` origin, in declaration order (the first stays the
+  canonical `url`), the panel's sign-in callback URIs, each workspace with the environments it holds, and the
+  `[[subscription]]` roster it declares to `POST /api/fleet/host`, and its runners stop sending a roster of their own.
+  It reports once before any runner ticks, so a runner the hub has released from the host never claims across a restart
+  while the hub answers; a report that fails or times out starts the runners anyway.
 - **Records who it is from the hub's first answer.** The host id and tenant land once in the store's `host_identity` row
   and are never edited. A later answer naming another host or tenant is a refusal of the host's token, not an update:
   the runners keep working, the host's facts stay buffered, and the panel shows the refusal.

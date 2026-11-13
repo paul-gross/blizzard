@@ -67,6 +67,7 @@ def test_report_sends_the_hosts_facts_and_no_name_and_answers_its_record() -> No
     report = HostReport(
         url="https://box.test",
         redirect_uris=("https://box.test/auth/callback",),
+        urls=("https://box.test", "https://alt.test"),
         workspaces=(HostReportedWorkspace("ws_1", 3),),
         subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Claude", provider="anthropic"),),
     )
@@ -77,6 +78,7 @@ def test_report_sends_the_hosts_facts_and_no_name_and_answers_its_record() -> No
     assert json.loads(seen[0].content) == {
         "url": "https://box.test",
         "redirect_uris": ["https://box.test/auth/callback"],
+        "urls": ["https://box.test", "https://alt.test"],
         "workspaces": [{"workspace_id": "ws_1", "env_capacity": 3}],
         "subscriptions": [{"slug": "anthropic", "name": "Claude", "provider": "anthropic"}],
         "version": __version__,

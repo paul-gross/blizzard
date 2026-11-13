@@ -23,7 +23,7 @@ from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.runners import executors_for, hosts_of, publish_retirement, registry_view, served_projects
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import RetireInterrupted, RetireOutcome
-from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace
+from blizzard.hub.domain.runners.host import Host, HostReport, HostRetired, HostWorkspace, origins_of
 from blizzard.hub.domain.runners.registration import DeclaredSubscription, RunnerHoldsRoutes, RunnerLifecycleConflict
 from blizzard.hub.domain.runners.served import UnknownServedProject
 from blizzard.wire.facts import HostFactAck, HostFactBatch
@@ -83,6 +83,7 @@ def report_host(
                 name=request.name,
                 url=request.url,
                 redirect_uris=tuple(request.redirect_uris),
+                urls=origins_of(request.urls, request.url),
                 workspaces=tuple(HostWorkspace(w.workspace_id, w.env_capacity) for w in request.workspaces),
                 subscriptions=tuple(
                     DeclaredSubscription(slug=d.slug, name=d.name, provider=d.provider) for d in request.subscriptions

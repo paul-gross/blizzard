@@ -24,6 +24,7 @@ from blizzard.hub.domain.runners.host import (
     HostWorkspace,
     RunnerAlreadyHosted,
     RunnerNotUnderHost,
+    origins_of,
 )
 from blizzard.hub.domain.runners.registration import (
     STALE_AFTER,
@@ -43,6 +44,7 @@ _REPORT = HostReport(
     name="box",
     url="http://box",
     redirect_uris=("http://box/callback",),
+    urls=("http://box", "http://box-alt"),
     workspaces=(HostWorkspace("w1", 2),),
     subscriptions=(DeclaredSubscription("s", "S", "anthropic"),),
 )
@@ -52,6 +54,7 @@ _REPORTED = replace(
     last_seen_at=_AT,
     url=_REPORT.url,
     redirect_uris=_REPORT.redirect_uris,
+    urls=_REPORT.urls,
     workspaces=_REPORT.workspaces,
     subscriptions=_REPORT.subscriptions,
 )
@@ -152,6 +155,8 @@ def test_the_first_report_is_a_change_and_an_identical_one_after_it_is_not() -> 
     [
         replace(_REPORT, url="http://elsewhere"),
         replace(_REPORT, redirect_uris=()),
+        replace(_REPORT, urls=("http://box-alt", "http://box")),
+        replace(_REPORT, urls=("http://box",)),
         replace(_REPORT, workspaces=(HostWorkspace("w1", 3),)),
         replace(_REPORT, workspaces=()),
         replace(_REPORT, subscriptions=()),
@@ -207,3 +212,18 @@ def test_a_first_retire_over_holdings_is_refused_naming_each_runners_chunks_unle
 
 def test_a_rerun_over_a_retired_host_writes_no_second_fact_and_needs_no_force() -> None:
     assert _RETIRED.retire({"rn_a": [_HELD]}, force=False, by="op", at=_AT) is None
+
+
+@pytest.mark.parametrize(
+    ("urls", "url", "expected"),
+    [
+        (["http://a", "http://b"], "http://a", ("http://a", "http://b")),
+        (None, "http://a", ("http://a",)),
+        (None, None, ()),
+        ([], "http://a", ()),
+    ],
+)
+def test_the_origins_of_a_report_are_the_given_list_or_the_one_url_of_a_reporter_that_predates_it(
+    urls: list[str] | None, url: str | None, expected: tuple[str, ...]
+) -> None:
+    assert origins_of(urls, url) == expected
