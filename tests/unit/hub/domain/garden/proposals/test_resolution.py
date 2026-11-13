@@ -36,7 +36,8 @@ from blizzard.hub.domain.garden.proposals.model import (
     RoutineProposalState,
 )
 from blizzard.hub.domain.garden.proposals.resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from tests.support.fake_transactions import FakeTransactions
 
 _PROJECT = "proj_test"
 
@@ -264,7 +265,9 @@ class _RecordingWriteRepo(_FakeFindings):
     ) -> None:
         raise NotImplementedError
 
-    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
+    def record_facts(
+        self, entries: Sequence[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
+    ) -> list[str]:
         self.batches.append(list(entries))
         return []
 
@@ -272,7 +275,7 @@ class _RecordingWriteRepo(_FakeFindings):
 def _resolution(
     *, closures: _FakeClosures, proposals: _FakeProposals, findings: _FakeFindings, repo: _RecordingWriteRepo
 ) -> GardenProposalDeliveryResolution:
-    exits = FindingExitService(repo=repo, clock=FixedClock(instant=_T0))
+    exits = FindingExitService(repo=repo, clock=FixedClock(instant=_T0), transactions=FakeTransactions())
     return GardenProposalDeliveryResolution(closures=closures, proposals=proposals, findings=findings, exits=exits)
 
 

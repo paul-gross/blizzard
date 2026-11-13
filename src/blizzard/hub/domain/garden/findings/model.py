@@ -15,6 +15,8 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingState
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 FACT_KINDS = frozenset(FindingFactKind)
 
@@ -499,12 +501,14 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         """Append one fact — never touches the `findings` row."""
         ...
 
-    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
-        """All-or-nothing — pinned by
+    def record_facts(
+        self, entries: Sequence[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
+    ) -> list[str]:
+        """All-or-nothing in ``transaction``, which holds the :func:`finding_lock` of every finding in ``entries``
+        and ``expect`` — pinned by
         `tests/component/hub/store/internal/test_finding_store.py::test_record_facts_is_all_or_nothing`.
-        ``expect`` maps a
-        finding id to the state its facts were built from; when any named finding has moved off
-        it by the time the write lands, nothing is written and those ids are returned."""
+        ``expect`` maps a finding id to the state its facts were built from; when any named finding has moved off
+        it, nothing is written and those ids are returned."""
         ...
 
 
@@ -580,6 +584,12 @@ def deliver_facts(
     return [fact for fact in facts if fact is not None]
 
 
+def finding_lock(finding_id: str) -> LockKey:
+    """The keyed lock on the finding ``finding_id`` (``bzh:transaction-graduation``): every unit writing a fact
+    guarded on the finding's state declares it, so the state it re-derives cannot move until the unit ends."""
+    return LockKey(LockNamespace.FINDING, finding_id)
+
+
 #: How many times a finding write re-reads and re-asks the model after losing its state guard — shared by
 #: the exit verbs and the garden delivery.
 GUARD_ATTEMPTS = 3
@@ -591,9 +601,10 @@ class FindingExitService:
     `record_facts` guarded on the states they were built from — and, for `supersede`, on the absorber's
     liveness — re-asking the model against freshly read findings when a concurrent write wins the guard."""
 
-    def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:
+    def __init__(self, *, repo: IWriteFindingRepository, clock: IClock, transactions: IHubTransactions) -> None:
         self._repo = repo
         self._clock = clock
+        self._transactions = transactions
 
     @property
     def repo(self) -> IWriteFindingRepository:
@@ -651,7 +662,10 @@ class FindingExitService:
         others = list(companions)
         for _ in range(GUARD_ATTEMPTS):
             expect = {f.finding_id: f.state for f in (*batch, *others)}
-            if not self._repo.record_facts(facts_for(batch, others), expect=expect):
+            with self._transactions.begin() as transaction:
+                locked = transaction.lock_set(keys=[finding_lock(fid) for fid in sorted(expect)])
+                moved = self._repo.record_facts(facts_for(batch, others), expect=expect, transaction=locked)
+            if not moved:
                 return
             reloaded = self._repo.get_many(list(expect))
             batch = [reloaded.get(f.finding_id, f) for f in batch]

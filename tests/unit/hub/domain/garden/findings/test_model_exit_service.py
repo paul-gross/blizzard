@@ -23,7 +23,10 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingNotReopenable,
     FindingWriteContended,
     IWriteFindingRepository,
+    finding_lock,
 )
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from tests.support.fake_transactions import FakeTransactions
 
 _PROJECT = "proj_test"
 
@@ -62,7 +65,9 @@ class _FakeFindingRepo:
     expects: list[dict[str, str] | None] = field(default_factory=list[dict[str, str] | None])
     reloads: list[list[str]] = field(default_factory=list[list[str]])
 
-    def record_facts(self, entries: list[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
+    def record_facts(
+        self, entries: list[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
+    ) -> list[str]:
         self.batches.append(list(entries))
         self.expects.append(None if expect is None else dict(expect))
         return self.conflicts.pop(0) if self.conflicts else []
@@ -76,8 +81,10 @@ def _as_write_repo(repo: _FakeFindingRepo) -> IWriteFindingRepository:
     return cast(IWriteFindingRepository, repo)
 
 
-def _service(repo: _FakeFindingRepo) -> FindingExitService:
-    return FindingExitService(repo=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+def _service(repo: _FakeFindingRepo, transactions: FakeTransactions | None = None) -> FindingExitService:
+    return FindingExitService(
+        repo=_as_write_repo(repo), clock=FixedClock(instant=_T0), transactions=transactions or FakeTransactions()
+    )
 
 
 def test_resolve_rejects_a_blank_note() -> None:
@@ -248,3 +255,12 @@ def test_a_guard_lost_on_every_attempt_refuses_as_contended() -> None:
 
     assert exc.value.finding_ids == ["fin_1"]
     assert len(repo.batches) == GUARD_ATTEMPTS
+
+
+def test_each_attempt_declares_the_finding_key_of_every_guarded_id_companions_included() -> None:
+    repo = _FakeFindingRepo(conflicts=[["fin_2"]], reloaded={"fin_1": _finding("fin_1"), "fin_2": _finding("fin_2")})
+    transactions = FakeTransactions()
+
+    _service(repo, transactions).supersede([_finding("fin_1")], _finding("fin_2"), note="dup", actor="u1")
+
+    assert transactions.locked_keys == [[finding_lock("fin_1"), finding_lock("fin_2")]] * 2

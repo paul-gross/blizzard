@@ -7,6 +7,7 @@ search rather than a table scan."""
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict, Unpack
@@ -14,15 +15,22 @@ from typing import TypedDict, Unpack
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
-from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, FindingAlreadyExited, FindingExitService
+from blizzard.hub.domain.garden.findings.model import (
+    FactEntry,
+    Finding,
+    FindingAlreadyExited,
+    FindingExitService,
+)
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
+from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.transactions import HubTransactions
+from tests.support.finding_units import finding_unit
 from tests.support.scaffolding import (
     count_queries,
     default_project,
@@ -147,12 +155,13 @@ def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
     project = default_project(engine)
     _add(store, project, finding_id="fin_1")
 
-    with pytest.raises(HubStoreError):
+    with pytest.raises(HubStoreError), finding_unit(hub_store_connections(engine), "fin_1") as locked:
         store.record_facts(
             [
                 FactEntry(finding_id="fin_1", kind="observed", at=_LATER, note=None),
                 FactEntry(finding_id="fin_1", kind="observed", at=None, note=None),  # pyright: ignore[reportArgumentType]  # a null timestamp is the store failure under test
-            ]
+            ],
+            transaction=locked,
         )
 
     assert _get(store, "fin_1").observed_count == 0
@@ -165,13 +174,15 @@ def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expect
     _add(store, project, finding_id="fin_2")
     store.record_fact("fin_1", kind="resolved", at=_LATER, note="n", actor="a")
 
-    moved = store.record_facts(
-        [
-            FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n"),
-            FactEntry(finding_id="fin_2", kind="wont-fix", at=_LATER, note="n"),
-        ],
-        expect={"fin_1": "live", "fin_2": "live"},
-    )
+    with finding_unit(hub_store_connections(engine), "fin_1", "fin_2") as locked:
+        moved = store.record_facts(
+            [
+                FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n"),
+                FactEntry(finding_id="fin_2", kind="wont-fix", at=_LATER, note="n"),
+            ],
+            expect={"fin_1": "live", "fin_2": "live"},
+            transaction=locked,
+        )
 
     assert moved == ["fin_1"]
     assert _get(store, "fin_1").state == "resolved"
@@ -183,9 +194,12 @@ def test_record_facts_writes_when_every_guarded_finding_holds_its_expected_state
     project = default_project(engine)
     _add(store, project, finding_id="fin_1")
 
-    moved = store.record_facts(
-        [FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n")], expect={"fin_1": "live"}
-    )
+    with finding_unit(hub_store_connections(engine), "fin_1") as locked:
+        moved = store.record_facts(
+            [FactEntry(finding_id="fin_1", kind="wont-fix", at=_LATER, note="n")],
+            expect={"fin_1": "live"},
+            transaction=locked,
+        )
 
     assert moved == []
     assert _get(store, "fin_1").state == "wont-fix"
@@ -197,7 +211,9 @@ def test_a_stale_second_exit_is_refused_and_records_one_exit(tmp_path: Path) -> 
     _add(store, project, finding_id="fin_1")
     stale = store.get("fin_1")
     assert stale is not None
-    service = FindingExitService(repo=store, clock=FixedClock(instant=_LATER))
+    service = FindingExitService(
+        repo=store, clock=FixedClock(instant=_LATER), transactions=HubTransactions(hub_store_connections(engine))
+    )
     service.resolve([stale], note="fixed", actor="a")
 
     with pytest.raises(FindingAlreadyExited):
@@ -487,20 +503,47 @@ def test_count_by_class_query_plans_as_an_index_search(tmp_path: Path) -> None:
     assert any("ix_findings_tenant_project_routine_class" in str(row) for row in plan), plan
 
 
-def test_a_guarded_finding_write_holds_the_writer_lock_until_its_transaction_ends(tmp_path: Path) -> None:
+def test_a_verb_waits_on_a_unit_holding_the_finding_key_then_refuses_the_exit_it_lost(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     _add(store, project)
-
+    stale = _get(store, "fin_1")
     connections = hub_store_connections(engine)
-    with connections.read("winner") as winner, connections.read("loser") as loser:
-        lock_findings(winner, ["fin_1"])
-        loser.exec_driver_sql("PRAGMA busy_timeout=0")
-        with pytest.raises(OperationalError, match="locked"):
-            lock_findings(loser, ["fin_1"])
-        loser.rollback()
-        winner.commit()
+    service = FindingExitService(
+        repo=store, clock=FixedClock(instant=_LATER), transactions=HubTransactions(connections)
+    )
+    done = threading.Event()
+    outcome: list[BaseException | None] = []
+
+    def race() -> None:
+        try:
+            service.wont_fix([stale], note="meh", actor="b")
+            outcome.append(None)
+        except BaseException as exc:
+            outcome.append(exc)
+        done.set()
 
     entry = FactEntry(finding_id="fin_1", kind="resolved", at=_LATER, note="done")
-    assert store.record_facts([entry], expect={"fin_1": "live"}) == []
-    assert store.record_facts([entry], expect={"fin_1": "live"}) == ["fin_1"]
+    with finding_unit(connections, "fin_1") as locked:
+        assert store.record_facts([entry], expect={"fin_1": "live"}, transaction=locked) == []
+        racer = threading.Thread(target=race)
+        racer.start()
+        assert not done.wait(timeout=0.3)
+    racer.join(timeout=5)
+
+    assert done.is_set()
+    assert isinstance(outcome[0], FindingAlreadyExited)
+    assert _get(store, "fin_1").state == "resolved"
+
+
+def test_record_facts_refuses_a_token_not_covering_every_finding_key(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    _add(store, project, finding_id="fin_1")
+    _add(store, project, finding_id="fin_2")
+    entry = FactEntry(finding_id="fin_1", kind="resolved", at=_LATER, note="done")
+
+    with pytest.raises(TransactionMisuse), finding_unit(hub_store_connections(engine), "fin_1") as locked:
+        store.record_facts([entry], expect={"fin_1": "live", "fin_2": "live"}, transaction=locked)
+
+    assert _get(store, "fin_1").state == "live"

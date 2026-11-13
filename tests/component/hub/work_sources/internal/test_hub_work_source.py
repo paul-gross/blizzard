@@ -93,7 +93,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
         closures=GardenProposalClosureStore(store),
         proposals=GardenProposalStore(store),
         findings=FindingStore(store),
-        exits=FindingExitService(repo=FindingStore(store), clock=clock),
+        exits=FindingExitService(repo=FindingStore(store), clock=clock, transactions=HubTransactions(store)),
     )
     return HubWorkSource(items, edits, users, resolution), items, chunks, users, engine, clock
 

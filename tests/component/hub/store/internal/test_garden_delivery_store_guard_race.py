@@ -27,9 +27,12 @@ from blizzard.hub.domain.garden.findings.model import (
     FindingExitService,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
+from blizzard.hub.store.transactions import HubTransactions
+from tests.support.finding_units import delivery_unit
 from tests.support.scaffolding import (
     chunk_unit,
     default_project,
@@ -123,6 +126,21 @@ def _markers(engine: Engine) -> int:
         return len(conn.execute(markers.where(artifacts.c.name == "garden-delivered")).all())
 
 
+def test_deliver_refuses_a_unit_not_holding_every_expected_finding_key(tmp_path: Path) -> None:
+    findings, deliveries, engine = _world(tmp_path)
+    project = default_project(engine)
+    _add_finding(findings, project, "fin_1")
+    plan = _plan(
+        project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
+    )
+
+    with pytest.raises(TransactionMisuse), chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
+        deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+
+    assert _kinds(engine, "fin_1") == ["add"]
+    assert _markers(engine) == 0
+
+
 def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: Path) -> None:
     findings, deliveries, engine = _world(tmp_path)
     project = default_project(engine)
@@ -132,8 +150,7 @@ def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: 
     )
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
 
-    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
-        deliveries.lock_expected(plan, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), plan) as unit:
         outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.GUARD_LOST
@@ -149,8 +166,7 @@ def test_deliver_records_when_the_guarded_finding_has_not_moved(tmp_path: Path) 
         project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
     )
 
-    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
-        deliveries.lock_expected(plan, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), plan) as unit:
         outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.RECORDED
@@ -172,8 +188,7 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
     )
     findings.record_fact("fin_1", kind="reopened", at=_LATER, note="n", actor="u2")
 
-    with chunk_unit(hub_store_connections(engine), stale.chunk_id) as unit:
-        deliveries.lock_expected(stale, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), stale) as unit:
         assert (
             deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.GUARD_LOST
@@ -183,8 +198,7 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
         NewFindingFact(finding_id="fin_1", kind="gone", finding_set_id="fins_1", note="gone"),
         expect={"fin_1": "live"},
     )
-    with chunk_unit(hub_store_connections(engine), fresh.chunk_id) as unit:
-        deliveries.lock_expected(fresh, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), fresh) as unit:
         assert (
             deliveries.deliver(fresh, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.RECORDED
@@ -201,8 +215,7 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     plan = _plan(
         project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
     )
-    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
-        deliveries.lock_expected(plan, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), plan) as unit:
         assert (
             deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.RECORDED
@@ -210,8 +223,7 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
     revisit = replace(plan, node_id="nd_2", epoch=2)
 
-    with chunk_unit(hub_store_connections(engine), revisit.chunk_id) as unit:
-        deliveries.lock_expected(revisit, transaction=unit)
+    with delivery_unit(hub_store_connections(engine), revisit) as unit:
         outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
@@ -228,7 +240,9 @@ def test_supersede_refuses_an_absorber_exited_after_it_was_read(tmp_path: Path) 
     superseded = findings.get("fin_a")
     assert superseded is not None
     findings.record_fact("fin_b", kind="wont-fix", at=_LATER, note="n", actor="u2")
-    service = FindingExitService(repo=findings, clock=FixedClock(instant=_LATER))
+    service = FindingExitService(
+        repo=findings, clock=FixedClock(instant=_LATER), transactions=HubTransactions(hub_store_connections(engine))
+    )
 
     with pytest.raises(AbsorberNotLive):
         service.supersede([superseded], absorber, note="dup", actor="u1")
@@ -245,7 +259,9 @@ def test_crossing_supersedes_land_exactly_one(tmp_path: Path) -> None:
     _add_finding(findings, project, "fin_b")
     a, b = findings.get("fin_a"), findings.get("fin_b")
     assert a is not None and b is not None
-    service = FindingExitService(repo=findings, clock=FixedClock(instant=_LATER))
+    service = FindingExitService(
+        repo=findings, clock=FixedClock(instant=_LATER), transactions=HubTransactions(hub_store_connections(engine))
+    )
 
     service.supersede([a], b, note="dup", actor="u1")
     with pytest.raises(AbsorberNotLive):

@@ -694,7 +694,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         transactions=transactions,
     )
     finding_store = FindingStore(connections)
-    finding_exit = FindingExitService(repo=finding_store, clock=clock)
+    finding_exit = FindingExitService(repo=finding_store, clock=clock, transactions=transactions)
     garden_proposal_store = GardenProposalStore(connections)
     garden_proposal_closure_store = GardenProposalClosureStore(connections)
     project_links = ProjectLinkStore(connections)

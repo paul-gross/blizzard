@@ -29,10 +29,12 @@ from blizzard.hub.domain.garden.findings.model import (
     IWriteFindingRepository,
     IWriteFindingSetRepository,
     UnknownFactKindError,
+    finding_lock,
     liveness_of,
     summarize_facts,
 )
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 
 # Resolves or creates scope ids on the caller's connection.
@@ -40,6 +42,7 @@ from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 #: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
@@ -87,27 +90,18 @@ def _decode_finding_cursor(cursor: str) -> str:
     return parts[0]
 
 
-def lock_findings(conn: Connection, finding_ids: Sequence[str]) -> None:
-    """Take the write lock of each named finding row — a no-op ``UPDATE``, which must be the
-    transaction's first statement, or follow only the chunk-row lock where one is taken
-    (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite)."""
-    conn.execute(
-        statements_of(conn)
-        .update(findings)
-        .where(findings.c.finding_id.in_(finding_ids))
-        .values(finding_id=findings.c.finding_id)
-    )
-
-
 def moved_findings(conn: Connection, expect: Mapping[str, str]) -> list[str]:
-    """The ids in `expect` whose state, re-derived under their row locks (`lock_findings`, taken
-    in sorted order), is no longer the state they were expected in — the one derive-and-compare
-    every guarded finding write shares."""
+    """The ids in `expect` whose state, re-derived on `conn` — a unit holding each one's `finding_lock` — is no
+    longer the state they were expected in: the one derive-and-compare every guarded finding write shares."""
     guarded = sorted(expect)
-    for batch in id_batches(guarded):
-        lock_findings(conn, batch)
     current = fact_summaries(conn, guarded)
     return [fid for fid in guarded if liveness_of(current[fid]).state != expect[fid]]
+
+
+def _refuse_unknown_kinds(entries: Sequence[FactEntry]) -> None:
+    for entry in entries:
+        if entry.kind not in FACT_KINDS:
+            raise UnknownFactKindError(entry.kind)
 
 
 def findings_outside_project(conn: Connection, finding_ids: Sequence[str], project_id: str) -> list[str]:
@@ -242,52 +236,55 @@ class FindingStore:
         proposal_id: str | None = None,
         superseded_by: str | None = None,
     ) -> None:
-        self.record_facts(
-            [
-                FactEntry(
-                    finding_id=finding_id,
-                    kind=kind,
-                    at=at,
-                    note=note,
-                    actor=actor,
-                    proposal_id=proposal_id,
-                    superseded_by=superseded_by,
-                )
-            ]
+        entry = FactEntry(
+            finding_id=finding_id,
+            kind=kind,
+            at=at,
+            note=note,
+            actor=actor,
+            proposal_id=proposal_id,
+            superseded_by=superseded_by,
         )
+        _refuse_unknown_kinds([entry])
+        with self._store.write("record_fact") as conn:
+            self._insert_facts(conn, [entry])
 
-    def record_facts(self, entries: Sequence[FactEntry], *, expect: Mapping[str, str] | None = None) -> list[str]:
+    def record_facts(
+        self, entries: Sequence[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
+    ) -> list[str]:
         """All-or-nothing — pinned by
         `tests/component/hub/store/internal/test_finding_store.py::test_record_facts_is_all_or_nothing`.
-        ``expect`` is the
-        port's compare-and-set (``src/blizzard/hub/domain/garden/findings/model.py``); each named
-        finding is re-derived under its row lock first (`lock_findings`)."""
-        for entry in entries:
-            if entry.kind not in FACT_KINDS:
-                raise UnknownFactKindError(entry.kind)
+        ``expect`` is the port's compare-and-set (``src/blizzard/hub/domain/garden/findings/model.py``), each named
+        finding re-derived in ``transaction``, which must hold every written and expected finding's `finding_lock`."""
+        _refuse_unknown_kinds(entries)
         if not entries:
             return []
-        with self._store.write("record_facts") as conn:
-            if expect:
-                moved = moved_findings(conn, expect)
-                if moved:
-                    return moved
-            conn.execute(
-                self._store.insert(finding_facts),
-                [
-                    {
-                        "finding_id": entry.finding_id,
-                        "kind": entry.kind,
-                        "recorded_at": entry.at,
-                        "note": entry.note,
-                        "actor": entry.actor,
-                        "proposal_id": entry.proposal_id,
-                        "superseded_by": entry.superseded_by,
-                    }
-                    for entry in entries
-                ],
-            )
+        conn = connection_for(self._store, transaction)
+        for finding_id in sorted({entry.finding_id for entry in entries} | set(expect or {})):
+            connection_for(self._store, transaction, key=finding_lock(finding_id))
+        if expect:
+            moved = moved_findings(conn, expect)
+            if moved:
+                return moved
+        self._insert_facts(conn, entries)
         return []
+
+    def _insert_facts(self, conn: Connection, entries: Sequence[FactEntry]) -> None:
+        conn.execute(
+            self._store.insert(finding_facts),
+            [
+                {
+                    "finding_id": entry.finding_id,
+                    "kind": entry.kind,
+                    "recorded_at": entry.at,
+                    "note": entry.note,
+                    "actor": entry.actor,
+                    "proposal_id": entry.proposal_id,
+                    "superseded_by": entry.superseded_by,
+                }
+                for entry in entries
+            ],
+        )
 
     def get(self, finding_id: str) -> Finding | None:
         with self._store.read("get") as conn:
