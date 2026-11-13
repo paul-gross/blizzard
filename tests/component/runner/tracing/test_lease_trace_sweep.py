@@ -4,6 +4,8 @@ in-memory exporter one ``sweep()`` at a time against a fixed clock."""
 from __future__ import annotations
 
 import json
+import threading
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -16,7 +18,9 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, StepKey
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.hub.identity import RunnerIdentityHolder
+from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
@@ -116,6 +120,40 @@ def test_a_lease_inside_the_settle_window_waits(tmp_path: Path) -> None:
     runner.clock.advance(timedelta(seconds=1))
     runner.sweep.sweep()
     assert runner.exporter.batches[0][0].context.span_id == _worker(lease_id)
+
+
+def test_late_transport_success_does_not_advance_the_cursor(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path)
+    release, finished = threading.Event(), threading.Event()
+
+    class HeldExporter:
+        def export(self, spans: Sequence[FinishedSpan]) -> bool:
+            try:
+                assert release.wait(5)
+                return True
+            finally:
+                finished.set()
+
+    runner.sweep = LeaseTraceSweep(
+        leases=runner.store,
+        outbound=runner.store,
+        exporter=BoundedTraceExporter(HeldExporter(), timeout=0.05),
+        identity=runner.identity,
+        clock=runner.clock,
+        config=_SETTLED,
+    )
+    runner.sweep.sweep()
+    start = runner.store.newest_trace_cursor()
+    runner.clock.advance(timedelta(seconds=1))
+    runner.close_lease()
+    try:
+        runner.sweep.sweep()
+        assert runner.store.newest_trace_cursor() == start
+        assert runner.kinds() == ["trace-export-failed"]
+    finally:
+        release.set()
+        assert finished.wait(5)
+    assert runner.store.newest_trace_cursor() == start
 
 
 @pytest.mark.parametrize("mode", ["refuses", "raises"])

@@ -14,6 +14,7 @@ import os
 import shutil
 import socket
 import tempfile
+import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -191,6 +192,7 @@ from blizzard.runner.tracing.attributes import (
     INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -296,6 +298,20 @@ class HostProcess:
     )
     #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
     host_hub_http_client: httpx2.Client | None = None
+    _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
+        default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
+    )
+    _trace_exporters_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def bounded_trace_exporter(self, exporter: ITraceExporter) -> BoundedTraceExporter:
+        """Share one transport guard for each injected exporter across this host's runners."""
+        with self._trace_exporters_lock:
+            for injected, bounded in self._trace_exporters:
+                if injected is exporter:
+                    return bounded
+            bounded = BoundedTraceExporter(exporter)
+            self._trace_exporters.append((exporter, bounded))
+            return bounded
 
     def registered(self) -> bool:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
@@ -1100,7 +1116,13 @@ def _build_runner(
 
         harness_sets = HarnessSets(assemble)
         harness_sets.select(harness_assembly_key(assembly_inputs))
-        exporter = (trace_exporter or _otlp_exporter(environ)) if tracing.enabled() else None
+        exporter = (
+            host.bounded_trace_exporter(trace_exporter)
+            if tracing.enabled() and trace_exporter is not None
+            else BoundedTraceExporter(_otlp_exporter(environ))
+            if tracing.enabled()
+            else None
+        )
         trace_sweep = (
             LeaseTraceSweep(
                 leases=stores.lease_traces,

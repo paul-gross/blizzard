@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import shlex
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,8 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
@@ -45,6 +48,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCo
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
+from blizzard.runner.host_config import BuiltRunner, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -59,11 +63,12 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
-from tests.support.host_files import load_runner_config, one_workspace, write_minimal_host
+from tests.support.host_files import host_config_of, load_runner_config, one_workspace, write_minimal_host
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -981,12 +986,21 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built: list[dict[str, object]] = []
+    wrapped: list[tuple[object, BoundedTraceExporter]] = []
 
     def record(**kwargs: object) -> object:
         built.append(kwargs)
         return object()
 
     monkeypatch.setattr(composition, "LeaseTraceSweep", record)
+
+    def bound(exporter: object) -> BoundedTraceExporter:
+        assert isinstance(exporter, InMemoryTraceExporter)
+        result = BoundedTraceExporter(exporter)
+        wrapped.append((exporter, result))
+        return result
+
+    monkeypatch.setattr(composition, "BoundedTraceExporter", bound)
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -1003,9 +1017,64 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
     try:
         (kwargs,) = built
         assert kwargs["config"] is config.tracing
-        assert kwargs["exporter"] is exporter
+        assert len(wrapped) == 1
+        assert wrapped[0][0] is exporter
+        assert kwargs["exporter"] is wrapped[0][1]
     finally:
         graph.close()
+
+
+def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    entered, release = threading.Event(), threading.Event()
+
+    class HeldExporter:
+        calls = 0
+
+        def export(self, spans: Sequence[FinishedSpan]) -> bool:
+            self.calls += 1
+            entered.set()
+            assert release.wait(5)
+            return True
+
+    exporters: list[ITraceExporter] = []
+
+    def record(**kwargs: object) -> object:
+        exporter = kwargs["exporter"]
+        assert isinstance(exporter, BoundedTraceExporter)
+        exporters.append(exporter)
+        return object()
+
+    monkeypatch.setattr(composition, "LeaseTraceSweep", record)
+    config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    env = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
+    transport = HeldExporter()
+    host = composition.build_host_process(
+        host_config_of(config),
+        [BuiltRunner(rid, replace(config, runner_id=rid), ResolvedToken()) for rid in ("rn_a", "rn_b")],
+        environ=env,
+        trace_exporter=transport,
+    )
+    try:
+        composition.add_runner(
+            replace(config, runner_id="rn_c"), host, runner_id="rn_c", environ=env, trace_exporter=transport
+        )
+        assert len(exporters) == 3
+        assert exporters[0] is exporters[1] is exporters[2]
+        results: list[bool] = []
+        thread = threading.Thread(target=lambda: results.append(exporters[0].export([])))
+        thread.start()
+        try:
+            assert entered.wait(5)
+            assert exporters[1].export([]) is False
+            assert exporters[2].export([]) is False
+            assert transport.calls == 1
+        finally:
+            release.set()
+            thread.join(5)
+        assert not thread.is_alive()
+        assert results == [True]
+    finally:
+        host.close()
 
 
 def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_root(tmp_path: Path) -> None:
