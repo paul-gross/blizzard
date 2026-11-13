@@ -16,6 +16,7 @@ from blizzard.foundation.settings_record.decision import decide
 from blizzard.foundation.settings_record.refusals import SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
 from blizzard.foundation.settings_record.write import Validate, seed_entry, write
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.settings.model import HubSettingsSnapshot
 from blizzard.hub.settings.values import freeze
 from blizzard.hub.store.errors import HubStoreConnections
@@ -217,11 +218,11 @@ class HubSettingsStore:
         with self._store.read("hub_settings_changes") as conn:
             rows = conn.execute(statement).all()
         page = rows[:limit]
-        result = [
+        result: list[dict[str, object]] = [
             {
                 "id": r.revision,
                 "revision": r.revision,
-                "recorded_at": r.recorded_at.isoformat(),
+                "recorded_at": iso_utc(r.recorded_at),
                 "actor": r.actor,
                 "door": r.door,
                 "op": r.op,

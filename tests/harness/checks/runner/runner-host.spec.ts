@@ -90,15 +90,18 @@ test('a socket path over the limit is refused before init, naming the path and t
 
 test('a setup that fails after the host process spawned leaves no process and no scratch root', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's-'));
   try {
-    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot, runtimeRoot });
     // A workspace provider the host does not know: the process starts, and exits before it answers.
     const config = { workspace: [{ id: 'workspace-local', provider: 'no-such-provider' }] };
     await expect(builder.create({ runnerConfig: config })).rejects.toThrow(/exited early|did not answer/);
     expect(fs.readdirSync(scratchRoot)).toEqual([]);
+    expect(fs.readdirSync(runtimeRoot)).toEqual([]);
     await builder.disposeAll();
   } finally {
     fs.rmSync(scratchRoot, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 });
 
@@ -259,8 +262,9 @@ test.describe('no ambient credentials', () => {
 
 test('several hosts are all disposed at once, and their statement-guard refusals are reported in one error', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's-'));
   try {
-    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot, runtimeRoot });
     const hosts = [await builder.create(), await builder.create()];
     const pids = hosts.map((host) => host.pid as number);
     hosts.forEach((host, at) => {
@@ -275,7 +279,9 @@ test('several hosts are all disposed at once, and their statement-guard refusals
     expect(error?.message).toContain('UnscopedRunnerStatement: host 1');
     for (const pid of pids) expect(isAlive(pid)).toBe(false);
     expect(fs.readdirSync(scratchRoot)).toEqual([]);
+    expect(fs.readdirSync(runtimeRoot)).toEqual([]);
   } finally {
     fs.rmSync(scratchRoot, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 });

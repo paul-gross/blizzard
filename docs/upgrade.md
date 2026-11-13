@@ -115,10 +115,11 @@ writable through the API: file, environment and flags are read on each restart, 
 
 Before rolling back to a release that reads the file instead of stored settings, export the live values with
 `blizzard hub admin settings export > hub-settings.toml` while the upgraded hub is still running. Copy the intended
-values into `blizzard-hub.toml`, preserving the boot configuration and any other file-only material. Export omits every
-entry at default, including unsets: remove or replace any old file values for those keys with the intended defaults. It
-is a values-only export, not a complete file or replacement snapshot. Check the resulting file before rolling back; the
-older hub cannot read the new settings entries. Follow [rollback](./rollback.md) for the store downgrade.
+values into `blizzard-hub.toml`, preserving the boot configuration and any other file-only material. Export omits absent
+and unset entries, but includes explicitly set values even when equal to their declared defaults: remove or replace any
+old file values for omitted keys with the intended defaults. It is a values-only export, not a complete file or
+replacement snapshot. Check the resulting file before rolling back; the older hub cannot read the new settings entries.
+Follow [rollback](./rollback.md) for the store downgrade.
 
 ### Runners below 0.4 are refused
 
