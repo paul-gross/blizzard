@@ -25,13 +25,13 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credentials import CredentialUnavailable
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeEdit
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryDraft,
     RepositoryEdit,
     RepositoryId,
-    RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority, IForgeRateDialect
@@ -121,12 +121,13 @@ class _World:
         self.hold_next = False
         self.next_headers: dict[str, str] = {}
         self.budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
-        self.key = BudgetKey(self.forge_id, "gh")
+        self.key = BudgetKey(self.forge_id, "secret/gh")
         self.registry = ForgeRegistry(
             records=self.stores.repository_records,
             forges=self.stores.forge_records,
+            credentials=self.stores.credential_records,
             objects=live.objects,
-            secrets=live.secrets,
+            authorizations=live.authorizations,
             build=self._build,
             capabilities=capabilities,
             budgets=self.budgets,
@@ -201,7 +202,7 @@ def test_a_binding_carries_the_write_locks_and_dialect_the_registry_was_handed(t
 
     (binding,) = world.bindings
     assert asked == ["github"]
-    assert binding.write_lock() is locks.lock(world.forge_id, "gh")
+    assert binding.write_lock() is locks.lock(world.forge_id, "secret/gh")
 
 
 def test_a_forge_edit_rebuilds_the_adapter_on_its_new_address(world: _World, loop: ActionLoop) -> None:
@@ -231,8 +232,9 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
         return ForgeRegistry(
             records=stores.repository_records,
             forges=stores.forge_records,
+            credentials=stores.credential_records,
             objects=live.objects,
-            secrets=live.secrets,
+            authorizations=live.authorizations,
             build=lambda binding: GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport),
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,
@@ -301,8 +303,10 @@ def test_a_secret_that_no_longer_reveals_refuses_the_build(world: _World) -> Non
     assert secret is not None
     world.authoring.retire_secret(secret, OP)
 
-    with pytest.raises(RepositorySecretUnavailable):
+    with pytest.raises(CredentialUnavailable) as raised:
         world.registry.refs(world.repository, priority=ForgePriority.LANDING)
+
+    assert raised.value.retired and raised.value.reference == "secret gh"
 
 
 def test_a_retired_repository_is_still_built(world: _World, loop: ActionLoop) -> None:

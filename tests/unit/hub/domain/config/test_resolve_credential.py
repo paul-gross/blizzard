@@ -101,6 +101,8 @@ def test_a_record_naming_a_credential_acts_with_it_retired_or_not(retired: bool,
         settings={"variant": "fine-grained"},
         revision=4,
         authority="secret/deploy-token",
+        slug="deploy",
+        retired=retired,
     )
 
 

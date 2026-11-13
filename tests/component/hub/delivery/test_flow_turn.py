@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.landing_policy import LandingPolicy
@@ -24,7 +24,9 @@ from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialUnavailable
 from blizzard.hub.domain.config.repositories import RepositoryEdit, ResolvedRepository
+from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.model import ProjectId
@@ -710,3 +712,73 @@ def test_a_nonlanding_action_does_not_consult_the_parked_watch(world: _World, mo
     world.tick()
 
     assert world.outcomes(chunk_id) == ["success"]
+
+
+# --- a credential that builds no authorization ------------------------------------------------------------------
+
+
+def _act_with(world: _World, credential_id: str) -> None:
+    """Point every repository at ``credential_id``; no verb writes ``credential_id`` yet."""
+    with world.hub.engine.begin() as conn:
+        conn.execute(hub_scoped(update(s.repositories).values(credential_id=credential_id)))
+
+
+def _retired_credential(world: _World) -> str:
+    authoring = world.hub.services.config_authoring
+    authoring.create_secret(SecretName.parse("deploy"), "tok-deploy", OP)
+    (repository,) = world.hub.services.repository_records.list_all(include_retired=False)
+    draft = CredentialDraft(
+        slug="deploy",
+        name=None,
+        forge_id=repository.fields.forge_id,
+        binding="github.token",
+        secret_name="deploy",
+        settings={},
+    )
+    credential = authoring.create_credential(draft, OP)
+    authoring.retire_credential(credential, OP)
+    return credential.credential_id
+
+
+def _refusal(world: _World, chunk_id: str) -> str | None:
+    artifacts = world.hub.services.chunks.artifacts.load_artifacts(chunk_id)
+    return next((a.data for a in artifacts if a.name == "hub-log.repository-secret-unavailable"), None)
+
+
+@pytest.mark.parametrize(
+    ("unavailable", "said"),
+    [("unknown", "credential cred_gone is unknown"), ("retired", "credential deploy is retired")],
+)
+def test_a_repository_whose_credential_is_unavailable_refuses_the_turn_before_any_pass(
+    world: _World, unavailable: str, said: str
+) -> None:
+    _act_with(world, "cred_gone" if unavailable == "unknown" else _retired_credential(world))
+    chunk_id = world.at_step("test.hooked")
+
+    world.tick()
+
+    assert world.hooked.passes == 0
+    refusal = _refusal(world, chunk_id)
+    assert refusal is not None and said in refusal
+    assert world.detail(chunk_id)["current_node_name"] == "build"
+
+
+def test_a_credential_unavailable_while_checking_what_the_forge_offers_refuses_the_turn(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = world.at_step("test.hooked")
+
+    def unavailable(forge: Any, repository: Any) -> frozenset[Capability]:
+        raise CredentialUnavailable("secret fixture-forge-token", retired=True)
+
+    def required(target: ResolvedRepository) -> frozenset[Capability]:
+        return frozenset({Capability.CHANGES_READ})
+
+    monkeypatch.setattr(world.turns, "_requirements", {"test.hooked": required})
+    monkeypatch.setattr(world.hub.services.forges, "offered", unavailable)
+
+    world.tick()
+
+    assert world.hooked.passes == 0
+    refusal = _refusal(world, chunk_id)
+    assert refusal is not None and "secret fixture-forge-token is retired" in refusal

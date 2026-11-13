@@ -57,12 +57,12 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credentials import CredentialUnavailable
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryId,
     RepositoryResolution,
-    RepositorySecretUnavailable,
     ResolvedRepository,
 )
 from blizzard.hub.domain.delivery.flows import (
@@ -127,6 +127,15 @@ _log = get_logger("blizzard.hub.flow_turn")
 
 class TurnEndRefused(Exception):
     """A turn's end found the turn already ended, or the turn let go; the writes beside it roll back."""
+
+
+class _TargetUnavailable(Exception):
+    """``target``'s credential or secret could not be read while checking what its forge offers."""
+
+    def __init__(self, target: ResolvedRepository, cause: CredentialUnavailable) -> None:
+        super().__init__(str(cause))
+        self.target = target
+        self.cause = cause
 
 
 class _TurnEnding:
@@ -404,7 +413,12 @@ class TurnRunner:
             now=self._clock.now(),
         )
         watch = visit.watched_repo() if spec.lands else None
-        if (missing := self._missing_capability(spec.name, resolution, only=watch)) is not None:
+        try:
+            missing = self._missing_capability(spec.name, resolution, only=watch)
+        except _TargetUnavailable as unavailable:
+            self._refuse_unavailable(at, ending, unavailable.target, unavailable.cause)
+            return None
+        if missing is not None:
             target, capability = missing
             forge = resolution.forge_of(target)
             self._router.escalate_capability_missing(
@@ -429,10 +443,8 @@ class TurnRunner:
                     forges[repository] = self._forges.repository_forge(
                         repository, cut_off=cut_off, priority=ForgePriority.LANDING
                     )
-                except RepositorySecretUnavailable as exc:
-                    detail = f"repository {target.slug}: {exc}"
-                    step = "repository-secret-unavailable"
-                    self._router.refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail, ending=ending)
+                except CredentialUnavailable as exc:
+                    self._refuse_unavailable(at, ending, target, exc)
                     return None
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
@@ -462,11 +474,22 @@ class TurnRunner:
         for target in resolution.targets:
             if only is not None and target.record != only:
                 continue
-            offered = self._forges.offered(resolution.forge_of(target), RepositoryId(target.record))
+            try:
+                offered = self._forges.offered(resolution.forge_of(target), RepositoryId(target.record))
+            except CredentialUnavailable as exc:
+                raise _TargetUnavailable(target, exc) from exc
             missing = sorted(requirement(target) - offered)
             if missing:
                 return target, missing[0]
         return None
+
+    def _refuse_unavailable(
+        self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: CredentialUnavailable
+    ) -> None:
+        """Refuse the visit: ``target`` acts with a credential or secret that is unknown or retired."""
+        detail = f"repository {target.slug}: {cause}"
+        step = "repository-secret-unavailable"
+        self._router.refuse(at.chunk, at.graph, at.node, epoch=at.epoch, step=step, detail=detail, ending=ending)
 
     def _stuck(self, node: Node) -> ActionEscalation:
         bound = self._passes.bound.deadline_seconds()

@@ -97,7 +97,7 @@ from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretRefere
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import ISecretCatalog, ISecretReader
+from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
@@ -229,11 +229,12 @@ from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
-from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.internal.factory import build_forge_authorizations, build_forge_registry
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
@@ -950,18 +951,20 @@ class HubCore:
 
 @dataclass(frozen=True)
 class LiveConfig:
-    """One tenant's built-object cache and the one secret reader its builders reveal
-    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
+    """One tenant's built-object cache and its forge authorization boundary, the one holder of the secret reader its
+    builders authenticate through (``bzh:secret-write-only``)."""
 
     objects: ConfigObjectCache
-    secrets: ISecretReader
+    authorizations: IForgeAuthorizations
 
 
 def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveConfig:
     """The :class:`LiveConfig` of the tenant ``stores`` serve."""
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
-        secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher),
+        authorizations=build_forge_authorizations(
+            StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher)
+        ),
     )
 
 
@@ -1059,8 +1062,9 @@ def default_forge_registry(
     return build_forge_registry(
         records=stores.repository_records,
         forges=stores.forge_records,
+        credentials=stores.credential_records,
         objects=live.objects,
-        secrets=live.secrets,
+        authorizations=live.authorizations,
         clock=stores.clock,
         budgets=budgets,
         write_locks=write_locks,

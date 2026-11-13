@@ -9,7 +9,7 @@ from datetime import datetime
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets
+from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets, authority_secret
 
 _KINDS: dict[BudgetNoticeKind, EventLogKind] = {
     BudgetNoticeKind.BUDGET_LOW: "forge-budget-low",
@@ -40,7 +40,8 @@ class BudgetNoticeDrain:
                     message=_message(notice),
                     detail={
                         "forge": notice.key.forge_id,
-                        "secret": notice.key.secret_name,
+                        "authority": notice.key.authority,
+                        "secret": authority_secret(notice.key.authority),
                         "bucket": notice.bucket,
                         "remaining": notice.remaining,
                         "limit": notice.limit,
@@ -55,7 +56,7 @@ class BudgetNoticeDrain:
 
 
 def _message(notice: BudgetNotice) -> str:
-    key = f"forge {notice.key.forge_id} ({notice.key.secret_name or 'anonymous'}, {notice.bucket})"
+    key = f"forge {notice.key.forge_id} ({notice.key.authority or 'anonymous'}, {notice.bucket})"
     left = f"{notice.remaining}/{notice.limit} left" if notice.limit is not None else "no reading"
     until = iso_utc(notice.reset)
     match notice.kind:

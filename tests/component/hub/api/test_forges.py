@@ -182,7 +182,7 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
     assert hub.client.get("/api/forges/ghe").json()["budgets"] == []
     budgets = hub.services.forge_budgets
     reset = hub.clock.now().replace(microsecond=0) + timedelta(minutes=5)
-    budgets.learn(BudgetKey(forge_id, "gh-token"), BudgetReading("core", 5000, 1200, reset))
+    budgets.learn(BudgetKey(forge_id, "secret/gh-token"), BudgetReading("core", 5000, 1200, reset))
     budgets.learn(BudgetKey(forge_id, None), BudgetReading("core", 60, 7, reset))
     budgets.learn(BudgetKey("other-forge", None), BudgetReading("core", 60, 1, reset))
 

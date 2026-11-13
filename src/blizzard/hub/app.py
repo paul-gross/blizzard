@@ -160,6 +160,7 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.refusals import refusal_reader
@@ -675,8 +676,9 @@ def build_hosted_app(
             return WorkSourceEntry.registry(
                 records=stores.work_source_records,
                 forges=stores.forge_records,
+                credentials=stores.credential_records,
                 objects=live.objects,
-                secrets=live.secrets,
+                authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
                 users=core.users,
                 work_item_store=stores.work_item_store,
                 edits=stores.work_item_edits,
@@ -693,8 +695,9 @@ def build_hosted_app(
             return build_forge_registry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
+                credentials=stores.credential_records,
                 objects=live.objects,
-                secrets=live.secrets,
+                authorizations=live.authorizations,
                 clock=stores.clock,
                 budgets=budgets,
                 write_locks=write_locks,

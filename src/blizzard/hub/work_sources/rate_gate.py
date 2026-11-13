@@ -28,7 +28,7 @@ class IWorkSourceRateGate(Protocol):
 class IWorkSourceRateBudgets(Protocol):
     """Every forge key's budget of one tenant, as the work-source family binds a source's gate from it."""
 
-    def sweeping(self, forge_id: str, secret_name: str | None, forge_kind: str) -> IWorkSourceRateGate:
-        """The gate of ``forge_id``'s budget under ``secret_name`` (``None`` is the forge's anonymous budget), reading
+    def sweeping(self, forge_id: str, authority: str | None, forge_kind: str) -> IWorkSourceRateGate:
+        """The gate of ``forge_id``'s budget as ``authority`` (``None`` is the forge's anonymous budget), reading
         answers by ``forge_kind``."""
         ...

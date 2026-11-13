@@ -601,12 +601,12 @@ class GitHubLanding:
             headers = {
                 "Accept": "application/vnd.github+json",
                 "Content-Type": "application/json",
-                "Authorization": f"token {self._binding.token}",
             }
             self._loop = asyncio.get_running_loop()
             self._client = httpx2.AsyncClient(
                 base_url=self._binding.api_url.rstrip("/"),
                 headers=headers,
+                auth=self._binding.authorization.auth,
                 transport=self._transport,
                 event_hooks={"response": [self._learn]},
             )

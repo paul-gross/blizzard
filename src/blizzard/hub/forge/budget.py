@@ -1,4 +1,4 @@
-"""Each forge key's rate budget — one per (forge, secret) pair, held per tenant beside the forge registry.
+"""Each forge key's rate budget — one per (forge, authority) pair, held per tenant beside the forge registry.
 
 A budget learns from the readings its forge's answers carry, and turns its least important callers away before a
 request is made once the remaining budget falls: ``landing`` while any remains, ``watching`` above a fifth of the limit,
@@ -42,10 +42,22 @@ class BudgetNoticeKind(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class BudgetKey:
-    """One budget's key: a forge and the secret its calls go out under; ``None`` is the forge's anonymous budget."""
+    """One budget's key: a forge and the authority its calls go out as; ``None`` is the forge's anonymous budget."""
 
     forge_id: str
-    secret_name: str | None
+    authority: str | None
+
+
+#: How a ``github.token`` authority names the secret it reads.
+_SECRET_AUTHORITY = "secret/"
+
+
+def authority_secret(authority: str | None) -> str | None:
+    """The secret ``authority`` acts as, when it is a secret's; ``None`` for any other authority and the anonymous
+    one."""
+    if authority is None or not authority.startswith(_SECRET_AUTHORITY):
+        return None
+    return authority.removeprefix(_SECRET_AUTHORITY)
 
 
 @domain_model
@@ -161,16 +173,16 @@ class ForgeBudgets:
             return tuple(budget.readings[name] for name in sorted(budget.readings))
 
     def forge_readings(self, forge_id: str) -> tuple[tuple[BudgetKey, BudgetReading], ...]:
-        """The last reading of each bucket of every budget ``forge_id`` has been heard from under, by secret then
+        """The last reading of each bucket of every budget ``forge_id`` has been heard from under, by authority then
         bucket; the anonymous budget first."""
         with self._guard:
-            keys = sorted((key for key in self._budgets if key.forge_id == forge_id), key=_by_secret)
+            keys = sorted((key for key in self._budgets if key.forge_id == forge_id), key=_by_authority)
         return tuple((key, reading) for key in keys for reading in self.readings(key))
 
-    def sweeping(self, forge_id: str, secret_name: str | None, forge_kind: str) -> SweepingGate:
-        """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, secret_name)``'s budget through,
+    def sweeping(self, forge_id: str, authority: str | None, forge_kind: str) -> SweepingGate:
+        """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, authority)``'s budget through,
         reading answers in ``forge_kind``'s dialect."""
-        return SweepingGate(self, BudgetKey(forge_id, secret_name), self._clock, self._dialects(forge_kind))
+        return SweepingGate(self, BudgetKey(forge_id, authority), self._clock, self._dialects(forge_kind))
 
     def drain_notices(self) -> tuple[BudgetNotice, ...]:
         """Every notice queued since the last drain, oldest first."""
@@ -213,8 +225,8 @@ class ForgeBudgets:
             self._notices.append(notice)
 
 
-def _by_secret(key: BudgetKey) -> tuple[bool, str]:
-    return (key.secret_name is not None, key.secret_name or "")
+def _by_authority(key: BudgetKey) -> tuple[bool, str]:
+    return (key.authority is not None, key.authority or "")
 
 
 @dataclass(frozen=True)

@@ -21,13 +21,13 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
-from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema
 from tests.support.chunk_units import chunk_unit
+from tests.support.forge_auth import retire_secrets, sent_token
 from tests.support.github_double import GitHubDouble
 from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
@@ -144,7 +144,7 @@ class _Forge:
         self.built: list[tuple[str, str, str]] = []
 
     def adapter(self, binding: ForgeBinding) -> IForgeAdapter:
-        self.built.append((binding.api_url, f"{binding.owner}/{binding.repo}", binding.token))
+        self.built.append((binding.api_url, f"{binding.owner}/{binding.repo}", sent_token(binding.authorization)))
         return self.double.adapter(binding)
 
     def forges(
@@ -153,8 +153,9 @@ class _Forge:
         return ForgeRegistry(
             records=stores.repository_records,
             forges=stores.forge_records,
+            credentials=stores.credential_records,
             objects=live.objects,
-            secrets=live.secrets,
+            authorizations=live.authorizations,
             build=self.adapter,
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,
@@ -349,15 +350,7 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
             | {"secret_name": "other-forge-token"},
         ],
     )
-    secrets = hub.services.forges.secrets
-    reveal = secrets.reveal
-
-    def reveal_unless_retired(name: SecretName):
-        if name.value == "other-forge-token":
-            raise SecretRetired("other-forge-token")
-        return reveal(name)
-
-    monkeypatch.setattr(secrets, "reveal", reveal_unless_retired)
+    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda name: name == "other-forge-token")
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None), ("gadget", None)])
     before = _event_kinds(hub)

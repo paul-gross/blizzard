@@ -27,6 +27,7 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import OP, ForgeDouble, forge_state, hub_store_connections, retire_credential
 from tests.support.work_source_registry_ops import (
     _id,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
@@ -88,13 +89,13 @@ def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replac
     client, services = hub
     create(client, services, forge[1])
     before = _adapter(services)
-    assert before.client.headers["Authorization"] == "token tok-a"
+    assert sent_header(before.client.auth) == "token tok-a"
     assert _adapter(services) is before  # a hit reuses the built adapter
 
     assert client.put("/api/secrets/gh/value", json={"value": "tok-b"}).status_code == 200
 
     after = _adapter(services)
-    assert after.client.headers["Authorization"] == "token tok-b"
+    assert sent_header(after.client.auth) == "token tok-b"
     assert not before.client.is_closed  # a caller may still be mid-request on it
     assert client.put("/api/secrets/gh/value", json={"value": "tok-c"}).status_code == 200
     _adapter(services)

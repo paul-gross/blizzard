@@ -17,15 +17,22 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
 from blizzard.hub.domain.config.changes import RecordKind
-from blizzard.hub.domain.config.credentials import ConfiguredCredential, CredentialDraft, CredentialEdit
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialEdit,
+    resolve_credential,
+)
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
+from blizzard.hub.forge.auth import ForgeScope
 from blizzard.hub.live_config import CacheKey
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.schema import work_sources
 from blizzard.hub.tenancy import StoreScope
+from tests.support.forge_auth import sent_token
 from tests.support.scaffolding import (
     OP,
     config_authoring,
@@ -76,8 +83,9 @@ class _World:
         def build() -> _Client:
             self.builds += 1
             record = self.stores.work_source_records.get(self.source_id)
-            assert record is not None and record.fields.secret is not None
-            token = live.secrets.reveal(SecretName.parse(record.fields.secret)).expose()
+            credential = resolve_credential(record, self.stores.credential_records) if record is not None else None
+            assert record is not None and credential is not None
+            token = sent_token(live.authorizations.authorization(credential, ForgeScope.WORK_SOURCE))
             return _Client(record.fields.locator, record.fields.annotate, token)
 
         return live.objects.get(RecordKind.WORK_SOURCE, self.source_id, build)

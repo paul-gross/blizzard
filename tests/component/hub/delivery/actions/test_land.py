@@ -33,7 +33,6 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     ResolvedRepository,
 )
-from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
@@ -65,6 +64,7 @@ from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
+from tests.support.forge_auth import retire_secrets, token_authorization
 from tests.support.github_double import GREEN, GitHubDouble, change, check, comparison
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.land_action_doubles import (
@@ -127,7 +127,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
         api_url="https://api.github.example",
         owner="acme",
         repo="widget",
-        token="tok",
+        authorization=token_authorization(),
         write_lock=asyncio.Lock,
         dialect=rate_dialect("github"),
         learn=lambda _reading: None,
@@ -1391,17 +1391,8 @@ def test_a_parked_watch_visit_reveals_and_checks_only_the_watched_repository(
     )
     offered = frozenset(Capability) - {Capability.REFS_ADVANCE}
     hub = build_hub(tmp_path, repositories=seeds, forges=double.forges_offering({"github": offered}))
-    secrets = hub.services.forges.secrets
-    reveal = secrets.reveal
     revealed: list[str] = []
-
-    def reveal_unless_gadget(name: SecretName):
-        revealed.append(name.value)
-        if name.value == "other-forge-token":
-            raise SecretRetired(name.value)
-        return reveal(name)
-
-    monkeypatch.setattr(secrets, "reveal", reveal_unless_gadget)
+    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda name: name == "other-forge-token", revealed)
     chunk_id = _chunk(hub, _WIDGET, _GADGET)
     record_hub_asset(
         hub,

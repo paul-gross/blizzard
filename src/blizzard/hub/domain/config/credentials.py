@@ -391,8 +391,8 @@ IMPLICIT_BINDING = "github.token"
 @domain_model
 @dataclass(frozen=True)
 class ResolvedCredential:
-    """The authority a configured record acts with. ``credential_id`` and ``revision`` are ``None`` for a record naming
-    no credential, which acts with its secret as an implicit ``github.token`` of no declared variant."""
+    """The authority a configured record acts with. ``credential_id``, ``slug`` and ``revision`` are ``None`` for a
+    record naming no credential, which acts with its secret as an implicit ``github.token`` of no declared variant."""
 
     credential_id: CredentialId | None
     forge_id: ForgeId
@@ -401,6 +401,8 @@ class ResolvedCredential:
     settings: Mapping[str, object]
     revision: int | None
     authority: str
+    slug: str | None = None
+    retired: bool = False
 
 
 def resolve_credential(
@@ -421,6 +423,8 @@ def resolve_credential(
             settings=credential.fields.settings,
             revision=credential.revision,
             authority=credential.authority,
+            slug=credential.slug,
+            retired=credential.retired,
         )
     secret_name = record.fields.secret_name if isinstance(record, ConfiguredRepository) else record.fields.secret
     if secret_name is None:

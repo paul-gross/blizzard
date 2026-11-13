@@ -8,7 +8,7 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,16 +22,19 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.credentials import CredentialId
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
+from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
+from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import (
     OMIT_TITLE,
     OP,
@@ -92,8 +95,9 @@ def _registry_world(
     registry = WorkSourceEntry.registry(
         records=stores.work_source_records,
         forges=stores.forge_records,
+        credentials=stores.credential_records,
         objects=live.objects,
-        secrets=live.secrets,
+        authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
         users=core.users,
         work_item_store=stores.work_item_store,
         edits=stores.work_item_edits,
@@ -299,8 +303,8 @@ def test_factory_gives_each_source_its_own_credentialed_client(tmp_path: Path) -
     source_two = registry.get(ids["two"])
     assert isinstance(source_one, GitHubWorkSource)
     assert isinstance(source_two, GitHubWorkSource)
-    assert source_one.client.headers["Authorization"] == "token token-one"
-    assert source_two.client.headers["Authorization"] == "token token-two"
+    assert sent_header(source_one.client.auth) == "token token-one"
+    assert sent_header(source_two.client.auth) == "token token-two"
     assert source_one.client is not source_two.client
 
 
@@ -315,6 +319,39 @@ def test_a_retired_source_whose_secret_cannot_be_revealed_reads_as_absent(tmp_pa
     assert secret is not None
     authoring.retire_secret(secret, OP)
     assert registry.get(ids["one"]) is None
+
+
+@pytest.mark.parametrize(
+    ("unavailable", "said"),
+    [("unknown-credential", "credential cred_gone is unknown"), ("retired-secret", "secret gh is retired")],
+)
+def test_a_source_whose_credential_builds_no_authorization_raises_work_source_error(
+    tmp_path: Path, unavailable: str, said: str
+) -> None:
+    engine = migrate_to(tmp_path, "head")[1]
+    clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
+    keys = hub_key_provider({}, data_dir=tmp_path / "data")
+    stores = build_hub_core(engine, clock=clock).open(StoreScope(default_tenant(engine)))
+    authoring = config_authoring(engine, keys=keys, clock=clock)
+    authoring.create_secret(SecretName.parse("gh"), "token", OP)
+    record = authoring.create_work_source("one", None, _github("acme/one").fields(seed_forge(engine)), OP)
+    if unavailable == "unknown-credential":
+        record = replace(record, credential_id=CredentialId("cred_gone"))
+    else:
+        record = authoring.retire_work_source(record, OP)
+        secret = stores.secrets.get("gh")
+        assert secret is not None
+        authoring.retire_secret(secret, OP)
+    live = build_live_config(stores, cipher=secret_cipher(keys))
+
+    with pytest.raises(WorkSourceError, match=said):
+        WorkSourceEntry.built(
+            record,
+            forges=stores.forge_records,
+            credentials=stores.credential_records,
+            authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
+            budgets=ForgeBudgets(clock=clock, dialects=rate_dialect),
+        )
 
 
 def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(tmp_path: Path) -> None:

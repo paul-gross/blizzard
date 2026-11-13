@@ -3824,6 +3824,52 @@ def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> Non
         assert _secret_plaintext_imports(module), statement
 
 
+#: Where a stored secret may be revealed: the forge authorization boundary's implementation.
+_REVEAL_HOME = _HUB_DIR / "forge" / "internal"
+#: The reader's own definitions — its seam and its store adapter — which declare ``reveal`` rather than call it.
+_REVEAL_DEFINITIONS = frozenset({_HUB_DIR / "domain" / "config" / "secrets.py", _HUB_DIR / "secrets" / "__init__.py"})
+
+
+def _reveal_calls(src_root: Path, *, home: Path, exempt: frozenset[Path]) -> list[str]:
+    """Every ``.reveal(`` call under ``src_root`` outside ``home`` and the ``exempt`` definition modules."""
+    violations: list[str] = []
+    for path in _production_files(src_root):
+        if path.is_relative_to(home) or path in exempt:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        violations.extend(
+            f"{path.relative_to(src_root).as_posix()}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "reveal"
+        )
+    return violations
+
+
+def test_only_the_forge_authorization_boundary_reveals_a_secret() -> None:
+    """``bzh:secret-write-only``: a stored value is revealed only by the forge authorization boundary, under
+    ``hub/forge/internal/``; landing and ingestion authenticate through the authorization it builds."""
+    violations = _reveal_calls(_SRC_DIR, home=_REVEAL_HOME, exempt=_REVEAL_DEFINITIONS)
+    assert not violations, f"only hub/forge/internal/ may call ISecretReader.reveal: {violations}"
+
+
+@pytest.mark.parametrize(
+    ("rel", "flagged"),
+    [
+        ("hub/work_sources/internal/factory.py", True),
+        ("hub/forge/registry.py", True),
+        ("hub/forge/internal/authorizations.py", False),
+    ],
+)
+def test_the_reveal_guard_flags_a_call_outside_the_boundary(tmp_path: Path, rel: str, flagged: bool) -> None:
+    module = tmp_path / rel
+    module.parent.mkdir(parents=True)
+    module.write_text("def build(secrets, name):\n    return secrets.reveal(name).expose()\n")
+
+    found = _reveal_calls(tmp_path, home=tmp_path / "hub" / "forge" / "internal", exempt=frozenset())
+
+    assert found == ([f"{rel}:2"] if flagged else [])
+
+
 _CONFIGURED_WRITE_NAMES = frozenset(
     {
         "IWriteSecretRepository",

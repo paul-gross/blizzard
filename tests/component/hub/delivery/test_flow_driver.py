@@ -892,7 +892,7 @@ def _budget_events(world: World) -> list[tuple[str, str, dict[str, object]]]:
 
 def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: World) -> None:
     budgets = world.hub.open_services(world.tenant).forge_budgets
-    key = BudgetKey("github", "token")
+    key = BudgetKey("github", "secret/token")
     reset = world.hub.clock.now() + timedelta(minutes=2)
     headers = {
         "X-RateLimit-Limit": "100",
@@ -921,6 +921,7 @@ def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log
     ]
     assert events[0][2] == {
         "forge": "github",
+        "authority": "secret/token",
         "secret": "token",
         "bucket": "core",
         "remaining": 30,
