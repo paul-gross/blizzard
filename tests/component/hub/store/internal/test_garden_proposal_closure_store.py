@@ -2,10 +2,12 @@
 The pass and accept-declining-to-mint writes are idempotent per
 ``proposal_id`` at the store level — the second call of either writes nothing — and
 accept-with-mint atomically writes the closure, the item, and its resting chunk
-together, checked first so an already-closed proposal mints nothing a second time."""
+together, inserted first so an already-closed proposal mints nothing a second time.
+Each write runs in a unit holding the proposal's key."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -20,6 +22,7 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from blizzard.hub.graphs import PACKAGED
@@ -31,6 +34,7 @@ from blizzard.hub.store.internal.garden_proposal_closure_store import (
 )
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -109,8 +113,14 @@ def test_get_many_matches_get_across_two_closed_proposals_and_skips_an_unclosed_
     hub = build_hub(tmp_path)
     _seed_proposals(hub, ["gprop_1", "gprop_2", "gprop_3"])
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
-    closures.record_pass("gprop_1", reason="r1", closed_by="u1", at=_NOW)
-    closures.record_accept_decline("gprop_2", reason=None, closed_by="u1", at=_NOW)
+    _in_unit(
+        hub, "gprop_1", lambda t: closures.record_pass("gprop_1", reason="r1", closed_by="u1", at=_NOW, transaction=t)
+    )
+    _in_unit(
+        hub,
+        "gprop_2",
+        lambda t: closures.record_accept_decline("gprop_2", reason=None, closed_by="u1", at=_NOW, transaction=t),
+    )
 
     result = closures.get_many(["gprop_1", "gprop_2", "gprop_3", "gprop_ghost"])
 
@@ -131,7 +141,11 @@ def test_get_many_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: p
     _seed_proposals(hub, proposal_ids)
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
     for proposal_id in proposal_ids:
-        closures.record_pass(proposal_id, reason="r", closed_by="u1", at=_NOW)
+        _in_unit(
+            hub,
+            proposal_id,
+            lambda t, p=proposal_id: closures.record_pass(p, reason="r", closed_by="u1", at=_NOW, transaction=t),
+        )
 
     result = closures.get_many(proposal_ids)
 
@@ -149,7 +163,11 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
     _seed_proposals(hub, proposal_ids)
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
     for proposal_id in proposal_ids:
-        closures.record_pass(proposal_id, reason="r", closed_by="u1", at=_NOW)
+        _in_unit(
+            hub,
+            proposal_id,
+            lambda t, p=proposal_id: closures.record_pass(p, reason="r", closed_by="u1", at=_NOW, transaction=t),
+        )
 
     one_batch_count = count_queries(hub.engine, lambda: closures.get_many(proposal_ids[:3]))
     two_batch_count = count_queries(hub.engine, lambda: closures.get_many(proposal_ids[:6]))
@@ -159,6 +177,11 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
     assert per_batch_cost > 0
     assert two_batch_count == one_batch_count + per_batch_cost
     assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
+
+
+def _in_unit(hub: HubHarness, proposal_id: str, write: Callable[[LockedTransaction], bool]) -> bool:
+    with proposal_unit(hub_store_connections(hub.engine), proposal_id) as transaction:
+        return write(transaction)
 
 
 def _mint(hub: HubHarness, proposal_id: str, pointer: WorkRef) -> None:
@@ -181,8 +204,14 @@ def test_find_by_items_round_trips_minted_pointers_and_drops_unminted_ones(tmp_p
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
     _mint(hub, "gprop_1", WorkRef(source="hub", ref="1"))
     _mint(hub, "gprop_2", WorkRef(source="other", ref="1"))
-    closures.record_pass("gprop_3", reason="r", closed_by="u1", at=_NOW)
-    closures.record_accept_decline("gprop_4", reason=None, closed_by="u1", at=_NOW)
+    _in_unit(
+        hub, "gprop_3", lambda t: closures.record_pass("gprop_3", reason="r", closed_by="u1", at=_NOW, transaction=t)
+    )
+    _in_unit(
+        hub,
+        "gprop_4",
+        lambda t: closures.record_accept_decline("gprop_4", reason=None, closed_by="u1", at=_NOW, transaction=t),
+    )
 
     result = closures.find_by_items(
         [WorkRef(source="hub", ref="1"), WorkRef(source="other", ref="1"), WorkRef(source="hub", ref="nope")]
@@ -233,7 +262,11 @@ def test_record_pass_then_get_round_trips(tmp_path: Path) -> None:
     _seed_proposal(hub)
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
 
-    written = closures.record_pass("gprop_1", reason="not worth it", closed_by="u1", at=_NOW)
+    written = _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_pass("gprop_1", reason="not worth it", closed_by="u1", at=_NOW, transaction=t),
+    )
 
     assert written is True
     closure = closures.get("gprop_1")
@@ -250,8 +283,12 @@ def test_record_pass_returns_false_on_a_second_call(tmp_path: Path) -> None:
     _seed_proposal(hub)
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
 
-    first = closures.record_pass("gprop_1", reason="r1", closed_by="u1", at=_NOW)
-    second = closures.record_pass("gprop_1", reason="r2", closed_by="u2", at=_NOW)
+    first = _in_unit(
+        hub, "gprop_1", lambda t: closures.record_pass("gprop_1", reason="r1", closed_by="u1", at=_NOW, transaction=t)
+    )
+    second = _in_unit(
+        hub, "gprop_1", lambda t: closures.record_pass("gprop_1", reason="r2", closed_by="u2", at=_NOW, transaction=t)
+    )
 
     assert first is True
     assert second is False
@@ -268,8 +305,16 @@ def test_record_accept_decline_round_trips_and_is_idempotent(tmp_path: Path) -> 
     _seed_proposal(hub)
     closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
 
-    first = closures.record_accept_decline("gprop_1", reason=None, closed_by="u1", at=_NOW)
-    second = closures.record_accept_decline("gprop_1", reason="too late", closed_by="u2", at=_NOW)
+    first = _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_accept_decline("gprop_1", reason=None, closed_by="u1", at=_NOW, transaction=t),
+    )
+    second = _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_accept_decline("gprop_1", reason="too late", closed_by="u2", at=_NOW, transaction=t),
+    )
 
     assert first is True
     assert second is False
@@ -301,17 +346,19 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
         urgency_id=default_urgency(hub.engine),
     )
 
-    first = items.accept_create(
-        proposal_id="gprop_1",
-        pointer=pointer,
-        title="t",
-        body="b",
-        author=author,
-        at=_NOW,
-        chunk=chunk,
-        reason=None,
-        closed_by="u1",
-    )
+    with proposal_unit(store, "gprop_1") as t:
+        first = items.accept_create(
+            proposal_id="gprop_1",
+            pointer=pointer,
+            title="t",
+            body="b",
+            author=author,
+            at=_NOW,
+            chunk=chunk,
+            reason=None,
+            closed_by="u1",
+            transaction=t,
+        )
     assert first is not None
     assert items.get("hub", pointer.ref) is not None
     closure = GardenProposalClosureStore(store).get("gprop_1")
@@ -320,17 +367,19 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
     assert closure.item_outcome is GardenProposalItemOutcome.MINTED
     assert closure.source == "hub" and closure.ref == pointer.ref
 
-    second = items.accept_create(
-        proposal_id="gprop_1",
-        pointer=pointer,
-        title="t",
-        body="b",
-        author=author,
-        at=_NOW,
-        chunk=chunk,
-        reason=None,
-        closed_by="u1",
-    )
+    with proposal_unit(store, "gprop_1") as t:
+        second = items.accept_create(
+            proposal_id="gprop_1",
+            pointer=pointer,
+            title="t",
+            body="b",
+            author=author,
+            at=_NOW,
+            chunk=chunk,
+            reason=None,
+            closed_by="u1",
+            transaction=t,
+        )
     assert second is None  # already closed — nothing minted a second time
 
     with hub.engine.connect() as conn:
@@ -346,7 +395,11 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
     graph = hub.services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
     store = hub_store_connections(hub.engine)
     closures = GardenProposalClosureStore(store)
-    closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW)
+    _in_unit(
+        hub,
+        "gprop_1",
+        lambda t: closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW, transaction=t),
+    )
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk(
@@ -357,17 +410,19 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
         urgency_id=default_urgency(hub.engine),
     )
 
-    result = items.accept_create(
-        proposal_id="gprop_1",
-        pointer=pointer,
-        title="t",
-        body="b",
-        author=WorkItemAuthor.user("u1"),
-        at=_NOW,
-        chunk=chunk,
-        reason=None,
-        closed_by="u1",
-    )
+    with proposal_unit(store, "gprop_1") as t:
+        result = items.accept_create(
+            proposal_id="gprop_1",
+            pointer=pointer,
+            title="t",
+            body="b",
+            author=WorkItemAuthor.user("u1"),
+            at=_NOW,
+            chunk=chunk,
+            reason=None,
+            closed_by="u1",
+            transaction=t,
+        )
 
     assert result is None
     assert items.get("hub", pointer.ref) is None

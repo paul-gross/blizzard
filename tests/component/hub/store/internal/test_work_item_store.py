@@ -17,6 +17,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.store import schema as s
@@ -29,6 +30,7 @@ from tests.support.scaffolding import (
     seed_graph,
     seed_work_item,
 )
+from tests.support.work_item_units import close_item, work_item_unit
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -151,7 +153,7 @@ def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     assert reread.closed_at is None
 
     closed_at = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
-    closed = store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=closed_at)
+    closed = close_item(store, "hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=closed_at)
 
     assert closed.closed_at == closed_at
     assert closed.closure == WorkItemClosure.WITHDRAWN
@@ -161,27 +163,41 @@ def test_close_is_unset_until_recorded(tmp_path: Path) -> None:
     assert fetched.closure == WorkItemClosure.WITHDRAWN
 
 
-def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> None:
-    """The ``closed_at IS NULL`` guard mirrors ``close``'s own (:107) — a title/body
-    write racing a closure matches zero rows rather than landing on a closed item."""
+def test_edit_close_and_withdraw_refuse_a_token_not_covering_the_items_key(tmp_path: Path) -> None:
+    """Every work-item write checks its unit declared the item's ``work_item_lock``."""
     store, engine = _store_and_engine(tmp_path)
+    connections = hub_store_connections(engine)
     created = seed_work_item(
-        hub_store_connections(engine),
+        connections,
         graph_id="gr_1",
-        title="a",
-        body="a",
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
-        stated_priority=None,
         at=_NOW,
     )
-    store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_NOW)
+    other = WorkRef(source="hub", ref="other")
 
-    result = store.edit("hub", created.ref, title="changed", body="changed", stated_priority=None, at=_NOW)
+    with pytest.raises(TransactionMisuse), work_item_unit(connections, other) as locked:
+        store.edit("hub", created.ref, title="t", body="b", stated_priority=None, at=_NOW, transaction=locked)
+    with pytest.raises(TransactionMisuse), work_item_unit(connections, other) as locked:
+        store.close("hub", created.ref, closure=WorkItemClosure.WITHDRAWN, at=_NOW, transaction=locked)
+    with pytest.raises(TransactionMisuse), work_item_unit(connections, other) as locked:
+        store.withdraw_open(WorkRef(source="hub", ref=created.ref), at=_NOW, transaction=locked)
 
-    assert result is None
     fetched = store.get("hub", created.ref)
-    assert fetched is not None
-    assert fetched.title == "a"  # untouched
+    assert fetched is not None and fetched.closure is None
+
+
+def test_closures_names_each_items_closure_and_omits_a_missing_one(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    connections = hub_store_connections(engine)
+    author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage")
+    open_item = seed_work_item(connections, graph_id="gr_1", author=author, at=_NOW)
+    delivered = seed_work_item(connections, graph_id="gr_1", author=author, at=_NOW)
+    close_item(store, "hub", delivered.ref, closure=WorkItemClosure.DELIVERED, at=_NOW)
+    missing = WorkRef(source="hub", ref="never")
+
+    closures = store.closures([open_item.pointer, delivered.pointer, missing])
+
+    assert closures == {open_item.pointer: None, delivered.pointer: WorkItemClosure.DELIVERED}
 
 
 # --------------------------------------------------------------------------- #

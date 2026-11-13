@@ -16,6 +16,7 @@ from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support.scaffolding import hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
+from tests.support.work_item_units import close_item
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -59,7 +60,7 @@ def test_close_round_trips_a_later_instant(tmp_path: Path) -> None:
     )
     later = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
 
-    store.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=later)
+    close_item(store, "hub", item.ref, closure=WorkItemClosure.DELIVERED, at=later)
 
     fetched = store.get("hub", item.ref)
     assert fetched is not None

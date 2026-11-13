@@ -14,7 +14,6 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -23,13 +22,14 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
+from blizzard.hub.domain.garden.findings.model import finding_lock
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.chunk_rows import fence, next_artifact_seq
 
-# Shares the finding adapter's locking and scope queries in one transaction.
+# Shares the finding adapter's guard and scope queries in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
+from blizzard.hub.store.internal.finding_store import findings_outside_project, moved_findings
 
 # Resolves or creates scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -73,17 +73,13 @@ class GardenDeliveryStore:
             )
         ).first()
 
-    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
-        conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
-        # Chunk row first, then findings sorted, so no path locks a finding and then a chunk; `deliver`'s
-        # guard then judges a state no verb can move until this transaction ends.
-        for batch in id_batches(sorted(plan.expect)):
-            lock_findings(conn, batch)
-
     def deliver(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> DeliveryOutcome:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
+        # `deliver`'s guard judges a state no verb can move until this transaction ends.
+        for finding_id in sorted(plan.expect):
+            connection_for(self._store, transaction, key=finding_lock(finding_id))
         already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
         if already is not None:
             return DeliveryOutcome.ALREADY_RECORDED

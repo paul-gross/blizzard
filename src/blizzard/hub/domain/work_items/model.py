@@ -99,14 +99,6 @@ def require_open_for(item: HubWorkItem, verb: WorkItemVerb) -> None:
         raise WorkItemNotEditable(item.work_item_id, item.closure)
 
 
-def require_withdrawn(closed: HubWorkItem) -> None:
-    """Refuse a withdraw whose write landed nothing: a delivery closed ``closed`` between the
-    guard and the write, so the closure that stands is not ``withdrawn``."""
-    if closed.closure is not WorkItemClosure.WITHDRAWN:
-        assert closed.closure is not None
-        raise WorkItemNotEditable(closed.work_item_id, closed.closure)
-
-
 def is_readable(item: HubWorkItem) -> bool:
     """Whether a holding chunk may still read ``item`` — a delivered item stays readable,
     a withdrawn one does not."""

@@ -104,7 +104,7 @@ class ValidatedDelivery:
     #: Every citable finding's :meth:`Finding.run_gone`: the fact kind and actor a run's `gone` lands as.
     gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict[str, tuple[str, str | None]])
     #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
-    #: names — what the write re-checks under the finding's row lock.
+    #: names — what the write re-checks under the finding's keyed lock.
     expect: dict[str, str] = field(default_factory=dict[str, str])
 
 

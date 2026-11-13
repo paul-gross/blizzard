@@ -9,14 +9,16 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Connection, Row
-from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.closure import GardenProposalClosure, IWriteGardenProposalClosureRepository
-from blizzard.hub.store.schema import garden_proposal_closures, garden_proposals
+from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.store.schema import garden_proposal_closures
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 def insert_garden_proposal_closure_row(
@@ -31,16 +33,9 @@ def insert_garden_proposal_closure_row(
     pointer: WorkRef | None,
 ) -> bool:
     """Writes one ``garden_proposal_closures`` row, on the caller's connection, inside
-    the caller's transaction. Idempotent per ``proposal_id``: returns ``False`` and
-    writes nothing when a closure already exists. Locks the proposal's own row before
-    reading closures (``tests/component/hub/store/test_garden_proposal_closure_race.py::
-    test_insert_closure_row_locks_the_proposal_row_before_reading_closures``)."""
+    the caller's transaction, which holds the proposal's key. Insert-if-absent per
+    ``proposal_id``: returns ``False`` and writes nothing when a closure already exists."""
     stmts = statements_of(conn)
-    conn.execute(
-        stmts.update(garden_proposals)
-        .where(garden_proposals.c.proposal_id == proposal_id)
-        .values(proposal_id=proposal_id)
-    )
     already = conn.execute(
         stmts.select(garden_proposal_closures, garden_proposal_closures.c.id).where(
             garden_proposal_closures.c.proposal_id == proposal_id
@@ -70,8 +65,8 @@ class GardenProposalClosureStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def get(self, proposal_id: str) -> GardenProposalClosure | None:
-        with self._store.read("get") as conn:
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
+        with connection_in(self._store, transaction, "get") as conn:
             row = conn.execute(
                 self._store.select(garden_proposal_closures).where(
                     garden_proposal_closures.c.proposal_id == proposal_id
@@ -128,37 +123,33 @@ class GardenProposalClosureStore:
                     result.update({WorkRef(source=row.source, ref=row.ref): self._of(row) for row in rows})
         return result
 
-    def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
-        try:
-            with self._store.write("record_pass", expect=(IntegrityError,)) as conn:
-                return insert_garden_proposal_closure_row(
-                    conn,
-                    proposal_id=proposal_id,
-                    closure=GardenProposalClosureKind.PASSED,
-                    reason=reason,
-                    closed_by=closed_by,
-                    at=at,
-                    item_outcome=None,
-                    pointer=None,
-                )
-        except IntegrityError:
-            return False
+    def record_pass(
+        self, proposal_id: str, *, reason: str, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
+        return insert_garden_proposal_closure_row(
+            connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id)),
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.PASSED,
+            reason=reason,
+            closed_by=closed_by,
+            at=at,
+            item_outcome=None,
+            pointer=None,
+        )
 
-    def record_accept_decline(self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime) -> bool:
-        try:
-            with self._store.write("record_accept_decline", expect=(IntegrityError,)) as conn:
-                return insert_garden_proposal_closure_row(
-                    conn,
-                    proposal_id=proposal_id,
-                    closure=GardenProposalClosureKind.ACCEPTED,
-                    reason=reason,
-                    closed_by=closed_by,
-                    at=at,
-                    item_outcome=GardenProposalItemOutcome.DECLINED,
-                    pointer=None,
-                )
-        except IntegrityError:
-            return False
+    def record_accept_decline(
+        self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
+        return insert_garden_proposal_closure_row(
+            connection_for(self._store, transaction, key=garden_proposal_lock(proposal_id)),
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=reason,
+            closed_by=closed_by,
+            at=at,
+            item_outcome=GardenProposalItemOutcome.DECLINED,
+            pointer=None,
+        )
 
     @staticmethod
     def _of(row: Row[Any]) -> GardenProposalClosure:

@@ -26,6 +26,7 @@ class _FakeUnit:
         self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
     ) -> LockedTransaction:
         self.owner.locked_chunks.append(list(chunks))
+        self.owner.locked_keys.append(sorted(keys))
         return cast(LockedTransaction, self)
 
     @property
@@ -35,9 +36,11 @@ class _FakeUnit:
 
 @dataclass
 class FakeTransactions:
-    """Opens a fresh unit per :meth:`begin`; ``locked_chunks`` holds each unit's declared chunks."""
+    """Opens a fresh unit per :meth:`begin`; ``locked_chunks`` and ``locked_keys`` hold each unit's declared chunks
+    and keys."""
 
     locked_chunks: list[list[str]] = field(default_factory=list[list[str]])
+    locked_keys: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:

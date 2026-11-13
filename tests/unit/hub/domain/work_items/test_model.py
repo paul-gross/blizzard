@@ -21,7 +21,6 @@ from blizzard.hub.domain.work_items.model import (
     is_readable,
     require_open_for,
     require_text,
-    require_withdrawn,
 )
 
 _AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
@@ -158,13 +157,3 @@ def test_an_explicit_none_priority_clears_it_and_a_priority_is_stored_by_value()
         WorkItemEdit(stated_priority=WorkItemPriority.LOW).resolve_against(_item(stated_priority=None)).stated_priority
         == WorkItemPriority.LOW.value
     )
-
-
-def test_a_withdraw_that_landed_stands_as_withdrawn() -> None:
-    require_withdrawn(_item(WorkItemClosure.WITHDRAWN))
-
-
-def test_a_withdraw_a_delivery_raced_is_refused_naming_the_delivery() -> None:
-    with pytest.raises(WorkItemNotEditable) as caught:
-        require_withdrawn(_item(WorkItemClosure.DELIVERED))
-    assert caught.value.closure is WorkItemClosure.DELIVERED

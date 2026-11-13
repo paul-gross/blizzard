@@ -27,6 +27,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from tests.support.garden_proposal_units import proposal_unit
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -132,8 +133,11 @@ def test_the_proposal_store_refuses_to_attach_another_projects_finding(tmp_path:
     store = GardenProposalStore(hub_store_connections(hub.engine))
     _create(store, own, [_OWN])
 
-    with pytest.raises(GardenProposalFindingOtherProjectError, match=_FOREIGN):
-        store.attach("gprop_1", [_FOREIGN])
+    with (
+        pytest.raises(GardenProposalFindingOtherProjectError, match=_FOREIGN),
+        proposal_unit(hub_store_connections(hub.engine), "gprop_1") as transaction,
+    ):
+        store.attach("gprop_1", [_FOREIGN], transaction=transaction)
 
     proposal = store.get("gprop_1")
     assert proposal is not None

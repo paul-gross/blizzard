@@ -21,10 +21,12 @@ from blizzard.hub.domain.garden.proposals.model import (
     GardenProposalAlreadyClosed,
     GardenProposalState,
     GardenProposalVerb,
+    garden_proposal_lock,
     garden_proposal_state,
     verb_legal_from,
 )
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
@@ -204,7 +206,10 @@ class GardenProposalPassReasonRequired(ValueError):
 class IReadGardenProposalClosureRepository(Protocol):
     """Read-only garden-proposal-closure access."""
 
-    def get(self, proposal_id: str) -> GardenProposalClosure | None: ...
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
+        """`proposal_id`'s closure, or `None` while open — read in `transaction` when one is given
+        (``bzh:transaction-participation``)."""
+        ...
 
     def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposalClosure]:
         """Every closure among `proposal_ids`, keyed by `proposal_id` — a proposal with
@@ -227,14 +232,19 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
     """Read-write garden-proposal-closure access — the pass and accept-declining-to-mint
     writes."""
 
-    def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
-        """Insert the passed closure row. Returns ``False`` and writes nothing when
-        `proposal_id` already carries a closure."""
+    def record_pass(
+        self, proposal_id: str, *, reason: str, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
+        """Insert the passed closure row in `transaction`, which holds :func:`garden_proposal_lock`. Returns
+        ``False`` and writes nothing when `proposal_id` already carries a closure — insert-if-absent."""
         ...
 
-    def record_accept_decline(self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime) -> bool:
-        """Insert the accepted-declining-to-mint closure row. Returns ``False`` and
-        writes nothing when `proposal_id` already carries a closure."""
+    def record_accept_decline(
+        self, proposal_id: str, *, reason: str | None, closed_by: str, at: datetime, transaction: LockedTransaction
+    ) -> bool:
+        """Insert the accepted-declining-to-mint closure row in `transaction`, which holds
+        :func:`garden_proposal_lock`. Returns ``False`` and writes nothing when `proposal_id` already carries a
+        closure — insert-if-absent."""
         ...
 
 
@@ -258,8 +268,9 @@ def compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
 class GardenProposalClosureService:
     """Close a garden proposal — pass or accept — over the closure write seam,
     :class:`~blizzard.hub.domain.work_items.editing.WorkItemEditService` (an accept's mint-with-link path),
-    and `default_graph`. Every refusal is :class:`GardenProposalClosure`'s own; this service loads, reads the
-    clock, writes, and turns a lost write race into :class:`GardenProposalAlreadyClosed`."""
+    and `default_graph`. Every refusal is :class:`GardenProposalClosure`'s own; this service declares the
+    proposal's :func:`garden_proposal_lock`, re-reads its closure under it, reads the clock, decides, and
+    writes in that one unit, turning a closure the insert finds into :class:`GardenProposalAlreadyClosed`."""
 
     def __init__(
         self,
@@ -268,7 +279,9 @@ class GardenProposalClosureService:
         items: WorkItemEditService,
         default_graph: Callable[[], Graph],
         clock: IClock,
+        transactions: IHubTransactions,
     ) -> None:
+        self._transactions = transactions
         self._closures = closures
         self._items = items
         self._default_graph = default_graph
@@ -280,14 +293,20 @@ class GardenProposalClosureService:
 
     def pass_(self, proposal: GardenProposal, *, reason: str, by: str) -> GardenProposalClosure:
         """Pass ``proposal`` (:meth:`GardenProposalClosure.passing`)."""
-        closure = GardenProposalClosure.passing(
-            proposal, self._closures.get(proposal.proposal_id), reason=reason, by=by, at=self._clock.now()
-        )
-        assert closure.reason is not None
-        if not self._closures.record_pass(
-            proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at
-        ):
-            self._raise_already_closed(proposal.proposal_id)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            closure = GardenProposalClosure.passing(
+                proposal,
+                self._closures.get(proposal.proposal_id, transaction=locked),
+                reason=reason,
+                by=by,
+                at=self._clock.now(),
+            )
+            assert closure.reason is not None
+            if not self._closures.record_pass(
+                proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at, transaction=locked
+            ):
+                self._raise_already_closed(proposal.proposal_id, locked)
         return closure
 
     def accept(
@@ -306,17 +325,11 @@ class GardenProposalClosureService:
         ``urgency`` or the tenant's default. Raises :class:`GardenProposalAlreadyClosed`,
         :class:`GardenProposalMintFieldWithoutMint` for a body or urgency on a non-minting accept, and
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
-        existing = self._closures.get(proposal.proposal_id)
         if not mint:
-            closure = GardenProposalClosure.accepted_declining(
-                proposal, existing, reason=reason, body=body, by=by, at=self._clock.now(), urgency=urgency
-            )
-            if not self._closures.record_accept_decline(
-                proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at
-            ):
-                self._raise_already_closed(proposal.proposal_id)
-            return AcceptedGardenProposal(closure=closure, chunk_id=None)
-        accept = MintingAccept.of(proposal, existing, reason=reason, body=body, findings=findings)
+            return self._accept_declining(proposal, reason=reason, by=by, body=body, urgency=urgency)
+        accept = MintingAccept.of(
+            proposal, self._closures.get(proposal.proposal_id), reason=reason, body=body, findings=findings
+        )
         minted = self._items.accept_create(
             proposal.proposal_id,
             title=accept.title,
@@ -326,15 +339,37 @@ class GardenProposalClosureService:
             project_id=ProjectId(proposal.project_id),
             reason=accept.reason,
             closed_by=by,
+            lock=garden_proposal_lock(proposal.proposal_id),
             urgency=urgency,
         )
         if minted is None:
-            self._raise_already_closed(proposal.proposal_id)
+            self._raise_already_closed(proposal.proposal_id, None)
         return AcceptedGardenProposal(
             closure=GardenProposalClosure.accepted_minting(accept, minted.item, by=by), chunk_id=minted.chunk_id
         )
 
-    def _raise_already_closed(self, proposal_id: str) -> NoReturn:
-        closure = self._closures.get(proposal_id)
+    def _accept_declining(
+        self, proposal: GardenProposal, *, reason: str | None, by: str, body: str | None, urgency: Urgency | None
+    ) -> AcceptedGardenProposal:
+        """Accept ``proposal`` minting no item (:meth:`GardenProposalClosure.accepted_declining`)."""
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[garden_proposal_lock(proposal.proposal_id)])
+            closure = GardenProposalClosure.accepted_declining(
+                proposal,
+                self._closures.get(proposal.proposal_id, transaction=locked),
+                reason=reason,
+                body=body,
+                by=by,
+                at=self._clock.now(),
+                urgency=urgency,
+            )
+            if not self._closures.record_accept_decline(
+                proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at, transaction=locked
+            ):
+                self._raise_already_closed(proposal.proposal_id, locked)
+        return AcceptedGardenProposal(closure=closure, chunk_id=None)
+
+    def _raise_already_closed(self, proposal_id: str, transaction: Transaction | None) -> NoReturn:
+        closure = self._closures.get(proposal_id, transaction=transaction)
         assert closure is not None
         raise GardenProposalAlreadyClosed(proposal_id, closure)

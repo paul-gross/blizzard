@@ -24,6 +24,7 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery
+from blizzard.hub.domain.garden.findings.model import finding_lock
 from blizzard.hub.domain.garden.formats import (
     DeliveredDelta,
     FindingAddOp,
@@ -67,10 +68,6 @@ class _FakeGardenDeliveryRepo:
 
     terminals: list[bool] = field(default_factory=list[bool])
     written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
-    locked_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
-
-    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
-        self.locked_in.append(transaction)
 
     def deliver(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
@@ -479,7 +476,7 @@ def test_deliver_returns_the_repository_outcome() -> None:
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
 
 
-def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk() -> None:
+def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk_and_every_expected_finding() -> None:
     repo = _FakeGardenDeliveryRepo()
     transactions = FakeTransactions()
     service = GardenDelivery(
@@ -488,10 +485,14 @@ def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk() -> None:
         transactions=transactions,
         clock=FixedClock(instant=_T0),
     )
-    delta = DeliveredDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add()])
+    delta = DeliveredDelta(
+        scope="runner",
+        revisions={"blizzard": "a" * 40},
+        findings=[_add(), FindingObservedOp(id="fin_2"), FindingGoneOp(id="fin_1", note="fixed")],
+    )
 
     service.deliver(
-        ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[]),
+        ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], expect={"fin_1": "live", "fin_2": "live"}),
         chunk=_CHUNK,
         node=_NODE,
         epoch=1,
@@ -499,6 +500,7 @@ def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk() -> None:
     )
 
     assert transactions.locked_chunks == [[_CHUNK.chunk_id]]
+    assert transactions.locked_keys == [[finding_lock("fin_1"), finding_lock("fin_2")]]
 
 
 @pytest.mark.parametrize(
@@ -533,4 +535,3 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
 
     assert repo.terminals == [terminal]
     assert status_facts.transactions == repo.written_in
-    assert repo.locked_in == repo.written_in

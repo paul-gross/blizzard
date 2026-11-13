@@ -38,6 +38,7 @@ from tests.support.scaffolding import (
     seed_user,
     serve_default_tenant,
 )
+from tests.support.work_item_units import close_item
 
 
 class _CountingFactsStore(ChunkFactsStore):
@@ -485,7 +486,7 @@ def test_a_withdrawal_lost_to_a_delivery_is_409_and_still_publishes_the_holder_d
     real = ChunkWorkRefsStore.find_live_holder
 
     def delivered_meanwhile(self: ChunkWorkRefsStore, pointer: WorkRef) -> str | None:
-        items.close("hub", ref, closure=WorkItemClosure.DELIVERED, at=hub.clock.now())
+        close_item(items, "hub", ref, closure=WorkItemClosure.DELIVERED, at=hub.clock.now())
         return real(self, pointer)
 
     monkeypatch.setattr(ChunkWorkRefsStore, "find_live_holder", delivered_meanwhile)

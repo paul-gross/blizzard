@@ -8,7 +8,7 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -18,6 +18,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -34,8 +35,9 @@ from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependencies
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
+from blizzard.hub.domain.kernel.locks import HubLock, LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
-from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
+from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService, work_item_lock
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
@@ -50,8 +52,16 @@ class _FakeItemsRepo:
     withdrawals: list[tuple[WorkRef, datetime, Transaction | None]] = field(
         default_factory=list[tuple[WorkRef, datetime, Transaction | None]]
     )
+    closed: dict[WorkRef, WorkItemClosure] = field(default_factory=dict[WorkRef, WorkItemClosure])
+    keys: list[LockKey] = field(default_factory=list[LockKey])
 
-    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
+    def closures(
+        self, pointers: Sequence[WorkRef], *, transaction: Transaction | None = None
+    ) -> Mapping[WorkRef, WorkItemClosure | None]:
+        return {p: self.closed.get(p) for p in pointers}
+
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
+        assert work_item_lock(pointer) in self.keys, "withdrawn under a token not covering the item's key"
         self.work_refs_seen.append([pointer])
         self.withdrawals.append((pointer, at, transaction))
 
@@ -73,12 +83,19 @@ class _FakeExclusiveWrites:
         default_factory=list[tuple[str, str, datetime, LockedTransaction]]
     )
     delete_transactions: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+    # Successive re-reads, one per run; once exhausted the last stands.
+    rereads: list[Chunk] = field(default_factory=list[Chunk])
+    declared: list[tuple[list[str], list[LockKey]]] = field(default_factory=list[tuple[list[str], list[LockKey]]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
-    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+    def lock_set(
+        self, *, chunks: Sequence[str] = (), keys: Sequence[LockKey] = (), hub: Sequence[HubLock] = ()
+    ) -> LockedTransaction:
+        self.declared.append((list(chunks), list(keys)))
+        self.items.keys = list(keys)
         return cast(LockedTransaction, self)
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
@@ -88,6 +105,8 @@ class _FakeExclusiveWrites:
         return self.edges
 
     def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        if self.rereads:
+            self.current = self.rereads.pop(0)
         return self.current
 
     def record_deleted(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> int:
@@ -338,3 +357,75 @@ def test_delete_shares_one_locked_transaction_and_timestamp_for_all_writes() -> 
     assert repo.delete_transactions == [repo]
     assert repo.releases == [("chk_1", "alice", at, repo)]
     assert items.withdrawals == [(first, at, repo), (second, at, repo)]
+
+
+def test_delete_reruns_over_a_hub_ref_outside_its_declared_keys_writing_nothing_first() -> None:
+    """A hub ref folded in after the pre-read lies outside the run's declared keys: that run
+    writes nothing and returns, and the delete runs again declaring the union, then withdraws it."""
+    known = WorkRef(source="hub", ref="1")
+    folded = WorkRef(source="hub", ref="folded-in")
+    caller_chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[known], minted_at=_T0)
+    reread = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[known, folded], minted_at=_T0)
+    items = _FakeItemsRepo()
+    repo = _FakeExclusiveWrites(_not_ready_facts(), [], rereads=[reread], items=items)
+    writes_after_first_run: list[int] = []
+    original_get = repo.get
+
+    def counting_get(chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        if len(repo.declared) == 2:
+            writes_after_first_run.append(len(items.deleted) + len(repo.releases) + len(items.withdrawals))
+        return original_get(chunk_id, transaction=transaction)
+
+    repo.get = counting_get  # pyright: ignore[reportAttributeAccessIssue] -- observe the re-read on the fake
+    service = DeleteService(
+        items=items,
+        clock=FixedClock(instant=_T0),
+        facts=cast(IReadChunkFactsRepository, repo),
+        record=cast(IWriteChunkRecordRepository, repo),
+        dependencies=cast(IWriteChunkDependenciesRepository, repo),
+        transactions=cast(IHubTransactions, repo),
+        cycle_lock=threading.Lock(),
+    )
+
+    service.delete(caller_chunk, by="operator")
+
+    assert repo.declared == [
+        (["chk_1"], [work_item_lock(known)]),
+        (["chk_1"], sorted([work_item_lock(known), work_item_lock(folded)])),
+    ]
+    assert writes_after_first_run == [0]
+    assert items.deleted == [("chk_1", "operator", _T0)]
+    assert [w[0] for w in items.withdrawals] == [known, folded]
+
+
+def test_delete_leaves_a_closed_hub_item_unwritten() -> None:
+    open_ref = WorkRef(source="hub", ref="1")
+    delivered = WorkRef(source="hub", ref="2")
+    current = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[open_ref, delivered], minted_at=_T0)
+    service, items = _service(_not_ready_facts(), current=current)
+    items.closed[delivered] = WorkItemClosure.DELIVERED
+
+    service.delete(current, by="operator")
+
+    assert [w[0] for w in items.withdrawals] == [open_ref]
+
+
+def test_delete_declares_the_chunk_and_every_hub_refs_key_once() -> None:
+    hub_ref = WorkRef(source="hub", ref="1")
+    forge = WorkRef(source="forge", ref="3")
+    current = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[hub_ref, forge], minted_at=_T0)
+    items = _FakeItemsRepo()
+    repo = _FakeExclusiveWrites(_not_ready_facts(), [], current, items)
+    service = DeleteService(
+        items=items,
+        clock=FixedClock(instant=_T0),
+        facts=cast(IReadChunkFactsRepository, repo),
+        record=cast(IWriteChunkRecordRepository, repo),
+        dependencies=cast(IWriteChunkDependenciesRepository, repo),
+        transactions=cast(IHubTransactions, repo),
+        cycle_lock=threading.Lock(),
+    )
+
+    service.delete(current, by="operator")
+
+    assert repo.declared == [(["chk_1"], [work_item_lock(hub_ref)])]

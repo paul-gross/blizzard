@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
@@ -38,6 +38,7 @@ from tests.support.scaffolding import (
     seed_promote,
     seed_work_item,
 )
+from tests.support.work_item_units import close_item
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -296,10 +297,11 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
 
 
 def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchanged(tmp_path: Path) -> None:
-    """A delivery that closed the held item first stands: the delete's withdraw write is guarded to open items."""
+    """A delivery that closed the held item first stands: the delete reads its closure under the item's key and
+    writes nothing to it."""
     chunks, items, delete, engine = _stores(tmp_path)
     item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
-    items.close("hub", item.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
+    close_item(items, "hub", item.ref, closure=WorkItemClosure.DELIVERED, at=_T0)
     chunk = chunks.record.get(f"ch_{item.ref}")
     assert chunk is not None
 
@@ -322,7 +324,7 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
         chunks.dependencies.declare(chunk.chunk_id, "ch_prereq", by="author", at=_T0, transaction=handle.transaction)
     original = items.withdraw_open
 
-    def fail_after_withdraw(pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
+    def fail_after_withdraw(pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
         original(pointer, at=at, transaction=transaction)
         raise RuntimeError("injected failure")
 
