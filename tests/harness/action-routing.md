@@ -2,10 +2,10 @@
 
 Use only a **provisioned feature environment**, never the hosted hub. This walk uses the `service-fleet-actions`
 profile: its fenced local hub enables `BLIZZARD_TEST_ACTIONS` and `BLIZZARD_CRASH_FENCE`; a local mock forge and stepped
-mock runner supply the other actors. Each case uses a fresh tenant; the deliberately corrupt edge uses a disposable
-fresh hub. `breakActionEdge` refuses a shared hub and changes one stored edge, because graph creation rejects that edge.
-There are no production test endpoints. The executable fixture is `action-routing.ts` and the actors and graphs are in
-`tests/service/fleet/actions/hub-actions.spec.ts`.
+mock runner supply the other actors. Each case uses a fresh tenant; the unroutable case uses a disposable fresh hub with
+a test-only action implementation that returns an unadvertised choice. Its graph is created through the public API and
+its store is never modified. There are no production test endpoints. The executable fixture is `action-routing.ts` and
+the actors and graphs are in `tests/service/fleet/actions/hub-actions.spec.ts`.
 
 ## Start
 
@@ -76,7 +76,7 @@ mocked. Nothing here is a production test endpoint.
 ## Inspect the matching board and live API
 
 At each outcome checkpoint, `ACTION WALK INSPECT` prints this case's **hub**, **tenant**, direct **board** and **api**
-URLs. They can change at every case: in particular, the invalid-edge case has a different hub. The hub serves the built
+URLs. They can change at every case: in particular, the unroutable case has a different hub. The hub serves the built
 board; do not use the feature environment's normal web server or hub. Open the printed board URL in a browser on the
 same machine. In its developer console run the following, substituting the printed tenant ID, then reload the printed
 board URL:
@@ -120,10 +120,11 @@ by pattern on a shared runner host.
    must match the created `triage` graph. The source `deliver` submission closed with `landed`.
 4. **Escalation.** Permit promotion. At `migration-absent`, expect `needs_human` at `deliver`, escalation cause
    `migration-target-unresolvable`, an `escalated` turn and a `needs-human` event, with no unroutable artifact.
-5. **Unroutable outcome.** The fixture first plants `deliver/done → nowhere` in its own disposable database. Permit
-   promotion. At `unroutable`, expect `needs_human`, one `hub-unroutable-outcome` artifact and one matching operational
-   row. The newest-first event feed has `needs-human` followed by `hub-node-unroutable-outcome`; their timestamps put
-   the unroutable event first chronologically. The subscribed SSE barrier also checks one published unroutable frame.
+5. **Unroutable outcome.** The disposable hub fixture answers `unadvertised` despite its action catalogue and graph
+   advertising `landed`. Permit promotion. At `unroutable`, expect `needs_human`, one `hub-unroutable-outcome` artifact
+   and one matching operational row. The newest-first event feed has `needs-human` followed by
+   `hub-node-unroutable-outcome`; their timestamps put the unroutable event first chronologically. The subscribed SSE
+   barrier also checks one published unroutable frame.
 6. **Conflict bounce.** The fixture arms mock forge `merge_conflict`. Permit promotion. At `merge_conflict`, history is
    `build/pass → deliver/conflict → build`; inspect the conflict turn, bounce envelope, no landing fact, and no landing.
    Continue; the test's tenant and runner are torn down without retrying the build.
@@ -133,4 +134,4 @@ by pattern on a shared runner host.
    event, and newest-first turns with `landed` ahead of at least one `pending`. Continue to teardown.
 
 The printed IDs identify this run only. To run unattended, unset `BLIZZARD_ACTION_WALK`; the same fixture runs without
-operator gates. Test failures retain hub/runner logs. Do not copy the invalid-edge helper to a shared or real hub.
+operator gates. Test failures retain hub/runner logs. The incompatible action fixture is confined to the disposable hub.

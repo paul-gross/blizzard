@@ -27,6 +27,7 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     IntendedMigration,
     QuestionFact,
+    RestartFact,
     TransitionFact,
     decide_close_enqueue,
 )
@@ -46,6 +47,7 @@ from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSu
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
+from blizzard.hub.domain.runners.route import Route
 from tests.support.completion_facts import (
     AT_BUILD,
     BUILD,
@@ -82,8 +84,10 @@ class _Ports:
     migration_transactions: list[object] = field(default_factory=list[object])
     transition_transactions: list[object] = field(default_factory=list[object])
     fact_transactions: list[object] = field(default_factory=list[object])
+    route_transactions: list[object | None] = field(default_factory=list[object | None])
     refusal: FenceRefusal | None = None
     gate: GateDecision | None = None
+    route: Route | None = None
 
     # facts
     def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
@@ -123,8 +127,9 @@ class _Ports:
         return self.refusal or DecisionWrite(wrote=True)
 
     # route / artifacts / registry / hub executor
-    def route_of(self, chunk_id: str, *, transaction: object = None) -> None:
-        return None
+    def route_of(self, chunk_id: str, *, transaction: object = None) -> Route | None:
+        self.route_transactions.append(transaction)
+        return self.route
 
     def load_artifacts(self, chunk_id: str) -> list[Any]:
         return []
@@ -367,6 +372,23 @@ def test_a_gate_resolving_migration_records_the_decision_it_resolves() -> None:
     service.apply(CHUNK, GRAPH, completion_submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)
 
     assert [m["decision_id"] for m in ports.migrations] == ["dec_1"]
+
+
+def test_a_restarted_gate_reads_the_holding_route_in_the_migration_write_transaction() -> None:
+    held = [decision_fact(node_id="nd_build", resolved=True)]
+    restarted = RestartFact("nd_build", "nd_build", "gr_a", 1, T1)
+    facts = replace(AT_BUILD, decisions=held, restarts=[restarted])
+    service, ports, _clock, transaction = _apply_service_with_lock(replace(facts, promoted=False))
+    ports.pre_lock = facts
+    ports.gate = gate_decision(node_id="nd_build", resolved="hand-off")
+    ports.route = Route("chk_1", "runner-a", "ws_1", [], T1)
+
+    result = service.apply(CHUNK, GRAPH, completion_submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)
+
+    assert result.outcome is ApplyOutcome.MIGRATED
+    assert ports.migrations[0]["claimant"] is None
+    assert ports.migration_transactions == [transaction]
+    assert ports.route_transactions == [None, transaction]
 
 
 def test_a_migration_of_a_chunk_the_lock_cannot_find_answers_the_unknown_chunk() -> None:

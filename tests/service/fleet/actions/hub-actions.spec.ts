@@ -1,4 +1,5 @@
-import { actionLeaseGate, actionPause, actionPrompt, actionReadback, breakActionEdge, chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
+import * as path from 'node:path';
+import { actionLeaseGate, actionPause, actionPrompt, actionReadback, chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 const REPO = 'toy-api';
 const LANDED = 'ACTION_LANDED.md';
@@ -123,8 +124,8 @@ for (const target of ['triage', 'absent'] as const) {
   });
 }
 
-test.describe('an invalid stored edge', () => {
-  test.use({ isolation: 'fresh-hub' });
+test.describe('an unadvertised action answer', () => {
+  test.use({ isolation: 'fresh-hub', hubEnv: { PYTHONPATH: path.resolve(__dirname, '../../../harness/unroutable-daemon') } });
 
   test('test_an_unroutable_hub_outcome_escalates_once', async ({ api, issue, runnerHost, testHub, events, cli, tenant, workerCheckpoint }) => {
     const graph = actionGraph(actionPrompt('pass\n', workerCheckpoint), { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
@@ -132,7 +133,6 @@ test.describe('an invalid stored edge', () => {
     } } } }, 'deliver');
     const created = await api.post('/api/graphs', { data: { definition_yaml: graph } });
     expect(created.status).toBe(201);
-    breakActionEdge(testHub, created.body.graph_id, 'deliver', 'done');
     const { chunk } = await issue('unroutable hub action');
     const subscription = await events.open({ barrier: true });
     actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
@@ -143,6 +143,8 @@ test.describe('an invalid stored edge', () => {
     await actionReadback('unroutable', chunk.chunk_id, api, cli, testHub, tenant);
     actionPause('Inspect the unroutable event and escalation readback');
     expect(detail.current_node_name).toBe('deliver');
+    expect(detail.escalation?.cause).toBe('unroutable-outcome');
+    expect(detail.escalation?.detail).toContain('unadvertised');
     expect((detail.artifacts as { name: string }[]).filter((item) => item.name === 'hub-unroutable-outcome')).toHaveLength(1);
     const frames = await subscription.barrier();
     expect(frames.filter((frame) => frame.event === 'event-logged' && frame.data?.chunk_id === chunk.chunk_id && frame.data?.kind === 'hub-node-unroutable-outcome')).toHaveLength(1);
