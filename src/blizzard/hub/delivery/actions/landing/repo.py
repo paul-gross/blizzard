@@ -155,7 +155,9 @@ class RepoLanding:
         try:
             return await call
         except ForgeAuthRefused as exc:
-            raise ForgeEscalation(self._auth_refused(exc)) from exc
+            raise ForgeEscalation(
+                forge_auth_escalation(exc, repo=self.repo, forge_label=self.forge_label, record=self.record)
+            ) from exc
         except ForgeRejected as exc:
             if exc.reason != ForgeRejected.AUTH:
                 raise
@@ -169,34 +171,6 @@ class RepoLanding:
                 f"this credential ({exc})"
             )
             raise ForgeEscalation(ActionEscalation(EscalationCause.FORGE_CONFIG, detail)) from exc
-
-    def _auth_refused(self, exc: ForgeAuthRefused) -> ActionEscalation:
-        """The ``forge-auth`` escalation of a credential the forge refused: what was refused and why, the forge's own
-        sanitized words, the credential or secret the call carried, and what to do about it."""
-        diagnostic = exc.diagnostic
-        needed = OPERATION_CAPABILITY.get(diagnostic.operation)
-        capability = str(needed) if needed is not None else None
-        detail = "\n".join(
-            (
-                f"{self.repo} on forge {self.forge_label}: {_operation_sentence(diagnostic)} was refused: "
-                f"{refusal_sentence(exc.refusal)}.",
-                f"GitHub said: {_forge_said(diagnostic)}.",
-                f"{self._carried(diagnostic)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
-            )
-        )
-        reason = ForgeAuthReason(
-            refusal=exc.refusal,
-            diagnostic=diagnostic,
-            repository=RepositoryId(self.record.record),
-            forge=self.record.forge_id,
-        )
-        return ActionEscalation(EscalationCause.FORGE_AUTH, detail, auth=reason)
-
-    def _carried(self, diagnostic: ForgeDiagnostic) -> str:
-        """The credential the refused call carried, as its binding and variant; the secret when it names none."""
-        if diagnostic.credential is None:
-            return f"Secret {self.record.secret_name}"
-        return f"Credential {diagnostic.credential} ({diagnostic.binding}, {diagnostic.variant})"
 
     async def compare(self, base: str, head: str) -> Comparison | None:
         """The forge's ``base...head`` comparison; ``None`` when the forge refused it or does not know a
@@ -222,6 +196,40 @@ class RepoLanding:
         if tip is None:
             raise LandedRevisionUnknown(f"{where} does not exist, so it has no live tip")
         return tip
+
+
+def forge_auth_escalation(
+    exc: ForgeAuthRefused, *, repo: str, forge_label: str, record: ResolvedRepository
+) -> ActionEscalation:
+    """The ``forge-auth`` escalation of a credential the forge refused for ``repo``, acting as ``record`` on the forge
+    labelled ``forge_label``: what was refused and why, the forge's own sanitized words, the credential or secret the
+    call carried, and what to do about it."""
+    diagnostic = exc.diagnostic
+    needed = OPERATION_CAPABILITY.get(diagnostic.operation)
+    capability = str(needed) if needed is not None else None
+    detail = "\n".join(
+        (
+            f"{repo} on forge {forge_label}: {_operation_sentence(diagnostic)} was refused: "
+            f"{refusal_sentence(exc.refusal)}.",
+            f"GitHub said: {_forge_said(diagnostic)}.",
+            f"{_carried(diagnostic, record)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
+        )
+    )
+    reason = ForgeAuthReason(
+        refusal=exc.refusal,
+        diagnostic=diagnostic,
+        repository=RepositoryId(record.record),
+        forge=record.forge_id,
+    )
+    return ActionEscalation(EscalationCause.FORGE_AUTH, detail, auth=reason)
+
+
+def _carried(diagnostic: ForgeDiagnostic, record: ResolvedRepository) -> str:
+    """The credential the refused call carried, as its binding and any variant; the secret when it names none."""
+    if diagnostic.credential is None:
+        return f"Secret {record.secret_name}"
+    kind = diagnostic.binding if diagnostic.variant is None else f"{diagnostic.binding}, {diagnostic.variant}"
+    return f"Credential {diagnostic.credential} ({kind})"
 
 
 def _operation_sentence(diagnostic: ForgeDiagnostic) -> str:

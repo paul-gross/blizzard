@@ -29,9 +29,10 @@ from blizzard.hub.domain.config.repositories import RepositoryEdit, ResolvedRepo
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
-from blizzard.hub.forge.landing import CommitPresence, Comparison, VisitForges
+from blizzard.hub.forge.landing import CommitPresence, Comparison, ForgeAuthRefused, VisitForges
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
@@ -782,3 +783,75 @@ def test_a_credential_unavailable_while_checking_what_the_forge_offers_refuses_t
     assert world.hooked.passes == 0
     refusal = _refusal(world, chunk_id)
     assert refusal is not None and "secret fixture-forge-token is retired" in refusal
+
+
+# --- a forge that refuses the access an authorization is built on --------------------------------------------------
+
+
+def _suspended() -> ForgeAuthRefused:
+    """The refusal of an App installation's suspended mint, as the forge registry raises it at build."""
+    diagnostic = ForgeDiagnostic(
+        status=403,
+        operation="mint_token",
+        endpoint="POST /app/installations/{installation_id}/access_tokens",
+        repository=_REPO,
+        message="This installation has been suspended",
+        documentation_url=None,
+        request_id=None,
+        accepted_permissions=None,
+        credential="app",
+        binding="github.app-installation",
+    )
+    return ForgeAuthRefused(ClassifiedRefusal(AuthRefusal.INSTALLATION_SUSPENDED, diagnostic))
+
+
+def _forge_auth(world: _World, chunk_id: str) -> tuple[str, str]:
+    with world.hub.engine.connect() as conn:
+        cause, detail = conn.execute(
+            hub_scoped(
+                select(s.escalations.c.cause, s.escalations.c.detail).where(s.escalations.c.chunk_id == chunk_id)
+            )
+        ).one()
+        kinds = conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id))).scalars()
+        assert "forge-auth-refused" in list(kinds)
+    return cause, detail
+
+
+def test_a_forge_refusing_the_access_checked_for_what_it_offers_escalates_forge_auth_before_any_pass(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = world.at_step("test.hooked")
+
+    def refused(forge: Any, repository: Any) -> frozenset[Capability]:
+        raise _suspended()
+
+    def required(target: ResolvedRepository) -> frozenset[Capability]:
+        return frozenset({Capability.CHANGES_READ})
+
+    monkeypatch.setattr(world.turns, "_requirements", {"test.hooked": required})
+    monkeypatch.setattr(world.hub.services.forges, "offered", refused)
+
+    world.tick()
+
+    assert world.hooked.passes == 0
+    cause, detail = _forge_auth(world, chunk_id)
+    assert cause == "forge-auth"
+    assert "the App's installation is suspended" in detail and "Unsuspend the App's installation." in detail
+    assert "Credential app (github.app-installation)." in detail
+
+
+def test_a_forge_refusing_the_access_its_roles_are_built_on_escalates_forge_auth_before_any_pass(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = world.at_step("test.hooked")
+
+    def refused(repository: Any, *, cut_off: Any, priority: Any) -> Any:
+        raise _suspended()
+
+    monkeypatch.setattr(world.hub.services.forges, "repository_forge", refused)
+
+    world.tick()
+
+    assert world.hooked.passes == 0
+    cause, detail = _forge_auth(world, chunk_id)
+    assert cause == "forge-auth" and f"{_REPO} on forge" in detail

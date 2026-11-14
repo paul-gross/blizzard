@@ -70,7 +70,7 @@ def test_create_stores_revision_one_and_no_plaintext(world: _World) -> None:
     assert record is not None
     assert (record.revision, record.replaced_by, record.replaced_at, record.created_at) == (1, "op", _NOW, _NOW)
     assert "tok-planted" not in repr(tuple(world.raw("gh")))
-    assert world.reader.reveal(SecretName.parse("gh")).expose() == "tok-planted"
+    assert world.reader.reveal(SecretName.parse("gh")).value.expose() == "tok-planted"
 
 
 def test_create_refuses_a_taken_name(world: _World) -> None:
@@ -92,7 +92,8 @@ def test_replace_moves_to_the_next_revision_and_reseals(world: _World) -> None:
     assert (replaced.revision, replaced.replaced_by, replaced.created_at) == (2, "alice", _NOW)
     assert replaced.replaced_at == _NOW + timedelta(minutes=5)
     assert world.raw("gh").nonce != first.nonce
-    assert world.reader.reveal(SecretName.parse("gh")).expose() == "new"
+    revealed = world.reader.reveal(SecretName.parse("gh"))
+    assert (revealed.value.expose(), revealed.revision) == ("new", 2)
 
 
 def test_replace_from_a_stale_revision_is_a_conflict_naming_the_current_one(world: _World) -> None:
@@ -104,7 +105,7 @@ def test_replace_from_a_stale_revision_is_a_conflict_naming_the_current_one(worl
     with pytest.raises(SecretRevisionConflict) as caught:
         world.authoring.replace_secret(stale, "v3", OP)
     assert caught.value.current == 2
-    assert world.reader.reveal(SecretName.parse("gh")).expose() == "v2"
+    assert world.reader.reveal(SecretName.parse("gh")).value.expose() == "v2"
 
 
 def test_replace_with_a_mismatched_if_match_is_refused_before_writing(world: _World) -> None:
@@ -135,7 +136,7 @@ def test_a_retired_secret_refuses_replace_and_reveal_until_enabled(world: _World
 
     world.authoring.enable_secret(retired, OP)
     assert world.store.retired_names() == set()
-    assert world.reader.reveal(SecretName.parse("gh")).expose() == "v1"
+    assert world.reader.reveal(SecretName.parse("gh")).value.expose() == "v1"
 
 
 def test_every_metadata_load_carries_the_retired_state(world: _World) -> None:

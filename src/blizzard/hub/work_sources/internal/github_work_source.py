@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar
 
@@ -29,7 +29,7 @@ from blizzard.hub.domain.chunk.ports.work_sources import (
     WorkItemGoneError,
 )
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
-from blizzard.hub.domain.kernel.forge_refusals import ClassifiedRefusal
+from blizzard.hub.domain.kernel.forge_refusals import ClassifiedRefusal, ForgeMintRefused
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateGate
 from blizzard.hub.work_sources.refusal_reader import IWorkSourceRefusalReader
 from blizzard.hub.work_sources.source import (
@@ -135,16 +135,22 @@ class GitHubWorkSource:
     def _turned_away(self) -> datetime | None:
         return self._gate.admit() if self._gate is not None else None
 
-    def _rate_refusal(self, exc: httpx2.HTTPError) -> datetime | None:
+    def _rate_refusal(self, exc: httpx2.HTTPError | ForgeMintRefused) -> datetime | None:
         """When ``exc`` is the forge refusing for rate, the instant it lifts — the gate marking the budget spent."""
         if self._gate is None or not isinstance(exc, httpx2.HTTPStatusError):
             return None
         response = exc.response
         return self._gate.refused(response.status_code, response.headers, _message(response))
 
-    def _auth_refusal(self, exc: httpx2.HTTPError, *, operation: str, endpoint: str) -> ClassifiedRefusal | None:
-        """When ``exc`` is a 401 or 403, the forge refusing the call's credential, classified. Ask only once the rate
-        gate has declined the answer as a rate refusal."""
+    def _auth_refusal(
+        self, exc: httpx2.HTTPError | ForgeMintRefused, *, operation: str, endpoint: str
+    ) -> ClassifiedRefusal | None:
+        """When ``exc`` is a 401 or 403, the forge refusing the call's credential, classified; when it is a refused
+        mint, that refusal on this source's repository. Ask only once the rate gate has declined the answer as a rate
+        refusal."""
+        if isinstance(exc, ForgeMintRefused):
+            refused = exc.classified
+            return ClassifiedRefusal(refused.refusal, replace(refused.diagnostic, repository=self._repo))
         if self._refusals is None or self._forge_id is None or not isinstance(exc, httpx2.HTTPStatusError):
             return None
         response = exc.response
@@ -161,7 +167,7 @@ class GitHubWorkSource:
         )
 
     def _annotate_error(
-        self, message: str, exc: httpx2.HTTPError, *, operation: str, endpoint: str
+        self, message: str, exc: httpx2.HTTPError | ForgeMintRefused, *, operation: str, endpoint: str
     ) -> WorkAnnotateError:
         """``exc`` as the annotation error it fails with: a rate refusal's retry instant, else a credential refusal's
         sentence, remedy, and refusal."""
@@ -187,7 +193,7 @@ class GitHubWorkSource:
             endpoint = "GET /repos/{owner}/{repo}/issues/{number}/comments"
             comments = self._client.get(f"{base}/comments")
             comments.raise_for_status()
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, ForgeMintRefused) as exc:
             _log.error("work-item fetch failed", source=pointer.source, ref=pointer.ref, error=str(exc))
             resume = self._rate_refusal(exc)
             refused = None if resume is not None else self._auth_refusal(exc, operation="fetch", endpoint=endpoint)
@@ -233,12 +239,12 @@ class GitHubWorkSource:
             )
             answer.raise_for_status()
             payload = as_table(answer.json()) or {}
-        except (httpx2.HTTPError, ValueError) as exc:
+        except (httpx2.HTTPError, ForgeMintRefused, ValueError) as exc:
             _log.error("work-item batch fetch failed", source=self._name, count=len(pointers), error=str(exc))
-            resume = self._rate_refusal(exc) if isinstance(exc, httpx2.HTTPError) else None
+            resume = None if isinstance(exc, ValueError) else self._rate_refusal(exc)
             refused = (
                 self._auth_refusal(exc, operation="fetch_many", endpoint="POST /graphql")
-                if resume is None and isinstance(exc, httpx2.HTTPError)
+                if resume is None and not isinstance(exc, ValueError)
                 else None
             )
             if refused is not None:
@@ -300,7 +306,7 @@ class GitHubWorkSource:
                 resp = self._client.post(f"/repos/{self._repo}/labels", json={"name": label.name, "color": label.color})
                 if resp.status_code != 422:
                     resp.raise_for_status()
-            except httpx2.HTTPError as exc:
+            except (httpx2.HTTPError, ForgeMintRefused) as exc:
                 _log.error("label bootstrap failed", source=self._name, label=label.name, error=str(exc))
                 raise self._annotate_error(
                     f"failed to bootstrap label {label.name!r} for {self._name}",
@@ -324,7 +330,7 @@ class GitHubWorkSource:
             resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
             if resp.status_code != 404:
                 resp.raise_for_status()
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, ForgeMintRefused) as exc:
             _log.error("set-status failed", source=self._name, ref=pointer.ref, marker=marker.value, error=str(exc))
             raise self._annotate_error(
                 f"failed to set {marker.value} on {self._name}#{pointer.ref}",
@@ -344,7 +350,7 @@ class GitHubWorkSource:
                 resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{Label(marker).name}")
                 if resp.status_code != 404:
                     resp.raise_for_status()
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, ForgeMintRefused) as exc:
             _log.error("clear-status failed", source=self._name, ref=pointer.ref, error=str(exc))
             raise self._annotate_error(
                 f"failed to clear status on {self._name}#{pointer.ref}",
@@ -381,7 +387,7 @@ class GitHubWorkSource:
                     next_link = resp.links.get("next")
                     url = next_link["url"] if next_link else None
                     params = None  # the Link header's next URL already carries the query
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, ForgeMintRefused) as exc:
             _log.error("marked-refs discovery failed", source=self._name, error=str(exc))
             raise self._annotate_error(
                 f"failed to discover marked refs for {self._name}",
@@ -409,7 +415,7 @@ class GitHubWorkSource:
             if resp.status_code in (404, 410):
                 raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
             resp.raise_for_status()
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, ForgeMintRefused) as exc:
             _log.error("close failed", source=self._name, ref=pointer.ref, error=str(exc))
             raise WorkCloseError(
                 f"failed to close {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)

@@ -189,9 +189,18 @@ class IWriteSecretRepository(ISecretCatalog, Protocol):
         ...
 
 
+@domain_model
+@dataclass(frozen=True)
+class RevealedSecret:
+    """A revealed secret's value and the revision it was sealed under, read together so the two always match."""
+
+    value: SecretValue
+    revision: int
+
+
 class ISecretReader(Protocol):
     """The one decryption path — injected only into objects that call external systems."""
 
-    def reveal(self, name: SecretName) -> SecretValue:
-        """Raises :class:`SecretNotFound` or :class:`SecretRetired`."""
+    def reveal(self, name: SecretName) -> RevealedSecret:
+        """The value and its revision; raises :class:`SecretNotFound` or :class:`SecretRetired`."""
         ...

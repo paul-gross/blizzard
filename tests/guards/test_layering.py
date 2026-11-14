@@ -3785,7 +3785,7 @@ def test_the_domain_imports_no_outer_hub_package() -> None:
     assert not _violations(_HUB_DIR / "domain", ("blizzard.hub.egress", "blizzard.hub.work_sources"))
 
 
-_SECRET_PLAINTEXT_NAMES = frozenset({"SecretValue", "ISecretReader", "ISealedSecretRepository"})
+_SECRET_PLAINTEXT_NAMES = frozenset({"SecretValue", "RevealedSecret", "ISecretReader", "ISealedSecretRepository"})
 _REQUEST_PLANE_DIRS = (_HUB_DIR / "api", _HUB_DIR / "cli", _WIRE_DIR)
 
 

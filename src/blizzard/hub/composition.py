@@ -233,7 +233,11 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
-from blizzard.hub.forge.internal.factory import build_forge_authorizations, build_forge_registry
+from blizzard.hub.forge.internal.factory import (
+    build_forge_authorizations,
+    build_forge_registry,
+    build_installation_tokens,
+)
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
@@ -953,7 +957,8 @@ class HubCore:
 @dataclass(frozen=True)
 class LiveConfig:
     """One tenant's built-object cache and its forge authorization boundary, the one holder of the secret reader its
-    builders authenticate through (``bzh:secret-write-only``)."""
+    builders authenticate through (``bzh:secret-write-only``) and of the tenant's installation tokens, minted on the
+    tenant's clock."""
 
     objects: ConfigObjectCache
     authorizations: IForgeAuthorizations
@@ -964,7 +969,9 @@ def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveCon
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
         authorizations=build_forge_authorizations(
-            StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher)
+            StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher),
+            forges=stores.forge_records,
+            tokens=build_installation_tokens(stores.clock),
         ),
     )
 
