@@ -10,10 +10,10 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialDraft,
-    CredentialId,
     CredentialSlug,
     CredentialUnavailable,
     IReadCredentialRepository,
@@ -67,6 +67,17 @@ class _Credentials:
 
     def resolve(self, value: str) -> ConfiguredCredential | None:
         return self._held.get(CredentialId(value))
+
+    def get_by_authority(
+        self, forge_id: ForgeId, authority: str, *, transaction: Transaction | None = None
+    ) -> ConfiguredCredential | None:
+        return next(
+            (r for r in self._held.values() if r.fields.forge_id == forge_id and r.authority == authority),
+            None,
+        )
+
+    def held_slugs(self, *, transaction: Transaction | None = None) -> frozenset[str]:
+        return frozenset(record.fields.slug for record in self._held.values())
 
 
 _credentials_conforms: type[IReadCredentialRepository] = _Credentials

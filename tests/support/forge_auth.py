@@ -9,7 +9,8 @@ import httpx2
 import pytest
 
 from blizzard.foundation.secrets.value import SecretValue
-from blizzard.hub.domain.config.credentials import CredentialId, CredentialUnavailable, ResolvedCredential
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import CredentialUnavailable, ResolvedCredential
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope, IForgeAuthorizations
 from blizzard.hub.forge.internal.github_auth import github_token_authorization

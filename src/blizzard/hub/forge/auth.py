@@ -13,7 +13,8 @@ from typing import Protocol
 import httpx2
 
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.credentials import CredentialId, ResolvedCredential
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import ResolvedCredential
 
 
 class ForgeScope(StrEnum):

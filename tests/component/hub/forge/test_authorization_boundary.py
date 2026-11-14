@@ -21,7 +21,8 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core, build_live_config
 from blizzard.hub.delivery.action_loop import ActionLoop
-from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialId
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import CredentialDraft
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryId
 from blizzard.hub.domain.config.secrets import SecretName

@@ -8,7 +8,8 @@ import pytest
 
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.credentials import CredentialId, CredentialUnavailable, ResolvedCredential
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import CredentialUnavailable, ResolvedCredential
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.forge.auth import ForgeScope

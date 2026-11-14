@@ -10,7 +10,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import TYPE_CHECKING, NewType, Protocol
+from typing import NewType, Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
@@ -34,9 +34,6 @@ from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
-
-if TYPE_CHECKING:
-    from blizzard.hub.domain.config.credentials import CredentialId
 
 WorkSourceId = NewType("WorkSourceId", str)
 
