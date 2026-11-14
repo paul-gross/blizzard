@@ -3642,6 +3642,487 @@
       "path": "hub config",
       "short_help": "Read, export, and apply the tenant's configuration."
     },
+    "credential": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "create": {
+          "help": "Add credential SLUG at revision 1 on the forge --forge names.\n\nRefused when SLUG is another credential's, when another credential on the forge already acts as the same\nauthority, or when the secret is missing or retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The credential's display name; its slug when omitted.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge the credential acts on, by id or slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "forge",
+              "opts": [
+                "--forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "How the credential authenticates: github.token.",
+              "hidden": false,
+              "kind": "option",
+              "name": "binding",
+              "opts": [
+                "--binding"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The stored secret the credential reads.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "variant",
+              "opts": [
+                "--variant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential create",
+          "short_help": "Add credential SLUG at revision 1 on the forge --forge names."
+        },
+        "edit": {
+          "help": "Change only the fields given on CREDENTIAL; a no-op keeps its revision.\n\nRefused when the new slug is another credential's, when --if-match names a stale revision, or when the change\nwould take away a capability an enabled repository acting with it needs.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "credential",
+              "opts": [
+                "credential"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the one it leaves keeps naming the credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new secret; every record naming the credential follows it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "secret",
+              "opts": [
+                "--secret"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "variant",
+              "opts": [
+                "--variant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "help": "Refuse the change unless the credential is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential edit",
+          "short_help": "Change only the fields given on CREDENTIAL; a no-op keeps its revision."
+        },
+        "enable": {
+          "help": "Re-enable a retired CREDENTIAL. Refused while its secret is retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "credential",
+              "opts": [
+                "credential"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the credential is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential enable",
+          "short_help": "Re-enable a retired CREDENTIAL."
+        },
+        "get": {
+          "help": "Show CREDENTIAL \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields and every repository and\nwork source naming it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "credential",
+              "opts": [
+                "credential"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential get",
+          "short_help": "Show CREDENTIAL \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields and every repository and work source naming it."
+        },
+        "list": {
+          "help": "List credentials by slug with their id, revision, state, forge, binding and authority.",
+          "params": [
+            {
+              "help": "Also list retired credentials.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential list",
+          "short_help": "List credentials by slug with their id, revision, state, forge, binding and authority."
+        },
+        "retire": {
+          "help": "Retire CREDENTIAL, refusing while an enabled record names it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "credential",
+              "opts": [
+                "credential"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the credential is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential retire",
+          "short_help": "Retire CREDENTIAL, refusing while an enabled record names it."
+        }
+      },
+      "help": "Create, list, get, edit, retire and enable the credentials repositories and work sources act with.",
+      "params": [],
+      "path": "hub credential",
+      "short_help": "Create, list, get, edit, retire and enable the credentials repositories and work sources act with."
+    },
     "decision": {
       "commands": {
         "list": {
@@ -8251,7 +8732,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nRefused when no --forge names the forge, when SLUG is another repository's current slug, when the forge, owner\nand repo are already taken \u2014 a retired repository keeps its claim \u2014 when the secret is missing or retired, or\nwhen the forge cannot honour --policy. The hub resolves a chunk's commits against the record on its next deliver.",
+          "help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nNeeds --credential or the deprecated --secret; both must name the same credential. Refused when no --forge names\nthe forge, when SLUG is another repository's current slug, when the forge, owner\nand repo are already taken \u2014 a retired repository keeps its claim \u2014 when the secret is missing or retired, or\nwhen the forge cannot honour --policy. The hub resolves a chunk's commits against the record on its next deliver.",
           "params": [
             {
               "hidden": false,
@@ -8325,14 +8806,26 @@
               "type": "text"
             },
             {
-              "help": "The stored secret holding the forge token.",
+              "help": "The credential the repository acts with, by id or slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "credential",
+              "opts": [
+                "--credential"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Deprecated: the stored secret holding the forge token, resolved to its credential \u2014 give --credential.",
               "hidden": false,
               "kind": "option",
               "name": "secret",
               "opts": [
                 "--secret"
               ],
-              "required": true,
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -8501,7 +8994,19 @@
               "type": "text"
             },
             {
-              "help": "The new forge-token secret.",
+              "help": "The credential to act with, by id or slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "credential",
+              "opts": [
+                "--credential"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Deprecated: the new forge-token secret \u2014 give --credential.",
               "hidden": false,
               "kind": "option",
               "name": "secret",
@@ -12468,7 +12973,19 @@
               "type": "text"
             },
             {
-              "help": "The stored secret holding the provider credential.",
+              "help": "The credential the source acts with, by id or slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "credential",
+              "opts": [
+                "--credential"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Deprecated: the stored secret holding the provider credential \u2014 give --credential.",
               "hidden": false,
               "kind": "option",
               "name": "secret",
@@ -12608,7 +13125,19 @@
               "type": "text"
             },
             {
-              "help": "The new credential secret.",
+              "help": "The credential to act with, by id or slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "credential",
+              "opts": [
+                "--credential"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Deprecated: the new credential secret \u2014 give --credential.",
               "hidden": false,
               "kind": "option",
               "name": "secret",
