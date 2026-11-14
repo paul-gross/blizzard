@@ -8,6 +8,7 @@ import { ConfigMaster } from './config-master';
 import { ConfigFormDialog } from './config-form-dialog';
 import type { RevisionRowVm } from './config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
+import { SECRET_CREATE_FIELDS } from './secrets/secrets.model';
 
 /**
  * The Admin config surfaces' real-render proof (the tooled half of
@@ -108,6 +109,23 @@ async function mountForgeForm() {
   return fixture;
 }
 
+const PEM = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----\n';
+
+async function mountSecretForm() {
+  await TestBed.configureTestingModule({
+    imports: [ConfigFormDialog], providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(ConfigFormDialog);
+  fixture.componentRef.setInput('heading', 'New secret');
+  fixture.componentRef.setInput('mode', 'create');
+  fixture.componentRef.setInput('fields', SECRET_CREATE_FIELDS);
+  fixture.componentRef.setInput('initial', { name: 'app-key', value: PEM });
+  fixture.componentRef.setInput('submitLabel', 'Create');
+  fixture.componentRef.setInput('testidPrefix', 'secret-form');
+  await fixture.whenStable();
+  return fixture;
+}
+
 async function sweep(
   width: number,
   body: (root: HTMLElement) => Promise<void> | void,
@@ -162,6 +180,20 @@ describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
     }, mountForgeForm);
   });
+  it.each([1280, 390, 320])('secret form at %ipx: the value is a masked multi-line control', async (width) => {
+    await sweep(width, () => {
+      const value = document.querySelector<HTMLTextAreaElement>('[data-testid="secret-form-field-value"]')!;
+      const name = document.querySelector<HTMLInputElement>('[data-testid="secret-form-field-name"]')!;
+      expect(value?.tagName).toBe('TEXTAREA');
+      expect(getComputedStyle(value).getPropertyValue('-webkit-text-security')).toBe('disc');
+      expect(value.value).toBe(PEM);
+      expect(value.getBoundingClientRect().height).toBeGreaterThan(2 * name.getBoundingClientRect().height);
+      expect(value.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(document.querySelector<HTMLButtonElement>('[data-testid="secret-form-submit"]')!.disabled).toBe(false);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    }, mountSecretForm);
+  });
+
   it('desktop: the detail carries its write controls and no CLI command, with no overflow', async () => {
     await sweep(
       1280,

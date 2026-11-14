@@ -71,4 +71,16 @@ describe('secret mutations', () => {
     });
     expect(invalidatedKeys(spy)).toContainEqual(hubConfigKey);
   });
+
+  it('sends a PEM value with its line breaks intact on create and replace', async () => {
+    const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----\n';
+    const create = TestBed.runInInjectionContext(() => injectCreateSecretMutation());
+    const replace = TestBed.runInInjectionContext(() => injectReplaceSecretMutation());
+
+    await create.mutateAsync({ name: 'app-key', value: pem });
+    await replace.mutateAsync({ name: 'app-key', revision: 1, value: pem });
+
+    expect(stub.forRoute('/api/secrets', 'POST')[0].body).toEqual({ name: 'app-key', value: pem });
+    expect(stub.forRoute('/api/secrets/app-key/value', 'PUT')[0].body).toEqual({ value: pem });
+  });
 });

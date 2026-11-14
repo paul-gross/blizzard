@@ -76,6 +76,24 @@ describe('ConfigFormDialog', () => {
     expect(input.getAttribute('type')).toBe('password');
   });
 
+  it('renders a secret-text field as a masked textarea and emits its value untrimmed', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [{ key: 'value', label: 'Value', kind: 'secret-text', required: true }]);
+    await fixture.whenStable();
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+    const area = el(fixture, 'dlg-field-value') as HTMLTextAreaElement;
+    expect(area.tagName).toBe('TEXTAREA');
+    expect(area.classList).toContain('masked');
+
+    area.value = 'line one\nline two\n';
+    area.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+
+    expect(emitted).toEqual([{ value: 'line one\nline two\n' }]);
+  });
+
   it('offers palette colors and emits the chosen color', async () => {
     const fixture = await mount('create');
     fixture.componentRef.setInput('fields', [{ key: 'color', label: 'Color', kind: 'color', options: [

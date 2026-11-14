@@ -129,7 +129,8 @@
  *   - projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts — the Admin
  *     config surfaces: a desktop detail carries its write controls and a
  *     phone's carries none and shows the CLI command, both without horizontal
- *     overflow at 1280/390/320px.
+ *     overflow at 1280/390/320px; the secret form's value is a masked
+ *     multi-line control at the same widths.
  *   - projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts — the
  *     members table: with a tenant name and member details of any length, the
  *     page never scrolls sideways at 360/768/1280px; a table wider than a

@@ -2,7 +2,18 @@ import type { SecretView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { referenceCount, secretBadges, secretCreate, secretRecordVm, secretRows } from './secrets.model';
+import { createBody } from '../config-edit.model';
+import {
+  referenceCount,
+  SECRET_CREATE_FIELDS,
+  SECRET_REPLACE_FIELDS,
+  secretBadges,
+  secretCreate,
+  secretRecordVm,
+  secretRows,
+} from './secrets.model';
+
+const PEM = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----\n';
 
 const USED: SecretView = {
   name: 'gh-blizzard',
@@ -85,5 +96,15 @@ describe('secretRecordVm', () => {
 
   it('creates a secret from the form, naming exactly its name and value', () => {
     expect(secretCreate({ name: 'gh-blizzard', value: 's3cret' })).toEqual({ name: 'gh-blizzard', value: 's3cret' });
+  });
+
+  it('sends a pasted PEM in the create body with its line breaks intact', () => {
+    const body = secretCreate(createBody(SECRET_CREATE_FIELDS, { name: ' app-key ', value: PEM }));
+    expect(body).toEqual({ name: 'app-key', value: PEM });
+  });
+
+  it('takes the value as masked multi-line text on create and replace', () => {
+    expect(SECRET_CREATE_FIELDS.find((field) => field.key === 'value')?.kind).toBe('secret-text');
+    expect(SECRET_REPLACE_FIELDS.map((field) => field.kind)).toEqual(['secret-text']);
   });
 });
