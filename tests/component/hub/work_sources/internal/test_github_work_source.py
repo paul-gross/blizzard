@@ -336,7 +336,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
     authoring.create_secret(SecretName.parse("gh"), "token", OP)
     record = authoring.create_work_source("one", None, _github("acme/one").fields(seed_forge(engine)), OP)
     if unavailable == "unknown-credential":
-        record = replace(record, credential_id=CredentialId("cred_gone"))
+        record = replace(record, fields=replace(record.fields, credential_id=CredentialId("cred_gone")))
     else:
         record = authoring.retire_work_source(record, OP)
         secret = stores.secrets.get("gh")
