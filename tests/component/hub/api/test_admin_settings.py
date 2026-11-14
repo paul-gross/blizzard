@@ -50,6 +50,32 @@ def test_change_notifications_only_follow_commits(tmp_path: Path) -> None:
     unsubscribe()
 
 
+def test_nonfinite_settings_are_rejected_without_changing_export(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    headers = {"If-Match": "0", "Content-Type": "application/json"}
+    for number in ("1e309", "-1e309", "NaN", "Infinity", "-Infinity"):
+        patch = client.patch(
+            path, headers=headers, content=f'{{"set": {{"auth.login_throttle.refill_seconds": {number}}}}}'
+        )
+        assert patch.status_code == 422, patch.text
+        assert patch.json()["code"] == "settings_invalid"
+        for suffix in ("", "?dry_run=true"):
+            apply = client.post(
+                path + "/apply" + suffix,
+                headers=headers,
+                content=f'{{"auth": {{"login_throttle": {{"refill_seconds": {number}}}}}}}',
+            )
+            assert apply.status_code == 422, apply.text
+            assert apply.json()["code"] == "settings_invalid"
+    assert client.get(path).json()["revision"] == 0
+    assert client.get(path + "/export").json() == {}
+    assert client.get(path + "/changes").json()["changes"] == []
+    valid = client.patch(path, headers={"If-Match": "0"}, json={"set": {"auth.login_throttle.refill_seconds": 1.5}})
+    assert valid.status_code == 200
+    assert client.get(path + "/export").json() == {"auth": {"login_throttle": {"refill_seconds": 1.5}}}
+
+
 def test_read_write_history_apply_and_round_trip(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     client = hub.client

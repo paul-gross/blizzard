@@ -14,12 +14,17 @@ import pytest
 import sqlalchemy as sa
 from httpx2 import Response
 
+from blizzard.foundation.flags import FlagRegistry
+from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.hub.auth.models import ProviderIdentity
+from blizzard.hub.composition import build_hub_settings
 from blizzard.hub.config import LoginThrottleConfig
+from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.store import schema
 from blizzard.wire import auth as auth_wire
 from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
-from tests.support.scaffolding import HubHarness, build_hub, hub_scoped
+from tests.support.scaffolding import HubHarness, build_hub, hub_level_connections, hub_scoped
 
 # --- providers ------------------------------------------------------------------
 
@@ -389,3 +394,28 @@ def test_login_throttle_capacity_is_configurable(tmp_path: Path) -> None:
     )
 
     assert _throttled_statuses(hub, 3)[2] == 429
+
+
+def test_login_rebuilds_throttle_after_live_settings_edit(tmp_path: Path) -> None:
+    github = FakeOAuthProvider(name="github")
+    hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
+    footing = HubSettingsFooting(
+        tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {}, document={"auth": {"mode": "oauth"}}
+    )
+    settings = build_hub_settings(hub_level_connections(hub.engine), hub.clock, footing)
+    hub.wired_app.state.hub_settings = settings
+
+    settings.authoring.apply(
+        Change("edit", sets={"auth.login_throttle.capacity": 1}), if_match=0, door="api", actor="test"
+    )
+    assert _throttled_statuses(hub, 2) == [307, 429]
+
+    settings.authoring.apply(
+        Change("edit", sets={"auth.login_throttle.capacity": 2}), if_match=1, door="api", actor="test"
+    )
+    assert _throttled_statuses(hub, 3) == [307, 307, 429]
+
+    settings.authoring.apply(
+        Change("edit", sets={"transcripts.record_max_bytes": 42}), if_match=2, door="api", actor="test"
+    )
+    assert _throttled_statuses(hub, 1) == [429]

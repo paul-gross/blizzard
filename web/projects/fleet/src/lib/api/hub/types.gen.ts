@@ -3790,7 +3790,7 @@ export type ConfigApplyOutcome = {
     /**
      * Op
      */
-    op: string;
+    op: 'create' | 'edit' | 'retire' | 'enable' | 'replace' | 'unchanged';
 };
 
 /**
@@ -5310,6 +5310,16 @@ export type DependentNotEditableView = {
     type: 'urn:blizzard:problem:dependent-not-editable';
     [key: string]: unknown;
 };
+
+export const Door = {
+    SEED: 'seed',
+    CLI: 'cli',
+    PAGE: 'page',
+    API: 'api',
+    APPLY: 'apply'
+} as const;
+
+export type Door = typeof Door[keyof typeof Door];
 
 /**
  * DuplicateCapabilityHarnessProblem
@@ -10019,10 +10029,7 @@ export type HubSettingRow = {
      * Key
      */
     key: string;
-    /**
-     * Lifetime
-     */
-    lifetime: string;
+    lifetime: Lifetime;
     /**
      * Revision
      */
@@ -10030,7 +10037,7 @@ export type HubSettingRow = {
     /**
      * Source
      */
-    source: string;
+    source: 'entry' | 'default';
     /**
      * Value
      */
@@ -10063,18 +10070,12 @@ export type HubSettingsChange = {
     diff: Array<{
         [key: string]: unknown;
     }>;
-    /**
-     * Door
-     */
-    door: string;
+    door: Door;
     /**
      * Id
      */
     id: number;
-    /**
-     * Op
-     */
-    op: string;
+    op: Op;
     /**
      * Recorded At
      */
@@ -11009,6 +11010,25 @@ export type LeaseTranscriptView = {
      */
     turns: Array<TurnSegmentViewOutput>;
 };
+
+/**
+ * Lifetime
+ *
+ * When a change to a key's value reaches the daemon reading it.
+ */
+export const Lifetime = {
+    PASS: 'pass',
+    SESSION: 'session',
+    BOOT: 'boot',
+    IMMUTABLE: 'immutable'
+} as const;
+
+/**
+ * Lifetime
+ *
+ * When a change to a key's value reaches the daemon reading it.
+ */
+export type Lifetime = typeof Lifetime[keyof typeof Lifetime];
 
 /**
  * LoginDisabledProblem
@@ -12039,6 +12059,16 @@ export type OldFieldWarning = {
      */
     message: string;
 };
+
+export const Op = {
+    SEED: 'seed',
+    EDIT: 'edit',
+    CREATE: 'create',
+    RETIRE: 'retire',
+    ENABLE: 'enable'
+} as const;
+
+export type Op = typeof Op[keyof typeof Op];
 
 /**
  * OpenDecisionsResponse

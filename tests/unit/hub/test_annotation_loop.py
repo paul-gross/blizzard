@@ -5,6 +5,7 @@ and for ``lifespan``'s task-starting conditions.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,6 +34,85 @@ class _CountingReconciler:
         self.calls += 1
         if self.calls in self._fail_on:
             raise RuntimeError("boom")
+
+
+async def test_settings_read_failure_retries_without_running_a_pass(tmp_path: Path) -> None:
+    shutdown = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    reads = 0
+    calls = 0
+
+    def config() -> HubConfig:
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            raise RuntimeError("store unavailable")
+        return HubConfig(root=tmp_path, db_url="sqlite:///:memory:")
+
+    def reconcile() -> None:
+        nonlocal calls
+        calls += 1
+        loop.call_soon_threadsafe(shutdown.set)
+
+    with capture_logs() as logs:
+        await asyncio.wait_for(Sweep(SweepName.CLOSE_DRAIN, reconcile, 0, shutdown, pass_config=config).run(), 2)
+    assert reads == 2
+    assert calls == 1
+    assert any(entry["event"] == "sweep settings read failed" for entry in logs)
+
+
+async def test_wake_settings_read_failure_retries_without_another_change() -> None:
+    shutdown = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    first_pass = asyncio.Event()
+    failed_read = asyncio.Event()
+    listener: Callable[[frozenset[str]], None] | None = None
+    reads = 0
+    calls = 0
+
+    def subscribe(callback: Callable[[frozenset[str]], None]) -> Callable[[], None]:
+        nonlocal listener
+        listener = callback
+        return lambda: None
+
+    def interval() -> int:
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            failed_read.set()
+            raise RuntimeError("store unavailable")
+        return 0 if reads >= 3 else 3600
+
+    def reconcile() -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            loop.call_soon_threadsafe(first_pass.set)
+        else:
+            loop.call_soon_threadsafe(shutdown.set)
+
+    sweep = Sweep(
+        SweepName.FORGE_STATUS,
+        reconcile,
+        3600,
+        shutdown,
+        live_interval=interval,
+        subscribe=subscribe,
+        interval_key="annotation_interval_seconds",
+    )
+    task = asyncio.create_task(sweep.run())
+    try:
+        await asyncio.wait_for(first_pass.wait(), 2)
+        assert listener is not None
+        listener(frozenset({"annotation_interval_seconds"}))
+        await asyncio.wait_for(failed_read.wait(), 2)
+        assert not task.done()
+        await asyncio.wait_for(task, 3)
+        assert calls == 2
+        assert reads >= 3
+    finally:
+        shutdown.set()
+        await task
 
 
 async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> None:
