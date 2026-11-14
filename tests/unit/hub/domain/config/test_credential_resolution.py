@@ -303,6 +303,7 @@ def test_a_record_whose_secret_is_not_its_credential_s_conflicts() -> None:
 
 def test_a_provider_acts_only_with_the_bindings_its_table_lists() -> None:
     require_binding_usable("github", _CRED)
+    require_binding_usable("github", replace(_CRED, fields=replace(_CRED.fields, binding="github.app-installation")))
     with pytest.raises(CredentialBindingUnsupported) as caught:
         require_binding_usable("github", _CRED, usable={"github": frozenset({"github.app-installation"})})
     assert caught.value.code == "credential_binding_unsupported"
