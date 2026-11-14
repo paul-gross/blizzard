@@ -1772,3 +1772,42 @@ def test_orphan_and_reconcile_touch_nothing_a_worker_that_owned_its_turn_took_wi
     adapter.orphan("ses_1")
     assert adapter.reconcile(("ses_1", "ses_2")) == 0
     assert probe.killed == [] and probe.killed_groups == [] and probe.interrupted_groups == []
+
+
+def test_spawn_streams_its_output(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture(spawn_executor)
+
+    adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--output-format") :][:3] == ["--output-format", "stream-json", "--verbose"]
+
+
+def test_resume_with_message_streams_its_output(monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+
+    _adapter(spawn_executor, binary="claude").resume_with_message("/ws", "sid", "msg")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--output-format") :][:3] == ["--output-format", "stream-json", "--verbose"]
+
+
+def test_judge_keeps_the_single_json_envelope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, spawn_executor: Executor
+) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+
+    _adapter(spawn_executor, binary="claude").judge("/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"))
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--output-format") + 1] == "json"
+    assert "--verbose" not in cmd
+    assert "stream-json" not in cmd
+
+
+def test_the_human_resume_command_names_no_output_format(spawn_executor: Executor) -> None:
+    assert "--output-format" not in _adapter(spawn_executor).resume_command("/ws", "sid", attended=True)
