@@ -5,9 +5,10 @@ its lease. Chunk-scoped segment reads resolve through the same session-file read
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
-from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
@@ -20,7 +21,7 @@ from blizzard.runner.transcripts.home import (
     session_start_cursor,
 )
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository, TranscriptSegmentState
-from blizzard.runner.transcripts.repository import ITranscriptRepositoryResolver, Transcript
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository, ITranscriptRepositoryResolver, Transcript
 
 __all__ = ["ResolvedSegmentContent", "ResolvedTranscript", "TranscriptService"]
 
@@ -37,11 +38,13 @@ class TranscriptService:
         transcripts: ITranscriptRepositoryResolver,
         archived: IReadArchivedTranscriptRepository,
         workspaces: IWorkspaceSpawnRoots,
+        transcripts_for_lease: Callable[[str], ITranscriptRepositoryResolver] | None = None,
     ) -> None:
         self._leases = leases
         self._transcript_ledger = transcript_ledger
         self._environments = environments
         self._transcripts = transcripts
+        self._transcripts_for_lease = transcripts_for_lease
         self._archived = archived
         self._workspaces = workspaces
 
@@ -58,21 +61,22 @@ class TranscriptService:
         # concrete session's transcript, and an archive must not conceal an absent owner.
         session = lease.session
         assert session is not None
-        self._transcripts.transcript_repository(session.harness_id)
+        transcripts = self._resolver(lease_id)
+        repository = transcripts.transcript_repository(session.harness_id)
 
         lease_active = self._leases.active_lease(lease_id) is not None
         if home_is_local(
             lease_active=lease_active,
             unshipped=not lease_active and self._transcript_ledger.has_unshipped_transcript_content(lease.chunk_id),
         ):
-            return ResolvedTranscript.local(self._read_local(lease))
+            return ResolvedTranscript.local(self._read_local(lease, repository))
 
         # The non-local home: src/blizzard/runner/transcripts/home.py.
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
         resolved = ResolvedTranscript.from_archive(lease.session_id, archived)
         if resolved is not None:
             return resolved
-        return ResolvedTranscript.local_fallback(self._read_local(lease), archived)
+        return ResolvedTranscript.local_fallback(self._read_local(lease, repository), archived)
 
     def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentState]:
         """The chunk's segment ledger rows, straight off the store — open or
@@ -91,23 +95,21 @@ class TranscriptService:
             return None
         start_cursor = session_start_cursor(segment, self._transcript_ledger.transcript_segments_for_chunk(chunk_id))
         spawn_cwd = segment.spawn_cwd if segment.spawn_cwd is not None else self.spawn_cwd(chunk_id)
-        local = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=start_cursor)
+        repository = self._resolver(segment.lease_id).transcript_repository(segment.session.harness_id)
+        local = repository.read_turns(segment.session.session_id, spawn_cwd=spawn_cwd, since=start_cursor)
         tail = None
         if local.available and segment.final and segment.cursor is not None:
-            tail = self._read_local_session(segment.session, spawn_cwd=spawn_cwd, since=segment.cursor)
+            tail = repository.read_turns(segment.session.session_id, spawn_cwd=spawn_cwd, since=segment.cursor)
         return segment_window(segment, local, tail)
 
-    def _read_local(self, lease: Lease) -> Transcript:
+    def _read_local(self, lease: Lease, repository: IReadTranscriptRepository) -> Transcript:
         assert lease.session_id is not None
         session = lease.session
         assert session is not None
-        return self._read_local_session(session, spawn_cwd=self.spawn_cwd(lease.chunk_id))
+        return repository.read_turns(session.session_id, spawn_cwd=self.spawn_cwd(lease.chunk_id))
 
-    def _read_local_session(
-        self, session: SessionReference, *, spawn_cwd: str | None, since: str | None = None
-    ) -> Transcript:
-        repository = self._transcripts.transcript_repository(session.harness_id)
-        return repository.read_turns(session.session_id, spawn_cwd=spawn_cwd, since=since)
+    def _resolver(self, lease_id: str) -> ITranscriptRepositoryResolver:
+        return self._transcripts_for_lease(lease_id) if self._transcripts_for_lease else self._transcripts
 
     def spawn_cwd(self, chunk_id: str) -> str | None:
         # The newest binding, released or not: a closed lease's transcript still reads in its own workspace. A

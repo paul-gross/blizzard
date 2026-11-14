@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -12,7 +13,6 @@ from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.harness_set import IInvocationHarnesses, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     IHarnessTranscriptSourceRegistry,
@@ -68,14 +68,12 @@ class UsageRecorder:
     #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
-    invocation_harnesses: IInvocationHarnesses | None = None
+    invocation_registry: Callable[[str, int, bool], UsageRecorderHarnesses] | None = None
 
     def _registry(self, lease_id: str, generation: int, *, judge: bool = False) -> UsageRecorderHarnesses:
-        key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
-        owner = self.invocation_harnesses.find(key) if self.invocation_harnesses is not None else None
-        if owner is not None:
-            return owner.registry
-        return self.invocation_harnesses.current.registry if self.invocation_harnesses is not None else self.harnesses
+        if self.invocation_registry is not None:
+            return self.invocation_registry(lease_id, generation, judge)
+        return self.harnesses
 
     def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         """Record just this attempt's spawn/resume invocation usage — no judgement ran."""

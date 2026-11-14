@@ -29,8 +29,8 @@ class OrphanHarnesses(IHarnessLifecycleRegistry, IHarnessLifecycleAndVerdictRegi
 
 
 class OrphanContext(Protocol):
-    @property
-    def harnesses(self) -> OrphanHarnesses: ...
+    def harnesses_for_lease(self, lease_id: str) -> OrphanHarnesses: ...
+    def harnesses_for_judge(self, lease_id: str) -> OrphanHarnesses: ...
     @property
     def stores(self) -> OrphanStores: ...
 
@@ -42,8 +42,7 @@ def orphan_resultless_exit(ctx: OrphanContext, lease: Lease, output: str, *, via
     if session is None:
         return
     try:
-        resolve = getattr(ctx, "harnesses_for_lease", None)
-        harnesses = resolve(lease.lease_id) if resolve is not None else ctx.harnesses
+        harnesses = ctx.harnesses_for_lease(lease.lease_id)
         usable = harnesses.lifecycle_and_verdict(session.harness_id).has_usable_output(output)
     except (UnknownHarnessError, UnavailableHarnessError):
         return
@@ -62,8 +61,7 @@ def orphan_session(ctx: OrphanContext, lease: Lease, *, via: str, judge: bool = 
         takeover = ctx.stores.takeover.open_takeover_for_chunk(lease.chunk_id)
         if takeover is not None and takeover.holds(lease.chunk_id, lease.epoch):
             return
-        resolve = getattr(ctx, "harnesses_for_judge" if judge else "harnesses_for_lease", None)
-        harnesses = resolve(lease.lease_id) if resolve is not None else ctx.harnesses
+        harnesses = ctx.harnesses_for_judge(lease.lease_id) if judge else ctx.harnesses_for_lease(lease.lease_id)
         harnesses.lifecycle(session.harness_id).orphan(session.session_id)
     except (UnknownHarnessError, UnavailableHarnessError) as exc:
         _log.warning(

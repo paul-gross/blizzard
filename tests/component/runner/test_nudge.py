@@ -30,6 +30,7 @@ from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.loop.steps import Advance, Pull
+from blizzard.runner.loop_wiring import UsageRegistryLookup
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
@@ -313,8 +314,9 @@ def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> 
     assert chunk_id == "ch_1"
 
 
-def test_nudge_defers_failed_drain_and_uses_retained_source_boundary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("failure", [False, RuntimeError("unavailable")])
+def test_nudge_continues_after_failed_drain_and_uses_retained_source_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: bool | Exception
 ) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
@@ -346,15 +348,23 @@ def test_nudge_defers_failed_drain_and_uses_retained_source_boundary(
     previous = WorkerInvocation("lease_r", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
-    monkeypatch.setattr(TranscriptPump, "pump_lease", Mock(side_effect=[False, True]))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+
+    def pump(_pump: TranscriptPump, lease_id: str, **kwargs: object) -> bool:
+        assert sets.lookup(previous) is old
+        assert kwargs.get("mark_incomplete", True)
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
+    monkeypatch.setattr(TranscriptPump, "pump_lease", pump)
 
     Advance(ctx).run()
-    assert not store.nudge_fired("lease_r", 1)
-    assert sets.lookup(previous) is old
-    assert new_harness.resumed == []
-
-    Advance(ctx).run()
+    assert store.nudge_fired("lease_r", 1)
     boundary = store.boundary("lease_r", 2, "nudge")
     assert boundary is not None and boundary.start_position == "old-tail"
     assert len(new_harness.resumed) == 1

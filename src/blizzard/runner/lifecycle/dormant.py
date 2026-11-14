@@ -645,10 +645,6 @@ class DormantSession:
                 # `_resolve_harness` already escalated and killed any survivor as part of that
                 # closure — no other runner can resume this exact session to re-attach here.
                 return
-            # A failed drain must not kill a still-live survivor. Drain again
-            # after stopping it to capture anything written in the meantime.
-            if not self.drain_before_resume():
-                return
         now = self.ctx.clock.now()
         # Kill-first — never two processes on one session — via the shared, liveness-checked
         # kill: a stale/reused pid is never blindly signaled.
@@ -750,8 +746,8 @@ class DormantSession:
         session = lease.session
         assert session is not None
         generation = spawner.generation(lease.lease_id)
-        if not transcript_drained and not self.drain_before_resume():
-            return None
+        if not transcript_drained:
+            self.drain_before_resume()
         if not self._worker_boundary_already_open(generation):
             binding = bindings[0] if bindings else None
             start_position, start_unreadable = self.ctx.resolve_boundary_start(
@@ -859,14 +855,12 @@ class DormantSession:
             )
         return resumed.pid, stamped, receipt_seq
 
-    def drain_before_resume(self) -> bool:
-        """Drain before a new spawn finalizes the old segment, deferring on failure."""
+    def drain_before_resume(self) -> None:
+        """Best-effort drain before a new spawn finalizes the old segment."""
         try:
-            return TranscriptPump(self.ctx).pump_lease(
+            TranscriptPump(self.ctx).pump_lease(
                 self.lease.lease_id,
                 deadline=self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS),
-                mark_incomplete=False,
             )
         except Exception:
-            _log.exception("transcript pump failed ahead of resume", lease_id=self.lease.lease_id)
-            return False
+            _log.exception("transcript pump failed ahead of resume — resuming anyway", lease_id=self.lease.lease_id)

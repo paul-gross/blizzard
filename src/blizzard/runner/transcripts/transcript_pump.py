@@ -85,6 +85,9 @@ class TranscriptPumpContext(OutboundContext, Protocol):
     @property
     def workspaces(self) -> IWorkspaceSpawnRoots: ...
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
+    def invocation_transcript_source(
+        self, session: SessionReference, lease_id: str, generation: int
+    ) -> IHarnessTranscriptSource: ...
 
 
 def resolve_record_max_bytes(ctx: TranscriptPumpContext) -> int:
@@ -182,8 +185,7 @@ class TranscriptPump:
         ``_pump_one`` call only advances one read window, and no later tick is coming — so
         each is pumped until caught up or ``deadline``. A segment never even attempted
         before ``deadline`` is marked truncated too, same as a partially-drained one.
-        Returns whether every segment was drained, so a resume can defer rather than
-        finalize a predecessor whose source still has unread content."""
+        Returns whether every segment was drained; incomplete segments are marked when requested."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return True
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments_for_lease(lease_id)
@@ -338,12 +340,7 @@ class TranscriptPump:
                 held[0].workdir if held else None,
             ).path
         try:
-            invocation_source = getattr(self.ctx, "invocation_transcript_source", None)
-            source = (
-                invocation_source(segment.session, segment.lease_id, segment.generation)
-                if invocation_source is not None
-                else self.ctx.transcript_source_for(segment.session)
-            )
+            source = self.ctx.invocation_transcript_source(segment.session, segment.lease_id, segment.generation)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # The segment's recorded owner, not this pump's own bug — a read-only side lane
             # that skips this segment for this tick; the lease's own dispatch path escalates it.

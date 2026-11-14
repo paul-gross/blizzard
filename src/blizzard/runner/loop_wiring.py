@@ -27,7 +27,7 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
-from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, WorkerInvocation
+from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
@@ -63,7 +63,7 @@ from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptReshipReport,
 )
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
-from blizzard.runner.usage.recorder import UsageRecorder
+from blizzard.runner.usage.recorder import UsageRecorder, UsageRecorderHarnesses
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -215,7 +215,7 @@ class LoopWiring:
                 workspaces=workspaces,
                 harnesses=harnesses,
                 invocation_boundaries=stores.invocation_boundaries,
-                invocation_harnesses=graph.harness_sets,
+                invocation_registry=UsageRegistryLookup(graph.harness_sets, harnesses),
                 transcripts_wired=True,
                 events=graph.events,
             ),
@@ -300,6 +300,19 @@ class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
 
 
 @dataclass(frozen=True)
+class UsageRegistryLookup:
+    owners: IInvocationHarnesses | None
+    fallback: UsageRecorderHarnesses
+
+    def __call__(self, lease_id: str, generation: int, judge: bool) -> UsageRecorderHarnesses:
+        if self.owners is None:
+            return self.fallback
+        key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
+        owner = self.owners.find(key)
+        return owner.registry if owner is not None else self.owners.current.registry
+
+
+@dataclass(frozen=True)
 class _OrphanScope:
     harnesses: IHarnessRegistry
     stores: RunnerStores
@@ -313,6 +326,9 @@ class _OrphanScope:
             else None
         )
         return owner.registry if owner is not None else self.harnesses
+
+    def harnesses_for_judge(self, lease_id: str) -> IHarnessRegistry:
+        return self.harnesses_for_lease(lease_id)
 
 
 @dataclass(frozen=True)

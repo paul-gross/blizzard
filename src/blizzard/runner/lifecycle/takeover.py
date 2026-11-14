@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -598,12 +598,14 @@ class TakeoverService:
         harnesses: IHarnessLifecycleRegistry,
         workspaces: IWorkspaceSpawnRoots,
         events: IRunnerEventPublisher | None = None,
+        harnesses_for_lease: Callable[[str], IHarnessLifecycleRegistry] | None = None,
     ) -> None:
         self._takeover = takeover
         self._elicitations = elicitations
         self._workspaces = workspaces
         self._clock = clock
         self._harnesses = harnesses
+        self._harnesses_for_lease = harnesses_for_lease
         self._process = process
         self._local_api_url = local_api_url
         # The SSE publish seam, typed against the Protocol (``bzh:dependency-inversion``);
@@ -620,7 +622,8 @@ class TakeoverService:
         # Resolve before the fact-before-command write: an unavailable recorded owner blocks
         # this takeover rather than opening it and then offering no usable command.
         try:
-            harness = self._harnesses.lifecycle(session.harness_id)
+            registry = self._harnesses_for_lease(reference.lease_id) if self._harnesses_for_lease else self._harnesses
+            harness = registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             raise TakeoverOwnerUnresolvable(str(exc)) from exc
         now = self._clock.now()

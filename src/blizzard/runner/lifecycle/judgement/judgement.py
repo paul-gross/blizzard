@@ -222,8 +222,7 @@ class Judgement:
         elicited, no attempt failed, and no `checks:` run."""
         lease = self.lease
         dormant = DormantSession(self.ctx, lease)
-        if not dormant.drain_before_resume():
-            return
+        dormant.drain_before_resume()
         _log.warning(
             "resuming premature exit for unattached produces names",
             node=self.envelope.node.node_name,

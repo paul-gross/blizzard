@@ -63,7 +63,7 @@ class ContextSampleContext(Protocol):
     def clock(self) -> IClock: ...
     @property
     def events(self) -> IRunnerEventPublisher | None: ...
-    def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource: ...
+    def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource: ...
 
 
 @dataclass(frozen=True)
@@ -114,8 +114,7 @@ class ContextSampleSweep:
         if not ContextSampleState.sample_due(state, now=now, interval=interval):
             return
         try:
-            resolve = getattr(ctx, "lease_transcript_source", None)
-            source = resolve(lease.lease_id, session) if resolve is not None else ctx.transcript_source_for(session)
+            source = ctx.lease_transcript_source(lease.lease_id, session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # A read-only side lane: never escalates on its own, only skips this one lease's
             # sample for this tick — its own dispatch path (a wake, a judgement) escalates it.

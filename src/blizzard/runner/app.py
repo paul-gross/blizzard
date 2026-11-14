@@ -760,6 +760,11 @@ class _WiredRunner:
     clients: tuple[httpx2.Client, ...]
 
 
+def _harnesses_for_lease(graph: RunnerProcess, lease_id: str) -> HarnessRegistry:
+    """Use the running worker's assembly, falling back to the current assembly after release or restart."""
+    return (graph.harness_sets.worker_for_lease(lease_id) or graph.harness_sets.current).registry
+
+
 def _wire_runner(
     config: RunnerConfig, host: HostProcess, graph: RunnerProcess, startup: contextlib.ExitStack
 ) -> _WiredRunner:
@@ -772,6 +777,10 @@ def _wire_runner(
     # The runner's own workspace, as such: the first its bindings name, else the host's first.
     home = config.home_workspace.id
     harnesses = graph.harnesses
+
+    def harnesses_for_lease(lease_id: str) -> HarnessRegistry:
+        return _harnesses_for_lease(graph, lease_id)
+
     clock = host.clock
     process = host.process
     platform_tracing = host.platform_tracing
@@ -809,6 +818,7 @@ def _wire_runner(
         transcript_ledger=runner_stores.transcript_ledger,
         environments=runner_stores.environments,
         transcripts=HarnessTranscriptRepositories(harnesses),
+        transcripts_for_lease=lambda lease_id: HarnessTranscriptRepositories(harnesses_for_lease(lease_id)),
         archived=archived_transcripts,
         workspaces=workspaces,
     )
@@ -861,6 +871,7 @@ def _wire_runner(
         harnesses=harnesses,
         workspaces=workspaces,
         events=graph.events,
+        harnesses_for_lease=harnesses_for_lease,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
     attachments = AttachmentService(
