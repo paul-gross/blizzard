@@ -1,4 +1,4 @@
-import { actionPause, actionReadback, breakActionEdge, chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
+import { actionLeaseGate, actionPause, actionPrompt, actionReadback, breakActionEdge, chunkProgress, expect, stepUntil, test } from '../../../harness/fixtures';
 
 const REPO = 'toy-api';
 const LANDED = 'ACTION_LANDED.md';
@@ -35,9 +35,9 @@ function actionGraph(prompt: string, nodes: Record<string, unknown>, first: stri
 test.use({ isolation: 'fresh-tenant' });
 test.beforeEach(async () => { if (process.env.BLIZZARD_ACTION_WALK === 'manual') test.setTimeout(0); });
 
-test('test_land_lands_a_chunk_against_the_mock_forge', async ({ api, issue, repository, runnerHosts, forge, cli }) => {
+test('test_land_lands_a_chunk_against_the_mock_forge', async ({ api, issue, repository, runnerHosts, forge, cli, testHub, tenant, workerCheckpoint }) => {
   test.slow();
-  expect((await api.post('/api/graphs', { data: { definition_yaml: actionGraph(BUILD, { deliver: {
+  expect((await api.post('/api/graphs', { data: { definition_yaml: actionGraph(actionPrompt(BUILD, workerCheckpoint), { deliver: {
     executor: 'hub', action: 'land', poll_interval: 1, poll_timeout: 600, judgement: { choices: {
       landed: { description: 'Every repo merged.', to: 'done' }, conflict: { description: 'Conflict.', to: 'build' },
       failure: { description: 'Failure.', to: 'build' }, 'inherited-failure': { description: 'Base red.', to: 'build' },
@@ -54,9 +54,10 @@ test('test_land_lands_a_chunk_against_the_mock_forge', async ({ api, issue, repo
   const { chunk } = await issue('actions', { repository: target });
   actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+  await actionLeaseGate(runnerHost, chunk.chunk_id, workerCheckpoint, testHub, tenant);
   const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', { stallPasses: 80, progress: chunkProgress });
   expect(detail.landed).toBe(true);
-  await actionReadback('landed', chunk.chunk_id, api, cli);
+  await actionReadback('landed', chunk.chunk_id, api, cli, testHub, tenant);
   actionPause('Inspect the landed readback before the forge comparison');
   const after = await ref();
   expect(after).toBeTruthy();
@@ -72,13 +73,14 @@ test('test_land_lands_a_chunk_against_the_mock_forge', async ({ api, issue, repo
   expect(comparison.commits).toHaveLength(2);
 });
 
-test('test_test_actions_drive_hub_nodes', async ({ api, issue, runnerHost, cli }) => {
-  expect((await api.post('/api/graphs', { data: { definition_yaml: actionGraph('pass\n', TEST_NODES, 'pick') } })).status).toBe(201);
+test('test_test_actions_drive_hub_nodes', async ({ api, issue, runnerHost, cli, testHub, tenant, workerCheckpoint }) => {
+  expect((await api.post('/api/graphs', { data: { definition_yaml: actionGraph(actionPrompt('pass\n', workerCheckpoint), TEST_NODES, 'pick') } })).status).toBe(201);
   const { chunk } = await issue('test actions');
   actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+  await actionLeaseGate(runnerHost, chunk.chunk_id, workerCheckpoint, testHub, tenant);
   const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (body) => body.status === 'done', { stallPasses: 80, progress: chunkProgress });
-  await actionReadback('transition', chunk.chunk_id, api, cli);
+  await actionReadback('transition', chunk.chunk_id, api, cli, testHub, tenant);
   actionPause('Inspect transition history and turn order');
   expect((detail.history as { choice_name: string }[]).map((item) => item.choice_name).slice(-2)).toEqual(['onward', 'done']);
   expect(Object.fromEntries((detail.artifacts as { name: string; content: string }[]).filter((item) => item.name.startsWith('test-sequence/')).map((item) => [item.name, item.content]))).toEqual({
@@ -87,7 +89,7 @@ test('test_test_actions_drive_hub_nodes', async ({ api, issue, runnerHost, cli }
 });
 
 for (const target of ['triage', 'absent'] as const) {
-  test(`test_a_hub_exit_routes_to_${target}`, async ({ api, issue, runnerHost, cli }) => {
+  test(`test_a_hub_exit_routes_to_${target}`, async ({ api, issue, runnerHost, cli, testHub, tenant, workerCheckpoint }) => {
     let destinationId = '';
     if (target === 'triage') {
       const destination = JSON.stringify({ name: 'triage', entry: 'build', nodes: {
@@ -99,17 +101,18 @@ for (const target of ['triage', 'absent'] as const) {
       expect(created.status).toBe(201);
       destinationId = created.body.graph_id;
     }
-    const graph = actionGraph('pass\n', { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
+    const graph = actionGraph(actionPrompt('pass\n', workerCheckpoint), { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
       landed: { description: 'Landed.', to: `graph:${target}` }, failure: { description: 'Failed.', to: 'build' },
     } } } }, 'deliver');
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph } })).status).toBe(201);
     const { chunk } = await issue(`cross graph ${target}`);
     actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await actionLeaseGate(runnerHost, chunk.chunk_id, workerCheckpoint, testHub, tenant);
     const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
       (body) => target === 'triage' ? body.graph_id === destinationId : body.status === 'needs_human',
       { stallPasses: 80, progress: chunkProgress });
-    await actionReadback(`migration-${target}`, chunk.chunk_id, api, cli);
+    await actionReadback(`migration-${target}`, chunk.chunk_id, api, cli, testHub, tenant);
     actionPause(`Inspect migration-${target} readback`);
     if (target === 'triage') {
       expect(detail.current_node_name).toBe('build');
@@ -123,8 +126,8 @@ for (const target of ['triage', 'absent'] as const) {
 test.describe('an invalid stored edge', () => {
   test.use({ isolation: 'fresh-hub' });
 
-  test('test_an_unroutable_hub_outcome_escalates_once', async ({ api, issue, runnerHost, testHub, events, cli }) => {
-    const graph = actionGraph('pass\n', { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
+  test('test_an_unroutable_hub_outcome_escalates_once', async ({ api, issue, runnerHost, testHub, events, cli, tenant, workerCheckpoint }) => {
+    const graph = actionGraph(actionPrompt('pass\n', workerCheckpoint), { deliver: { executor: 'hub', action: 'test.answer', with: { choice: 'landed' }, judgement: { choices: {
       landed: { description: 'Landed.', to: 'done' }, failure: { description: 'Failed.', to: 'build' },
     } } } }, 'deliver');
     const created = await api.post('/api/graphs', { data: { definition_yaml: graph } });
@@ -134,9 +137,10 @@ test.describe('an invalid stored edge', () => {
     const subscription = await events.open({ barrier: true });
     actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await actionLeaseGate(runnerHost, chunk.chunk_id, workerCheckpoint, testHub, tenant);
     const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
       (body) => body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
-    await actionReadback('unroutable', chunk.chunk_id, api, cli);
+    await actionReadback('unroutable', chunk.chunk_id, api, cli, testHub, tenant);
     actionPause('Inspect the unroutable event and escalation readback');
     expect(detail.current_node_name).toBe('deliver');
     expect((detail.artifacts as { name: string }[]).filter((item) => item.name === 'hub-unroutable-outcome')).toHaveLength(1);
@@ -151,8 +155,8 @@ test.describe('an invalid stored edge', () => {
 });
 
 for (const scenario of ['merge_conflict', 'checks_pending'] as const) {
-  test(`test_land_${scenario}_walk`, async ({ api, issue, repository, runnerHosts, forge, cli }) => {
-    test.setTimeout(180_000);
+  test(`test_land_${scenario}_walk`, async ({ api, issue, repository, runnerHosts, forge, cli, testHub, tenant, workerCheckpoint }) => {
+    if (process.env.BLIZZARD_ACTION_WALK !== 'manual') test.setTimeout(180_000);
     const target = await repository();
     const full = `${target.owner}/${target.name}`;
     const host = await runnerHosts.create({ runnerConfig: { workspace: [{
@@ -160,7 +164,7 @@ for (const scenario of ['merge_conflict', 'checks_pending'] as const) {
       repo: [{ name: target.name, url: target.origin }],
     }] } });
     expect((await forge.call('POST', `/_levers/${scenario}`, { repo: full })).status).toBe(200);
-    const created = await api.post('/api/graphs', { data: { definition_yaml: actionGraph(BUILD.replaceAll(REPO, target.name), { deliver: {
+    const created = await api.post('/api/graphs', { data: { definition_yaml: actionGraph(actionPrompt(BUILD.replaceAll(REPO, target.name), workerCheckpoint), { deliver: {
       executor: 'hub', action: 'land', poll_interval: 1, poll_timeout: 600, judgement: { choices: {
         landed: { description: 'Landed.', to: 'done' }, conflict: { description: 'Conflict.', to: 'build' },
         failure: { description: 'Failure.', to: 'build' }, 'inherited-failure': { description: 'Base red.', to: 'build' },
@@ -171,10 +175,11 @@ for (const scenario of ['merge_conflict', 'checks_pending'] as const) {
     console.log(`action-walk ${scenario} graph=${created.body.graph_id} chunk=${chunk.chunk_id} repo=${full}`);
     actionPause(`Promote chunk ${chunk.chunk_id} and step its runner to the next outcome`);
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    await actionLeaseGate(host, chunk.chunk_id, workerCheckpoint, testHub, tenant);
     const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body,
       (row) => scenario === 'merge_conflict' ? row.bounces.length > 0 : row.pending !== null,
       { stallPasses: 80, progress: chunkProgress });
-    await actionReadback(scenario, chunk.chunk_id, api, cli);
+    await actionReadback(scenario, chunk.chunk_id, api, cli, testHub, tenant);
     actionPause(`Inspect the ${scenario} readback`);
     if (scenario === 'merge_conflict') {
       expect(detail.current_node_name).toBe('build');
@@ -197,7 +202,7 @@ for (const scenario of ['merge_conflict', 'checks_pending'] as const) {
         (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
       expect(done.landed).toBe(true);
       expect(done.history.map((row: { choice_name: string }) => row.choice_name)).toEqual(['pass', 'landed']);
-      await actionReadback('checks_released', chunk.chunk_id, api, cli);
+      await actionReadback('checks_released', chunk.chunk_id, api, cli, testHub, tenant);
       actionPause('Inspect the landed turn, event and landing fact');
       const facts = await api.get(`/api/chunks/${chunk.chunk_id}/landing-facts`);
       expect(facts.body.items.map((fact: { repo: string }) => fact.repo)).toEqual([full]);

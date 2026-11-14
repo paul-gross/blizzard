@@ -1,7 +1,10 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import type { TestHub } from './tenancy';
+import type { TestHub, Tenant } from './tenancy';
+import type { RunnerHost } from './runner-host';
+import type { WorkerCheckpoint } from './worker-checkpoint';
+import { stepUntilHeld } from './runner-steps';
 
 /** Plant the invalid edge a graph validator cannot mint, on a test's own disposable hub only. */
 export function breakActionEdge(hub: TestHub, graphId: string, node: string, target: string): void {
@@ -20,9 +23,9 @@ export function breakActionEdge(hub: TestHub, graphId: string, node: string, tar
 /** Optional operator gate: the next act happens only after Enter on the controlling terminal. */
 export function actionPause(instruction: string): void {
   if (process.env.BLIZZARD_ACTION_WALK !== 'manual') return;
-  const tty = fs.openSync('/dev/tty', 'r');
+  console.log(`\nACTION WALK STEP: ${instruction}\nPress Enter to continue.`);
+  const tty = fs.openSync(process.env.BLIZZARD_ACTION_GATE_FIFO ?? '/dev/tty', 'r');
   try {
-    console.log(`\nACTION WALK STEP: ${instruction}\nPress Enter to continue.`);
     const byte = Buffer.alloc(1);
     while (fs.readSync(tty, byte, 0, 1, null) === 1 && byte[0] !== 10) { /* one line */ }
   } finally {
@@ -30,11 +33,35 @@ export function actionPause(instruction: string): void {
   }
 }
 
+
+/** Hold the mock worker only during an operator walk, before its build prompt runs. */
+export function actionPrompt(prompt: string, checkpoint: WorkerCheckpoint): string {
+  return process.env.BLIZZARD_ACTION_WALK === 'manual' ? checkpoint.snippet('action-build') + prompt : prompt;
+}
+
+/** Let an operator inspect the runner's real, open lease before releasing the mock worker. */
+export async function actionLeaseGate(host: RunnerHost, chunk: string, checkpoint: WorkerCheckpoint, hub: TestHub, tenant: Tenant): Promise<void> {
+  if (process.env.BLIZZARD_ACTION_WALK !== 'manual') return;
+  const lease = await stepUntilHeld(host, chunk, checkpoint, 'action-build');
+  const runner = host.runners['runner-local']!;
+  const response = await runner.leasesForChunk(chunk);
+  if (!response.ok || !response.body.items.some((item) => item.lease_id === lease.lease_id && item.state === 'running' && item.closed_at === null)) {
+    throw new Error(`running lease readback failed for ${chunk}`);
+  }
+  console.log(`ACTION WALK LEASE ${JSON.stringify({ hub: hub.coordinates.url, tenant: tenant.id, chunk, board: `${hub.coordinates.url}/board/chunk/${chunk}`, runner: runner.id, lease: lease.lease_id, leasesUrl: `${host.url}/runners/${runner.id}/api/leases?chunk_id=${encodeURIComponent(chunk)}`, readback: response.body.items })}`);
+  actionPause('Inspect the held build lease and matching board before releasing the worker');
+  checkpoint.release('action-build');
+}
+
 /** Independent operator readbacks at a walk checkpoint; history and operational events retain their API order. */
 export async function actionReadback(
   label: string, id: string, api: import('./client/clients').HubApi,
   cli: (args: string[]) => Promise<import('./cli').CliResult>,
+  hub: TestHub, tenant: Tenant,
 ): Promise<void> {
+  if (process.env.BLIZZARD_ACTION_WALK === 'manual') {
+    console.log(`ACTION WALK INSPECT hub=${hub.coordinates.url} tenant=${tenant.id} board=${hub.coordinates.url}/board/chunk/${id} api=${hub.coordinates.url}/api/chunks/${id}`);
+  }
   const detail = await api.get(`/api/chunks/${id}`);
   const events = await api.get(`/api/events?chunk_id=${encodeURIComponent(id)}`);
   if (detail.status !== 200 || events.status !== 200) throw new Error(`readback failed for ${id}`);
