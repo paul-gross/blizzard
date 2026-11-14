@@ -82,13 +82,15 @@ same machine. In its developer console run the following, substituting the print
 board URL:
 
 ```js
+sessionStorage.setItem('blizzard.tenant', '<tenant ID>')
 localStorage.setItem('blizzard.tenant.last', '<tenant ID>')
 ```
 
 Confirm the URL's chunk ID matches the printed checkpoint and inspect the chunk detail and its history. Browser storage
-is per origin, so repeat this for **every** case, even if the hub URL did not change; reload to switch tenants. The
-board may not expose every raw fact. In another terminal independently read the live public APIs, replacing all
-placeholders with the current printed values (flow and submission IDs are in `ACTION WALK` JSON):
+is per origin, and the tab's session tenant takes precedence over the browser's last choice. Set both keys for **every**
+case, even if reusing the same tab and hub URL; reload to switch tenants. The board may not expose every raw fact. In
+another terminal independently read the live public APIs, replacing all placeholders with the current printed values
+(flow and submission IDs are in `ACTION WALK` JSON):
 
 ```sh
 HUB='http://127.0.0.1:<printed-port>' TENANT='<printed-tenant>' CHUNK='<printed-chunk>'
