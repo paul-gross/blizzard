@@ -33,6 +33,7 @@ from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient, ServiceRequestError
 from blizzard.runner.harness.opencode_v2.declaration import live_registration, snapshot_registration
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
+from blizzard.runner.harness.opencode_v2.execution import ExecutionObserver
 from blizzard.runner.harness.opencode_v2.orphan import SessionOrphaner
 from blizzard.runner.harness.opencode_v2.registration import read_registration
 from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind, DriveRequest, write_request
@@ -313,6 +314,7 @@ def _adapter(engine: Engine, executor: ThreadPoolExecutor) -> OpenCodeTwoAdapter
             monotonic_clock=clock,
         ),
         orphaner=SessionOrphaner(registration, transport, monotonic_clock=clock),
+        observer=ExecutionObserver(registration, transport, monotonic_clock=clock),
         binary=str(engine.binary),
         driver_command=(_BLIZZARD,),
         model="openai/gpt-6-luna",

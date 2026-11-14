@@ -22,6 +22,7 @@ from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.driver import RegistrationSource
+from blizzard.runner.harness.opencode_v2.execution import ExecutionObserver
 from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
 from blizzard.runner.harness.opencode_v2.orphan import SessionOrphaner
 from blizzard.runner.harness.opencode_v2.price_catalog import SqliteOpenCodeTwoPriceCatalog, resolve_catalog_store_path
@@ -138,8 +139,9 @@ class OpenCodeTwoDeclaration:
     ) -> HarnessAssembly:
         """This runner's adapter and its one health probe, sharing one service keeper and one version hold — the
         hold refuses a version either observes for as long as this runner's composition lasts. The keeper, the
-        transcript source and the orphaner share one transport and ``monotonic_clock``; the keeper reads registration
-        through its own tool-profile snapshot, the other two through the worker's live profile."""
+        transcript source, the orphaner and the execution observer share one transport and ``monotonic_clock``; the
+        keeper reads registration through its own tool-profile snapshot, the others through the worker's live
+        profile."""
         del process, health_roots
         transport = UrllibServiceTransport()
         tool_env = shared.worker_env.tool()
@@ -160,6 +162,7 @@ class OpenCodeTwoDeclaration:
             monotonic_clock=monotonic_clock,
         )
         orphaner = SessionOrphaner(registration, transport, monotonic_clock=monotonic_clock)
+        observer = ExecutionObserver(registration, transport, monotonic_clock=monotonic_clock)
         hold = VersionHold()
         store_path = resolve_catalog_store_path(shared.worker_env.variables)
         adapter = OpenCodeTwoAdapter(
@@ -175,6 +178,7 @@ class OpenCodeTwoDeclaration:
             transcript_root=shared.transcripts_root,
             bundle_path=str(shared.bundle.path) if shared.bundle is not None else None,
             orphaner=orphaner,
+            observer=observer,
             binary=section.binary,
             driver_command=driver_command(),
             model_aliases=section.model_aliases,

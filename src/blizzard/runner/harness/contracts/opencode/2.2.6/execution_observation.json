@@ -1,0 +1,249 @@
+{
+  "active": {
+    "data": {
+      "ses_5a1e0b7c2ffeRootExecObserve01": {
+        "type": "running"
+      },
+      "ses_5a1e0b9d4ffeChildExecObserv1": {
+        "type": "running"
+      }
+    }
+  },
+  "active_none": {
+    "data": {}
+  },
+  "child": "ses_5a1e0b9d4ffeChildExecObserv1",
+  "children": {
+    "ses_5a1e0b7c2ffeRootExecObserve01": {
+      "data": [
+        {
+          "agent": "general",
+          "cost": 0,
+          "id": "ses_5a1e0b9d4ffeChildExecObserv1",
+          "location": {
+            "directory": "<scratch>/repo"
+          },
+          "metadata": {},
+          "model": {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          "parentID": "ses_5a1e0b7c2ffeRootExecObserve01",
+          "permissions": [],
+          "projectID": "global",
+          "time": {
+            "created": 1794500061910,
+            "updated": 1794500063030
+          },
+          "title": "Run the long check",
+          "tokens": {
+            "cache": {
+              "read": 0,
+              "write": 0
+            },
+            "input": 0,
+            "output": 0,
+            "reasoning": 0
+          }
+        }
+      ]
+    },
+    "ses_5a1e0b9d4ffeChildExecObserv1": {
+      "data": []
+    }
+  },
+  "forms": {
+    "ses_5a1e0b7c2ffeRootExecObserve01": {
+      "data": []
+    },
+    "ses_5a1e0b9d4ffeChildExecObserv1": {
+      "data": []
+    }
+  },
+  "info": {
+    "pid": 48211,
+    "version": "2.2.6"
+  },
+  "messages_newest_first": {
+    "ses_5a1e0b7c2ffeRootExecObserve01": {
+      "cursor": {
+        "next": null,
+        "previous": null
+      },
+      "data": [
+        {
+          "agent": "build",
+          "content": [
+            {
+              "executed": false,
+              "id": "call_7d0e5a1f3b2c4e8a9f6d1c2b3a4e5f60",
+              "name": "subagent",
+              "native": {
+                "itemId": "fc_0e5a1f3b2c4e8a9f6d1c2b3a4e5f6071"
+              },
+              "state": {
+                "input": {
+                  "agent": "general",
+                  "description": "Run the long check",
+                  "prompt": "Use the shell tool exactly once to run `sleep 960; echo CHECKED` and report its exact output."
+                },
+                "metadata": {
+                  "sessionID": "ses_5a1e0b9d4ffeChildExecObserv1"
+                },
+                "status": "running"
+              },
+              "time": {
+                "created": 1794500061200,
+                "ran": 1794500061890
+              },
+              "type": "tool"
+            }
+          ],
+          "id": "msg_1b52a0f1c001RootStep2Running",
+          "model": {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          "snapshot": {
+            "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
+          },
+          "time": {
+            "created": 1794500058410,
+            "streamed": 1794500061210
+          },
+          "type": "assistant"
+        },
+        {
+          "agent": "build",
+          "content": [
+            {
+              "executed": false,
+              "id": "call_2b8c4d6e0f1a4b3c9d7e5f1a2b3c4d5e",
+              "name": "read",
+              "native": {
+                "itemId": "fc_2b8c4d6e0f1a4b3c9d7e5f1a2b3c4d5e01"
+              },
+              "state": {
+                "content": [
+                  {
+                    "text": "# Notes\n",
+                    "type": "text"
+                  }
+                ],
+                "input": {
+                  "path": "NOTES.md"
+                },
+                "metadata": {
+                  "status": "completed",
+                  "truncated": false
+                },
+                "status": "completed"
+              },
+              "time": {
+                "completed": 1794500057120,
+                "created": 1794500056300,
+                "ran": 1794500056340
+              },
+              "type": "tool"
+            }
+          ],
+          "cost": 0,
+          "finish": "tool-calls",
+          "id": "msg_1b52a0e6a001RootStep1Complete",
+          "model": {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          "time": {
+            "completed": 1794500057160,
+            "created": 1794500052190,
+            "streamed": 1794500056310
+          },
+          "tokens": {
+            "cache": {
+              "read": 12800,
+              "write": 0
+            },
+            "input": 412,
+            "output": 38,
+            "reasoning": 0
+          },
+          "type": "assistant"
+        },
+        {
+          "id": "msg_1b52a0e69001RootUserPrompt0",
+          "text": "Read `NOTES.md`, then hand the long check to a subagent and report what it prints.",
+          "time": {
+            "created": 1794500052170
+          },
+          "type": "user"
+        }
+      ]
+    },
+    "ses_5a1e0b9d4ffeChildExecObserv1": {
+      "cursor": {
+        "next": null,
+        "previous": null
+      },
+      "data": [
+        {
+          "agent": "general",
+          "content": [
+            {
+              "executed": false,
+              "id": "call_9f1e2d3c4b5a49687f6e5d4c3b2a1f0e",
+              "name": "shell",
+              "native": {
+                "itemId": "fc_9f1e2d3c4b5a49687f6e5d4c3b2a1f0e"
+              },
+              "state": {
+                "input": {
+                  "command": "sleep 960; echo CHECKED",
+                  "timeout": 1200000
+                },
+                "metadata": {},
+                "status": "running"
+              },
+              "time": {
+                "created": 1794500063020,
+                "ran": 1794500063432
+              },
+              "type": "tool"
+            }
+          ],
+          "id": "msg_1b52a1013001ChildStep1Runnin",
+          "model": {
+            "id": "gpt-6-luna",
+            "providerID": "openai",
+            "variant": "high"
+          },
+          "time": {
+            "created": 1794500062030,
+            "streamed": 1794500063030
+          },
+          "type": "assistant"
+        },
+        {
+          "id": "msg_1b52a1012001ChildUserPrompt",
+          "text": "Use the shell tool exactly once to run `sleep 960; echo CHECKED` and report its exact output.",
+          "time": {
+            "created": 1794500061950
+          },
+          "type": "user"
+        }
+      ]
+    }
+  },
+  "permission_requests": {
+    "ses_5a1e0b7c2ffeRootExecObserve01": {
+      "data": []
+    },
+    "ses_5a1e0b9d4ffeChildExecObserv1": {
+      "data": []
+    }
+  },
+  "root": "ses_5a1e0b7c2ffeRootExecObserve01"
+}

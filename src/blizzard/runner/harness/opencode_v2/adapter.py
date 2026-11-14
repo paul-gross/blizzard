@@ -32,6 +32,7 @@ from blizzard.runner.harness.observation import ExecutionObservation, ExecutionO
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
+from blizzard.runner.harness.opencode_v2.execution import IExecutionObserver
 from blizzard.runner.harness.opencode_v2.orphan import ISessionOrphaner
 from blizzard.runner.harness.opencode_v2.price_catalog import IOpenCodeTwoPriceCatalog, OpenCodeTwoModelPrice
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
@@ -86,6 +87,7 @@ class OpenCodeTwoAdapter:
         clock: IClock,
         transcript_source: IHarnessTranscriptSource,
         orphaner: ISessionOrphaner,
+        observer: IExecutionObserver,
         binary: str = DEFAULT_OPENCODE_BINARY,
         driver_command: Sequence[str] = ("blizzard",),
         model: str = "",
@@ -119,6 +121,7 @@ class OpenCodeTwoAdapter:
         self._transcript_source = transcript_source
         self._price_catalog = price_catalog
         self._orphaner = orphaner
+        self._observer = observer
         # The version launches are held to: the one last observed, which is the one the runner advertises.
         self._advertised: str | None = None
 
@@ -573,9 +576,9 @@ class OpenCodeTwoAdapter:
         return None
 
     def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
-        """No evidence is read from the OpenCode 2 service yet, so every execution is ``unknown``."""
-        del request
-        return ExecutionObservation.unknown("opencode-v2 execution evidence is not read yet")
+        """The registered service's live answer for the lease's own session tree; the generation is not asked, since
+        every generation of a lease drives the one session it was identified by."""
+        return self._observer.observe(request.session.session_id, request.now)
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
