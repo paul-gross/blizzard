@@ -10,7 +10,7 @@ const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
     [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
     [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
     [RecordKind.FORGE]: ['/admin', 'forges'],
-    [RecordKind.CREDENTIAL]: null,
+    [RecordKind.CREDENTIAL]: ['/admin', 'credentials'],
     [RecordKind.SECRET]: ['/admin', 'secrets'],
     [RecordKind.PROJECT]: ['/admin', 'projects'],
     [RecordKind.SCOPE]: ['/gardening', 'scopes'],
@@ -42,9 +42,9 @@ export function recordLink(ref: RecordRefView): ConfigLinkVm {
   return { kind: recordKindLabel(ref.kind), name: ref.label ?? ref.key, route: recordRoute(ref.kind, ref.key) };
 }
 
-/** A link to the secret `name`, or none when the record names no secret. */
-export function secretLinks(name: string | null | undefined): readonly ConfigLinkVm[] {
-  return name ? [recordLink({ kind: RecordKind.SECRET, key: name, label: null })] : [];
+/** A link to the credential `id`, shown by its slug, or none when the record names no credential. */
+export function credentialLinks(id: string | null | undefined, slug: string | null | undefined): readonly ConfigLinkVm[] {
+  return id ? [recordLink({ kind: RecordKind.CREDENTIAL, key: id, label: slug ?? null })] : [];
 }
 
 /** A nullable field as text — `—` when unset. */

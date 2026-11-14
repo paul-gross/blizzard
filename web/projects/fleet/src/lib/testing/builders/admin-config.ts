@@ -1,6 +1,9 @@
 import type {
   ConfigChangesPage,
   ConfigChangeView,
+  CredentialDocument,
+  CredentialListItem,
+  CredentialSummary,
   ForgeDetail,
   MemberView,
   ProjectView,
@@ -167,6 +170,36 @@ export function forgeDetail(overrides: Partial<ForgeDetail> = {}): ForgeDetail {
     created_by_name: null,
     ...overrides,
   };
+}
+
+/** A live `github.token` credential on the GitHub forge, reading `gh-token`, named by no record, at its first revision. */
+export function credentialSummary(overrides: Partial<CredentialListItem> = {}): CredentialListItem {
+  return { ...credentialFields(), referrer_count: 0, ...overrides };
+}
+
+function credentialFields(): CredentialSummary {
+  return {
+    credential_id: 'cred_g',
+    slug: 'gh-main',
+    name: 'gh-main',
+    forge_id: 'frg_g',
+    forge_slug: 'github',
+    forge_name: 'GitHub',
+    binding: 'github.token',
+    secret_name: 'gh-token',
+    settings: {},
+    authority: 'secret/gh-token',
+    retired: false,
+    revision: 1,
+    created_at: fixtureInstant(-30 * 24 * 3600),
+    created_by: 'usr_1',
+    created_by_name: null,
+  };
+}
+
+/** {@link credentialSummary}'s record as its detail reads it — with the records naming it, none by default. */
+export function credentialDocument(overrides: Partial<CredentialDocument> = {}): CredentialDocument {
+  return { ...credentialFields(), referrers: [], ...overrides };
 }
 
 /** One config-change entry: an operator's board edit of a project at revision 2. */

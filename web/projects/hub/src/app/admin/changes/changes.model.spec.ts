@@ -110,6 +110,11 @@ describe('changeEntryVm', () => {
     ]);
   });
 
+  it('routes a credential change to its credential detail', () => {
+    const vm = changeEntryVm(changeEntries([change(5, { record_kind: 'credential', record_key: 'cred_g', op: 'create', revision: 1, diff: [] })])[0])!;
+    expect(vm.rows[0].route).toEqual(['/admin', 'credentials', 'cred_g']);
+  });
+
   it('renders a change with no field diff as its revision step', () => {
     const vm = changeEntryVm(
       changeEntries([change(5, { record_kind: 'secret', record_key: 'gh', op: 'replace', revision: 3, diff: [] })])[0],

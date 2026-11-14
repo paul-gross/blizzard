@@ -21,6 +21,7 @@ import type { ConfigRowVm } from '../config-record-list';
 import { repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
+import { injectCredentialsQuery } from '../credentials/credentials.query';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
 /**
@@ -86,6 +87,7 @@ export class RepositoriesPage {
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateRepositoryMutation();
   private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly credentialsQuery = injectCredentialsQuery(() => false);
   private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
   /** The forge the create form has picked — its detail says which policies it can honour. */
   private readonly pickedForge = signal<string | null>(null);
@@ -93,6 +95,7 @@ export class RepositoriesPage {
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
+      this.credentialsQuery.data()?.credentials ?? [],
       this.landingPoliciesQuery.data() ?? null,
       this.forgeQuery.data()?.landing_policies ?? null,
     ),

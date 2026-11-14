@@ -126,9 +126,16 @@ export class ConfigFormDialog {
   protected onText(key: string, value: string): void {
     this.typed.update((typed) => ({
       ...typed, [key]: value,
-      ...Object.fromEntries(this.fields().filter((field) => field.filterBy === key).map((field) => [field.key, ''])),
+      ...Object.fromEntries(this.dependentsOf(key).map((dependent) => [dependent, ''])),
     }));
     this.valuesChange.emit(this.values());
+  }
+
+  /** Every field whose choices hang on `key`, directly or through another dependent — each is
+   * cleared when `key` changes, so no pick outlives the field it was filtered by. */
+  private dependentsOf(key: string): readonly string[] {
+    const direct = this.fields().filter((field) => field.filterBy === key).map((field) => field.key);
+    return direct.flatMap((dependent) => [dependent, ...this.dependentsOf(dependent)]);
   }
 
   protected optionsFor(field: ConfigFieldDef): readonly { value: string; label: string; disabled?: boolean }[] {

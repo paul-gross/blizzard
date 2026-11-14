@@ -21,6 +21,8 @@ import type { ConfigRowVm } from '../config-record-list';
 import { WORK_SOURCE_FIELDS, workSourceCreate, workSourceKey, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
 import { ProjectLens } from '../../core/project-lens';
+import { credentialPickerFields } from '../credentials/credentials.model';
+import { injectCredentialsQuery } from '../credentials/credentials.query';
 import { forgePickerFields } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
 
@@ -87,7 +89,10 @@ export class WorkSourcesPage {
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateWorkSourceMutation();
   private readonly forgesQuery = injectForgesQuery(() => false);
-  protected readonly fields = computed(() => forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []));
+  private readonly credentialsQuery = injectCredentialsQuery(() => false);
+  protected readonly fields = computed(() =>
+    credentialPickerFields(forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []), this.credentialsQuery.data()?.credentials ?? []),
+  );
   protected readonly createOpen = signal(false);
   protected readonly createError = signal<string | null>(null);
 

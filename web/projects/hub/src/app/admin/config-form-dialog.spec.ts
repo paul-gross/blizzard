@@ -171,6 +171,28 @@ describe('ConfigFormDialog', () => {
     expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('clears a pick that hangs on a cleared pick, through every level', async () => {
+    const fixture = await mount('create');
+    const values: ConfigFormValues[] = [];
+    fixture.componentInstance.valuesChange.subscribe((v) => values.push(v));
+    fixture.componentRef.setInput('fields', [
+      { key: 'provider', label: 'Provider', kind: 'text', required: true },
+      { key: 'forge', label: 'Forge', kind: 'select', filterBy: 'provider', options: [{ value: 'frg_g', label: 'GitHub', kind: 'github' }] },
+      { key: 'credential', label: 'Credential', kind: 'select', filterBy: 'forge', options: [{ value: 'cred_g', label: 'gh-main', kind: 'frg_g' }] },
+    ]);
+    await fixture.whenStable();
+    await type(fixture, 'dlg-field-provider', 'github');
+    for (const key of ['forge', 'credential']) {
+      (el(fixture, `dlg-field-${key}`) as HTMLButtonElement).click();
+      await fixture.whenStable();
+      (document.querySelector('[role="option"]') as HTMLElement).click();
+      await fixture.whenStable();
+    }
+    expect(values.at(-1)).toMatchObject({ forge: 'frg_g', credential: 'cred_g' });
+    await type(fixture, 'dlg-field-provider', 'gitlab');
+    expect(values.at(-1)).toMatchObject({ provider: 'gitlab', forge: '', credential: '' });
+  });
+
   it('edit: a refetched initial reaches untouched fields after a failed save', async () => {
     const fixture = await mount('edit', 'revision conflict');
     const emitted: ConfigFormValues[] = [];

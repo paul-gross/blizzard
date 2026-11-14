@@ -7,6 +7,7 @@ import { injectUrgenciesQuery } from '../core/urgencies.query';
 import { injectProjectsQuery } from '../core/projects.query';
 import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
+import { injectCredentialsQuery } from './credentials/credentials.query';
 import { injectForgesQuery } from './forges/forges.query';
 import { injectMembersQuery } from './members/members.query';
 import { injectLensLinks } from './projects/lens-links';
@@ -18,7 +19,7 @@ import { injectWorkSourcesQuery } from './work-sources/work-sources.query';
  * The `/admin` route — its own second strip over the hub's administration surfaces,
  * each a child route (`admin.routes.ts`) so a tab is a deep link: Members (the members
  * of the tenant the board acts in), its projects, then one surface per configured
- * noun — work sources, repositories, secrets — and the change log across all of them. Members
+ * noun — work sources, repositories, forges, credentials, secrets — and the change log across all of them. Members
  * stays in the strip at every width. Each tab counts what it holds — under a project lens, Work
  * sources and Repositories count what that project links — once its read answers; Members only
  * for an actor who may read them. Changes counts every change the lens selects, the change log's
@@ -39,6 +40,7 @@ export class AdminShell {
   private readonly sourcesQuery = injectWorkSourcesQuery(() => false);
   private readonly repositoriesQuery = injectRepositoriesQuery(() => false);
   private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly credentialsQuery = injectCredentialsQuery(() => false);
   private readonly secretsQuery = injectSecretsQuery(() => false);
   private readonly sourceLinks = injectLensLinks('source');
   private readonly repositoryLinks = injectLensLinks('repository');
@@ -51,6 +53,7 @@ export class AdminShell {
     sources: tabCount(this.sourcesQuery.data(), this.sourceLinks.names()),
     repositories: tabCount(this.repositoriesQuery.data(), this.repositoryLinks.names()),
     forges: tabCount(this.forgesQuery.data()),
+    credentials: tabCount(this.credentialsQuery.data()?.credentials),
     secrets: tabCount(this.secretsQuery.data()),
     changes: changesTotal(this.changesQuery.data()?.pages),
   }));

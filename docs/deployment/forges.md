@@ -68,7 +68,11 @@ A forge is configured through the same doors as the records that name it:
 - The board's Admin page, whose Forges tab lists each forge with its revision, history, and the records that name it,
   and lets a user with `config:edit` create, edit, retire and enable one on a desktop. On a phone the tab is read-only
   and names the `blizzard hub forge` command that makes the change. A forge's detail shows its capabilities and each
-  budget's last reading, or "no reading yet" before the forge has answered.
+  budget's last reading, or "no reading yet" before the forge has answered. Beside it, the Credentials tab lists each
+  credential with its forge, binding, and how many records name it, and lets a user with `config:edit` create, edit,
+  retire and enable one on a desktop: the binding offers only those of the picked forge's kind, and a credential's
+  detail shows its authority, read-only, the records naming it, and its history. On a phone the tab is read-only and
+  names the `blizzard hub credential edit` command.
 
 ## Records that name a forge
 

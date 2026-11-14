@@ -7,6 +7,7 @@ import type { MeResponse } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
 import {
   configChangesPage,
+  credentialSummary,
   memberView,
   OPERATOR_ME_RESPONSE,
   projectView,
@@ -67,6 +68,7 @@ describe('AdminShell', () => {
       'GET /api/work-sources': () => SOURCES,
       'GET /api/repositories': () => REPOSITORIES,
       'GET /api/secrets': () => SECRETS,
+      'GET /api/credentials': () => ({ credentials: [credentialSummary(), credentialSummary({ credential_id: 'cred_b' })], bindings: [] }),
       'GET /api/config/changes': () => configChangesPage({ total: slug === null ? 42 : 7 }),
       'GET /api/projects/{project}/source-links': () => ({
         source_links: [sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null })],
@@ -98,6 +100,7 @@ describe('AdminShell', () => {
     expect(count(el, 'projects')).toBe('2');
     expect(count(el, 'work-sources')).toBe('3');
     expect(count(el, 'repositories')).toBe('2');
+    expect(count(el, 'credentials')).toBe('2');
     expect(count(el, 'secrets')).toBe('1');
     expect(count(el, 'changes')).toBe('42');
   });

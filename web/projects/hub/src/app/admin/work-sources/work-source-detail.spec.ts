@@ -7,6 +7,8 @@ import { type MeResponse, type WorkSourceSummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
+  credentialSummary,
+  forgeDetail,
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
   settle,
@@ -27,7 +29,7 @@ const JIRA: WorkSourceSummary = {
   work_source_id: 'wsrc_j',
   slug: 'jira',
   name: 'Acme Jira',
-  provider: 'jira',
+  provider: 'github',
   locator: 'ACME',
   secret: 'jira-token',
   annotate: false,
@@ -72,6 +74,14 @@ describe('WorkSourceDetail', () => {
         source === 'hub' ? HUB : ['wsrc_j', 'jira', 'tracker'].includes(source) ? JIRA : stubError(404, { detail: 'no such work source' }),
       'PATCH /api/work-sources/{source}': () => ({ ...JIRA, slug: 'jira-2', revision: 4 }),
       'GET /api/config/changes': () => HISTORY,
+      'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_ghe', slug: 'ghe', name: 'Enterprise' })] }),
+      'GET /api/credentials': () => ({
+        credentials: [
+          credentialSummary({ credential_id: 'cred_g', slug: 'gh-main', forge_id: 'frg_github' }),
+          credentialSummary({ credential_id: 'cred_e', slug: 'ghe-main', forge_id: 'frg_ghe' }),
+        ],
+        bindings: [],
+      }),
     });
     TestBed.configureTestingModule({
       providers: [
@@ -130,5 +140,33 @@ describe('WorkSourceDetail', () => {
     const reads = stub.forRoute('/api/config/changes', 'GET');
     expect(reads[0].search).toContain('record_kind=work_source');
     expect(reads[0].search).toContain('record_key=wsrc_j');
+  });
+
+  it('offers only credentials of the source\'s forge, clears the pick on a forge change, and sends the credential', async () => {
+    const { harness } = await open('/admin/work-sources/wsrc_j');
+    const testid = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const options = () => Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-work-source-edit"]')!.click();
+    await settle(harness.fixture);
+
+    testid('admin-work-source-edit-field-credential')!.click();
+    await settle(harness.fixture);
+    expect(options().map((o) => o.textContent?.trim())).toEqual(['gh-main · github.token']);
+    options()[0].click();
+    await settle(harness.fixture);
+
+    testid('admin-work-source-edit-field-forge')!.click();
+    await settle(harness.fixture);
+    options().find((o) => o.textContent?.includes('Enterprise'))!.click();
+    await settle(harness.fixture);
+    testid('admin-work-source-edit-field-credential')!.click();
+    await settle(harness.fixture);
+    expect(options().map((o) => o.textContent?.trim())).toEqual(['ghe-main · github.token']);
+    options()[0].click();
+    await settle(harness.fixture);
+    testid('admin-work-source-edit-submit')!.click();
+    await settle(harness.fixture);
+
+    expect(stub.forRoute('/api/work-sources/wsrc_j', 'PATCH')[0].body).toEqual({ forge: 'frg_ghe', credential: 'cred_e' });
   });
 });

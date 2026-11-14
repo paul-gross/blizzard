@@ -23,6 +23,7 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { repositoryFields, repositoryRecordVm } from './repositories.model';
 import { injectRepositoryQuery, injectLandingPoliciesQuery } from './repositories.query';
+import { injectCredentialsQuery } from '../credentials/credentials.query';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
 /**
@@ -69,6 +70,7 @@ export class RepositoryDetail {
   private readonly lifecycleMutation = injectRepositoryLifecycleMutation();
 
   private readonly forgesQuery = injectForgesQuery(() => false);
+  private readonly credentialsQuery = injectCredentialsQuery(() => false);
   private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
   /** The forge the edit form has picked; until it picks one, the repository's own. */
   private readonly pickedForge = signal<string | null>(null);
@@ -77,6 +79,7 @@ export class RepositoryDetail {
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
+      this.credentialsQuery.data()?.credentials ?? [],
       this.landingPoliciesQuery.data() ?? null,
       this.forgeQuery.data()?.landing_policies ?? null,
     ),
@@ -91,7 +94,7 @@ export class RepositoryDetail {
   );
   protected readonly shown = computed(() => {
     const record = this.repositoryQuery.data();
-    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id });
+    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id, credential: record.credential_id });
   });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));

@@ -23,6 +23,8 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { WORK_SOURCE_FIELDS, workSourceCliName, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
+import { credentialPickerFields } from '../credentials/credentials.model';
+import { injectCredentialsQuery } from '../credentials/credentials.query';
 import { forgePickerFields } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
 
@@ -70,7 +72,10 @@ export class WorkSourceDetail {
   private readonly lifecycleMutation = injectWorkSourceLifecycleMutation();
 
   private readonly forgesQuery = injectForgesQuery(() => false);
-  protected readonly fields = computed(() => forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []));
+  private readonly credentialsQuery = injectCredentialsQuery(() => false);
+  protected readonly fields = computed(() =>
+    credentialPickerFields(forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []), this.credentialsQuery.data()?.credentials ?? []),
+  );
   protected readonly editOpen = signal(false);
   protected readonly editError = signal<string | null>(null);
   private readonly pendingKey = signal<string | null>(null);
@@ -81,7 +86,7 @@ export class WorkSourceDetail {
   );
   protected readonly shown = computed(() => {
     const record = this.sourceQuery.data();
-    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id });
+    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id, credential: record.credential_id });
   });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
