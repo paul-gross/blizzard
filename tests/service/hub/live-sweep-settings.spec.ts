@@ -32,3 +32,17 @@ test('a committed interval edit is retained when the next forge-status pass runs
     expect.objectContaining({ key: 'annotation_interval_seconds', value: 1 }),
   ]));
 });
+
+test('settings audit follows the hosted controlled clock', async ({ api, clock }) => {
+  const instant = await clock.advance(86400);
+  const initial = await api.get('/api/admin/settings');
+  const edited = await api.patch('/api/admin/settings', {
+    headers: { 'If-Match': String(initial.body.revision) },
+    data: { set: { action_pass_seconds: 5 } },
+  });
+  expect(edited.status).toBe(200);
+  const history = await api.get('/api/admin/settings/changes');
+  expect(history.status).toBe(200);
+  const change = history.body.changes.find((entry: { revision: number }) => entry.revision === initial.body.revision + 1);
+  expect(new Date(change.recorded_at).getTime()).toBe(instant.getTime());
+});

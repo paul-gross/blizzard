@@ -241,6 +241,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.secrets import StoreSecretReader
 from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.settings.service import HubSettingsAuthoring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
@@ -943,7 +944,7 @@ class LiveConfig:
 
 @dataclass(frozen=True)
 class HubSettingsGraph:
-    store: HubSettingsStore
+    store: IReadHubSettingsAdmin
     reader: HubSettingsReader
     authoring: HubSettingsAuthoring
     footing: HubSettingsFooting

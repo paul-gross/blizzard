@@ -6207,8 +6207,17 @@
             "type": "string"
           },
           "op": {
+            "enum": [
+              "create",
+              "edit",
+              "retire",
+              "enable",
+              "replace",
+              "unchanged"
+            ],
             "title": "Op",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -7603,6 +7612,16 @@
         ],
         "title": "DependentNotEditableView",
         "type": "object"
+      },
+      "Door": {
+        "enum": [
+          "seed",
+          "cli",
+          "page",
+          "api",
+          "apply"
+        ],
+        "type": "string"
       },
       "DuplicateCapabilityHarnessProblem": {
         "additionalProperties": true,
@@ -15035,8 +15054,8 @@
             "type": "string"
           },
           "lifetime": {
-            "title": "Lifetime",
-            "type": "string"
+            "$ref": "#/components/schemas/Lifetime",
+            "x-blizzard-open": true
           },
           "revision": {
             "anyOf": [
@@ -15050,8 +15069,13 @@
             "title": "Revision"
           },
           "source": {
+            "enum": [
+              "entry",
+              "default"
+            ],
             "title": "Source",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           },
           "value": {
             "title": "Value"
@@ -15117,16 +15141,16 @@
             "type": "array"
           },
           "door": {
-            "title": "Door",
-            "type": "string"
+            "$ref": "#/components/schemas/Door",
+            "x-blizzard-open": true
           },
           "id": {
             "title": "Id",
             "type": "integer"
           },
           "op": {
-            "title": "Op",
-            "type": "string"
+            "$ref": "#/components/schemas/Op",
+            "x-blizzard-open": true
           },
           "recorded_at": {
             "title": "Recorded At",
@@ -16393,6 +16417,17 @@
         ],
         "title": "LeaseTranscriptView",
         "type": "object"
+      },
+      "Lifetime": {
+        "description": "When a change to a key's value reaches the daemon reading it.",
+        "enum": [
+          "pass",
+          "session",
+          "boot",
+          "immutable"
+        ],
+        "title": "Lifetime",
+        "type": "string"
       },
       "LoginDisabledProblem": {
         "additionalProperties": true,
@@ -18035,6 +18070,16 @@
         ],
         "title": "OldFieldWarning",
         "type": "object"
+      },
+      "Op": {
+        "enum": [
+          "seed",
+          "edit",
+          "create",
+          "retire",
+          "enable"
+        ],
+        "type": "string"
       },
       "OpenDecisionsResponse": {
         "description": "The fleet's open (unresolved) decisions.",

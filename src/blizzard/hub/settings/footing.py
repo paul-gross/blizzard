@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -32,6 +33,16 @@ def _put(document: dict[str, object], path: str, value: object) -> None:
         assert isinstance(child, dict)
         table = cast(dict[str, object], child)
     table[parts[-1]] = thaw(value)
+
+
+def _finite(value: object) -> bool:
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, Mapping):
+        return all(_finite(item) for item in cast(Mapping[object, object], value).values())
+    if isinstance(value, (list, tuple)):
+        return all(_finite(item) for item in cast(list[object] | tuple[object, ...], value))
+    return True
 
 
 @domain_model
@@ -68,6 +79,8 @@ class HubSettingsFooting:
                     continue
                 raise ConfigError(f"unknown hub setting {key!r}")
             if not entry.at_default:
+                if not _finite(entry.value):
+                    raise ConfigError(f"{key} must not contain a non-finite number")
                 _put(document, key, entry.value)
         try:
             resolved = HubConfig.resolve_document(

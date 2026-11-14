@@ -198,7 +198,7 @@ class ConfigApplyOutcome(WireModel):
 
     kind: str
     key: str
-    op: str
+    op: Annotated[Literal["create", "edit", "retire", "enable", "replace", "unchanged"] | Unrecognized, OPEN]
     diff: list[FieldChangeView] = []
 
 

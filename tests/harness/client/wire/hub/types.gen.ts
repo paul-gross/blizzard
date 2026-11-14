@@ -3618,7 +3618,7 @@ export type ConfigApplyOutcome = {
     /**
      * Op
      */
-    op: string;
+    op: 'create' | 'edit' | 'retire' | 'enable' | 'replace' | 'unchanged';
 };
 
 /**
@@ -4495,6 +4495,8 @@ export type DependentNotEditableView = {
     type: 'urn:blizzard:problem:dependent-not-editable';
     [key: string]: unknown;
 };
+
+export type Door = 'seed' | 'cli' | 'page' | 'api' | 'apply';
 
 /**
  * DuplicateCapabilityHarnessProblem
@@ -8970,10 +8972,7 @@ export type HubSettingRow = {
      * Key
      */
     key: string;
-    /**
-     * Lifetime
-     */
-    lifetime: string;
+    lifetime: Lifetime;
     /**
      * Revision
      */
@@ -8981,7 +8980,7 @@ export type HubSettingRow = {
     /**
      * Source
      */
-    source: string;
+    source: 'entry' | 'default';
     /**
      * Value
      */
@@ -9014,18 +9013,12 @@ export type HubSettingsChange = {
     diff: Array<{
         [key: string]: unknown;
     }>;
-    /**
-     * Door
-     */
-    door: string;
+    door: Door;
     /**
      * Id
      */
     id: number;
-    /**
-     * Op
-     */
-    op: string;
+    op: Op;
     /**
      * Recorded At
      */
@@ -9885,6 +9878,13 @@ export type LeaseTranscriptView = {
      */
     turns: Array<TurnSegmentViewOutput>;
 };
+
+/**
+ * Lifetime
+ *
+ * When a change to a key's value reaches the daemon reading it.
+ */
+export type Lifetime = 'pass' | 'session' | 'boot' | 'immutable';
 
 /**
  * LoginDisabledProblem
@@ -10890,6 +10890,8 @@ export type OldFieldWarning = {
      */
     message: string;
 };
+
+export type Op = 'seed' | 'edit' | 'create' | 'retire' | 'enable';
 
 /**
  * OpenDecisionsResponse

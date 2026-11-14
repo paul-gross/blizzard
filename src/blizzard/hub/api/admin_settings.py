@@ -88,8 +88,8 @@ def _view(settings: HubSettingsGraph) -> HubSettingsView:
             HubSettingRow(
                 key=key.path,
                 value=thaw(entry.value if source == "entry" and entry else _default(key.path, key.default)),
-                source=source,
-                lifetime=key.lifetime.value,
+                source="entry" if source == "entry" else "default",
+                lifetime=key.lifetime,
                 revision=metadata[0] if metadata else None,
                 written_at=iso_utc(metadata[1]) if metadata else None,
                 written_by=metadata[2] if metadata else None,
@@ -182,11 +182,8 @@ def apply_document(
     if any(value is None for value in entries.values()):
         _refuse("settings_invalid", "null is not a setting value; use settings unset")
     change = Change("edit", sets=entries)
-    apply_id = None if dry_run else settings.store.new_apply_id()
     try:
-        diff = settings.store.apply_document(change, actor=identity.user_id, apply_id=apply_id, dry_run=dry_run)
-        if not dry_run:
-            settings.authoring.committed(diff)
+        apply_id, diff = settings.authoring.apply_document(change, actor=identity.user_id, dry_run=dry_run)
     except SettingsInvalid as exc:
         _invalid(exc)
     moved = {field.key: field for field in diff}

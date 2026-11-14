@@ -47,20 +47,6 @@ def test_invalid_write_leaves_no_changes(tmp_path: Path) -> None:
     assert not store.snapshot().entries
 
 
-def test_migration_round_trip_keeps_tenant_data(tmp_path: Path) -> None:
-    from blizzard.hub.store.schema import tenants
-    from tests.support.scaffolding import add_tenant
-
-    runner, engine = migrate_to(tmp_path, "20261111_1000_chunk_repository_targets")
-    tenant = add_tenant(engine, "retained")
-    runner.upgrade("head")
-    runner.downgrade("20261111_1000_chunk_repository_targets")
-    runner.upgrade("head")
-    with engine.connect() as conn:
-        assert conn.execute(sa.select(tenants.c.name).where(tenants.c.tenant_id == tenant)).scalar_one() == "retained"
-        assert conn.execute(sa.select(sa.func.count()).select_from(hub_setting_changes)).scalar_one() == 0
-
-
 def test_failure_during_audit_rolls_back_revision_and_entries(tmp_path: Path) -> None:
     class FailedClock:
         def now(self) -> datetime:

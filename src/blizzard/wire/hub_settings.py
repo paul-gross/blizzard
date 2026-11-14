@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.foundation.config_keys import Lifetime
+from blizzard.foundation.settings_record.vocabulary import Door, Op
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.vocabulary import OPEN
 
 
 class HubSettingRow(WireModel):
     key: str
     value: object
-    source: str
-    lifetime: str
+    source: Annotated[Literal["entry", "default"] | Unrecognized, OPEN]
+    lifetime: Annotated[Lifetime | Unrecognized, OPEN]
     revision: int | None = None
     written_at: str | None = None
     written_by: str | None = None
@@ -34,8 +40,8 @@ class HubSettingsChange(WireModel):
     revision: int
     recorded_at: str
     actor: str
-    door: str
-    op: str
+    door: Annotated[Door | Unrecognized, OPEN]
+    op: Annotated[Op | Unrecognized, OPEN]
     apply_id: str | None
     diff: list[dict[str, object]]
 

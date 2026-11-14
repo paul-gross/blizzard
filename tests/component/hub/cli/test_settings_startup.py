@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 from click.testing import CliRunner
 
+from blizzard.foundation.clock import IClock
 from blizzard.hub.cli import runtime
 from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.config import HubConfig
+from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from tests.support.config_inputs import hub_runtime_of, init_hub
 
 
@@ -17,7 +20,9 @@ def test_host_seeds_and_restarts_from_stored_values(tmp_path: Path, monkeypatch:
     init_hub(tmp_path)
     seen: list[tuple[bool, int]] = []
 
-    def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+    def serve(
+        config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+    ) -> None:
         seen.append((config.follow_latest, config.action_pass_seconds))
         if len(seen) == 1:
             revision = settings.reader.snapshot().revision
@@ -65,7 +70,9 @@ def test_invalid_late_seed_can_be_corrected_before_retry(tmp_path: Path, monkeyp
     )
     seen: list[tuple[int, int]] = []
 
-    def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+    def serve(
+        config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+    ) -> None:
         seen.append((config.annotation_interval_seconds, config.action_pass_seconds))
 
     monkeypatch.setattr(runtime, "_serve", serve)
@@ -113,12 +120,12 @@ def test_startup_legacy_guard_uses_captured_file_and_environment(
     init_hub(tmp_path)
 
     def serve(
-        config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph
+        config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
     ) -> None:
         with config.config_path.open("a") as f:
             f.write('\n[[work_source]]\nname="new"\nprovider="github"\nrepo="a/b"\ntoken_env="NEW_TOKEN"\n')
         monkeypatch.setenv("BZ_FORGE_URL", "changed-after-capture")
-        app = build_hosted_app(config, version_window=window, settings=settings)
+        app = build_hosted_app(config, version_window=window, settings=settings, clock=clock)
         app.state.hosted_cleanup.close()
         app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
 
@@ -145,10 +152,13 @@ def test_legacy_stored_boot_value_does_not_override_file_or_migrate_validation(
     init_hub(tmp_path)
     seen: list[bool] = []
 
-    def serve(config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+    def serve(
+        config: HubConfig, window: object, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+    ) -> None:
         seen.append(config.follow_latest)
         if len(seen) == 1:
-            settings.store.apply(
+            # Simulate a legacy stored boot value, bypassing current authoring validation.
+            cast(HubSettingsStore, settings.store).apply(
                 Change("edit", sets={"follow_latest": False}),
                 if_match=settings.reader.snapshot().revision,
                 door="api",
@@ -168,3 +178,46 @@ def test_legacy_stored_boot_value_does_not_override_file_or_migrate_validation(
     result = cli.invoke(runtime.migrate_cmd, ["--dir", str(tmp_path)])
     assert result.exit_code != 0
     assert "follow_latest" in result.output
+
+
+def test_settings_audit_uses_hosted_clock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import timedelta
+
+    import sqlalchemy as sa
+
+    from blizzard.foundation.clock import ControlledClock
+    from blizzard.foundation.settings_record.vocabulary import Change
+    from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
+    from blizzard.hub.domain.runners.version_window import VersionWindow
+    from blizzard.hub.store.schema import hub_setting_changes
+
+    monkeypatch.setenv("BLIZZARD_CLOCK", "controlled")
+    monkeypatch.setenv("BLIZZARD_CLOCK_FENCE", "1")
+    init_hub(tmp_path)
+
+    def serve(
+        config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+    ) -> None:
+        app = build_hosted_app(config, version_window=window, settings=settings, clock=clock)
+        try:
+            assert isinstance(clock, ControlledClock)
+            assert app.state.services.clock is clock
+            clock.set(clock.now() + timedelta(days=1))
+            settings.authoring.apply(
+                Change("edit", sets={"action_pass_seconds": 45}),
+                if_match=settings.reader.snapshot().revision,
+                door="api",
+                actor="test",
+            )
+            with app.state.engine.connect() as conn:
+                recorded = conn.execute(
+                    sa.select(hub_setting_changes.c.recorded_at).where(hub_setting_changes.c.actor == "test")
+                ).scalar_one()
+            assert recorded.replace(tzinfo=clock.now().tzinfo) == clock.now()
+        finally:
+            app.state.hosted_cleanup.close()
+            app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+
+    monkeypatch.setattr(runtime, "_serve", serve)
+    result = CliRunner().invoke(runtime.host, ["--dir", str(tmp_path)])
+    assert result.exit_code == 0, repr(result.exception)

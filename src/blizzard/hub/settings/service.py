@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 # Protects only the in-process listener set, not a store decision.
 # ast-grep-ignore: bzh:store-exclusive-write
 from threading import Lock
 
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.settings_record.decision import Validate, decide
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
 from blizzard.hub.settings.model import HubSettingsApply, IHubSettingsSnapshots, IWriteHubSettings
@@ -33,6 +34,9 @@ class HubSettingsAuthoring:
 
         return unsubscribe
 
+    def seed(self, keys: Sequence[str], file: ConfigView) -> None:
+        self._store.seed(keys, file)
+
     def submit(self, request: HubSettingsApply) -> tuple[FieldChange, ...]:
         snapshot = self._reader.snapshot()
         entries = {key: Entry(thaw(entry.value), entry.at_default) for key, entry in snapshot.entries.items()}
@@ -40,10 +44,20 @@ class HubSettingsAuthoring:
         changed = self._store.apply(
             request.change, if_match=request.if_match, door=request.door, actor=request.actor, apply_id=request.apply_id
         )
-        self.committed(changed)
+        self._committed(changed)
         return changed
 
-    def committed(self, changed: tuple[FieldChange, ...]) -> None:
+    def apply_document(
+        self, change: Change, *, actor: str, dry_run: bool
+    ) -> tuple[str | None, tuple[FieldChange, ...]]:
+        """Apply or preview atomically against the store's locked current revision."""
+        apply_id = None if dry_run else self._store.new_apply_id()
+        changed = self._store.apply_document(change, actor=actor, apply_id=apply_id, dry_run=dry_run)
+        if not dry_run:
+            self._committed(changed)
+        return apply_id, changed
+
+    def _committed(self, changed: tuple[FieldChange, ...]) -> None:
         """Notify listeners after a successful committed write (never a dry run)."""
         if changed:
             with self._listeners_lock:

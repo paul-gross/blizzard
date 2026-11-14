@@ -24,11 +24,12 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
+from blizzard.foundation.clock import IClock, resolve_clock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app, open_hub_engine
-from blizzard.hub.composition import HubSettingsGraph, build_hub_settings, build_system_clock
+from blizzard.hub.composition import HubSettingsGraph, build_hub_settings
 from blizzard.hub.config import ConfigError, HubConfig, bootstrap_document
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError, check_own_floor
@@ -160,27 +161,30 @@ def host(
         config.db_url,
         document,
     )
+    clock = resolve_clock(environ)
     settings_engine = open_hub_engine(config.db_url)
     settings = build_hub_settings(
         HubStoreConnections(settings_engine, HubStoreErrorFactory(get_logger("blizzard.hub.store"))),
-        build_system_clock(),
+        clock,
         footing,
     )
     try:
         with click_exception_on(ConfigError, SettingsInvalid):
-            settings.store.seed(setting_keys(HUB_REGISTRY), footing.file_view(document))
+            settings.authoring.seed(setting_keys(HUB_REGISTRY), footing.file_view(document))
             config = footing.resolve(settings.reader.snapshot().entries)
-        _serve(config, window, listening_file, settings)
+        _serve(config, window, listening_file, settings, clock)
     finally:
         settings_engine.dispose()
 
 
-def _serve(config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph) -> None:
+def _serve(
+    config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+) -> None:
     # Bound before anything is built, so every derivation of the port sees the one actually bound.
     with bound_tcp(config.host, config.port) as sock:
         config = replace(config, port=bound_port(sock))
         with click_exception_on(ConfigError):
-            app = build_hosted_app(config, version_window=window, settings=settings)
+            app = build_hosted_app(config, version_window=window, settings=settings, clock=clock)
         try:
             click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
             server = build_early_shutdown_server(

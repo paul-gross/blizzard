@@ -28,7 +28,7 @@ from starlette.exceptions import HTTPException
 from starlette.routing import Route
 
 from blizzard import __version__
-from blizzard.foundation.clock import ControlledClock, resolve_clock
+from blizzard.foundation.clock import ControlledClock, IClock, resolve_clock
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
@@ -292,14 +292,19 @@ class Sweep:
     async def _run_passes(self, log: structlog.stdlib.BoundLogger, wake: asyncio.Event, first: bool) -> None:
         # A single interval is captured for each pass and its overrun warning.
         while not self.shutdown.is_set():
-            config = self.pass_config() if self.pass_config is not None else None
-            interval = (
-                _sweep_interval(self.config_name, config)
-                if config is not None and self.interval_key is not None
-                else self.live_interval()
-                if self.live_interval is not None
-                else self.interval_seconds
-            )
+            try:
+                config = self.pass_config() if self.pass_config is not None else None
+                interval = (
+                    _sweep_interval(self.config_name, config)
+                    if config is not None and self.interval_key is not None
+                    else self.live_interval()
+                    if self.live_interval is not None
+                    else self.interval_seconds
+                )
+            except Exception:
+                log.exception("sweep settings read failed")
+                await self._wait(self.interval_seconds)
+                continue
             started = self.timer()
             try:
                 with bind_pass_config(config) if config is not None else contextlib.nullcontext():
@@ -322,10 +327,16 @@ class Sweep:
                 first = False
                 continue
             wait_started = self.timer()
+            retry_read = False
             while not self.shutdown.is_set():
                 if wake.is_set():
                     wake.clear()
-                    delay = self.live_interval() if self.live_interval is not None else interval
+                    try:
+                        delay = self.live_interval() if self.live_interval is not None else interval
+                        retry_read = False
+                    except Exception:
+                        log.exception("sweep settings read failed")
+                        retry_read = True
                 remaining = delay - (self.timer() - wait_started)
                 if remaining <= 0:
                     break
@@ -333,10 +344,14 @@ class Sweep:
                 changed = asyncio.create_task(wake.wait())
                 try:
                     done, _ = await asyncio.wait(
-                        (shutdown, changed), timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+                        (shutdown, changed),
+                        timeout=min(remaining, 1) if retry_read else remaining,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
                     if not done:
-                        break
+                        if not retry_read:
+                            break
+                        wake.set()
                 finally:
                     shutdown.cancel()
                     changed.cancel()
@@ -744,13 +759,14 @@ def build_hosted_app(
     oauth_http_client: httpx2.Client | None = None,
     version_window: VersionWindow,
     settings: HubSettingsGraph | None = None,
+    clock: IClock | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
     instrumented through it. ``version_window`` judges each registering runner's version."""
-    resolved_clock = resolve_clock(os.environ)
+    resolved_clock = clock if clock is not None else resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
     owns_tracing = platform_tracing is None
     platform_tracing = (
