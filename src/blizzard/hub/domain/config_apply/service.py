@@ -39,8 +39,13 @@ from blizzard.hub.domain.config.apply import (
 )
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
-from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD, CredentialId
-from blizzard.hub.domain.config.credential_resolution import CredentialChoice, decide_credential, held_for_old_field
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credential_resolution import (
+    CredentialChoice,
+    available_credential,
+    decide_credential,
+    held_for_old_field,
+)
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialDraft,
@@ -620,19 +625,34 @@ class ConfigApplication:
         leaves the projects. An entry naming a credential acts with it, as the apply leaves it, and holds its secret.
         An entry's :class:`ConfigFieldError` on its forge or credential is refused at the entry."""
 
-        def named(section: str, index: int, reference: str) -> ConfiguredCredential:
+        def acting(
+            section: str,
+            index: int,
+            credential: str | UnsetType,
+            forge_id: ForgeId,
+            *,
+            field: str,
+            sent: str | None | UnsetType,
+            current: str | None | UnsetType,
+            forge_moved: bool,
+        ) -> tuple[CredentialId, str] | None:
+            """The credential an entry acts with and its secret: the one it names, else the one its old field resolves
+            to — ``field`` names it, ``sent`` is the value the entry sends and ``current`` the stored record's
+            (:data:`UNSET` for a create); ``None`` leaves the stored record's. Refused at the entry when the named one
+            is unavailable."""
+            decision = decide_credential(
+                _NO_CREDENTIAL, sent, current=current, field=field, required=False, forge_moved=forge_moved
+            )
+            held: tuple[CredentialId, str] | None = None
+            if decision.resolve is not None:
+                held = (old_fields.planned(section, index, field, forge_id, decision.resolve), decision.resolve)
+            if isinstance(credential, UnsetType):
+                return held
             try:
-                decision = decide_credential(
-                    CredentialChoice(reference, credentials.resolve(reference)),
-                    UNSET,
-                    current=UNSET,
-                    field=CREDENTIAL_FIELD,
-                    required=False,
-                )
+                use = available_credential(credential, credentials.resolve(credential))
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(section, index, exc) from exc
-            assert decision.use is not None
-            return decision.use
+            return use.credential_id, use.fields.secret_name
 
         def resolved(choice: ForgeChoice, provider: str | None, current: ForgeId | None) -> ConfiguredForge | None:
             return resolve_forge(
@@ -660,23 +680,22 @@ class ConfigApplication:
             assert forge_id is not None
             fields = entry.draft.on(forge_id)
             edit = entry.edit if forge is None else replace(entry.edit, forge_id=forge_id)
-            decision = decide_credential(
-                _NO_CREDENTIAL,
-                (UNSET if entry.draft.secret is None else entry.draft.secret) if stored is None else entry.edit.secret,
-                current=UNSET if stored is None else stored.fields.secret,
+            held_credential = acting(
+                WORK_SOURCES_SECTION,
+                index,
+                entry.credential,
+                forge_id,
                 field="secret",
-                required=False,
+                sent=(UNSET if entry.draft.secret is None else entry.draft.secret)
+                if stored is None
+                else entry.edit.secret,
+                current=UNSET if stored is None else stored.fields.secret,
                 forge_moved=stored is not None and forge_id != stored.fields.forge_id,
             )
-            if decision.resolve is not None:
-                planned = old_fields.planned(WORK_SOURCES_SECTION, index, "secret", forge_id, decision.resolve)
-                fields = entry.draft.on(forge_id, credential_id=planned, secret=decision.resolve)
-                edit = replace(edit, credential_id=planned, secret=decision.resolve)
-            if not isinstance(entry.credential, UnsetType):
-                use = named(WORK_SOURCES_SECTION, index, entry.credential)
-                secret = use.fields.secret_name
-                fields = entry.draft.on(forge_id, credential_id=use.credential_id, secret=secret)
-                edit = replace(edit, credential_id=use.credential_id, secret=secret)
+            if held_credential is not None:
+                credential_id, secret = held_credential
+                fields = entry.draft.on(forge_id, credential_id=credential_id, secret=secret)
+                edit = replace(edit, credential_id=credential_id, secret=secret)
             work_sources.append(
                 WorkSourceDeclaration(
                     slug=entry.slug,
@@ -698,25 +717,22 @@ class ConfigApplication:
             assert forge_id is not None
             repo_fields = repo.draft.on(forge_id)
             repo_edit = repo.edit if forge is None else replace(repo.edit, forge_id=forge_id)
-            decision = decide_credential(
-                _NO_CREDENTIAL,
-                (UNSET if repo.draft.secret_name is None else repo.draft.secret_name)
+            held_credential = acting(
+                REPOSITORIES_SECTION,
+                index,
+                repo.credential,
+                forge_id,
+                field="secret_name",
+                sent=(UNSET if repo.draft.secret_name is None else repo.draft.secret_name)
                 if stored_repo is None
                 else repo.edit.secret_name,
                 current=UNSET if stored_repo is None else stored_repo.fields.secret_name,
-                field="secret_name",
-                required=False,
                 forge_moved=stored_repo is not None and forge_id != stored_repo.fields.forge_id,
             )
-            if decision.resolve is not None:
-                planned = old_fields.planned(REPOSITORIES_SECTION, index, "secret_name", forge_id, decision.resolve)
-                repo_fields = repo.draft.on(forge_id, credential_id=planned, secret_name=decision.resolve)
-                repo_edit = replace(repo_edit, credential_id=planned, secret_name=decision.resolve)
-            if not isinstance(repo.credential, UnsetType):
-                use = named(REPOSITORIES_SECTION, index, repo.credential)
-                secret_name = use.fields.secret_name
-                repo_fields = repo.draft.on(forge_id, credential_id=use.credential_id, secret_name=secret_name)
-                repo_edit = replace(repo_edit, credential_id=use.credential_id, secret_name=secret_name)
+            if held_credential is not None:
+                credential_id, secret_name = held_credential
+                repo_fields = repo.draft.on(forge_id, credential_id=credential_id, secret_name=secret_name)
+                repo_edit = replace(repo_edit, credential_id=credential_id, secret_name=secret_name)
             repositories.append(
                 RepositoryDeclaration(
                     slug=repo.slug,
