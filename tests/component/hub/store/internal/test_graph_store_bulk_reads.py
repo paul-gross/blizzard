@@ -296,3 +296,29 @@ def test_executors_by_node_name_is_one_statement(tmp_path: Path) -> None:
         _mint(store, f"gr_{i}", f"g{i}", node_names=["a", "b"], created_at=_T0)
 
     assert count_queries(engine, store.executors_by_node_name) == 1
+
+
+def test_is_retired_joins_the_supplied_unit_and_rejects_expired_tokens(tmp_path: Path) -> None:
+    from blizzard.hub.domain.kernel.transactions import TransactionMisuse
+    from blizzard.hub.store.schema import graph_lifecycle_facts
+    from blizzard.hub.store.transactions import HubTransactions, connection_for
+
+    _, engine = migrate_to(tmp_path, "head")
+    scoped = hub_store_connections(engine)
+    graphs = GraphStore(scoped)
+    _mint(graphs, "gr_joined", "joined", created_at=_T0)
+    assert not graphs.is_retired("gr_joined")
+    locked = None
+    with pytest.raises(ValueError), HubTransactions(scoped).begin() as unit:
+        locked = unit.lock_chunks([])
+        conn = connection_for(scoped, locked)
+        conn.execute(
+            scoped.insert(graph_lifecycle_facts).values(graph_id="gr_joined", retired=True, set_at=_T0, set_by="op")
+        )
+        assert graphs.is_retired("gr_joined", transaction=locked)
+        raise ValueError("roll back")
+    assert not graphs.is_retired("gr_joined")
+    assert locked is not None
+    with pytest.raises(TransactionMisuse):
+        graphs.is_retired("gr_joined", transaction=locked)
+    engine.dispose()

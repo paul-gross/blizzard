@@ -27,7 +27,6 @@ from blizzard.hub.domain.chunk.model import (
     person_note,
 )
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -272,13 +271,14 @@ class RequeueService:
         *,
         movement: IWriteChunkMovementRepository,
         route: IWriteChunkRouteRepository,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._movement = movement
         self._route = route
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def requeue(self, chunk: Chunk, *, by: str, note: str | None = None) -> int:
@@ -290,19 +290,20 @@ class RequeueService:
         requeue (or superseding fact) cannot be raced past this guard. Raises
         :class:`ChunkNotFound` for a chunk gone under the lock. Returns the freshly-written
         ``requeues.id``."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             if not facts.admits(ChunkVerb.REQUEUE):
                 raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
             now = self._clock.now()
             requeue_id = self._movement.record_requeue(  # supersedes escalation
-                chunk.chunk_id, at=now, by=by, note=person_note(note), transaction=handle.transaction
+                chunk.chunk_id, at=now, by=by, note=person_note(note), transaction=transaction
             )
             # A detached chunk holds no route: there is nothing to release.
-            if handle.route_of(chunk.chunk_id) is not None:
+            if self._route.route_of(chunk.chunk_id, transaction=transaction) is not None:
                 self._route.record_route_released(
-                    chunk.chunk_id, at=now, transaction=handle.transaction
+                    chunk.chunk_id, at=now, transaction=transaction
                 )  # -> ready, re-leasable
             return requeue_id

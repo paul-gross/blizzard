@@ -94,6 +94,7 @@ export type * as Wire from './client/wire/hub/types.gen';
 export type { ForgeApi, HubApi };
 export type { Repository };
 export { FIXTURE_FORGE } from './hubs';
+export { actionLeaseGate, actionPause, actionPrompt, actionReadback } from './action-routing';
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
 export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({

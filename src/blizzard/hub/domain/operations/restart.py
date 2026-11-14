@@ -18,12 +18,13 @@ from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_e
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite, waiting
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.flow_submissions import IReadChunkFlowSubmissions
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.operations.edit import MigrationTargetIsCurrentPin
 
 #: The answer an open ask is consumed with. Fixed and toneless: the person who moved the
@@ -180,7 +181,8 @@ class RestartService:
         facts: IReadChunkFactsRepository,
         graphs: IReadGraphRepository,
         clock: IClock,
-        exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
+        record: IReadChunkRecordRepository,
         closer_available: Callable[[str], bool],
         events: EventLogService,
     ) -> None:
@@ -195,8 +197,8 @@ class RestartService:
         self._graphs = graphs
         self._clock = clock
         self._closer_available = closer_available
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
+        self._record = record
 
     def restart(
         self,
@@ -214,14 +216,15 @@ class RestartService:
         write. :func:`plan_restart` decides against the facts and the record re-read under the row
         lock; every refusal writes nothing. Returns the ``chunk_restarts.id`` and the ``withdrawn`` flow facts, for the
         caller to announce once committed; the close-skip events a gate opened on arrival wrote are published here."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             # Re-read fresh under the lock: a concurrent edit that re-pinned ``graph_id``
             # between the caller's own load and this lock must not have the plan answered
             # against a pin it already changed.
-            current = handle.record(chunk.chunk_id)
+            current = self._record.get(chunk.chunk_id, transaction=locked)
             if current is None:
                 raise ChunkNotFound(chunk.chunk_id)
             plan = plan_restart(
@@ -230,9 +233,10 @@ class RestartService:
                 graph,
                 node_name=node_name,
                 to_graph=to_graph,
-                to_graph_retired=to_graph is not None and self._graphs.is_retired(to_graph.graph_id),
+                to_graph_retired=to_graph is not None
+                and self._graphs.is_retired(to_graph.graph_id, transaction=locked),
             )
-            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=handle.transaction)
+            open_submissions = self._submissions.open_flow_submissions(chunk.chunk_id, transaction=locked)
             written = self._movement.record_restart(
                 chunk.chunk_id,
                 from_node_id=plan.from_node_id,
@@ -245,14 +249,14 @@ class RestartService:
                 to_graph_id=plan.to_graph_id,
                 note=person_note(note),
                 waiting=waiting(open_submissions),
-                transaction=handle.transaction,
+                transaction=locked,
             )
-            landed = handle.facts(chunk.chunk_id)
+            landed = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             assert landed is not None
             close_skipped = open_graph_gate_on_arrival(
                 self._decisions,
                 self._facts,
-                handle.transaction,
+                locked,
                 self._clock,
                 chunk_id=chunk.chunk_id,
                 graph=to_graph if to_graph is not None else graph,

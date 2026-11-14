@@ -1,10 +1,9 @@
 """ApplyService and DecisionService under the row lock (unit tier).
 
-The fake lock yields a handle whose ``facts`` are the post-race facts, while the pre-lock
+The fake transaction selects post-race facts, while the pre-lock
 ``load_facts`` answers the pre-race ones — so each case observes only what the service re-derives
 under the lock: a racer's landed movement answered as its replay, or a racer that moved the
-chunk, escalated, or asked at the same epoch refused before any write. The ``record_*_locked``
-writers are spies; every other port raises on an unexpected call."""
+chunk, escalated, or asked at the same epoch refused before any write. The record writers are spies; every other port raises on an unexpected call."""
 
 from __future__ import annotations
 
@@ -28,6 +27,7 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     IntendedMigration,
     QuestionFact,
+    RestartFact,
     TransitionFact,
     decide_close_enqueue,
 )
@@ -35,7 +35,6 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.chunk.ports.decisions import DecisionWrite, IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite, TransitionWrite
@@ -48,6 +47,7 @@ from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSu
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
+from blizzard.hub.domain.runners.route import Route
 from tests.support.completion_facts import (
     AT_BUILD,
     BUILD,
@@ -82,11 +82,17 @@ class _Ports:
     decisions: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     wakes: int = 0
     migration_transactions: list[object] = field(default_factory=list[object])
+    transition_transactions: list[object] = field(default_factory=list[object])
+    fact_transactions: list[object] = field(default_factory=list[object])
+    route_transactions: list[object | None] = field(default_factory=list[object | None])
     refusal: FenceRefusal | None = None
     gate: GateDecision | None = None
+    route: Route | None = None
 
     # facts
     def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
+        if transaction is not None:
+            self.fact_transactions.append(transaction)
         return self.pre_lock if transaction is None else self.under_lock
 
     # movement
@@ -104,6 +110,7 @@ class _Ports:
         return self.refusal or MigrationWrite("mg_recorded")
 
     def record_transition(self, *, transaction: LockedTransaction, **kwargs: Any) -> TransitionWrite | FenceRefusal:
+        self.transition_transactions.append(transaction)
         self.transitions.append(kwargs)
         return self.refusal or TransitionWrite()
 
@@ -120,8 +127,9 @@ class _Ports:
         return self.refusal or DecisionWrite(wrote=True)
 
     # route / artifacts / registry / hub executor
-    def route_of(self, chunk_id: str) -> None:
-        return None
+    def route_of(self, chunk_id: str, *, transaction: object = None) -> Route | None:
+        self.route_transactions.append(transaction)
+        return self.route
 
     def load_artifacts(self, chunk_id: str) -> list[Any]:
         return []
@@ -141,39 +149,7 @@ class _Ports:
 
 
 @dataclass
-class _LockedRead:
-    chunk_facts: ChunkFacts | None
-    read_ids: list[str] = field(default_factory=list[str])
-
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        self.read_ids.append(chunk_id)
-        return self.chunk_facts
-
-    @property
-    def transaction(self) -> object:
-        return self
-
-    def __getattr__(self, name: str) -> Any:
-        return _raise("handle", name)
-
-
-@dataclass
-class _FakeExclusiveWrites:
-    under_lock: ChunkFacts | None
-    clock: FixedClock
-    locked_ids: list[list[str]] = field(default_factory=list[list[str]])
-    handles: list[_LockedRead] = field(default_factory=list[_LockedRead])
-
-    @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
-        self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
-        self.locked_ids.append(list(chunk_ids))
-        self.handles.append(_LockedRead(self.under_lock))
-        yield cast(ILockedChunkRead, self.handles[-1])
-
-
-@dataclass
-class _FakeTransactions:
+class FakeTransactions:
     """One unit whose lock wait passes time; the facts a port reads in it are the ones under the lock."""
 
     clock: FixedClock
@@ -198,7 +174,7 @@ def _wired(under_lock: ChunkFacts | None, *, pre_lock: ChunkFacts = AT_BUILD) ->
     assert under_lock != pre_lock, "a race case needs the lock to see facts the pre-lock read did not"
     ports = _Ports(pre_lock=pre_lock, under_lock=under_lock)
     clock = FixedClock(T1 + timedelta(hours=1))
-    return ports, clock, cast(IChunkExclusiveWrites, _FakeExclusiveWrites(under_lock, clock))
+    return ports, clock, FakeTransactions(clock)
 
 
 def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports, FixedClock]:
@@ -208,15 +184,14 @@ def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports,
 
 def _apply_service_with_lock(
     under_lock: ChunkFacts | None,
-) -> tuple[ApplyService, _Ports, FixedClock, _FakeExclusiveWrites]:
+) -> tuple[ApplyService, _Ports, FixedClock, FakeTransactions]:
     ports, clock, exclusive = _wired(under_lock)
     service = ApplyService(
         facts=cast(IReadChunkFactsRepository, ports),
         movement=cast(IWriteChunkMovementRepository, ports),
         decisions=cast(IWriteChunkDecisionsRepository, ports),
         escalations=cast(IWriteChunkEscalationsRepository, ports),
-        exclusive=cast(IChunkExclusiveWrites, exclusive),
-        transactions=cast(IHubTransactions, ports),
+        transactions=cast(IHubTransactions, exclusive),
         route=cast(IReadChunkRouteRepository, ports),
         artifacts=cast(IReadChunkArtifactsRepository, ports),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
@@ -235,7 +210,7 @@ def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, 
         facts=cast(IReadChunkFactsRepository, ports),
         route=cast(IWriteChunkRouteRepository, ports),
         decisions=cast(IWriteChunkDecisionsRepository, ports),
-        transactions=cast(IHubTransactions, _FakeTransactions(clock)),
+        transactions=cast(IHubTransactions, FakeTransactions(clock)),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
         closer_available=lambda source: source == "hub",
@@ -372,8 +347,8 @@ def test_a_migration_locks_reads_and_writes_the_submitted_chunk_through_the_lock
     service.apply(CHUNK, GRAPH, completion_submission("hand-off"), targets=_HAND_OFF)
 
     assert exclusive.locked_ids == [["chk_1"]]
-    assert exclusive.handles[0].read_ids == ["chk_1"]
-    assert ports.migration_transactions == [exclusive.handles[0]]
+    assert ports.migration_transactions == [exclusive]
+    assert ports.fact_transactions == [exclusive]
 
 
 def test_a_migration_lands_its_artifacts_at_the_node_and_epoch_it_left() -> None:
@@ -397,6 +372,23 @@ def test_a_gate_resolving_migration_records_the_decision_it_resolves() -> None:
     service.apply(CHUNK, GRAPH, completion_submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)
 
     assert [m["decision_id"] for m in ports.migrations] == ["dec_1"]
+
+
+def test_a_restarted_gate_reads_the_holding_route_in_the_migration_write_transaction() -> None:
+    held = [decision_fact(node_id="nd_build", resolved=True)]
+    restarted = RestartFact("nd_build", "nd_build", "gr_a", 1, T1)
+    facts = replace(AT_BUILD, decisions=held, restarts=[restarted])
+    service, ports, _clock, transaction = _apply_service_with_lock(replace(facts, promoted=False))
+    ports.pre_lock = facts
+    ports.gate = gate_decision(node_id="nd_build", resolved="hand-off")
+    ports.route = Route("chk_1", "runner-a", "ws_1", [], T1)
+
+    result = service.apply(CHUNK, GRAPH, completion_submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)
+
+    assert result.outcome is ApplyOutcome.MIGRATED
+    assert ports.migrations[0]["claimant"] is None
+    assert ports.migration_transactions == [transaction]
+    assert ports.route_transactions == [None, transaction]
 
 
 def test_a_migration_of_a_chunk_the_lock_cannot_find_answers_the_unknown_chunk() -> None:
@@ -504,3 +496,14 @@ def test_a_coherent_gate_decision_records_once_under_the_lock() -> None:
     ]
     assert result.outcome is ApplyOutcome.PARKED_AT_GATE
     assert result.decision_id == ports.decisions[0]["decision_id"]
+
+
+def test_transition_reads_and_writes_in_the_locked_unit() -> None:
+    service, ports, _clock, transactions = _apply_service_with_lock(replace(AT_BUILD, promoted=False))
+
+    result = service.apply(CHUNK, GRAPH, completion_submission("ship", lease_id="lease_1"))
+
+    assert result.outcome is ApplyOutcome.DONE
+    assert transactions.locked_ids == [[CHUNK.chunk_id]]
+    assert ports.fact_transactions == [transactions]
+    assert ports.transition_transactions == [transactions]

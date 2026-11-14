@@ -28,9 +28,10 @@ from blizzard.hub.domain.chunk.model import (
     WorkRef,
 )
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
     ChunksInDifferentProjects,
@@ -81,6 +82,7 @@ class _FakeWorkRefsRepo:
     def add_work_refs(
         self, chunk_id: str, pointers: list[WorkRef], *, at: datetime, transaction: LockedTransaction
     ) -> None:
+        assert transaction is _TOKEN
         self.added.append((chunk_id, pointers))
 
     def __getattr__(self, name: str) -> Any:
@@ -97,6 +99,7 @@ class _FakeDependenciesRepo:
     _next_id: int = 1
 
     def list_standing_edges(self, *, transaction: Any = None) -> list[DependencyEdge]:
+        assert transaction is _TOKEN
         return self.edges
 
     def record_fold(
@@ -108,6 +111,7 @@ class _FakeDependenciesRepo:
         at: datetime,
         transaction: Any,
     ) -> dict[str, int]:
+        assert transaction is _TOKEN
         self.fold_calls += 1
         grouped_ids: dict[str, int] = {}
         for target in targets:
@@ -135,8 +139,13 @@ class _FakeRecordRepo:
 
     chunks: dict[str, Chunk]
 
-    def get(self, chunk_id: str) -> Chunk | None:
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        assert transaction is _TOKEN
         return self.chunks.get(chunk_id)
+
+    def get_many(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, Chunk]:
+        assert transaction is _TOKEN
+        return {cid: self.chunks[cid] for cid in chunk_ids if cid in self.chunks}
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"GroupService should not touch record.{name!r}")
@@ -148,56 +157,27 @@ class _FakeFactsRepo:
 
     facts: dict[str, ChunkFacts]
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.facts.get(chunk_id)
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
+        assert transaction is _TOKEN
+        return {cid: self.facts[cid] for cid in chunk_ids if cid in self.facts}
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"GroupService should not touch facts.{name!r}")
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    """Only ``record``/``records_for``/``facts_for``/``standing_edges`` are live — see module docstring."""
-
-    record_repo: _FakeRecordRepo
-    facts_repo: _FakeFactsRepo
-    dependencies_repo: _FakeDependenciesRepo
-
-    transaction: Any = None
-
-    def record(self, chunk_id: str) -> Chunk | None:
-        return self.record_repo.get(chunk_id)
-
-    def facts(self, chunk_id: str) -> ChunkFacts | None:
-        return self.facts_repo.load_facts(chunk_id)
-
-    def records_for(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
-        return {cid: self.record_repo.chunks[cid] for cid in chunk_ids if cid in self.record_repo.chunks}
-
-    def facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
-        return {cid: self.facts_repo.facts[cid] for cid in chunk_ids if cid in self.facts_repo.facts}
-
-    def standing_edges(self) -> list[DependencyEdge]:
-        return self.dependencies_repo.list_standing_edges()
-
-    def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"GroupService should not touch handle.{name!r}")
+_TOKEN = cast(LockedTransaction, object())
 
 
-@dataclass
-class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same fakes the
-    ``GroupService`` under test was built with."""
-
-    record_repo: _FakeRecordRepo
-    facts_repo: _FakeFactsRepo
-    dependencies_repo: _FakeDependenciesRepo
-
-    transaction: Any = None
-
+class _FakeTransactions:
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.record_repo, self.facts_repo, self.dependencies_repo))
+    def begin(self) -> Generator[Any]:
+        yield self
+
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        assert chunk_ids[0] == "chk_survivor"
+        return _TOKEN
 
 
 def _service(
@@ -211,11 +191,12 @@ def _service(
     dependencies = _FakeDependenciesRepo(edges=list(edges or []))
     record_repo = _FakeRecordRepo(chunks=chunks)
     facts_repo = _FakeFactsRepo(facts=facts)
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(record_repo, facts_repo, dependencies))
     service = GroupService(
         work_refs=cast(IWriteChunkWorkRefsRepository, work_refs),
         dependencies=cast(IWriteChunkDependenciesRepository, dependencies),
-        exclusive=exclusive,
+        transactions=cast(IHubTransactions, _FakeTransactions()),
+        record=cast(IReadChunkRecordRepository, record_repo),
+        facts=cast(IReadChunkFactsRepository, facts_repo),
         clock=clock or FixedClock(instant=_T0),
         cycle_lock=threading.Lock(),
     )
@@ -511,3 +492,18 @@ def test_a_hand_built_record_naming_no_project_is_refused_rather_than_folded() -
     with pytest.raises(ChunkProjectMissing):
         service.group("chk_survivor", ["chk_bare"])
     assert work_refs.added == []
+
+
+def test_group_declares_every_requested_id_before_any_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    chunks = {cid: _chunk(cid) for cid in ("chk_survivor", "chk_a")}
+    service, _, _ = _service(chunks, {cid: _not_ready_facts() for cid in chunks})
+    declared: list[str] = []
+
+    def lock_chunks(self: _FakeTransactions, chunk_ids: Sequence[str]) -> LockedTransaction:
+        declared.extend(chunk_ids)
+        return _TOKEN
+
+    monkeypatch.setattr(_FakeTransactions, "lock_chunks", lock_chunks)
+    result = service.group("chk_survivor", ["chk_a", "chk_survivor", "chk_a"])
+    assert declared == ["chk_survivor", "chk_a", "chk_survivor", "chk_a"]
+    assert result.grouped_id == 1

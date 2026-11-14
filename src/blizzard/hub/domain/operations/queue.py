@@ -32,7 +32,6 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import (
     BACKLOG_RANKING_LOCK,
@@ -779,14 +778,17 @@ class GroupService:
         *,
         work_refs: IWriteChunkWorkRefsRepository,
         dependencies: IWriteChunkDependenciesRepository,
-        exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
+        facts: IReadChunkFactsRepository,
+        record: IReadChunkRecordRepository,
         clock: IClock,
         cycle_lock: threading.Lock,
     ) -> None:
         self._work_refs = work_refs
         self._dependencies = dependencies
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._transactions = transactions
+        self._facts = facts
+        self._record = record
         self._clock = clock
         # The residual per-tenant lock DependencyService's own cycle check also shares —
         # closes the race a row lock over this fold's own chunks alone cannot.
@@ -797,22 +799,23 @@ class GroupService:
         and each folded chunk's standing dependency edges. Refused before any
         write when a merge id belongs to another project (:class:`ChunksInDifferentProjects`)
         or the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
-        with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
-            return self._group_locked(handle, survivor_id, merge_ids)
+        with self._cycle_lock, self._transactions.begin() as transaction:
+            locked = transaction.lock_chunks([survivor_id, *merge_ids])
+            return self._group(locked, survivor_id, merge_ids)
 
-    def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:
+    def _group(self, transaction: LockedTransaction, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         # One read each for the survivor and every merge id.
         ids = [survivor_id, *merge_ids]
-        records = handle.records_for(ids)
-        facts = handle.facts_for(ids)
+        records = self._record.get_many(ids, transaction=transaction)
+        facts = self._facts.load_facts_for(ids, transaction=transaction)
         survivor, survivor_status = self._admitted(records, facts, survivor_id)
         targets = [self._admitted(records, facts, merge_id)[0] for merge_id in merge_targets(survivor_id, merge_ids)]
         require_same_project(survivor, targets)
         folded_ids = [t.chunk_id for t in targets]
-        plan = plan_group(handle.standing_edges(), survivor_id, folded_ids)
+        plan = plan_group(self._dependencies.list_standing_edges(transaction=transaction), survivor_id, folded_ids)
         now = self._clock.now()
         for target in targets:
-            self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now, transaction=handle.transaction)
+            self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now, transaction=transaction)
 
         grouped_id: int | None = None
         if targets:
@@ -827,7 +830,7 @@ class GroupService:
             # One call, one transaction across every target — a target's
             # own row can never commit ahead of a sibling's edge release/mint.
             grouped_ids = self._dependencies.record_fold(
-                fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now, transaction=handle.transaction
+                fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now, transaction=transaction
             )
             grouped_id = grouped_ids[targets[-1].chunk_id]
         _log.info(
@@ -837,7 +840,7 @@ class GroupService:
             merged=folded_ids,
             count=len(targets),
         )
-        merged = handle.record(survivor_id)
+        merged = self._record.get(survivor_id, transaction=transaction)
         return GroupResult(
             survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
         )

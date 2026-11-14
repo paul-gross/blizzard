@@ -168,7 +168,7 @@ class _FakeGraphRepo:
 
     retired: frozenset[str] = frozenset()
 
-    def is_retired(self, graph_id: str) -> bool:
+    def is_retired(self, graph_id: str, *, transaction: Transaction | None = None) -> bool:
         return graph_id in self.retired
 
     def __getattr__(self, name: str) -> Any:

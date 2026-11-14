@@ -22,7 +22,6 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel, dec
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -196,7 +195,6 @@ class ApplyService:
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
         escalations: IWriteChunkEscalationsRepository,
-        exclusive: IChunkExclusiveWrites,
         transactions: IHubTransactions,
         route: IReadChunkRouteRepository,
         artifacts: IReadChunkArtifactsRepository,
@@ -212,8 +210,6 @@ class ApplyService:
         self._movement = movement
         self._decisions = decisions
         self._escalations = escalations
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
         self._transactions = transactions
         self._route = route
         self._artifacts = artifacts
@@ -385,17 +381,16 @@ class ApplyService:
         fresh_transition_id = Id.mint(IdPrefix.TRANSITION, self._clock).value
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
         close_skipped: tuple[int, ...] = ()
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            locked = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            locked = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if locked is None:
                 return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
             # A racing duplicate at this (node, epoch) answers as the replay it is, never as a
             # refusal for no longer standing at `from_node`.
             raced = self._landed_under_lock(locked, submission)
             if raced is None:
-                refused = self._refuse_under_lock(
-                    chunk, graph, from_node, submission, locked, transaction=handle.transaction
-                )
+                refused = self._refuse_under_lock(chunk, graph, from_node, submission, locked, transaction=transaction)
                 if refused is not None:
                     return refused
                 transitioned = self._movement.record_transition(
@@ -407,26 +402,26 @@ class ApplyService:
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
                     terminal=ChunkFacts.terminal_verdict(locked),
-                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission, transaction=transaction),
                     runner_id=submission.runner_id,
                     at=self._clock.now(),
                     artifacts=artifact_rows,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
-                    transaction=handle.transaction,
+                    transaction=transaction,
                 )
                 if isinstance(transitioned, FenceRefusal):
                     return ApplyResult.failure(transitioned.detail)
                 close_skipped = transitioned.close_skipped + open_graph_gate_on_arrival(
                     self._decisions,
                     self._facts,
-                    handle.transaction,
+                    transaction,
                     self._clock,
                     chunk_id=chunk.chunk_id,
                     graph=graph,
                     node_id=plan.to_node_id,
                     epoch=submission.epoch,
-                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission, transaction=transaction),
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                 )
         self._events.publish(*close_skipped_events(close_skipped, chunk=chunk))
@@ -570,15 +565,14 @@ class ApplyService:
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
         migration_id = Id.mint(IdPrefix.MIGRATION, self._clock).value
         close_skipped: tuple[int, ...] = ()
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            locked = handle.facts(chunk.chunk_id)
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            locked = self._facts.load_facts(chunk.chunk_id, transaction=transaction)
             if locked is None:
                 return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
             landed = self._landed_under_lock(locked, submission)
             if landed is None:
-                refused = self._refuse_under_lock(
-                    chunk, graph, from_node, submission, locked, transaction=handle.transaction
-                )
+                refused = self._refuse_under_lock(chunk, graph, from_node, submission, locked, transaction=transaction)
                 if refused is not None:
                     return refused
                 outcome = self._movement.record_migration(
@@ -594,14 +588,14 @@ class ApplyService:
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
                     terminal=ChunkFacts.terminal_verdict(locked),
-                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission, transaction=transaction),
                     at=self._clock.now(),
                     artifacts=artifact_rows,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     release_route=landing.releases_route,
                     clear_intent=landing.clear_intent,
                     migration_id=migration_id,
-                    transaction=handle.transaction,
+                    transaction=transaction,
                 )
                 if isinstance(outcome, FenceRefusal):
                     return ApplyResult.failure(outcome.detail)
@@ -609,7 +603,7 @@ class ApplyService:
                 close_skipped = (outcome.close_skipped if outcome is not None else ()) + open_graph_gate_on_arrival(
                     self._decisions,
                     self._facts,
-                    handle.transaction,
+                    transaction,
                     self._clock,
                     chunk_id=chunk.chunk_id,
                     graph=landing.graph,
