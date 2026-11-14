@@ -38,6 +38,7 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -84,13 +85,23 @@ class IndexWalkAllowance:
     reason: str
 
 
+@dataclass(frozen=True)
+class RowidPageAllowance:
+    """A limited first page in rowid order, whose cursor pages seek the integer primary key."""
+
+    protocol: type
+    method: str
+    table: str
+    reason: str
+
+
 def walks_a_named_index(detail: str) -> bool:
     """Whether a plan row reads its table through a real named index — the only offense an
     :class:`IndexWalkAllowance` covers."""
     return " USING " in detail and "AUTOMATIC" not in detail
 
 
-Allowance = TableWideAllowance | MethodScopedAllowance | IndexWalkAllowance
+Allowance = TableWideAllowance | MethodScopedAllowance | IndexWalkAllowance | RowidPageAllowance
 
 
 # --- why a read walks a named index by design ---------------------------------------------------------------------
@@ -321,6 +332,20 @@ _TENANT_SETTINGS_REASON = (
 )
 
 HUB_ALLOWED_SCANS: list[Allowance] = [
+    MethodScopedAllowance(
+        IReadHubSettingsAdmin,
+        "view",
+        "hub_setting_entries",
+        200,
+        "the hub settings view reads every setting; the registry bounds the number of keys, not fleet traffic.",
+    ),
+    RowidPageAllowance(
+        IReadHubSettingsAdmin,
+        "changes",
+        "hub_setting_changes",
+        "the first page walks the revision integer primary key in descending order and stops at limit + 1; "
+        "subsequent pages seek that key. The page plan and limit are pinned by the store component test.",
+    ),
     # --- the one-shot legacy-config import ----------------------------------------------
     TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
     # --- the derivation sweep's corpus read of every open tenant's markers ----------

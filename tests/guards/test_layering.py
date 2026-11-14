@@ -279,7 +279,7 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
     for module in ("factories", "key_variables", "rotation", "sealing", "value")
 } | {
     f"blizzard.foundation.settings_record.{module}": _SETTINGS_RECORD_UNTIL_CONSUMERS
-    for module in ("decision", "record", "refusals", "vocabulary", "write")
+    for module in ("decision", "record", "refusals", "write")
 }
 
 

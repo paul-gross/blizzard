@@ -186,7 +186,7 @@ from blizzard.hub.domain.urgency.ports import (
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider
-from blizzard.hub.settings.model import IReadHubSettings
+from blizzard.hub.settings.model import IReadHubSettings, IReadHubSettingsAdmin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
@@ -2464,6 +2464,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadHubSettings, "revision"): lambda w: HubSettingsStore(
         hub_level_connections(w.engine), w.clock, lambda _: {}
     ).revision(),
+    (IReadHubSettingsAdmin, "view"): lambda w: HubSettingsStore(
+        hub_level_connections(w.engine), w.clock, lambda _: {}
+    ).view(),
+    (IReadHubSettingsAdmin, "changes"): lambda w: HubSettingsStore(
+        hub_level_connections(w.engine), w.clock, lambda _: {}
+    ).changes(limit=50, before=None),
     (IReadUrgencyRepository, "get"): lambda w: w.urgencies.get(w.urgency_id),
     (IReadUrgencyRepository, "get_by_slug"): lambda w: w.urgencies.get_by_slug("census-urgent"),
     (IReadUrgencyRepository, "list_all"): lambda w: w.urgencies.list_all(),

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli import runtime as hub_cli
@@ -247,8 +248,10 @@ def test_cli_failure_before_lifespan_closes_hosted_resources(tmp_path: Path, mon
     stopped: list[bool] = []
     original_stop = ActionLoop.stop
 
-    def build(config: HubConfig, *, version_window: VersionWindow, settings: HubSettingsGraph) -> FastAPI:
-        app = original_build(config, version_window=version_window, settings=settings)
+    def build(
+        config: HubConfig, *, version_window: VersionWindow, settings: HubSettingsGraph, clock: IClock
+    ) -> FastAPI:
+        app = original_build(config, version_window=version_window, settings=settings, clock=clock)
         connections.append(_pooled_connection(app.state.engine))
         app.state.services.action_loop.start()
         return app
