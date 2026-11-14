@@ -19,6 +19,10 @@
      consumer that resizes vertically. */
   resize: vertical;
 }
+/* A `<textarea>` has no password type; Chromium and WebKit mask its characters with this. */
+.masked {
+  -webkit-text-security: disc;
+}
 .ctl:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: 0;

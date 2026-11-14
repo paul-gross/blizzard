@@ -39,6 +39,18 @@ export const Multiline: Story = {
     value: 'Sweep the kit for\nparts without a stories file.',
   },
 };
+export const MultilinePassword: Story = {
+  args: {
+    multiline: true,
+    type: 'password',
+    rows: 4,
+    value: '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----',
+  },
+};
+export const MultilinePasswordPhone: Story = {
+  ...MultilinePassword,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
 export const LongValue: Story = {
   args: {
     value:
