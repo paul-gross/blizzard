@@ -769,7 +769,11 @@ def start_hub(
                 forge = ensure_fixture_forge(hub, forge_url)
                 seeded = work_sources if work_sources is not None else default_work_sources(forge)
                 create_work_sources(hub, seeded)
-                create_repositories(hub, fixture_repositories(seeded, forge))
+                # The fixture forge has no CI; these scenarios exercise crash recovery.
+                repositories = fixture_repositories(seeded, forge)
+                for repository in repositories:
+                    repository["allow_no_ci"] = True
+                create_repositories(hub, repositories)
     return proc
 
 

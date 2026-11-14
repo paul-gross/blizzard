@@ -2699,7 +2699,9 @@ def _merged_markers(hub: httpx2.Client, chunk_id: str) -> list[str]:
 
 def _create_web_repository(hub: httpx2.Client, forge_url: str) -> None:
     """The second repository the two-repo land resolves its ``toy-web`` commit against."""
-    create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, ensure_fixture_forge(hub, forge_url), owner=OWNER)])
+    repository = fixture_repository(_WEB_REPO_NAME, ensure_fixture_forge(hub, forge_url), owner=OWNER)
+    repository["allow_no_ci"] = True  # The fixture forge has no CI.
+    create_repositories(hub, [repository])
 
 
 def _repo_pull_count(forge: httpx2.Client, repo: str) -> int:
