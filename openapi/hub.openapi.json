@@ -7485,8 +7485,17 @@
         "title": "CredentialReferenceView",
         "type": "object"
       },
+      "CredentialSettingKind": {
+        "description": "What a binding's setting takes: one of its choices, or a positive integer.",
+        "enum": [
+          "choice",
+          "positive-integer"
+        ],
+        "title": "CredentialSettingKind",
+        "type": "string"
+      },
       "CredentialSettingView": {
-        "description": "One setting a binding takes, by ``key``, with the values it accepts.",
+        "description": "One setting a binding takes, by ``key``: ``kind`` says what it accepts \u2014 one of ``choices``, or a positive\ninteger, when ``choices`` is empty.",
         "properties": {
           "choices": {
             "items": {
@@ -7498,10 +7507,15 @@
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CredentialSettingKind",
+            "x-blizzard-open": true
           }
         },
         "required": [
           "key",
+          "kind",
           "choices"
         ],
         "title": "CredentialSettingView",

@@ -23,7 +23,7 @@ const GITHUB: ForgeSummary = {
   created_at: '2026-01-01T00:00:00Z', created_by: 'usr_1', created_by_name: null,
 };
 const GITLAB: ForgeSummary = { ...GITHUB, forge_id: 'frg_l', slug: 'gitlab', name: 'GitLab', kind: 'gitlab' };
-const TOKEN: CredentialBindingView = { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', choices: ['classic', 'fine-grained'] }] };
+const TOKEN: CredentialBindingView = { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice', choices: ['classic', 'fine-grained'] }] };
 const LAB: CredentialBindingView = { name: 'gitlab.token', forge_kind: 'gitlab', settings: [] };
 const BINDINGS = [TOKEN, LAB];
 const FORGE_BINDINGS: ForgeBindingsView[] = [{ forge_id: 'frg_g', bindings: ['github.token'] }, { forge_id: 'frg_l', bindings: ['gitlab.token'] }];

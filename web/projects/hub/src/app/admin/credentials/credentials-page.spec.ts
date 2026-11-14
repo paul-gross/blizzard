@@ -21,7 +21,7 @@ const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_
 const LIST = {
   credentials: [credentialSummary({ referrer_count: 2 })],
   bindings: [
-    { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', choices: ['classic', 'fine-grained'] }] },
+    { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice' as const, choices: ['classic', 'fine-grained'] }] },
     { name: 'gitlab.token', forge_kind: 'gitlab', settings: [] },
   ],
   forge_bindings: [

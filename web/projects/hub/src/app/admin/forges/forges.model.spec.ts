@@ -52,8 +52,8 @@ describe('forge admin models', () => {
     const detail: ForgeDetail = {
       ...GITHUB, repositories: [], work_sources: [], offered: ['checks', 'merge'], landing_policies: [],
       budgets: [
-        { bucket: 'core', secret_name: 'gh', remaining: 4000, limit: 5000, reset: new Date(2026, 10, 1, 12, 0, 0).toISOString() },
-        { bucket: 'graphql', secret_name: null, remaining: 10, limit: 100, reset: new Date(2026, 10, 1, 13, 0, 0).toISOString() },
+        { bucket: 'core', secret_name: 'gh', authority: 'secret/gh', remaining: 4000, limit: 5000, reset: new Date(2026, 10, 1, 12, 0, 0).toISOString() },
+        { bucket: 'graphql', secret_name: null, authority: null, remaining: 10, limit: 100, reset: new Date(2026, 10, 1, 13, 0, 0).toISOString() },
       ],
     };
     const facts = forgeRecordVm(detail)!.facts.map((fact) => [fact.label, fact.value]);
@@ -69,7 +69,7 @@ describe('forge admin models', () => {
     expect(budgetFacts([])).toEqual([{ label: 'Budgets', value: 'no reading yet' }]);
   });
   it('shows an unparseable budget reset verbatim', () => {
-    expect(budgetFacts([{ bucket: 'core', secret_name: null, remaining: 1, limit: 2, reset: 'bad reset' }])[0].value)
+    expect(budgetFacts([{ bucket: 'core', secret_name: null, authority: null, remaining: 1, limit: 2, reset: 'bad reset' }])[0].value)
       .toBe('1/2 remaining, resets bad reset');
   });
 

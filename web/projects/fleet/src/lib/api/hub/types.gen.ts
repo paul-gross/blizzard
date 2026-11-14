@@ -4618,9 +4618,24 @@ export type CredentialReferenceView = {
 };
 
 /**
+ * CredentialSettingKind
+ *
+ * What a binding's setting takes: one of its choices, or a positive integer.
+ */
+export const CredentialSettingKind = { CHOICE: 'choice', POSITIVE_INTEGER: 'positive-integer' } as const;
+
+/**
+ * CredentialSettingKind
+ *
+ * What a binding's setting takes: one of its choices, or a positive integer.
+ */
+export type CredentialSettingKind = typeof CredentialSettingKind[keyof typeof CredentialSettingKind];
+
+/**
  * CredentialSettingView
  *
- * One setting a binding takes, by ``key``, with the values it accepts.
+ * One setting a binding takes, by ``key``: ``kind`` says what it accepts — one of ``choices``, or a positive
+ * integer, when ``choices`` is empty.
  */
 export type CredentialSettingView = {
     /**
@@ -4631,6 +4646,7 @@ export type CredentialSettingView = {
      * Key
      */
     key: string;
+    kind: CredentialSettingKind;
 };
 
 /**

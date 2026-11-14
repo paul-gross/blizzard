@@ -149,7 +149,7 @@ def list_credentials(services: Services, include_retired: bool = False) -> Crede
                 name=binding.name,
                 forge_kind=binding.forge_kind,
                 settings=[
-                    CredentialSettingView(key=key, choices=list(choices))
+                    CredentialSettingView(key=key, kind=binding.setting_kinds[key], choices=list(choices))
                     for key, choices in binding.setting_choices.items()
                 ],
             )
