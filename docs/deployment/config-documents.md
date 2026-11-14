@@ -280,7 +280,7 @@ references use forge slugs, and even an unreferenced active forge is exported. A
 A version-3 export writes every active credential, ordered by slug, and each work source and repository names its
 credential by slug. A record acting with no credential but holding a secret names the credential its secret would
 resolve to; when no such credential exists yet, the export declares the one an apply of the document creates, and writes
-nothing itself.
+nothing itself. A retired credential a live record names is written too, so the document applies, re-enabling it.
 
 ## Recording
 
