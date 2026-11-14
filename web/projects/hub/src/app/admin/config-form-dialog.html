@@ -64,7 +64,7 @@
           />
         } @else {
           <fleet-kit-text-input
-            [type]="field.kind === 'password' ? 'password' : 'text'"
+            [type]="field.kind === 'password' ? 'password' : field.kind === 'number' ? 'number' : 'text'"
             [ariaLabel]="field.label"
             [value]="textOf(field.key)"
             [testid]="testidPrefix() + '-field-' + field.key"

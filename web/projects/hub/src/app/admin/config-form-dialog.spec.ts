@@ -94,6 +94,15 @@ describe('ConfigFormDialog', () => {
     expect(emitted).toEqual([{ value: 'line one\nline two\n' }]);
   });
 
+  it('renders a number field as a numeric input', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [{ key: 'app_id', label: 'App id', kind: 'number', required: true }]);
+    await fixture.whenStable();
+    const input = el(fixture, 'dlg-field-app_id') as HTMLInputElement;
+    expect(input.getAttribute('type')).toBe('number');
+    expect(input.getAttribute('inputmode')).toBe('numeric');
+  });
+
   it('offers palette colors and emits the chosen color', async () => {
     const fixture = await mount('create');
     fixture.componentRef.setInput('fields', [{ key: 'color', label: 'Color', kind: 'color', options: [
