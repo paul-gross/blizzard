@@ -1,7 +1,8 @@
+import { generateKeyPairSync } from 'node:crypto';
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { type ApiResponse, type Engine, expecting, type Json, type LogContext, send, type Verbs, verbs } from './engine';
 import type { Ledger } from './ledger';
-import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing, MockTokenRegistration } from './mock';
+import type { MockDriveAnswer, MockInstallationRegistration, MockIssue, MockRepositoryCreated, MockRunnerLeverListing, MockTokenRegistration } from './mock';
 import type { SweepPassResponse } from './wire/hub/types.gen';
 import { identityFor } from '../auth';
 import type { ClockMode } from '../clock-stack';
@@ -173,6 +174,23 @@ export interface ForgeApi {
   revokeToken(token: string): Promise<void>;
   /** Makes `owner/name` private, where a fine-grained token's withholdings apply. */
   privateRepository(repository: string): Promise<void>;
+  /** Registers a GitHub App under the public half of its key, or replaces the key of the App already registered. */
+  registerApp(appId: number, publicKey: string): Promise<void>;
+  /** Registers an installation of a registered App, or replaces the installation of the same id. */
+  registerInstallation(registration: MockInstallationRegistration): Promise<void>;
+  /**
+   * Sets how many seconds an installation token minted from then on lives. Global to the forge, so refused below
+   * `fresh-hub` on the hub's own forge.
+   */
+  tokenLifetime(seconds: number): Promise<void>;
+  /** Suspends an installation: its mint answers `403` and the tokens minted under it `401`. */
+  suspendInstallation(installationId: number): Promise<void>;
+  /** Deletes an installation: its read and mint answer `404` and the tokens minted under it `401`. */
+  deleteInstallation(installationId: number): Promise<void>;
+  /** Takes `owner/name` out of an installation: its tokens answer `404` on that repository. */
+  removeRepository(installationId: number, repository: string): Promise<void>;
+  /** Replaces the permissions an installation grants; a token already minted is capped by the new grant. */
+  setPermissions(installationId: number, permissions: MockInstallationRegistration['permissions']): Promise<void>;
   /** A raw call for the lever and control routes the forge's own README documents. */
   call(method: string, route: string, data?: unknown): Promise<ApiResponse>;
 }
@@ -219,5 +237,32 @@ export function forgeApi(options: { context: APIRequestContext; testInfo: TestIn
     registerToken: (registration) => lever('register_token', registration, `registering a ${registration.token_kind} token`),
     revokeToken: (token) => lever('revoke_token', { token }, 'revoking a token'),
     privateRepository: (repository) => lever('private_repository', { repo: repository }, `making ${repository} private`),
+    registerApp: (appId, publicKey) => lever('register_app', { app_id: appId, public_key: publicKey }, `registering App ${appId}`),
+    registerInstallation: (registration) => lever('register_installation', registration, `registering installation ${registration.installation_id}`),
+    async tokenLifetime(seconds) {
+      if (options.level !== undefined) requireFreshHub(options.level, 'forge.tokenLifetime()');
+      await lever('token_lifetime', { seconds }, `setting the token lifetime to ${seconds}s`);
+    },
+    suspendInstallation: (installationId) => lever('suspend_installation', { installation_id: installationId }, `suspending installation ${installationId}`),
+    deleteInstallation: (installationId) => lever('delete_installation', { installation_id: installationId }, `deleting installation ${installationId}`),
+    removeRepository: (installationId, repository) =>
+      lever('remove_repository', { installation_id: installationId, repo: repository }, `removing ${repository} from installation ${installationId}`),
+    setPermissions: (installationId, permissions) =>
+      lever('set_permissions', { installation_id: installationId, permissions }, `setting installation ${installationId}'s permissions`),
   };
+}
+
+/** A GitHub App's RSA key pair, both halves PEM: the forge is given `publicKey`, the hub's secret holds `privateKey`. */
+export interface AppKeyPair {
+  publicKey: string;
+  privateKey: string;
+}
+
+/** A fresh RSA key pair for a mock GitHub App. */
+export function appKeyPair(): AppKeyPair {
+  return generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
 }

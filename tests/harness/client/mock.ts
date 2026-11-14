@@ -27,6 +27,17 @@ export interface MockTokenRegistration {
   scopes?: string[];
 }
 
+/**
+ * `POST /_levers/register_installation`: an installation of a registered App, the repositories (`owner/name`) it
+ * reaches, and the permissions it grants, by GitHub's names. Registering an existing id replaces it.
+ */
+export interface MockInstallationRegistration {
+  installation_id: number;
+  app_id: number;
+  repositories: string[];
+  permissions: Record<string, 'read' | 'write' | 'admin'>;
+}
+
 /** The mock forge's lever listing, `GET /_levers`. */
 export interface MockLeverListing {
   state_levers: string[];
