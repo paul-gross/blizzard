@@ -364,7 +364,7 @@ test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ reposi
   expect(detail).toContain('HTTP 401');
   expect(detail).toContain('Bad credentials');
   expect(detail).toMatch(/request [^\s)]+\)/);
-  expect(detail).toContain('Secret ');
+  expect(detail).toContain('Credential ');
   expect(detail).not.toContain('Then run:');
   expect(escalated.landed).toBe(false);
   expect(escalated.current_node_name).toBe('deliver');
@@ -394,7 +394,11 @@ test('test_pr_ci_escalates_a_repository_the_forge_does_not_know_as_forge_config'
   const nowhere = `${forge.url}/no-such-api`;
   const declared = await api.post('/api/forges', { data: { slug: 'nowhere', kind: 'github', api_base: nowhere } });
   expect(declared.status, JSON.stringify(declared.body)).toBe(201);
-  const moved = await api.patch(`/api/repositories/${repo.name}`, { data: { forge: 'nowhere' } });
+  const secret = await api.post('/api/secrets', { data: { name: 'nowhere-secret', value: 'fixture-token' } });
+  expect(secret.status, JSON.stringify(secret.body)).toBe(201);
+  const credential = await api.post('/api/credentials', { data: { slug: 'nowhere-credential', forge: 'nowhere', binding: 'github.token', secret: 'nowhere-secret', settings: { variant: 'classic' } } });
+  expect(credential.status, JSON.stringify(credential.body)).toBe(201);
+  const moved = await api.patch(`/api/repositories/${repo.name}`, { data: { forge: 'nowhere', credential: 'nowhere-credential' } });
   expect(moved.status, JSON.stringify(moved.body)).toBe(200);
   const escalated = await drive(host, api, chunk.chunk_id, (s) => s.status === 'needs_human');
   expect(escalated.escalation).not.toBeNull();

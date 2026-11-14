@@ -387,14 +387,16 @@ def _apply_statements(hub: HubHarness, document: dict[str, object]) -> tuple[lis
     return ops, len(statements)
 
 
-def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", [2, 3])
+def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path: Path, version: int) -> None:
     counts: list[tuple[int, int]] = []
     for n in (1, N):
         (tmp_path / str(n)).mkdir()
         hub = _config_hub(tmp_path / str(n), n)
-        exported = hub.client.get("/api/config/export").json()
+        path = f"/api/config/export?version={version}"
+        exported = hub.client.get(path).json()
         assert len(exported["projects"]) == n + 1
-        export = count_queries(hub.engine, lambda hub=hub: hub.client.get("/api/config/export"))
+        export = count_queries(hub.engine, lambda hub=hub, path=path: hub.client.get(path))
         ops, apply = _apply_statements(hub, exported)
         assert set(ops) == {"unchanged"}
         counts.append((export, apply))

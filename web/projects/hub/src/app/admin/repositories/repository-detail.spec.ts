@@ -7,6 +7,8 @@ import { type MeResponse, type RepositorySummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
+  credentialSummary,
+  forgeDetail,
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
   settle,
@@ -20,9 +22,9 @@ const CORE: RepositorySummary = {
   forge_slug: 'github',
   forge_name: 'GitHub',
   warnings: [],
-  credential_id: null,
-  credential_slug: null,
-  credential_name: null,
+  credential_id: 'cred_g',
+  credential_slug: 'gh-main',
+  credential_name: 'gh-main',
   repository_id: 'repo_c',
   slug: 'core',
   name: 'Core',
@@ -55,6 +57,12 @@ const HISTORY = configChangesPage({
     }),
   ],
 });
+const CREDENTIALS = [
+  credentialSummary({ credential_id: 'cred_g', slug: 'gh-main', forge_id: 'frg_github' }),
+  credentialSummary({ credential_id: 'cred_b', slug: 'gh-bot', forge_id: 'frg_github' }),
+  credentialSummary({ credential_id: 'cred_l', slug: 'lab-main', forge_id: 'frg_lab' }),
+  credentialSummary({ credential_id: 'cred_r', slug: 'gh-retired', forge_id: 'frg_github', retired: true }),
+];
 const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
 describe('RepositoryDetail', () => {
@@ -72,6 +80,9 @@ describe('RepositoryDetail', () => {
       'GET /api/repositories/{repository}': () => record,
       'PATCH /api/repositories/{repository}': () => ({ ...record, slug: 'core-2', revision: 4 }),
       'GET /api/config/changes': () => HISTORY,
+      'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_lab', slug: 'lab', name: 'Lab' })] }),
+      'GET /api/forges/{forge}': (_request, { forge }) => forgeDetail({ forge_id: forge }),
+      'GET /api/credentials': () => ({ credentials: CREDENTIALS, bindings: [], forge_bindings: [] }),
     });
     TestBed.configureTestingModule({
       providers: [
@@ -143,5 +154,47 @@ describe('RepositoryDetail', () => {
     const reads = stub.forRoute('/api/config/changes', 'GET');
     expect(reads[0].search).toContain('record_kind=repository');
     expect(reads[0].search).toContain('record_key=repo_c');
+  });
+
+  const testid = (root: ParentNode, id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const optionLabels = () => Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).map((o) => o.textContent?.trim());
+
+  async function choose(harness: RouterTestingHarness, field: string, label: string): Promise<void> {
+    testid(document, `admin-repository-edit-field-${field}`)!.click();
+    await settle(harness.fixture);
+    Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((o) => o.textContent?.includes(label))!.click();
+    await settle(harness.fixture);
+  }
+
+  it('offers only enabled credentials of the repository\'s forge, and sends the one picked', async () => {
+    const { harness } = await open('/admin/repositories/repo_c');
+    testid(harness.routeNativeElement as HTMLElement, 'admin-repository-edit')!.click();
+    await settle(harness.fixture);
+    testid(document, 'admin-repository-edit-field-credential')!.click();
+    await settle(harness.fixture);
+    expect(optionLabels()).toEqual(['gh-main · github.token', 'gh-bot · github.token']);
+    Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))[1].click();
+    await settle(harness.fixture);
+    testid(document, 'admin-repository-edit-submit')!.click();
+    await settle(harness.fixture);
+
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ credential: 'cred_b' });
+  });
+
+  it('clears the credential when the forge changes, offering only the new forge\'s', async () => {
+    const { harness } = await open('/admin/repositories/repo_c');
+    testid(harness.routeNativeElement as HTMLElement, 'admin-repository-edit')!.click();
+    await settle(harness.fixture);
+    await choose(harness, 'forge', 'Lab');
+    expect(testid(document, 'admin-repository-edit-diff')?.textContent).toContain('Credential');
+    testid(document, 'admin-repository-edit-field-credential')!.click();
+    await settle(harness.fixture);
+    expect(optionLabels()).toEqual(['lab-main · github.token']);
+    Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))[0].click();
+    await settle(harness.fixture);
+    testid(document, 'admin-repository-edit-submit')!.click();
+    await settle(harness.fixture);
+
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ forge: 'frg_lab', credential: 'cred_l' });
   });
 });

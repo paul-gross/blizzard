@@ -28,8 +28,10 @@ class CredentialUnavailable(ConfigFieldError):
 
     code = "credential_unavailable"
 
-    def __init__(self, credential: str, *, retired: bool) -> None:
-        super().__init__(CREDENTIAL_FIELD, f"credential {credential} is {'retired' if retired else 'unknown'}")
+    def __init__(self, credential: str, *, retired: bool, field: str = CREDENTIAL_FIELD) -> None:
+        """``field`` is the one the write named the credential by — ``credential``, or an old secret field it resolved
+        from."""
+        super().__init__(field, f"credential {credential} is {'retired' if retired else 'unknown'}")
         self.credential = credential
         self.retired = retired
 

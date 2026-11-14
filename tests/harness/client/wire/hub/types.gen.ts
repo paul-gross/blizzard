@@ -3783,7 +3783,7 @@ export type ConfigDocumentInvalidProblem = {
 /**
  * ConfigDocumentV2
  *
- * A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
+ * A declarative configuration document, version 2 — the version a hub exports by default. Each entry is the
  * kind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that
  * name them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order
  * after the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an
@@ -3837,6 +3837,66 @@ export type ConfigDocumentV2 = {
      * Work Sources
      */
     work_sources?: Array<WorkSourceEntry>;
+};
+
+/**
+ * ConfigDocumentV3
+ *
+ * A declarative configuration document, version 3: version 2's sections, with ``credentials`` reconciled after
+ * ``forges`` and the ``secrets`` check and before the work sources and repositories, whose entries name their
+ * credential as ``credential`` where version 2's name a secret. A declared credential is never retired by its
+ * absence; one whose secret moves takes every record acting with it along.
+ */
+export type ConfigDocumentV3 = {
+    /**
+     * Cadences
+     */
+    cadences?: Array<CadenceEntry>;
+    /**
+     * Credentials
+     */
+    credentials?: Array<CredentialEntry>;
+    /**
+     * Forges
+     */
+    forges?: Array<ForgeEntry>;
+    /**
+     * Projects
+     */
+    projects?: Array<ProjectDocument>;
+    /**
+     * Repositories
+     */
+    repositories?: Array<RepositoryEntryV3>;
+    /**
+     * Routines
+     */
+    routines?: Array<RoutineEntry>;
+    /**
+     * Scopes
+     */
+    scopes?: Array<ScopeEntry>;
+    /**
+     * Secrets
+     */
+    secrets?: Array<string>;
+    settings?: SettingsEntry | null;
+    /**
+     * Urgencies
+     */
+    urgencies?: Array<UrgencyEntry>;
+    /**
+     * Urgency Order
+     */
+    urgency_order?: Array<string> | null;
+    /**
+     * Version
+     */
+    version: 3;
+    /**
+     * Work Sources
+     */
+    work_sources?: Array<WorkSourceEntryV3>;
 };
 
 /**
@@ -3993,6 +4053,26 @@ export type CredentialAuthorityTakenProblem = {
 };
 
 /**
+ * CredentialBindingView
+ *
+ * A binding a credential may name: its ``name``, the kind of forge it authenticates against, and its settings.
+ */
+export type CredentialBindingView = {
+    /**
+     * Forge Kind
+     */
+    forge_kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Settings
+     */
+    settings: Array<CredentialSettingView>;
+};
+
+/**
  * CredentialCapabilityMissingProblem
  *
  * A credential edit would no longer offer what an enabled repository acting with it needs: ``referrers`` lists
@@ -4140,6 +4220,42 @@ export type CredentialDocument = {
 };
 
 /**
+ * CredentialEntry
+ *
+ * A credential declared by slug: ``forge`` names its forge by id or slug, ``binding`` how it authenticates,
+ * ``secret`` the secret it reads, and ``settings`` the binding's own fields. An omitted ``name`` stays as stored; a
+ * ``forge`` or ``binding`` other than the stored credential's is refused.
+ */
+export type CredentialEntry = {
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Forge
+     */
+    forge: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Secret
+     */
+    secret: string;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * CredentialInUseProblem
  *
  * Enabled records still name the credential; ``referrers`` lists each.
@@ -4170,6 +4286,80 @@ export type CredentialInUseProblem = {
      */
     type: 'urn:blizzard:problem:credential-in-use';
     [key: string]: unknown;
+};
+
+/**
+ * CredentialListItem
+ *
+ * One ``GET /api/credentials`` row: the credential, with how many enabled repositories and work sources name it.
+ */
+export type CredentialListItem = {
+    /**
+     * Authority
+     */
+    authority: string;
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created By Name
+     */
+    created_by_name: string | null;
+    /**
+     * Credential Id
+     */
+    credential_id: string;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Forge Name
+     */
+    forge_name: string;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Referrer Count
+     */
+    referrer_count: number;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -4254,6 +4444,22 @@ export type CredentialReferenceView = {
      * Label
      */
     label: string;
+};
+
+/**
+ * CredentialSettingView
+ *
+ * One setting a binding takes, by ``key``, with the values it accepts.
+ */
+export type CredentialSettingView = {
+    /**
+     * Choices
+     */
+    choices: Array<string>;
+    /**
+     * Key
+     */
+    key: string;
 };
 
 /**
@@ -4363,13 +4569,22 @@ export type CredentialSummary = {
 /**
  * CredentialsListView
  *
- * Every stored credential by slug — ``GET /api/credentials``.
+ * Every stored credential by slug — ``GET /api/credentials`` — every binding a credential may name, and the
+ * bindings each enabled forge allows.
  */
 export type CredentialsListView = {
     /**
+     * Bindings
+     */
+    bindings: Array<CredentialBindingView>;
+    /**
      * Credentials
      */
-    credentials: Array<CredentialSummary>;
+    credentials: Array<CredentialListItem>;
+    /**
+     * Forge Bindings
+     */
+    forge_bindings: Array<ForgeBindingsView>;
 };
 
 /**
@@ -7098,6 +7313,22 @@ export type FoldWouldCloseCycleProblem = {
      */
     type: 'urn:blizzard:problem:fold-would-close-cycle';
     [key: string]: unknown;
+};
+
+/**
+ * ForgeBindingsView
+ *
+ * An enabled forge, by id, with the name of every binding a credential on it may name.
+ */
+export type ForgeBindingsView = {
+    /**
+     * Bindings
+     */
+    bindings: Array<string>;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
 };
 
 /**
@@ -12567,6 +12798,51 @@ export type RepositoryEntry = {
      * Secret Name
      */
     secret_name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * RepositoryEntryV3
+ *
+ * A version-3 repository entry: it names its forge, and the credential it acts with by id or slug.
+ */
+export type RepositoryEntryV3 = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean;
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Credential
+     */
+    credential: string;
+    /**
+     * Forge
+     */
+    forge: string;
+    landing_policy?: LandingPolicyName | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours?: number | null;
+    /**
+     * Repo
+     */
+    repo: string;
     /**
      * Slug
      */
@@ -18797,6 +19073,43 @@ export type WorkSourceEntry = {
 };
 
 /**
+ * WorkSourceEntryV3
+ *
+ * A version-3 work source entry: it names its forge, and the credential it acts with by id or slug — ``null``, or
+ * omitted, for none on a create, and the stored one on an edit.
+ */
+export type WorkSourceEntryV3 = {
+    /**
+     * Annotate
+     */
+    annotate?: boolean;
+    /**
+     * Credential
+     */
+    credential?: string | null;
+    /**
+     * Forge
+     */
+    forge: string;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * WorkSourceLocatorTakenProblem
  *
  * Another work source holds the provider and locator.
@@ -23221,7 +23534,11 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
 
 export type ApplyConfigApiConfigApplyPostData = {
-    body: ConfigDocumentV2;
+    body: ({
+        version: 2;
+    } & ConfigDocumentV2) | ({
+        version: 3;
+    } & ConfigDocumentV3);
     path?: never;
     query?: {
         /**
@@ -23387,9 +23704,11 @@ export type ExportConfigApiConfigExportGetError = ExportConfigApiConfigExportGet
 
 export type ExportConfigApiConfigExportGetResponses = {
     /**
+     * Response Export Config Api Config Export Get
+     *
      * Successful Response
      */
-    200: ConfigDocumentV2;
+    200: ConfigDocumentV2 | ConfigDocumentV3;
 };
 
 export type ExportConfigApiConfigExportGetResponse = ExportConfigApiConfigExportGetResponses[keyof ExportConfigApiConfigExportGetResponses];

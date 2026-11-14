@@ -7,6 +7,7 @@ describe('cliChangeCommand', () => {
   it('names the CLI verb that changes each kind', () => {
     expect(cliChangeCommand(RecordKind.WORK_SOURCE, 'winter')).toBe('blizzard hub source edit winter');
     expect(cliChangeCommand(RecordKind.REPOSITORY, 'blizzard')).toBe('blizzard hub repo edit blizzard');
+    expect(cliChangeCommand(RecordKind.CREDENTIAL, 'gh-main')).toBe('blizzard hub credential edit gh-main');
     expect(cliChangeCommand(RecordKind.SECRET, 'gh-token')).toBe('blizzard hub secret set gh-token');
   });
 });

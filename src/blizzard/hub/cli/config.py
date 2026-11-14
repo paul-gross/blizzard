@@ -126,7 +126,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 
     Creates what is absent, edits only the fields the document states, enables what is retired, and never
     touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The
-    hub applies a version-2 document only."""
+    hub applies a version-2 or a version-3 document; version 3 declares credentials, and names the one each work
+    source and repository acts with."""
     codec = codec_for_path(file)
     if codec is None:
         raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")
@@ -148,7 +149,7 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 @config_group.command("export", cls=FleetCommand)
 @click.option(
     "--version",
-    type=click.Choice(["1", "2"]),
+    type=click.Choice(["1", "2", "3"]),
     default="2",
     show_default=True,
     help="Configuration document version to print.",
@@ -164,8 +165,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 def config_export(cli: CliContext, fmt: str, version: str) -> None:
     """Print every active work source, repository and secret name as a document that applies back unchanged.
 
-    Retired records are left out, since applying one would enable it. The hub exports version 2 only, and refuses
-    version 1 naming it."""
+    Retired records are left out, since applying one would enable it. The hub exports version 2 or 3 — version 3
+    declares credentials, and names the one each work source and repository acts with — and refuses version 1."""
     codec = codec_for_path(f"export.{fmt}")
     assert codec is not None
     resp = cli.send("get", "/api/config/export", params={"version": version})

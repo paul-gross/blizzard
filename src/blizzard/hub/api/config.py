@@ -7,12 +7,12 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.foundation.store.utc import iso_utc
@@ -33,14 +33,27 @@ from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, 
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credential_resolution import ExportedCredentials
+from blizzard.hub.domain.config.credentials import ConfiguredCredential, CredentialEdit
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
-from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, POLICY_CAPABILITIES, landing_sort_key
-from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositoryId
-from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit, WorkSourceId
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    RepositoryDraft,
+    RepositoryEdit,
+    RepositoryId,
+)
+from blizzard.hub.domain.config.work_sources import (
+    ConfiguredWorkSource,
+    WorkSourceDraft,
+    WorkSourceEdit,
+    WorkSourceId,
+)
 from blizzard.hub.domain.config_apply.entries import (
     DeclaredCadence,
+    DeclaredCredential,
     DeclaredForge,
     DeclaredRepository,
     DeclaredRoutine,
@@ -65,16 +78,20 @@ from blizzard.wire.config import (
     ConfigChangesPage,
     ConfigChangeView,
     ConfigDocumentV2,
+    ConfigDocumentV3,
+    CredentialEntry,
     FieldChangeView,
     ForgeEntry,
     LandingPolicyNeedsView,
     ProjectDocument,
     RepositoryEntry,
+    RepositoryEntryV3,
     RoutineEntry,
     ScopeEntry,
     SettingsEntry,
     UrgencyEntry,
     WorkSourceEntry,
+    WorkSourceEntryV3,
 )
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
@@ -96,12 +113,16 @@ _VIEW = Depends(require(Permission.FLEET_VIEW))
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
 
-#: The one document version a hub applies, exports and serves schemas for.
+#: The document version a hub exports and serves schemas for when a read names none.
 DOCUMENT_VERSION = 2
-#: The code a document version other than :data:`DOCUMENT_VERSION` is refused under.
+#: The document version that declares credentials, and names one on each work source and repository.
+CREDENTIALS_VERSION = 3
+#: Every document version a hub applies, exports and serves schemas for.
+DOCUMENT_VERSIONS = (DOCUMENT_VERSION, CREDENTIALS_VERSION)
+#: The code a document version outside :data:`DOCUMENT_VERSIONS` is refused under.
 VERSION_RETIRED = "config_version_retired"
 
-_SCHEMAS = {
+_V2_SCHEMAS: dict[str, type[BaseModel]] = {
     "forges": ForgeEntry,
     "work-sources": WorkSourceEntry,
     "repositories": RepositoryEntry,
@@ -110,6 +131,17 @@ _SCHEMAS = {
     "cadences": CadenceDocument,
     "urgencies": UrgencyEntry,
     "settings": SettingsEntry,
+}
+
+#: Each document version's entry schema by record kind.
+_SCHEMAS: dict[int, dict[str, type[BaseModel]]] = {
+    DOCUMENT_VERSION: _V2_SCHEMAS,
+    CREDENTIALS_VERSION: {
+        **_V2_SCHEMAS,
+        "credentials": CredentialEntry,
+        "work-sources": WorkSourceEntryV3,
+        "repositories": RepositoryEntryV3,
+    },
 }
 
 
@@ -122,12 +154,12 @@ _CREDENTIAL_KEYED = (RecordKind.CREDENTIAL,)
 
 
 def _version_retired(loc: list[str], version: object) -> HTTPException:
-    """422 on ``loc`` for a document version this hub no longer reads."""
+    """422 on ``loc`` for a document version this hub does not read."""
     if version is None:
-        msg = f"a document must name version {DOCUMENT_VERSION}"
+        msg = f"a document must name version {DOCUMENT_VERSION} or {CREDENTIALS_VERSION}"
     else:
         stated = version if isinstance(version, int) else repr(version)
-        msg = f"version {stated} is retired; send a version {DOCUMENT_VERSION} document"
+        msg = f"version {stated} is not read; send a version {DOCUMENT_VERSION} or {CREDENTIALS_VERSION} document"
     return _invalid([{"loc": loc, "msg": msg, "type": VERSION_RETIRED}])
 
 
@@ -226,15 +258,16 @@ def list_landing_policies() -> list[LandingPolicyNeedsView]:
 
 
 @router.get("/schema/{kind}", dependencies=[_VIEW])
-def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION) -> dict[str, object]:
-    """The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422
-    `config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,
-    every landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered
-    (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and
+def get_schema(kind: str, version: Annotated[int, Query(ge=1)] = DOCUMENT_VERSION) -> dict[str, object]:
+    """The JSON Schema of a record kind's document entry at `version` — 2, the default, or 3, which adds
+    `credentials` and names a credential on `work-sources` and `repositories`; 404 for a kind with none at that
+    version, and 422 `config_version_retired` for any other version. The `repositories` schema lists, under
+    `x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer (`requires`) and
+    the ones it uses when offered (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and
     `ForgeDetail.landing_policies`."""
-    if version != DOCUMENT_VERSION:
+    if version not in DOCUMENT_VERSIONS:
         raise _version_retired(["query", "version"], version)
-    model = _SCHEMAS.get(kind)
+    model = _SCHEMAS[version].get(kind)
     if model is None:
         raise ProblemHTTPException(
             partial(problems_admin.config_schema_not_found_problem, f"no document schema for {kind!r}")
@@ -304,28 +337,34 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
     return key
 
 
-def _entries(document: ConfigDocumentV2) -> DocumentEntries:
+def _entries(document: ConfigDocumentV2 | ConfigDocumentV3) -> DocumentEntries:
     """The domain's entries from a validated document: each entry's create fields, a sparse edit of only the
-    fields the entry states (``model_fields_set``), and the forge it names."""
+    fields the entry states (``model_fields_set``), and the forge and credential it names."""
     sources: list[DeclaredWorkSource] = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "slug"}
         reference = stated.pop("forge", UNSET)
+        credential = stated.pop("credential", None)
         sources.append(
             DeclaredWorkSource(
                 slug=entry.slug,
                 name=entry.name,
                 draft=WorkSourceDraft(
-                    provider=entry.provider, locator=entry.locator, annotate=entry.annotate, secret=entry.secret
+                    provider=entry.provider,
+                    locator=entry.locator,
+                    annotate=entry.annotate,
+                    secret=entry.secret if isinstance(entry, WorkSourceEntry) else None,
                 ),
                 edit=WorkSourceEdit(**stated),
                 forge=ForgeChoice(forge=reference),
+                credential=UNSET if credential is None else credential,
             )
         )
     repositories: list[DeclaredRepository] = []
     for repo in document.repositories:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
         reference = stated.pop("forge", UNSET)
+        credential = stated.pop("credential", UNSET)
         policy = repo.landing_policy
         if "landing_policy" in stated:
             stated["landing_policy"] = policy
@@ -337,15 +376,38 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
                     owner=repo.owner,
                     repo=repo.repo,
                     base_branch=repo.base_branch,
-                    secret_name=repo.secret_name,
+                    secret_name=repo.secret_name if isinstance(repo, RepositoryEntry) else None,
                     landing_policy=policy or DEFAULT_LANDING_POLICY,
                     allow_no_ci=repo.allow_no_ci,
                     park_timeout_hours=repo.park_timeout_hours,
                 ),
                 edit=RepositoryEdit(**stated),
                 forge=ForgeChoice(forge=reference),
+                credential=credential,
             )
         )
+    credentials = (
+        tuple(
+            DeclaredCredential(
+                slug=entry.slug,
+                name=entry.name,
+                forge=entry.forge,
+                binding=entry.binding,
+                secret=entry.secret,
+                settings=entry.settings,
+                edit=CredentialEdit(
+                    **{
+                        _CREDENTIAL_EDIT_FIELDS[name]: getattr(entry, name)
+                        for name in entry.model_fields_set
+                        if name in _CREDENTIAL_EDIT_FIELDS
+                    }
+                ),
+            )
+            for entry in document.credentials
+        )
+        if isinstance(document, ConfigDocumentV3)
+        else ()
+    )
     scopes = [
         DeclaredScope(
             name=scope.slug,
@@ -392,6 +454,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
             )
             for f in document.forges
         ),
+        credentials=credentials,
         work_sources=tuple(sources),
         repositories=tuple(repositories),
         projects=tuple(_project_declaration(entry) for entry in document.projects),
@@ -399,6 +462,11 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
         scopes=tuple(scopes),
         routines=tuple(routines),
     )
+
+
+#: Each credential entry field a stored credential's sparse edit takes, with the :class:`CredentialEdit` field it sets;
+#: a ``name`` stated ``null`` is left as stored.
+_CREDENTIAL_EDIT_FIELDS = {"name": "name", "secret": "secret_name", "settings": "settings"}
 
 
 def _declared_cadence(entry: CadenceEntry) -> DeclaredCadence:
@@ -419,7 +487,7 @@ def _declared_cadence(entry: CadenceEntry) -> DeclaredCadence:
     )
 
 
-def _urgency_sections(document: ConfigDocumentV2) -> UrgencySections:
+def _urgency_sections(document: ConfigDocumentV2 | ConfigDocumentV3) -> UrgencySections:
     """The urgency sections as the document states them: each entry's fields it states, the order when stated, and
     the default when the settings state one."""
     urgencies: list[UrgencyDeclaration] = []
@@ -498,7 +566,7 @@ def _refusal(exc: ApplyEntryRefused) -> HTTPException:
     return ProblemHTTPException(partial(problems.config_apply_conflict_problem, f"{exc.section}[{exc.index}]: {cause}"))
 
 
-def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
+def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2 | ConfigDocumentV3:
     codec = codec_for_media_type(content_type or "")
     if codec is None:
         raise ProblemHTTPException(
@@ -514,9 +582,11 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
             [{"loc": ["body"], "msg": exc.problem, "type": "value_error", "line": exc.line, "column": exc.column}]
         ) from exc
     version = mapping.get("version")
-    if version != DOCUMENT_VERSION:
+    if version not in DOCUMENT_VERSIONS:
         raise _version_retired(["body", "version"], version)
     try:
+        if version == CREDENTIALS_VERSION:
+            return ConfigDocumentV3.model_validate(mapping)
         return ConfigDocumentV2.model_validate(mapping)
     except ValidationError as exc:
         raise _invalid(
@@ -525,7 +595,7 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
 
 
 def _apply(
-    document: ConfigDocumentV2,
+    document: ConfigDocumentV2 | ConfigDocumentV3,
     identity: ResolvedIdentity,
     services: TenantServices,
     *,
@@ -554,10 +624,16 @@ _APPLY_BODY = {
     "content": {
         media_type: {
             "schema": {
-                "oneOf": [{"$ref": "#/components/schemas/ConfigDocumentV2"}],
+                "oneOf": [
+                    {"$ref": "#/components/schemas/ConfigDocumentV2"},
+                    {"$ref": "#/components/schemas/ConfigDocumentV3"},
+                ],
                 "discriminator": {
                     "propertyName": "version",
-                    "mapping": {"2": "#/components/schemas/ConfigDocumentV2"},
+                    "mapping": {
+                        "2": "#/components/schemas/ConfigDocumentV2",
+                        "3": "#/components/schemas/ConfigDocumentV3",
+                    },
                 },
             }
         }
@@ -573,26 +649,31 @@ async def apply_config(
     services: Services,
     dry_run: bool = False,
 ) -> ConfigApplyResponse:
-    """Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,
-    edit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,
-    and every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,
-    with the same `outcomes` and no `apply_id`. 422 invalid — `config_version_retired` for any `version` but 2, a
-    missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a
-    cadence write would leave it promoting its runs and the caller may not promote chunks."""
+    """Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one
+    transaction: create what is absent, edit only the fields an entry states, enable what is retired, leave unnamed
+    records alone. Forges are declared, and every work source and repository names its forge by id or slug; a
+    version-3 document declares credentials too, and each work source and repository names the one it acts with by id
+    or slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.
+    422 invalid — `config_version_retired` for any `version` but 2 or 3, a missing one included — 409 conflict, 415
+    unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its
+    runs and the caller may not promote chunks."""
     document = _document(await request.body(), request.headers.get("content-type"))
     return await run_in_threadpool(_apply, document, identity, services, dry_run=dry_run)
 
 
-@router.get("/export", response_model=ConfigDocumentV2, dependencies=[_VIEW])
+@router.get("/export", response_model=ConfigDocumentV2 | ConfigDocumentV3, dependencies=[_VIEW])
 def export_config(
-    services: Services, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION
-) -> ConfigDocumentV2:
+    services: Services, version: Annotated[int, Query(ge=1)] = DOCUMENT_VERSION
+) -> ConfigDocumentV2 | ConfigDocumentV3:
     """Every project with its standing links, every live urgency — an icon as its media type and base64 bytes — in
     order with the tenant's default, every active forge, every active, non-built-in work source and
     repository, and every active scope, routine (its linked scope set included), and cadence named in its project by
-    slug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.
-    Retired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`."""
-    if version != DOCUMENT_VERSION:
+    slug, with every field, and every active secret name, as a document of `version` — 2, the default, or 3 — that
+    applies back as a no-op. Version 3 adds every active credential, and names the credential each work source and
+    repository acts with by slug; one acting with none but by its old secret field names the credential that field
+    resolves to — and, when none exists yet, declares the one an apply of the document creates. Retired records are
+    left out, since applying one would enable it. 422 `config_version_retired` for any other `version`."""
+    if version not in DOCUMENT_VERSIONS:
         raise _version_retired(["query", "version"], version)
     retired = services.secret_catalog.retired_names()
     projects = services.projects.list_all()
@@ -606,8 +687,15 @@ def export_config(
     )
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
+    held_credentials = (
+        services.credential_records.list_all(include_retired=True) if version == CREDENTIALS_VERSION else []
+    )
     forges = services.forge_records.get_many(
-        list({r.fields.forge_id for r in sources} | {r.fields.forge_id for r in repositories})
+        list(
+            {r.fields.forge_id for r in sources}
+            | {r.fields.forge_id for r in repositories}
+            | {c.fields.forge_id for c in held_credentials if not c.retired}
+        )
     )
     repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
     source_slugs = {r.work_source_id: r.slug for r in services.work_source_records.list_all(include_retired=True)}
@@ -617,7 +705,7 @@ def export_config(
     live_urgencies = services.urgency_reading.ordered()
     icons = services.urgency_reading.icons()
     urgencies = services.urgency_reading.by_id()
-    return ConfigDocumentV2(
+    exported = ConfigDocumentV2(
         version=DOCUMENT_VERSION,
         urgencies=[
             UrgencyEntry(
@@ -702,6 +790,88 @@ def export_config(
                 park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories
+        ],
+    )
+    if version == CREDENTIALS_VERSION:
+        return _export_v3(exported, sources, repositories, held_credentials, forges, services)
+    return exported
+
+
+def _export_v3(
+    exported: ConfigDocumentV2,
+    sources: Sequence[ConfiguredWorkSource],
+    repositories: Sequence[ConfiguredRepository],
+    held: Sequence[ConfiguredCredential],
+    forges: Mapping[ForgeId, ConfiguredForge],
+    services: TenantServices,
+) -> ConfigDocumentV3:
+    """``exported`` as a version-3 document: every section but its work sources and repositories, then the live
+    credentials — and each retired one a referrer names, so the document applies — work sources and repositories, each
+    referrer naming its credential by slug."""
+    named = ExportedCredentials(held, services.credential_records.held_slugs)
+    source_credentials = [
+        named.slug_if_any(r.fields.forge_id, r.fields.credential_id, r.fields.secret) for r in sources
+    ]
+    repository_credentials = [
+        named.slug_of(r.fields.forge_id, r.fields.credential_id, r.fields.secret_name) for r in repositories
+    ]
+    declared = [
+        CredentialEntry(
+            slug=c.slug,
+            name=c.name,
+            forge=forges[c.fields.forge_id].slug,
+            binding=c.fields.binding,
+            secret=c.fields.secret_name,
+            settings=dict(c.fields.settings),
+        )
+        for c in held
+        if not c.retired or c.credential_id in named.named
+    ] + [
+        CredentialEntry(
+            slug=d.slug,
+            name=d.name or d.slug,
+            forge=forges[d.forge_id].slug,
+            binding=d.binding,
+            secret=d.secret_name,
+            settings=dict(d.settings),
+        )
+        for d in named.drafts
+    ]
+    shared: dict[str, Any] = {
+        name: getattr(exported, name)
+        for name in ConfigDocumentV2.model_fields
+        if name not in ("version", "work_sources", "repositories")
+    }
+    return ConfigDocumentV3(
+        version=CREDENTIALS_VERSION,
+        **shared,
+        credentials=sorted(declared, key=lambda entry: entry.slug),
+        work_sources=[
+            WorkSourceEntryV3(
+                slug=r.slug,
+                name=r.name,
+                provider=r.fields.provider,
+                locator=r.fields.locator,
+                forge=forges[r.fields.forge_id].slug,
+                annotate=r.fields.annotate,
+                credential=credential,
+            )
+            for r, credential in zip(sources, source_credentials, strict=True)
+        ],
+        repositories=[
+            RepositoryEntryV3(
+                slug=r.slug,
+                name=r.name,
+                forge=forges[r.fields.forge_id].slug,
+                owner=r.fields.owner,
+                repo=r.fields.repo,
+                base_branch=r.fields.base_branch,
+                credential=credential,
+                landing_policy=r.fields.landing_policy,
+                allow_no_ci=r.fields.allow_no_ci,
+                park_timeout_hours=r.fields.park_timeout_hours,
+            )
+            for r, credential in zip(repositories, repository_credentials, strict=True)
         ],
     )
 

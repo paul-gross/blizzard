@@ -274,6 +274,28 @@ def test_a_source_names_its_forge_by_forge_and_the_hub_refuses_one_naming_none(c
     assert _source(["edit", "demo", "--clear", "api-base"]).exit_code == 2
 
 
+def test_an_export_of_version_3_prints_a_version_3_document_that_applies_back_unchanged(
+    client: TestClient, tmp_path: Path
+) -> None:
+    assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
+    path = tmp_path / "cfg.yaml"
+    path.write_text(_APPLY_YAML)
+    assert _config(["apply", str(path)]).exit_code == 0
+
+    exported = _config(["export", "--version", "3", "--format", "json"])
+
+    assert exported.exit_code == 0, exported.output
+    document = json.loads(exported.stdout)
+    assert document["version"] == 3
+    assert [c["secret"] for c in document["credentials"]] == ["gh-demo"]
+    assert {r["credential"] for r in document["repositories"]} == {document["credentials"][0]["slug"]}
+    out = tmp_path / "v3.json"
+    out.write_text(exported.stdout)
+    replay = _config(["apply", str(out)])
+    assert replay.exit_code == 0, replay.output
+    assert not _lines(replay.output, "create") and not _lines(replay.output, "edit")
+
+
 def test_an_export_of_version_1_prints_the_hubs_refusal(client: TestClient) -> None:
     refused = _config(["export", "--version", "1"])
     assert refused.exit_code != 0

@@ -218,6 +218,8 @@ also_copy = [
     ".vale.ini",
     "styles",
     "tests/fixtures/route_clause",
+    # The version-2 export's goldens.
+    "tests/fixtures/config_export_v2",
     "tests/fixtures/ui_surface",
     ".github/workflows/gate.yml",
     ".github/workflows/pr.yml",

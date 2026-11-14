@@ -22,6 +22,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.changes import RecordRef
+from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS, bindings_for_kind
 from blizzard.hub.domain.config.credential_resolution import CredentialCapabilityMissing
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -34,12 +35,16 @@ from blizzard.hub.domain.config.credentials import (
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.wire.credential import (
+    CredentialBindingView,
     CredentialCreateRequest,
     CredentialDocument,
+    CredentialListItem,
     CredentialPatchRequest,
     CredentialReferenceView,
+    CredentialSettingView,
     CredentialsListView,
     CredentialSummary,
+    ForgeBindingsView,
 )
 from blizzard.wire.record_referrer import RecordReferrer
 
@@ -123,11 +128,38 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 
 @router.get("", response_model=CredentialsListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_credentials(services: Services, include_retired: bool = False) -> CredentialsListView:
-    """Every stored credential by slug, retired ones hidden unless `include_retired`."""
+    """Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled
+    repositories and work sources naming it; and every binding a credential may name, with the kind of forge it
+    authenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may
+    name."""
     records = services.credential_records.list_all(include_retired=include_retired)
     names = user_names(services, (r.created_by for r in records))
     forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
-    return CredentialsListView(credentials=[_summary(r, forges[r.fields.forge_id], names) for r in records])
+    referrers = services.credential_references.referrers_of([r.credential_id for r in records])
+    return CredentialsListView(
+        credentials=[
+            CredentialListItem(
+                **_summary(r, forges[r.fields.forge_id], names).model_dump(),
+                referrer_count=len(referrers[r.credential_id]),
+            )
+            for r in records
+        ],
+        bindings=[
+            CredentialBindingView(
+                name=binding.name,
+                forge_kind=binding.forge_kind,
+                settings=[
+                    CredentialSettingView(key=key, choices=list(choices))
+                    for key, choices in binding.setting_choices.items()
+                ],
+            )
+            for binding in CREDENTIAL_BINDINGS.values()
+        ],
+        forge_bindings=[
+            ForgeBindingsView(forge_id=forge.forge_id, bindings=list(bindings_for_kind(forge.kind)))
+            for forge in services.forge_records.list_all(include_retired=False)
+        ],
+    )
 
 
 @router.post("", response_model=CredentialSummary, status_code=status.HTTP_201_CREATED)

@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 from blizzard.auth_core import Role
 from blizzard.hub.store import schema as s
-from blizzard.wire.credential import CredentialDocument, CredentialSummary
+from blizzard.wire.credential import CredentialDocument, CredentialsListView, CredentialSummary
 from blizzard.wire.repository import RepositorySummary
 from blizzard.wire.work_source import WorkSourceSummary
 from tests.support.scaffolding import (
@@ -81,11 +81,37 @@ def _old_field_events(hub: HubHarness) -> list[dict[str, Any]]:
     return [{"severity": severity, **json.loads(detail)} for severity, detail in rows]
 
 
+def test_the_list_counts_each_credential_s_enabled_referrers_and_names_every_binding(hub: HubHarness) -> None:
+    _credential(hub)
+    _credential(hub, "idle", secret="third-token")
+    assert hub.client.post("/api/repositories", json=_repository(credential="deploy")).status_code == 201
+    assert hub.client.post("/api/work-sources", json=_source(credential="deploy")).status_code == 201
+    retired = hub.client.post("/api/repositories", json=_repository(slug="gone", repo="gone", credential="deploy"))
+    assert hub.client.post(f"/api/repositories/{retired.json()['slug']}/retire").status_code == 200
+
+    listed = CredentialsListView.model_validate(hub.client.get("/api/credentials").json())
+
+    assert {row.slug: row.referrer_count for row in listed.credentials} == {"deploy": 2, "idle": 0}
+    assert [binding.model_dump() for binding in listed.bindings] == [
+        {
+            "name": "github.token",
+            "forge_kind": "github",
+            "settings": [{"key": "variant", "choices": ["classic", "fine-grained"]}],
+        }
+    ]
+    forges = {forge["slug"]: forge["forge_id"] for forge in hub.client.get("/api/forges").json()["forges"]}
+    assert hub.client.post("/api/forges/other/retire").status_code == 200
+    listed = CredentialsListView.model_validate(hub.client.get("/api/credentials").json())
+    assert {(view.forge_id, tuple(view.bindings)) for view in listed.forge_bindings} == {
+        (forges["ghe"], ("github.token",))
+    }
+
+
 def test_a_credential_is_created_listed_read_renamed_retired_and_enabled(hub: HubHarness) -> None:
     created = _credential(hub, variant="classic")
     assert CredentialSummary.model_validate(created).authority == f"secret/{_SPARE}"
     assert (created["revision"], created["forge_slug"], created["settings"]) == (1, "ghe", {"variant": "classic"})
-    assert hub.client.get("/api/credentials").json()["credentials"] == [created]
+    assert hub.client.get("/api/credentials").json()["credentials"] == [{**created, "referrer_count": 0}]
     document = hub.client.get(f"/api/credentials/{created['credential_id']}").json()
     assert CredentialDocument.model_validate(document).referrers == []
 

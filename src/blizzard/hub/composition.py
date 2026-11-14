@@ -93,7 +93,7 @@ from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
-from blizzard.hub.domain.config.credentials import IReadCredentialRepository
+from blizzard.hub.domain.config.credentials import ICredentialReferences, IReadCredentialRepository
 from blizzard.hub.domain.config.forges import ForgeKindOffers, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog
@@ -411,6 +411,8 @@ class TenantServices:
     forge_records: IReadForgeRepository
     #: Stored credential records (the read half).
     credential_records: IReadCredentialRepository
+    #: The enabled repositories and work sources naming each credential.
+    credential_references: ICredentialReferences
     #: Each chunk's landed-commit address on its repository record's forge.
     commit_links: IReadLandedCommitLinks
     #: Each branch's delivery line and the visits submitted to it (the read half).
@@ -1493,6 +1495,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             repositories=stores.repository_records,
             work_sources=stores.work_source_records,
             forges=stores.forge_records,
+            credentials=stores.credential_records,
             projects=stores.projects,
             links=stores.project_links,
             positions=stores.project_positions,
@@ -1513,6 +1516,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
         credential_records=stores.credential_records,
+        credential_references=stores.credential_referrers,
         commit_links=commit_links,
         flows=stores.flows,
         flow_views=stores.flows,

@@ -15,9 +15,9 @@ const WINTER: WorkSourceSummary = {
   forge_slug: 'github',
   forge_name: 'GitHub',
   warnings: [],
-  credential_id: null,
-  credential_slug: null,
-  credential_name: null,
+  credential_id: 'cred_w',
+  credential_slug: 'gh-winter',
+  credential_name: 'gh-winter',
   work_source_id: 'wsrc_w',
   slug: 'winter',
   name: 'winter',
@@ -74,7 +74,7 @@ describe('workSourceRecordVm', () => {
     expect(workSourceRecordVm(undefined)).toBeNull();
   });
 
-  it('shows a configured source with its fields, token link, and history', () => {
+  it('shows a configured source with its fields, credential link, and history', () => {
     const vm = workSourceRecordVm(WINTER)!;
     expect(vm.facts.find((f) => f.label === 'Provider')?.value).toBe('github');
     expect(vm.facts.find((f) => f.label === 'Forge')?.value).toBe('GitHub');
@@ -82,7 +82,7 @@ describe('workSourceRecordVm', () => {
     expect(vm.revision).toBe(2);
     expect(vm.links?.links).toEqual([
       { kind: 'forge', name: 'github', route: ['/admin', 'forges', 'frg_github'] },
-      { kind: 'secret', name: 'gh-winter', route: ['/admin', 'secrets', 'gh-winter'] },
+      { kind: 'credential', name: 'gh-winter', route: ['/admin', 'credentials', 'cred_w'] },
     ]);
     expect(vm.hasHistory).toBe(true);
     expect(vm.note).toBeNull();
@@ -122,7 +122,7 @@ describe('workSourceCliName', () => {
   });
 
   it('creates a work source from the form, carrying the checkbox as a boolean and leaving empty text out', () => {
-    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', forge: 'frg_github', secret: '', annotate: true };
+    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', forge: 'frg_github', credential: '', annotate: true };
     expect(workSourceCreate(body)).toEqual({
       slug: 'winter',
       provider: 'github',
@@ -130,9 +130,9 @@ describe('workSourceCliName', () => {
       forge: 'frg_github',
       annotate: true,
     });
-    expect(workSourceCreate({ ...body, annotate: false, secret: 'gh-winter' })).toMatchObject({
+    expect(workSourceCreate({ ...body, annotate: false, credential: 'cred_w' })).toMatchObject({
       annotate: false,
-      secret: 'gh-winter',
+      credential: 'cred_w',
     });
   });
 });

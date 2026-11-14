@@ -1,4 +1,5 @@
 import {
+  type CredentialSummary,
   type ForgeSummary,
   hubApi,
   openLookup,
@@ -10,9 +11,10 @@ import {
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, type ConfigFieldOption, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
-import { factText, recordLink, secretLinks } from '../config-links.model';
+import { credentialLinks, factText, recordLink } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
+import { credentialPickerFields } from '../credentials/credentials.model';
 import { forgePickerFields } from '../forges/forges.model';
 
 type LandingPolicyName = hubApi.LandingPolicyName;
@@ -31,7 +33,7 @@ export function repositoryCreate(body: Readonly<Record<string, string | boolean>
     owner: text('owner'),
     repo: text('repo'),
     base_branch: text('base_branch'),
-    secret_name: text('secret_name'),
+    credential: text('credential'),
     ...(typeof body['allow_no_ci'] === 'boolean' ? { allow_no_ci: body['allow_no_ci'] } : {}),
     ...(text('landing_policy') === '' ? {} : { landing_policy: text('landing_policy') as LandingPolicyName }),
     ...(text('park_timeout_hours') === '' ? {} : { park_timeout_hours: Number(text('park_timeout_hours')) }),
@@ -68,13 +70,14 @@ export function landingPolicyOptions(
   });
 }
 
-/** The repository form's fields with its forge and landing-policy choices filled in. */
+/** The repository form's fields with its forge, credential and landing-policy choices filled in. */
 export function repositoryFields(
   forges: readonly ForgeSummary[],
+  credentials: readonly CredentialSummary[],
   needs: readonly LandingPolicyNeedsView[] | null,
   honour: readonly PolicyHonour[] | null,
 ): readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] {
-  return forgePickerFields(REPOSITORY_FIELDS, forges).map((field) =>
+  return credentialPickerFields(forgePickerFields(REPOSITORY_FIELDS, forges), credentials).map((field) =>
     field.key === 'landing_policy' ? { ...field, options: landingPolicyOptions(needs, honour) } : field,
   );
 }
@@ -132,7 +135,7 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,
     links: {
       heading: 'Related records',
-      links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...secretLinks(repository.secret_name)],
+      links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...credentialLinks(repository.credential_id, repository.credential_slug)],
       emptyText: 'No related records.',
     },
     hasHistory: true,
@@ -140,7 +143,8 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
 }
 
 /** A repository's form fields. The slug is the handle people type and may be renamed; the
- * name is its display label, and left blank on create it takes the slug. */
+ * name is its display label, and left blank on create it takes the slug. The credential it acts
+ * with is one of its forge's. */
 export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
@@ -148,7 +152,7 @@ export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRe
   { key: 'owner', label: 'Owner', kind: 'text', required: true },
   { key: 'repo', label: 'Repository', kind: 'text', required: true },
   { key: 'base_branch', label: 'Base branch', kind: 'text', required: true },
-  { key: 'secret_name', label: 'Token secret', kind: 'text', required: true },
+  { key: 'credential', label: 'Credential', kind: 'select', required: true, filterBy: 'forge' },
   { key: 'landing_policy', label: 'Landing policy', kind: 'select' },
   { key: 'allow_no_ci', label: 'Allow no CI', kind: 'checkbox' },
   {

@@ -87,7 +87,9 @@ The board's Admin page lists work sources, with each record's revision, last cha
 with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
 before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
 built-in `hub` source is listed and cannot be changed. The form picks a matching enabled forge instead of editing its
-API and web origins, and a [configuration document](./config-documents.md) names it with `forge`.
+API and web origins, and a [configuration document](./config-documents.md) names it with `forge`. It picks the
+credential the source acts with from that forge's enabled credentials, in place of a token secret; changing the forge
+clears the pick.
 
 ## Naming a work source
 

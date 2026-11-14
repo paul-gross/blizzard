@@ -2,7 +2,7 @@ import { RecordKind, type WorkSourceCreateRequest, type WorkSourceSummary } from
 
 import { builtInTone, lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
-import { factText, recordLink, secretLinks } from '../config-links.model';
+import { credentialLinks, factText, recordLink } from '../config-links.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
@@ -11,7 +11,7 @@ import type { ConfigRecordVm } from '../config-record-panel';
  * `annotate` is the form's one checkbox. */
 export function workSourceCreate(body: Readonly<Record<string, string | boolean>>): WorkSourceCreateRequest {
   const text = (key: string): string => createText(body, key);
-  const optional = (key: 'name' | 'secret'): Partial<WorkSourceCreateRequest> =>
+  const optional = (key: 'name' | 'credential'): Partial<WorkSourceCreateRequest> =>
     text(key) === '' ? {} : { [key]: text(key) };
   return {
     slug: text('slug'),
@@ -19,7 +19,7 @@ export function workSourceCreate(body: Readonly<Record<string, string | boolean>
     locator: text('locator'),
     ...optional('name'),
     forge: text('forge'),
-    ...optional('secret'),
+    ...optional('credential'),
     ...(typeof body['annotate'] === 'boolean' ? { annotate: body['annotate'] } : {}),
   };
 }
@@ -94,7 +94,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
     note: source.retired ? 'Retired — no new items ingest from it.' : null,
     links: {
        heading: 'Related records',
-       links: [recordLink({ kind: RecordKind.FORGE, key: source.forge_id!, label: source.forge_slug }), ...secretLinks(source.secret)],
+       links: [recordLink({ kind: RecordKind.FORGE, key: source.forge_id!, label: source.forge_slug }), ...credentialLinks(source.credential_id, source.credential_slug)],
        emptyText: 'No related records.',
     },
     hasHistory: true,
@@ -102,13 +102,14 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
 }
 
 /** A work source's form fields. The slug is the handle people type and may be renamed; the
- * name is its display label, and left blank on create it takes the slug. */
+ * name is its display label, and left blank on create it takes the slug. The credential it acts
+ * with, if any, is one of its forge's. */
 export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef<keyof WorkSourceCreateRequest>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'provider', label: 'Provider', kind: 'text', required: true },
   { key: 'locator', label: 'Locator', kind: 'text', required: true },
   { key: 'forge', label: 'Forge', kind: 'select', required: true, filterBy: 'provider' },
-  { key: 'secret', label: 'Token secret', kind: 'text' },
+  { key: 'credential', label: 'Credential', kind: 'select', filterBy: 'forge' },
   { key: 'annotate', label: 'Annotates', kind: 'checkbox' },
 ];

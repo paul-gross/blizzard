@@ -21,9 +21,9 @@ const BLIZZARD: RepositorySummary = {
   forge_slug: 'github',
   forge_name: 'GitHub',
   warnings: [],
-  credential_id: null,
-  credential_slug: null,
-  credential_name: null,
+  credential_id: 'cred_1',
+  credential_slug: 'gh-blizzard',
+  credential_name: 'gh-blizzard',
   repository_id: 'repo_1',
   slug: 'blizzard',
   name: 'blizzard',
@@ -70,7 +70,7 @@ describe('repositoryRecordVm', () => {
     expect(repositoryRecordVm(undefined)).toBeNull();
   });
 
-  it('shows the fields, revision, and token link', () => {
+  it('shows the fields, revision, and forge and credential links', () => {
     const vm = repositoryRecordVm(BLIZZARD)!;
     expect(vm.facts.map((f) => [f.label, f.value])).toEqual([
       ['Name', 'blizzard'],
@@ -84,7 +84,11 @@ describe('repositoryRecordVm', () => {
       ['Created by', 'pgross'],
     ]);
     expect(vm.revision).toBe(2);
-    expect(vm.links?.links.map((l) => l.name)).toEqual(['github', 'gh-blizzard']);
+    expect(vm.links?.links).toEqual([
+      { kind: 'forge', name: 'github', route: ['/admin', 'forges', 'frg_github'] },
+      { kind: 'credential', name: 'gh-blizzard', route: ['/admin', 'credentials', 'cred_1'] },
+    ]);
+    expect(repositoryRecordVm({ ...BLIZZARD, credential_id: null })?.links?.links.map((l) => l.kind)).toEqual(['forge']);
     expect(vm.hasHistory).toBe(true);
   });
 
@@ -110,7 +114,7 @@ describe('repositoryRecordVm', () => {
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',
-      secret_name: 'gh-blizzard',
+      credential: 'cred_1',
     };
     expect(repositoryCreate(body)).toEqual({
       slug: 'blizzard',
@@ -118,7 +122,7 @@ describe('repositoryRecordVm', () => {
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',
-      secret_name: 'gh-blizzard',
+      credential: 'cred_1',
     });
     expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe('Blizzard');
   });
@@ -211,7 +215,7 @@ describe('landing policy choices', () => {
   });
 
   it('fills the policy field in the repository form', () => {
-    const fields = repositoryFields([], NEEDS, HONOUR_NO_POLL);
+    const fields = repositoryFields([], [], NEEDS, HONOUR_NO_POLL);
     expect(
       fields.find((field) => field.key === 'landing_policy')?.options?.[1],
     ).toEqual({
@@ -224,7 +228,7 @@ describe('landing policy choices', () => {
 
 describe('park timeout', () => {
   const FORM = {
-    slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', secret_name: 's',
+    slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', credential: 'cred_1',
     park_timeout_hours: '12',
   };
 

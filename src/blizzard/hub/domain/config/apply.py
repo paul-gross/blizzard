@@ -25,6 +25,14 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
     RecordState,
 )
+from blizzard.hub.domain.config.credential_naming import CredentialId, credential_lock
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialEdit,
+    binding_named,
+    require_declarable_credential,
+)
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
@@ -47,6 +55,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryId,
 )
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
     ConfiguredWorkSource,
@@ -60,6 +69,7 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction
 PROJECTS_SECTION = "projects"
 SECRETS_SECTION = "secrets"
 FORGES_SECTION = "forges"
+CREDENTIALS_SECTION = "credentials"
 WORK_SOURCES_SECTION = "work_sources"
 REPOSITORIES_SECTION = "repositories"
 SCOPES_SECTION = "scopes"
@@ -132,6 +142,42 @@ class ForgeDeclaration:
     fields: ForgeFields
     edit: ForgeEdit
     forge_id: ForgeId
+
+
+@domain_model
+@dataclass(frozen=True)
+class CredentialDeclaration:
+    """A credential the document names by slug: its create fields on the forge the edge resolved, the sparse edit of
+    only the fields it states, and the id a credential the document creates takes — minted at the edge, so the
+    referrer entries can name it."""
+
+    draft: CredentialDraft
+    edit: CredentialEdit
+    credential_id: CredentialId
+
+    @property
+    def slug(self) -> str:
+        return self.draft.slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredOldField:
+    """A referrer entry's old secret field — ``secret_name`` of a repository, ``secret`` of a work source — that
+    resolves, inside the apply's unit, to the ``github.token`` credential reading ``secret_name`` on ``forge_id``. The
+    entry is at ``section`` and ``index``, and ``planned`` is the credential its write names: the one acting as that
+    authority when the edge read it, else a fresh id for the one the apply creates."""
+
+    section: str
+    index: int
+    field: str
+    forge_id: ForgeId
+    secret_name: str
+    planned: CredentialId
+
+    def locks(self) -> list[LockKey]:
+        """The keys resolving it relies on: the forge's, the secret's and the planned credential's."""
+        return [forge_lock(self.forge_id), secret_lock(self.secret_name), credential_lock(self.planned)]
 
 
 @domain_model
@@ -256,6 +302,7 @@ class ApplyPlan:
 class ConfigDeclaration:
     secrets: tuple[str, ...] = ()
     declared_forges: tuple[ForgeDeclaration, ...] = ()
+    credentials: tuple[CredentialDeclaration, ...] = ()
     work_sources: tuple[WorkSourceDeclaration, ...] = ()
     repositories: tuple[RepositoryDeclaration, ...] = ()
     #: The ``projects`` section, planned by the package that owns projects.
@@ -268,6 +315,8 @@ class ConfigDeclaration:
     #: The urgencies the routine and cadence writes newly name; their locks are declared beside the urgency sections'.
     reference_guards: tuple[UrgencyReferenceGuard, ...] = ()
     reference_locks: tuple[LockKey, ...] = ()
+    #: The old secret fields the work-source and repository entries resolve to a credential, in document order.
+    old_fields: tuple[DeclaredOldField, ...] = ()
 
 
 @domain_model
@@ -282,6 +331,14 @@ class StoredConfig:
     secrets: Mapping[str, RecordState]
     forges: Mapping[str, ConfiguredForge] = field(default_factory=dict[str, ConfiguredForge])
     former_forges: Mapping[str, ConfiguredForge] = field(default_factory=dict[str, ConfiguredForge])
+    #: Stored credentials by the current slug of each the document declares, and the one that left each declared slug
+    #: none holds.
+    credentials: Mapping[str, ConfiguredCredential] = field(default_factory=dict[str, ConfiguredCredential])
+    former_credentials: Mapping[str, ConfiguredCredential] = field(default_factory=dict[str, ConfiguredCredential])
+    #: Every credential a repository the document declares acts with as the edge read it, by id.
+    acting_credentials: Mapping[CredentialId, ConfiguredCredential] = field(
+        default_factory=dict[CredentialId, ConfiguredCredential]
+    )
     #: For each declared repository slug no repository holds, the repository that left it.
     former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict[str, ConfiguredRepository])
     #: For each declared work-source slug no work source holds, the work source that left it.
@@ -318,13 +375,16 @@ class IConfigApplyWriter(Protocol):
 
 
 def _write_locks(writes: Sequence[PlannedWrite]) -> set[LockKey]:
-    """The keys this section's ``writes`` rely on: each forge a forge write writes, and each forge and secret a
-    work-source or repository write names."""
+    """The keys this section's ``writes`` rely on: each forge a forge write writes, each credential a credential write
+    writes with the forge and secret it names, and each forge, secret and credential a work-source or repository write
+    names."""
     keys: set[LockKey] = set()
     for write in writes:
         record = write.record
         if isinstance(record, ConfiguredForge):
             keys.add(forge_lock(record.forge_id))
+        elif isinstance(record, ConfiguredCredential):
+            keys.update([*record.locks(), credential_lock(record.credential_id)])
         elif isinstance(record, ConfiguredWorkSource | ConfiguredRepository):
             keys.update(record.locks())
     return keys
@@ -339,6 +399,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
             raise ApplyEntryRefused(SECRETS_SECTION, index, SecretNotActive(name, retired=state is not None))
     plan = _Accumulator()
     _reconcile_section(_ForgeSection(declaration.declared_forges, stored, ctx, at), stored.forges, plan)
+    _reconcile_section(_CredentialSection(declaration.credentials, stored, ctx, at), stored.credentials, plan)
     _reconcile_section(_WorkSourceSection(declaration.work_sources, stored, ctx, at), stored.work_sources, plan)
     _reconcile_section(_RepositorySection(declaration.repositories, stored, ctx, at), stored.repositories, plan)
     plan.writes.extend(declaration.projects.writes)
@@ -363,6 +424,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
                     *declaration.projects.locks,
                     *declaration.urgencies.locks,
                     *declaration.reference_locks,
+                    *(key for old in declaration.old_fields for key in old.locks()),
                     *_write_locks(plan.writes),
                 }
             )
@@ -466,6 +528,26 @@ class _ForgeSection(_SlugSection[ForgeDeclaration, ConfiguredForge]):
 
     def edit(self, entry: ForgeDeclaration, record: ConfiguredForge) -> tuple[ConfiguredForge, ConfigChange] | None:
         return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
+
+
+class _CredentialSection(_SlugSection[CredentialDeclaration, ConfiguredCredential]):
+    section = CREDENTIALS_SECTION
+    kind = RecordKind.CREDENTIAL
+
+    def guard(self, entry: CredentialDeclaration, record: ConfiguredCredential | None) -> None:
+        draft = entry.draft
+        left = self._stored.former_credentials.get(entry.slug)
+        require_declarable_credential(draft.slug, draft.forge_id, draft.binding, record, left)
+
+    def create(self, entry: CredentialDeclaration) -> tuple[ConfiguredCredential, ConfigChange]:
+        binding = binding_named(entry.draft.binding)
+        return ConfiguredCredential.new(entry.draft, binding, self._ctx, at=self._at, credential_id=entry.credential_id)
+
+    def edit(
+        self, entry: CredentialDeclaration, record: ConfiguredCredential
+    ) -> tuple[ConfiguredCredential, ConfigChange] | None:
+        binding = binding_named(record.fields.binding)
+        return record.edit(entry.edit, binding, self._ctx, if_match=None, at=self._at)
 
 
 class _WorkSourceSection(_SlugSection[WorkSourceDeclaration, ConfiguredWorkSource]):

@@ -113,6 +113,15 @@ class CredentialUnavailable(Exception):
         self.retired = retired
 
 
+class CredentialEntryTaken(ConfigFieldError):
+    """A document's credential entry claims a slug, or acts as an authority, another credential of the tenant holds —
+    :class:`CredentialSlugTaken` or :class:`CredentialAuthorityTaken` at the entry's field."""
+
+    def __init__(self, taken: CredentialSlugTaken | CredentialAuthorityTaken) -> None:
+        super().__init__("slug" if isinstance(taken, CredentialSlugTaken) else "secret", str(taken))
+        self.code = taken.code
+
+
 def require_unused(slug: str, referrers: list[RecordRef]) -> None:
     """A credential an enabled record still names cannot be retired."""
     if referrers:
@@ -439,6 +448,49 @@ def resolve_credential(
         revision=None,
         authority=binding.authority(secret_name, {}),
     )
+
+
+def require_declarable_credential(
+    slug: str,
+    forge_id: ForgeId,
+    binding: str,
+    record: ConfiguredCredential | None,
+    left: ConfiguredCredential | None,
+) -> None:
+    """The refusals a declared credential entry meets before any write: a ``slug`` no credential holds but ``left``
+    left, and — for the stored ``record`` — a forge or a binding other than its own
+    (:class:`CredentialBindingImmutable`)."""
+    if record is None and left is not None:
+        raise ConfigFieldError(
+            "slug",
+            f"{slug!r} is a slug credential {left.slug!r} ({left.credential_id}) left; "
+            "name that credential by its current slug, or choose another",
+        )
+    if record is None:
+        return
+    for field, stated, held in (
+        ("forge", forge_id, record.fields.forge_id),
+        ("binding", binding, record.fields.binding),
+    ):
+        if stated != held:
+            raise CredentialBindingImmutable(field, f"a credential's {field} never changes; create another")
+
+
+@domain_model
+@dataclass(frozen=True)
+class PlannedCredentials:
+    """The credentials an apply's entries may name: every one held, as the document leaves it, and each the document
+    creates; ``former`` maps a slug a credential left, while none holds it, to that credential."""
+
+    records: tuple[ConfiguredCredential, ...]
+    former: Mapping[str, ConfiguredCredential]
+
+    def resolve(self, value: str) -> ConfiguredCredential | None:
+        """The credential ``value`` names — an id, a current slug, or a slug it left — or ``None``."""
+        for record in self.records:
+            if value in (record.credential_id, record.slug):
+                return record
+        return self.former.get(value)
 
 
 # --- Seams -----------------------------------------------------------------------------------------------------------

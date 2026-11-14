@@ -71,7 +71,7 @@ export { graphView, graphNodeView, graphEdgeView } from './builders/graph';
 export { pauseStateView, capacitiesView, hubConnectivityView, runnerStatusView, runnerDashboardView, hostRunnerView } from './builders/runner-dashboard';
 export { hostEnvironmentView, hostRegistrationView, servedProjectStatusView, selfTestView, hostSubscriptionView, harnessHealthView } from './builders/host-shell-views';
 export { runnerRegistryView, hostRegistryView, runnerBindingView, subscriptionUsageView } from './builders/fleet-runner-host';
-export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, configChangeView, configChangesPage } from './builders/admin-config';
+export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, credentialSummary, credentialDocument, configChangeView, configChangesPage } from './builders/admin-config';
 export { queuePeekEntry, backlogPeekEntry } from './builders/board-root-queue';
 export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runner-core';
 export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden';

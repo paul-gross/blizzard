@@ -786,12 +786,14 @@ export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends bo
 /**
  * Apply Config
  *
- * Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,
- * edit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,
- * and every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,
- * with the same `outcomes` and no `apply_id`. 422 invalid — `config_version_retired` for any `version` but 2, a
- * missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a
- * cadence write would leave it promoting its runs and the caller may not promote chunks.
+ * Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one
+ * transaction: create what is absent, edit only the fields an entry states, enable what is retired, leave unnamed
+ * records alone. Forges are declared, and every work source and repository names its forge by id or slug; a
+ * version-3 document declares credentials too, and each work source and repository names the one it acts with by id
+ * or slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.
+ * 422 invalid — `config_version_retired` for any `version` but 2 or 3, a missing one included — 409 conflict, 415
+ * unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its
+ * runs and the caller may not promote chunks.
  */
 export const applyConfigApiConfigApplyPost = <ThrowOnError extends boolean = false>(options: Options<ApplyConfigApiConfigApplyPostData, ThrowOnError>): RequestResult<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError> => (options.client ?? client).post<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError>({
     url: '/api/config/apply',
@@ -818,8 +820,11 @@ export const listChangesApiConfigChangesGet = <ThrowOnError extends boolean = fa
  * Every project with its standing links, every live urgency — an icon as its media type and base64 bytes — in
  * order with the tenant's default, every active forge, every active, non-built-in work source and
  * repository, and every active scope, routine (its linked scope set included), and cadence named in its project by
- * slug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.
- * Retired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.
+ * slug, with every field, and every active secret name, as a document of `version` — 2, the default, or 3 — that
+ * applies back as a no-op. Version 3 adds every active credential, and names the credential each work source and
+ * repository acts with by slug; one acting with none but by its old secret field names the credential that field
+ * resolves to — and, when none exists yet, declares the one an apply of the document creates. Retired records are
+ * left out, since applying one would enable it. 422 `config_version_retired` for any other `version`.
  */
 export const exportConfigApiConfigExportGet = <ThrowOnError extends boolean = false>(options?: Options<ExportConfigApiConfigExportGetData, ThrowOnError>): RequestResult<ExportConfigApiConfigExportGetResponses, ExportConfigApiConfigExportGetErrors, ThrowOnError> => (options?.client ?? client).get<ExportConfigApiConfigExportGetResponses, ExportConfigApiConfigExportGetErrors, ThrowOnError>({ url: '/api/config/export', ...options });
 
@@ -833,10 +838,11 @@ export const listLandingPoliciesApiConfigLandingPoliciesGet = <ThrowOnError exte
 /**
  * Get Schema
  *
- * The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422
- * `config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,
- * every landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered
- * (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and
+ * The JSON Schema of a record kind's document entry at `version` — 2, the default, or 3, which adds
+ * `credentials` and names a credential on `work-sources` and `repositories`; 404 for a kind with none at that
+ * version, and 422 `config_version_retired` for any other version. The `repositories` schema lists, under
+ * `x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer (`requires`) and
+ * the ones it uses when offered (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and
  * `ForgeDetail.landing_policies`.
  */
 export const getSchemaApiConfigSchemaKindGet = <ThrowOnError extends boolean = false>(options: Options<GetSchemaApiConfigSchemaKindGetData, ThrowOnError>): RequestResult<GetSchemaApiConfigSchemaKindGetResponses, GetSchemaApiConfigSchemaKindGetErrors, ThrowOnError> => (options.client ?? client).get<GetSchemaApiConfigSchemaKindGetResponses, GetSchemaApiConfigSchemaKindGetErrors, ThrowOnError>({ url: '/api/config/schema/{kind}', ...options });
@@ -844,7 +850,10 @@ export const getSchemaApiConfigSchemaKindGet = <ThrowOnError extends boolean = f
 /**
  * List Credentials
  *
- * Every stored credential by slug, retired ones hidden unless `include_retired`.
+ * Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled
+ * repositories and work sources naming it; and every binding a credential may name, with the kind of forge it
+ * authenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may
+ * name.
  */
 export const listCredentialsApiCredentialsGet = <ThrowOnError extends boolean = false>(options?: Options<ListCredentialsApiCredentialsGetData, ThrowOnError>): RequestResult<ListCredentialsApiCredentialsGetResponses, ListCredentialsApiCredentialsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListCredentialsApiCredentialsGetResponses, ListCredentialsApiCredentialsGetErrors, ThrowOnError>({ url: '/api/credentials', ...options });
 

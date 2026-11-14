@@ -48,6 +48,14 @@ export const ADMIN_ROUTES: Routes = [
         ],
       },
       {
+        path: 'credentials',
+        loadComponent: () => import('./credentials/credentials-page').then((m) => m.CredentialsPage),
+        children: [
+          { path: '', loadComponent: () => import('./credentials/credential-detail').then((m) => m.CredentialDetail) },
+          { path: ':key', loadComponent: () => import('./credentials/credential-detail').then((m) => m.CredentialDetail) },
+        ],
+      },
+      {
         path: 'secrets',
         loadComponent: () => import('./secrets/secrets-page').then((m) => m.SecretsPage),
         children: [

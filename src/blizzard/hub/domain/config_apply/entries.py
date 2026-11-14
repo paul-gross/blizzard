@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.model import CadenceEdit, CadenceShape
+from blizzard.hub.domain.config.credentials import CredentialEdit
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
@@ -22,26 +23,29 @@ from blizzard.hub.domain.urgency.declarations import UrgencySections
 @dataclass(frozen=True)
 class DeclaredWorkSource:
     """A work source the document names by slug: the display name it states, its create fields but the forge, the
-    sparse edit of what it states but the forge, and what it says of its forge."""
+    sparse edit of what it states but the forge, what it says of its forge, and the credential it names by id or slug
+    — :data:`UNSET` when it names none, as a version-2 entry never does."""
 
     slug: str
     name: str | None
     draft: WorkSourceDraft
     edit: WorkSourceEdit
     forge: ForgeChoice
+    credential: str | UnsetType = UNSET
 
 
 @domain_model
 @dataclass(frozen=True)
 class DeclaredRepository:
     """A repository the document names by slug: its create fields but the forge, the sparse edit of what it states but
-    the forge, and what it says of its forge."""
+    the forge, what it says of its forge, and the credential it names, as :class:`DeclaredWorkSource` names one."""
 
     slug: str
     name: str | None
     draft: RepositoryDraft
     edit: RepositoryEdit
     forge: ForgeChoice
+    credential: str | UnsetType = UNSET
 
 
 @domain_model
@@ -52,6 +56,21 @@ class DeclaredForge:
     kind: str
     fields: ForgeFields
     edit: ForgeEdit
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredCredential:
+    """A credential the document names by slug: the forge it names by id or slug, its binding, secret and settings,
+    and the sparse edit of the fields it states but the forge and binding."""
+
+    slug: str
+    name: str | None
+    forge: str
+    binding: str
+    secret: str
+    settings: Mapping[str, object]
+    edit: CredentialEdit
 
 
 @domain_model
@@ -106,6 +125,7 @@ class DocumentEntries:
 
     secrets: tuple[str, ...] = ()
     forges: tuple[DeclaredForge, ...] = ()
+    credentials: tuple[DeclaredCredential, ...] = ()
     work_sources: tuple[DeclaredWorkSource, ...] = ()
     repositories: tuple[DeclaredRepository, ...] = ()
     projects: tuple[ProjectDeclaration, ...] = ()

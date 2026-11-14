@@ -162,7 +162,7 @@ def _revision(conn: Connection, credential_id: str) -> int:
     ).scalar_one()
 
 
-def _lost_race(conn: Connection, record: ConfiguredCredential) -> CredentialAuthorityTaken | CredentialSlugTaken:
+def lost_race(conn: Connection, record: ConfiguredCredential) -> CredentialAuthorityTaken | CredentialSlugTaken:
     """The refusal a write that lost the authority or the slug to a concurrent one reads as, on ``conn``."""
     holder = _authority_holder(conn, record)
     return CredentialAuthorityTaken(record.authority, holder=holder) if holder else CredentialSlugTaken(record.slug)
@@ -182,7 +182,7 @@ class CredentialRecordStore:
             with conn.begin_nested():
                 insert_credential(conn, record, change)
         except IntegrityError as exc:
-            raise _lost_race(conn, record) from exc
+            raise lost_race(conn, record) from exc
         return record
 
     def update(
@@ -199,7 +199,7 @@ class CredentialRecordStore:
             with conn.begin_nested():
                 update_credential(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
-            raise _lost_race(conn, record) from exc
+            raise lost_race(conn, record) from exc
         return record
 
     def record_lifecycle(

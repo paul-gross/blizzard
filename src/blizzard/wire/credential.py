@@ -74,10 +74,41 @@ class CredentialDocument(CredentialSummary):
     referrers: list[CredentialReferenceView]
 
 
-class CredentialsListView(WireModel):
-    """Every stored credential by slug — ``GET /api/credentials``."""
+class CredentialListItem(CredentialSummary):
+    """One ``GET /api/credentials`` row: the credential, with how many enabled repositories and work sources name it."""
 
-    credentials: list[CredentialSummary]
+    referrer_count: int
+
+
+class CredentialSettingView(WireModel):
+    """One setting a binding takes, by ``key``, with the values it accepts."""
+
+    key: str
+    choices: list[str]
+
+
+class CredentialBindingView(WireModel):
+    """A binding a credential may name: its ``name``, the kind of forge it authenticates against, and its settings."""
+
+    name: str
+    forge_kind: str
+    settings: list[CredentialSettingView]
+
+
+class ForgeBindingsView(WireModel):
+    """An enabled forge, by id, with the name of every binding a credential on it may name."""
+
+    forge_id: str
+    bindings: list[str]
+
+
+class CredentialsListView(WireModel):
+    """Every stored credential by slug — ``GET /api/credentials`` — every binding a credential may name, and the
+    bindings each enabled forge allows."""
+
+    credentials: list[CredentialListItem]
+    bindings: list[CredentialBindingView]
+    forge_bindings: list[ForgeBindingsView]
 
 
 CREDENTIAL_NOT_FOUND: Final = "urn:blizzard:problem:credential-not-found"

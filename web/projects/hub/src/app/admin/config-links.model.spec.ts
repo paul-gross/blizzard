@@ -1,7 +1,7 @@
 import { RecordKind } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { factText, recordKindLabel, recordLink, recordRoute, secretLinks } from './config-links.model';
+import { factText, recordKindLabel, recordLink, recordRoute, credentialLinks } from './config-links.model';
 
 describe('recordKindLabel', () => {
   it('spaces the wire value', () => {
@@ -16,6 +16,7 @@ describe('recordRoute', () => {
     expect(recordRoute(RecordKind.REPOSITORY, 'blizzard')).toEqual(['/admin', 'repositories', 'blizzard']);
     expect(recordRoute(RecordKind.FORGE, 'github')).toEqual(['/admin', 'forges', 'github']);
     expect(recordRoute(RecordKind.SECRET, 'gh')).toEqual(['/admin', 'secrets', 'gh']);
+    expect(recordRoute(RecordKind.CREDENTIAL, 'cred_1')).toEqual(['/admin', 'credentials', 'cred_1']);
   });
 
   it('opens a scope, routine, or cadence on its gardening detail', () => {
@@ -59,11 +60,10 @@ describe('recordLink by label', () => {
   });
 });
 
-describe('secretLinks', () => {
-  it('links a named secret, and nothing for none', () => {
-    expect(secretLinks('gh')).toEqual([{ kind: 'secret', name: 'gh', route: ['/admin', 'secrets', 'gh'] }]);
-    expect(secretLinks(null)).toEqual([]);
-    expect(secretLinks('')).toEqual([]);
+describe('credentialLinks', () => {
+  it('links a named credential by its slug, and nothing for none', () => {
+    expect(credentialLinks('cred_1', 'gh-main')).toEqual([{ kind: 'credential', name: 'gh-main', route: ['/admin', 'credentials', 'cred_1'] }]);
+    expect(credentialLinks(null, null)).toEqual([]);
   });
 });
 

@@ -3,7 +3,7 @@ declarative document (``POST /api/config/apply``, ``GET /api/config/export``).""
 
 from __future__ import annotations
 
-from typing import Annotated, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -143,6 +143,53 @@ class WorkSourceEntry(BaseModel):
     secret: str | None = None
 
 
+class CredentialEntry(BaseModel):
+    """A credential declared by slug: ``forge`` names its forge by id or slug, ``binding`` how it authenticates,
+    ``secret`` the secret it reads, and ``settings`` the binding's own fields. An omitted ``name`` stays as stored; a
+    ``forge`` or ``binding`` other than the stored credential's is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    forge: str
+    binding: str
+    secret: str
+    settings: dict[str, Any] = {}
+
+
+class RepositoryEntryV3(BaseModel):
+    """A version-3 repository entry: it names its forge, and the credential it acts with by id or slug."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    forge: str
+    owner: str
+    repo: str
+    base_branch: str
+    credential: str
+    landing_policy: LandingPolicy | None = None
+    allow_no_ci: bool = False
+    park_timeout_hours: int | None = None
+
+
+class WorkSourceEntryV3(BaseModel):
+    """A version-3 work source entry: it names its forge, and the credential it acts with by id or slug — ``null``, or
+    omitted, for none on a create, and the stored one on an edit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    provider: str
+    locator: str
+    forge: str
+    annotate: bool = False
+    credential: str | None = None
+
+
 class UrgencyEntry(BaseModel):
     """An urgency as a document entry, named by its slug: created when the tenant holds none by it — with no ``name``
     taking the slug and no ``color`` the palette color the live urgencies use least — and otherwise a sparse edit of
@@ -168,7 +215,7 @@ class SettingsEntry(BaseModel):
 
 
 class ConfigDocumentV2(BaseModel):
-    """A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
+    """A declarative configuration document, version 2 — the version a hub exports by default. Each entry is the
     kind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that
     name them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order
     after the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an
@@ -188,6 +235,30 @@ class ConfigDocumentV2(BaseModel):
     secrets: list[str] = []
     work_sources: list[WorkSourceEntry] = []
     repositories: list[RepositoryEntry] = []
+    scopes: list[ScopeEntry] = []
+    routines: list[RoutineEntry] = []
+    cadences: list[CadenceEntry] = []
+
+
+class ConfigDocumentV3(BaseModel):
+    """A declarative configuration document, version 3: version 2's sections, with ``credentials`` reconciled after
+    ``forges`` and the ``secrets`` check and before the work sources and repositories, whose entries name their
+    credential as ``credential`` where version 2's name a secret. A declared credential is never retired by its
+    absence; one whose secret moves takes every record acting with it along."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[3]
+    projects: list[ProjectDocument] = []
+    urgencies: list[UrgencyEntry] = []
+    #: The whole live order, most urgent first, naming every urgency live once the apply has run; omitted, it stands.
+    urgency_order: list[str] | None = None
+    settings: SettingsEntry | None = None
+    forges: list[ForgeEntry] = []
+    secrets: list[str] = []
+    credentials: list[CredentialEntry] = []
+    work_sources: list[WorkSourceEntryV3] = []
+    repositories: list[RepositoryEntryV3] = []
     scopes: list[ScopeEntry] = []
     routines: list[RoutineEntry] = []
     cadences: list[CadenceEntry] = []

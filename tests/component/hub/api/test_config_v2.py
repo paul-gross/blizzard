@@ -98,8 +98,8 @@ def test_v2_can_enable_a_declared_retired_forge_before_references(tmp_path: Path
     assert [(o["kind"], o["op"]) for o in applied.json()["outcomes"]] == [("forge", "enable"), ("repository", "create")]
 
 
-@pytest.mark.parametrize("version", [1, None, 3, "2"])
-def test_a_document_of_any_version_but_2_is_refused_naming_version_2(tmp_path: Path, version: object) -> None:
+@pytest.mark.parametrize("version", [1, None, 4, "2"])
+def test_a_document_of_any_version_but_2_or_3_is_refused_naming_both(tmp_path: Path, version: object) -> None:
     hub = build_hub(tmp_path, repositories=(), link=False)
     document: dict[str, object] = {"forges": [FORGE]}
     if version is not None:

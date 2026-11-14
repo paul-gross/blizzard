@@ -43,6 +43,11 @@ class CredentialBinding(Protocol):
     @property
     def supplied(self) -> bool: ...
 
+    @property
+    def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
+        """Each setting the binding takes, by key, with the values it accepts."""
+        ...
+
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
         """The canonical form of ``settings``; :class:`CredentialSettingsInvalid` naming the setting it refuses."""
         ...
@@ -71,6 +76,10 @@ class GitHubTokenBinding:
     forge_kind: str = "github"
     supplied: bool = True
 
+    @property
+    def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
+        return {"variant": _TOKEN_VARIANTS}
+
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
         for key in settings:
             if key != "variant":
@@ -93,3 +102,8 @@ class GitHubTokenBinding:
 
 #: Every binding a credential may name, by name.
 CREDENTIAL_BINDINGS: Mapping[str, CredentialBinding] = {binding.name: binding for binding in (GitHubTokenBinding(),)}
+
+
+def bindings_for_kind(kind: str) -> tuple[str, ...]:
+    """The name of every binding a credential on a forge of ``kind`` may name."""
+    return tuple(binding.name for binding in CREDENTIAL_BINDINGS.values() if binding.forge_kind == kind)
