@@ -27,6 +27,9 @@ class AuthRefusal(StrEnum):
     PERMISSION_MISSING = "permission-missing"
     TOKEN_UNSUPPORTED = "token-unsupported"
     SSO_REQUIRED = "sso-required"
+    KEY_REJECTED = "key-rejected"
+    INSTALLATION_MISSING = "installation-missing"
+    INSTALLATION_SUSPENDED = "installation-suspended"
 
 
 @domain_model
@@ -65,7 +68,19 @@ _SENTENCES = {
     AuthRefusal.PERMISSION_MISSING: "the token lacks a permission the call needs",
     AuthRefusal.TOKEN_UNSUPPORTED: "this kind of token cannot make the call",
     AuthRefusal.SSO_REQUIRED: "the token is not authorized for the organization's SSO",
+    AuthRefusal.KEY_REJECTED: "the App's key, App id, or the hub's clock was refused",
+    AuthRefusal.INSTALLATION_MISSING: "the App's installation does not exist",
+    AuthRefusal.INSTALLATION_SUSPENDED: "the App's installation is suspended",
 }
+
+
+class ForgeMintRefused(Exception):
+    """The forge refused to mint, or to describe, the installation access a credential acts with — raised from
+    inside an authorization and translated by each caller into its own refusal. Its text is the refusal alone."""
+
+    def __init__(self, classified: ClassifiedRefusal) -> None:
+        super().__init__(str(classified.refusal))
+        self.classified = classified
 
 
 def refusal_sentence(refusal: AuthRefusal) -> str:
@@ -87,6 +102,12 @@ def refusal_remedy(refusal: AuthRefusal, diagnostic: ForgeDiagnostic, *, capabil
             return f"Use a classic token or a GitHub App, or a landing policy that does not need {needed}."
         case AuthRefusal.SSO_REQUIRED:
             return "Authorize the token for the organization's SSO."
+        case AuthRefusal.KEY_REJECTED:
+            return "Replace the App's private key, or correct its App id, or check the hub's clock."
+        case AuthRefusal.INSTALLATION_MISSING:
+            return "Reinstall the App, or correct the installation id."
+        case AuthRefusal.INSTALLATION_SUSPENDED:
+            return "Unsuspend the App's installation."
 
 
 def forge_auth_refused_detail(

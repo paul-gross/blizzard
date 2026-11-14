@@ -5,7 +5,7 @@ refusals the same way; free of any HTTP library, so it reads status, headers, an
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.kernel.forge_refusals import (
@@ -57,6 +57,47 @@ def classify_auth_refusal(
     )
     sso = _lowered(headers).get("x-github-sso", "")
     return ClassifiedRefusal(_refusal(status, sso, diagnostic.message, withheld=withheld), diagnostic)
+
+
+#: How GitHub answers an App-authenticated mint or installation read it refuses.
+_MINT_REFUSALS = {
+    401: AuthRefusal.KEY_REJECTED,
+    403: AuthRefusal.INSTALLATION_SUSPENDED,
+    404: AuthRefusal.INSTALLATION_MISSING,
+    422: AuthRefusal.PERMISSION_MISSING,
+}
+
+
+def classify_mint_refusal(
+    status: int,
+    headers: Mapping[str, str],
+    message: str,
+    *,
+    documentation_url: str | None,
+    operation: str,
+    endpoint: str,
+    credential: CallCredential,
+    missing: str | None = None,
+) -> ClassifiedRefusal | None:
+    """A refused mint or installation read: a 401 is the App's JWT refused, a 404 a missing installation, a 403 a
+    suspended one, and a 422 a permission the installation does not grant — its diagnostic naming ``missing``, the
+    permissions the mint asked for that the installation lacks. ``None`` for any other answer."""
+    refusal = _MINT_REFUSALS.get(status)
+    if refusal is None:
+        return None
+    diagnostic = diagnostic_of(
+        status,
+        headers,
+        message,
+        documentation_url=documentation_url,
+        operation=operation,
+        endpoint=endpoint,
+        repository=None,
+        credential=credential,
+    )
+    if refusal is AuthRefusal.PERMISSION_MISSING and missing is not None:
+        diagnostic = replace(diagnostic, accepted_permissions=missing)
+    return ClassifiedRefusal(refusal, diagnostic)
 
 
 def diagnostic_of(

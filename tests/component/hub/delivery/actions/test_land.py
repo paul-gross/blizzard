@@ -34,14 +34,16 @@ from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import CredentialDraft
-from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeId
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     ResolvedRepository,
 )
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
+from blizzard.hub.forge.auth import ForgeAuthorization
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
     Change,
@@ -1661,3 +1663,36 @@ def test_degraded_checks_do_not_land_even_with_no_ci_opt_in(policy: LandingPolic
     assert answer.choice == "pending"
     assert not any(name.startswith("empty-checks/") for name in sink.markers())
     assert not double.named("merge") and not double.named("advance_ref")
+
+
+def test_an_app_installation_withholding_checks_read_escalates_naming_its_credential_and_no_variant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    double = _forge(_WIDGET)
+    hub = _hub(tmp_path, double)
+    chunk_id = _chunk(hub, _WIDGET)
+    kind = FORGE_KIND_CAPABILITIES["github"]
+    narrowed = kind - {Capability.CHECKS_READ}
+    authorization = ForgeAuthorization(
+        credential_id=CredentialId("cred_app"),
+        credential_slug="app",
+        binding="github.app-installation",
+        variant=None,
+        authority="app/12/installation/34",
+        offered=narrowed,
+        auth=httpx2.Auth(),
+    )
+
+    def offered(forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
+        return kind if repository is None else narrowed
+
+    def authorized(repository: RepositoryId) -> ForgeAuthorization:
+        return authorization
+
+    monkeypatch.setattr(hub.services.forges, "offered", offered)
+    monkeypatch.setattr(hub.services.forges, "authorization", authorized)
+
+    assert _take(hub, chunk_id) == "escalated"
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
+    assert "does not offer `checks.read` to credential app (github.app-installation), which" in rows[0].detail

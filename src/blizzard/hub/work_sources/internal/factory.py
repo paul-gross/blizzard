@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.credentials import (
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.kernel.forge_refusals import ForgeMintRefused
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.live_config import ConfigObjectCache
@@ -32,7 +33,7 @@ from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateBudgets, IWorkSourceRateGate
 from blizzard.hub.work_sources.refusal_reader import IWorkSourceRefusalReader
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
-from blizzard.hub.work_sources.source import IWorkSource, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSource, WorkSourceAuthRefused, WorkSourceError
 
 
 class IWorkSourceAuthorization(Protocol):
@@ -118,7 +119,8 @@ class WorkSourceEntry:
         refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
     ) -> BuiltWorkSource:
         """Build the record's adapter on its forge's addresses, over a client authenticated by the authorization of
-        the credential it acts with."""
+        the credential it acts with — :class:`WorkSourceAuthRefused` when the forge refuses the access that
+        authorization is built on."""
         forge = forges.get(record.fields.forge_id)
         if forge is None:
             raise WorkSourceError(f"work source {record.slug} names no forge")
@@ -127,6 +129,10 @@ class WorkSourceEntry:
             authorization = authorizations.authorization(credential) if credential is not None else None
         except CredentialUnavailable as exc:
             raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
+        except ForgeMintRefused as exc:
+            raise WorkSourceAuthRefused(f"work source {record.slug}", exc.classified) from exc
+        except httpx2.HTTPError as exc:
+            raise WorkSourceError(f"work source {record.slug}: its forge could not be read: {exc}") from exc
         entry = cls.of(record, forge, authorization, instrument, budgets, refusals)
         client = entry.client()
         return BuiltWorkSource(record=record, source=entry.source(client), release=client.close)

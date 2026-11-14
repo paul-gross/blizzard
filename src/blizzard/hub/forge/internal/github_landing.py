@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any, ClassVar, NamedTuple, NoReturn
 
@@ -20,7 +21,13 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, sanitize_forge_text
+from blizzard.hub.domain.kernel.forge_refusals import (
+    ClassifiedRefusal,
+    ForgeDiagnostic,
+    ForgeMintRefused,
+    sanitize_forge_text,
+)
+from blizzard.hub.forge.internal.github_auth import InstallationAuth, variant_withholds
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (
@@ -501,7 +508,9 @@ class GitHubLanding:
                 )
             )
         if status == 404 and missing is not None:
-            raise ForgeNotFound(ForgeObject.REPOSITORY if await self._repository_missing(call) else missing)
+            if await self._repository_missing(call):
+                raise ForgeNotFound(ForgeObject.REPOSITORY, self._repository_unseen())
+            raise ForgeNotFound(missing)
         raise ForgeRejected(_message(response) or f"HTTP {status}", diagnostic=self._diagnostic(response, call))
 
     def _diagnostic(self, response: httpx2.Response, call: _Call) -> ForgeDiagnostic:
@@ -522,9 +531,17 @@ class GitHubLanding:
         return CallCredential(authorization.credential_slug, authorization.binding, authorization.variant)
 
     def _withheld(self, call: _Call) -> bool:
-        """Whether ``call`` needs a capability the authorization it carries does not offer."""
+        """Whether ``call`` needs a capability the variant of the token it carries withholds — not what an
+        installation's grant left unoffered, which is a missing permission."""
         capability = OPERATION_CAPABILITY.get(call.operation)
-        return capability is not None and capability not in self._binding.authorization.offered
+        return capability is not None and capability in variant_withholds(self._binding.authorization.variant)
+
+    def _repository_unseen(self) -> str:
+        """How a repository the forge answers 404 for is worded: an installation's token cannot see a repository
+        the installation does not include, either."""
+        if isinstance(self._binding.authorization.auth, InstallationAuth):
+            return f"{ForgeObject.REPOSITORY} not found, or the installation does not include it"
+        return ""
 
     async def _repository_missing(self, call: _Call) -> bool:
         """Whether the repository itself answers 404 — read at most once a minute. GitHub hides a repository a
@@ -590,6 +607,11 @@ class GitHubLanding:
                 headers=headers,
                 timeout=ATTEMPT_TIMEOUT_SECONDS,
             )
+        except ForgeMintRefused as exc:
+            refused = exc.classified
+            raise ForgeAuthRefused(
+                ClassifiedRefusal(refused.refusal, replace(refused.diagnostic, repository=self._full_name))
+            ) from exc
         except httpx2.HTTPError as exc:
             raise ForgeUnavailable(f"{method} {self._binding.api_url}{path}: {exc}") from exc
         if response.status_code >= 500:

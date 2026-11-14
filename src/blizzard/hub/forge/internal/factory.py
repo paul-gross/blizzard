@@ -18,6 +18,7 @@ from blizzard.hub.domain.config.secrets import ISecretReader
 from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
+from blizzard.hub.forge.internal.github_auth import InstallationTokens
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
@@ -35,9 +36,18 @@ def build_forge_adapter(
     return kinds[binding.kind](binding, clock=clock, instrument=instrument)
 
 
-def build_forge_authorizations(secrets: ISecretReader) -> IForgeAuthorizations:
-    """A tenant's forge authorization boundary over its secret reader — the reader's one forge holder."""
-    return ForgeAuthorizations(secrets=secrets)
+def build_installation_tokens(clock: IClock) -> InstallationTokens:
+    """A tenant's installation tokens, renewed on its clock — held for the tenant's life, so an adapter rebuilt by an
+    edit keeps the token its predecessor minted."""
+    return InstallationTokens(clock=clock)
+
+
+def build_forge_authorizations(
+    secrets: ISecretReader, *, forges: IReadForgeRepository, tokens: InstallationTokens
+) -> IForgeAuthorizations:
+    """A tenant's forge authorization boundary over its secret reader — the reader's one forge holder — minting
+    through its installation ``tokens`` against the forges ``forges`` names."""
+    return ForgeAuthorizations(secrets=secrets, forges=forges, tokens=tokens)
 
 
 def build_forge_registry(

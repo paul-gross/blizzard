@@ -4,18 +4,22 @@ or an unknown or retired secret."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import CredentialUnavailable, ResolvedCredential
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
-from blizzard.hub.domain.config.secrets import SecretName, SecretNotFound, SecretRetired
+from blizzard.hub.domain.config.secrets import RevealedSecret, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.forge.auth import ForgeScope
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
-from blizzard.hub.forge.internal.github_auth import TokenVariant, effective_variant
+from blizzard.hub.forge.internal.github_auth import InstallationTokens, TokenVariant, effective_variant
 from tests.support.forge_auth import sent_authorization
+from tests.support.github_app import Forges
 
 _FINE = "github_pat_11AAAA"
 _CLASSIC = "ghp_abcdef"
@@ -56,12 +60,12 @@ class _Reader:
         self.held = held
         self.retired = retired
 
-    def reveal(self, name: SecretName) -> SecretValue:
+    def reveal(self, name: SecretName) -> RevealedSecret:
         if name.value in self.retired:
             raise SecretRetired(name.value)
         if name.value not in self.held:
             raise SecretNotFound(name.value)
-        return SecretValue(self.held[name.value])
+        return RevealedSecret(SecretValue(self.held[name.value]), 1)
 
 
 def _credential(
@@ -83,6 +87,13 @@ def _credential(
 _KIND = FORGE_KIND_CAPABILITIES["github"]
 
 
+def _authorizations(reader: _Reader) -> ForgeAuthorizations:
+    """The boundary over ``reader``; a ``github.token`` credential reads no forge and mints nothing."""
+    return ForgeAuthorizations(
+        secrets=reader, forges=Forges(), tokens=InstallationTokens(clock=FixedClock(datetime(2026, 11, 14, tzinfo=UTC)))
+    )
+
+
 @pytest.mark.parametrize(
     ("token", "variant", "offered"),
     [
@@ -94,7 +105,7 @@ _KIND = FORGE_KIND_CAPABILITIES["github"]
 def test_an_authorization_carries_its_variant_and_what_that_leaves_offered(
     token: str, variant: str, offered: frozenset[Capability]
 ) -> None:
-    authorizations = ForgeAuthorizations(secrets=_Reader({"gh": token}))
+    authorizations = _authorizations(_Reader({"gh": token}))
 
     authorization = authorizations.authorization(_credential(), ForgeScope.LANDING)
 
@@ -104,7 +115,7 @@ def test_an_authorization_carries_its_variant_and_what_that_leaves_offered(
 
 
 def test_a_record_naming_no_credential_is_authorized_by_its_secret_alone() -> None:
-    authorizations = ForgeAuthorizations(secrets=_Reader({"gh": _CLASSIC}))
+    authorizations = _authorizations(_Reader({"gh": _CLASSIC}))
 
     authorization = authorizations.authorization(_credential(named=False), ForgeScope.WORK_SOURCE)
 
@@ -114,7 +125,7 @@ def test_a_record_naming_no_credential_is_authorized_by_its_secret_alone() -> No
 
 
 def test_the_authorization_holds_no_token_in_its_representation() -> None:
-    authorization = ForgeAuthorizations(secrets=_Reader({"gh": _FINE})).authorization(_credential(), ForgeScope.LANDING)
+    authorization = _authorizations(_Reader({"gh": _FINE})).authorization(_credential(), ForgeScope.LANDING)
 
     assert _FINE not in repr(authorization) and "github_pat_" not in repr(authorization)
 
@@ -132,6 +143,6 @@ def test_an_unavailable_credential_or_secret_builds_no_authorization(
     reader: _Reader, credential: ResolvedCredential, reference: str, retired: bool
 ) -> None:
     with pytest.raises(CredentialUnavailable) as raised:
-        ForgeAuthorizations(secrets=reader).authorization(credential, ForgeScope.LANDING)
+        _authorizations(reader).authorization(credential, ForgeScope.LANDING)
 
     assert (raised.value.reference, raised.value.retired) == (reference, retired)

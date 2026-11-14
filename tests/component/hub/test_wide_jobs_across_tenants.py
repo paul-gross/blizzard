@@ -88,7 +88,7 @@ class _Hub:
         store = self.stores(tenant).secrets
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
         reader = StoreSecretReader(catalog=store, sealed=store, cipher=secret_cipher(keys))
-        return reader.reveal(SecretName.parse(name)).expose()
+        return reader.reveal(SecretName.parse(name)).value.expose()
 
     def key_ids(self, tenant: TenantId) -> set[str]:
         return self.stores(tenant).secrets.key_ids_in_use()
