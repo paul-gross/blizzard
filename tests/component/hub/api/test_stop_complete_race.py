@@ -1,7 +1,7 @@
 """Concurrent stop/complete refusals are atomic (component tier).
 
 ``StopService.stop``/``CompleteService.complete`` re-derive the terminal-status guard
-they refuse on from ``handle.facts()``, inside the same row-locked transaction the write
+they refuse on from the locked ``load_facts``, inside the same row-locked transaction the write
 lands under (``bzh:store-exclusive-write``) — never from a pre-lock snapshot. Drives two
 concurrent clients through a barrier, mirroring ``tests/component/hub/api/test_claim_exactly_once.py``'s own
 pattern, to expose the check-then-act gap a pre-lock read would leave open."""

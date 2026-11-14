@@ -77,10 +77,10 @@ def _mint(chunks: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef] | None
 
 
 def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     pointer = WorkRef(source="default", ref="1")
     chunk = _mint(chunks, "ch_1", work_refs=[pointer])
-    with chunks.exclusive.locked(["ch_1"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         chunks.artifacts.record_hub_artifact(
             "ch_1",
             node_id="nd_deliver",
@@ -92,7 +92,7 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([pointer], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     # Sanity: landed and carrying a pending intent *before* the delete — proves the
     # post-delete emptiness below is the ephemeral exclusion at work, not a
@@ -139,22 +139,22 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
 # --- refusal at every status outside PRE_CLAIM_STATUSES, success at both members ---
 
 
-def _make_running(chunks: ChunkStores, chunk_id: str) -> None:
-    with chunks.exclusive.locked([chunk_id]) as handle:
+def _make_running(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         chunks.route.record_route(
             Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=[], created_at=_T0),
             token_hash="deadbeef",
             at=_T0,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
-def _make_paused(chunks: ChunkStores, chunk_id: str) -> None:
+def _make_paused(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
     chunks.lifecycle.record_pause(chunk_id, paused=True, by="alice", at=_T0)
 
 
-def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
-    with chunks.exclusive.locked([chunk_id]) as handle:
+def _make_needs_human(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         chunks.escalations.record_escalation(
             chunk_id,
             epoch=1,
@@ -164,12 +164,12 @@ def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
-def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
-    with chunks.exclusive.locked([chunk_id]) as handle:
+def _make_waiting_on_human(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         chunks.questions.record_question(
             question_id="qn_1",
             chunk_id=chunk_id,
@@ -182,24 +182,24 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
             asked_at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
-def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
-    with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.lifecycle.record_stop(chunk_id, by="alice", at=_at(0), waiting=(), transaction=handle.transaction)
+def _make_stopped(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
+        chunks.lifecycle.record_stop(chunk_id, by="alice", at=_at(0), waiting=(), transaction=tx)
 
 
-def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
-    with chunks.exclusive.locked([chunk_id]) as handle:
+def _make_done(chunks: ChunkStores, engine: Engine, chunk_id: str) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         chunks.lifecycle.record_completion(
             chunk_id,
             by="alice",
             at=_at(0),
             close_decision=decide_close_enqueue([], lambda _: True),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
@@ -216,11 +216,11 @@ def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
     ids=["running", "paused", "needs_human", "waiting_on_human", "stopped", "done"],
 )
 def test_delete_refuses_every_status_outside_groupable(
-    tmp_path: Path, driver: Callable[[ChunkStores, str], None], expected_status: str
+    tmp_path: Path, driver: Callable[[ChunkStores, Engine, str], None], expected_status: str
 ) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     chunk = _mint(chunks, "ch_1")
-    driver(chunks, "ch_1")
+    driver(chunks, engine, "ch_1")
 
     with pytest.raises(ChunkNotDeletable) as excinfo:
         delete.delete(chunk, by="operator")
@@ -287,8 +287,8 @@ def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouch
     item = seed_work_item(hub_store_connections(engine), graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
     chunk_id = f"ch_{item.ref}"
     forge_pointer = WorkRef(source="forge", ref="99")
-    with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.work_refs.add_work_refs(chunk_id, [forge_pointer], at=_T0, transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
+        chunks.work_refs.add_work_refs(chunk_id, [forge_pointer], at=_T0, transaction=tx)
     mixed = chunks.record.get(chunk_id)
     assert mixed is not None
     assert {r.source for r in mixed.work_refs} == {"hub", "forge"}
@@ -325,8 +325,8 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
     chunk = chunks.record.get(f"ch_{item.ref}")
     assert chunk is not None
     _mint(chunks, "ch_prereq")
-    with chunks.exclusive.locked([chunk.chunk_id, "ch_prereq"]) as handle:
-        chunks.dependencies.declare(chunk.chunk_id, "ch_prereq", by="author", at=_T0, transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), chunk.chunk_id, "ch_prereq") as tx:
+        chunks.dependencies.declare(chunk.chunk_id, "ch_prereq", by="author", at=_T0, transaction=tx)
     original = items.withdraw_open
 
     def fail_after_withdraw(pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
@@ -404,11 +404,11 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
 
 
 def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
-    with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
 
     with pytest.raises(ChunkHasDependents) as excinfo:
         delete.delete(prerequisite, by="operator")
@@ -418,11 +418,11 @@ def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) 
 
 
 def test_delete_the_dependent_instead_succeeds_and_releases_its_outgoing_edge(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     _mint(chunks, "ch_prereq")
     dependent = _mint(chunks, "ch_dependent")
-    with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
 
     delete.delete(dependent, by="operator")
 
@@ -431,11 +431,11 @@ def test_delete_the_dependent_instead_succeeds_and_releases_its_outgoing_edge(tm
 
 
 def test_delete_succeeds_once_the_blocking_edge_is_released_first(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
-    with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
     chunks.dependencies.release("ch_dependent", "ch_prereq", by="operator", at=_at(1))
 
     delete.delete(prerequisite, by="operator")

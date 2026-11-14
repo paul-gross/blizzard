@@ -18,6 +18,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     chunk_stores,
     count_queries,
@@ -65,11 +66,11 @@ def test_records_for_on_a_locked_handle_matches_record_per_id(tmp_path: Path) ->
     with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_grouped", grouped_into="ch_live", at=_T0)
 
-    with store.exclusive.locked(["ch_live", "ch_grouped"]) as handle:
-        result = handle.records_for(["ch_live", "ch_grouped", "ch_never_minted"])
+    with chunk_unit(hub_store_connections(engine), ["ch_live", "ch_grouped"]) as tx:
+        result = store.record.get_many(["ch_live", "ch_grouped", "ch_never_minted"], transaction=tx)
         assert set(result) == {"ch_live"}
-        assert result["ch_live"] == handle.record("ch_live")
-        assert handle.records_for([]) == {}
+        assert result["ch_live"] == store.record.get("ch_live", transaction=tx)
+        assert store.record.get_many([], transaction=tx) == {}
 
 
 def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:

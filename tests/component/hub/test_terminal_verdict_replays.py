@@ -14,17 +14,18 @@ import pytest
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.model import DecisionChoice, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import MigrationWrite
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from tests.support import garden_delivery_world, review_recorder_world
+from tests.support.chunk_units import chunk_unit
 from tests.support.hub_node_artifacts import record_hub_asset
-from tests.support.scaffolding import build_hub
+from tests.support.scaffolding import build_hub, hub_store_connections
 from tests.support.write_fence_locks import Chunk
 
 _CLOSE = decide_close_enqueue([WorkRef("default", "1")], lambda _: True)
@@ -34,8 +35,8 @@ def _never_found(*_args: object, **_kwargs: object) -> None:
     """A pre-lock replay probe that finds nothing, so a replay meets the store's own probe under the lock."""
 
 
-def _verdict(chunk: Chunk, handle: ILockedChunkRead) -> bool:
-    return terminal_under_lock(chunk.stores.facts, chunk.chunk_id, transaction=handle.transaction)
+def _verdict(chunk: Chunk, tx: LockedTransaction) -> bool:
+    return terminal_under_lock(chunk.stores.facts, chunk.chunk_id, transaction=tx)
 
 
 def _ask(chunk: Chunk, question_id: str) -> tuple[int, str]:
@@ -80,7 +81,7 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
     assert chunk.decide("build", epoch=1)["outcome"] == "parked_at_gate"
     chunk.stop()
 
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
         replayed = chunk.stores.decisions.record_decision(
             decision_id="dec_replay",
             chunk_id=chunk.chunk_id,
@@ -88,13 +89,13 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
             node_name="build",
             epoch=1,
             admission=EpochAdmission.CURRENT,
-            terminal=_verdict(chunk, handle),
+            terminal=_verdict(chunk, tx),
             choices=[DecisionChoice(name="pass", description="")],
             at=chunk.hub.clock.now(),
             artifacts=[],
             imposed_by_runner_id="r1",
             close_decision=_CLOSE,
-            transaction=handle.transaction,
+            transaction=tx,
         )
         fresh = chunk.stores.decisions.record_decision(
             decision_id="dec_fresh",
@@ -103,13 +104,13 @@ def test_a_decision_replayed_under_the_lock_on_a_since_stopped_chunk_writes_noth
             node_name="review",
             epoch=1,
             admission=EpochAdmission.CURRENT,
-            terminal=_verdict(chunk, handle),
+            terminal=_verdict(chunk, tx),
             choices=[DecisionChoice(name="pass", description="")],
             at=chunk.hub.clock.now(),
             artifacts=[],
             imposed_by_runner_id="r1",
             close_decision=_CLOSE,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     assert not isinstance(replayed, FenceRefusal) and replayed.wrote is False
@@ -134,7 +135,7 @@ def test_a_decision_resubmitted_past_its_pre_lock_probe_on_a_since_stopped_chunk
 # --- migration --------------------------------------------------------------------------------------------------------
 
 
-def _migrate(chunk: Chunk, handle: ILockedChunkRead, *, from_node: str) -> MigrationWrite | FenceRefusal | None:
+def _migrate(chunk: Chunk, tx: LockedTransaction, *, from_node: str) -> MigrationWrite | FenceRefusal | None:
     return chunk.stores.movement.record_migration(
         chunk.chunk_id,
         from_node_id=chunk.nodes[from_node],
@@ -145,12 +146,12 @@ def _migrate(chunk: Chunk, handle: ILockedChunkRead, *, from_node: str) -> Migra
         model=None,
         epoch=1,
         admission=EpochAdmission.CURRENT,
-        terminal=_verdict(chunk, handle),
+        terminal=_verdict(chunk, tx),
         at=chunk.hub.clock.now(),
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         close_decision=_CLOSE,
-        transaction=handle.transaction,
+        transaction=tx,
     )
 
 
@@ -158,13 +159,13 @@ def test_a_migration_replayed_on_a_since_stopped_chunk_answers_as_recorded_and_a
     tmp_path: Path,
 ) -> None:
     chunk = Chunk(build_hub(tmp_path))
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        assert isinstance(_migrate(chunk, handle, from_node="build"), MigrationWrite)
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        assert isinstance(_migrate(chunk, tx, from_node="build"), MigrationWrite)
     chunk.stop()
 
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        replayed = _migrate(chunk, handle, from_node="build")
-        fresh = _migrate(chunk, handle, from_node="review")
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        replayed = _migrate(chunk, tx, from_node="build")
+        fresh = _migrate(chunk, tx, from_node="review")
 
     assert replayed is None
     assert fresh == FenceRefusal.terminal(1)
@@ -174,7 +175,7 @@ def test_a_migration_replayed_on_a_since_stopped_chunk_answers_as_recorded_and_a
 # --- hub step, bounce and its escalation ------------------------------------------------------------------------------
 
 
-def _hub_step(chunk: Chunk, handle: ILockedChunkRead, *, epoch: int, transition_id: str) -> bool:
+def _hub_step(chunk: Chunk, tx: LockedTransaction, *, epoch: int, transition_id: str) -> bool:
     return chunk.stores.hub_exec.record_hub_step_transition(
         chunk.chunk_id,
         from_node_id=chunk.nodes["review"],
@@ -182,14 +183,14 @@ def _hub_step(chunk: Chunk, handle: ILockedChunkRead, *, epoch: int, transition_
         choice_name="pass",
         epoch=epoch,
         admission=EpochAdmission.ABOVE,
-        terminal=_verdict(chunk, handle),
+        terminal=_verdict(chunk, tx),
         runner_id="hub",
         transition_id=transition_id,
         at=chunk.hub.clock.now(),
         artifacts=[],
         release_route=False,
         close_decision=_CLOSE,
-        transaction=handle.transaction,
+        transaction=tx,
     ).wrote
 
 
@@ -197,15 +198,15 @@ def test_a_hub_step_replayed_on_a_since_stopped_chunk_writes_nothing_twice_and_a
     tmp_path: Path,
 ) -> None:
     chunk = Chunk(build_hub(tmp_path))
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        assert _hub_step(chunk, handle, epoch=2, transition_id="tr_hub_1") is True
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        assert _hub_step(chunk, tx, epoch=2, transition_id="tr_hub_1") is True
     chunk.stop()
     transitions = chunk.rows(s.transitions)
 
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        assert _verdict(chunk, handle) is True
-        assert _hub_step(chunk, handle, epoch=2, transition_id="tr_hub_replay") is False
-        assert _hub_step(chunk, handle, epoch=3, transition_id="tr_hub_fresh") is False
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        assert _verdict(chunk, tx) is True
+        assert _hub_step(chunk, tx, epoch=2, transition_id="tr_hub_replay") is False
+        assert _hub_step(chunk, tx, epoch=3, transition_id="tr_hub_fresh") is False
 
     assert chunk.rows(s.transitions) == transitions
     assert chunk.rows(s.lease_facts) == 2  # the runner's lease and the first hub step's; nothing after the stop
@@ -216,42 +217,42 @@ def test_a_bounce_and_its_escalation_replayed_on_a_since_stopped_chunk_keep_thei
 ) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
-    def bounce(handle: ILockedChunkRead, epoch: int) -> bool:
+    def bounce(tx: LockedTransaction, epoch: int) -> bool:
         return chunk.stores.escalations.record_bounce(
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
-            terminal=_verdict(chunk, handle),
+            terminal=_verdict(chunk, tx),
             cause="poll-timeout",
             envelope="{}",
             at=chunk.hub.clock.now(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
-    def escalate(handle: ILockedChunkRead, epoch: int) -> BounceEscalationOutcome:
+    def escalate(tx: LockedTransaction, epoch: int) -> BounceEscalationOutcome:
         return chunk.stores.escalations.record_bounce_escalation(
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
-            terminal=_verdict(chunk, handle),
+            terminal=_verdict(chunk, tx),
             runner_id="hub",
             takeover_command="",
             at=chunk.hub.clock.now(),
             cause="bounce-cap",
             detail="crossed",
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        assert bounce(handle, 2) is True
-        assert escalate(handle, 2) is BounceEscalationOutcome.RECORDED
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        assert bounce(tx, 2) is True
+        assert escalate(tx, 2) is BounceEscalationOutcome.RECORDED
     chunk.stop()
 
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
-        assert bounce(handle, 2) is False
-        assert escalate(handle, 2) is BounceEscalationOutcome.ALREADY_RECORDED
-        assert bounce(handle, 3) is False
-        assert escalate(handle, 3) is BounceEscalationOutcome.REFUSED
+    with chunk_unit(hub_store_connections(chunk.hub.engine), [chunk.chunk_id]) as tx:
+        assert bounce(tx, 2) is False
+        assert escalate(tx, 2) is BounceEscalationOutcome.ALREADY_RECORDED
+        assert bounce(tx, 3) is False
+        assert escalate(tx, 3) is BounceEscalationOutcome.REFUSED
 
     assert chunk.rows(s.chunk_bounces) == 1
     assert chunk.rows(s.escalations) == 1

@@ -42,8 +42,10 @@ def _mint(store: ChunkStores, chunk_id: str) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
 
 
-def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at: datetime = _T0) -> None:
-    with store.exclusive.locked([chunk_id]) as handle:
+def _record_decision(
+    store: ChunkStores, engine: Engine, chunk_id: str, decision_id: str, *, at: datetime = _T0
+) -> None:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         store.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id=decision_id,
@@ -57,7 +59,7 @@ def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
@@ -68,10 +70,10 @@ def _resolve(
         store.decisions.record_decision_resolution(decision_id, choice=choice, resolved_by=by, at=_T0, transaction=unit)
 
 
-def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
+def _transition(store: ChunkStores, engine: Engine, chunk_id: str, decision_id: str, *, transition_id: str) -> None:
     """Closes ``decision_id`` — the movement fact `decision_for_chunk`'s
     ``_not_closed_clause`` reads to drop it from a chunk's live decision."""
-    with store.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         store.movement.record_transition(
             transition_id=transition_id,
             chunk_id=chunk_id,
@@ -86,7 +88,7 @@ def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transiti
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
@@ -97,10 +99,10 @@ def test_list_open_decisions_query_count_is_independent_of_fleet_size(tmp_path: 
     large, large_engine = _store(tmp_path / "large")
     for i in range(3):
         _mint(small, f"ch_{i}")
-        _record_decision(small, f"ch_{i}", f"dec_{i}")
+        _record_decision(small, small_engine, f"ch_{i}", f"dec_{i}")
     for i in range(9):
         _mint(large, f"ch_{i}")
-        _record_decision(large, f"ch_{i}", f"dec_{i}")
+        _record_decision(large, large_engine, f"ch_{i}", f"dec_{i}")
 
     small_count = count_queries(small_engine, lambda: small.decisions.list_open_decisions())
     large_count = count_queries(large_engine, lambda: large.decisions.list_open_decisions())
@@ -114,15 +116,15 @@ def test_list_open_decisions_query_count_is_independent_of_fleet_size(tmp_path: 
 def test_fact_closed_undecided_history_is_filtered_before_hydration(tmp_path: Path, closure: str) -> None:
     store, engine = _store(tmp_path)
     _mint(store, "ch_open")
-    _record_decision(store, "ch_open", "dec_open")
+    _record_decision(store, engine, "ch_open", "dec_open")
     baseline = count_rows_read(engine, store.decisions.list_open_decisions)
 
     for i in range(12):
         chunk_id, decision_id = f"ch_closed_{i}", f"dec_closed_{i}"
         _mint(store, chunk_id)
-        _record_decision(store, chunk_id, decision_id)
+        _record_decision(store, engine, chunk_id, decision_id)
         if closure == "transition":
-            _transition(store, chunk_id, decision_id, transition_id=f"tr_{i}")
+            _transition(store, engine, chunk_id, decision_id, transition_id=f"tr_{i}")
         else:
             table, values = {
                 "migration": (
@@ -152,16 +154,16 @@ def test_decision_for_chunk_query_count_is_independent_of_that_chunks_history_le
     long_, long_engine = _store(tmp_path / "long")
     _mint(short, "ch_1")
     for i in range(3):
-        _record_decision(short, "ch_1", f"dec_closed_{i}")
+        _record_decision(short, short_engine, "ch_1", f"dec_closed_{i}")
         _resolve(short, short_engine, "ch_1", f"dec_closed_{i}")
-        _transition(short, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
-    _record_decision(short, "ch_1", "dec_live")
+        _transition(short, short_engine, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
+    _record_decision(short, short_engine, "ch_1", "dec_live")
     _mint(long_, "ch_1")
     for i in range(9):
-        _record_decision(long_, "ch_1", f"dec_closed_{i}")
+        _record_decision(long_, long_engine, "ch_1", f"dec_closed_{i}")
         _resolve(long_, long_engine, "ch_1", f"dec_closed_{i}")
-        _transition(long_, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
-    _record_decision(long_, "ch_1", "dec_live")
+        _transition(long_, long_engine, "ch_1", f"dec_closed_{i}", transition_id=f"tr_{i}")
+    _record_decision(long_, long_engine, "ch_1", "dec_live")
 
     short_count = count_queries(short_engine, lambda: short.decisions.decision_for_chunk("ch_1"))
     long_count = count_queries(long_engine, lambda: long_.decisions.decision_for_chunk("ch_1"))
@@ -183,19 +185,19 @@ def test_list_open_decisions_and_decision_for_chunk_across_the_four_decision_sha
     _mint(store, "ch_transitioned")
     _mint(store, "ch_history")
 
-    _record_decision(store, "ch_resolved", "dec_resolved")
+    _record_decision(store, engine, "ch_resolved", "dec_resolved")
     _resolve(store, engine, "ch_resolved", "dec_resolved")
 
-    _record_decision(store, "ch_open", "dec_open")
+    _record_decision(store, engine, "ch_open", "dec_open")
 
-    _record_decision(store, "ch_transitioned", "dec_transitioned")
+    _record_decision(store, engine, "ch_transitioned", "dec_transitioned")
     _resolve(store, engine, "ch_transitioned", "dec_transitioned")
-    _transition(store, "ch_transitioned", "dec_transitioned", transition_id="tr_transitioned")
+    _transition(store, engine, "ch_transitioned", "dec_transitioned", transition_id="tr_transitioned")
 
-    _record_decision(store, "ch_history", "dec_history_old")
+    _record_decision(store, engine, "ch_history", "dec_history_old")
     _resolve(store, engine, "ch_history", "dec_history_old")
-    _transition(store, "ch_history", "dec_history_old", transition_id="tr_history")
-    _record_decision(store, "ch_history", "dec_history_new")
+    _transition(store, engine, "ch_history", "dec_history_old", transition_id="tr_history")
+    _record_decision(store, engine, "ch_history", "dec_history_new")
 
     open_ids = {d.decision_id for d in store.decisions.list_open_decisions()}
     assert open_ids == {"dec_open", "dec_history_new"}

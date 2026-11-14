@@ -10,7 +10,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.operations.queue import GroupService
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
@@ -25,7 +24,7 @@ def test_group_returns_joined_survivor_and_rolls_back_on_fold_failure(
     store = hub_store_connections(engine)
     transactions = HubTransactions(store)
     clock = FixedClock(now)
-    chunks = build_chunk_stores(store, clock, registry=RunnerRegistryStore(store), transactions=transactions)
+    chunks = build_chunk_stores(store, clock)
     ref = WorkRef(source="default", ref="1")
     for chunk_id, refs in (("ch_a", []), ("ch_b", [ref])):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=refs, minted_at=now))

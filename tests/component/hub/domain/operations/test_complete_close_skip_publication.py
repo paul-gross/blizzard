@@ -16,7 +16,16 @@ from sqlalchemy import Connection, select
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
-from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, ingest
+from tests.support.chunk_units import chunk_unit
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    emitted_events,
+    hub_scoped,
+    hub_store_connections,
+    ingest,
+)
 
 _KIND = "work-item-close-skipped"
 
@@ -98,14 +107,14 @@ def test_stores_with_no_services_record_the_skip_row_and_return_its_id(tmp_path:
     stores = chunk_stores(hub.engine, hub.clock)
     since = hub.events.latest_id()
 
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         written = stores.lifecycle.record_completion(
             chunk_id,
             by="test",
             at=hub.clock.now(),
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     assert written.close_skipped == tuple(_skip_row_ids(hub))

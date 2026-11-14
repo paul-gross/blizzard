@@ -8,11 +8,13 @@ from typing import Any
 
 from sqlalchemy import Table
 
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import (
     HubHarness,
     chunk_rows,
     chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     ingest,
     report_lease,
     with_test_lock_wait,
@@ -128,7 +130,7 @@ class Chunk:
         return decision_id
 
 
-def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable[[ILockedChunkRead], None]) -> object:
+def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable[[LockedTransaction], None]) -> object:
     with_test_lock_wait(chunk.hub)
     answered: dict[str, object] = {}
     started = threading.Event()
@@ -141,13 +143,13 @@ def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable
             answered["error"] = error
 
     thread = threading.Thread(target=_submit)
-    with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(chunk.hub.engine), chunk.chunk_id) as unit:
         thread.start()
         assert started.wait(timeout=60), "the submission thread never started"
         thread.join(timeout=0.3)
         assert thread.is_alive(), "the submission completed while a writer held the chunk row lock — not fenced"
         assert not answered, "the submission produced an outcome while a writer held the chunk row lock — not fenced"
-        write(handle)
+        write(unit)
     # A generous hang guard: the blocked submission polls for the lock, then runs the whole request.
     thread.join(timeout=60)
     assert not thread.is_alive(), "the submission never finished after the writer released the chunk row lock"
@@ -158,17 +160,17 @@ def held_by_a_writer(chunk: Chunk, submit: Callable[[], object], write: Callable
     return answered["result"]
 
 
-def stop_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
-    def write(handle: ILockedChunkRead) -> None:
+def stop_under_lock(chunk: Chunk) -> Callable[[LockedTransaction], None]:
+    def write(unit: LockedTransaction) -> None:
         chunk.stores.lifecycle.record_stop(
-            chunk.chunk_id, by="operator", at=chunk.hub.clock.now(), waiting=(), transaction=handle.transaction
+            chunk.chunk_id, by="operator", at=chunk.hub.clock.now(), waiting=(), transaction=unit
         )
 
     return write
 
 
-def restart_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
-    def write(handle: ILockedChunkRead) -> None:
+def restart_under_lock(chunk: Chunk) -> Callable[[LockedTransaction], None]:
+    def write(unit: LockedTransaction) -> None:
         chunk.stores.movement.record_restart(
             chunk.chunk_id,
             from_node_id=chunk.nodes["build"],
@@ -176,7 +178,7 @@ def restart_under_lock(chunk: Chunk) -> Callable[[ILockedChunkRead], None]:
             by="operator",
             at=chunk.hub.clock.now(),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     return write

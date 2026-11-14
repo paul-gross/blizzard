@@ -325,7 +325,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
 
     def migrate(epoch: int) -> MigrationWrite | FenceRefusal | None:
         terminal = ChunkFacts.terminal_verdict(chunk.stores.facts.load_facts(chunk.chunk_id))
-        with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(chunk.hub.engine), chunk.chunk_id) as tx:
             return chunk.stores.movement.record_migration(
                 chunk.chunk_id,
                 from_node_id=chunk.nodes["build"],
@@ -354,7 +354,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
                 ],
                 source=MigrationSource.AUTHORED_EDGE,
                 close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-                transaction=handle.transaction,
+                transaction=tx,
             )
 
     assert migrate(1) == FenceRefusal.stale(1, latest=2)

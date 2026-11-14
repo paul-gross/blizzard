@@ -40,6 +40,7 @@ from blizzard.hub.store.internal.chunk_fact_loading import ALL_FAMILIES, STATUS_
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from tests.support.chunk_units import chunk_unit
 from tests.support.load_all_facts_seed import (
     LIVE_CHUNK_IDS,
     T0,
@@ -321,7 +322,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, engine: Engine, chunk_
     in which batch."""
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
     seed_promote(store, engine, chunk_id, at=T0)
-    with store.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), [chunk_id]) as tx:
         store.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id=f"dec_{chunk_id}",
@@ -335,7 +336,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, engine: Engine, chunk_
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 

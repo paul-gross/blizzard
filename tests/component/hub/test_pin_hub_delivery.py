@@ -17,9 +17,10 @@ from blizzard.hub.domain.actions.declarations import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from tests.support.chunk_units import chunk_unit
 from tests.support.github_double import GitHubDouble
 from tests.support.pin_hub_delivery_world import mint_and_claim, writable
-from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, report_lease
 
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 
@@ -43,7 +44,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         )
         for branch, commit in (("feat/from-e1", "a"), ("feat/from-e2", "b"))
     ]
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         writable(hub).record_transition(
             transition_id="tr_seed_deliver",
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
@@ -57,7 +58,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
             artifacts=rows,
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 

@@ -44,7 +44,7 @@ def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) ->
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
-    with store.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), chunk_id) as tx:
         store.decisions.record_decision(
             imposed_by_runner_id=imposed_by_runner_id,
             decision_id="dec_1",
@@ -58,13 +58,13 @@ def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) ->
             close_decision=decide_close_enqueue([], lambda _: True),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
     return store, engine
 
 
-def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None) -> None:
-    with store.exclusive.locked(["ch_1"]) as handle:
+def _transition(store: ChunkStores, engine: Engine, *, to_node_id: str, decision_id: str | None) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
@@ -79,7 +79,7 @@ def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None)
             decision_id=decision_id,
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
@@ -92,43 +92,43 @@ def test_an_unresolved_gate_on_a_live_chunk_is_open(tmp_path: Path) -> None:
 
 
 def test_a_gate_a_transition_closed_undecided_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_gate(tmp_path)
-    _transition(store, to_node_id="nd_2", decision_id="dec_1")
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id=None)
+    _transition(store, engine, to_node_id="nd_2", decision_id="dec_1")
 
     assert _open_ids(store) == []
 
 
 def test_a_gate_on_a_stopped_chunk_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_gate(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=handle.transaction)
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id=None)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=tx)
 
     assert _open_ids(store) == []
 
 
 def test_a_gate_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_gate(tmp_path)
-    _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id=None)
+    _transition(store, engine, to_node_id=RESERVED_TERMINAL, decision_id=None)
 
     assert _open_ids(store) == []
 
 
-def _stop(store: ChunkStores) -> None:
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=handle.transaction)
+def _stop(store: ChunkStores, engine: Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=tx)
 
 
-def _finish(store: ChunkStores) -> None:
-    _transition(store, to_node_id=RESERVED_TERMINAL, decision_id=None)
+def _finish(store: ChunkStores, engine: Engine) -> None:
+    _transition(store, engine, to_node_id=RESERVED_TERMINAL, decision_id=None)
 
 
 @pytest.mark.parametrize("end", [None, _stop, _finish], ids=["live", "stopped", "done"])
 def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_resolve_window(
-    tmp_path: Path, end: Callable[[ChunkStores], None] | None
+    tmp_path: Path, end: Callable[[ChunkStores, Engine], None] | None
 ) -> None:
-    store = _store_with_gate(tmp_path)
+    store, engine = _gate(tmp_path, "ch_1", imposed_by_runner_id=None)
     if end is not None:
-        end(store)
+        end(store, engine)
 
     status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
 

@@ -376,7 +376,7 @@ def test_delete_reruns_over_a_hub_ref_outside_its_declared_keys_writing_nothing_
             writes_after_first_run.append(len(items.deleted) + len(repo.releases) + len(items.withdrawals))
         return original_get(chunk_id, transaction=transaction)
 
-    repo.get = counting_get  # pyright: ignore[reportAttributeAccessIssue] -- observe the re-read on the fake
+    repo.get = counting_get  # observe the re-read on the fake
     service = DeleteService(
         items=items,
         clock=FixedClock(instant=_T0),

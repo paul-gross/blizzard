@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.forge.landing import Mergeability
+from tests.support.chunk_units import chunk_unit
 from tests.support.delivery_conflict_world import github_double, mint_and_claim, seed_at_deliver_with_an_unlanded_commit
 from tests.support.hub_request_auth import seed_enrolled
 from tests.support.scaffolding import (
@@ -26,6 +27,7 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
     claim_route,
+    hub_store_connections,
     pointer_token,
     report_lease,
     seed_session,
@@ -197,7 +199,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     stores = chunk_stores(hub.engine, hub.clock)
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         stores.escalations.record_bounce(
             chunk_id,
             epoch=1,
@@ -206,7 +208,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
             cause="conflict",
             envelope="{}",
             at=hub.clock.now(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # supersedes epoch 1, proving it's over
 
@@ -277,7 +279,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         _writable_movement(hub).record_migration(
             chunk_id,
             from_node_id=nodes["build"],
@@ -293,7 +295,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
@@ -313,7 +315,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         _writable_movement(hub).record_migration(
             chunk_id,
             from_node_id=nodes["build"],
@@ -329,7 +331,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
@@ -350,7 +352,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # crashed on graph A, no transition of its own
     report_lease(hub, chunk_id, epoch=2, seq=2)
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         _writable_movement(hub).record_migration(
             chunk_id,
             from_node_id=nodes["build"],
@@ -366,7 +368,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))

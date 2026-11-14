@@ -16,7 +16,8 @@ from blizzard.hub.graphs import PACKAGED
 from tests.support.github_double import GitHubDouble, forge_holding
 from tests.support.scaffolding import (
     HubHarness,
-    chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     make_ready,
     pointer_token,
 )
@@ -83,7 +84,7 @@ def seed_at_deliver_with_an_unlanded_commit(
         )
         for repo in repos
     ]
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
         _writable_movement(hub).record_transition(
             transition_id="tr_seed_deliver",
             chunk_id=chunk_id,
@@ -97,5 +98,5 @@ def seed_at_deliver_with_an_unlanded_commit(
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=unit,
         )

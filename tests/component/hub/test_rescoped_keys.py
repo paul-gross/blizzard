@@ -37,7 +37,6 @@ from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
@@ -45,7 +44,6 @@ from blizzard.hub.store.internal.credential_referrers import CredentialReferrers
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -53,6 +51,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
+from tests.support.chunk_units import chunk_unit as locked_unit
 from tests.support.scaffolding import (
     chunk_unit,
     default_project,
@@ -254,10 +253,7 @@ def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: 
     pointer = WorkRef(source="hub", ref="7")
     for tenant in (tenants.first, tenants.second):
         store = scoped_connections(tenants.engine, tenant)
-        stores = build_chunk_stores(
-            store, FixedClock(_AT), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-        )
-        with stores.exclusive.locked([], keys=[work_ref_lock(pointer)]):
+        with locked_unit(store, [], keys=[work_ref_lock(pointer)]):
             pass
 
     held = [tenant for tenant, _ in _lock_rows(tenants, LockNamespace.WORK_REF)]

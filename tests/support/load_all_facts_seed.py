@@ -84,17 +84,17 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
 
     _mint(store, "ch_running")
     seed_promote(store, engine, "ch_running", at=T0)
-    with store.exclusive.locked(["ch_running"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_running") as unit:
         store.route.record_route(
             Route(chunk_id="ch_running", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_running",
             at=T0,
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     _mint(store, "ch_delivering")
     seed_promote(store, engine, "ch_delivering", at=T0)
-    with store.exclusive.locked(["ch_delivering"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_delivering") as unit:
         store.movement.record_transition(
             transition_id="tr_delivering",
             chunk_id="ch_delivering",
@@ -108,7 +108,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     _mint(store, "ch_waiting")
@@ -154,33 +154,33 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
 
     _mint(store, "ch_stopped")
     seed_promote(store, engine, "ch_stopped", at=T0)
-    with store.exclusive.locked(["ch_stopped"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_stopped") as unit:
         store.route.record_route(
             Route(chunk_id="ch_stopped", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_stopped",
             at=T0,
-            transaction=handle.transaction,
+            transaction=unit,
         )
     clock.instant = _at(1)
-    with store.exclusive.locked(["ch_stopped"]) as handle:
-        store.lifecycle.record_stop("ch_stopped", by="op", at=_at(1), waiting=(), transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_stopped") as unit:
+        store.lifecycle.record_stop("ch_stopped", by="op", at=_at(1), waiting=(), transaction=unit)
 
     _mint(store, "ch_done_completed")
     seed_promote(store, engine, "ch_done_completed", at=T0)
     clock.instant = T0
-    with store.exclusive.locked(["ch_done_completed"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_done_completed") as unit:
         store.lifecycle.record_completion(
             "ch_done_completed",
             by="op",
             at=T0,
             close_decision=decide_close_enqueue([], lambda _: True),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     _mint(store, "ch_done_terminal")
     seed_promote(store, engine, "ch_done_terminal", at=T0)
-    with store.exclusive.locked(["ch_done_terminal"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_done_terminal") as unit:
         store.movement.record_transition(
             transition_id="tr_terminal",
             chunk_id="ch_done_terminal",
@@ -194,7 +194,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # AC4: movement facts spanning two graphs — a transition on gr_1, then a migration
@@ -202,7 +202,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     # gr_2, not the chunk's gr_1 mint pin.
     _mint(store, "ch_multigraph", graph_id="gr_1")
     seed_promote(store, engine, "ch_multigraph", at=T0)
-    with store.exclusive.locked(["ch_multigraph"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_multigraph") as unit:
         store.movement.record_transition(
             transition_id="tr_multigraph",
             chunk_id="ch_multigraph",
@@ -216,9 +216,9 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with store.exclusive.locked(["ch_multigraph"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_multigraph") as unit:
         store.movement.record_migration(
             "ch_multigraph",
             from_node_id="nd_g1_runner",
@@ -234,7 +234,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
@@ -252,23 +252,21 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     _mint(store, "ch_kitchen_sink")
     seed_promote(store, engine, "ch_kitchen_sink", at=T0)
     seed_lease(engine, "ch_kitchen_sink", epoch=1, runner_id="r", at=T0)
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.route.record_route(
             Route(chunk_id="ch_kitchen_sink", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash="th_ks_1",
             at=T0,
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.route.record_route_token(
-            "ch_kitchen_sink", token_hash="th_ks_2", at=_at(1), transaction=handle.transaction
-        )
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
-        store.route.record_route_released("ch_kitchen_sink", at=_at(2), transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
+        store.route.record_route_token("ch_kitchen_sink", token_hash="th_ks_2", at=_at(1), transaction=unit)
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
+        store.route.record_route_released("ch_kitchen_sink", at=_at(2), transaction=unit)
         store.movement.record_requeue(
             "ch_kitchen_sink",
             at=_at(2),
-            transaction=handle.transaction,
+            transaction=unit,
         )
     store.usage.record_usage(
         "ch_kitchen_sink",
@@ -284,7 +282,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         cost_usd=0.1,
         at=T0,
     )
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.escalations.record_bounce(
             "ch_kitchen_sink",
             epoch=1,
@@ -293,12 +291,12 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             cause="conflict",
             envelope="{}",
             at=T0,
-            transaction=handle.transaction,
+            transaction=unit,
         )
         store.hub_exec.record_hub_node_poll(
-            "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=T0, transaction=handle.transaction
+            "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=T0, transaction=unit
         )
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id="dec_1",
@@ -312,7 +310,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1), transaction=unit)
@@ -329,7 +327,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     store.delivery.record_delivery_landed(
         "ch_kitchen_sink", at=T0, close_decision=decide_close_enqueue([], lambda _: True)
     )
-    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.movement.record_restart(
             "ch_kitchen_sink",
             from_node_id="nd_g1_runner",
@@ -337,7 +335,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             by="op",
             at=_at(3),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
 

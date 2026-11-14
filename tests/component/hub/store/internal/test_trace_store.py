@@ -37,6 +37,7 @@ from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.fact_families import FactTable
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import TenantId
+from tests.support.chunk_units import chunk_unit
 from tests.support.hub_event_rows import hub_event_log_of
 from tests.support.scaffolding import (
     SEEDED_CAPABILITIES,
@@ -45,6 +46,7 @@ from tests.support.scaffolding import (
     chunk_stores,
     count_queries,
     default_tenant,
+    hub_store_connections,
     seed_runner,
 )
 from tests.support.trace_hub import seed_open_tenant_chunk, stop, trace_hub, trace_store, transitioned_and_stopped
@@ -217,7 +219,7 @@ class _HubStepToDone:
         if self.committed:
             return
         self._hub.clock.advance(timedelta(seconds=5))
-        with self._stores.exclusive.locked([self._chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(self._hub.engine), [self._chunk_id]) as tx:
             assert self._stores.hub_exec.record_hub_step_transition(
                 self._chunk_id,
                 from_node_id=self._from,
@@ -232,7 +234,7 @@ class _HubStepToDone:
                 artifacts=[],
                 release_route=True,
                 close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _source: False),
-                transaction=handle.transaction,
+                transaction=tx,
             ).wrote
         self.committed = True
 

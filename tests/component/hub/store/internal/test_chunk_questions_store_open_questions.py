@@ -60,13 +60,13 @@ def _open_ids(store: ChunkStores) -> list[str]:
     return [q.question_id for q in store.questions.list_open_questions()]
 
 
-def _stop(store: ChunkStores) -> None:
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=handle.transaction)
+def _stop(store: ChunkStores, engine: Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_stop("ch_1", by="op", at=_T0, waiting=(), transaction=tx)
 
 
-def _finish(store: ChunkStores) -> None:
-    with store.exclusive.locked(["ch_1"]) as handle:
+def _finish(store: ChunkStores, engine: Engine) -> None:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
@@ -81,7 +81,7 @@ def _finish(store: ChunkStores) -> None:
             decision_id=None,
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 
@@ -98,26 +98,26 @@ def test_an_answered_question_leaves_the_open_list(tmp_path: Path) -> None:
 
 
 def test_a_question_on_a_stopped_chunk_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_question(tmp_path)
-    _stop(store)
+    store, engine = _seeded(tmp_path)
+    _stop(store, engine)
 
     assert _open_ids(store) == []
 
 
 def test_a_question_on_a_chunk_done_by_a_terminal_transition_leaves_the_open_list(tmp_path: Path) -> None:
-    store = _store_with_question(tmp_path)
-    _finish(store)
+    store, engine = _seeded(tmp_path)
+    _finish(store, engine)
 
     assert _open_ids(store) == []
 
 
 @pytest.mark.parametrize("end", [None, _stop, _finish], ids=["live", "stopped", "done"])
 def test_the_open_lists_ended_chunk_filter_agrees_with_the_models_answer_window(
-    tmp_path: Path, end: Callable[[ChunkStores], None] | None
+    tmp_path: Path, end: Callable[[ChunkStores, Engine], None] | None
 ) -> None:
-    store = _store_with_question(tmp_path)
+    store, engine = _seeded(tmp_path)
     if end is not None:
-        end(store)
+        end(store, engine)
 
     status = ChunkFacts.or_default(store.facts.load_facts("ch_1")).status()
 

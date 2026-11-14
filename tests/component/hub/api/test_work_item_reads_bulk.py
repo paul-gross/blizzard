@@ -14,11 +14,11 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import WorkItem
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     FakeBatchWorkSource,
     FakeWorkSource,
     build_hub,
-    chunk_stores,
     count_queries,
     hub_store_connections,
     ingest,
@@ -95,10 +95,8 @@ def test_an_unconfigured_source_and_a_failing_source_each_error_only_their_own_r
     # A pointer to a source nothing configures: seed it onto a chunk directly.
     hub_store = hub_store_connections(hub.engine)
     refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([gone]) as handle:
-        refs.add_work_refs(
-            gone, [WorkRef(source="retired", ref="5")], at=hub.clock.now(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(hub.engine), [gone]) as tx:
+        refs.add_work_refs(gone, [WorkRef(source="retired", ref="5")], at=hub.clock.now(), transaction=tx)
 
     chunks = _bulk(hub, [good, bad, gone]).json()["chunks"]
     assert chunks[good][0]["title"] == "fine" and chunks[good][0]["error"] is None

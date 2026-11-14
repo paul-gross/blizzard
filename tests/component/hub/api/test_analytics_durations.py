@@ -19,13 +19,14 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from tests.support.analytics_durations_world import complete_node, mint_chunk, seeded_hub
+from tests.support.chunk_units import chunk_unit
 from tests.support.hub_request_auth import cookie, seed_enrolled
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     build_hub,
-    chunk_stores,
     claim_route,
+    hub_store_connections,
     report_lease,
     seed_session,
     seed_user,
@@ -397,7 +398,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
     hub.clock.advance(timedelta(seconds=1))
     complete_node(hub, chunk_id, epoch=1, from_node_id=nodes["build"], choice="pass")  # graph A: build -> review
 
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         _writable(hub).record_migration(
             chunk_id,
             from_node_id=nodes["review"],
@@ -413,7 +414,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=3, seq=2)
