@@ -205,11 +205,11 @@ A credential entry is keyed by its `slug` and carries `forge`, an id or a slug, 
 optional `name`. `GET /api/config/schema/credentials?version=3` serves its JSON Schema; at version 2 there is none, so
 it answers `404 config_schema_not_found`. A stored credential's `forge` and `binding` never change: an entry stating
 another is refused `422 credential_binding_immutable` at that field. An entry acting as an authority another credential
-on its forge holds is refused `422 credential_authority_taken` at its `secret`, and a slug another credential left `422`
-at its `slug`, naming that credential. A `settings` edit that would no longer offer what an enabled repository acting
-with the credential needs is refused `422 forge_capability_missing` at `settings`. A secret move rewrites the secret of
-every record acting with the credential in the same transaction. An apply never retires a credential the document leaves
-out.
+on its forge holds is refused `422 credential_authority_taken` at its `secret`, and a slug another credential left
+`422 value_error` at its `slug`, naming that credential. A `settings` edit that would no longer offer what an enabled
+repository acting with the credential needs is refused `422 forge_capability_missing` at `settings`. A secret move
+rewrites the secret of every record acting with the credential in the same transaction. An apply never retires a
+credential the document leaves out.
 
 Credential entries reconcile after the forges and the secret check and before the work sources and repositories, so a
 referrer may name a credential declared in the same file. A referrer acts with the credential it names, as the apply
