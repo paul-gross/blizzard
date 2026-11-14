@@ -101,7 +101,7 @@ async function labels(forge: ForgeApi, repo: Repository, number: number): Promis
 test.describe('at fresh-hub', () => {
   test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
 
-  test('test_an_app_installation_lands_and_sweeps_across_expiry_and_restart_and_refuses_each_condition', async ({ api, clock, forge, freshHub, issue, repository, runnerHosts }) => {
+  test('test_an_app_installation_lands_and_sweeps_across_expiry_and_restart_and_refuses_each_condition', async ({ api, clock, forge, freshHub, hubLog, issue, repository, runnerHosts }) => {
     test.slow();
     const first = await repository();
     const second = await repository();
@@ -112,7 +112,8 @@ test.describe('at fresh-hub', () => {
     const withdrawn = await repository();
     const removed = await repository();
     const rejected = await repository();
-    const repos = [first, second, checksless, suspended, deleted, rekeyed, withdrawn, removed, rejected];
+    const revoked = await repository();
+    const repos = [first, second, checksless, suspended, deleted, rekeyed, withdrawn, removed, rejected, revoked];
     const host = await runnerHosts.create({ runnerRepositories: Object.fromEntries(repos.map((r) => [r.name, r.origin!])) });
     const graphs = new Map<string, string>();
     for (const [index, repo] of repos.entries()) {
@@ -267,6 +268,25 @@ test.describe('at fresh-hub', () => {
       await forge.removeRepository(1006, fullName(removed));
       const { detail } = await escalates(removed, 'refuse a removed repository', 'forge-config');
       expect(detail).toContain('or the installation does not include it');
+    });
+
+    await test.step('a revoked token is minted again once and the landing goes through, logging a warning', async () => {
+      await forge.registerInstallation({ installation_id: 1008, app_id: APP, repositories: [fullName(revoked)], permissions: FULL });
+      await credential(api, 'app-revoked', 'app-key', APP, 1008);
+      await bind(api, revoked, 'app-revoked', true);
+      // Held at `deliver` by a pending check, so the landing holds a token when the forge revokes it.
+      const repo = { repo: fullName(revoked) };
+      expect((await forge.call('POST', '/_levers/checks_pending', repo)).status).toBe(200);
+      const { id } = await promoted(revoked, 'land across a revoked token');
+      await stepUntil(host, () => flowTurn(api, clock, id), (s) => s.pending !== null || settled(s), { stallPasses: 80, progress: chunkProgress });
+      expect((await forge.call('POST', '/_levers/revoke_token', { installation_id: 1008 })).status).toBe(200);
+      expect((await forge.call('DELETE', `/_levers/checks_pending?repo=${encodeURIComponent(repo.repo)}`)).status).toBe(200);
+      const state = await settle(host, api, clock, id);
+      expect(state.status, JSON.stringify(state.escalation)).toBe('done');
+      expect(state.landed).toBe(true);
+      expect((await events(api, 'forge-auth-refused')).filter((event) => event.chunk_id === id)).toEqual([]);
+      const warned = hubLog.lines().filter((line) => line.json?.event === 'the forge refused an installation token; minting a fresh one' && line.json?.authority === `app/${APP}/installation/1008`);
+      expect(warned.length).toBeGreaterThan(0);
     });
 
     await test.step('a token refused again after its re-mint escalates credential-invalid', async () => {
