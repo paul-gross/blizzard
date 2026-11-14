@@ -28,12 +28,13 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
-from blizzard.runner.harness.harness_set import HarnessSet, WorkerInvocation
+from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, WorkerInvocation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessKnownRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, WorkspacePromptReader
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import HubClientError, IHubClient
@@ -223,6 +224,9 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     @property
     def harness_selector(self) -> HarnessSelector: ...
     @property
+    def harness_sets(self) -> IInvocationHarnesses | None: ...
+    def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource: ...
+    @property
     def harnesses(self) -> SpawnHarnesses: ...
     @property
     def harness_versions(self) -> HarnessVersionCache | None: ...
@@ -360,7 +364,7 @@ class Spawner:
         # A retry (`Attempt.requeue`) or a recovery mints under its own prior owner — not a selection
         # candidate. Every other fresh mint, a rotated pool's replacement included, reaches the selector
         # or its no-set fallback.
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         current = owners.current if owners is not None else None
         source = mint_owner_source(resume_from, harness_id, envelope.node)
         if source is MintOwnerSource.RESUME and resume_from is not None:
@@ -680,7 +684,7 @@ class Spawner:
         moments earlier this same call; what still fails here is only a same-tick race or a
         fresh mint's own default."""
         try:
-            owners = getattr(self.ctx, "harness_sets", None)
+            owners = self.ctx.harness_sets
             registry = owners.current.registry if owners is not None else self.ctx.harnesses
             return registry.lifecycle(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
@@ -703,7 +707,7 @@ class Spawner:
     ) -> str | None:
         """The version this runner advertises for ``harness_id``, which every launch records: the cross-tick cache's
         when the loop wires one, else observed now."""
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         versions = (
             selected.versions
             if selected is not None
@@ -737,7 +741,7 @@ class Spawner:
             raise LaunchVersionRefusedError(harness_id, str(exc)) from exc
 
     def _forget_version(self, harness_id: str, *, selected: HarnessSet | None = None) -> None:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         versions = (
             selected.versions
             if selected is not None
@@ -759,13 +763,13 @@ class Spawner:
         return self.ctx.stores.liveness.lease_generation(lease_id) + 1
 
     def _sessions(self) -> SessionResolver:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is None:
             return self.ctx.sessions
         return replace(
             self.ctx.sessions,
             harnesses=owners.current.registry,
-            transcript_for_lease=getattr(self.ctx, "lease_transcript_source", None),
+            transcript_for_lease=self.ctx.lease_transcript_source,
         )
 
     def stdout_path(self, lease_id: str) -> str:

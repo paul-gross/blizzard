@@ -20,17 +20,18 @@ observed. Which one a fresh mint actually spawns under is a per-`sessions:` entr
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
 regardless of whether anything ever spawns under it: each bound binary's successful version observation is reused while
 its resolved path, size, and modification time remain unchanged; a changed fingerprint or explicit invalidation prompts
-a fresh probe. Health and applicable service-version observations refresh on read after ten minutes; a changed or
-missing binary also invalidates them, and health can refresh earlier when its version or self-test result changes. A
-missing binary is not treated as a reusable successful observation. A recorded session's owner resolves against this
-runner's own bindings: **unknown** means the session was recorded under a harness id this runner build doesn't ship at
-all — the remedy is to run a runner version that binds that id, on the runner holding the chunk, never to substitute
-another harness. **unavailable** means the id is bound but this runner can't supply the specific capability being asked
-of it — resuming or judging versus reading its transcript. Both `claude_code` and `opencode` bind every capability the
-registry knows to ask for today, so this never fires for either; the loop's own usage-recording and session-rotation
-call sites still treat an `unavailable` binding as their ordinary "no fallback transcript" outcome, never a crash, for
-whichever future capability gap reintroduces one. Either shows up as an `owner-unresolvable` event, which
-[observability.md](./observability.md) owns reading and resolving.
+a fresh probe. Applicable service-version observations have an independent ten-minute refresh window; a binary change or
+disappearance does not invalidate them. Health refreshes after ten minutes, or earlier when the observed version or
+self-test result changes or it is explicitly invalidated. A missing binary is not treated as a reusable successful
+binary version observation. A recorded session's owner resolves against this runner's own bindings: **unknown** means
+the session was recorded under a harness id this runner build doesn't ship at all — the remedy is to run a runner
+version that binds that id, on the runner holding the chunk, never to substitute another harness. **unavailable** means
+the id is bound but this runner can't supply the specific capability being asked of it — resuming or judging versus
+reading its transcript. Both `claude_code` and `opencode` bind every capability the registry knows to ask for today, so
+this never fires for either; the loop's own usage-recording and session-rotation call sites still treat an `unavailable`
+binding as their ordinary "no fallback transcript" outcome, never a crash, for whichever future capability gap
+reintroduces one. Either shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns
+reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
 tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode 1 version the runner admits today:

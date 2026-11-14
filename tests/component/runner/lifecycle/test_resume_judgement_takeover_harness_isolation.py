@@ -38,7 +38,7 @@ from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverOwnerUnresolvable, TakeoverService
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Resume
-from blizzard.runner.loop_wiring import ResumeMarking
+from blizzard.runner.loop_wiring import ResumeMarking, UsageRegistryLookup
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.runner_fakes import (
@@ -292,7 +292,11 @@ def test_judge_collects_from_retained_set_after_replacement(tmp_path: Path) -> N
     new = Mock(spec=HarnessSet, registry=new_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
     Advance(ctx).run()
     key = JudgeInvocation("lease_a", 1)
@@ -322,7 +326,11 @@ def test_lost_judge_relaunch_retains_earlier_owner_until_collection(tmp_path: Pa
     remaining = [new, old]
     sets = HarnessSets(lambda _: remaining.pop())
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
     Advance(ctx).run()
     sets.select(HarnessAssemblyKey((2,)))
@@ -380,7 +388,11 @@ def test_judge_uses_worker_source_after_replacement(tmp_path: Path, monkeypatch:
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
     Advance(ctx).run()
     assert len(first.judged) == 1
@@ -427,7 +439,11 @@ def test_judge_after_restart_anchors_current_session_location_across_relaunch(
     second = Mock(spec=HarnessSet, registry=registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[first, second]))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
     Advance(ctx).run()
     assert sets.lookup(WorkerInvocation("lease_a", 1)) is first
@@ -473,7 +489,11 @@ def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
     Advance(ctx).run()
     assert old_harness.judged == []
@@ -512,7 +532,11 @@ def test_resume_drains_previous_generation_before_releasing_it(tmp_path: Path, m
     previous = WorkerInvocation("lease_a", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
     observed: list[str] = []
 
     def pump(_pump: TranscriptPump, lease_id: str, **_kwargs: object) -> bool:
@@ -534,7 +558,10 @@ def test_resume_drains_previous_generation_before_releasing_it(tmp_path: Path, m
     assert boundary is not None and boundary.start_position == "old-tail"
 
 
-def test_failed_resume_drain_keeps_owner_until_retry_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("failure", [False, RuntimeError("unavailable")])
+def test_failed_resume_drain_does_not_block_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: bool | Exception
+) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
     handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
@@ -548,19 +575,25 @@ def test_failed_resume_drain_keeps_owner_until_retry_succeeds(tmp_path: Path, mo
     previous = WorkerInvocation("lease_a", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(ctx, harness_sets=sets, usage=replace(ctx.usage, invocation_harnesses=sets))
-    pump = Mock(side_effect=[RuntimeError("unavailable"), False, True])
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+
+    def pump(_pump: TranscriptPump, lease_id: str, **kwargs: object) -> bool:
+        assert lease_id == "lease_a"
+        assert sets.lookup(previous) is old
+        assert kwargs.get("mark_incomplete", True)
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
     monkeypatch.setattr(TranscriptPump, "pump_lease", pump)
     lease = store.active_lease("lease_a")
     assert lease is not None
     dormant = DormantSession(ctx, lease)
     bindings = store.bindings_for_chunk("ch_a")
-
-    for _ in range(2):
-        dormant.resume_on_unmet_produces("continue", bindings)
-        assert sets.lookup(previous) is old
-        assert store.lease_generation("lease_a") == 1
-        assert new_harness.resumed == []
 
     dormant.resume_on_unmet_produces("continue", bindings)
     assert sets.find(previous) is None
@@ -568,7 +601,7 @@ def test_failed_resume_drain_keeps_owner_until_retry_succeeds(tmp_path: Path, mo
     assert len(new_harness.resumed) == 1
 
 
-def test_restart_defers_failed_drain_before_killing_survivor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restart_continues_after_failed_drain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -585,12 +618,7 @@ def test_restart_defers_failed_drain_before_killing_survivor(tmp_path: Path, mon
         probe=probe,
         clock=FixedClock(_NOW + timedelta(seconds=1)),
     )
-    monkeypatch.setattr(TranscriptPump, "pump_lease", Mock(side_effect=[False, True, True]))
-
-    Resume(ctx).run()
-    assert probe.killed == [] and probe.killed_groups == []
-    assert harness.resumed == []
-    assert store.resume_intent_lease_ids() == {"lease_a"}
+    monkeypatch.setattr(TranscriptPump, "pump_lease", Mock(return_value=False))
 
     Resume(ctx).run()
     assert probe.killed == [100]
