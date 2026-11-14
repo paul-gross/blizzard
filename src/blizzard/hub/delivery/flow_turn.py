@@ -707,6 +707,12 @@ class TurnRunner:
         if reason is None or target is None:
             self._router.escalate(chunk, escalation, epoch=epoch, ending=ending)
             return
+        try:
+            credential = self._forges.authorization(reason.repository).credential_slug
+        except CredentialUnavailable:
+            # The credential was retired or replaced after the visit was built; the escalation still reaches a person,
+            # just without naming one.
+            credential = None
         self._router.escalate_capability_missing(
             chunk,
             node,
@@ -715,7 +721,7 @@ class TurnRunner:
             escalation.detail,
             forge=ready.resolution.forge_of(target),
             epoch=epoch,
-            credential=self._forges.authorization(reason.repository).credential_slug,
+            credential=credential,
             ending=ending,
         )
 
