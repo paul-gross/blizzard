@@ -23,7 +23,7 @@ from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository, resolve_credential
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
-from blizzard.hub.domain.kernel.forge_refusals import ForgeMintRefused
+from blizzard.hub.domain.kernel.forge_refusals import ForgeAccessUnavailable, ForgeMintRefused
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope, IForgeAuthorizations
 from blizzard.hub.forge.budget import (
     BudgetKey,
@@ -43,6 +43,7 @@ from blizzard.hub.forge.landing import (
     ForgeAuthRefused,
     ForgeCapabilityMissing,
     ForgeRateLimited,
+    ForgeUnavailable,
     IForgeChanges,
     IForgeChecks,
     IForgeRefs,
@@ -201,13 +202,21 @@ class ForgeRegistry:
         """The adapter built under the repository's current revisions — a retired record's too, so a chunk that named
         it still lands. :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable` when its credential or
         secret is unknown or retired; :class:`~blizzard.hub.forge.landing.ForgeAuthRefused` when the forge refuses
-        the access its authorization is built on."""
+        the access its authorization is built on, :class:`~blizzard.hub.forge.landing.ForgeUnavailable` when it gives
+        no answer to build on. An adapter whose authorization is outdated is built again."""
+        build = partial(self._build_current, repository)
         try:
-            built = self._objects.get(RecordKind.REPOSITORY, repository, partial(self._build_current, repository))
+            built = self._objects.get(RecordKind.REPOSITORY, repository, build)
+            # The executor resolved the repository from the records, and a configured record is never deleted.
+            assert built is not None
+            if built.authorization.outdated():
+                self._objects.drop(RecordKind.REPOSITORY, repository, built)
+                built = self._objects.get(RecordKind.REPOSITORY, repository, build)
+                assert built is not None
         except ForgeMintRefused as exc:
             raise ForgeAuthRefused(exc.classified) from exc
-        # The executor resolved the repository from the records, and a configured record is never deleted.
-        assert built is not None
+        except ForgeAccessUnavailable as exc:
+            raise ForgeUnavailable(str(exc)) from exc
         return built
 
     def _build_current(self, repository: RepositoryId) -> _Built:

@@ -139,8 +139,7 @@ class StoreWorkSourceRegistry:
         return label_from_binding(pointer, source, lambda: self.source_label(pointer.source))
 
     def _annotating(self, source: str) -> BuiltWorkSource | None:
-        """:meth:`_built` for a write half: a build the forge refused the credential of is the annotation refusal the
-        forge-status pass records, not a fault of the pass."""
+        """:meth:`_built` for a write half: a build the forge refused the credential of is an annotation refusal."""
         try:
             return self._built(source)
         except WorkSourceAuthRefused as exc:

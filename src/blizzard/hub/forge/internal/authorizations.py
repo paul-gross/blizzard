@@ -65,11 +65,9 @@ _BUILDERS: Mapping[str, Callable[[_Build], ForgeAuthorization]] = {
 
 
 class ForgeAuthorizations:
-    """Reveals a credential's secret through ``secrets`` and builds its authorization on what its binding — looked up
-    in ``bindings`` — names its forge kind offering by ``capabilities``. Every scope of a ``github.token`` credential
-    is the same token; a ``github.app-installation`` credential's scopes are each their own installation token, minted
-    through the tenant's ``tokens`` against the forge ``forges`` names. A builder's
-    :class:`~blizzard.hub.domain.kernel.forge_refusals.ForgeMintRefused` reaches the caller unchanged."""
+    """Reveals a credential's secret through ``secrets`` and builds its authorization by the binding ``bindings``
+    names, on what its forge kind offers by ``capabilities``; a binding that mints does so through the tenant's
+    ``tokens`` against the forge ``forges`` names. A builder's refusal reaches the caller unchanged."""
 
     def __init__(
         self,

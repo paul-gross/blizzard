@@ -1,12 +1,8 @@
 """GitHub's credential bindings' authorizations.
 
-``github.token``: the token's effective variant, what that leaves the forge's kind offering, and the ``httpx2.Auth``
-that sends the token on every request. The variant is read from the revealed value at build; the value, and any part
-of it, never leaves this module but on the ``Authorization`` header — only the variant is logged or returned.
-
-``github.app-installation``: installation tokens minted with the App's private key, per tenant, held in memory only,
-renewed before they expire and dropped when refused. The key lives only inside the built auth; the JWT and every
-token leave only on an ``Authorization`` header."""
+``github.token``: the token's effective variant and the ``httpx2.Auth`` sending it; only the variant is logged or
+returned. ``github.app-installation``: installation tokens minted with the App's private key, per tenant, in memory
+only. The key, the JWT and every token leave this module only on an ``Authorization`` header."""
 
 from __future__ import annotations
 
@@ -20,6 +16,7 @@ from collections.abc import AsyncGenerator, Generator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from functools import partial
 from typing import cast
 
 import httpx2
@@ -37,6 +34,7 @@ from blizzard.hub.domain.config.secrets import RevealedSecret
 from blizzard.hub.domain.kernel.forge_refusals import (
     AuthRefusal,
     ClassifiedRefusal,
+    ForgeAccessUnavailable,
     ForgeDiagnostic,
     ForgeMintRefused,
 )
@@ -124,9 +122,7 @@ APP_REQUIRED_PERMISSIONS: Mapping[ForgeScope, Mapping[str, str]] = {
     ForgeScope.LANDING: {"metadata": "read", "contents": "write", "pull_requests": "write"},
     ForgeScope.WORK_SOURCE: {"metadata": "read", "issues": "write", "pull_requests": "read"},
 }
-#: The permissions a scope's token is minted with only when the installation grants them, and the capability its
-#: authorization withholds when it does not. Reading a revision's checks reads its check runs and its commit statuses,
-#: so ``checks.read`` is withheld unless both are granted.
+#: Each scope's permissions minted only when granted, and the capability withheld when not (checks need both reads).
 APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, Capability]]] = {
     ForgeScope.LANDING: {
         "checks": ("read", Capability.CHECKS_READ),
@@ -185,13 +181,25 @@ def _permission_list(permissions: Mapping[str, str]) -> str:
 @adapter_model
 @dataclass(frozen=True)
 class InstallationKey:
-    """What one installation token is held under: the forge, the installation's authority, the scope it was minted
-    for, and the revision of the App key that signed its mint — a replaced key mints under a new key."""
+    """What one installation token is held under: the forge and its API base, the installation's authority, the scope
+    it was minted for, and the name and revision of the App key that signed its mint."""
 
     forge_id: str
+    api_base: str
     authority: str
     scope: ForgeScope
+    secret_name: str
     secret_revision: int
+
+    def grant(self) -> tuple[str, str, str, str, int]:
+        """What the installation's grant is held under: the key less its scope."""
+        return (self.forge_id, self.api_base, self.authority, self.secret_name, self.secret_revision)
+
+    def supersedes(self, held: InstallationKey) -> bool:
+        """Whether ``held`` is this key's installation and scope under an older forge address or App key."""
+        return (held.forge_id, held.authority, held.scope) == (self.forge_id, self.authority, self.scope) and (
+            held != self
+        )
 
 
 @adapter_model
@@ -235,11 +243,13 @@ def app_jwt(app_id: int, private_key: SecretValue, now: datetime) -> str:
     return jwt.encode(claims, private_key.expose(), algorithm="RS256")
 
 
+type _GrantKey = tuple[str, str, str, str, int]
+
+
 class InstallationTokens:
-    """One tenant's installation tokens, held in memory only: each is minted on first use, renewed once within
-    :data:`RENEW_BEFORE` of expiring, and dropped when a request it carried was refused. One mint at a time per key;
-    a waiter takes the token the mint it waited on made. An installation's grant is read once per App key revision.
-    Holds no key: each call is handed the :class:`AppInstallation` it signs with."""
+    """One tenant's installation tokens and grants, in memory only: a token is minted on first use, renewed within
+    :data:`RENEW_BEFORE` of expiring, and dropped when refused, one mint at a time per key — its waiters take what it
+    minted. A grant is read once per key and read again when a mint finds it wider than the installation's."""
 
     def __init__(self, *, clock: IClock, transport: httpx2.BaseTransport | None = None) -> None:
         self._clock = clock
@@ -247,16 +257,60 @@ class InstallationTokens:
         self._guard = threading.Lock()
         self._locks: dict[InstallationKey, threading.Lock] = {}
         self._tokens: dict[InstallationKey, MintedToken] = {}
-        self._installations: dict[tuple[str, str, int], Installation] = {}
+        self._grants: dict[_GrantKey, Installation] = {}
 
     def installation(self, key: InstallationKey, app: AppInstallation) -> Installation:
-        """The installation ``app`` names, read once per ``key``'s forge, authority and key revision;
-        :class:`ForgeMintRefused` when GitHub refuses the App or the installation is missing or suspended."""
-        held = (key.forge_id, key.authority, key.secret_revision)
+        """The installation ``app`` names, read once per ``key``'s grant; :class:`ForgeMintRefused` when GitHub
+        refuses the App or the installation is missing or suspended."""
+        known = self.held_grant(key)
+        return known if known is not None else self._read(key, app)
+
+    def held_grant(self, key: InstallationKey) -> Installation | None:
+        """The grant held for ``key``'s installation — never any I/O."""
         with self._guard:
-            known = self._installations.get(held)
-        if known is not None:
-            return known
+            return self._grants.get(key.grant())
+
+    def fresh(self, key: InstallationKey) -> MintedToken | None:
+        """``key``'s held token while more than :data:`RENEW_BEFORE` is left on it — never any I/O."""
+        with self._guard:
+            token = self._tokens.get(key)
+        return token if token is not None and self._lasting(token) else None
+
+    def current(self, key: InstallationKey, app: AppInstallation) -> MintedToken:
+        """``key``'s token, minting one when none is held, the held one is due for renewal, or it was invalidated. A
+        token minted while this call waited is answered even inside :data:`RENEW_BEFORE`: N waiters, one mint."""
+        with self._guard:
+            seen = self._tokens.get(key)
+        if seen is not None and self._lasting(seen):
+            return seen
+        with self._lock(key):
+            with self._guard:
+                held = self._tokens.get(key)
+            if held is not None and (self._lasting(held) or (held is not seen and self._clock.now() < held.expires_at)):
+                return held
+            minted = self._mint(key, app)
+            with self._guard:
+                for superseded in [k for k in self._tokens if key.supersedes(k)]:
+                    del self._tokens[superseded]
+                for superseded in [k for k in self._locks if key.supersedes(k)]:
+                    del self._locks[superseded]
+                self._tokens[key] = minted
+            return minted
+
+    def invalidate(self, key: InstallationKey, token: MintedToken) -> None:
+        """Drop ``token`` if it is still ``key``'s — a token minted since is kept."""
+        with self._guard:
+            if self._tokens.get(key) is token:
+                del self._tokens[key]
+
+    def _lasting(self, token: MintedToken) -> bool:
+        return token.expires_at - self._clock.now() > RENEW_BEFORE
+
+    def _lock(self, key: InstallationKey) -> threading.Lock:
+        with self._guard:
+            return self._locks.setdefault(key, threading.Lock())
+
+    def _read(self, key: InstallationKey, app: AppInstallation) -> Installation:
         response = self._call(app, "GET", f"/app/installations/{app.installation_id}")
         payload = self._answer(response, app, "read_installation", _INSTALLATION)
         if payload.get("suspended_at"):
@@ -277,47 +331,34 @@ class InstallationTokens:
             )
         granted = as_table(payload.get("permissions")) or {}
         installation = Installation({str(name): str(level) for name, level in granted.items()})
+        held = key.grant()
         with self._guard:
-            self._installations[held] = installation
+            for superseded in [g for g in self._grants if (g[0], g[2]) == (held[0], held[2]) and g != held]:
+                del self._grants[superseded]
+            self._grants[held] = installation
         return installation
 
-    def fresh(self, key: InstallationKey) -> MintedToken | None:
-        """``key``'s held token while more than :data:`RENEW_BEFORE` is left on it — never any I/O."""
+    def _forget(self, key: InstallationKey, installation: Installation) -> None:
         with self._guard:
-            token = self._tokens.get(key)
-        if token is None or token.expires_at - self._clock.now() <= RENEW_BEFORE:
-            return None
-        return token
-
-    def current(self, key: InstallationKey, app: AppInstallation) -> MintedToken:
-        """``key``'s token, minting one when none is held, the held one is due for renewal, or it was invalidated. A
-        token just minted is answered even inside :data:`RENEW_BEFORE`, so a short-lived one is no mint loop."""
-        token = self.fresh(key)
-        if token is not None:
-            return token
-        with self._lock(key):
-            token = self.fresh(key)
-            if token is not None:
-                return token
-            minted = self._mint(key, app)
-            with self._guard:
-                for held in [k for k in self._tokens if _same_but_revision(k, key)]:
-                    del self._tokens[held]
-                self._tokens[key] = minted
-            return minted
-
-    def invalidate(self, key: InstallationKey, token: MintedToken) -> None:
-        """Drop ``token`` if it is still ``key``'s — a token minted since is kept."""
-        with self._guard:
-            if self._tokens.get(key) is token:
-                del self._tokens[key]
-
-    def _lock(self, key: InstallationKey) -> threading.Lock:
-        with self._guard:
-            return self._locks.setdefault(key, threading.Lock())
+            if self._grants.get(key.grant()) is installation:
+                del self._grants[key.grant()]
 
     def _mint(self, key: InstallationKey, app: AppInstallation) -> MintedToken:
+        """A token minted on the held grant; a mint refused for a permission the grant claimed reads the grant again
+        and, when the installation now grants less, mints once more on what it grants."""
         installation = self.installation(key, app)
+        try:
+            return self._minted(key, app, installation)
+        except ForgeMintRefused as exc:
+            if exc.classified.refusal is not AuthRefusal.PERMISSION_MISSING:
+                raise
+            self._forget(key, installation)
+            reread = self._read(key, app)
+            if reread.permissions == installation.permissions:
+                raise
+        return self._minted(key, app, reread)
+
+    def _minted(self, key: InstallationKey, app: AppInstallation, installation: Installation) -> MintedToken:
         response = self._call(
             app,
             "POST",
@@ -400,10 +441,6 @@ class InstallationTokens:
         raise AssertionError("unreachable")
 
 
-def _same_but_revision(held: InstallationKey, key: InstallationKey) -> bool:
-    return (held.forge_id, held.authority, held.scope) == (key.forge_id, key.authority, key.scope) and held != key
-
-
 def _said(response: httpx2.Response) -> str:
     try:
         body = as_table(response.json()) or {}
@@ -470,24 +507,44 @@ def github_app_authorization(
     api_base: str,
     tokens: InstallationTokens,
 ) -> ForgeAuthorization:
-    """``credential``'s authorization for ``scope`` over the App key ``revealed``, its offer narrowed by what the
-    installation grants — read now, so a refused App or a missing or suspended installation raises
-    :class:`ForgeMintRefused` before any request is made."""
+    """``credential``'s authorization for ``scope`` over the App key ``revealed``. A scope with optional permissions
+    reads the installation now, narrowing its offer to the grant: :class:`ForgeMintRefused` when GitHub refuses it,
+    :class:`ForgeAccessUnavailable` when GitHub does not answer. Any other scope reads nothing until its first mint."""
     app = AppInstallation(
         api_base=api_base,
-        app_id=int(cast(int, credential.settings["app_id"])),
-        installation_id=int(cast(int, credential.settings["installation_id"])),
+        app_id=cast(int, credential.settings["app_id"]),
+        installation_id=cast(int, credential.settings["installation_id"]),
         private_key=revealed.value,
         credential=CallCredential(credential.slug, credential.binding, None),
     )
-    key = InstallationKey(str(credential.forge_id), credential.authority, scope, revealed.revision)
-    installation = tokens.installation(key, app)
+    key = InstallationKey(
+        str(credential.forge_id), api_base, credential.authority, scope, credential.secret_name, revealed.revision
+    )
+    offered, outdated = kind, _never
+    if APP_OPTIONAL_PERMISSIONS[scope]:
+        try:
+            installation = tokens.installation(key, app)
+        except httpx2.HTTPError as exc:
+            raise ForgeAccessUnavailable(f"the installation could not be read: {type(exc).__name__}") from exc
+        offered = app_offers(scope, installation.permissions, kind)
+        outdated = partial(_regranted, tokens, key, installation)
     return ForgeAuthorization(
         credential_id=credential.credential_id,
         credential_slug=credential.slug,
         binding=credential.binding,
         variant=None,
         authority=credential.authority,
-        offered=app_offers(scope, installation.permissions, kind),
+        offered=offered,
         auth=InstallationAuth(tokens, key, app),
+        grant_scoped=True,
+        outdated=outdated,
     )
+
+
+def _never() -> bool:
+    return False
+
+
+def _regranted(tokens: InstallationTokens, key: InstallationKey, built_on: Installation) -> bool:
+    held = tokens.held_grant(key)
+    return held is None or held.permissions != built_on.permissions

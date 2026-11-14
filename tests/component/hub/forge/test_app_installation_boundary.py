@@ -1,14 +1,13 @@
 """A ``github.app-installation`` credential behind the forge authorization boundary (component tier), over a migrated
-store holding the App's key as a secret, the tenant's live configuration, real ``GitHubLanding`` adapters, and the
-production work-source registry, all against a GitHub App's side of GitHub on a mock transport. The binding is made
-known to the store for this module alone: two repositories acting as one installation share its budget, its write
-lock and its token; landing and the work source share its budget but never a token; a replaced key mints under its
-new revision with no restart; and a refused installation read refuses each path's build as that path's refusal."""
+store holding the App's key, the tenant's live configuration, real ``GitHubLanding`` adapters, and the production
+work-source registry, against a GitHub App's side of GitHub on a mock transport: how one installation shares budget,
+write lock and token across repositories and scopes, and how its builds meet a replaced key, a suspended or silent
+installation, and a withdrawn grant."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +19,8 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core, build_live_config
 from blizzard.hub.delivery.action_loop import ActionLoop
+from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credential_bindings import (
     CREDENTIAL_BINDINGS,
     CredentialBinding,
@@ -35,7 +36,7 @@ from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
 from blizzard.hub.forge.internal.github_auth import InstallationTokens
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
-from blizzard.hub.forge.landing import ForgeAuthRefused
+from blizzard.hub.forge.landing import ForgeAuthRefused, ForgeCapabilityMissing, ForgeUnavailable
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, WriteLocks
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider
@@ -45,7 +46,7 @@ from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceAuthRefused
 from tests.support.forge_auth import sent_header
-from tests.support.github_app import API_BASE, APP_ID, INSTALLATION_ID, AppGitHub, app_key_pem
+from tests.support.github_app import API_BASE, APP_ID, FULL_GRANT, INSTALLATION_ID, AppGitHub, app_key_pem
 from tests.support.scaffolding import OP, config_authoring, default_tenant, migrated_hub_at, seed_forge
 
 _NOW = datetime(2026, 11, 14, 12, 0, 0, tzinfo=UTC)
@@ -229,11 +230,37 @@ def test_a_key_github_does_not_hold_refuses_the_landing_build_as_key_rejected(wo
     assert refused.value.diagnostic.credential == "app"
 
 
-def test_a_suspended_installation_refuses_the_work_source_build(world: _World) -> None:
+def test_a_work_source_build_calls_no_forge_and_its_first_call_is_refused_for_a_suspended_installation(
+    world: _World,
+) -> None:
     world.github.suspend()
 
+    source = world.sources.get(WorkSourceId(world.source))
+    assert source is not None and (world.github.reads, len(world.github.mints)) == (0, 0)
     with pytest.raises(WorkSourceAuthRefused) as refused:
-        world.sources.get(WorkSourceId(world.source))
+        source.fetch(WorkRef(source=world.source, ref="7"))
 
     assert refused.value.refusal is AuthRefusal.INSTALLATION_SUSPENDED
     assert "Unsuspend the App's installation." in str(refused.value)
+
+
+def test_an_installation_read_the_forge_does_not_answer_is_an_unavailable_forge_at_the_landing_build(
+    world: _World,
+) -> None:
+    world.github.read_status = 502
+
+    with pytest.raises(ForgeUnavailable):
+        world.registry.refs(world.widget, priority=ForgePriority.LANDING)
+
+
+def test_a_grant_withdrawn_after_it_was_read_narrows_the_next_hand_out(world: _World, loop: ActionLoop) -> None:
+    world.land(loop, world.widget)
+    assert Capability.CHECKS_READ in world.registry.authorization(world.widget).offered
+    world.github.grant({k: v for k, v in FULL_GRANT.items() if k != "checks"})
+    world.clock.advance(timedelta(hours=1))
+
+    world.land(loop, world.widget)
+
+    assert Capability.CHECKS_READ not in world.registry.authorization(world.widget).offered
+    with pytest.raises(ForgeCapabilityMissing):
+        loop.submit(world.registry.checks(world.widget, priority=ForgePriority.LANDING).checks("abc")).result(5)

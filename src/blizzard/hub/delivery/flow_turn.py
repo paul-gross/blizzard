@@ -31,7 +31,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
-from blizzard.hub.delivery.actions.landing.repo import forge_auth_escalation
+from blizzard.hub.delivery.actions.forge_auth import credential_kind, forge_auth_escalation
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.hub_node import HUB_LOG_PREFIX, BouncedAction, HubNodeRouter
 from blizzard.hub.domain.actions.check_observations import timeout_observation
@@ -102,7 +102,7 @@ from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
 from blizzard.hub.forge.auth import ForgeAuthorization
 from blizzard.hub.forge.budget import ForgePriority
-from blizzard.hub.forge.landing import ForgeAuthRefused, RepositoryForge
+from blizzard.hub.forge.landing import ForgeAuthRefused, ForgeUnavailable, RepositoryForge
 from blizzard.hub.forge.registry import ForgeRegistry, TurnCutOff
 from blizzard.hub.settings.pass_config import bind_pass_config
 from blizzard.hub.tenancy import TenantClosed, UnknownTenant
@@ -147,6 +147,15 @@ class _TargetRefused(Exception):
     """The forge refused the access ``target``'s authorization is built on while checking what its forge offers."""
 
     def __init__(self, target: ResolvedRepository, cause: ForgeAuthRefused) -> None:
+        super().__init__(str(cause))
+        self.target = target
+        self.cause = cause
+
+
+class _TargetSilent(Exception):
+    """``target``'s forge gave no answer to build its authorization on while checking what its forge offers."""
+
+    def __init__(self, target: ResolvedRepository, cause: ForgeUnavailable) -> None:
         super().__init__(str(cause))
         self.target = target
         self.cause = cause
@@ -443,6 +452,9 @@ class TurnRunner:
         except _TargetRefused as refused:
             self._refuse_auth(at, ending, resolution, refused.target, refused.cause)
             return None
+        except _TargetSilent as silent:
+            self._hold_silent(at, ending, silent.target, silent.cause)
+            return None
         if missing is not None:
             target, capability = missing
             forge = resolution.forge_of(target)
@@ -476,6 +488,9 @@ class TurnRunner:
                     return None
                 except ForgeAuthRefused as exc:
                     self._refuse_auth(at, ending, resolution, target, exc)
+                    return None
+                except ForgeUnavailable as exc:
+                    self._hold_silent(at, ending, target, exc)
                     return None
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
@@ -519,6 +534,8 @@ class TurnRunner:
                 raise _TargetUnavailable(target, exc) from exc
             except ForgeAuthRefused as exc:
                 raise _TargetRefused(target, exc) from exc
+            except ForgeUnavailable as exc:
+                raise _TargetSilent(target, exc) from exc
             missing = sorted(requirement(target) - offered)
             if missing:
                 return target, missing[0]
@@ -540,12 +557,7 @@ class TurnRunner:
             if authorization.credential_slug is not None
             else f"secret {target.secret_name}"
         )
-        kind = (
-            authorization.binding
-            if authorization.variant is None
-            else f"{authorization.binding}, {authorization.variant}"
-        )
-        return f" to {who} ({kind})"
+        return f" to {who} ({credential_kind(authorization.binding, authorization.variant)})"
 
     def _refuse_auth(
         self,
@@ -563,6 +575,13 @@ class TurnRunner:
         )
         assert escalation.auth is not None
         self._router.escalate_forge_auth(at.chunk, at.node, escalation, escalation.auth, epoch=at.epoch, ending=ending)
+
+    def _hold_silent(
+        self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: ForgeUnavailable
+    ) -> None:
+        """Wait the visit ``pending``: ``target``'s forge did not answer, as a pass whose forge did not answer waits."""
+        _log.info("a visit's forge did not answer its build; re-polling", repository=target.record, error=str(cause))
+        self._router.record_wait(at.chunk, at.node, epoch=at.epoch, kind="pending", ending=ending)
 
     def _refuse_unavailable(
         self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: CredentialUnavailable
@@ -760,9 +779,9 @@ class TurnRunner:
             return
         try:
             credential = self._forges.authorization(reason.repository).credential_slug
-        except CredentialUnavailable:
-            # The credential was retired or replaced after the visit was built; the escalation still reaches a person,
-            # just without naming one.
+        except (CredentialUnavailable, ForgeAuthRefused, ForgeUnavailable):
+            # The credential changed or its forge refused or missed a rebuild since the visit was built; the
+            # escalation still reaches a person, just without naming one.
             credential = None
         self._router.escalate_capability_missing(
             chunk,

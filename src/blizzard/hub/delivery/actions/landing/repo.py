@@ -14,20 +14,18 @@ from typing import Any
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.delivery.actions.forge_auth import forge_auth_escalation
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     EffectStatus,
-    ForgeAuthReason,
     IEffectSink,
     LandingRecord,
     Marker,
     Pass,
 )
 from blizzard.hub.domain.actions.visit import Visit
-from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
-from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, refusal_remedy, refusal_sentence
+from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.forge.landing import (
-    OPERATION_CAPABILITY,
     Comparison,
     ComparisonStatus,
     ForgeAuthRefused,
@@ -196,53 +194,6 @@ class RepoLanding:
         if tip is None:
             raise LandedRevisionUnknown(f"{where} does not exist, so it has no live tip")
         return tip
-
-
-def forge_auth_escalation(
-    exc: ForgeAuthRefused, *, repo: str, forge_label: str, record: ResolvedRepository
-) -> ActionEscalation:
-    """The ``forge-auth`` escalation of a credential the forge refused for ``repo``, acting as ``record`` on the forge
-    labelled ``forge_label``: what was refused and why, the forge's own sanitized words, the credential or secret the
-    call carried, and what to do about it."""
-    diagnostic = exc.diagnostic
-    needed = OPERATION_CAPABILITY.get(diagnostic.operation)
-    capability = str(needed) if needed is not None else None
-    detail = "\n".join(
-        (
-            f"{repo} on forge {forge_label}: {_operation_sentence(diagnostic)} was refused: "
-            f"{refusal_sentence(exc.refusal)}.",
-            f"GitHub said: {_forge_said(diagnostic)}.",
-            f"{_carried(diagnostic, record)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
-        )
-    )
-    reason = ForgeAuthReason(
-        refusal=exc.refusal,
-        diagnostic=diagnostic,
-        repository=RepositoryId(record.record),
-        forge=record.forge_id,
-    )
-    return ActionEscalation(EscalationCause.FORGE_AUTH, detail, auth=reason)
-
-
-def _carried(diagnostic: ForgeDiagnostic, record: ResolvedRepository) -> str:
-    """The credential the refused call carried, as its binding and any variant; the secret when it names none."""
-    if diagnostic.credential is None:
-        return f"Secret {record.secret_name}"
-    kind = diagnostic.binding if diagnostic.variant is None else f"{diagnostic.binding}, {diagnostic.variant}"
-    return f"Credential {diagnostic.credential} ({kind})"
-
-
-def _operation_sentence(diagnostic: ForgeDiagnostic) -> str:
-    return f"the `{diagnostic.operation}` call ({diagnostic.endpoint})"
-
-
-def _forge_said(diagnostic: ForgeDiagnostic) -> str:
-    """The forge's quoted message and the answer's status and request id; a request id it did not send is left
-    out."""
-    answer = f"HTTP {diagnostic.status}"
-    if diagnostic.request_id is not None:
-        answer += f", request {diagnostic.request_id}"
-    return f'"{diagnostic.message}" ({answer})'
 
 
 # --- where one repository stands ------------------------------------------------------------------------------------

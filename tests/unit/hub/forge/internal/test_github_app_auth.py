@@ -21,7 +21,12 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credentials import ResolvedCredential
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
-from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ForgeMintRefused, refusal_remedy
+from blizzard.hub.domain.kernel.forge_refusals import (
+    AuthRefusal,
+    ForgeAccessUnavailable,
+    ForgeMintRefused,
+    refusal_remedy,
+)
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
 from blizzard.hub.forge.internal.github_auth import (
@@ -31,11 +36,12 @@ from blizzard.hub.forge.internal.github_auth import (
     InstallationTokens,
 )
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
-from blizzard.hub.forge.landing import ForgeAuthRefused, ForgeNotFound, ForgeObject
+from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_mint_refusal
+from blizzard.hub.forge.landing import ForgeAuthRefused, ForgeNotFound, ForgeObject, ForgeUnavailable
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
-from blizzard.hub.work_sources.source import WorkSourceAuthRefused
+from blizzard.hub.work_sources.source import WorkSourceAuthRefused, WorkSourceError
 from tests.support.github_app import (
     API_BASE,
     FULL_GRANT,
@@ -112,13 +118,19 @@ def test_a_token_within_five_minutes_of_expiring_is_renewed_on_the_next_request(
     assert len(world.github.mints) == 2 and world.sent_token() != first
 
 
-def test_a_token_minted_already_inside_the_renewal_window_is_sent_rather_than_minted_again() -> None:
+def test_requests_waiting_on_a_mint_inside_the_renewal_window_share_its_token() -> None:
     clock = ControlledClock(_NOW)
-    world = _World(AppGitHub(clock=clock, lifetime=timedelta(minutes=2)), clock)
+    world = _World(AppGitHub(clock=clock, lifetime=timedelta(minutes=2), mint_delay=0.2), clock)
     authorization = world.authorization()
+    statuses: list[int] = []
+    threads = [threading.Thread(target=lambda: statuses.append(world.get(authorization).status_code)) for _ in range(5)]
 
-    assert world.get(authorization).status_code == 200
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
 
+    assert statuses == [200] * 5
     assert len(world.github.mints) == 1
 
 
@@ -153,22 +165,21 @@ def test_the_event_loop_is_not_held_while_a_token_is_minted() -> None:
     clock = ControlledClock(_NOW)
     world = _World(AppGitHub(clock=clock, mint_delay=0.3), clock)
     authorization = world.authorization()
-    ticks: list[int] = []
+    seen_done: list[bool] = []
 
     async def go() -> None:
-        async def tick() -> None:
-            for count in range(5):
-                ticks.append(count)
-                await asyncio.sleep(0.02)
-
         async with httpx2.AsyncClient(
             base_url=API_BASE, auth=authorization.auth, transport=world.github.transport
         ) as client:
-            await asyncio.gather(client.get("/repos/acme/widget"), tick())
+            request = asyncio.create_task(client.get("/repos/acme/widget"))
+            for _ in range(5):
+                await asyncio.sleep(0.02)
+                seen_done.append(request.done())
+            assert (await request).status_code == 200
 
     asyncio.run(go())
 
-    assert ticks == [0, 1, 2, 3, 4]
+    assert seen_done == [False] * 5
 
 
 def test_a_restarted_hub_mints_on_first_use(world: _World) -> None:
@@ -412,6 +423,62 @@ def test_a_mint_refused_for_a_missing_permission_names_the_permissions_the_insta
     )
 
 
+def test_a_mint_refused_for_its_rate_is_an_unavailable_forge_never_a_suspension(world: _World) -> None:
+    authorization = world.authorization()
+    world.github.mint_rate_limited = True
+
+    with pytest.raises(ForgeUnavailable) as unavailable:
+        _land(world, authorization, lambda forge: forge.branch_tip("main"))
+    with pytest.raises(WorkSourceError) as failed:
+        _work_source(world, world.authorization(scope=ForgeScope.WORK_SOURCE)).fetch(WorkRef("wsrc_1", "7"))
+
+    assert not isinstance(unavailable.value, ForgeAuthRefused)
+    assert not isinstance(failed.value, WorkSourceAuthRefused)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [{"x-ratelimit-remaining": "0"}, {"Retry-After": "30"}],
+    ids=["primary-budget-spent", "retry-after"],
+)
+def test_a_403_carrying_a_rate_refusal_classifies_as_no_mint_refusal(headers: dict[str, str]) -> None:
+    classified = classify_mint_refusal(
+        403,
+        headers,
+        "forbidden",
+        documentation_url=None,
+        operation="mint_token",
+        endpoint="POST /x",
+        credential=CallCredential("app", "github.app-installation", None),
+    )
+
+    assert classified is None
+
+
+def test_a_withdrawn_grant_found_at_a_mint_is_read_again_and_minted_on(world: _World) -> None:
+    authorization = world.authorization()
+    world.get(authorization)
+    world.github.grant({k: v for k, v in FULL_GRANT.items() if k != "checks"})
+    world.clock.advance(timedelta(hours=1))
+
+    assert world.get(authorization).status_code == 200
+
+    assert "checks" not in world.github.mints[-1]["permissions"] and world.github.reads == 2
+    assert authorization.outdated()
+    assert Capability.CHECKS_READ not in world.authorization().offered
+
+
+def test_a_grant_the_installation_still_holds_leaves_a_refused_mint_its_refusal(world: _World) -> None:
+    authorization = world.authorization()
+    world.github.mint_status = 422
+
+    with pytest.raises(ForgeAuthRefused) as refused:
+        _land(world, authorization, lambda forge: forge.branch_tip("main"))
+
+    assert refused.value.refusal is AuthRefusal.PERMISSION_MISSING
+    assert not authorization.outdated()
+
+
 def _read_answers_401(github: AppGitHub) -> None:
     github.read_status = 401
 
@@ -440,6 +507,36 @@ def test_a_refused_installation_read_refuses_the_build(
     assert refused.value.classified.refusal is refusal
     assert refused.value.classified.diagnostic.operation == "read_installation"
     _assert_no_secret(world, f"{refused.value!r} {refused.value} {refused.value.classified!r}")
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+def test_an_installation_read_the_forge_does_not_answer_is_unavailable_at_build(world: _World, status: int) -> None:
+    world.github.read_status = status
+
+    with pytest.raises(ForgeAccessUnavailable):
+        world.authorization()
+
+
+def test_an_installation_read_that_cannot_connect_is_unavailable_at_build() -> None:
+    def refuse(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("refused", request=request)
+
+    world = _World()
+    world.tokens = InstallationTokens(clock=world.clock, transport=httpx2.MockTransport(refuse))
+    world.authorizations = ForgeAuthorizations(
+        secrets=world.reader, forges=Forges(), tokens=world.tokens, bindings=WITH_APP
+    )
+
+    with pytest.raises(ForgeAccessUnavailable):
+        world.authorization()
+
+
+def test_a_work_source_authorization_reads_nothing_at_build(world: _World) -> None:
+    world.github.suspend()
+
+    world.authorization(scope=ForgeScope.WORK_SOURCE)
+
+    assert (world.github.reads, len(world.github.mints)) == (0, 0)
 
 
 def test_a_key_github_does_not_hold_is_key_rejected(world: _World) -> None:

@@ -32,7 +32,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
-from blizzard.hub.forge.landing import CommitPresence, Comparison, ForgeAuthRefused, VisitForges
+from blizzard.hub.forge.landing import CommitPresence, Comparison, ForgeAuthRefused, ForgeUnavailable, VisitForges
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
@@ -855,3 +855,22 @@ def test_a_forge_refusing_the_access_its_roles_are_built_on_escalates_forge_auth
     assert world.hooked.passes == 0
     cause, detail = _forge_auth(world, chunk_id)
     assert cause == "forge-auth" and f"{_REPO} on forge" in detail
+
+
+def test_a_forge_that_does_not_answer_while_its_roles_are_built_waits_pending_before_any_pass(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk_id = world.at_step("test.hooked")
+
+    def silent(repository: Any, *, cut_off: Any, priority: Any) -> Any:
+        raise ForgeUnavailable("the installation could not be read: ReadTimeout")
+
+    monkeypatch.setattr(world.hub.services.forges, "repository_forge", silent)
+
+    world.tick()
+
+    assert world.hooked.passes == 0
+    assert "failure" not in world.outcomes(chunk_id)
+    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert [poll.kind for poll in facts.hub_node_polls] == ["pending"]

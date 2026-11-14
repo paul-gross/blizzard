@@ -75,12 +75,17 @@ _SENTENCES = {
 
 
 class ForgeMintRefused(Exception):
-    """The forge refused to mint, or to describe, the installation access a credential acts with — raised from
-    inside an authorization and translated by each caller into its own refusal. Its text is the refusal alone."""
+    """The forge refused to mint, or to describe, the installation access a credential acts with. Its text is the
+    refusal alone."""
 
     def __init__(self, classified: ClassifiedRefusal) -> None:
         super().__init__(str(classified.refusal))
         self.classified = classified
+
+
+class ForgeAccessUnavailable(Exception):
+    """The forge gave no answer to act on when asked to describe the access a credential acts with: a refused
+    connection, a timeout, a 5xx, or a rate refusal."""
 
 
 def refusal_sentence(refusal: AuthRefusal) -> str:

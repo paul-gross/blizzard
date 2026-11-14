@@ -24,7 +24,7 @@ from blizzard.hub.domain.config.credentials import (
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.kernel.forge_refusals import ForgeMintRefused
+from blizzard.hub.domain.kernel.forge_refusals import ForgeAccessUnavailable, ForgeMintRefused
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.live_config import ConfigObjectCache
@@ -131,7 +131,7 @@ class WorkSourceEntry:
             raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
         except ForgeMintRefused as exc:
             raise WorkSourceAuthRefused(f"work source {record.slug}", exc.classified) from exc
-        except httpx2.HTTPError as exc:
+        except ForgeAccessUnavailable as exc:
             raise WorkSourceError(f"work source {record.slug}: its forge could not be read: {exc}") from exc
         entry = cls.of(record, forge, authorization, instrument, budgets, refusals)
         client = entry.client()

@@ -1,7 +1,7 @@
 """A GitHub App's side of GitHub for tests, on one ``httpx2.MockTransport``: the installation read and the token mint,
 each verifying the App's RS256 JWT against its public key, and every other route answering 200 to a live installation
 token and 401 to anything else. It counts mints and reads, and can revoke a token or answer a mint or a read with any
-status. Also: an App credential resolved for the boundary to build, and a forge reader holding one forge."""
+status, or a mint's 403 as a rate refusal. Also: an App credential resolved for the boundary to build, and a forge reader holding one forge."""
 
 from __future__ import annotations
 
@@ -88,8 +88,8 @@ class _Installation:
 @dataclass
 class AppGitHub:
     """The fake. ``lifetime`` is each minted token's; ``mint_delay`` holds every mint that long, so concurrent callers
-    overlap it. ``mint_status`` and ``read_status`` force those answers' status; ``always_401`` refuses every other
-    route's request whatever it carries."""
+    overlap it. ``mint_status`` and ``read_status`` force those answers' status, and ``mint_rate_limited`` a mint's
+    secondary rate refusal; ``always_401`` refuses every other route's request whatever it carries."""
 
     clock: IClock
     private_pem: str = field(default_factory=app_key_pem)
@@ -98,6 +98,7 @@ class AppGitHub:
     mint_status: int | None = None
     read_status: int | None = None
     always_401: bool = False
+    mint_rate_limited: bool = False
     rate_remaining: int | None = None
     installations: dict[int, _Installation] = field(
         default_factory=lambda: {INSTALLATION_ID: _Installation(dict(FULL_GRANT))}
@@ -182,12 +183,19 @@ class AppGitHub:
         asked = json.loads(request.content or b"{}").get("permissions")
         with self._lock:
             self.mints.append({"installation": int(parts[3]), "permissions": asked})
+        if self.mint_rate_limited:
+            limited = _answer(403, {"message": "You have exceeded a secondary rate limit."})
+            limited.headers["retry-after"] = "60"
+            return limited
         if self.mint_status is not None:
             return _answer(self.mint_status, {"message": "refused"})
         if installation is None:
             return _answer(404, {"message": "Not Found"})
         if installation.suspended:
             return _answer(403, {"message": "This installation has been suspended"})
+        requested: dict[str, str] = asked or {}
+        if any(not _covers(installation.permissions.get(name), level) for name, level in requested.items()):
+            return _answer(422, {"message": "The permissions requested are not granted to this installation."})
         with self._lock:
             token = f"ghs_minted{len(self.mints)}x{int(parts[3])}"
             expires_at = self.clock.now() + self.lifetime
@@ -196,6 +204,11 @@ class AppGitHub:
             201,
             {"token": token, "expires_at": expires_at.isoformat().replace("+00:00", "Z"), "permissions": asked or {}},
         )
+
+
+def _covers(granted: str | None, needed: str) -> bool:
+    levels = ("read", "write", "admin")
+    return granted in levels and levels.index(granted) >= levels.index(needed)
 
 
 class AppKeyReader:

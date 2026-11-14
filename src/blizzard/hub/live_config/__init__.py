@@ -94,6 +94,14 @@ class ConfigObjectCache:
                 self._supersede(kind, key, held[1])
         return built
 
+    def drop(self, kind: RecordKind, key: str, built: object) -> None:
+        """Set ``built`` aside if it is still the record's object, so the next hand-out builds afresh."""
+        with self._lock:
+            held = self._entries.get((kind, key))
+            if held is not None and held[1] is built:
+                del self._entries[(kind, key)]
+                self._supersede(kind, key, built)
+
     def close(self) -> None:
         """Close and forget every object built or set aside — the tenant they were built for is no longer
         served; a later hand-out builds afresh."""

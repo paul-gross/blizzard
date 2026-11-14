@@ -27,7 +27,7 @@ from blizzard.hub.domain.kernel.forge_refusals import (
     ForgeMintRefused,
     sanitize_forge_text,
 )
-from blizzard.hub.forge.internal.github_auth import InstallationAuth, variant_withholds
+from blizzard.hub.forge.internal.github_auth import variant_withholds
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (
@@ -537,9 +537,9 @@ class GitHubLanding:
         return capability is not None and capability in variant_withholds(self._binding.authorization.variant)
 
     def _repository_unseen(self) -> str:
-        """How a repository the forge answers 404 for is worded: an installation's token cannot see a repository
-        the installation does not include, either."""
-        if isinstance(self._binding.authorization.auth, InstallationAuth):
+        """How a repository the forge answers 404 for is worded: a grant-scoped credential cannot see a repository its
+        grant does not include, either."""
+        if self._binding.authorization.grant_scoped:
             return f"{ForgeObject.REPOSITORY} not found, or the installation does not include it"
         return ""
 
