@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.credential_setting_kind import SettingKind
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.record_referrer import RecordReferrer
+from blizzard.wire.vocabulary import OPEN
 
 
 class CredentialCreateRequest(BaseModel):
@@ -81,9 +84,11 @@ class CredentialListItem(CredentialSummary):
 
 
 class CredentialSettingView(WireModel):
-    """One setting a binding takes, by ``key``, with the values it accepts."""
+    """One setting a binding takes, by ``key``: ``kind`` says what it accepts — one of ``choices``, or a positive
+    integer, when ``choices`` is empty."""
 
     key: str
+    kind: Annotated[SettingKind | Unrecognized, OPEN]
     choices: list[str]
 
 

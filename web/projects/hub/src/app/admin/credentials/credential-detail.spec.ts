@@ -19,7 +19,7 @@ import {
 
 import { CredentialDetail } from './credential-detail';
 
-const BINDINGS = [{ name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', choices: ['classic', 'fine-grained'] }] }];
+const BINDINGS = [{ name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice' as const, choices: ['classic', 'fine-grained'] }] }];
 const IN_USE: CredentialDocument = credentialDocument({
   revision: 3,
   settings: { variant: 'classic' },

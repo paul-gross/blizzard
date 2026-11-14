@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.credential_setting_kind import SettingKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.errors import ConfigFieldError
@@ -45,7 +46,12 @@ class CredentialBinding(Protocol):
 
     @property
     def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
-        """Each setting the binding takes, by key, with the values it accepts."""
+        """Each setting the binding takes, by key, with the values it accepts — none for a setting not a choice."""
+        ...
+
+    @property
+    def setting_kinds(self) -> Mapping[str, SettingKind]:
+        """What each setting the binding takes, by key, accepts."""
         ...
 
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
@@ -79,6 +85,10 @@ class GitHubTokenBinding:
     @property
     def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
         return {"variant": _TOKEN_VARIANTS}
+
+    @property
+    def setting_kinds(self) -> Mapping[str, SettingKind]:
+        return {"variant": SettingKind.CHOICE}
 
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
         for key in settings:
@@ -118,6 +128,10 @@ class GitHubAppInstallationBinding:
     @property
     def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
         return dict.fromkeys(_APP_SETTINGS, ())
+
+    @property
+    def setting_kinds(self) -> Mapping[str, SettingKind]:
+        return dict.fromkeys(_APP_SETTINGS, SettingKind.POSITIVE_INTEGER)
 
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
         for key in settings:
