@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261113_1000_credential_carry_over",
+  "head_revision": "20261114_0900_app_credentials",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
