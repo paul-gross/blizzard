@@ -25,6 +25,10 @@ const GITHUB: ForgeSummary = {
 const GITLAB: ForgeSummary = { ...GITHUB, forge_id: 'frg_l', slug: 'gitlab', name: 'GitLab', kind: 'gitlab' };
 const TOKEN: CredentialBindingView = { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice', choices: ['classic', 'fine-grained'] }] };
 const LAB: CredentialBindingView = { name: 'gitlab.token', forge_kind: 'gitlab', settings: [] };
+const APP: CredentialBindingView = {
+  name: 'github.app-installation', forge_kind: 'github',
+  settings: [{ key: 'app_id', kind: 'positive-integer', choices: [] }, { key: 'installation_id', kind: 'positive-integer', choices: [] }],
+};
 const BINDINGS = [TOKEN, LAB];
 const FORGE_BINDINGS: ForgeBindingsView[] = [{ forge_id: 'frg_g', bindings: ['github.token'] }, { forge_id: 'frg_l', bindings: ['gitlab.token'] }];
 const VARIANT = settingField('github.token', 'variant');
@@ -75,6 +79,30 @@ describe('credential form', () => {
     expect(credentialPatch(configEdit(fields, shown, moved).body, moved, record.binding, BINDINGS)).toEqual({ settings: { variant: 'fine-grained' } });
     const renamed = { ...shown, secret: 'gh-other' };
     expect(credentialPatch(configEdit(fields, shown, renamed).body, renamed, record.binding, BINDINGS)).toEqual({ secret: 'gh-other' });
+  });
+
+  it('renders an integer setting as a number field shown only with its binding, and sends it as a number', () => {
+    const bindings = [TOKEN, APP];
+    const forgeBindings: ForgeBindingsView[] = [{ forge_id: 'frg_g', bindings: ['github.token', 'github.app-installation'] }];
+    const fields = credentialFields([GITHUB], bindings, forgeBindings);
+    const appId = settingField(APP.name, 'app_id');
+    const installationId = settingField(APP.name, 'installation_id');
+    expect(fields.find((field) => field.key === appId)).toMatchObject({ kind: 'number', shownWhen: { key: 'binding', value: APP.name } });
+    expect(shownFields(fields, { binding: 'github.token' }).map((field) => field.key)).not.toContain(appId);
+
+    const form = { slug: 'gh-app', name: '', forge: 'frg_g', binding: APP.name, secret: 'app-key', [appId]: '12', [installationId]: ' 34 ' };
+    expect(credentialCreate(createBody(fields, form), bindings).settings).toEqual({ app_id: 12, installation_id: 34 });
+
+    const record = credentialSummary({ binding: APP.name, settings: { app_id: 12, installation_id: 34 } });
+    const shown = formValuesOf(fields, credentialShown(record));
+    const moved = { ...shown, [installationId]: '56' };
+    expect(credentialPatch(configEdit(fields, shown, moved).body, moved, record.binding, bindings)).toEqual({ settings: { app_id: 12, installation_id: 56 } });
+  });
+
+  it('takes a setting of a kind this build does not know as text', () => {
+    const odd = { key: 'region', kind: 'region-code', choices: [] } as unknown as CredentialBindingView['settings'][number];
+    const fields = credentialFields([GITHUB], [{ ...TOKEN, settings: [odd] }], FORGE_BINDINGS);
+    expect(fields.find((field) => field.key === settingField(TOKEN.name, 'region'))?.kind).toBe('text');
   });
 });
 
