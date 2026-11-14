@@ -14,6 +14,7 @@ def test_settings_row_vocabulary_is_open() -> None:
     assert row.lifetime is Lifetime.PASS
     row = HubSettingRow.model_validate({"key": "a", "value": 1, "source": "future", "lifetime": "future"})
     assert row.source == row.lifetime == Unrecognized("future")
+    assert row.model_dump()["source"] == "future"
     assert row.model_dump()["lifetime"] == "future"
 
 
@@ -36,6 +37,20 @@ def test_settings_change_vocabulary_is_open(field: str) -> None:
 
 
 def test_apply_outcome_op_is_open() -> None:
+    known = ConfigApplyOutcome.model_validate({"kind": "settings", "key": "a", "op": "replace"})
+    assert known.op == "replace"
     outcome = ConfigApplyOutcome.model_validate({"kind": "settings", "key": "a", "op": "future"})
     assert outcome.op == Unrecognized("future")
     assert outcome.model_dump()["op"] == "future"
+
+
+def test_inline_vocabulary_schemas_are_unchanged() -> None:
+    source = HubSettingRow.model_json_schema()["properties"]["source"]
+    op = ConfigApplyOutcome.model_json_schema()["properties"]["op"]
+    assert source == {"enum": ["entry", "default"], "title": "Source", "type": "string", "x-blizzard-open": True}
+    assert op == {
+        "enum": ["create", "edit", "retire", "enable", "replace", "unchanged"],
+        "title": "Op",
+        "type": "string",
+        "x-blizzard-open": True,
+    }

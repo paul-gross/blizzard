@@ -14,7 +14,47 @@ from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.schema import hub_setting_changes
-from tests.support.scaffolding import count_queries, hub_level_connections, migrate_to
+from tests.support.scaffolding import (
+    capture_statements,
+    count_queries,
+    explain_query_plan,
+    hub_level_connections,
+    migrate_to,
+)
+
+
+def test_admin_reads_use_one_query_with_entries_and_paginated_history(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    store = HubSettingsStore(hub_level_connections(engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), lambda _: {})
+    store.apply(Change("edit", sets={"x": 1}), if_match=0, door="api", actor="first")
+    store.apply(Change("edit", sets={"y": 2}), if_match=1, door="api", actor="second")
+
+    assert count_queries(engine, store.view) == 1
+    snapshot, provenance = store.view()
+    assert snapshot.revision == 2
+    assert snapshot.entries == {"x": Entry(1), "y": Entry(2)}
+    assert provenance["x"][0::2] == (1, "first")
+    assert provenance["y"][0::2] == (2, "second")
+    assert count_queries(engine, lambda: store.changes(limit=1, before=None)) == 1
+    with capture_statements(engine) as statements:
+        page, cursor = store.changes(limit=1, before=None)
+    statement, parameters = statements[0]
+    assert "ORDER BY hub_setting_changes.revision DESC" in statement
+    assert "LIMIT" in statement
+    assert parameters[0] == 2  # limit + 1
+    assert any(row.detail == "SCAN hub_setting_changes" for row in explain_query_plan(engine, statement, parameters))
+    assert [row["revision"] for row in page] == [2]
+    assert cursor == 2
+    assert count_queries(engine, lambda: store.changes(limit=1, before=cursor)) == 1
+    with capture_statements(engine) as statements:
+        page, cursor = store.changes(limit=1, before=cursor)
+    statement, parameters = statements[0]
+    assert any(
+        "SEARCH hub_setting_changes USING INTEGER PRIMARY KEY (rowid<?)" in row.detail
+        for row in explain_query_plan(engine, statement, parameters)
+    )
+    assert [row["revision"] for row in page] == [1]
+    assert cursor is None
 
 
 def test_write_audit_conflict_and_reader_cache(tmp_path: Path) -> None:

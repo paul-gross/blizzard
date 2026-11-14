@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.config_keys import Lifetime
+from blizzard.foundation.hub_setting_source import HubSettingSource
 from blizzard.foundation.settings_record.vocabulary import Door, Op
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -17,7 +18,7 @@ from blizzard.wire.vocabulary import OPEN
 class HubSettingRow(WireModel):
     key: str
     value: object
-    source: Annotated[Literal["entry", "default"] | Unrecognized, OPEN]
+    source: Annotated[HubSettingSource | Unrecognized, OPEN]
     lifetime: Annotated[Lifetime | Unrecognized, OPEN]
     revision: int | None = None
     written_at: str | None = None
