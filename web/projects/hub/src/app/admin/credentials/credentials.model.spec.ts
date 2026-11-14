@@ -1,4 +1,4 @@
-import type { CredentialBindingView, ForgeSummary } from 'fleet';
+import type { CredentialBindingView, ForgeBindingsView, ForgeSummary } from 'fleet';
 import { credentialDocument, credentialSummary } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -26,6 +26,7 @@ const GITLAB: ForgeSummary = { ...GITHUB, forge_id: 'frg_l', slug: 'gitlab', nam
 const TOKEN: CredentialBindingView = { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', choices: ['classic', 'fine-grained'] }] };
 const LAB: CredentialBindingView = { name: 'gitlab.token', forge_kind: 'gitlab', settings: [] };
 const BINDINGS = [TOKEN, LAB];
+const FORGE_BINDINGS: ForgeBindingsView[] = [{ forge_id: 'frg_g', bindings: ['github.token'] }, { forge_id: 'frg_l', bindings: ['gitlab.token'] }];
 const VARIANT = settingField('github.token', 'variant');
 
 describe('credential rows', () => {
@@ -41,23 +42,23 @@ describe('credential rows', () => {
 });
 
 describe('credential form', () => {
-  it('offers only the bindings of the picked forge\'s kind, keyed by forge', () => {
-    expect(bindingOptions([GITHUB, GITLAB, { ...GITLAB, forge_id: 'frg_x', retired: true }], BINDINGS)).toEqual([
+  it('offers only the bindings the hub allows on the picked forge, keyed by forge', () => {
+    expect(bindingOptions(FORGE_BINDINGS)).toEqual([
       { value: 'github.token', label: 'github.token', kind: 'frg_g' },
       { value: 'gitlab.token', label: 'gitlab.token', kind: 'frg_l' },
     ]);
-    const binding = credentialFields([GITHUB, GITLAB], BINDINGS).find((field) => field.key === 'binding')!;
+    const binding = credentialFields([GITHUB, GITLAB], BINDINGS, FORGE_BINDINGS).find((field) => field.key === 'binding')!;
     expect(binding).toMatchObject({ filterBy: 'forge', createOnly: true });
   });
 
   it('shows a binding\'s settings only while it is picked', () => {
-    const fields = credentialFields([GITHUB], BINDINGS);
+    const fields = credentialFields([GITHUB], BINDINGS, FORGE_BINDINGS);
     expect(shownFields(fields, { binding: 'github.token' }).map((field) => field.key)).toContain(VARIANT);
     expect(shownFields(fields, { binding: 'gitlab.token' }).map((field) => field.key)).not.toContain(VARIANT);
   });
 
   it('creates with the picked binding\'s settings, leaving empty ones and an empty name out', () => {
-    const fields = credentialFields([GITHUB], BINDINGS);
+    const fields = credentialFields([GITHUB], BINDINGS, FORGE_BINDINGS);
     const form = { slug: 'gh-main', name: '', forge: 'frg_g', binding: 'github.token', secret: 'gh-token', [VARIANT]: 'classic' };
     expect(credentialCreate(createBody(fields, form), BINDINGS)).toEqual({
       slug: 'gh-main', forge: 'frg_g', binding: 'github.token', secret: 'gh-token', settings: { variant: 'classic' },
@@ -66,7 +67,7 @@ describe('credential form', () => {
   });
 
   it('edits only what changed, sending the whole settings when a setting moves', () => {
-    const fields = credentialFields([GITHUB], BINDINGS);
+    const fields = credentialFields([GITHUB], BINDINGS, FORGE_BINDINGS);
     const record = credentialSummary({ settings: { variant: 'classic' } });
     const shown = formValuesOf(fields, credentialShown(record));
     expect(shown).toMatchObject({ forge: 'frg_g', binding: 'github.token', secret: 'gh-token', [VARIANT]: 'classic' });
@@ -97,7 +98,7 @@ describe('credential detail', () => {
   });
 
   it('never offers the authority as a form field', () => {
-    expect(credentialFields([GITHUB], BINDINGS).map((field) => field.key)).not.toContain('authority');
+    expect(credentialFields([GITHUB], BINDINGS, FORGE_BINDINGS).map((field) => field.key)).not.toContain('authority');
   });
 });
 

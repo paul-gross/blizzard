@@ -852,7 +852,8 @@ export const getSchemaApiConfigSchemaKindGet = <ThrowOnError extends boolean = f
  *
  * Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled
  * repositories and work sources naming it; and every binding a credential may name, with the kind of forge it
- * authenticates against and each setting's choices.
+ * authenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may
+ * name.
  */
 export const listCredentialsApiCredentialsGet = <ThrowOnError extends boolean = false>(options?: Options<ListCredentialsApiCredentialsGetData, ThrowOnError>): RequestResult<ListCredentialsApiCredentialsGetResponses, ListCredentialsApiCredentialsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListCredentialsApiCredentialsGetResponses, ListCredentialsApiCredentialsGetErrors, ThrowOnError>({ url: '/api/credentials', ...options });
 

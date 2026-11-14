@@ -22,7 +22,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.changes import RecordRef
-from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
+from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS, bindings_for_kind
 from blizzard.hub.domain.config.credential_resolution import CredentialCapabilityMissing
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -44,6 +44,7 @@ from blizzard.wire.credential import (
     CredentialSettingView,
     CredentialsListView,
     CredentialSummary,
+    ForgeBindingsView,
 )
 from blizzard.wire.record_referrer import RecordReferrer
 
@@ -129,7 +130,8 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 def list_credentials(services: Services, include_retired: bool = False) -> CredentialsListView:
     """Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled
     repositories and work sources naming it; and every binding a credential may name, with the kind of forge it
-    authenticates against and each setting's choices."""
+    authenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may
+    name."""
     records = services.credential_records.list_all(include_retired=include_retired)
     names = user_names(services, (r.created_by for r in records))
     forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
@@ -152,6 +154,10 @@ def list_credentials(services: Services, include_retired: bool = False) -> Crede
                 ],
             )
             for binding in CREDENTIAL_BINDINGS.values()
+        ],
+        forge_bindings=[
+            ForgeBindingsView(forge_id=forge.forge_id, bindings=list(bindings_for_kind(forge.kind)))
+            for forge in services.forge_records.list_all(include_retired=False)
         ],
     )
 

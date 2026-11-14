@@ -7644,7 +7644,7 @@
         "type": "object"
       },
       "CredentialsListView": {
-        "description": "Every stored credential by slug \u2014 ``GET /api/credentials`` \u2014 and every binding a credential may name.",
+        "description": "Every stored credential by slug \u2014 ``GET /api/credentials`` \u2014 every binding a credential may name, and the\nbindings each enabled forge allows.",
         "properties": {
           "bindings": {
             "items": {
@@ -7659,11 +7659,19 @@
             },
             "title": "Credentials",
             "type": "array"
+          },
+          "forge_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ForgeBindingsView"
+            },
+            "title": "Forge Bindings",
+            "type": "array"
           }
         },
         "required": [
           "credentials",
-          "bindings"
+          "bindings",
+          "forge_bindings"
         ],
         "title": "CredentialsListView",
         "type": "object"
@@ -12276,6 +12284,28 @@
           "instance"
         ],
         "title": "FoldWouldCloseCycleProblem",
+        "type": "object"
+      },
+      "ForgeBindingsView": {
+        "description": "An enabled forge, by id, with the name of every binding a credential on it may name.",
+        "properties": {
+          "bindings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "forge_id",
+          "bindings"
+        ],
+        "title": "ForgeBindingsView",
         "type": "object"
       },
       "ForgeBudgetView": {
@@ -42236,7 +42266,7 @@
     },
     "/api/credentials": {
       "get": {
-        "description": "Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled\nrepositories and work sources naming it; and every binding a credential may name, with the kind of forge it\nauthenticates against and each setting's choices.",
+        "description": "Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled\nrepositories and work sources naming it; and every binding a credential may name, with the kind of forge it\nauthenticates against and each setting's choices; and, for each enabled forge, the bindings a credential on it may\nname.",
         "operationId": "list_credentials_api_credentials_get",
         "parameters": [
           {

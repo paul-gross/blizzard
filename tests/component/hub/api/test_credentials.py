@@ -99,6 +99,12 @@ def test_the_list_counts_each_credential_s_enabled_referrers_and_names_every_bin
             "settings": [{"key": "variant", "choices": ["classic", "fine-grained"]}],
         }
     ]
+    forges = {forge["slug"]: forge["forge_id"] for forge in hub.client.get("/api/forges").json()["forges"]}
+    assert hub.client.post("/api/forges/other/retire").status_code == 200
+    listed = CredentialsListView.model_validate(hub.client.get("/api/credentials").json())
+    assert {(view.forge_id, tuple(view.bindings)) for view in listed.forge_bindings} == {
+        (forges["ghe"], ("github.token",))
+    }
 
 
 def test_a_credential_is_created_listed_read_renamed_retired_and_enabled(hub: HubHarness) -> None:

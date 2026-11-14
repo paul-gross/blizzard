@@ -68,7 +68,7 @@ describe('AdminShell', () => {
       'GET /api/work-sources': () => SOURCES,
       'GET /api/repositories': () => REPOSITORIES,
       'GET /api/secrets': () => SECRETS,
-      'GET /api/credentials': () => ({ credentials: [credentialSummary(), credentialSummary({ credential_id: 'cred_b' })], bindings: [] }),
+      'GET /api/credentials': () => ({ credentials: [credentialSummary(), credentialSummary({ credential_id: 'cred_b' })], bindings: [], forge_bindings: [] }),
       'GET /api/config/changes': () => configChangesPage({ total: slug === null ? 42 : 7 }),
       'GET /api/projects/{project}/source-links': () => ({
         source_links: [sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null })],

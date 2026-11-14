@@ -42,7 +42,8 @@ export class CredentialDetail {
   protected readonly editMutation = injectEditCredentialMutation();
   private readonly lifecycleMutation = injectCredentialLifecycleMutation();
   private readonly bindings = computed(() => this.credentialsQuery.data()?.bindings ?? []);
-  protected readonly fields = computed(() => credentialFields(this.forgesQuery.data() ?? [], this.bindings()));
+  private readonly forgeBindings = computed(() => this.credentialsQuery.data()?.forge_bindings ?? []);
+  protected readonly fields = computed(() => credentialFields(this.forgesQuery.data() ?? [], this.bindings(), this.forgeBindings()));
   protected readonly vm = computed(() => credentialRecordVm(this.credentialQuery.data()));
   protected readonly state = computed<KitAsyncStateValue>(() => restingAsyncState(this.key() === null, this.credentialQuery, this.vm() === null));
   protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));

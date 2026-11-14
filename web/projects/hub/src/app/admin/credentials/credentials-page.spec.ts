@@ -24,6 +24,10 @@ const LIST = {
     { name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', choices: ['classic', 'fine-grained'] }] },
     { name: 'gitlab.token', forge_kind: 'gitlab', settings: [] },
   ],
+  forge_bindings: [
+    { forge_id: 'frg_g', bindings: ['github.token'] },
+    { forge_id: 'frg_l', bindings: ['gitlab.token'] },
+  ],
 };
 const FORGES = {
   forges: [
@@ -96,7 +100,7 @@ describe('CredentialsPage', () => {
     expect(row.textContent).toContain('used by 2 records');
   });
 
-  it('offers only the bindings of the picked forge\'s kind', async () => {
+  it('offers only the bindings the hub allows on the picked forge', async () => {
     const { harness, el } = await open('/admin/credentials');
     testid(el, 'admin-credentials-new')!.click();
     await settle(harness.fixture);

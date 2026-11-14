@@ -134,6 +134,7 @@ export type {
   CredentialSettingView,
   CredentialSummary,
   CredentialsListView,
+  ForgeBindingsView,
   SecretCreateRequestWritable,
   SecretReplaceRequest,
   RepositoryPatchRequest,

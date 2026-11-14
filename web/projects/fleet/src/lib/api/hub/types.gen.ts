@@ -4740,7 +4740,8 @@ export type CredentialSummary = {
 /**
  * CredentialsListView
  *
- * Every stored credential by slug — ``GET /api/credentials`` — and every binding a credential may name.
+ * Every stored credential by slug — ``GET /api/credentials`` — every binding a credential may name, and the
+ * bindings each enabled forge allows.
  */
 export type CredentialsListView = {
     /**
@@ -4751,6 +4752,10 @@ export type CredentialsListView = {
      * Credentials
      */
     credentials: Array<CredentialListItem>;
+    /**
+     * Forge Bindings
+     */
+    forge_bindings: Array<ForgeBindingsView>;
 };
 
 /**
@@ -7637,6 +7642,22 @@ export type FoldWouldCloseCycleProblem = {
      */
     type: 'urn:blizzard:problem:fold-would-close-cycle';
     [key: string]: unknown;
+};
+
+/**
+ * ForgeBindingsView
+ *
+ * An enabled forge, by id, with the name of every binding a credential on it may name.
+ */
+export type ForgeBindingsView = {
+    /**
+     * Bindings
+     */
+    bindings: Array<string>;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
 };
 
 /**

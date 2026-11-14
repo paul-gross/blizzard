@@ -5,6 +5,7 @@ import {
   type CredentialListItem,
   type CredentialPatchRequest,
   type CredentialSummary,
+  type ForgeBindingsView,
   type ForgeSummary,
 } from 'fleet';
 
@@ -22,24 +23,24 @@ export function settingField(binding: string, key: string): string {
   return `setting.${binding}.${key}`;
 }
 
-/** The binding choices: for each enabled forge, every binding of its kind, keyed by the forge, so
- * the select offers only the picked forge's bindings and a forge change clears the pick. */
-export function bindingOptions(forges: readonly ForgeSummary[], bindings: readonly CredentialBindingView[]): readonly ConfigFieldOption[] {
-  return forgeOptions(forges).flatMap((forge) =>
-    bindings
-      .filter((binding) => binding.forge_kind === forge.kind)
-      .map((binding) => ({ value: binding.name, label: binding.name, kind: forge.value })),
-  );
+/** The binding choices: for each enabled forge, every binding the hub allows on it, keyed by the
+ * forge, so the select offers only the picked forge's bindings and a forge change clears the pick. */
+export function bindingOptions(forgeBindings: readonly ForgeBindingsView[]): readonly ConfigFieldOption[] {
+  return forgeBindings.flatMap((forge) => forge.bindings.map((name) => ({ value: name, label: name, kind: forge.forge_id })));
 }
 
 /** A credential's form fields. The forge and binding are fixed at create; each binding's settings
  * are selects of the choices the hub lists for it. */
-export function credentialFields(forges: readonly ForgeSummary[], bindings: readonly CredentialBindingView[]): readonly ConfigFieldDef[] {
+export function credentialFields(
+  forges: readonly ForgeSummary[],
+  bindings: readonly CredentialBindingView[],
+  forgeBindings: readonly ForgeBindingsView[],
+): readonly ConfigFieldDef[] {
   return [
     { key: 'slug', label: 'Slug', kind: 'text', required: true },
     { key: 'name', label: 'Name', kind: 'text' },
     { key: 'forge', label: 'Forge', kind: 'select', required: true, createOnly: true, options: forgeOptions(forges) },
-    { key: 'binding', label: 'Binding', kind: 'select', required: true, createOnly: true, filterBy: 'forge', options: bindingOptions(forges, bindings) },
+    { key: 'binding', label: 'Binding', kind: 'select', required: true, createOnly: true, filterBy: 'forge', options: bindingOptions(forgeBindings) },
     { key: 'secret', label: 'Secret', kind: 'text', required: true },
     ...bindings.flatMap((binding) =>
       binding.settings.map((setting): ConfigFieldDef => ({

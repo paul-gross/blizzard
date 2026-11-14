@@ -82,7 +82,7 @@ describe('RepositoryDetail', () => {
       'GET /api/config/changes': () => HISTORY,
       'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_lab', slug: 'lab', name: 'Lab' })] }),
       'GET /api/forges/{forge}': (_request, { forge }) => forgeDetail({ forge_id: forge }),
-      'GET /api/credentials': () => ({ credentials: CREDENTIALS, bindings: [] }),
+      'GET /api/credentials': () => ({ credentials: CREDENTIALS, bindings: [], forge_bindings: [] }),
     });
     TestBed.configureTestingModule({
       providers: [

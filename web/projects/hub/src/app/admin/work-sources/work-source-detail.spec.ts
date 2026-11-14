@@ -81,6 +81,7 @@ describe('WorkSourceDetail', () => {
           credentialSummary({ credential_id: 'cred_e', slug: 'ghe-main', forge_id: 'frg_ghe' }),
         ],
         bindings: [],
+        forge_bindings: [],
       }),
     });
     TestBed.configureTestingModule({

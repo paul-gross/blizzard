@@ -102,3 +102,8 @@ class GitHubTokenBinding:
 
 #: Every binding a credential may name, by name.
 CREDENTIAL_BINDINGS: Mapping[str, CredentialBinding] = {binding.name: binding for binding in (GitHubTokenBinding(),)}
+
+
+def bindings_for_kind(kind: str) -> tuple[str, ...]:
+    """The name of every binding a credential on a forge of ``kind`` may name."""
+    return tuple(binding.name for binding in CREDENTIAL_BINDINGS.values() if binding.forge_kind == kind)

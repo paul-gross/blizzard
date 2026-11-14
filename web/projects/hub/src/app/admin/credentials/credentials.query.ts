@@ -21,7 +21,7 @@ export function injectCredentialsQuery(includeRetired: () => boolean) {
       queryFn: async (): Promise<CredentialsListView> => {
         const { data, error } = await listCredentialsApiCredentialsGet({ query: { include_retired: retired }, throwOnError: false });
         if (error) throw error;
-        return data ?? { credentials: [], bindings: [] };
+        return data ?? { credentials: [], bindings: [], forge_bindings: [] };
       },
     };
   });

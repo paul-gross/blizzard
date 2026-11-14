@@ -34,7 +34,8 @@ export class CredentialsPage {
   private readonly forgesQuery = injectForgesQuery(() => false);
   protected readonly createMutation = injectCreateCredentialMutation();
   private readonly bindings = computed(() => this.credentialsQuery.data()?.bindings ?? []);
-  protected readonly fields = computed(() => credentialFields(this.forgesQuery.data() ?? [], this.bindings()));
+  private readonly forgeBindings = computed(() => this.credentialsQuery.data()?.forge_bindings ?? []);
+  protected readonly fields = computed(() => credentialFields(this.forgesQuery.data() ?? [], this.bindings(), this.forgeBindings()));
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
