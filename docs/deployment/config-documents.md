@@ -87,7 +87,9 @@ and [cadences](./cadences.md) own the field meanings, and `GET /api/config/schem
 `/scopes`, `/routines`, and `/cadences` serve each entry's JSON Schema, and `/api/config/schema/forges` serves forge
 entries; `?version=1` is refused `config_version_retired`. An unknown field is refused. `secrets` lists secret names
 that must already exist and be active; a document never carries a secret's value, so set one first with
-`blizzard hub secret create`.
+`blizzard hub secret create`. A document names no credential: each source and repository it applies acts with the
+`github.token` credential reading its secret, and [credentials.md](./credentials.md) owns credentials and rebinding a
+record to another one.
 
 A scope entry is keyed by its `slug`, and so is a routine entry; a routine's `name` is its editable display name. An
 entry states its `slug`, its `name`, or both. A `name`-only entry is the older form, deprecated and removed in 0.6: it

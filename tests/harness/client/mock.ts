@@ -16,6 +16,17 @@ export interface MockIssue {
   title: string;
 }
 
+/** The kinds of personal access token the mock forge's `register_token` lever takes. */
+export type MockTokenKind = 'classic' | 'fine-grained';
+
+/** `POST /_levers/register_token`: a personal access token the forge authenticates once `strict_tokens` holds. */
+export interface MockTokenRegistration {
+  token: string;
+  token_kind: MockTokenKind;
+  /** A classic token's scopes, echoed in `X-OAuth-Scopes`. */
+  scopes?: string[];
+}
+
 /** The mock forge's lever listing, `GET /_levers`. */
 export interface MockLeverListing {
   state_levers: string[];

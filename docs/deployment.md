@@ -36,6 +36,7 @@ owns what that assumption still costs.
 | [`deployment/human-auth.md`](./deployment/human-auth.md)   | You are putting operators behind SSO: the `[auth]` table, who may sign in and why one is refused, the superuser bootstrap, roles, runner-side federation, and what a TLS-terminating proxy changes |
 | [`deployment/tenants.md`](./deployment/tenants.md)         | You are running several fleets on one hub, or managing who belongs to one: tenants, hub administrators, members, invitations, and `--tenant`                                                       |
 | [`deployment/secrets.md`](./deployment/secrets.md)         | You are storing a credential in the hub, choosing where its encryption key lives, or rotating that key                                                                                             |
+| [`deployment/credentials.md`](./deployment/credentials.md) | You are giving a repository or work source a GitHub token: the credential record, the token's permissions, classic against fine-grained, the carry-over at upgrade, rebinding, and what is refused |
 
 ### Configuring what workers do
 
