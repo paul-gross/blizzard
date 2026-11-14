@@ -112,6 +112,7 @@ def test_a_projects_entry_creates_the_project_and_its_links_with_the_apply_id(hu
     apply_id = applied.json()["apply_id"]
     written = [c for c in _changes(hub) if c["apply_id"] == apply_id]
     assert {(c["record_kind"], c["door"]) for c in written} == {
+        ("credential", "apply"),
         ("work_source", "apply"),
         ("repository", "apply"),
         ("project", "apply"),

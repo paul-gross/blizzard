@@ -1493,6 +1493,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             repositories=stores.repository_records,
             work_sources=stores.work_source_records,
             forges=stores.forge_records,
+            credentials=stores.credential_records,
             projects=stores.projects,
             links=stores.project_links,
             positions=stores.project_positions,

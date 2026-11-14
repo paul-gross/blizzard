@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    DeclaredOldField,
     ForgeDeclaration,
     PlannedPosition,
     PlannedWrite,
@@ -165,6 +166,28 @@ def test_an_apply_plan_editing_a_repository_naming_a_credential_declares_the_cre
     assert plan.locks == tuple(
         sorted({*_URGENCY_LOCKS, forge_lock(_GHE), secret_lock("repo-tok"), credential_lock(CredentialId("cred_demo"))})
     )
+
+
+def test_an_apply_plan_resolving_an_old_field_declares_its_forge_secret_and_planned_credential_keys() -> None:
+    planned = CredentialId("cred_planned")
+    old = DeclaredOldField("repositories", 0, "secret_name", _GHE, "repo-tok", planned)
+    declaration = ConfigDeclaration(
+        repositories=(
+            RepositoryDeclaration(
+                "demo",
+                None,
+                replace(_REPO, credential_id=planned),
+                RepositoryEdit(),
+                RepositoryId("repo_demo"),
+            ),
+        ),
+        old_fields=(old,),
+    )
+
+    plan = reconcile(declaration, _STORED, _CTX, at=_AT)
+
+    assert old.locks() == [forge_lock(_GHE), secret_lock("repo-tok"), credential_lock(planned)]
+    assert plan.locks == tuple(sorted(old.locks()))
 
 
 def test_an_apply_entry_moving_the_secret_of_a_repository_naming_a_credential_is_refused_at_its_entry() -> None:

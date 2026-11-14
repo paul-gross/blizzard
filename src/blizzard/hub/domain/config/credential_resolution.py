@@ -8,7 +8,7 @@ is the configuration writer's (``bzh:domain-orchestration-split``)."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 
 from blizzard.foundation.landing_policy import LandingPolicy
@@ -125,6 +125,30 @@ def old_field_draft(forge_id: ForgeId, secret_name: str, *, slug: str) -> Creden
     return CredentialDraft(
         slug=slug, name=name, forge_id=forge_id, binding=OLD_FIELD_BINDING, secret_name=secret_name, settings={}
     )
+
+
+def held_for_old_field(
+    forge_id: ForgeId, secret_name: str, held: Iterable[ConfiguredCredential]
+) -> ConfiguredCredential | None:
+    """The credential of ``held`` an old field naming ``secret_name`` on ``forge_id`` resolves to — the one on the forge
+    acting as its ``github.token`` authority, retired or not — or ``None`` when none does."""
+    authority = old_field_authority(secret_name)
+    return next((c for c in held if c.fields.forge_id == forge_id and c.authority == authority), None)
+
+
+def resolve_old_field(
+    forge_id: ForgeId,
+    secret_name: str,
+    held: Iterable[ConfiguredCredential],
+    taken: Callable[[], Collection[str]],
+) -> ConfiguredCredential | CredentialDraft:
+    """What an old field naming ``secret_name`` on ``forge_id`` resolves to over ``held``: the held credential acting
+    as its authority (:func:`held_for_old_field`), else the draft of the credential it would create, its slug clear of
+    ``taken`` — the tenant's current and former credential slugs, read only when no credential is held."""
+    found = held_for_old_field(forge_id, secret_name, held)
+    if found is not None:
+        return found
+    return old_field_draft(forge_id, secret_name, slug=new_credential_slug(secret_name, taken()))
 
 
 def credential_offers(credential: ConfiguredCredential, kind: frozenset[Capability]) -> frozenset[Capability]:

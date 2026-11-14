@@ -716,13 +716,16 @@ def _apply_yaml(hub: HubHarness, text: str, *, dry_run: bool = False):
     )
 
 
-def _forge_ids_masked(outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """``outcomes`` with each forge id a create names masked: two hubs each mint their own forge for one origin."""
+def _minted_ids_masked(outcomes: list[dict[str, Any]], *fields: str) -> list[dict[str, Any]]:
+    """``outcomes`` with the id each of ``fields`` a create names masked: two applies each mint their own forge for
+    one origin, and their own credential for one old secret field."""
     return [
         {
             **outcome,
             "diff": [
-                {**change, "new": "frg_*"} if change["field"] == "forge" and change["old"] is None else change
+                {**change, "new": f"{change['field']}_*"}
+                if change["field"] in fields and change["old"] is None
+                else change
                 for change in outcome["diff"]
             ],
         }
@@ -745,7 +748,9 @@ def test_yaml_and_json_bodies_apply_identically(hub: HubHarness, tmp_path: Path)
     from_yaml = _apply_yaml(other, _YAML_DOCUMENT)
     assert from_json.status_code == 200, from_json.text
     assert from_yaml.status_code == 200, from_yaml.text
-    assert _forge_ids_masked(from_json.json()["outcomes"]) == _forge_ids_masked(from_yaml.json()["outcomes"])
+    assert _minted_ids_masked(from_json.json()["outcomes"], "forge", "credential") == _minted_ids_masked(
+        from_yaml.json()["outcomes"], "forge", "credential"
+    )
     assert [(o["kind"], o["key"], o["op"]) for o in from_json.json()["outcomes"]] == [
         ("work_source", "demo", "create"),
         ("repository", "blizzard", "create"),
@@ -761,19 +766,21 @@ def test_a_dry_run_writes_nothing_and_matches_the_real_apply(hub: HubHarness) ->
     assert _changes(hub) == before
     assert hub.client.get("/api/work-sources/demo").status_code == 404
     real = _apply_yaml(hub, _YAML_DOCUMENT)
-    assert real.json()["outcomes"] == dry.json()["outcomes"]
+    assert _minted_ids_masked(real.json()["outcomes"], "credential") == _minted_ids_masked(
+        dry.json()["outcomes"], "credential"
+    )
 
 
 def test_the_rows_an_apply_writes_carry_the_apply_door_and_one_apply_id(hub: HubHarness) -> None:
     applied = _apply_yaml(hub, _YAML_DOCUMENT).json()
     rows = [r for r in _changes(hub) if r["door"] == "apply"]
-    assert [r["record_kind"] for r in rows] == ["repository", "work_source"]
+    assert [r["record_kind"] for r in rows] == ["repository", "work_source", "credential"]
     assert {r["apply_id"] for r in rows} == {applied["apply_id"]}
     assert _apply_yaml(hub, _YAML_DOCUMENT).json()["outcomes"] == [
         {"kind": "work_source", "key": "demo", "op": "unchanged", "diff": []},
         {"kind": "repository", "key": "blizzard", "op": "unchanged", "diff": []},
     ]
-    assert len([r for r in _changes(hub) if r["door"] == "apply"]) == 2
+    assert len([r for r in _changes(hub) if r["door"] == "apply"]) == 3
 
 
 def test_a_claimed_apply_door_on_another_route_still_records_api(hub: HubHarness) -> None:

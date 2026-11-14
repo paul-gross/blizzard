@@ -37,6 +37,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    DeclaredOldField,
     EntryOutcome,
     IConfigApplyWriter,
     PlannedWrite,
@@ -64,10 +65,9 @@ from blizzard.hub.domain.config.credential_resolution import (
     CredentialDecision,
     credential_offers,
     decide_credential,
-    new_credential_slug,
     old_field_authority,
-    old_field_draft,
     require_referrers_honoured,
+    resolve_old_field,
 )
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -141,6 +141,16 @@ class _Reresolve(Exception):
 
     def __init__(self, credential_id: CredentialId) -> None:
         super().__init__(credential_id)
+        self.credential_id = credential_id
+
+
+class _ApplyReresolve(Exception):
+    """Raised out of an apply's unit whose old field resolved to ``credential_id`` rather than ``planned``, the one the
+    apply planned and locked — one another write created first — so the apply runs again naming that one."""
+
+    def __init__(self, planned: CredentialId, credential_id: CredentialId) -> None:
+        super().__init__(planned, credential_id)
+        self.planned = planned
         self.credential_id = credential_id
 
 
@@ -449,13 +459,17 @@ class ConfigAuthoring:
         another; :class:`_Reresolve` when it is a credential other than ``old.planned``, the create's own lost race
         included — its insert runs in a savepoint, so the unit reads on."""
         authority = old_field_authority(old.secret_name)
-        held = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
-        if held is None:
-            slug = new_credential_slug(old.secret_name, self._credentials.held_slugs(transaction=locked))
+        found = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
+        held = resolve_old_field(
+            old.forge_id,
+            old.secret_name,
+            () if found is None else (found,),
+            lambda: self._credentials.held_slugs(transaction=locked),
+        )
+        if isinstance(held, CredentialDraft):
             binding = binding_named(OLD_FIELD_BINDING)
-            draft = old_field_draft(old.forge_id, old.secret_name, slug=slug)
             record, change = ConfiguredCredential.new(
-                draft, binding, ctx, at=self._clock.now(), credential_id=old.planned
+                held, binding, ctx, at=self._clock.now(), credential_id=old.planned
             )
             facts = self._named_facts(record.locks(), locked)
             try:
@@ -465,8 +479,8 @@ class ConfigAuthoring:
             try:
                 return self._credentials.create(record, change=change, transaction=locked)
             except (CredentialAuthorityTaken, CredentialSlugTaken):
-                held = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
-                raise _Reresolve(old.planned if held is None else held.credential_id) from None
+                first = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
+                raise _Reresolve(old.planned if first is None else first.credential_id) from None
         if held.credential_id != old.planned:
             raise _Reresolve(held.credential_id)
         if held.retired:
@@ -839,15 +853,36 @@ class ConfigAuthoring:
         self, declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, dry_run: bool
     ) -> tuple[EntryOutcome, ...]:
         """Reconcile ``declaration`` against ``stored`` and commit every write in one unit declaring the plan's locks,
-        or — under ``dry_run`` — run that same unit and roll it back. The outcomes are the same either way."""
+        or — under ``dry_run`` — run that same unit and roll it back. The outcomes are the same either way.
+
+        Each old secret field the declaration resolves (:attr:`ConfigDeclaration.old_fields`) resolves in that unit,
+        after the forge writes and before every other, to its ``github.token`` credential, created when there is none
+        (:meth:`credential_for_old_field`); the apply runs once more naming the credential another write created first
+        when the unit read one."""
+        try:
+            return self._apply(declaration, stored, ctx, dry_run=dry_run)
+        except _ApplyReresolve as moved:
+            return self._apply(_naming(declaration, moved.planned, moved.credential_id), stored, ctx, dry_run=dry_run)
+
+    def _apply(
+        self, declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeContext, *, dry_run: bool
+    ) -> tuple[EntryOutcome, ...]:
         plan = reconcile(declaration, stored, ctx, at=self._clock.now())
         self._require_planned_offered(plan)
         if plan.writes or plan.positions:
             try:
                 with self._transactions.begin() as transaction:
                     locked = transaction.lock_set(keys=plan.locks)
+                    writes = plan.writes
+                    if declaration.old_fields:
+                        forges = tuple(write for write in writes if isinstance(write.record, ConfiguredForge))
+                        if forges:
+                            self._apply_writer.apply(forges, transaction=locked)
+                        for old in declaration.old_fields:
+                            self._resolve_declared(old, ctx, locked)
+                        writes = tuple(write for write in writes if not isinstance(write.record, ConfiguredForge))
                     self._apply_writer.apply(
-                        self._judged(plan.writes, locked),
+                        self._judged(writes, locked),
                         transaction=locked,
                         positions=plan.positions,
                         guards=plan.guards,
@@ -857,6 +892,19 @@ class ConfigAuthoring:
             except _Rollback:
                 pass
         return plan.outcomes
+
+    def _resolve_declared(self, old: DeclaredOldField, ctx: ChangeContext, locked: LockedTransaction) -> None:
+        """Resolve the declared old field ``old`` in ``locked`` (:meth:`credential_for_old_field`), each refusal at its
+        entry's old field."""
+        try:
+            self.credential_for_old_field(_OldField(old.field, old.forge_id, old.secret_name, old.planned), ctx, locked)
+        except _Reresolve as moved:
+            raise _ApplyReresolve(old.planned, moved.credential_id) from None
+        except CredentialUnavailable as refused:
+            unavailable = CredentialUnavailable(refused.credential, retired=refused.retired, field=old.field)
+            raise ApplyEntryRefused(old.section, old.index, unavailable) from refused
+        except ConfigFieldError as refused:
+            raise ApplyEntryRefused(old.section, old.index, refused) from refused
 
     # --- Carry-over --------------------------------------------------------------
 
@@ -1031,6 +1079,36 @@ class ConfigAuthoring:
                 record.name, retired=retired, at=now, by=ctx.actor, change=change, transaction=locked
             )
         return True
+
+
+def _naming(declaration: ConfigDeclaration, planned: CredentialId, moved: CredentialId) -> ConfigDeclaration:
+    """``declaration`` with every write and old field naming the credential ``planned`` naming ``moved`` instead."""
+
+    def named(credential_id: CredentialId | None | UnsetType) -> CredentialId | None | UnsetType:
+        return moved if credential_id == planned else credential_id
+
+    return replace(
+        declaration,
+        work_sources=tuple(
+            replace(
+                entry,
+                fields=replace(entry.fields, credential_id=named(entry.fields.credential_id)),
+                edit=replace(entry.edit, credential_id=named(entry.edit.credential_id)),
+            )
+            for entry in declaration.work_sources
+        ),
+        repositories=tuple(
+            replace(
+                entry,
+                fields=replace(entry.fields, credential_id=named(entry.fields.credential_id)),
+                edit=replace(entry.edit, credential_id=named(entry.edit.credential_id)),
+            )
+            for entry in declaration.repositories
+        ),
+        old_fields=tuple(
+            replace(old, planned=moved) if old.planned == planned else old for old in declaration.old_fields
+        ),
+    )
 
 
 #: The records whose writes name a forge and a secret.

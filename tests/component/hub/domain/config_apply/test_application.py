@@ -53,6 +53,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         repositories=services.repository_records,
         work_sources=services.work_source_records,
         forges=services.forge_records,
+        credentials=services.credential_records,
         projects=services.projects,
         links=services.project_links,
         positions=services.project_positions,
@@ -80,10 +81,13 @@ def test_a_real_apply_mints_its_apply_id_and_record_ids_from_the_clock(hub: HubH
     (repository,) = hub.services.repository_records.list_all(include_retired=True)
     repository_id = Id.parse(repository.repository_id)
     assert repository_id is not None and repository_id.minted_at == _AT
+    credential_id = Id.parse(repository.fields.credential_id or "")
+    assert credential_id is not None and credential_id.minted_at == _AT
     changes = hub.services.config_changes.page(
         before=None, limit=50, record_kind=None, record_key=None, project_id=None
     )
     assert {change.record_kind.value for change in changes if change.apply_id == applied.apply_id} == {
+        "credential",
         "repository",
         "project",
         "project_repository_link",

@@ -25,6 +25,7 @@ from blizzard.hub.domain.config.changes import (
     RecordKind,
     RecordState,
 )
+from blizzard.hub.domain.config.credential_naming import CredentialId, credential_lock
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
@@ -47,6 +48,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
     RepositoryId,
 )
+from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
     ConfiguredWorkSource,
@@ -132,6 +134,26 @@ class ForgeDeclaration:
     fields: ForgeFields
     edit: ForgeEdit
     forge_id: ForgeId
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredOldField:
+    """A referrer entry's old secret field — ``secret_name`` of a repository, ``secret`` of a work source — that
+    resolves, inside the apply's unit, to the ``github.token`` credential reading ``secret_name`` on ``forge_id``. The
+    entry is at ``section`` and ``index``, and ``planned`` is the credential its write names: the one acting as that
+    authority when the edge read it, else a fresh id for the one the apply creates."""
+
+    section: str
+    index: int
+    field: str
+    forge_id: ForgeId
+    secret_name: str
+    planned: CredentialId
+
+    def locks(self) -> list[LockKey]:
+        """The keys resolving it relies on: the forge's, the secret's and the planned credential's."""
+        return [forge_lock(self.forge_id), secret_lock(self.secret_name), credential_lock(self.planned)]
 
 
 @domain_model
@@ -268,6 +290,8 @@ class ConfigDeclaration:
     #: The urgencies the routine and cadence writes newly name; their locks are declared beside the urgency sections'.
     reference_guards: tuple[UrgencyReferenceGuard, ...] = ()
     reference_locks: tuple[LockKey, ...] = ()
+    #: The old secret fields the work-source and repository entries resolve to a credential, in document order.
+    old_fields: tuple[DeclaredOldField, ...] = ()
 
 
 @domain_model
@@ -363,6 +387,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
                     *declaration.projects.locks,
                     *declaration.urgencies.locks,
                     *declaration.reference_locks,
+                    *(key for old in declaration.old_fields for key in old.locks()),
                     *_write_locks(plan.writes),
                 }
             )

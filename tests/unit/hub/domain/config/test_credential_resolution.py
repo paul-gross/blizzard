@@ -27,10 +27,12 @@ from blizzard.hub.domain.config.credential_resolution import (
     CredentialDecision,
     credential_offers,
     decide_credential,
+    held_for_old_field,
     new_credential_slug,
     old_field_authority,
     old_field_draft,
     require_referrers_honoured,
+    resolve_old_field,
 )
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -216,6 +218,25 @@ def test_an_old_field_beside_a_credential_of_another_binding_conflicts() -> None
 def test_an_old_field_resolves_to_a_github_token_credential_named_for_its_secret() -> None:
     assert old_field_authority("gh") == "secret/gh"
     assert old_field_draft(_GHE, "gh", slug="gh-2") == CredentialDraft("gh-2", "gh", _GHE, "github.token", "gh", {})
+
+
+def test_an_old_field_resolves_to_the_held_credential_acting_as_its_authority_on_its_forge_retired_or_not() -> None:
+    retired = _credential(retired=True)
+    elsewhere = _credential(forge=_OTHER)
+    other_secret = _credential(secret="other")
+
+    assert held_for_old_field(_GHE, "gh", [elsewhere, other_secret, retired]) is retired
+    assert held_for_old_field(_GHE, "gh", [elsewhere, other_secret]) is None
+
+
+def test_resolving_an_old_field_reads_the_taken_slugs_only_for_the_draft_it_would_create() -> None:
+    def taken() -> set[str]:
+        raise AssertionError("no slug is read for a held credential")
+
+    assert resolve_old_field(_GHE, "gh", [_CRED], taken) is _CRED
+    assert resolve_old_field(_GHE, "gh", [_credential(forge=_OTHER)], lambda: {"gh"}) == old_field_draft(
+        _GHE, "gh", slug="gh-2"
+    )
 
 
 # --- The slug rule ---------------------------------------------------------------------------------------------------
