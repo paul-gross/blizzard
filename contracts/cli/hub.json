@@ -3687,7 +3687,7 @@
               "type": "text"
             },
             {
-              "help": "How the credential authenticates: github.token.",
+              "help": "How the credential authenticates: github.token or github.app-installation.",
               "hidden": false,
               "kind": "option",
               "name": "binding",
@@ -3721,6 +3721,30 @@
               "required": false,
               "secondary_opts": [],
               "type": "choice"
+            },
+            {
+              "help": "The GitHub App's id, for a github.app-installation credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "app_id",
+              "opts": [
+                "--app-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "The GitHub App installation's id, for a github.app-installation credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "installation_id",
+              "opts": [
+                "--installation-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -3763,7 +3787,7 @@
           "short_help": "Add credential SLUG at revision 1 on the forge --forge names."
         },
         "edit": {
-          "help": "Change only the fields given on CREDENTIAL; a no-op keeps its revision.\n\nRefused when the new slug is another credential's, when --if-match names a stale revision, or when the change\nwould take away a capability an enabled repository acting with it needs.",
+          "help": "Change only the fields given on CREDENTIAL; a no-op keeps its revision. Any setting given replaces all its\nsettings, so give every setting its binding requires.\n\nRefused when the new slug is another credential's, when --if-match names a stale revision, or when the change\nwould take away a capability an enabled repository acting with it needs.",
           "params": [
             {
               "hidden": false,
@@ -3823,6 +3847,30 @@
               "required": false,
               "secondary_opts": [],
               "type": "choice"
+            },
+            {
+              "help": "The GitHub App's id, for a github.app-installation credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "app_id",
+              "opts": [
+                "--app-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "The GitHub App installation's id, for a github.app-installation credential.",
+              "hidden": false,
+              "kind": "option",
+              "name": "installation_id",
+              "opts": [
+                "--installation-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
             },
             {
               "help": "Refuse the change unless the credential is still at this revision.",
