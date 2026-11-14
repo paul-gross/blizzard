@@ -98,13 +98,13 @@ owns the pre-flight check an upgrade runs first.
 ## The rate budget
 
 The hub keeps one rate budget per forge and token authority — for a token held in a secret, the authority is
-`secret/<name>`, and a source or repository with no secret shares the forge's anonymous budget — in memory, shared by
-every caller that reaches the forge under that key: every repository and work source acting as that token, a `deliver`
-step's landing, the commit check, and each work source's forge-status labels, closes and fetches. Every write a
-`deliver` step sends as one token on one forge goes out one at a time. The budget learns from the `X-RateLimit-Limit`,
-`X-RateLimit-Remaining` and `X-RateLimit-Reset` headers the forge answers with, and once its remaining falls it turns
-the least important callers away before a request is sent, so each one waits for the reset rather than spending the last
-of the budget and failing:
+`secret/<name>`; for a GitHub App installation, `app/<app_id>/installation/<installation_id>`; and a source or
+repository with no secret shares the forge's anonymous budget — in memory, shared by every caller that reaches the forge
+under that key: every repository and work source acting as that token, a `deliver` step's landing, the commit check, and
+each work source's forge-status labels, closes and fetches. Every write a `deliver` step sends as one token on one forge
+goes out one at a time. The budget learns from the `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`
+headers the forge answers with, and once its remaining falls it turns the least important callers away before a request
+is sent, so each one waits for the reset rather than spending the last of the budget and failing:
 
 | Caller                                                                  | Sent while the remaining is   |
 | ----------------------------------------------------------------------- | ----------------------------- |
@@ -122,8 +122,8 @@ its `core` one. It is admitted through the same gate, and the budget learns the 
 left: it holds every caller of that key until the answer's `X-RateLimit-Reset`.
 
 `blizzard hub forge get <forge>` prints each budget's last reading as a `budget` line — the secret, or `(anonymous)`,
-the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`.
-Nothing is listed before the forge has answered.
+the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`,
+each naming its `authority`. Nothing is listed before the forge has answered.
 
 The hub records `forge-budget-low` (warning) when a budget's remaining first falls low enough to turn a caller away, and
 `forge-rate-limited` (warning) when the forge first refuses one for its rate — each at most once per budget per reset
