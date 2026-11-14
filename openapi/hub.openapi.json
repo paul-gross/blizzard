@@ -12309,8 +12309,19 @@
         "type": "object"
       },
       "ForgeBudgetView": {
-        "description": "One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous\nbudget), and the limit, remaining and reset the forge last answered with.",
+        "description": "One rate budget's last reading of one bucket: the authority its calls go out as and, for a token's, the secret\nit reads (each ``None`` for the anonymous budget), and the limit, remaining and reset the forge last answered\nwith.",
         "properties": {
+          "authority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authority"
+          },
           "bucket": {
             "title": "Bucket",
             "type": "string"
@@ -12344,7 +12355,8 @@
           "bucket",
           "limit",
           "remaining",
-          "reset"
+          "reset",
+          "authority"
         ],
         "title": "ForgeBudgetView",
         "type": "object"

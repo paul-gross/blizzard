@@ -7663,10 +7663,15 @@ export type ForgeBindingsView = {
 /**
  * ForgeBudgetView
  *
- * One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous
- * budget), and the limit, remaining and reset the forge last answered with.
+ * One rate budget's last reading of one bucket: the authority its calls go out as and, for a token's, the secret
+ * it reads (each ``None`` for the anonymous budget), and the limit, remaining and reset the forge last answered
+ * with.
  */
 export type ForgeBudgetView = {
+    /**
+     * Authority
+     */
+    authority: string | null;
     /**
      * Bucket
      */
