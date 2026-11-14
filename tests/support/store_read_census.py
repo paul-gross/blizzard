@@ -1409,7 +1409,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         return decide_close_enqueue(chunk.work_refs, lambda _source: True)
 
     # --- graphs -------------------------------------------------------------------------
-    default_graph = hub.services.graph_mint.ensure_default(
+    default_graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_GRAPH_YAML})

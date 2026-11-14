@@ -45,7 +45,7 @@ _UNTIL = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _default_graph(hub: HubHarness) -> Graph:
-    return hub.services.graph_mint.ensure_default(
+    return hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
 

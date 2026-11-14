@@ -123,7 +123,7 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
 
     def seeded(root: Path, count: int) -> tuple[Any, list[str]]:
         hub = build_hub(root)
-        graph = hub.services.graph_mint.ensure_default(
+        graph = hub.services.default_graph.ensure_default(
             hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
         )
         store = hub_store_connections(hub.engine)

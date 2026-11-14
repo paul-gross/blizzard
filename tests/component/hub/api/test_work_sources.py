@@ -271,7 +271,7 @@ def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_pat
 
 def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_pointer(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    default = hub.services.graph_mint.ensure_default(
+    default = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
 
@@ -352,7 +352,7 @@ def test_create_does_not_promote_and_priority_never_writes_a_queue_position(tmp_
 def test_create_against_a_retired_default_graph_is_503_and_writes_no_item(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
-    graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
     hub.services.graph_lifecycle.retire(graph, by="operator")
 
     resp = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
@@ -373,7 +373,7 @@ def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Pa
     assert blank.status_code == 422, blank.text
     assert hub.client.get("/api/graphs").json() == []
 
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     hub.services.graph_lifecycle.retire(graph, by="operator")

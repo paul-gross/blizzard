@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import Column, Connection, Row, Select
 
@@ -28,7 +27,6 @@ from blizzard.hub.domain.graph.model import (
     Graph,
     GraphArtifact,
     GraphSummary,
-    ILockedGraphNameRead,
     IReadGraphBodies,
     IWriteGraphRepository,
     Node,
@@ -36,10 +34,8 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
-from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_retired_select
-from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,
@@ -264,38 +260,14 @@ EDGES = EdgeRow()
 NODES = NodeRow()
 
 
-@dataclass(frozen=True)
-class LockedGraphName:
-    """The concrete name-lock handle — :class:`ILockedGraphNameRead`'s adapter, every read
-    resolving on :attr:`conn`, the connection the name's lock row was taken on."""
-
-    conn: Connection
-    _graphs: GraphStore
-
-    def get_enabled_by_name(self, name: str) -> Graph | None:
-        return self._graphs.enabled_by_name_conn(self.conn, name)
-
-    def any_minted(self, name: str) -> bool:
-        return self._graphs.any_minted_conn(self.conn, name)
-
-
 class GraphStore:
     """Read-write graph adapter over the hub store engine."""
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    @contextmanager
-    def locked_name(self, name: str) -> Generator[ILockedGraphNameRead, None, None]:
-        with self._store.write("locked_graph_name") as conn:
-            lock_keys(conn, LockNamespace.GRAPH_NAME, [name])
-            yield LockedGraphName(conn, self)
-
-    def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        self._mint_conn(cast(LockedGraphName, handle).conn, graph, definition_yaml=definition_yaml, at=at)
-
-    def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        with self._store.write("mint") as conn:
+    def mint(self, graph: Graph, *, definition_yaml: str, at: datetime, transaction: Transaction | None = None) -> None:
+        with connection_in(self._store, transaction, "mint", write=True) as conn:
             self._mint_conn(conn, graph, definition_yaml=definition_yaml, at=at)
 
     def _mint_conn(self, conn: Connection, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
@@ -329,8 +301,8 @@ class GraphStore:
                 return None
             return self._reify(conn, row)
 
-    def get_enabled_by_name(self, name: str) -> Graph | None:
-        with self._store.read("get_enabled_by_name") as conn:
+    def get_enabled_by_name(self, name: str, *, transaction: Transaction | None = None) -> Graph | None:
+        with connection_in(self._store, transaction, "get_enabled_by_name") as conn:
             return self.enabled_by_name_conn(conn, name)
 
     def enabled_by_name_conn(self, conn: Connection, name: str) -> Graph | None:
@@ -583,8 +555,8 @@ class GraphStore:
                 for row in rows
             ]
 
-    def any_minted(self, name: str) -> bool:
-        with self._store.read("any_minted") as conn:
+    def any_minted(self, name: str, *, transaction: Transaction | None = None) -> bool:
+        with connection_in(self._store, transaction, "any_minted") as conn:
             return self.any_minted_conn(conn, name)
 
     def any_minted_conn(self, conn: Connection, name: str) -> bool:

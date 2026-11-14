@@ -31,7 +31,7 @@ def _project(hub: HubHarness) -> str:
 
 
 def _graph(hub: HubHarness) -> str:
-    return hub.services.graph_mint.ensure_default(
+    return hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     ).name
 

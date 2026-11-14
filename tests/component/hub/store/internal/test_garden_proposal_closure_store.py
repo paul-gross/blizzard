@@ -382,7 +382,7 @@ class _StaleBeforeTheUnit:
 
 def _closure_service(hub: HubHarness, closures: IWriteGardenProposalClosureRepository) -> GardenProposalClosureService:
     store = hub_store_connections(hub.engine)
-    graph = hub.services.graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
+    graph = hub.services.default_graph.ensure_default(PACKAGED.default.doc, definition_yaml=PACKAGED.default.text)
     return GardenProposalClosureService(
         closures=closures,
         items=hub.services.garden_proposal_closure.items,

@@ -31,7 +31,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 def _routine(hub: HubHarness, slug: str, *linked: str) -> Routine:
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     project = project_record(hub, default_project(hub.engine))

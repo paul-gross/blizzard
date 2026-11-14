@@ -32,6 +32,7 @@ from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, Forg
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.domain.graph.model import graph_name_lock
 from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
@@ -43,7 +44,6 @@ from blizzard.hub.store.internal.credential_record_store import CredentialRecord
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
-from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
@@ -242,8 +242,8 @@ def _lock_rows(tenants: _Tenants, namespace: LockNamespace) -> list[tuple[str, s
 
 def test_two_tenants_locking_one_graph_name_each_hold_their_own_lock_row(tenants: _Tenants) -> None:
     for tenant in (tenants.first, tenants.second):
-        with GraphStore(scoped_connections(tenants.engine, tenant)).locked_name("release"):
-            pass
+        with HubTransactions(scoped_connections(tenants.engine, tenant)).begin() as unit:
+            unit.lock_set(keys=[graph_name_lock("release")])
 
     assert _lock_rows(tenants, LockNamespace.GRAPH_NAME) == sorted(
         [(tenants.first, "release"), (tenants.second, "release")]

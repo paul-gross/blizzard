@@ -58,7 +58,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # configured source degrades to its raw `{source}#{ref}` label and a null web_url, minted straight through the domain.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     unconfigured = WorkRef(source="retired", ref="9")

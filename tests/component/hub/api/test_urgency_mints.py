@@ -67,7 +67,7 @@ def _retired(hub: HubHarness, slug: str) -> str:
 
 
 def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | None = None) -> str:
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     routine = hub.services.routine_authoring.create(
@@ -82,7 +82,7 @@ def _routine(hub: HubHarness, slug: str = "nightly", *, default_urgency: str | N
 
 
 def _proposal(hub: HubHarness) -> None:
-    hub.services.graph_mint.ensure_default(
+    hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
@@ -134,7 +134,7 @@ def test_a_hub_item_create_writes_the_default(hub: HubHarness) -> None:
 
 
 def test_a_garden_proposal_accept_writes_the_default(hub: HubHarness) -> None:
-    hub.services.graph_mint.ensure_default(
+    hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     GardenProposalStore(hub_store_connections(hub.engine)).create(

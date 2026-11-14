@@ -447,7 +447,7 @@ def create_work_item(
     urgency = stated_urgency(request.urgency, services)
     project_id = project if project is not None else project_of_call(services).project_id
     try:
-        graph = services.graph_mint.ensure_default(
+        graph = services.default_graph.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
         )
     except DefaultGraphRetired as exc:

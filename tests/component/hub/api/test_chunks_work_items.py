@@ -93,7 +93,7 @@ def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     # Every ingest refuses an empty batch, so write the degenerate empty-pointer chunk straight
     # to the record store to prove the route still answers one.
     hub = build_hub(tmp_path)
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     chunk = Chunk(chunk_id="ch_empty", graph_id=graph.graph_id, work_refs=[], minted_at=hub.clock.now())
@@ -115,7 +115,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     pointer's entry carries neither, and its existing fields are unchanged."""
     forge = FakeWorkSource(name="widget", title="flaky test", body="please fix the flake")
     hub = build_hub(tmp_path, work_sources={"widget": forge})
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     hub_store = hub_store_connections(hub.engine)

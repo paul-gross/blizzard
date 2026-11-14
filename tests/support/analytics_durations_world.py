@@ -17,7 +17,7 @@ from tests.support.scaffolding import (
 )
 
 #: Named to match the packaged default graph's own name, so `POST /api/chunks` mints
-#: onto *this* graph — `GraphMintService.ensure_default` is idempotent by name.
+#: onto *this* graph — `DefaultGraphService.ensure_default` is idempotent by name.
 _GRAPH_YAML = """
 name: default-delivery
 entry: build

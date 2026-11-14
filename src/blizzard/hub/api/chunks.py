@@ -216,7 +216,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except IngestItemProjectMismatch as exc:
         raise ProblemHTTPException(partial(problems_chunks.ingest_item_project_mismatch_problem, str(exc))) from exc
     try:
-        graph = services.graph_mint.ensure_default(
+        graph = services.default_graph.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
         )
     except DefaultGraphRetired as exc:
