@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.credential_setting_kind import SettingKind
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.credential_bindings import (
@@ -30,6 +31,7 @@ from blizzard.hub.domain.config.forges import ForgeId
 _AT = datetime(2026, 11, 13, 9, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="ops", door=Door.CLI)
 _TOKEN = CREDENTIAL_BINDINGS["github.token"]
+_APP = CREDENTIAL_BINDINGS["github.app-installation"]
 _DRAFT = CredentialDraft(
     slug="deploy",
     name=None,
@@ -93,6 +95,47 @@ def test_an_unknown_binding_is_refused_naming_it() -> None:
     with pytest.raises(CredentialBindingUnknown, match=r"'github\.app'"):
         binding_named("github.app")
     assert binding_named("github.token") is _TOKEN
+
+
+# --- The github.app-installation binding -----------------------------------------------------------------------------
+
+
+def test_a_github_app_installation_takes_both_ids_as_positive_integers() -> None:
+    assert _APP.validate({"installation_id": 34, "app_id": 12}) == {"app_id": 12, "installation_id": 34}
+    assert _APP.setting_kinds == {
+        "app_id": SettingKind.POSITIVE_INTEGER,
+        "installation_id": SettingKind.POSITIVE_INTEGER,
+    }
+    assert _TOKEN.setting_kinds == {"variant": SettingKind.CHOICE}
+    assert (_APP.name, _APP.forge_kind, _APP.supplied) == ("github.app-installation", "github", False)
+
+
+@pytest.mark.parametrize(
+    ("settings", "field"),
+    [
+        ({"app_id": "12", "installation_id": 34}, "settings.app_id"),
+        ({"app_id": 12, "installation_id": True}, "settings.installation_id"),
+        ({"app_id": 12.0, "installation_id": 34}, "settings.app_id"),
+        ({"app_id": 0, "installation_id": 34}, "settings.app_id"),
+        ({"app_id": 12, "installation_id": -1}, "settings.installation_id"),
+        ({"installation_id": 34}, "settings.app_id"),
+        ({"app_id": 12}, "settings.installation_id"),
+        ({"app_id": 12, "installation_id": 34, "variant": "classic"}, "settings.variant"),
+    ],
+)
+def test_a_github_app_installation_refuses_a_bad_or_missing_id_naming_it(
+    settings: dict[str, object], field: str
+) -> None:
+    with pytest.raises(CredentialSettingsInvalid) as caught:
+        _APP.validate(settings)
+    assert caught.value.field == field
+    assert caught.value.code == "credential_settings_invalid"
+
+
+def test_a_github_app_installation_acts_as_its_installation_and_declares_its_kind() -> None:
+    kind = frozenset(Capability)
+    assert _APP.authority("key", {"app_id": 12, "installation_id": 34}) == "app/12/installation/34"
+    assert _APP.declared_offers({"app_id": 12, "installation_id": 34}, kind) == kind
 
 
 # --- The record ------------------------------------------------------------------------------------------------------

@@ -93,6 +93,28 @@ def test_edit_moves_the_revision_sets_the_variant_and_refuses_a_stale_if_match(c
     assert _cred(["edit", "gh"]).exit_code != 0
 
 
+def test_create_and_edit_an_app_installation_credential(client: TestClient) -> None:
+    _seed()
+    assert _cli("secret", ["create", "app-key"], stdin="-----BEGIN PRIVATE KEY-----\nkey\n").exit_code == 0
+    app = ["--forge", "forge-invalid", "--binding", "github.app-installation", "--secret", "app-key"]
+
+    created = _cred(["create", "app", *app, "--app-id", "12", "--installation-id", "34"])
+    half = _cred(["edit", "app", "--installation-id", "56"])
+    edited = _cred(["edit", "app", "--app-id", "12", "--installation-id", "56"])
+
+    assert created.exit_code == 0, created.output
+    assert half.exit_code != 0
+    assert "app_id" in half.output
+    assert edited.exit_code == 0, edited.output
+    shown = json.loads(_cred(["get", "app", "--json"]).stdout)
+    assert (shown["settings"], shown["authority"], shown["revision"]) == (
+        {"app_id": 12, "installation_id": 56},
+        "app/12/installation/56",
+        2,
+    )
+    assert "setting installation_id 56" in _cred(["get", "app"]).output
+
+
 def test_retire_refuses_while_named_then_retires_and_enables(client: TestClient) -> None:
     _seed()
     repo = _cli("repo", ["create", "blizzard", *_REPO, "--credential", "gh"])

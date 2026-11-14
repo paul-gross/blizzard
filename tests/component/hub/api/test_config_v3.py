@@ -138,6 +138,27 @@ def test_the_version_3_export_is_the_document_and_reapplies_unchanged(hub: HubHa
     assert {o["op"] for o in again.json()["outcomes"]} == {"unchanged"}
 
 
+def test_an_app_installation_credential_entry_round_trips_through_export(hub: HubHarness) -> None:
+    app = {
+        "slug": "app",
+        "name": "app",
+        "forge": "enterprise",
+        "binding": "github.app-installation",
+        "secret": "ops",
+        "settings": {"app_id": 12, "installation_id": 34},
+    }
+    document = {**_document(), "credentials": [app, _CREDENTIAL]}
+    assert _apply(hub, document).status_code == 200
+
+    exported = hub.client.get("/api/config/export", params={"version": 3}).json()
+
+    assert exported["credentials"] == document["credentials"]
+    assert _credential(hub, "app")["authority"] == "app/12/installation/34"
+    again = _apply(hub, {k: v for k, v in exported.items() if k != "version"})
+    assert again.status_code == 200, again.text
+    assert {o["op"] for o in again.json()["outcomes"]} == {"unchanged"}
+
+
 def test_a_dry_run_writes_nothing_and_answers_the_outcomes_of_the_apply(hub: HubHarness) -> None:
     before = _change_rows(hub)
     dry = _apply(hub, _document(), dry_run=True)

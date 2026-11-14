@@ -157,7 +157,9 @@ class GitHubAppInstallationBinding:
 
 
 #: Every binding a credential may name, by name.
-CREDENTIAL_BINDINGS: Mapping[str, CredentialBinding] = {binding.name: binding for binding in (GitHubTokenBinding(),)}
+CREDENTIAL_BINDINGS: Mapping[str, CredentialBinding] = {
+    binding.name: binding for binding in (GitHubTokenBinding(), GitHubAppInstallationBinding())
+}
 
 
 def bindings_for_kind(kind: str) -> tuple[str, ...]:
