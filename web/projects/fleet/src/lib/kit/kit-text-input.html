@@ -1,6 +1,7 @@
 @if (multiline()) {
   <textarea
     class="ctl"
+    [class.masked]="type() === 'password'"
     [rows]="rows()"
     [attr.placeholder]="placeholder()"
     [attr.aria-label]="ariaLabel()"
