@@ -46,5 +46,7 @@ def downgrade() -> None:
         raise RuntimeError(
             f"a hub before this revision cannot act with a {_APP_BINDING} credential: "
             + "; ".join(refused)
-            + " — retire and delete each credential named, then downgrade again"
+            + " — no hub command deletes a credential: with the hub stopped, null each repository's and work source's"
+            " credential_id naming one, delete its credential_lifecycle_facts, credential_former_slugs and credentials"
+            " rows by a direct store edit, then downgrade again"
         )

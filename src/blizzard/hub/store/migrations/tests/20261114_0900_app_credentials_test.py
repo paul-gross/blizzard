@@ -107,6 +107,7 @@ def test_the_downgrade_is_refused_naming_an_app_credential_and_writes_nothing(tm
 
     assert f"({tenant}): credential app" in str(refused.value)
     assert "credential token" not in str(refused.value)
+    assert "by a direct store edit" in str(refused.value)
     assert _version(engine) == _REVISION
     assert _rows(engine) == rows
 
