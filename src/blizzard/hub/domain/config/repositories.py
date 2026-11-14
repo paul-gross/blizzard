@@ -186,9 +186,6 @@ class ConfiguredRepository:
     retired: bool = False
     #: When the newest retirement fact was set; ``None`` while the record is enabled.
     retired_at: datetime | None = None
-    #: The credential the record acts with; ``None`` while it acts with its secret alone. Read from the store; no
-    #: verb writes it.
-    credential_id: CredentialId | None = None
 
     def locks(self) -> list[LockKey]:
         """The keyed locks a write of the repository relies on: the forge's and the secret's it names, and the

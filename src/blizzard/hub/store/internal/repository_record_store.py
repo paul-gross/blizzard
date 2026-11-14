@@ -328,7 +328,6 @@ def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
         created_by=row.created_by,
         retired=retired_at is not None,
         retired_at=retired_at,
-        credential_id=None if row.credential_id is None else CredentialId(row.credential_id),
     )
 
 

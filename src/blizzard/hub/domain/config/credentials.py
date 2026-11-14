@@ -411,10 +411,10 @@ def resolve_credential(
     """The credential ``record`` acts with: the one it names, retired or not; else an implicit ``github.token`` over
     its secret; else ``None``, an anonymous work source. :class:`CredentialUnavailable` when the credential it names
     does not exist."""
-    if record.credential_id is not None:
-        credential = credentials.get(record.credential_id)
+    if record.fields.credential_id is not None:
+        credential = credentials.get(record.fields.credential_id)
         if credential is None:
-            raise CredentialUnavailable(f"credential {record.credential_id}", retired=False)
+            raise CredentialUnavailable(f"credential {record.fields.credential_id}", retired=False)
         return ResolvedCredential(
             credential_id=credential.credential_id,
             forge_id=credential.fields.forge_id,

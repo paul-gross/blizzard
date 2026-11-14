@@ -75,13 +75,13 @@ _credentials_conforms: type[IReadCredentialRepository] = _Credentials
 def _repository(*, secret_name: str = "gh", credential_id: CredentialId | None = None) -> ConfiguredRepository:
     fields = RepositoryFields(forge_id=_FORGE, owner="acme", repo="demo", base_branch="master", secret_name=secret_name)
     record, _ = ConfiguredRepository.new("demo", None, fields, _CTX, at=_AT)
-    return replace(record, credential_id=credential_id)
+    return replace(record, fields=replace(record.fields, credential_id=credential_id))
 
 
 def _work_source(*, secret: str | None, credential_id: CredentialId | None = None) -> ConfiguredWorkSource:
     fields = WorkSourceFields(provider="github", locator="acme/demo", forge_id=_FORGE, annotate=False, secret="gh")
     record, _ = ConfiguredWorkSource.new("demo", None, fields, _CTX, at=_AT)
-    return replace(record, fields=replace(fields, secret=secret), credential_id=credential_id)
+    return replace(record, fields=replace(fields, secret=secret, credential_id=credential_id))
 
 
 @pytest.mark.parametrize("retired", [False, True])

@@ -310,7 +310,6 @@ def _of(row: Row[Any], *, retired: bool) -> ConfiguredWorkSource:
         created_at=row.created_at,
         created_by=row.created_by,
         retired=retired,
-        credential_id=None if row.credential_id is None else CredentialId(row.credential_id),
     )
 
 

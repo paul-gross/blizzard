@@ -95,7 +95,7 @@ class _World:
         return CacheKey.of(RecordKind.WORK_SOURCE, self.source_id, revisions)
 
     def act_with_credential(self) -> ConfiguredCredential:
-        """Point the work source at a new credential reading its own secret; no verb writes ``credential_id`` yet."""
+        """Point the work source at a new credential reading its own secret, in place of the one its write resolved."""
         self.authoring.create_secret(SecretName.parse("deploy"), "tok-deploy", OP)
         credential = self.authoring.create_credential(
             CredentialDraft(
@@ -117,7 +117,7 @@ class _World:
                 )
                 .values(credential_id=credential.credential_id)
             )
-        assert self.source().credential_id == credential.credential_id
+        assert self.source().fields.credential_id == credential.credential_id
         return credential
 
     def source(self):
@@ -204,10 +204,11 @@ def _on_github(engine: Engine) -> ForgeChoice:
     return ForgeChoice(forge=forge.forge_id, named=forge)
 
 
-def test_an_implicit_referrer_keys_on_its_own_secret_and_no_credential(world: _World) -> None:
+def test_a_referrer_written_naming_a_secret_keys_on_the_credential_that_write_resolved(world: _World) -> None:
     key = world.key()
 
-    assert (key.secret_name, key.secret_revision, key.credential_id, key.credential_revision) == ("gh", 1, None, None)
+    assert (key.secret_name, key.secret_revision, key.credential_revision) == ("gh", 1, 1)
+    assert key.credential_id == world.source().fields.credential_id is not None
 
 
 def test_a_credential_referrer_keys_on_the_credential_and_its_secret(world: _World) -> None:
