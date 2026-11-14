@@ -41,7 +41,7 @@ Your verbs are the `blizzard` CLI's `runner` commands whose help is labeled **Wo
 | `finding …`             | Findings your chunk's proposal answers | `--help`  |
 | `ask "<question>"`      | Ask a human an undecidable choice      | `--help`  |
 
-A person's answer or note binds every later session on the chunk: read `chunk asks` and `chunk notes` first; never
-contradict either.
+A person's answer or note binds later scope, acceptance and verdict; exceptions apply only within their scope. Read
+`chunk asks` and `chunk notes` first; never contradict either.
 
 `blizzard runner heartbeat` and `blizzard runner session-end` fire from your hooks; never invoke either.

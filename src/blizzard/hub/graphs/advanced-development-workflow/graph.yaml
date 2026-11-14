@@ -238,10 +238,10 @@ nodes:
       prompt: ./prompts/verify.judgement.md
       choices:
         pass:
-          description: The change verified end to end through verification methods the project declares.
+          description: The change meets acceptance, as amended by any scoped operator exceptions.
           to: review
         fail:
-          description: Verification surfaced failures, recorded in the verification-report asset for build to repair.
+          description: Verification found unresolved unwaived acceptance failures for build to repair, recorded in the verification-report asset.
           to: build
           prompt_addendum: ./prompts/build.from-verify.md
     retries:

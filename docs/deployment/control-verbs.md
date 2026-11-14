@@ -58,6 +58,13 @@ out changes nothing about the verb. `GET /api/chunks/{id}` carries each note bac
 resolutions — node, epoch, choice, who and when — `requeues` its hub requeues with who requeued, and `restarts` its
 restarts, each with its `note`. A resolve that loses the race drops its note along with its choice.
 
+The default worker instructions make answers and notes binding on later scope, acceptance, and verdict. In the packaged
+advanced-development-workflow, you can explicitly accept a named verification failure or waive a check's execution,
+including a manual check. State the exception's scope: accepting one baseline failure does not waive a new or unrelated
+failure, or verification of newly changed behavior. The report still records the actual failed or not-run result; an
+exception does not turn it into a pass. An unanswered question grants no exception. These instructions govern worker
+judgement, not mechanical check-gate enforcement.
+
 ## Restart
 
 `chunk restart [--to-graph <graph>] [--node <name>]` is CLI/API only (`POST /api/chunks/{id}/restart`): it forces the
