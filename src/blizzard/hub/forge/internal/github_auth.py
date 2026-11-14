@@ -125,9 +125,14 @@ APP_REQUIRED_PERMISSIONS: Mapping[ForgeScope, Mapping[str, str]] = {
     ForgeScope.WORK_SOURCE: {"metadata": "read", "issues": "write", "pull_requests": "read"},
 }
 #: The permissions a scope's token is minted with only when the installation grants them, and the capability its
-#: authorization withholds when it does not.
+#: authorization withholds when it does not. Reading a revision's checks reads its check runs and its commit statuses,
+#: so ``checks.read`` is withheld unless both are granted.
 APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, Capability]]] = {
-    ForgeScope.LANDING: {"checks": ("read", Capability.CHECKS_READ), "actions": ("write", Capability.CHECKS_RERUN)},
+    ForgeScope.LANDING: {
+        "checks": ("read", Capability.CHECKS_READ),
+        "statuses": ("read", Capability.CHECKS_READ),
+        "actions": ("write", Capability.CHECKS_RERUN),
+    },
     ForgeScope.WORK_SOURCE: {},
 }
 
