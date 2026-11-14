@@ -8,8 +8,10 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
+import structlog
 from fastapi import FastAPI
 from structlog.testing import capture_logs
 
@@ -21,6 +23,7 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.sweeps.locks import SweepLocks
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.domain.sweeps.roster import ISweepsEveryTenant, SweepRoster
+from blizzard.hub.store.errors import HubStoreErrorFactory
 
 
 class _CountingReconciler:
@@ -61,6 +64,116 @@ async def test_settings_read_failure_retries_without_running_a_pass(tmp_path: Pa
     assert any(entry["event"] == "sweep settings read failed" for entry in logs)
 
 
+async def test_failed_boot_read_wakes_on_interval_change(tmp_path: Path) -> None:
+    shutdown = asyncio.Event()
+    failed = asyncio.Event()
+    passed = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    listener: Callable[[frozenset[str]], None] | None = None
+    reads = 0
+    recovered = False
+
+    def subscribe(callback: Callable[[frozenset[str]], None]) -> Callable[[], None]:
+        nonlocal listener
+        listener = callback
+        return lambda: None
+
+    def config() -> HubConfig:
+        nonlocal reads
+        reads += 1
+        if not recovered:
+            failed.set()
+            raise HubStoreErrorFactory(structlog.get_logger()).from_driver(RuntimeError("offline"), operation="read")
+        return HubConfig(root=tmp_path, db_url="sqlite:///:memory:")
+
+    def reconcile() -> None:
+        loop.call_soon_threadsafe(passed.set)
+
+    sweep = Sweep(
+        SweepName.FORGE_STATUS,
+        reconcile,
+        5,
+        shutdown,
+        pass_config=config,
+        live_interval=lambda: 5,
+        subscribe=subscribe,
+        interval_key="annotation_interval_seconds",
+    )
+    with capture_logs() as logs:
+        task = asyncio.create_task(sweep.run())
+        try:
+            await asyncio.wait_for(failed.wait(), 1)
+            await asyncio.sleep(0.05)
+            assert reads == 1
+            recovered = True
+            assert listener is not None
+            listener(frozenset({"annotation_interval_seconds"}))
+            await asyncio.wait_for(passed.wait(), 1)
+            assert reads == 2
+        finally:
+            shutdown.set()
+            await asyncio.wait_for(task, 1)
+    assert sum("hub store read failed" in entry["event"] for entry in logs) == 1
+    assert not any(entry["event"] == "sweep settings read failed" for entry in logs)
+
+
+async def test_notification_during_retry_cleanup_is_not_lost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shutdown = asyncio.Event()
+    failed = asyncio.Event()
+    passed = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    listener: Callable[[frozenset[str]], None] | None = None
+    reads = 0
+    gather = asyncio.gather
+    injected = False
+
+    def subscribe(callback: Callable[[frozenset[str]], None]) -> Callable[[], None]:
+        nonlocal listener
+        listener = callback
+        return lambda: None
+
+    async def notify_during_cleanup(*args: Any, **kwargs: Any) -> Any:
+        nonlocal injected
+        if not injected:
+            injected = True
+            assert listener is not None
+            listener(frozenset({"annotation_interval_seconds"}))
+        return await gather(*args, **kwargs)
+
+    def config() -> HubConfig:
+        nonlocal reads
+        reads += 1
+        if reads <= 2:
+            failed.set()
+            raise RuntimeError("offline")
+        return HubConfig(root=tmp_path, db_url="sqlite:///:memory:")
+
+    def reconcile() -> None:
+        loop.call_soon_threadsafe(passed.set)
+
+    sweep = Sweep(
+        SweepName.FORGE_STATUS,
+        reconcile,
+        5,
+        shutdown,
+        pass_config=config,
+        live_interval=lambda: 5,
+        subscribe=subscribe,
+        interval_key="annotation_interval_seconds",
+    )
+    monkeypatch.setattr(asyncio, "gather", notify_during_cleanup)
+    task = asyncio.create_task(sweep.run())
+    try:
+        await asyncio.wait_for(failed.wait(), 1)
+        assert listener is not None
+        listener(frozenset({"annotation_interval_seconds"}))
+        await asyncio.wait_for(passed.wait(), 1)
+        assert reads == 3
+    finally:
+        shutdown.set()
+        await asyncio.wait_for(task, 1)
+
+
 async def test_wake_settings_read_failure_retries_without_another_change() -> None:
     shutdown = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -80,7 +193,7 @@ async def test_wake_settings_read_failure_retries_without_another_change() -> No
         reads += 1
         if reads == 2:
             failed_read.set()
-            raise RuntimeError("store unavailable")
+            raise HubStoreErrorFactory(structlog.get_logger()).from_driver(RuntimeError("offline"), operation="read")
         return 0 if reads >= 3 else 3600
 
     def reconcile() -> None:
@@ -100,19 +213,22 @@ async def test_wake_settings_read_failure_retries_without_another_change() -> No
         subscribe=subscribe,
         interval_key="annotation_interval_seconds",
     )
-    task = asyncio.create_task(sweep.run())
-    try:
-        await asyncio.wait_for(first_pass.wait(), 2)
-        assert listener is not None
-        listener(frozenset({"annotation_interval_seconds"}))
-        await asyncio.wait_for(failed_read.wait(), 2)
-        assert not task.done()
-        await asyncio.wait_for(task, 3)
-        assert calls == 2
-        assert reads >= 3
-    finally:
-        shutdown.set()
-        await task
+    with capture_logs() as logs:
+        task = asyncio.create_task(sweep.run())
+        try:
+            await asyncio.wait_for(first_pass.wait(), 2)
+            assert listener is not None
+            listener(frozenset({"annotation_interval_seconds"}))
+            await asyncio.wait_for(failed_read.wait(), 2)
+            assert not task.done()
+            await asyncio.wait_for(task, 3)
+            assert calls == 2
+            assert reads >= 3
+        finally:
+            shutdown.set()
+            await task
+    assert sum("hub store read failed" in entry["event"] for entry in logs) == 1
+    assert not any(entry["event"] == "sweep settings read failed" for entry in logs)
 
 
 async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> None:

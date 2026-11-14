@@ -182,6 +182,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config, current_pass_config
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -304,9 +305,21 @@ class Sweep:
                     if self.live_interval is not None
                     else self.interval_seconds
                 )
-            except Exception:
-                log.exception("sweep settings read failed")
-                await self._wait(self.interval_seconds)
+            except Exception as exc:
+                if not isinstance(exc, HubStoreError):
+                    log.exception("sweep settings read failed")
+                shutdown = asyncio.create_task(self.shutdown.wait())
+                changed = asyncio.create_task(wake.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        (shutdown, changed), timeout=max(self.interval_seconds, 1), return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if changed in done:
+                        wake.clear()
+                finally:
+                    shutdown.cancel()
+                    changed.cancel()
+                    await asyncio.gather(shutdown, changed, return_exceptions=True)
                 continue
             started = self.timer()
             try:
@@ -337,8 +350,9 @@ class Sweep:
                     try:
                         delay = self.live_interval() if self.live_interval is not None else interval
                         retry_read = False
-                    except Exception:
-                        log.exception("sweep settings read failed")
+                    except Exception as exc:
+                        if not isinstance(exc, HubStoreError):
+                            log.exception("sweep settings read failed")
                         retry_read = True
                 remaining = delay - (self.timer() - wait_started)
                 if remaining <= 0:

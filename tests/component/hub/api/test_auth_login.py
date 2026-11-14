@@ -6,25 +6,30 @@ dance against the stub IdP is ``tests/service/``'s job."""
 
 from __future__ import annotations
 
+import signal
+from dataclasses import replace
 from pathlib import Path
+from socket import socket
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import sqlalchemy as sa
+from click.testing import CliRunner
+from fastapi import FastAPI
 from httpx2 import Response
 
-from blizzard.foundation.flags import FlagRegistry
-from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.hub.auth.models import ProviderIdentity
-from blizzard.hub.composition import build_hub_settings
-from blizzard.hub.config import LoginThrottleConfig
-from blizzard.hub.config_keys import HUB_REGISTRY
-from blizzard.hub.settings.footing import HubSettingsFooting
+from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
+from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
+from blizzard.hub.cli import runtime
+from blizzard.hub.config import AuthConfig, LoginThrottleConfig
 from blizzard.hub.store import schema
 from blizzard.wire import auth as auth_wire
+from tests.support.config_inputs import init_hub
 from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
-from tests.support.scaffolding import HubHarness, build_hub, hub_level_connections, hub_scoped
+from tests.support.runner_client import UntimedTestClient
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped
 
 # --- providers ------------------------------------------------------------------
 
@@ -396,26 +401,63 @@ def test_login_throttle_capacity_is_configurable(tmp_path: Path) -> None:
     assert _throttled_statuses(hub, 3)[2] == 429
 
 
-def test_login_rebuilds_throttle_after_live_settings_edit(tmp_path: Path) -> None:
+def test_login_rebuilds_throttle_after_live_settings_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     github = FakeOAuthProvider(name="github")
-    hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
-    footing = HubSettingsFooting(
-        tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {}, document={"auth": {"mode": "oauth"}}
-    )
-    settings = build_hub_settings(hub_level_connections(hub.engine), hub.clock, footing)
-    hub.wired_app.state.hub_settings = settings
+    github.codes["admin"] = ADA
 
-    settings.authoring.apply(
-        Change("edit", sets={"auth.login_throttle.capacity": 1}), if_match=0, door="api", actor="test"
-    )
-    assert _throttled_statuses(hub, 2) == [307, 429]
+    def registry(*args: object, **kwargs: object) -> OAuthProviderRegistry:
+        return OAuthProviderRegistry({"github": github})
 
-    settings.authoring.apply(
-        Change("edit", sets={"auth.login_throttle.capacity": 2}), if_match=1, door="api", actor="test"
-    )
-    assert _throttled_statuses(hub, 3) == [307, 307, 429]
+    monkeypatch.setattr(ProviderEntry, "registry", registry)
+    config = init_hub(tmp_path / "hub")
+    config = replace(config, auth=AuthConfig(mode="oauth", superuser="ada@example.com"))
+    config.config_path.write_text(config.to_toml())
 
-    settings.authoring.apply(
-        Change("edit", sets={"transcripts.record_max_bytes": 42}), if_match=2, door="api", actor="test"
-    )
-    assert _throttled_statuses(hub, 1) == [429]
+    class TestServer:
+        def __init__(self, app: FastAPI) -> None:
+            self.app = app
+
+        def handle_exit(self, signum: int, frame: object) -> None:
+            pass
+
+        def run(self, sockets: list[socket]) -> None:
+            _exercise_hosted_throttle(self.app)
+
+    def server(app: FastAPI, **kwargs: object) -> TestServer:
+        return TestServer(app)
+
+    monkeypatch.setattr(runtime, "build_early_shutdown_server", server)
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    try:
+        result = CliRunner().invoke(runtime.host, ["--dir", str(config.root), "--port", "0"])
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+    assert result.exit_code == 0, repr(result.exception)
+
+
+def _exercise_hosted_throttle(app: FastAPI) -> None:
+    with UntimedTestClient(app) as client:
+        authorize = client.get("/api/auth/github/authorize", follow_redirects=False)
+        state = state_from_redirect(authorize.headers["location"])
+        assert (
+            client.get(f"/api/auth/github/callback?code=admin&state={state}", follow_redirects=False).status_code == 302
+        )
+
+        def edit(revision: int, key: str, value: int) -> None:
+            response = client.patch(
+                "/api/admin/settings", headers={"If-Match": str(revision)}, json={"set": {key: value}}
+            )
+            assert response.status_code == 200, response.text
+
+        def statuses(calls: int) -> list[int]:
+            return [client.get("/api/auth/github/authorize", follow_redirects=False).status_code for _ in range(calls)]
+
+        initial = client.get("/api/admin/settings")
+        assert initial.status_code == 200, initial.text
+        revision = initial.json()["revision"]
+        edit(revision, "auth.login_throttle.capacity", 1)
+        assert statuses(2) == [307, 429]
+        edit(revision + 1, "auth.login_throttle.capacity", 2)
+        assert statuses(3) == [307, 307, 429]
+        edit(revision + 2, "transcripts.record_max_bytes", 42)
+        assert statuses(1) == [429]
