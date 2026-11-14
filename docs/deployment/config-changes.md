@@ -1,8 +1,8 @@
 # Configuration changes
 
-Every committed write to a stored forge, work source, repository, secret, project, project link, scope, routine,
-urgency, the urgency order, or the tenant's settings appends one row to the hub's change log, in the same transaction as
-the write. A write that changes nothing appends nothing.
+Every committed write to a stored forge, work source, repository, secret, credential, project, project link, scope,
+routine, urgency, the urgency order, or the tenant's settings appends one row to the hub's change log, in the same
+transaction as the write. A write that changes nothing appends nothing.
 
 ## Reading the log
 
@@ -14,14 +14,14 @@ blizzard hub config changes --kind forge --key github
 
 Rows come newest first. Each carries the acting user, the door, the kind and key of the record, the record's revision
 after the change, the operation, and the fields that changed. Without `--all` the verb prints the newest page; `--kind`
-is `forge`, `work_source`, `repository`, `secret`, `scope`, `routine`, `project`, `urgency`, `urgency_order`, or
-`tenant_settings`, and `--key` narrows to one record — a scope's slug, a routine's slug, a project's, work source's or
-repository's id or slug, or an urgency's id. `--json` prints the raw rows.
+is `forge`, `work_source`, `repository`, `secret`, `credential`, `scope`, `routine`, `project`, `urgency`,
+`urgency_order`, or `tenant_settings`, and `--key` narrows to one record — a scope's slug, a routine's slug, a
+project's, work source's or repository's or credential's id or slug, or an urgency's id. `--json` prints the raw rows.
 
-A forge's, a project's, a work source's and a repository's rows are keyed by id, as are a project link's rows by the
-linked record's id, so they follow the record across slug changes; each row carries the record's current slug as
-`record_label`, which the listing shows. A row's recorded fields stay as written: a slug edit lists the old and new
-slug. For a changed `forge` field, `old` and `new` remain the stored forge ids. `old_label` and `new_label` give the
+A forge's, a project's, a work source's, a repository's and a credential's rows are keyed by id, as are a project link's
+rows by the linked record's id, so they follow the record across slug changes; each row carries the record's current
+slug as `record_label`, which the listing shows. A row's recorded fields stay as written: a slug edit lists the old and
+new slug. For a changed `forge` field, `old` and `new` remain the stored forge ids. `old_label` and `new_label` give the
 current slug and display name of each referenced forge; the board shows those labels in its revisions view. Historical
 address field names remain as originally recorded.
 
