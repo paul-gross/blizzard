@@ -150,7 +150,7 @@ blizzard hub source edit blizzard --credential gh-app
 `blizzard hub credential get gh-app` shows its authority, `app/123456/installation/7890123`, and never the key.
 
 On the board, a user with `config:edit` does the same on a desktop from the Admin page. On the Secrets tab, create a
-secret and paste the whole `.pem` file into its value; the field is masked and keeps the key's line breaks. On the
+secret and paste the whole `.pem` file into its value; the field hides the key and keeps its line breaks. On the
 Credentials tab, create a credential, pick `github.app-installation` as its binding and the secret, and enter the App id
 and the installation id as numbers. The credential's detail shows its authority, read-only.
 

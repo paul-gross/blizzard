@@ -23,6 +23,14 @@
 .masked {
   -webkit-text-security: disc;
 }
+/* A browser without it, such as Firefox, blurs the characters past reading instead. */
+@supports not (-webkit-text-security: disc) {
+  .masked {
+    color: transparent;
+    text-shadow: 0 0 8px var(--text);
+    caret-color: var(--text);
+  }
+}
 .ctl:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: 0;

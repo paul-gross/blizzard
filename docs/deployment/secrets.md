@@ -34,7 +34,8 @@ tenant the call acts in ([tenants.md](./tenants.md#naming-the-tenant-a-call-acts
 
 The board's Admin page lists secrets with the records that use each one. On a desktop, a user with `config:edit` can
 create a secret, replace its value, retire it, and enable it there; Retire is unavailable while a record uses the
-secret. The value is typed or pasted into a masked field that keeps its line breaks, as a private key's need, and is
+secret. The value is typed or pasted into a field that keeps its line breaks, as a private key's need, and hides what it
+holds — Chromium-based browsers and Safari draw each character as a dot, and others, such as Firefox, blur it — and is
 sent as entered; it is never shown again, and no page of the board displays it. On a phone the page is read-only and
 names the `blizzard hub secret set` command.
 
