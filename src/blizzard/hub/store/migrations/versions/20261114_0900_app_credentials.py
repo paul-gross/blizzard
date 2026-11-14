@@ -1,8 +1,6 @@
 """app credentials — a credential may name the ``github.app-installation`` binding.
 
-The upgrade changes no table: a credential's ``binding`` and ``settings`` already hold any binding's name and settings.
-The downgrade is refused, naming every App credential by tenant and slug, while one exists — a hub before this revision
-cannot act with one. It writes nothing.
+Changes no table. The downgrade writes nothing, and is refused while any App credential exists, naming each one.
 Revision ID: 20261114_0900_app_credentials
 Revises: 20261112_0900_hub_settings
 """

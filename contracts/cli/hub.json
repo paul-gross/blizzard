@@ -3964,7 +3964,7 @@
               "type": "text"
             },
             {
-              "help": "How the credential authenticates: github.token or github.app-installation.",
+              "help": "How the credential authenticates: one of github.token, github.app-installation.",
               "hidden": false,
               "kind": "option",
               "name": "binding",

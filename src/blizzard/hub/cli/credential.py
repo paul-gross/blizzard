@@ -10,6 +10,7 @@ from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
 
 _VARIANT = click.option(
     "--variant",
@@ -55,7 +56,9 @@ def credential_group() -> None:
 @click.option("--name", default=None, help="The credential's display name; its slug when omitted.")
 @click.option("--forge", required=True, help="The forge the credential acts on, by id or slug.")
 @click.option(
-    "--binding", required=True, help="How the credential authenticates: github.token or github.app-installation."
+    "--binding",
+    required=True,
+    help=f"How the credential authenticates: one of {', '.join(CREDENTIAL_BINDINGS)}.",
 )
 @click.option("--secret", required=True, help="The stored secret the credential reads.")
 @_VARIANT

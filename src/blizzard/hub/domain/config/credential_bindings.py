@@ -46,12 +46,12 @@ class CredentialBinding(Protocol):
 
     @property
     def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
-        """Each setting the binding takes, by key, with the values it accepts — none for a setting not a choice."""
+        """The values each of the binding's choice settings accepts, by key."""
         ...
 
     @property
     def setting_kinds(self) -> Mapping[str, SettingKind]:
-        """What each setting the binding takes, by key, accepts."""
+        """Every setting the binding takes, by key, with what it accepts."""
         ...
 
     def validate(self, settings: Mapping[str, object]) -> dict[str, object]:
@@ -119,7 +119,7 @@ _APP_SETTINGS = ("app_id", "installation_id")
 class GitHubAppInstallationBinding:
     """A GitHub App's installation, acting through installation tokens the hub mints with the App's private key — the
     secret's value. ``app_id`` and ``installation_id`` are both required, each a positive integer; the authority is
-    the installation, so every credential naming it shares one budget and one write lane."""
+    the installation."""
 
     name: str = "github.app-installation"
     forge_kind: str = "github"
@@ -127,7 +127,7 @@ class GitHubAppInstallationBinding:
 
     @property
     def setting_choices(self) -> Mapping[str, tuple[str, ...]]:
-        return dict.fromkeys(_APP_SETTINGS, ())
+        return {}
 
     @property
     def setting_kinds(self) -> Mapping[str, SettingKind]:
