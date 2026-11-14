@@ -1,0 +1,120 @@
+version: 2
+projects:
+- slug: default
+  name: Default
+  description: ''
+  color: red
+  sources: []
+  repositories: []
+- slug: fleet
+  name: Fleet
+  description: the fleet
+  color: teal
+  sources:
+  - issues
+  - public
+  repositories:
+  - code
+  - tools
+  landing_order:
+  - tools
+  - code
+  repository_branches:
+    code: trunk
+urgencies:
+- slug: standard
+  name: standard
+  color: slate
+  emoji: null
+  icon: null
+- slug: background
+  name: Background
+  color: blue
+  emoji: "\U0001F319"
+  icon: null
+urgency_order:
+- standard
+- background
+settings:
+  default_urgency: background
+forges:
+- slug: enterprise
+  name: enterprise
+  kind: github
+  api_base: https://api.enterprise.test
+  web_base: null
+- slug: internal
+  name: internal
+  kind: github
+  api_base: https://api.internal.test
+  web_base: null
+secrets:
+- gh
+- ops
+work_sources:
+- slug: issues
+  name: issues
+  provider: github
+  locator: acme/code
+  forge: enterprise
+  annotate: false
+  secret: gh
+- slug: public
+  name: public
+  provider: github
+  locator: acme/open
+  forge: internal
+  annotate: false
+  secret: ops
+repositories:
+- slug: code
+  name: Code
+  forge: enterprise
+  owner: acme
+  repo: code
+  base_branch: main
+  secret_name: gh
+  landing_policy: park
+  allow_no_ci: true
+  park_timeout_hours: 12
+- slug: tools
+  name: tools
+  forge: internal
+  owner: acme
+  repo: tools
+  base_branch: main
+  secret_name: ops
+  landing_policy: merge-on-checks
+  allow_no_ci: false
+  park_timeout_hours: null
+scopes:
+- slug: core
+  description: the core
+  project: fleet
+routines:
+- slug: sweep
+  name: sweep
+  graph_name: default-delivery
+  default_scope_slug: core
+  default_model: []
+  default_effort: null
+  default_harnesses: []
+  default_urgency: background
+  scopes:
+  - core
+  project: fleet
+cadences:
+- slug: evening
+  name: evening
+  schedule: null
+  spacing: 10d
+  anchor: null
+  chores:
+  - key: nightly
+    routine: sweep
+    scopes: null
+    mode: full
+    note: null
+    promote: true
+    urgency: background
+  project: fleet
