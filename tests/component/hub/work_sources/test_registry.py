@@ -17,15 +17,17 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeEdit
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceId, WorkSourceSlug
+from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
-from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
+from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceAuthRefused, WorkSourceError
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.forge_auth import sent_header
 from tests.support.scaffolding import OP, ForgeDouble, forge_state, hub_store_connections, retire_credential
@@ -346,3 +348,43 @@ def test_an_active_source_that_cannot_be_built_raises_on_closer(
 
     with pytest.raises(WorkSourceError):
         registry.closer(source_id)
+
+
+def test_a_source_whose_credential_the_forge_refuses_at_build_raises_the_annotation_refusal(
+    hub: tuple[TestClient, HubServices], forge: tuple[ForgeDouble, str]
+) -> None:
+    """The write halves carry a refused build as the refusal the forge-status pass records, naming the forge."""
+    client, services = hub
+    source_id = create(client, services, forge[1])
+    classified = ClassifiedRefusal(
+        refusal=AuthRefusal.INSTALLATION_SUSPENDED,
+        diagnostic=ForgeDiagnostic(
+            status=403,
+            operation="mint",
+            endpoint="POST /app/installations/{installation_id}/access_tokens",
+            repository=None,
+            message="This installation has been suspended",
+            documentation_url=None,
+            request_id=None,
+            accepted_permissions=None,
+        ),
+    )
+
+    def refused(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        raise WorkSourceAuthRefused(f"work source {record.slug}", classified)
+
+    registry = StoreWorkSourceRegistry(
+        records=_tenant(services).work_source_records,
+        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(cast(FastAPI, client.app).state.engine))),
+        build=refused,
+        built_in=_sources(services).get("hub"),  # pyright: ignore[reportArgumentType]  # the registry port types its "hub" entry as IWorkSource; it is the built-in source
+    )
+    record = _tenant(services).work_source_records.get(WorkSourceId(source_id))
+    assert record is not None
+
+    for reach in (registry.annotator, registry.label_clearer):
+        with pytest.raises(WorkAnnotateError) as raised:
+            reach(source_id)
+        assert raised.value.refusal is not None
+        assert raised.value.refusal.classified == classified
+        assert raised.value.refusal.forge_id == record.fields.forge_id

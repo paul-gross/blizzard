@@ -765,3 +765,23 @@ def test_an_unrefused_failure_records_no_refusal_event(tmp_path: Path) -> None:
     _reconciler(hub, WorkSourceRegistry({}, {"default": _FlakyRead()})).sweep()
 
     assert _refused_events(hub.services) == []
+
+
+class _RefusedBuild(WorkSourceRegistry):
+    """A registry whose source's binding cannot be built: the forge refuses the credential it is built on."""
+
+    def annotator(self, source: str) -> IWorkAnnotator | None:
+        raise WorkAnnotateError("refused", refusal=_REFUSAL)
+
+
+def test_a_source_whose_build_is_refused_records_the_refusal_beside_the_skip(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+
+    _reconciler(hub, _RefusedBuild({}, {"default": FakeAnnotator()})).sweep()
+
+    (event,) = _refused_events(hub.services)
+    assert event.detail is not None
+    assert event.detail["work_source_id"] == "default"
+    assert event.detail["forge_id"] == "frg_example"
+    assert event.detail["refusal"] == "credential-invalid"
+    assert len(_skip_events(hub.services)) == 1

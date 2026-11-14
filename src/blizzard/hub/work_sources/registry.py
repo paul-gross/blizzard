@@ -22,14 +22,25 @@ from functools import partial
 from typing import Protocol, cast
 
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkCloser
+from blizzard.hub.domain.chunk.ports.work_sources import (
+    IWorkAnnotator,
+    IWorkCloser,
+    WorkAnnotateError,
+    WorkAnnotateRefusal,
+)
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository, WorkSourceId
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.editor import IWorkEditor
-from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceBatchReader, IWorkSourceRegistry, WorkSourceError
+from blizzard.hub.work_sources.source import (
+    IWorkSource,
+    IWorkSourceBatchReader,
+    IWorkSourceRegistry,
+    WorkSourceAuthRefused,
+    WorkSourceError,
+)
 
 
 class IBuiltInWorkSource(IWorkSource, IWorkEditor, IWorkCloser, Protocol):
@@ -127,10 +138,23 @@ class StoreWorkSourceRegistry:
         source = self.get(pointer.source)
         return label_from_binding(pointer, source, lambda: self.source_label(pointer.source))
 
+    def _annotating(self, source: str) -> BuiltWorkSource | None:
+        """:meth:`_built` for a write half: a build the forge refused the credential of is the annotation refusal the
+        forge-status pass records, not a fault of the pass."""
+        try:
+            return self._built(source)
+        except WorkSourceAuthRefused as exc:
+            record = self._records.get(WorkSourceId(source))
+            # The build just read it, and a configured record is never deleted.
+            assert record is not None
+            raise WorkAnnotateError(
+                str(exc), refusal=WorkAnnotateRefusal(exc.classified, record.fields.forge_id)
+            ) from exc
+
     def annotator(self, source: str) -> IWorkAnnotator | None:
         if source == RESERVED_HUB_SOURCE_NAME:
             return None
-        built = self._built(source)
+        built = self._annotating(source)
         if built is None or not built.record.fields.annotate:
             return None
         return cast(IWorkAnnotator, built.source)
@@ -143,7 +167,7 @@ class StoreWorkSourceRegistry:
     def label_clearer(self, source: str) -> IWorkAnnotator | None:
         if source == RESERVED_HUB_SOURCE_NAME:
             return None
-        built = self._built(source)
+        built = self._annotating(source)
         return cast(IWorkAnnotator, built.source) if built is not None else None
 
     def closer(self, source: str) -> IWorkCloser | None:

@@ -95,6 +95,7 @@ class WorkSourceAuthRefused(WorkSourceError):
     def __init__(self, subject: str, classified: ClassifiedRefusal) -> None:
         refusal, diagnostic = classified.refusal, classified.diagnostic
         super().__init__(f"{subject}: {refusal_explained(classified)}")
+        self.classified = classified
         self.refusal: AuthRefusal = refusal
         self.diagnostic: ForgeDiagnostic = diagnostic
 
