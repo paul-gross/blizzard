@@ -1,5 +1,5 @@
-"""The lease-liveness repository seam — heartbeat and spawn facts, REAP's staleness
-baseline."""
+"""The lease-liveness repository seam — heartbeat, spawn and execution-evidence facts, REAP's
+staleness baseline."""
 
 from __future__ import annotations
 
@@ -10,10 +10,12 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease, ParkResume
 
 __all__ = [
+    "ExecutionEvidence",
     "IReadLeaseLivenessRepository",
     "IWriteLeaseLivenessRepository",
     "LeaseLivenessFacts",
@@ -23,13 +25,37 @@ __all__ = [
 
 @domain_model
 @dataclass(frozen=True)
+class ExecutionEvidence:
+    """The newest ``alive`` evidence a harness reported for a lease, with the generation it was
+    observed in — already bounded above by the instant the row was observed."""
+
+    generation: int
+    evidence_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
 class LeaseLivenessFacts:
     """One lease's :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` and
-    :meth:`~IReadLeaseLivenessRepository.latest_spawn`, read together —
-    :meth:`~IReadLeaseLivenessRepository.liveness_facts`'s own per-lease value."""
+    :meth:`~IReadLeaseLivenessRepository.latest_spawn`, its current spawn generation, and its newest
+    execution evidence, read together — :meth:`~IReadLeaseLivenessRepository.liveness_facts`'s own
+    per-lease value."""
 
     latest_heartbeat: datetime | None
     latest_spawn: datetime | None
+    generation: int = 0
+    latest_evidence: ExecutionEvidence | None = None
+
+    def current_evidence(self) -> datetime | None:
+        """The evidence instant that renews this lease, or ``None``: evidence counts only when it was
+        observed in the lease's current generation and produced no earlier than that generation's
+        spawn. An older generation's evidence renews nothing."""
+        evidence = self.latest_evidence
+        if evidence is None or self.latest_spawn is None or evidence.generation != self.generation:
+            return None
+        if as_utc(evidence.evidence_at) < as_utc(self.latest_spawn):
+            return None
+        return evidence.evidence_at
 
 
 class IReadLeaseLivenessRepository(Protocol):
@@ -49,8 +75,10 @@ class IReadLeaseLivenessRepository(Protocol):
         ...
 
     def liveness_facts(self, lease_ids: Sequence[str]) -> dict[str, LeaseLivenessFacts]:
-        """:meth:`latest_heartbeat` and :meth:`latest_spawn`, for every id in ``lease_ids``,
-        in two grouped reads rather than one round trip per lease (`bzh:bulk-reconstitution`).
+        """:meth:`latest_heartbeat`, :meth:`latest_spawn` with the generation count, and the newest
+        ``alive`` execution evidence whose ``evidence_at`` is no later than its own row's ``observed_at``,
+        of the newest generation any such row names, for every id in ``lease_ids`` — in grouped reads
+        rather than one round trip per lease (`bzh:bulk-reconstitution`).
         A lease with neither fact is absent from the result, exactly as the singular getters
         would both answer ``None`` for it."""
         ...

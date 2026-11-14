@@ -37,6 +37,7 @@ from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODE
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
@@ -822,6 +823,11 @@ class ClaudeCodeAdapter:
             candidate += timedelta(days=1)
         # `now` is always UTC (``bzh:injected-clock``); the reply matches its own tzinfo.
         return candidate.astimezone(now.tzinfo)
+
+    def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
+        """No evidence is read from a Claude Code worker yet, so every execution is ``unknown``."""
+        del request
+        return ExecutionObservation.unknown("claude-code execution evidence is not read yet")
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

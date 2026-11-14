@@ -58,16 +58,12 @@ class ReapSweep:
         parked = ctx.stores.asks.parked_lease_ids()
         takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
         active_leases = ctx.stores.lease_record.list_active_leases()
-        # One bulk read for every candidate's heartbeat/spawn (`bzh:bulk-reconstitution`).
+        # One bulk read for every candidate's heartbeat/spawn/evidence (`bzh:bulk-reconstitution`).
         liveness_facts = ctx.stores.liveness.liveness_facts([lease.lease_id for lease in active_leases])
         deferred = 0
         for lease in active_leases:
             facts = liveness_facts.get(lease.lease_id)
-            liveness = Liveness.of(
-                lease,
-                heartbeat=facts.latest_heartbeat if facts is not None else None,
-                spawn=facts.latest_spawn if facts is not None else None,
-            )
+            liveness = Liveness.of_facts(lease, facts)
             move = reap_move(
                 lease,
                 taken_over=takeovers.holds_lease(lease),

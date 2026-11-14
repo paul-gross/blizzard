@@ -21,6 +21,7 @@ from blizzard.runner.harness.adapter import (
     IHarnessUsageLimits,
     IHarnessWorkerLifecycle,
 )
+from blizzard.runner.harness.observation import IHarnessExecutionObservation
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 
 
@@ -48,6 +49,7 @@ class HarnessBinding:
 
     adapter: IHarnessAdapter | None = None
     transcript_source: IHarnessTranscriptSource | None = None
+    execution_observation: IHarnessExecutionObservation | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,12 @@ class IHarnessTranscriptSourceRegistry(Protocol):
     def transcript_source(self, harness_id: str) -> IHarnessTranscriptSource: ...
 
 
+class IHarnessExecutionObservationRegistry(Protocol):
+    """The execution-observation slice of the registry."""
+
+    def execution_observation(self, harness_id: str) -> IHarnessExecutionObservation: ...
+
+
 class IHarnessSelfTestRegistry(Protocol):
     """The self-test slice of the registry."""
 
@@ -123,6 +131,7 @@ class IHarnessRegistry(
     IHarnessUsageLimitsRegistry,
     IHarnessProviderOverloadRegistry,
     IHarnessTranscriptSourceRegistry,
+    IHarnessExecutionObservationRegistry,
     IHarnessSelfTestRegistry,
     Protocol,
 ):
@@ -168,6 +177,12 @@ class HarnessRegistry:
         if binding.transcript_source is None:
             raise UnavailableHarnessError(harness_id, "transcript source")
         return binding.transcript_source
+
+    def execution_observation(self, harness_id: str) -> IHarnessExecutionObservation:
+        binding = self._binding(harness_id)
+        if binding.execution_observation is None:
+            raise UnavailableHarnessError(harness_id, "execution observation")
+        return binding.execution_observation
 
     def _adapter(self, harness_id: str) -> IHarnessAdapter:
         binding = self._binding(harness_id)

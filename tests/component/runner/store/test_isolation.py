@@ -33,6 +33,7 @@ from blizzard.runner.environments.repository import BindingCompletion, IWriteEnv
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.observation import ExecutionObservation
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
@@ -43,6 +44,7 @@ from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, 
 from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IWriteEscalationRepository
+from blizzard.runner.leases.execution_observation import IWriteExecutionObservationRepository
 from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease, NewMint
@@ -562,6 +564,21 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         session=_SESSION,
         report_kind="context.sampled",
         report_payload="{}",
+    ),
+    (IWriteExecutionObservationRepository, "record_execution_observation"): lambda w: (
+        w.stores.execution_observations.record_execution_observation(
+            lease_id=w.lease_2,
+            chunk_id=w.chunk_1,
+            generation=1,
+            observation=ExecutionObservation.unknown("isolation"),
+            observed_at=_at(50),
+            warned_anchor_at=_at(50),
+            report_kind="event.recorded",
+            report_payload="{}",
+        )
+    ),
+    (IWriteExecutionObservationRepository, "prune_execution_observations"): lambda w: (
+        w.stores.execution_observations.prune_execution_observations(now=_at(10**7))
     ),
     (IWriteExternalUsageAttemptRepository, "record_external_usage_attempt"): lambda w: (
         w.host.external_usage.record_external_usage_attempt(

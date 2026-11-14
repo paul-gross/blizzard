@@ -147,6 +147,7 @@ from blizzard.runner.store.internal.check_store import CheckStore
 from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
+from blizzard.runner.store.internal.execution_observation_store import ExecutionObservationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
@@ -1219,6 +1220,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         selftest_results=SelfTestResultStore(connections),
         lease_traces=LeaseTraceFactsStore(connections),
         usage_limits=RunnerUsageLimitStore(connections),
+        execution_observations=ExecutionObservationStore(connections),
     )
 
 

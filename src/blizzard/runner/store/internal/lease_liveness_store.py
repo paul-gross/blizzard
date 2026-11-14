@@ -15,10 +15,12 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository, LeaseLivenessFacts
+from blizzard.runner.harness.observation import ExecutionLiveness
+from blizzard.runner.leases.liveness import ExecutionEvidence, IWriteLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.leases.model import ParkResume
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final, insert_outbox_row
 from blizzard.runner.store.schema import (
+    execution_observations,
     heartbeats,
     lease_context,
     lease_spawns,
@@ -171,7 +173,8 @@ class LeaseLivenessStore:
         if not lease_ids:
             return {}
         heartbeat_by_lease: dict[str, datetime] = {}
-        spawn_by_lease: dict[str, datetime] = {}
+        spawn_by_lease: dict[str, tuple[datetime, int]] = {}
+        evidence_by_lease: dict[str, ExecutionEvidence] = {}
         with self._store.connect() as conn:
             for batch in id_batches(lease_ids):
                 hb_stmt = (
@@ -185,19 +188,49 @@ class LeaseLivenessStore:
                     heartbeat_by_lease[str(row.lease_id)] = row.beat_at
                 sp_stmt = (
                     self._store.select(
-                        lease_spawns, lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at")
+                        lease_spawns,
+                        lease_spawns.c.lease_id,
+                        func.max(lease_spawns.c.spawned_at).label("spawned_at"),
+                        func.count().label("generation"),
                     )
                     .where(lease_spawns.c.lease_id.in_(batch))
                     .group_by(lease_spawns.c.lease_id)
                 )
                 for row in conn.execute(sp_stmt):
-                    spawn_by_lease[str(row.lease_id)] = row.spawned_at
-        return {
-            lease_id: LeaseLivenessFacts(
-                latest_heartbeat=heartbeat_by_lease.get(lease_id), latest_spawn=spawn_by_lease.get(lease_id)
+                    spawn_by_lease[str(row.lease_id)] = (row.spawned_at, int(row.generation))
+                ev_stmt = (
+                    self._store.select(
+                        execution_observations,
+                        execution_observations.c.lease_id,
+                        execution_observations.c.generation,
+                        func.max(execution_observations.c.evidence_at).label("evidence_at"),
+                    )
+                    .where(
+                        execution_observations.c.lease_id.in_(batch),
+                        execution_observations.c.liveness == ExecutionLiveness.ALIVE.value,
+                        execution_observations.c.evidence_at.isnot(None),
+                        # Evidence produced after its own sample was taken is no evidence at all.
+                        execution_observations.c.evidence_at <= execution_observations.c.observed_at,
+                    )
+                    .group_by(execution_observations.c.lease_id, execution_observations.c.generation)
+                )
+                for row in conn.execute(ev_stmt):
+                    lease_id = str(row.lease_id)
+                    held = evidence_by_lease.get(lease_id)
+                    if held is None or int(row.generation) > held.generation:
+                        evidence_by_lease[lease_id] = ExecutionEvidence(
+                            generation=int(row.generation), evidence_at=row.evidence_at
+                        )
+        facts: dict[str, LeaseLivenessFacts] = {}
+        for lease_id in set(heartbeat_by_lease) | set(spawn_by_lease):
+            spawn = spawn_by_lease.get(lease_id)
+            facts[lease_id] = LeaseLivenessFacts(
+                latest_heartbeat=heartbeat_by_lease.get(lease_id),
+                latest_spawn=spawn[0] if spawn is not None else None,
+                generation=spawn[1] if spawn is not None else 0,
+                latest_evidence=evidence_by_lease.get(lease_id),
             )
-            for lease_id in set(heartbeat_by_lease) | set(spawn_by_lease)
-        }
+        return facts
 
     def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]:
         if not lease_ids:

@@ -105,11 +105,7 @@ class ResumeIntents:
         facts_by_lease = self.stores.liveness.liveness_facts([lease.lease_id for lease in candidates])
         for lease in candidates:
             facts = facts_by_lease.get(lease.lease_id)
-            liveness = Liveness.of(
-                lease,
-                heartbeat=facts.latest_heartbeat if facts is not None else None,
-                spawn=facts.latest_spawn if facts is not None else None,
-            )
+            liveness = Liveness.of_facts(lease, facts)
             if crash_orphaned(
                 lease,
                 session_ended=lease.lease_id in ended,

@@ -193,7 +193,7 @@ class OpenCodeTwoDeclaration:
             effort_aliases=section.effort_aliases,
         )
         return HarnessAssembly(
-            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source),
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source, execution_observation=adapter),
             health_probes=(probe,),
         )
 

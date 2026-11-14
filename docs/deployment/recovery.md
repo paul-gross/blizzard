@@ -84,6 +84,24 @@ the start, against environment bindings re-read from the store; facts are the on
 state a clean shutdown would have left. A crash during the re-attach itself degrades to the reap path: the resume is
 bounded by the crash-point sweep's recovery, no stronger.
 
+## Execution evidence and the no-progress warning
+
+The heartbeat is not the only thing that keeps a live worker inside the liveness window. About once a minute the runner
+asks each live lease's harness what it can see of that lease's current execution, and records the answer in the
+`execution_observations` table of `host.db`. When the harness reports the execution running, with evidence produced
+since the current spawn, that evidence renews the window exactly as a heartbeat does, so a single tool call running
+longer than an hour is not reaped while the harness keeps reporting it. Evidence from an earlier spawn of the lease, or
+an answer the harness cannot tie to the lease's own session, renews nothing; once the evidence stops, the window runs
+out from the last evidence, as it does from the last heartbeat. A harness that cannot observe its executions answers
+`unknown` and changes nothing: its leases are reaped on heartbeats alone, as before.
+
+Liveness is not progress. When a worker the harness reports running has made no progress — no completed tool call, no
+progress the harness reports — for 15 minutes, the runner raises one worker-no-progress warning in the operational event
+feed ([observability.md](./observability.md)), naming the worker's current activity, how old its evidence is and how
+long it has gone without progress, and logs it at WARNING. It fires once per stall; observations that only show the
+worker still running neither repeat it nor clear it, and progress resuming re-arms it. The warning stops nothing — the
+harness's own tool timeouts still bound every call.
+
 On the hub side, a completion re-flushed after a hub crash applies idempotently behind the epoch fence, and a per-repo
 land already recorded is skipped on redelivery — a crash mid-delivery lands the chunk exactly once.
 

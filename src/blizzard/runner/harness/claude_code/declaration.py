@@ -135,7 +135,8 @@ class ClaudeCodeDeclaration:
             for root in health_roots
         )
         return HarnessAssembly(
-            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source), health_probes=probes
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source, execution_observation=adapter),
+            health_probes=probes,
         )
 
     @property

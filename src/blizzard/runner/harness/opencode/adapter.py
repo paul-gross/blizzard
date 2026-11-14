@@ -34,6 +34,7 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.compaction_window import compose_window
@@ -1159,6 +1160,12 @@ class OpenCodeAdapter:
             if line_observed is not None:
                 observed = line_observed
         return f"{observed[0]}/{observed[1]}" if observed is not None else None
+
+    def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
+        """OpenCode 1 exposes no live execution state to read, so every execution is ``unknown``;
+        its worker plugin's heartbeat stays the only liveness it gives."""
+        del request
+        return ExecutionObservation.unknown("unsupported: opencode v1 exposes no execution evidence")
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

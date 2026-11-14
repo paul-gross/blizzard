@@ -20,6 +20,7 @@ from blizzard.runner.environments.repository import EnvBinding, IReadEnvironment
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import ParkedEscalation
+from blizzard.runner.leases.execution_observation import WarnedStall
 from blizzard.runner.leases.git_commit_declaration import DeclaredLeaseCommit, IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.leases.model import ClosedLease, Lease
@@ -28,6 +29,12 @@ from blizzard.runner.leases.record import IReadChunkLeaseRepository
 
 #: Deliberately **conservative**: bounded below by the longest tool call a healthy worker makes.
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
+
+#: How often each live lease's current execution is observed through its harness.
+EXECUTION_OBSERVATION_INTERVAL = timedelta(seconds=60)
+
+#: How long an observably alive worker may go without substantive progress before one warning.
+NO_PROGRESS_THRESHOLD = timedelta(minutes=15)
 
 #: A **list-length affordance**, not a retention policy.
 RECENT_LEASE_LIMIT = 20
@@ -42,24 +49,71 @@ def is_healthy_closure(reason: str | None) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class Liveness:
-    """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
+    """A lease's staleness baseline: the newest of its heartbeat, its spawn, its current
+    generation's execution evidence, and its mint.
 
-    ``max`` over all three rather than a chain, so a worker respawned into an old lease
+    ``max`` over all of them rather than a chain, so a worker respawned into an old lease
     reads fresh for **every** spawn generation, not just the first."""
 
     last_activity: datetime
 
     @classmethod
-    def of(cls, lease: Lease, *, heartbeat: datetime | None, spawn: datetime | None) -> Liveness:
+    def of(
+        cls,
+        lease: Lease,
+        *,
+        heartbeat: datetime | None,
+        spawn: datetime | None,
+        evidence: datetime | None = None,
+    ) -> Liveness:
         """The baseline from the lease's mint and its already-read activity facts. ``None``
-        is a meaningful value for either fact — a lease that has never beaten, or never
-        spawned — and leaves the mint (or the other fact) as the baseline."""
-        facts = (heartbeat, spawn)
+        is a meaningful value for any fact — a lease that has never beaten, never spawned, or
+        was never positively observed — and leaves the mint (or another fact) as the baseline.
+        ``evidence`` must already be the current generation's own
+        (:meth:`~blizzard.runner.leases.liveness.LeaseLivenessFacts.current_evidence`)."""
+        facts = (heartbeat, spawn, evidence)
         return cls(max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)]))
+
+    @classmethod
+    def of_facts(cls, lease: Lease, facts: LeaseLivenessFacts | None) -> Liveness:
+        """:meth:`of` over one lease's bulk-read facts, ``None`` when it has none yet."""
+        if facts is None:
+            return cls.of(lease, heartbeat=None, spawn=None)
+        return cls.of(
+            lease, heartbeat=facts.latest_heartbeat, spawn=facts.latest_spawn, evidence=facts.current_evidence()
+        )
 
     def stale(self, now: datetime, *, threshold: timedelta = HEARTBEAT_STALENESS_THRESHOLD) -> bool:
         """True iff the baseline is older than ``threshold`` as of ``now``."""
         return now - as_utc(self.last_activity) > threshold
+
+
+# --- No-progress warning ---------------------------------------------------
+
+
+def progress_anchor(*, spawn: datetime, heartbeat: datetime | None, progress: datetime | None) -> datetime:
+    """When the current execution last made substantive progress: the newest of its generation's
+    spawn, the lease's heartbeats (a completed tool), and a harness-reported ``progress``. Liveness
+    evidence never moves it."""
+    return max(as_utc(fact) for fact in (spawn, heartbeat, progress) if fact is not None)
+
+
+def warns_no_progress(
+    *,
+    alive: bool,
+    generation: int,
+    anchor: datetime,
+    warned: WarnedStall | None,
+    now: datetime,
+    threshold: timedelta = NO_PROGRESS_THRESHOLD,
+) -> bool:
+    """Whether this observation raises the no-progress warning: the worker is observably alive and
+    its progress anchor is older than ``threshold``, and no warning has already fired on this same
+    stall — the same generation and the same anchor. A stall warns once; only progress moving the
+    anchor re-arms it."""
+    if not alive or now - as_utc(anchor) <= threshold:
+        return False
+    return warned is None or warned.generation != generation or as_utc(warned.anchor_at) != as_utc(anchor)
 
 
 # --- Derived lease state — the panel's read model ----------------
@@ -170,7 +224,7 @@ class LeaseActivity:
         when it has none yet), the parked and backing-off lease ids, its chunk's held bindings,
         and whether its process probes alive."""
         heartbeat = facts.latest_heartbeat if facts is not None else None
-        liveness = Liveness.of(lease, heartbeat=heartbeat, spawn=facts.latest_spawn if facts is not None else None)
+        liveness = Liveness.of_facts(lease, facts)
         binding = bindings[0] if bindings else None
         return cls(
             lease=lease,

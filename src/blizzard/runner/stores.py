@@ -40,6 +40,10 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, I
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.leases.execution_observation import (
+    IReadExecutionObservationRepository,
+    IWriteExecutionObservationRepository,
+)
 from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, IWriteLeaseLivenessRepository
@@ -126,6 +130,7 @@ class IReadRunnerStore(
     IReadSelfTestResultRepository,
     IReadLeaseTraces,
     IReadRunnerUsageLimitRepository,
+    IReadExecutionObservationRepository,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed."""
@@ -158,6 +163,7 @@ class IWriteRunnerStore(
     IWriteSelfTestResultRepository,
     IWriteLeaseTraces,
     IWriteRunnerUsageLimitRepository,
+    IWriteExecutionObservationRepository,
     IReadRunnerStore,
     Protocol,
 ):
@@ -196,6 +202,8 @@ class RunnerStores:
     lease_traces: IWriteLeaseTraces
     #: The runner's own usage-limit marks and floor clears — its floor when it spends no subscription.
     usage_limits: IWriteRunnerUsageLimitRepository
+    #: The harness's sampled evidence of each lease's own execution, and the no-progress warnings it raised.
+    execution_observations: IWriteExecutionObservationRepository
 
 
 @dataclass(frozen=True)
@@ -228,6 +236,7 @@ class RunnerReadStores:
     selftest_results: IReadSelfTestResultRepository
     lease_traces: IReadLeaseTraces
     usage_limits: IReadRunnerUsageLimitRepository
+    execution_observations: IReadExecutionObservationRepository
 
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
@@ -259,6 +268,7 @@ class RunnerReadStores:
             selftest_results=stores.selftest_results,
             lease_traces=stores.lease_traces,
             usage_limits=stores.usage_limits,
+            execution_observations=stores.execution_observations,
         )
 
 

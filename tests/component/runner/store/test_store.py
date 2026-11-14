@@ -13,8 +13,9 @@ import sqlalchemy as sa
 
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.observation import ExecutionObservation
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.store.schema import external_usage_samples, heartbeats
+from blizzard.runner.store.schema import execution_observations, external_usage_samples, heartbeats
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
 from tests.support.runner_store import (
@@ -289,6 +290,43 @@ def test_prune_heartbeats_removes_a_superseded_beat_but_never_the_newest(tmp_pat
             .all()
         )
     assert list(remaining) == [newest]
+
+
+def test_prune_execution_observations_keeps_each_leases_newest_row_and_newest_warning(tmp_path: Path):
+    """The cadence anchor (the newest row) and the warning dedupe (the newest warning row) answer
+    identically before and after; every other row past the window is pruned."""
+    store = _store(tmp_path)
+    old = _NOW - timedelta(days=2)
+    for minute, warned in ((0, True), (1, True), (2, False), (3, False)):
+        at = old + timedelta(minutes=minute)
+        store.record_execution_observation(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            generation=1,
+            observation=ExecutionObservation.unknown("seeded"),
+            observed_at=at,
+            warned_anchor_at=at if warned else None,
+        )
+    before = store.execution_observation_states(["lease_1"])
+
+    pruned = store.prune_execution_observations(now=_NOW)
+
+    assert pruned == 2
+    assert store.execution_observation_states(["lease_1"]) == before
+    with store.engine.connect() as conn:
+        remaining = (
+            conn.execute(
+                sa.select(execution_observations.c.observed_at)
+                .where(
+                    execution_observations.c.lease_id == "lease_1",
+                    execution_observations.c.runner_id == FIXTURE_RUNNER_ID,
+                )
+                .order_by(execution_observations.c.id)
+            )
+            .scalars()
+            .all()
+        )
+    assert list(remaining) == [old + timedelta(minutes=1), old + timedelta(minutes=3)]
 
 
 def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path: Path):

@@ -28,6 +28,7 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.json_value import decode_json
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
@@ -570,6 +571,11 @@ class OpenCodeTwoAdapter:
             if root and step.model is not None:
                 return f"{step.model.provider_id}/{step.model.id}"
         return None
+
+    def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
+        """No evidence is read from the OpenCode 2 service yet, so every execution is ``unknown``."""
+        del request
+        return ExecutionObservation.unknown("opencode-v2 execution evidence is not read yet")
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

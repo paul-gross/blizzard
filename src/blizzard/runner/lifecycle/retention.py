@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
+from blizzard.runner.leases.execution_observation import IWriteExecutionObservationRepository
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.throttle.usage_limits import (
@@ -40,6 +41,8 @@ class RetentionStores(Protocol):
     def liveness(self) -> IWriteLeaseLivenessRepository: ...
     @property
     def usage_limits(self) -> IWriteRunnerUsageLimitRepository: ...
+    @property
+    def execution_observations(self) -> IWriteExecutionObservationRepository: ...
 
 
 class RetentionHostStores(Protocol):
@@ -83,6 +86,7 @@ class RetentionPrune:
         lanes: tuple[tuple[str, Callable[[], int]], ...] = (
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
+            ("execution observation", lambda: ctx.stores.execution_observations.prune_execution_observations(now=now)),
             ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
             ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
             ("subscription usage limit", lambda: ctx.host_stores.usage_limits.prune_usage_limits(now=now)),

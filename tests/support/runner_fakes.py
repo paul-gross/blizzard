@@ -57,6 +57,7 @@ from blizzard.runner.harness.capability_snapshot import HarnessCapability, Harne
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
@@ -115,6 +116,7 @@ from blizzard.runner.store.internal.check_store import CheckStore
 from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
+from blizzard.runner.store.internal.execution_observation_store import ExecutionObservationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
@@ -210,6 +212,7 @@ class SqlAlchemyRunnerStore(
     SelfTestResultStore,
     LeaseTraceFactsStore,
     RunnerUsageLimitStore,
+    ExecutionObservationStore,
 ):
     """The flat, every-concept-at-once runner store — test support only:
     production composes the extracted concept adapters individually via
@@ -417,6 +420,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         selftest_results=store,
         lease_traces=store,
         usage_limits=store,
+        execution_observations=store,
     )
 
 
@@ -1167,6 +1171,9 @@ class FakeHarness:
     ) -> None:
         self._handle = handle
         self.verdict = verdict
+        # `observe_execution`'s scripted answer; a test reassigns it between ticks.
+        self.execution_observation = ExecutionObservation.unknown("fake harness scripts no observation")
+        self.observation_requests: list[ExecutionObservationRequest] = []
         # Scripted: the first N `spawn` calls return a `FailingIdentityHandle`
         # instead of an already-identified one; 0 (default) never fails, unchanged from before.
         self._identity_failures_remaining = identity_failures
@@ -1536,6 +1543,11 @@ class FakeHarness:
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
 
+    def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
+        """The scripted :attr:`execution_observation` — ``unknown`` until a test sets one — recording each request."""
+        self.observation_requests.append(request)
+        return self.execution_observation
+
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
         del now
         self.usage_limit_calls.append((output, tuple(lines)))
@@ -1803,7 +1815,11 @@ def make_context(
         else single_workspace(provider, spawn_root=spawn_root, prompt=workspace_prompt)
     )
     _harnesses = HarnessRegistry(
-        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                adapter=harness, transcript_source=harness.transcript_source(), execution_observation=harness
+            )
+        }
     )
     # A FakeHarness always carries a transcript source.
     _transcripts_wired = True
