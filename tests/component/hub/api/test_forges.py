@@ -184,13 +184,30 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
     reset = hub.clock.now().replace(microsecond=0) + timedelta(minutes=5)
     budgets.learn(BudgetKey(forge_id, "secret/gh-token"), BudgetReading("core", 5000, 1200, reset))
     budgets.learn(BudgetKey(forge_id, None), BudgetReading("core", 60, 7, reset))
+    budgets.learn(BudgetKey(forge_id, "app/12/installation/34"), BudgetReading("core", 15000, 9000, reset))
     budgets.learn(BudgetKey("other-forge", None), BudgetReading("core", 60, 1, reset))
 
     shown = hub.client.get("/api/forges/ghe").json()["budgets"]
 
+    at = reset.isoformat()
     assert shown == [
-        {"secret_name": None, "bucket": "core", "limit": 60, "remaining": 7, "reset": reset.isoformat()},
-        {"secret_name": "gh-token", "bucket": "core", "limit": 5000, "remaining": 1200, "reset": reset.isoformat()},
+        {"secret_name": None, "authority": None, "bucket": "core", "limit": 60, "remaining": 7, "reset": at},
+        {
+            "secret_name": None,
+            "authority": "app/12/installation/34",
+            "bucket": "core",
+            "limit": 15000,
+            "remaining": 9000,
+            "reset": at,
+        },
+        {
+            "secret_name": "gh-token",
+            "authority": "secret/gh-token",
+            "bucket": "core",
+            "limit": 5000,
+            "remaining": 1200,
+            "reset": at,
+        },
     ]
 
     def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
