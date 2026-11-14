@@ -156,8 +156,9 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     assert "| `chunk asks`" in out
     assert "| `chunk notes`" in out
     # A person's note binds like an answer — matched on collapsed whitespace across the wrap.
-    assert "answer or note binds every later session" in " ".join(out.split())
-    assert "read `chunk asks` and `chunk notes`" in " ".join(out.split())
+    assert "answer or note binds later scope, acceptance and verdict" in " ".join(out.split())
+    assert "exceptions apply only within their scope" in " ".join(out.split())
+    assert "Read `chunk asks` and `chunk notes` first" in " ".join(out.split())
     assert "| `artifact …`" in out
     assert '| `ask "<question>"`' in out
     assert "blizzard runner heartbeat" in out
