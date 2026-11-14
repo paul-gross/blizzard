@@ -115,12 +115,13 @@ class IWorkAnnotators(Protocol):
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
         """The write half of the binding keyed ``source``, or ``None`` when that source is unconfigured or not opted
-        into annotation — the structural "never written to" a non-opted source gets."""
+        into annotation — the structural "never written to" a non-opted source gets. :class:`WorkAnnotateError`
+        carrying its refusal when the forge refused the credential the binding is built on."""
         ...
 
     def label_clearer(self, source: str) -> IWorkAnnotator | None:
         """The write half of the source keyed ``source`` whether or not it annotates;
-        ``None`` when no configured source has that key or it has no forge labels."""
+        ``None`` when no configured source has that key or it has no forge labels. Raises as :meth:`annotator` does."""
         ...
 
     def source_label(self, source: str) -> str:

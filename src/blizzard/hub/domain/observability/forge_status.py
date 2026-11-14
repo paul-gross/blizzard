@@ -185,7 +185,12 @@ class TenantAnnotation:
         skipped_before = len(tally.sources_skipped)
         failed_before = tally.failed
         for name in annotating:
-            annotator = self._work_sources.annotator(name)
+            try:
+                annotator = self._work_sources.annotator(name)
+            except WorkAnnotateError as exc:
+                self._refused_build(name, exc)
+                self._skipped(name, outages, tally)
+                continue
             if annotator is None:  # pragma: no cover - annotating_ids() only names built ones
                 continue
             if _reconcile(name, annotator, desired, tally, partial(self._refused, name)) is None:
@@ -194,7 +199,13 @@ class TenantAnnotation:
                 outages.discard(name)
         unfinished: list[str] = []
         for name in leaving:
-            clearer = self._work_sources.label_clearer(name)
+            try:
+                clearer = self._work_sources.label_clearer(name)
+            except WorkAnnotateError as exc:
+                self._refused_build(name, exc)
+                self._skipped(name, outages, tally)
+                unfinished.append(name)
+                continue
             if clearer is None:
                 _log.warning("forge-status source left config; its labels are not cleared", source=name)
                 outages.discard(name)
@@ -208,6 +219,13 @@ class TenantAnnotation:
                 unfinished.append(name)
         self._remember(AnnotationMemoryChange.on_departure(leaving, unfinished))
         return len(tally.sources_skipped) == skipped_before and tally.failed == failed_before and not unfinished
+
+    def _refused_build(self, name: str, exc: WorkAnnotateError) -> None:
+        """Record the refusal of the credential the source keyed ``name`` is built on; any other failure is the
+        pass's fault."""
+        if exc.refusal is None:
+            raise exc
+        self._refused(name, exc.refusal)
 
     def _skipped(self, name: str, outages: set[str], tally: AnnotationTally) -> None:
         tally.sources_skipped.append(name)
