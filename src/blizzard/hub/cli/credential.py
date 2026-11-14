@@ -17,6 +17,15 @@ _VARIANT = click.option(
     default=None,
     help="Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
 )
+_APP_ID = click.option(
+    "--app-id", type=int, default=None, help="The GitHub App's id, for a github.app-installation credential."
+)
+_INSTALLATION_ID = click.option(
+    "--installation-id",
+    type=int,
+    default=None,
+    help="The GitHub App installation's id, for a github.app-installation credential.",
+)
 _IF_MATCH = click.option(
     "--if-match", type=int, default=None, help="Refuse the change unless the credential is still at this revision."
 )
@@ -45,9 +54,13 @@ def credential_group() -> None:
 @click.argument("slug")
 @click.option("--name", default=None, help="The credential's display name; its slug when omitted.")
 @click.option("--forge", required=True, help="The forge the credential acts on, by id or slug.")
-@click.option("--binding", required=True, help="How the credential authenticates: github.token.")
+@click.option(
+    "--binding", required=True, help="How the credential authenticates: github.token or github.app-installation."
+)
 @click.option("--secret", required=True, help="The stored secret the credential reads.")
 @_VARIANT
+@_APP_ID
+@_INSTALLATION_ID
 def credential_create(
     cli: CliContext,
     slug: str,
@@ -56,6 +69,8 @@ def credential_create(
     binding: str,
     secret: str,
     variant: str | None,
+    app_id: int | None,
+    installation_id: int | None,
 ) -> None:
     """Add credential SLUG at revision 1 on the forge --forge names.
 
@@ -67,7 +82,7 @@ def credential_create(
         "forge": forge,
         "binding": binding,
         "secret": secret,
-        "settings": _settings(variant),
+        "settings": _settings(variant, app_id, installation_id),
     }
     row = cli.post("/api/credentials", "POST /credentials", json_body=body, door=True).json()
     cli.show_lines(row, f"credential {row['slug']} created at revision 1 — id {row['credential_id']}")
@@ -106,6 +121,8 @@ def credential_show(cli: CliContext, credential: str) -> None:
 @click.option("--name", default=None, help="The new display name.")
 @click.option("--secret", default=None, help="The new secret; every record naming the credential follows it.")
 @_VARIANT
+@_APP_ID
+@_INSTALLATION_ID
 @_IF_MATCH
 def credential_edit(
     cli: CliContext,
@@ -114,15 +131,19 @@ def credential_edit(
     name: str | None,
     secret: str | None,
     variant: str | None,
+    app_id: int | None,
+    installation_id: int | None,
     if_match: int | None,
 ) -> None:
-    """Change only the fields given on CREDENTIAL; a no-op keeps its revision.
+    """Change only the fields given on CREDENTIAL; a no-op keeps its revision. Any setting given replaces all its
+    settings, so give every setting its binding requires.
 
     Refused when the new slug is another credential's, when --if-match names a stale revision, or when the change
     would take away a capability an enabled repository acting with it needs."""
     body: dict[str, Any] = {k: v for k, v in {"slug": slug, "name": name, "secret": secret}.items() if v is not None}
-    if variant is not None:
-        body["settings"] = _settings(variant)
+    settings = _settings(variant, app_id, installation_id)
+    if settings:
+        body["settings"] = settings
     if not body:
         raise click.UsageError("nothing to change — give a field to set")
     row = cli.patch(
@@ -151,8 +172,9 @@ def credential_enable(cli: CliContext, credential: str, if_match: int | None) ->
     _lifecycle(cli, credential, "enable", if_match)
 
 
-def _settings(variant: str | None) -> dict[str, str]:
-    return {} if variant is None else {"variant": variant}
+def _settings(variant: str | None, app_id: int | None, installation_id: int | None) -> dict[str, object]:
+    given = {"variant": variant, "app_id": app_id, "installation_id": installation_id}
+    return {key: value for key, value in given.items() if value is not None}
 
 
 def _lifecycle(cli: CliContext, credential: str, verb: str, if_match: int | None) -> None:
