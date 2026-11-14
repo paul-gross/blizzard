@@ -329,6 +329,12 @@ class CliContext:
         for line in lines:
             click.echo(line)
 
+    def warn(self, payload: dict[str, Any]) -> None:
+        """Print each warning a write answered on stderr, so ``--json`` stdout stays the body alone."""
+        warnings: list[dict[str, str]] = payload.get("warnings") or []
+        for warning in warnings:
+            click.echo(f"warning: {warning['message']}", err=True)
+
     def finish(self, resp: Response, message: str) -> None:
         """Echo a write verb's result: the raw body under ``--json``, else a static
         success line that never has to parse the body at all."""

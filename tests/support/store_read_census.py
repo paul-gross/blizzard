@@ -84,10 +84,10 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import (
     CredentialDraft,
     CredentialEdit,
-    CredentialId,
     CredentialSlug,
     IReadCredentialRepository,
 )
@@ -1346,7 +1346,8 @@ class HubWorld:
     work_source_id: WorkSourceId
     #: The forge both name, created ``census-forge`` and renamed ``census-github``.
     forge_id: ForgeId
-    #: A credential on that forge reading ``gh-token``, created ``census-cred`` and renamed ``census-credential``.
+    #: A credential on that forge reading ``gh-token``, created ``census-cred`` and renamed ``census-credential``; the
+    #: census work source and repository act with it.
     credential_id: CredentialId
     #: A visit submitted to two flows, with an open turn; a second visit beside it is closed.
     flow_chunk: str
@@ -1556,7 +1557,12 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         "census-source",
         None,
         WorkSourceFields(
-            provider="github", locator="acme/census", forge_id=census_forge.forge_id, annotate=False, secret="gh-token"
+            provider="github",
+            locator="acme/census",
+            forge_id=census_forge.forge_id,
+            annotate=False,
+            secret="gh-token",
+            credential_id=census_credential.credential_id,
         ),
         operator,
     )
@@ -1569,6 +1575,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             repo="census",
             base_branch="master",
             secret_name="gh-token",
+            credential_id=census_credential.credential_id,
         ),
         operator,
     )
@@ -3095,6 +3102,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         WorkSourceSlug.parse("census-source")
     ),
     (IReadWorkSourceRepository, "resolve"): lambda w: w.hub.services.work_source_records.resolve("census-source"),
+    (IReadWorkSourceRepository, "naming_credential"): lambda w: w.hub.services.work_source_records.naming_credential(
+        w.credential_id
+    ),
     (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
         include_retired=True
     ),
@@ -3109,6 +3119,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.hub.services.repository_records.get_by_former_slug(RepositorySlug.parse("census-repo"))
     ),
     (IReadRepositoryRecordRepository, "resolve"): lambda w: w.hub.services.repository_records.resolve("census-repo"),
+    (IReadRepositoryRecordRepository, "naming_credential"): lambda w: (
+        w.hub.services.repository_records.naming_credential(w.credential_id)
+    ),
     (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
         include_retired=True
     ),
@@ -3135,6 +3148,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         CredentialSlug.parse("census-cred")
     ),
     (IReadCredentialRepository, "resolve"): lambda w: w.hub.services.credential_records.resolve("census-cred"),
+    (IReadCredentialRepository, "get_by_authority"): lambda w: w.hub.services.credential_records.get_by_authority(
+        w.forge_id, "secret/gh-token"
+    ),
+    (IReadCredentialRepository, "held_slugs"): lambda w: w.hub.services.credential_records.held_slugs(),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
     (IReadConfigRevisions, "revisions_for"): lambda w: (
         w.config_revisions.revisions_for(RecordKind.REPOSITORY, [w.repository_id]),

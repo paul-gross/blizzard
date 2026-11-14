@@ -32,6 +32,7 @@ _COMMANDS = {
     "source": f"{_CLI}.source:source_group",
     "repo": f"{_CLI}.repo:repo_group",
     "forge": f"{_CLI}.forge:forge_group",
+    "credential": f"{_CLI}.credential:credential_group",
     "project": f"{_CLI}.project:project_group",
     "config": f"{_CLI}.config:config_group",
     "urgency": f"{_CLI}.urgency:urgency_group",

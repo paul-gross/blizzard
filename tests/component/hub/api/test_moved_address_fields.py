@@ -106,7 +106,10 @@ def test_a_create_naming_no_forge_is_refused_forge_required(hub: HubHarness, pat
 def test_a_write_naming_its_forge_answers_no_warnings_and_any_other_field_is_still_forbidden(
     hub: HubHarness, path: str, body: dict[str, Any]
 ) -> None:
-    created = hub.client.post(path, json={**body, "forge": "ghe"})
+    credential = {"slug": "gh", "forge": "ghe", "binding": "github.token", "secret": "gh"}
+    assert hub.client.post("/api/credentials", json=credential).status_code == 201
+    named = {k: v for k, v in body.items() if k not in ("secret_name", "secret")}
+    created = hub.client.post(path, json={**named, "forge": "ghe", "credential": "gh"})
     assert created.status_code == 201, created.text
     assert created.json()["warnings"] == []
     assert "Deprecation" not in created.headers

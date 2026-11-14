@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from blizzard.wire import config as config_wire
+from blizzard.wire import credential as credential_wire
 from blizzard.wire import forge as forge_wire
 from blizzard.wire import graph as graph_wire
 from blizzard.wire import invitation as invitation_wire
@@ -400,6 +401,70 @@ def forge_slug_taken_problem(message: str, slug: str, *, instance: str) -> forge
         detail=forge_wire.ForgeSlugTakenDetail(message=message, slug=slug),
         instance=instance,
         status=409,
+    )
+
+
+def credential_not_found_problem(detail: str, *, instance: str) -> credential_wire.CredentialNotFoundProblem:
+    return credential_wire.CredentialNotFoundProblem(
+        type=credential_wire.CREDENTIAL_NOT_FOUND,
+        title="Credential not found",
+        detail=detail,
+        instance=instance,
+        status=404,
+    )
+
+
+def credential_in_use_problem(
+    message: str, referrers: list[record_referrer_wire.RecordReferrer], *, instance: str
+) -> credential_wire.CredentialInUseProblem:
+    return credential_wire.CredentialInUseProblem(
+        type=credential_wire.CREDENTIAL_IN_USE,
+        title="Credential in use",
+        detail=message,
+        instance=instance,
+        status=409,
+        referrers=referrers,
+    )
+
+
+def credential_slug_taken_problem(
+    message: str, slug: str, *, instance: str
+) -> credential_wire.CredentialSlugTakenProblem:
+    return credential_wire.CredentialSlugTakenProblem(
+        type=credential_wire.CREDENTIAL_SLUG_TAKEN,
+        title="Credential slug taken",
+        detail=message,
+        instance=instance,
+        status=409,
+        slug=slug,
+    )
+
+
+def credential_authority_taken_problem(
+    message: str, holder: str, authority: str, *, instance: str
+) -> credential_wire.CredentialAuthorityTakenProblem:
+    return credential_wire.CredentialAuthorityTakenProblem(
+        type=credential_wire.CREDENTIAL_AUTHORITY_TAKEN,
+        title="Credential authority taken",
+        detail=message,
+        instance=instance,
+        status=409,
+        holder=holder,
+        authority=authority,
+    )
+
+
+def credential_capability_missing_problem(
+    message: str, referrers: list[record_referrer_wire.RecordReferrer], missing: list[str], *, instance: str
+) -> credential_wire.CredentialCapabilityMissingProblem:
+    return credential_wire.CredentialCapabilityMissingProblem(
+        type=credential_wire.CREDENTIAL_CAPABILITY_MISSING,
+        title="Credential capability missing",
+        detail=message,
+        instance=instance,
+        status=422,
+        referrers=referrers,
+        missing=missing,
     )
 
 

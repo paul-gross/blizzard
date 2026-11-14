@@ -16,14 +16,14 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordKind, RecordRef
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
+from blizzard.hub.domain.config.credential_naming import CredentialId, CredentialUnavailable, credential_lock
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialDraft,
     CredentialEdit,
-    CredentialId,
     CredentialInUse,
-    credential_lock,
 )
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeEdit,
@@ -35,6 +35,7 @@ from blizzard.hub.domain.config.forges import (
 )
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    RepositoryDraft,
     RepositoryEdit,
     RepositoryFields,
     RepositoryId,
@@ -48,7 +49,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
     WorkSourceSecretUnavailable,
 )
-from blizzard.hub.domain.kernel.locks import LockKey
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 _AT = datetime(2026, 11, 12, 9, 0, tzinfo=UTC)
@@ -108,6 +109,8 @@ class _World:
     events: list[str] = field(default_factory=list[str])
     declared: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
     token: object = None
+    credentials: dict[str, ConfiguredCredential] = field(default_factory=lambda: {_CRED.credential_id: _CRED})
+    authority_holder: ConfiguredCredential | None = None
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:
@@ -134,7 +137,24 @@ class _World:
         self._in_unit("read", transaction)
         if ids == [_GHE]:
             return {} if self.forge is None else {_GHE: self.forge}
+        if all(str(key).startswith("cred_") for key in ids):
+            return {key: self.credentials[key] for key in ids if key in self.credentials}
         return {} if self.secret is None else {"tok": self.secret}
+
+    def get_by_authority(
+        self, forge_id: ForgeId, authority: str, *, transaction: Transaction | None = None
+    ) -> ConfiguredCredential | None:
+        if transaction is not None:
+            self._in_unit("authority", transaction)
+        return self.authority_holder
+
+    def held_slugs(self, *, transaction: Transaction | None = None) -> frozenset[str]:
+        self._in_unit("slugs", transaction)
+        return frozenset({"deploy"})
+
+    def naming_credential(self, credential_id: CredentialId, *, transaction: Transaction | None = None) -> list[Any]:
+        self._in_unit("naming", transaction)
+        return []
 
     def referrers_of(self, ids: list[Any], *, transaction: Transaction | None = None) -> dict[Any, list[RecordRef]]:
         self._in_unit("referrers", transaction)
@@ -143,6 +163,8 @@ class _World:
     # --- writes ---
     def _write(self, record: Any = None, **kwargs: Any) -> Any:
         self._in_unit("write", kwargs["transaction"])
+        if isinstance(record, ConfiguredCredential):
+            self.credentials[record.credential_id] = record
         return record
 
     create = update = _write
@@ -179,6 +201,8 @@ _RETIRED_SOURCE, _RETIRED_REPO = replace(_SOURCE, retired=True), replace(_REPO, 
 _RETIRED_FORGE = replace(_FORGE, retired=True)
 _RETIRED_CRED = replace(_CRED, retired=True)
 _CRED_KEY = credential_lock(CredentialId("cred_deploy"))
+_LINKED_REPO = replace(_REPO, fields=replace(_REPO.fields, credential_id=_CRED.credential_id))
+_LINKED_SOURCE = replace(_SOURCE, fields=replace(_SOURCE.fields, credential_id=_CRED.credential_id))
 
 _VERBS: dict[str, tuple[_Verb, list[LockKey], list[str]]] = {
     "forge edit": (
@@ -230,6 +254,26 @@ _VERBS: dict[str, tuple[_Verb, list[LockKey], list[str]]] = {
         [_CRED_KEY, *_NAMED],
         ["lock", "read", "read", "write"],
     ),
+    "credential edit of its settings": (
+        lambda a: a.edit_credential(_CRED, CredentialEdit(settings={"variant": "classic"}), _CTX),
+        [_CRED_KEY, *_NAMED],
+        ["lock", "read", "read", "naming", "write"],
+    ),
+    "repository edit naming a credential": (
+        lambda a: a.edit_repository(_LINKED_REPO, RepositoryEdit(base_branch="main"), _CTX),
+        [_CRED_KEY, *_NAMED],
+        ["lock", "read", "read", "read", "write"],
+    ),
+    "work source edit naming a credential": (
+        lambda a: a.edit_work_source(_LINKED_SOURCE, WorkSourceEdit(annotate=False), _CTX),
+        [_CRED_KEY, *_NAMED],
+        ["lock", "read", "read", "read", "write"],
+    ),
+    "repository retire naming a credential": (
+        lambda a: a.retire_repository(_LINKED_REPO, _CTX),
+        [_CRED_KEY, *_NAMED],
+        ["lock", "write"],
+    ),
     "credential retire": (lambda a: a.retire_credential(_CRED, _CTX), [_CRED_KEY], ["lock", "referrers", "write"]),
     "credential enable": (
         lambda a: a.enable_credential(_RETIRED_CRED, _CTX),
@@ -254,6 +298,44 @@ def test_each_verb_declares_the_keys_of_what_it_writes_and_names_once_before_rea
 
     assert world.declared == [sorted(keys)]
     assert world.events == events
+
+
+def test_a_credential_secret_edit_mirrors_its_referrers_in_its_own_unit_after_its_write() -> None:
+    world = _World()
+    old = replace(_CRED, fields=replace(_CRED.fields, secret_name="old"), authority="secret/old")
+
+    _authoring(world).edit_credential(old, CredentialEdit(secret_name="tok"), _CTX)
+
+    assert world.declared == [sorted([_CRED_KEY, *_NAMED])]
+    assert world.events == ["lock", "read", "read", "write", "naming", "naming"]
+
+
+def test_an_old_field_resolves_and_creates_its_credential_inside_the_referrer_s_one_unit() -> None:
+    world = _World()
+    draft = RepositoryDraft(owner="acme", repo="demo", base_branch="master", secret_name="tok")
+
+    written = _authoring(world).create_repository_naming(
+        "demo", None, draft, ForgeChoice(forge=_GHE, named=_FORGE), _CTX
+    )
+
+    (declared,) = world.declared
+    (planned,) = [key for key in declared if key.namespace is LockNamespace.CREDENTIAL]
+    assert declared == sorted([*_NAMED, planned])
+    assert world.events == ["lock", "authority", "slugs", "read", "read", "write", "read", "read", "read", "write"]
+    (use,) = written.old_fields
+    assert (use.field, use.credential.credential_id, use.credential.slug) == ("secret_name", planned.key, "tok")
+    assert written.record.fields.credential_id == planned.key
+
+
+def test_an_old_field_naming_a_retired_credential_is_refused_before_any_write() -> None:
+    world = _World(authority_holder=_RETIRED_CRED)
+    draft = RepositoryDraft(owner="acme", repo="demo", base_branch="master", secret_name="tok")
+
+    with pytest.raises(CredentialUnavailable, match="credential deploy is retired"):
+        _authoring(world).create_repository_naming("demo", None, draft, ForgeChoice(forge=_GHE, named=_FORGE), _CTX)
+
+    assert world.declared == [sorted([*_NAMED, _CRED_KEY])]
+    assert world.events == ["lock", "authority"]
 
 
 def test_a_forge_an_enabled_record_names_is_refused_its_retire_under_the_forge_s_key() -> None:

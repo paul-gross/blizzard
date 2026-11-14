@@ -71,6 +71,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     ),
     "forge-budget-low": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
     "forge-rate-limited": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
+    "config-old-field-used": Recorded("hub/api/forge_warnings.py:warned", "warning"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/hub/outbound.py:OutboundFacts.command_failed", "warning"),
     "work-item-close-failed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.drain", "warning"),

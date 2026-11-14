@@ -76,6 +76,9 @@ export function workSourceSummary(overrides: Partial<WorkSourceSummary> = {}): W
     created_by: 'usr_1',
     created_by_name: null,
     warnings: [],
+    credential_id: null,
+    credential_slug: null,
+    credential_name: null,
     ...overrides,
   };
 }
@@ -102,6 +105,9 @@ export function repositorySummary(overrides: Partial<RepositorySummary> = {}): R
     created_by: 'usr_1',
     created_by_name: null,
     warnings: [],
+    credential_id: null,
+    credential_slug: null,
+    credential_name: null,
     ...overrides,
   };
 }

@@ -32,7 +32,7 @@ from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, CadenceEdit, Spacing
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
-from blizzard.hub.domain.config.credentials import CredentialId
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from blizzard.hub.api.problem_declaration import ProblemDeclaration
 from blizzard.wire import config as config_wire
+from blizzard.wire import credential as credential_wire
 from blizzard.wire import forge as forge_wire
 from blizzard.wire import graph as graph_wire
 from blizzard.wire import invitation as invitation_wire
@@ -89,6 +90,9 @@ _REVISION_CONFLICT_OPERATIONS = (
     ("PATCH", "/api/work-sources/{source}"),
     ("POST", "/api/work-sources/{source}/retire"),
     ("POST", "/api/work-sources/{source}/enable"),
+    ("PATCH", "/api/credentials/{credential}"),
+    ("POST", "/api/credentials/{credential}/retire"),
+    ("POST", "/api/credentials/{credential}/enable"),
     ("PUT", "/api/secrets/{name}/value"),
     ("PATCH", "/api/urgencies/{key}"),
     ("POST", "/api/urgencies/{key}/retire"),
@@ -104,6 +108,9 @@ _FIELD_INVALID_OPERATIONS = (
     ("POST", "/api/projects/{project}/landing-order/position"),
     ("POST", "/api/forges"),
     ("PATCH", "/api/forges/{forge}"),
+    ("POST", "/api/credentials"),
+    ("PATCH", "/api/credentials/{credential}"),
+    ("POST", "/api/credentials/{credential}/enable"),
     ("POST", "/api/repositories"),
     ("PATCH", "/api/repositories/{repository}"),
     ("POST", "/api/repositories/{repository}/enable"),
@@ -211,6 +218,28 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
             ("POST", "/api/forges/{forge}/retire", forge_wire.ForgeInUseProblem),
             ("POST", "/api/forges/{forge}/enable", forge_wire.ForgeRevisionConflictProblem),
         )
+    ),
+    *(
+        ProblemDeclaration(method, path, 404, credential_wire.CredentialNotFoundProblem)
+        for method, path in (
+            ("GET", "/api/credentials/{credential}"),
+            ("PATCH", "/api/credentials/{credential}"),
+            ("POST", "/api/credentials/{credential}/retire"),
+            ("POST", "/api/credentials/{credential}/enable"),
+        )
+    ),
+    *(
+        ProblemDeclaration(method, path, 409, model)
+        for method, path, model in (
+            ("POST", "/api/credentials", credential_wire.CredentialSlugTakenProblem),
+            ("POST", "/api/credentials", credential_wire.CredentialAuthorityTakenProblem),
+            ("PATCH", "/api/credentials/{credential}", credential_wire.CredentialSlugTakenProblem),
+            ("PATCH", "/api/credentials/{credential}", credential_wire.CredentialAuthorityTakenProblem),
+            ("POST", "/api/credentials/{credential}/retire", credential_wire.CredentialInUseProblem),
+        )
+    ),
+    ProblemDeclaration(
+        "PATCH", "/api/credentials/{credential}", 422, credential_wire.CredentialCapabilityMissingProblem
     ),
     *(
         ProblemDeclaration(method, path, 404, urgency_wire.UrgencyNotFoundProblem)

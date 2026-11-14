@@ -49,7 +49,13 @@ def source_group() -> None:
 @click.option("--name", default=None, help="The source's display name; its slug when omitted.")
 @click.option("--provider", required=True, help="The provider the source reads items from, e.g. github.")
 @click.option("--locator", required=True, help="Where the items live; for github, owner/name.")
-@click.option("--secret", "secret", default=None, help="The stored secret holding the provider credential.")
+@click.option("--credential", "credential", default=None, help="The credential the source acts with, by id or slug.")
+@click.option(
+    "--secret",
+    "secret",
+    default=None,
+    help="Deprecated: the stored secret holding the provider credential — give --credential.",
+)
 @click.option("--forge", "forge", default=None, help="The forge the source reads from, by id or slug.")
 @click.option(
     "--annotate/--no-annotate", "annotate", default=False, help="Whether the hub annotates items on the forge."
@@ -60,6 +66,7 @@ def source_create(
     name: str | None,
     provider: str,
     locator: str,
+    credential: str | None,
     secret: str | None,
     forge: str | None,
     annotate: bool,
@@ -77,9 +84,10 @@ def source_create(
         "secret": secret,
         "annotate": annotate,
     }
-    body.update({k: v for k, v in (("name", name), ("forge", forge)) if v is not None})
+    body.update({k: v for k, v in (("name", name), ("forge", forge), ("credential", credential)) if v is not None})
     resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, door=True)
     out = resp.json()
+    cli.warn(out)
     cli.show_lines(out, f"work source {out['slug']} created at revision 1 — id {out['work_source_id']}")
 
 
@@ -109,7 +117,7 @@ def source_show(cli: CliContext, source: str) -> None:
         f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
         f"id {body['work_source_id']}",
         f"provider {body['provider']}  locator {body['locator']}",
-        f"forge {body['forge_slug']}",
+        f"forge {body['forge_slug']}  credential {body['credential_slug'] or '-'}",
         f"secret {body['secret'] or '-'}  annotate {str(body['annotate']).lower()}",
         f"created {body['created_at']} by {body['created_by']}",
     )
@@ -121,7 +129,8 @@ def source_show(cli: CliContext, source: str) -> None:
 @click.option("--name", default=None, help="The new display name.")
 @click.option("--provider", default=None, help="The new provider.")
 @click.option("--locator", default=None, help="The new locator.")
-@click.option("--secret", default=None, help="The new credential secret.")
+@click.option("--credential", "credential", default=None, help="The credential to act with, by id or slug.")
+@click.option("--secret", default=None, help="Deprecated: the new credential secret — give --credential.")
 @click.option("--forge", "forge", default=None, help="The forge to move the source to, by id or slug.")
 @click.option("--annotate/--no-annotate", "annotate", default=None, help="Turn forge annotation on or off.")
 @click.option(
@@ -139,6 +148,7 @@ def source_edit(
     name: str | None,
     provider: str | None,
     locator: str | None,
+    credential: str | None,
     secret: str | None,
     forge: str | None,
     annotate: bool | None,
@@ -155,6 +165,7 @@ def source_edit(
         "name": name,
         "provider": provider,
         "locator": locator,
+        "credential": credential,
         "secret": secret,
         "forge": forge,
     }
@@ -176,6 +187,7 @@ def source_edit(
         door=True,
     )
     out = resp.json()
+    cli.warn(out)
     cli.show_lines(out, f"work source {out['slug']} is at revision {out['revision']}")
 
 

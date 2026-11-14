@@ -25,6 +25,7 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IReadWorkRefsCorpus
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlowViews
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
@@ -347,6 +348,15 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("credential_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("credentials", 200, _FLEET_CONFIG_REASON),
+    MethodScopedAllowance(
+        IReadCredentialRepository,
+        "held_slugs",
+        "credential_former_slugs",
+        200,
+        "the slug rule of a credential an old secret field creates reads every slug the tenant's credentials held — "
+        "the primary key is (tenant_id, slug), which a read of them all searches by tenant; bounded by the tenant's "
+        "operator-created credentials and their renames.",
+    ),
     TableWideAllowance("forge_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("forges", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graph_lifecycle_facts", 200, _FLEET_CONFIG_REASON),

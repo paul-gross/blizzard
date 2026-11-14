@@ -8,17 +8,28 @@ A repository or work-source write from a door goes through the ``…_naming`` ve
 as the edge resolved it: the forge is decided first
 (:func:`~blizzard.hub.domain.config.forge_resolution.resolve_forge`), then the record is built and validated on it.
 
-Every repository write that sets a landing policy — a create, a policy edit, a forge change, and each repository write
-an apply or an import plans — is checked against what :class:`IForgeOffers` says its forge offers, and refused
-:class:`~blizzard.hub.domain.config.landing_policies.ForgeCapabilityMissing` before anything is written."""
+A door's write names its credential as a :class:`~blizzard.hub.domain.config.credential_resolution.CredentialChoice`
+beside the old secret field, decided by the old-field table
+(:func:`~blizzard.hub.domain.config.credential_resolution.decide_credential`); an old field alone resolves, inside the
+record's unit, to the ``github.token`` credential reading it on the record's forge, created when there is none
+(:meth:`ConfigAuthoring.credential_for_old_field`).
+
+Every repository write that sets a landing policy — a create, a policy edit, a forge or credential change, and each
+repository write an apply or an import plans — is checked against what :class:`IForgeOffers` says its forge offers,
+narrowed by the declared offers of the credential it acts with, and refused
+:class:`~blizzard.hub.domain.config.landing_policies.ForgeCapabilityMissing` before anything is written. A per-record
+write judges it inside its unit, on the forge and credential read there."""
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.secrets.sealing import ISecretCipher
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config import secret_lifecycle
@@ -46,14 +57,28 @@ from blizzard.hub.domain.config.carry_over import (
     plan_import,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ISecretReferences
+from blizzard.hub.domain.config.credential_naming import CredentialId, CredentialUnavailable, credential_lock
+from blizzard.hub.domain.config.credential_resolution import (
+    OLD_FIELD_BINDING,
+    CredentialChoice,
+    CredentialDecision,
+    credential_offers,
+    decide_credential,
+    new_credential_slug,
+    old_field_authority,
+    old_field_draft,
+    require_referrers_honoured,
+)
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
+    CredentialAuthorityTaken,
     CredentialDraft,
     CredentialEdit,
+    CredentialSecretUnavailable,
+    CredentialSlugTaken,
     ICredentialReferences,
     IWriteCredentialRepository,
     binding_named,
-    credential_lock,
     require_credential_references,
 )
 from blizzard.hub.domain.config.credentials import require_unused as require_credential_unused
@@ -72,6 +97,7 @@ from blizzard.hub.domain.config.forges import (
 from blizzard.hub.domain.config.landing_policies import require_offered
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys
 from blizzard.hub.domain.config.references import (
+    NamedFacts,
     references_refusal,
     require_repository_references,
     require_work_source_references,
@@ -82,6 +108,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryDraft,
     RepositoryEdit,
     RepositoryFields,
+    RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.secrets import (
     IWriteSecretRepository,
@@ -96,15 +123,89 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceFields,
+    WorkSourceSecretUnavailable,
     require_known_provider,
 )
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
-from blizzard.hub.domain.kernel.unset import UnsetType
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 
 class _Rollback(Exception):
     """Raised out of a unit that must leave nothing behind — a dry run, or an import recorded first."""
+
+
+class _Reresolve(Exception):
+    """Raised out of a unit whose old field resolved to a credential other than the one it locked — one another write
+    created first — so the write runs again locking that one."""
+
+    def __init__(self, credential_id: CredentialId) -> None:
+        super().__init__(credential_id)
+        self.credential_id = credential_id
+
+
+@domain_model
+@dataclass(frozen=True)
+class OldFieldUse:
+    """An old secret field a write sent alone, and the credential it resolved to."""
+
+    field: str
+    credential: ConfiguredCredential
+
+
+@domain_model
+@dataclass(frozen=True)
+class Authored[R]:
+    """A door's write: the record written, and each old field it resolved to a credential."""
+
+    record: R
+    old_fields: tuple[OldFieldUse, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class _OldField:
+    """An old field to resolve inside a referrer's unit: its wire name, the forge and secret it names, and the
+    credential the unit locks for it."""
+
+    field: str
+    forge_id: ForgeId
+    secret_name: str
+    planned: CredentialId
+
+    def secret_refusal(self, refused: CredentialSecretUnavailable) -> ConfigFieldError:
+        """``refused`` — the credential's refusal of the secret — as the referrer's own refusal of its old field."""
+        if self.field == "secret_name":
+            return RepositorySecretUnavailable(refused.secret, retired=refused.retired)
+        return WorkSourceSecretUnavailable(refused.secret, retired=refused.retired)
+
+
+#: A write that names no credential and sends no old field.
+_NO_CREDENTIAL = CredentialChoice()
+
+#: Whether a repository unit judges what its forge offers the record's policy: for a record it creates (asked of the
+#: forge's kind), for one it edits (asked of the repository), or not at all.
+type _OffersCheck = bool | None
+_CREATED: _OffersCheck = True
+_EDITED: _OffersCheck = False
+_UNCHECKED: _OffersCheck = None
+
+
+def _named_credential(decision: CredentialDecision, old: _OldField | None) -> tuple[CredentialId, str] | None:
+    """The credential a write acts with and the secret it mirrors: the one ``decision`` names, else the one ``old``
+    resolves to — ``None`` when the write leaves its credential as stored."""
+    if decision.use is not None:
+        return decision.use.credential_id, decision.use.fields.secret_name
+    if old is not None:
+        return old.planned, old.secret_name
+    return None
+
+
+def _used(old: _OldField | None, resolved: ConfiguredCredential | None) -> tuple[OldFieldUse, ...]:
+    """The old field a write resolved, with the credential it resolved to — none when it resolved no old field."""
+    if old is None or resolved is None:
+        return ()
+    return (OldFieldUse(old.field, resolved),)
 
 
 class ConfigAuthoring:
@@ -222,25 +323,62 @@ class ConfigAuthoring:
         the refusals of :meth:`_credential_unit`."""
         binding = binding_named(draft.binding)
         record, change = ConfiguredCredential.new(draft, binding, ctx, at=self._clock.now())
-        with self._credential_unit(record, change.op, held=[]) as locked:
+        with self._credential_unit(record, change.op, held=[]) as (locked, _):
             return self._credentials.create(record, change=change, transaction=locked)
 
     def edit_credential(
         self, record: ConfiguredCredential, edit: CredentialEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredCredential:
-        """Edit the credential; its forge and binding never change, and its authority is derived again."""
-        decided = record.edit(edit, binding_named(record.fields.binding), ctx, if_match=if_match, at=self._clock.now())
+        """Edit the credential; its forge and binding never change, and its authority is derived again.
+
+        An edit of its settings is refused
+        :class:`~blizzard.hub.domain.config.credential_resolution.CredentialCapabilityMissing` when what it would offer
+        falls short of an enabled repository acting with it; an edit of its secret rewrites every record acting with it
+        to the new one (``hub:credential-secret-mirrored``), each at its own revision with its own change row."""
+        now = self._clock.now()
+        decided = record.edit(edit, binding_named(record.fields.binding), ctx, if_match=if_match, at=now)
         if decided is None:
             return record
         edited, change = decided
-        with self._credential_unit(edited, change.op, held=[credential_lock(record.credential_id)]) as locked:
-            return self._credentials.update(
+        credential_id = record.credential_id
+        with self._credential_unit(edited, change.op, held=[credential_lock(credential_id)]) as (locked, facts):
+            if edited.fields.settings != record.fields.settings:
+                forge = facts.forges[edited.fields.forge_id]
+                repositories = self._repositories.naming_credential(credential_id, transaction=locked)
+                require_referrers_honoured(
+                    edited, [(repo, self._offers.offered(forge, repo.repository_id)) for repo in repositories]
+                )
+            written = self._credentials.update(
                 edited,
                 from_revision=record.revision,
                 left_slug=record.slug_left_for(edited),
                 change=change,
                 transaction=locked,
             )
+            if edited.fields.secret_name != record.fields.secret_name:
+                self._mirror_secret(written, ctx, locked, at=now)
+            return written
+
+    def _mirror_secret(
+        self, credential: ConfiguredCredential, ctx: ChangeContext, locked: LockedTransaction, *, at: datetime
+    ) -> None:
+        """Rewrite the old secret field of every record acting with ``credential`` — retired ones too — to its secret,
+        in ``locked``, which holds the credential's keys and so every key such a record names."""
+        credential_id, secret = credential.credential_id, credential.fields.secret_name
+        for repository in self._repositories.naming_credential(credential_id, transaction=locked):
+            decided = repository.edit(
+                RepositoryEdit(secret_name=secret, credential_id=credential_id), ctx, if_match=None, at=at
+            )
+            if decided is not None:
+                self._repositories.update(
+                    decided[0], from_revision=repository.revision, left_slug=None, change=decided[1], transaction=locked
+                )
+        for source in self._work_sources.naming_credential(credential_id, transaction=locked):
+            moved = source.edit(WorkSourceEdit(secret=secret, credential_id=credential_id), ctx, if_match=None, at=at)
+            if moved is not None:
+                self._work_sources.update(
+                    moved[0], from_revision=source.revision, left_slug=None, change=moved[1], transaction=locked
+                )
 
     def retire_credential(
         self, record: ConfiguredCredential, ctx: ChangeContext, *, if_match: int | None = None
@@ -275,7 +413,7 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        with self._credential_unit(moved, change.op, held=[credential_lock(record.credential_id)]) as locked:
+        with self._credential_unit(moved, change.op, held=[credential_lock(record.credential_id)]) as (locked, _):
             return self._credentials.record_lifecycle(
                 moved,
                 retired=False,
@@ -289,26 +427,113 @@ class ConfigAuthoring:
     @contextmanager
     def _credential_unit(
         self, record: ConfiguredCredential, op: ChangeOp, *, held: list[LockKey]
-    ) -> Generator[LockedTransaction]:
+    ) -> Generator[tuple[LockedTransaction, NamedFacts]]:
         """The unit the ``op`` write of ``record`` runs in: it declares ``held`` and the keys of the forge and secret
-        ``record`` names, then judges, under them, whether it may name them."""
+        ``record`` names, then judges, under them, whether it may name them — yielding the facts it read."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=sorted([*held, *record.locks()]))
             binding = binding_named(record.fields.binding)
-            require_credential_references(record, op, binding, *self._named_facts(record.locks(), locked))
-            yield locked
+            facts = self._named_facts(record.locks(), locked)
+            require_credential_references(record, op, binding, facts.forges, facts.secrets)
+            yield locked, facts
+
+    def credential_for_old_field(
+        self, old: _OldField, ctx: ChangeContext, locked: LockedTransaction
+    ) -> ConfiguredCredential:
+        """The ``github.token`` credential the old field ``old`` resolves to on its forge, read in ``locked`` — the
+        referrer's unit, which holds the forge's, the secret's and ``old.planned``'s keys — and created under
+        ``old.planned`` when there is none, its slug by
+        :func:`~blizzard.hub.domain.config.credential_resolution.new_credential_slug`.
+
+        :class:`CredentialUnavailable` when it is retired, so the operator enables it rather than a write creating
+        another; :class:`_Reresolve` when it is a credential other than ``old.planned``, the create's own lost race
+        included — its insert runs in a savepoint, so the unit reads on."""
+        authority = old_field_authority(old.secret_name)
+        held = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
+        if held is None:
+            slug = new_credential_slug(old.secret_name, self._credentials.held_slugs(transaction=locked))
+            binding = binding_named(OLD_FIELD_BINDING)
+            draft = old_field_draft(old.forge_id, old.secret_name, slug=slug)
+            record, change = ConfiguredCredential.new(
+                draft, binding, ctx, at=self._clock.now(), credential_id=old.planned
+            )
+            facts = self._named_facts(record.locks(), locked)
+            try:
+                require_credential_references(record, change.op, binding, facts.forges, facts.secrets)
+            except CredentialSecretUnavailable as refused:
+                raise old.secret_refusal(refused) from None
+            try:
+                return self._credentials.create(record, change=change, transaction=locked)
+            except (CredentialAuthorityTaken, CredentialSlugTaken):
+                held = self._credentials.get_by_authority(old.forge_id, authority, transaction=locked)
+                raise _Reresolve(old.planned if held is None else held.credential_id) from None
+        if held.credential_id != old.planned:
+            raise _Reresolve(held.credential_id)
+        if held.retired:
+            raise CredentialUnavailable(held.slug, retired=True)
+        return held
+
+    def _planned_credential(self, forge_id: ForgeId, secret_name: str) -> CredentialId:
+        """The credential an old field naming ``secret_name`` on ``forge_id`` is expected to resolve to, read before
+        its unit: the one acting as that authority, else a fresh id for the one it will create."""
+        held = self._credentials.get_by_authority(forge_id, old_field_authority(secret_name))
+        if held is not None:
+            return held.credential_id
+        return CredentialId(Id.mint_at(IdPrefix.CREDENTIAL, self._clock.now()).value)
+
+    def _resolving[R](
+        self, decision: CredentialDecision, field: str, forge_id: ForgeId, write: Callable[[_OldField | None], R]
+    ) -> R:
+        """Run ``write``, handing it the old field ``decision`` resolves on ``forge_id``, if any; run it once more
+        locking the credential another write created first when the first run's unit read one."""
+        if decision.resolve is None:
+            return write(None)
+        planned = self._planned_credential(forge_id, decision.resolve)
+        try:
+            return write(_OldField(field, forge_id, decision.resolve, planned))
+        except _Reresolve as moved:
+            return write(_OldField(field, forge_id, decision.resolve, moved.credential_id))
 
     # --- Work sources ------------------------------------------------------------
 
     def create_work_source_naming(
-        self, slug: str, name: str | None, draft: WorkSourceDraft, choice: ForgeChoice, ctx: ChangeContext
-    ) -> ConfiguredWorkSource:
-        """Create a work source on the forge ``choice`` names. The refusals of
-        :func:`~blizzard.hub.domain.config.forge_resolution.resolve_forge`, and the record's own."""
+        self,
+        slug: str,
+        name: str | None,
+        draft: WorkSourceDraft,
+        choice: ForgeChoice,
+        ctx: ChangeContext,
+        *,
+        credential: CredentialChoice = _NO_CREDENTIAL,
+    ) -> Authored[ConfiguredWorkSource]:
+        """Create a work source on the forge ``choice`` names, acting with the credential ``credential`` and the old
+        ``secret`` field decide. The refusals of
+        :func:`~blizzard.hub.domain.config.forge_resolution.resolve_forge` and
+        :func:`~blizzard.hub.domain.config.credential_resolution.decide_credential`, and the record's own."""
         require_known_provider(draft.provider)
         forge = self._resolve(choice, provider=draft.provider, current=None)
         assert forge is not None
-        return self.create_work_source(slug, name, draft.on(forge.forge_id), ctx)
+        decision = decide_credential(
+            credential,
+            UNSET if draft.secret is None else draft.secret,
+            current=UNSET,
+            field="secret",
+            required=False,
+        )
+
+        def write(old: _OldField | None) -> Authored[ConfiguredWorkSource]:
+            named = _named_credential(decision, old)
+            fields = (
+                draft.on(forge.forge_id)
+                if named is None
+                else draft.on(forge.forge_id, credential_id=named[0], secret=named[1])
+            )
+            record, change = ConfiguredWorkSource.new(slug, name, fields, ctx, at=self._clock.now())
+            with self._work_source_unit(record, change.op, ctx, old=old) as (locked, resolved):
+                written = self._work_sources.create(record, change=change, transaction=locked)
+            return Authored(written, _used(old, resolved))
+
+        return self._resolving(decision, "secret", forge.forge_id, write)
 
     def edit_work_source_naming(
         self,
@@ -318,38 +543,67 @@ class ConfigAuthoring:
         ctx: ChangeContext,
         *,
         if_match: int | None = None,
-    ) -> ConfiguredWorkSource:
-        """Edit a work source, re-pointing it at the forge ``choice`` names, if any, as
-        :meth:`create_work_source_naming` names one."""
+        credential: CredentialChoice = _NO_CREDENTIAL,
+    ) -> Authored[ConfiguredWorkSource]:
+        """Edit a work source, re-pointing it at the forge ``choice`` names, if any, and at the credential
+        ``credential`` and the old ``secret`` field decide, as :meth:`create_work_source_naming` names them."""
         record.require_revision(if_match)
         provider = record.fields.provider if isinstance(edit.provider, UnsetType) else edit.provider
         require_known_provider(provider)
         forge = self._resolve(choice, provider=provider, current=record.fields.forge_id)
         moved = edit if forge is None else replace(edit, forge_id=forge.forge_id)
-        return self.edit_work_source(record, moved, ctx, if_match=if_match)
+        forge_id = record.fields.forge_id if forge is None else forge.forge_id
+        decision = decide_credential(
+            credential,
+            edit.secret,
+            current=record.fields.secret,
+            field="secret",
+            required=False,
+            forge_moved=forge_id != record.fields.forge_id,
+        )
+
+        def write(old: _OldField | None) -> Authored[ConfiguredWorkSource]:
+            named = _named_credential(decision, old)
+            sparse = moved if named is None else replace(moved, credential_id=named[0], secret=named[1])
+            written, resolved = self._edit_work_source(record, sparse, ctx, if_match=if_match, old=old)
+            return Authored(written, _used(old, resolved))
+
+        return self._resolving(decision, "secret", forge_id, write)
 
     def create_work_source(
         self, slug: str, name: str | None, fields: WorkSourceFields, ctx: ChangeContext
     ) -> ConfiguredWorkSource:
         record, change = ConfiguredWorkSource.new(slug, name, fields, ctx, at=self._clock.now())
-        with self._work_source_unit(record, change.op) as locked:
+        with self._work_source_unit(record, change.op, ctx) as (locked, _):
             return self._work_sources.create(record, change=change, transaction=locked)
 
     def edit_work_source(
         self, record: ConfiguredWorkSource, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredWorkSource:
+        return self._edit_work_source(record, edit, ctx, if_match=if_match)[0]
+
+    def _edit_work_source(
+        self,
+        record: ConfiguredWorkSource,
+        edit: WorkSourceEdit,
+        ctx: ChangeContext,
+        *,
+        if_match: int | None,
+        old: _OldField | None = None,
+    ) -> tuple[ConfiguredWorkSource, ConfiguredCredential | None]:
         decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
-            return record
+            return record, None
         edited, change = decided
-        with self._work_source_unit(edited, change.op) as locked:
-            return self._work_sources.update(
+        with self._work_source_unit(edited, change.op, ctx, old=old) as (locked, resolved):
+            written = self._work_sources.update(
                 edited,
                 from_revision=record.revision,
                 left_slug=record.slug_left_for(edited),
                 change=change,
                 transaction=locked,
             )
+        return written, resolved
 
     def retire_work_source(
         self, record: ConfiguredWorkSource, ctx: ChangeContext, *, if_match: int | None = None
@@ -369,7 +623,7 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        with self._work_source_unit(moved, change.op) as locked:
+        with self._work_source_unit(moved, change.op, ctx) as (locked, _):
             return self._work_sources.record_lifecycle(
                 moved,
                 retired=retired,
@@ -383,12 +637,40 @@ class ConfigAuthoring:
     # --- Repositories ------------------------------------------------------------
 
     def create_repository_naming(
-        self, slug: str, name: str | None, draft: RepositoryDraft, choice: ForgeChoice, ctx: ChangeContext
-    ) -> ConfiguredRepository:
-        """Create a repository on the forge ``choice`` names, as :meth:`create_work_source_naming` names one."""
+        self,
+        slug: str,
+        name: str | None,
+        draft: RepositoryDraft,
+        choice: ForgeChoice,
+        ctx: ChangeContext,
+        *,
+        credential: CredentialChoice = _NO_CREDENTIAL,
+    ) -> Authored[ConfiguredRepository]:
+        """Create a repository on the forge ``choice`` names, acting with the credential ``credential`` and the old
+        ``secret_name`` field decide, as :meth:`create_work_source_naming` names them."""
         forge = self._resolve(choice, provider=None, current=None)
         assert forge is not None
-        return self.create_repository(slug, name, draft.on(forge.forge_id), ctx)
+        decision = decide_credential(
+            credential,
+            UNSET if draft.secret_name is None else draft.secret_name,
+            current=UNSET,
+            field="secret_name",
+            required=True,
+        )
+
+        def write(old: _OldField | None) -> Authored[ConfiguredRepository]:
+            named = _named_credential(decision, old)
+            fields = (
+                draft.on(forge.forge_id)
+                if named is None
+                else draft.on(forge.forge_id, credential_id=named[0], secret_name=named[1])
+            )
+            record, change = ConfiguredRepository.new(slug, name, fields, ctx, at=self._clock.now())
+            with self._repository_unit(record, change.op, ctx, offers=_CREATED, old=old) as (locked, resolved):
+                written = self._repositories.create(record, change=change, transaction=locked)
+            return Authored(written, _used(old, resolved))
+
+        return self._resolving(decision, "secret_name", forge.forge_id, write)
 
     def edit_repository_naming(
         self,
@@ -398,39 +680,72 @@ class ConfigAuthoring:
         ctx: ChangeContext,
         *,
         if_match: int | None = None,
-    ) -> ConfiguredRepository:
-        """Edit a repository, re-pointing it at the forge ``choice`` names, if any, as
-        :meth:`create_work_source_naming` names one."""
+        credential: CredentialChoice = _NO_CREDENTIAL,
+    ) -> Authored[ConfiguredRepository]:
+        """Edit a repository, re-pointing it at the forge ``choice`` names, if any, and at the credential
+        ``credential`` and the old ``secret_name`` field decide, as :meth:`create_work_source_naming` names them."""
         record.require_revision(if_match)
         forge = self._resolve(choice, provider=None, current=record.fields.forge_id)
         moved = edit if forge is None else replace(edit, forge_id=forge.forge_id)
-        return self.edit_repository(record, moved, ctx, if_match=if_match)
+        forge_id = record.fields.forge_id if forge is None else forge.forge_id
+        decision = decide_credential(
+            credential,
+            edit.secret_name,
+            current=record.fields.secret_name,
+            field="secret_name",
+            required=False,
+            forge_moved=forge_id != record.fields.forge_id,
+        )
+
+        def write(old: _OldField | None) -> Authored[ConfiguredRepository]:
+            named = _named_credential(decision, old)
+            sparse = moved if named is None else replace(moved, credential_id=named[0], secret_name=named[1])
+            written, resolved = self._edit_repository(record, sparse, ctx, if_match=if_match, old=old)
+            return Authored(written, _used(old, resolved))
+
+        return self._resolving(decision, "secret_name", forge_id, write)
 
     def create_repository(
         self, slug: str, name: str | None, fields: RepositoryFields, ctx: ChangeContext
     ) -> ConfiguredRepository:
         record, change = ConfiguredRepository.new(slug, name, fields, ctx, at=self._clock.now())
-        self._require_offered(record, self._forges.get(record.fields.forge_id), created=True)
-        with self._repository_unit(record, change.op) as locked:
+        with self._repository_unit(record, change.op, ctx, offers=_CREATED) as (locked, _):
             return self._repositories.create(record, change=change, transaction=locked)
 
     def edit_repository(
         self, record: ConfiguredRepository, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredRepository:
+        return self._edit_repository(record, edit, ctx, if_match=if_match)[0]
+
+    def _edit_repository(
+        self,
+        record: ConfiguredRepository,
+        edit: RepositoryEdit,
+        ctx: ChangeContext,
+        *,
+        if_match: int | None,
+        old: _OldField | None = None,
+    ) -> tuple[ConfiguredRepository, ConfiguredCredential | None]:
         decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
-            return record
+            return record, None
         edited, change = decided
-        if not isinstance(edit.landing_policy, UnsetType) or edited.fields.forge_id != record.fields.forge_id:
-            self._require_offered(edited, self._forges.get(edited.fields.forge_id), created=False)
-        with self._repository_unit(edited, change.op) as locked:
-            return self._repositories.update(
+        offers = (
+            _EDITED
+            if not isinstance(edit.landing_policy, UnsetType)
+            or edited.fields.forge_id != record.fields.forge_id
+            or edited.fields.credential_id != record.fields.credential_id
+            else _UNCHECKED
+        )
+        with self._repository_unit(edited, change.op, ctx, offers=offers, old=old) as (locked, resolved):
+            written = self._repositories.update(
                 edited,
                 from_revision=record.revision,
                 left_slug=record.slug_left_for(edited),
                 change=change,
                 transaction=locked,
             )
+        return written, resolved
 
     def retire_repository(
         self, record: ConfiguredRepository, ctx: ChangeContext, *, if_match: int | None = None
@@ -450,7 +765,7 @@ class ConfigAuthoring:
         if decided is None:
             return record
         moved, change = decided
-        with self._repository_unit(moved, change.op) as locked:
+        with self._repository_unit(moved, change.op, ctx) as (locked, _):
             return self._repositories.record_lifecycle(
                 moved,
                 retired=retired,
@@ -464,34 +779,59 @@ class ConfigAuthoring:
     # --- The unit a referrer write runs in -------------------------------------
 
     @contextmanager
-    def _work_source_unit(self, record: ConfiguredWorkSource, op: ChangeOp) -> Generator[LockedTransaction]:
-        """The unit the ``op`` write of ``record`` runs in: it declares the keys of the forge and secret ``record``
-        names, then judges, under them, whether it may name them."""
+    def _work_source_unit(
+        self, record: ConfiguredWorkSource, op: ChangeOp, ctx: ChangeContext, *, old: _OldField | None = None
+    ) -> Generator[tuple[LockedTransaction, ConfiguredCredential | None]]:
+        """The unit the ``op`` write of ``record`` runs in: it declares the keys of the forge, secret and credential
+        ``record`` names, resolves the old field ``old`` to its credential when one is given
+        (:meth:`credential_for_old_field`), then judges, under them, whether it may name them — yielding the
+        credential ``old`` resolved to."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=sorted(record.locks()))
+            resolved = None if old is None else self.credential_for_old_field(old, ctx, locked)
             if op is not ChangeOp.RETIRE:
-                require_work_source_references(record, op, *self._named_facts(record.locks(), locked))
-            yield locked
+                require_work_source_references(record, op, self._named_facts(record.locks(), locked))
+            yield locked, resolved
 
     @contextmanager
-    def _repository_unit(self, record: ConfiguredRepository, op: ChangeOp) -> Generator[LockedTransaction]:
-        """The unit the ``op`` write of ``record`` runs in, as :meth:`_work_source_unit` opens one."""
+    def _repository_unit(
+        self,
+        record: ConfiguredRepository,
+        op: ChangeOp,
+        ctx: ChangeContext,
+        *,
+        offers: _OffersCheck = None,
+        old: _OldField | None = None,
+    ) -> Generator[tuple[LockedTransaction, ConfiguredCredential | None]]:
+        """The unit the ``op`` write of ``record`` runs in, as :meth:`_work_source_unit` opens one, judging too —
+        unless ``offers`` is ``None`` — whether its forge, through its credential, offers what its policy needs
+        (:meth:`_require_offered`)."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=sorted(record.locks()))
+            resolved = None if old is None else self.credential_for_old_field(old, ctx, locked)
             if op is not ChangeOp.RETIRE:
-                require_repository_references(record, op, *self._named_facts(record.locks(), locked))
-            yield locked
+                facts = self._named_facts(record.locks(), locked)
+                require_repository_references(record, op, facts)
+                if offers is not None:
+                    credential_id = record.fields.credential_id
+                    credential = None if credential_id is None else facts.credentials.get(credential_id)
+                    forge = facts.forges.get(record.fields.forge_id)
+                    self._require_offered(record, forge, created=offers, credential=credential)
+            yield locked, resolved
 
-    def _named_facts(
-        self, keys: Iterable[LockKey], locked: LockedTransaction
-    ) -> tuple[dict[ForgeId, ConfiguredForge], dict[str, SecretMetadata]]:
-        """The forges and secrets ``keys`` lock, each read in ``locked``."""
+    def _named_facts(self, keys: Iterable[LockKey], locked: LockedTransaction) -> NamedFacts:
+        """The forges, secrets and credentials ``keys`` lock, each read in ``locked``."""
         held = set(keys)
         forge_ids = sorted(ForgeId(key.key) for key in held if key.namespace is LockNamespace.FORGE)
         names = sorted(key.key for key in held if key.namespace is LockNamespace.SECRET)
-        forges = dict(self._forges.get_many(forge_ids, transaction=locked)) if forge_ids else {}
-        secrets = dict(self._secrets.get_many(names, transaction=locked)) if names else {}
-        return forges, secrets
+        credential_ids = sorted(CredentialId(key.key) for key in held if key.namespace is LockNamespace.CREDENTIAL)
+        return NamedFacts(
+            forges=dict(self._forges.get_many(forge_ids, transaction=locked)) if forge_ids else {},
+            secrets=dict(self._secrets.get_many(names, transaction=locked)) if names else {},
+            credentials=(
+                dict(self._credentials.get_many(credential_ids, transaction=locked)) if credential_ids else {}
+            ),
+        )
 
     # --- Apply -------------------------------------------------------------------
 
@@ -577,43 +917,59 @@ class ConfigAuthoring:
     def _judged(self, writes: Sequence[PlannedWrite], locked: LockedTransaction) -> tuple[PlannedWrite, ...]:
         """``writes``, each carrying the refusal its write earns for the forge and secret it names, read under the
         apply's keys with the apply's own forge writes — every one ahead of any referrer — landed over them."""
-        forges, secrets = self._named_facts(
+        read = self._named_facts(
             (key for write in writes if isinstance(write.record, _REFERRERS) for key in write.record.locks()), locked
         )
-        forges.update(
-            {write.record.forge_id: write.record for write in writes if isinstance(write.record, ConfiguredForge)}
-        )
+        planned = {write.record.forge_id: write.record for write in writes if isinstance(write.record, ConfiguredForge)}
+        facts = replace(read, forges={**read.forges, **planned})
         return tuple(
-            replace(write, verdict=references_refusal(write.record, write.change.op, forges, secrets))
-            for write in writes
+            replace(write, verdict=references_refusal(write.record, write.change.op, facts)) for write in writes
         )
 
     def _judged_import(self, imported: LegacyImport, locked: LockedTransaction) -> LegacyImport:
         """``imported``, carrying the refusal each work source and repository it creates earns for the forge and
         secret it names, read under the import's keys with the import's own secrets and forges landed over them."""
         records = [*(source for source, _ in imported.work_sources), *(repo for repo, _ in imported.repositories)]
-        forges, secrets = self._named_facts((key for record in records for key in record.locks()), locked)
-        forges.update({forge.forge_id: forge for forge, _ in imported.forges})
+        read = self._named_facts((key for record in records for key in record.locks()), locked)
+        forges = {**read.forges, **{forge.forge_id: forge for forge, _ in imported.forges}}
+        secrets = dict(read.secrets)
         for secret in imported.secrets:
             at, by = secret.change.recorded_at, secret.change.actor
             secrets[secret.name] = SecretMetadata(secret.name, 1, at, by, at, retired=False)
+        facts = replace(read, forges=forges, secrets=secrets)
         verdicts = {
             _record_id(record): refused
             for record in records
-            if (refused := references_refusal(record, ChangeOp.CREATE, forges, secrets)) is not None
+            if (refused := references_refusal(record, ChangeOp.CREATE, facts)) is not None
         }
         return replace(imported, verdicts=verdicts)
 
     # --- Capabilities ------------------------------------------------------------
 
-    def _require_offered(self, record: ConfiguredRepository, forge: ConfiguredForge | None, *, created: bool) -> None:
+    def _require_offered(
+        self,
+        record: ConfiguredRepository,
+        forge: ConfiguredForge | None,
+        *,
+        created: bool,
+        credential: ConfiguredCredential | None = None,
+    ) -> None:
         """:class:`ForgeCapabilityMissing` when ``forge`` does not offer what ``record``'s policy requires — asked for
-        the repository, or for the forge's kind when the write ``created`` it. A forge that does not exist is the
-        record write's own refusal, not this check's."""
+        the repository, or for the forge's kind when the write ``created`` it, and narrowed by the declared offers of
+        ``credential``, the one the record acts with, when it names one
+        (:func:`~blizzard.hub.domain.config.credential_resolution.credential_offers`). A forge that does not exist is
+        the record write's own refusal, not this check's."""
         if forge is None:
             return
         offered = self._offers.offered(forge, None if created else record.repository_id)
-        require_offered(record.fields.landing_policy, offered, forge=forge.slug)
+        if credential is not None:
+            offered = credential_offers(credential, offered)
+        require_offered(
+            record.fields.landing_policy,
+            offered,
+            forge=forge.slug,
+            credential=None if credential is None else credential.slug,
+        )
 
     def _require_planned_offered(self, plan: ApplyPlan) -> None:
         """Check every repository write ``plan`` holds, each refused at its own document entry."""

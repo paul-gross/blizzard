@@ -63,7 +63,15 @@ def repo_group() -> None:
 @click.option("--owner", required=True, help="The repository's owner on the forge.")
 @click.option("--repo", "repo", required=True, help="The repository's name on the forge.")
 @click.option("--base-branch", "base_branch", required=True, help="The branch work lands on.")
-@click.option("--secret", "secret", required=True, help="The stored secret holding the forge token.")
+@click.option(
+    "--credential", "credential", default=None, help="The credential the repository acts with, by id or slug."
+)
+@click.option(
+    "--secret",
+    "secret",
+    default=None,
+    help="Deprecated: the stored secret holding the forge token, resolved to its credential — give --credential.",
+)
 @_POLICY
 @_PARK_TIMEOUT
 @_ALLOW_NO_CI
@@ -75,14 +83,16 @@ def repo_create(
     owner: str,
     repo: str,
     base_branch: str,
-    secret: str,
+    credential: str | None,
+    secret: str | None,
     policy: str | None,
     park_timeout: int | None,
     allow_no_ci: bool | None,
 ) -> None:
     """Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.
 
-    Refused when no --forge names the forge, when SLUG is another repository's current slug, when the forge, owner
+    Needs --credential or the deprecated --secret; both must name the same credential. Refused when no --forge names
+    the forge, when SLUG is another repository's current slug, when the forge, owner
     and repo are already taken — a retired repository keeps its claim — when the secret is missing or retired, or
     when the forge cannot honour --policy. The hub resolves a chunk's commits against the record on its next deliver."""
     body = {
@@ -92,12 +102,14 @@ def repo_create(
         "owner": owner,
         "repo": repo,
         "base_branch": base_branch,
-        "secret_name": secret,
+        **({} if credential is None else {"credential": credential}),
+        **({} if secret is None else {"secret_name": secret}),
         **_landing(policy, park_timeout),
         **({} if allow_no_ci is None else {"allow_no_ci": allow_no_ci}),
     }
     resp = cli.post("/api/repositories", "POST /repositories", json_body=body, door=True)
     out = resp.json()
+    cli.warn(out)
     cli.show_lines(out, f"repository {out['slug']} created at revision 1 — id {out['repository_id']}")
 
 
@@ -126,7 +138,7 @@ def repo_show(cli: CliContext, repository: str) -> None:
         f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
         f"id {body['repository_id']}",
         f"forge {body['forge_slug']}  {body['owner']}/{body['repo']}",
-        f"base_branch {body['base_branch']}  secret {body['secret_name']}",
+        f"base_branch {body['base_branch']}  credential {body['credential_slug'] or '-'}  secret {body['secret_name']}",
         f"policy {body['landing_policy']}{_timeout(body)}  allow no CI {body['allow_no_ci']}",
         f"created {body['created_at']} by {body['created_by']}",
     )
@@ -140,7 +152,8 @@ def repo_show(cli: CliContext, repository: str) -> None:
 @click.option("--owner", default=None, help="The new owner.")
 @click.option("--repo", "repo", default=None, help="The new repository name on the forge.")
 @click.option("--base-branch", "base_branch", default=None, help="The new base branch.")
-@click.option("--secret", "secret", default=None, help="The new forge-token secret.")
+@click.option("--credential", "credential", default=None, help="The credential to act with, by id or slug.")
+@click.option("--secret", "secret", default=None, help="Deprecated: the new forge-token secret — give --credential.")
 @_POLICY
 @_PARK_TIMEOUT
 @_ALLOW_NO_CI
@@ -161,6 +174,7 @@ def repo_edit(
     owner: str | None,
     repo: str | None,
     base_branch: str | None,
+    credential: str | None,
     secret: str | None,
     policy: str | None,
     park_timeout: int | None,
@@ -180,6 +194,7 @@ def repo_edit(
         "owner": owner,
         "repo": repo,
         "base_branch": base_branch,
+        "credential": credential,
         "secret_name": secret,
         **_landing(policy, park_timeout),
         **({} if allow_no_ci is None else {"allow_no_ci": allow_no_ci}),
@@ -200,6 +215,7 @@ def repo_edit(
         door=True,
     )
     out = resp.json()
+    cli.warn(out)
     cli.show_lines(out, f"repository {out['slug']} is at revision {out['revision']}")
 
 

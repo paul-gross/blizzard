@@ -60,7 +60,7 @@ class _World:
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
         self.source_id = self.authoring.create_work_source_naming(
             "demo", None, _FIELDS, _on_github(self.engine), OP
-        ).work_source_id
+        ).record.work_source_id
         self.live = self.second_process()
         self.builds = 0
 

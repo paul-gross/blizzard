@@ -97,11 +97,11 @@ class _World:
 
     def source(self, name: str) -> ConfiguredWorkSource:
         draft = WorkSourceDraft(provider="github", locator=f"acme/{name}", annotate=False, secret="forge-token")
-        return self.config().create_work_source_naming(name, None, draft, _on_github(self.engine), OP)
+        return self.config().create_work_source_naming(name, None, draft, _on_github(self.engine), OP).record
 
     def repository(self, name: str) -> ConfiguredRepository:
         draft = RepositoryDraft(owner="acme", repo=name, base_branch="main", secret_name="forge-token")
-        return self.config().create_repository_naming(name, None, draft, _on_github(self.engine), OP)
+        return self.config().create_repository_naming(name, None, draft, _on_github(self.engine), OP).record
 
 
 @pytest.fixture

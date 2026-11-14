@@ -36,6 +36,7 @@ from tests.support.scaffolding import (
     hub_level_connections,
     hub_store_connections,
     ingest,
+    retire_credential,
     scoped_connections,
 )
 from tests.support.work_source_registry_ops import create, forge, promote
@@ -320,6 +321,7 @@ def test_a_retired_source_whose_secret_is_also_retired_keeps_its_labels(
     assert memory.annotated_sources() == {source_id}
 
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
+    retire_credential(services, "gh")
     assert client.post("/api/secrets/gh/retire").status_code == 200
     services.annotation.sweep()
 

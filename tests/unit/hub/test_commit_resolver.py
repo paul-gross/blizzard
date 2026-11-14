@@ -17,6 +17,7 @@ from structlog.testing import capture_logs
 
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.forges import (
     FORGE_KIND_CAPABILITIES,
     GITHUB_API_BASE,
@@ -102,6 +103,11 @@ class _Records(IReadRepositoryRecordRepository):
         raise NotImplementedError
 
     def resolve(self, value: str) -> ConfiguredRepository | None:
+        raise NotImplementedError
+
+    def naming_credential(
+        self, credential_id: CredentialId, *, transaction: Transaction | None = None
+    ) -> list[ConfiguredRepository]:
         raise NotImplementedError
 
 

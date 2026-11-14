@@ -14,6 +14,8 @@ src/blizzard/hub/api/chunk_views.py 1 955465abebb974a5e9fc1484b33fe1511a1bcc92f1
 src/blizzard/hub/api/chunks.py 59 1c2d36cb46fd218aa8a2572e515657a0960728b526d75534b29dac0e0bffe2b7
 src/blizzard/hub/api/clock.py 6 745d3fe368177b14c1abc62605d05016683895e6da0c8bd54ebc2772e1affcf0
 src/blizzard/hub/api/config.py 5 a1e561089ec3706a31a41533eb9660dbb485086ac2fdd72f417cca4b236a8b1e
+src/blizzard/hub/api/credential_params.py 1 29a4c9fa85532ba645b2dbc6d74afc0aa6f4774c0cd5c94925b487633fdb3a9e
+src/blizzard/hub/api/credentials.py 6 24e28f6cf1fde57c52e2a773a10be7506a25472a905fbbd24f8a8fc5185ef060
 src/blizzard/hub/api/decisions.py 6 2c32b27ecace4744f17591e0cb8e2aa58247ce790e9ed8fdfdf950ed93283ac4
 src/blizzard/hub/api/egress.py 8 821a2540375f9df700073787db78218f159bb552d84fe5eec0fa07a20aee44f9
 src/blizzard/hub/api/env_timeline.py 4 990bd480d409dd36ba63c19f40d9f67e3eeb00df569de47c091d42ad5e83bb10

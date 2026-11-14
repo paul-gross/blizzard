@@ -27,7 +27,7 @@ from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSour
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
-from tests.support.scaffolding import OP, ForgeDouble, forge_state, hub_store_connections
+from tests.support.scaffolding import OP, ForgeDouble, forge_state, hub_store_connections, retire_credential
 from tests.support.work_source_registry_ops import (
     _id,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
     _ingest,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
@@ -186,6 +186,7 @@ def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_erro
     client, services = hub
     source_id = create(client, services, forge[1])
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
+    retire_credential(services, "gh")
     assert client.post("/api/secrets/gh/retire").status_code == 200
 
     assert _sources(services).get(source_id) is None
@@ -210,6 +211,7 @@ def test_board_reads_a_retired_source_without_its_secret_and_renames_on_the_next
     after = client.get(f"/api/chunks/{chunk_id}").json()["work_refs"][0]
     assert after["label"] == "widget-core#1"
     assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
+    retire_credential(services, "gh")
     assert client.post("/api/secrets/gh/retire").status_code == 200
     assert _sources(services).get(source_id) is None
 

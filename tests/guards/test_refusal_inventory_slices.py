@@ -349,6 +349,11 @@ _RAISED_FACTORIES = {
         for name in (
             "config_field_invalid_problem",
             "config_schema_not_found_problem",
+            "credential_authority_taken_problem",
+            "credential_capability_missing_problem",
+            "credential_in_use_problem",
+            "credential_not_found_problem",
+            "credential_slug_taken_problem",
             "default_graph_retired_problem",
             "forge_in_use_problem",
             "forge_not_found_problem",

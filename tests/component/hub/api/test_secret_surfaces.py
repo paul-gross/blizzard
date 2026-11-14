@@ -34,6 +34,7 @@ from blizzard.wire.secret import (
 )
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.refusal_observation import declared_refusal_mismatches
+from tests.support.scaffolding import retire_credential
 from tests.support.worker_http import Bound, bind_stubs
 
 _SENTINEL = "tok-planted-839"
@@ -194,6 +195,8 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
 
     assert client.post("/api/repositories/blizzard/retire").status_code == 200
     assert "repository blizzard" not in _cli(["get", "gh-test"]).output
+    assert "credential gh-test" in _cli(["get", "gh-test"]).output
+    retire_credential(client, "gh-test")
     assert client.get("/api/secrets/gh-test").json()["retirable"] is True
     assert _cli(["retire", "gh-test"]).exit_code == 0
     assert client.get("/api/secrets/gh-test").json()["retirable"] is True

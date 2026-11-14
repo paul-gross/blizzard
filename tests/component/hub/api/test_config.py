@@ -30,7 +30,14 @@ from blizzard.wire.config import (
     ConfigMediaTypeUnsupportedProblem,
 )
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
-from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    hub_store_connections,
+    retire_credential,
+    seed_session,
+    seed_user,
+)
 
 _SENTINEL = "tok-planted-840"
 
@@ -150,7 +157,8 @@ def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
         True,
     )
     assert body["created_by"] == "operator"
-    assert body["warnings"] == []
+    assert [w["field"] for w in body["warnings"]] == ["secret"]
+    body["warnings"] = []
     assert hub.client.get("/api/work-sources/demo").json() == body
     assert hub.client.get(f"/api/work-sources/{body['work_source_id']}").json() == body
 
@@ -189,6 +197,7 @@ def test_the_create_422s_name_the_offending_field(hub: HubHarness) -> None:
 def test_a_retired_secret_is_a_422_on_create_and_on_enable(hub: HubHarness) -> None:
     assert _create(hub).status_code == 201
     hub.client.post("/api/work-sources/demo/retire")
+    retire_credential(hub.services, "gh")
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
     assert _create(hub, slug="other", locator="acme/other").status_code == 422
     enabled = hub.client.post("/api/work-sources/demo/enable")
@@ -333,15 +342,19 @@ def test_the_built_in_hub_is_never_written(hub: HubHarness) -> None:
 
 
 def test_a_referenced_secret_cannot_be_retired_and_shows_its_references(hub: HubHarness) -> None:
-    source_id = _create(hub).json()["work_source_id"]
+    created = _create(hub).json()
+    source_id, credential = created["work_source_id"], {"kind": "credential", "label": "gh"}
     shown = hub.client.get("/api/secrets/gh").json()
-    assert shown["references"] == [{"kind": "work_source", "key": source_id, "label": "demo"}]
+    assert [{k: ref[k] for k in ("kind", "label")} for ref in shown["references"][:1]] == [credential]
+    assert shown["references"][1:] == [{"kind": "work_source", "key": source_id, "label": "demo"}]
     assert hub.client.get("/api/secrets").json()[0]["references"] == shown["references"]
     refused = hub.client.post("/api/secrets/gh/retire")
     assert refused.status_code == 409
     assert "work_source demo" in refused.json()["detail"]["message"]
     assert hub.client.get("/api/secrets/gh").json()["retired"] is False
     hub.client.post("/api/work-sources/demo/retire")
+    assert [ref["kind"] for ref in hub.client.get("/api/secrets/gh").json()["references"]] == ["credential"]
+    retire_credential(hub.services, "gh")
     assert hub.client.get("/api/secrets/gh").json()["references"] == []
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
 
@@ -409,6 +422,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert [(c["record_kind"], c["op"]) for c in full["changes"]] == [
         ("work_source", "edit"),
         ("work_source", "create"),
+        ("credential", "create"),
         ("forge", "create"),
         ("forge", "create"),
         ("secret", "create"),
@@ -432,7 +446,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert len(first["changes"]) == 2
     assert first["next_before"] == first["changes"][-1]["id"]
     rest = hub.client.get("/api/config/changes", params={"limit": 2, "before": first["next_before"]}).json()
-    assert [(c["record_kind"], c["op"]) for c in rest["changes"]] == [("forge", "create"), ("forge", "create")]
+    assert [(c["record_kind"], c["op"]) for c in rest["changes"]] == [("credential", "create"), ("forge", "create")]
     assert rest["next_before"] == rest["changes"][-1]["id"]
     assert len(_changes(hub, record_key="gh")) == 1
     assert hub.client.get("/api/config/changes", params={"limit": 201}).status_code == 422
@@ -528,7 +542,8 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
     assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
     assert body["repository_id"].startswith("repo_")
     assert body["name"] == "blizzard"
-    assert body["warnings"] == []
+    assert [w["field"] for w in body["warnings"]] == ["secret_name"]
+    body["warnings"] = []
     assert hub.client.get("/api/repositories/blizzard").json() == body
     assert hub.client.get(f"/api/repositories/{body['repository_id']}").json() == body
     assert hub.client.get("/api/repositories").json()["repositories"] == [body]
@@ -542,7 +557,7 @@ def test_the_repository_create_422s_name_the_offending_field(hub: HubHarness) ->
         ({"owner": ""}, "owner"),
         ({"forge": "nope"}, "forge"),
         ({"secret_name": "absent"}, "secret_name"),
-        ({"secret_name": None}, "secret_name"),
+        ({"secret_name": None}, "credential"),
     )
     for overrides, field in cases:
         resp = hub.client.post("/api/repositories", json={**_REPO, **overrides})
@@ -622,7 +637,7 @@ def test_a_repository_patch_is_sparse_and_refuses_every_null(hub: HubHarness) ->
 def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub: HubHarness) -> None:
     _create_repo(hub)
     repository_id = hub.client.get("/api/repositories/blizzard").json()["repository_id"]
-    assert hub.client.get("/api/secrets/gh").json()["references"] == [
+    assert hub.client.get("/api/secrets/gh").json()["references"][1:] == [
         {"kind": "repository", "key": repository_id, "label": "blizzard"}
     ]
     refused = hub.client.post("/api/secrets/gh/retire")
@@ -633,6 +648,7 @@ def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub
     assert (retired["revision"], retired["retired"]) == (2, True)
     assert hub.client.get("/api/repositories").json()["repositories"] == []
     assert len(hub.client.get("/api/repositories", params={"include_retired": True}).json()["repositories"]) == 1
+    retire_credential(hub.services, "gh")
     assert hub.client.post("/api/secrets/gh/retire").status_code == 200
     enabled = hub.client.post("/api/repositories/blizzard/enable")
     assert enabled.status_code == 422

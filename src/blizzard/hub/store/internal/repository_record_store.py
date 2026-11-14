@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
@@ -30,7 +31,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlugTaken,
     resolve_repository_reference,
 )
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -43,7 +44,7 @@ from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-from blizzard.hub.store.transactions import connection_for
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
@@ -94,6 +95,7 @@ def _columns(record: ConfiguredRepository) -> dict[str, object]:
         "landing_policy": f.landing_policy.value,
         "allow_no_ci": f.allow_no_ci,
         "park_timeout_hours": f.park_timeout_hours,
+        "credential_id": f.credential_id,
     }
 
 
@@ -287,6 +289,19 @@ class RepositoryRecordStore:
     def resolve(self, value: str) -> ConfiguredRepository | None:
         return resolve_repository_reference(value, self)
 
+    def naming_credential(
+        self, credential_id: CredentialId, *, transaction: Transaction | None = None
+    ) -> list[ConfiguredRepository]:
+        with connection_in(self._store, transaction, "naming_credential") as conn:
+            rows = conn.execute(
+                statements_of(conn)
+                .select(repositories)
+                .where(repositories.c.credential_id == credential_id)
+                .order_by(repositories.c.slug)
+            ).all()
+            retired = retirements(conn, [RepositoryId(row.repository_id) for row in rows]) if rows else {}
+        return [_of(row, retired_at=retired.get(row.repository_id)) for row in rows]
+
 
 def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredRepository:
     return _of(row, retired_at=retirements(conn, [RepositoryId(row.repository_id)]).get(row.repository_id))
@@ -306,6 +321,7 @@ def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
             landing_policy=LandingPolicy(row.landing_policy),
             allow_no_ci=row.allow_no_ci,
             park_timeout_hours=row.park_timeout_hours,
+            credential_id=None if row.credential_id is None else CredentialId(row.credential_id),
         ),
         revision=row.revision,
         created_at=row.created_at,

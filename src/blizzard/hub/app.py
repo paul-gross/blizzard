@@ -61,6 +61,7 @@ from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
+from blizzard.hub.api.credentials import router as credentials_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
 from blizzard.hub.api.env_timeline import router as env_timeline_router
@@ -582,6 +583,7 @@ def create_app(
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(forges_router)
+    app.include_router(credentials_router)
     app.include_router(urgencies_router)
     app.include_router(settings_router)
     app.include_router(projects_router)

@@ -287,6 +287,14 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PATCH", "/api/forges/{forge}"): _f({}),
     ("POST", "/api/forges/{forge}/retire"): _f(),
     ("POST", "/api/forges/{forge}/enable"): _f(),
+    ("GET", "/api/credentials"): _LIST,
+    ("POST", "/api/credentials"): _own(
+        {"slug": "beta-extra", "forge": "{forge}", "binding": "github.token", "secret": "{spare_secret}"}, status=201
+    ),
+    ("GET", "/api/credentials/{credential}"): _f(),
+    ("PATCH", "/api/credentials/{credential}"): _f({}),
+    ("POST", "/api/credentials/{credential}/retire"): _f(),
+    ("POST", "/api/credentials/{credential}/enable"): _f(),
     ("GET", "/api/urgencies"): _LIST,
     ("POST", "/api/urgencies"): _own({"slug": "beta-extra-urgency"}, status=201),
     ("PUT", "/api/urgencies/order"): _f(

@@ -149,10 +149,12 @@ Each removed surface and its replacement:
 - Version 1 of the configuration document is retired. `POST /api/config/apply` refuses any `version` but 2, a missing
   one included, with `422 config_version_retired`, and `GET /api/config/export` and `/api/config/schema/{kind}` answer
   version 2 by default and refuse `version=1` the same way. `blizzard hub config export` already exported version 2.
-- The `config-old-field-used` event is no longer recorded; rows already stored keep their severity.
+- The `config-old-field-used` event no longer records a forge address field; it records a repository or work-source
+  write that names its credential by `secret_name` or `secret` alone.
 - The hub store drops `repositories.forge_api_url`, `work_sources.api_base` and `work_sources.web_base`, and holds every
   record's `forge_id` to a forge of its own tenant.
-- The `warnings` list on the repository, work-source and apply responses is always empty, and is deprecated.
+- The `warnings` list on the configuration apply response is always empty, and is deprecated. On a repository or
+  work-source write it carries one entry per old secret field the write leaned on.
 
 Before the move, carry every kept configuration document onto version 2 (`blizzard hub config export` writes one from
 the running hub) and every runbook or script onto `--forge`. A store whose repository or work source names no forge, a

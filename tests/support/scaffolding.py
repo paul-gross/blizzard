@@ -538,6 +538,20 @@ def seed_project(engine: Engine, slug: str, *, tenant: TenantId | None = None) -
     return authoring.create(slug, slug, _SEEDER).project_id
 
 
+def retire_credential(services: TenantServices | HubServices | TestClient, slug: str) -> None:
+    """Retire the credential ``slug`` names — the one a door's old secret field resolved to — so the secret it reads
+    may retire too. Hub services, or a client of a hosted hub, name their one open tenant."""
+    if isinstance(services, TestClient):
+        services = cast(HubServices, cast(FastAPI, services.app).state.services)
+    if isinstance(services, HubServices):
+        tenant = services.tenants.open_tenants.only()
+        assert tenant is not None
+        services = services.tenants.open_services(StoreScope(tenant))
+    credential = services.credential_records.resolve(slug)
+    assert credential is not None, slug
+    services.config_authoring.retire_credential(credential, OP)
+
+
 def link_project(
     engine: Engine,
     *,
