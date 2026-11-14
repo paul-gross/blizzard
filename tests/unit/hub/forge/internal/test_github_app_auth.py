@@ -278,7 +278,12 @@ def test_each_scope_is_minted_with_its_permissions(world: _World) -> None:
     world.get(world.authorization(scope=ForgeScope.WORK_SOURCE))
 
     landing, work_source = (mint["permissions"] for mint in world.github.mints)
-    assert landing == {**APP_REQUIRED_PERMISSIONS[ForgeScope.LANDING], "checks": "read", "actions": "write"}
+    assert landing == {
+        **APP_REQUIRED_PERMISSIONS[ForgeScope.LANDING],
+        "checks": "read",
+        "statuses": "read",
+        "actions": "write",
+    }
     assert work_source == dict(APP_REQUIRED_PERMISSIONS[ForgeScope.WORK_SOURCE])
 
 
@@ -290,6 +295,7 @@ def test_each_scope_is_minted_with_its_permissions(world: _World) -> None:
     [
         ((), frozenset[Capability]()),
         (("checks",), frozenset({Capability.CHECKS_READ})),
+        (("statuses",), frozenset({Capability.CHECKS_READ})),
         (("actions",), frozenset({Capability.CHECKS_RERUN})),
         (("checks", "actions"), frozenset({Capability.CHECKS_READ, Capability.CHECKS_RERUN})),
     ],
@@ -313,7 +319,7 @@ def test_a_grant_below_the_level_an_optional_permission_needs_withholds_its_capa
 
 
 def test_a_work_source_authorization_offers_the_whole_kind(world: _World) -> None:
-    world.github.grant({k: v for k, v in FULL_GRANT.items() if k not in ("checks", "actions")})
+    world.github.grant({k: v for k, v in FULL_GRANT.items() if k not in ("checks", "statuses", "actions")})
 
     assert world.authorization(scope=ForgeScope.WORK_SOURCE).offered == _KIND
     assert APP_OPTIONAL_PERMISSIONS[ForgeScope.WORK_SOURCE] == {}

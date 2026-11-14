@@ -35,13 +35,14 @@ from blizzard.hub.domain.kernel.transactions import Transaction
 API_BASE = "https://api.github.test"
 APP_ID = 12
 INSTALLATION_ID = 34
-#: Every permission a landing or work-source token is minted with, and both optional ones.
+#: Every permission a landing or work-source token is minted with, and every optional one.
 FULL_GRANT: Mapping[str, str] = {
     "metadata": "read",
     "contents": "write",
     "pull_requests": "write",
     "issues": "write",
     "checks": "read",
+    "statuses": "read",
     "actions": "write",
 }
 #: Every binding a credential may name, the App's among them.
