@@ -21,6 +21,13 @@ from blizzard.hub.domain.config.apply import (
     UrgencyReferenceGuard,
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
+from blizzard.hub.domain.config.credential_naming import credential_lock
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialAuthorityTaken,
+    CredentialEntryTaken,
+    CredentialSlugTaken,
+)
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken, forge_lock
 from blizzard.hub.domain.config.repositories import (
@@ -43,6 +50,10 @@ from blizzard.hub.domain.urgency.order import UrgencyOrderConflict
 # A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import cadence_store as cadence_writes
+
+# A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal import credential_record_store as credential_writes
 
 # A declared exception of engineering:adapters-stay-apart: config apply writes every config fact in one transaction.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -153,6 +164,8 @@ class ConfigApplyStore:
             except IntegrityError as exc:  # a concurrent create won the race
                 cause = _taken(write.record)
                 raise ApplyEntryRefused(write.section, write.index, cause) from exc
+            except (CredentialSlugTaken, CredentialAuthorityTaken) as exc:
+                raise ApplyEntryRefused(write.section, write.index, CredentialEntryTaken(exc)) from exc
             except _REFUSALS as exc:
                 raise ApplyEntryRefused(write.section, write.index, exc) from exc
         for project_positions in _by_project(positions):
@@ -169,6 +182,8 @@ class ConfigApplyStore:
         retired = change.op is ChangeOp.RETIRE
         if isinstance(record, UrgencyWrite | UrgencyOrderWrite | SettingsWrite):
             _run_urgency(conn, record, from_revision, change, order)
+        elif isinstance(record, ConfiguredCredential):
+            _run_credential(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, ConfiguredForge):
             if from_revision is None:
                 forge_writes.insert_forge(conn, record, change)
@@ -241,13 +256,15 @@ class ConfigApplyStore:
 
 
 def _relied_on(writes: Sequence[PlannedWrite]) -> set[LockKey]:
-    """Every key a body of ``writes`` relies on: a forge write's forge, the forge and secret a work-source or
-    repository write names, and a link write's own key."""
+    """Every key a body of ``writes`` relies on: a forge write's forge, a credential write's credential with the forge
+    and secret it names, the forge and secret a work-source or repository write names, and a link write's own key."""
     keys: set[LockKey] = set()
     for write in writes:
         record = write.record
         if isinstance(record, ConfiguredForge):
             keys.add(forge_lock(record.forge_id))
+        elif isinstance(record, ConfiguredCredential):
+            keys.update([*record.locks(), credential_lock(record.credential_id)])
         elif isinstance(record, ConfiguredWorkSource | ConfiguredRepository):
             keys.update(record.locks())
         elif isinstance(record, SourceLink | RepositoryLink) and (lock := record.lock()) is not None:
@@ -323,6 +340,39 @@ def _append_positions(conn: Connection, positions: Sequence[PlannedPosition]) ->
             ],
         )
     )
+
+
+def _run_credential(
+    conn: Connection,
+    record: ConfiguredCredential,
+    from_revision: int | None,
+    change: ConfigChange,
+    *,
+    lifecycle: bool,
+    retired: bool,
+) -> None:
+    """A credential is created, retired or enabled, or edited — an apply never moves its slug. A create or an edit runs
+    in a savepoint, so one losing its slug or authority to a concurrent write reads the holder on."""
+    if not lifecycle:
+        try:
+            with conn.begin_nested():
+                if from_revision is None:
+                    credential_writes.insert_credential(conn, record, change)
+                else:
+                    credential_writes.update_credential(conn, record, from_revision, None, change)
+        except IntegrityError as exc:
+            raise credential_writes.lost_race(conn, record) from exc
+    else:
+        assert from_revision is not None
+        credential_writes.record_credential_lifecycle(
+            conn,
+            record,
+            retired=retired,
+            from_revision=from_revision,
+            at=change.recorded_at,
+            by=change.actor,
+            change=change,
+        )
 
 
 def _run_scope(

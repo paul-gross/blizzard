@@ -19,6 +19,7 @@ from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
 from blizzard.hub.domain.config.credential_naming import (
     CREDENTIAL_FIELD,
     CredentialConflict,
+    CredentialId,
     CredentialUnavailable,
 )
 from blizzard.hub.domain.config.credentials import (
@@ -149,6 +150,45 @@ def resolve_old_field(
     if found is not None:
         return found
     return old_field_draft(forge_id, secret_name, slug=new_credential_slug(secret_name, taken()))
+
+
+class ExportedCredentials:
+    """The credential each live referrer names as an export writes it, read over ``held`` — every credential of the
+    tenant — without writing: the one it acts with, else the one its old field resolves to
+    (:func:`resolve_old_field`) — a held credential, or the draft one would be created as, each draft once per forge
+    and secret and clear of ``taken``, the tenant's current and former credential slugs, and of every other draft."""
+
+    def __init__(self, held: Iterable[ConfiguredCredential], taken: Callable[[], Collection[str]]) -> None:
+        self._held = list(held)
+        self._by_id = {c.credential_id: c for c in self._held}
+        self._taken = taken
+        self._read: frozenset[str] | None = None
+        self._drafts: dict[tuple[ForgeId, str], CredentialDraft] = {}
+
+    @property
+    def drafts(self) -> tuple[CredentialDraft, ...]:
+        """The credentials the referrers' old fields would create, in the order first named."""
+        return tuple(self._drafts.values())
+
+    def slug_of(self, forge_id: ForgeId, credential_id: CredentialId | None, secret_name: str | None) -> str | None:
+        """The slug of the credential a referrer on ``forge_id`` acting with ``credential_id`` — ``None`` when it names
+        none — and holding the old field ``secret_name`` names; ``None`` when it names neither."""
+        if credential_id is not None:
+            return self._by_id[credential_id].slug
+        if secret_name is None:
+            return None
+        key = (forge_id, secret_name)
+        if key not in self._drafts:
+            resolved = resolve_old_field(forge_id, secret_name, self._held, self._slugs)
+            if isinstance(resolved, ConfiguredCredential):
+                return resolved.slug
+            self._drafts[key] = resolved
+        return self._drafts[key].slug
+
+    def _slugs(self) -> Collection[str]:
+        if self._read is None:
+            self._read = frozenset(self._taken())
+        return self._read | {draft.slug for draft in self._drafts.values()}
 
 
 def credential_offers(credential: ConfiguredCredential, kind: frozenset[Capability]) -> frozenset[Capability]:

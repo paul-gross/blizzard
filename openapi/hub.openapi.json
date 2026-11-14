@@ -6489,7 +6489,7 @@
       },
       "ConfigDocumentV2": {
         "additionalProperties": false,
-        "description": "A declarative configuration document, version 2 \u2014 the one version a hub applies and exports. Each entry is the\nkind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that\nname them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order\nafter the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an\nurgency or a scope the same document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its\nslug.",
+        "description": "A declarative configuration document, version 2 \u2014 the version a hub exports by default. Each entry is the\nkind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that\nname them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order\nafter the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an\nurgency or a scope the same document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its\nslug.",
         "properties": {
           "cadences": {
             "default": [],
@@ -6597,6 +6597,126 @@
           "version"
         ],
         "title": "ConfigDocumentV2",
+        "type": "object"
+      },
+      "ConfigDocumentV3": {
+        "additionalProperties": false,
+        "description": "A declarative configuration document, version 3: version 2's sections, with ``credentials`` reconciled after\n``forges`` and the ``secrets`` check and before the work sources and repositories, whose entries name their\ncredential as ``credential`` where version 2's name a secret. A declared credential is never retired by its\nabsence; one whose secret moves takes every record acting with it along.",
+        "properties": {
+          "cadences": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadenceEntry"
+            },
+            "title": "Cadences",
+            "type": "array"
+          },
+          "credentials": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CredentialEntry"
+            },
+            "title": "Credentials",
+            "type": "array"
+          },
+          "forges": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForgeEntry"
+            },
+            "title": "Forges",
+            "type": "array"
+          },
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDocument"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "repositories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RepositoryEntryV3"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "routines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoutineEntry"
+            },
+            "title": "Routines",
+            "type": "array"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScopeEntry"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "secrets": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Secrets",
+            "type": "array"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingsEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "urgencies": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UrgencyEntry"
+            },
+            "title": "Urgencies",
+            "type": "array"
+          },
+          "urgency_order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency Order"
+          },
+          "version": {
+            "const": 3,
+            "title": "Version",
+            "type": "integer"
+          },
+          "work_sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkSourceEntryV3"
+            },
+            "title": "Work Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "ConfigDocumentV3",
         "type": "object"
       },
       "ConfigFieldInvalidProblem": {
@@ -6807,6 +6927,33 @@
         "title": "CredentialAuthorityTakenProblem",
         "type": "object"
       },
+      "CredentialBindingView": {
+        "description": "A binding a credential may name: its ``name``, the kind of forge it authenticates against, and its settings.",
+        "properties": {
+          "forge_kind": {
+            "title": "Forge Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialSettingView"
+            },
+            "title": "Settings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "forge_kind",
+          "settings"
+        ],
+        "title": "CredentialBindingView",
+        "type": "object"
+      },
       "CredentialCapabilityMissingProblem": {
         "additionalProperties": true,
         "description": "A credential edit would no longer offer what an enabled repository acting with it needs: ``referrers`` lists\neach such repository, and ``missing`` the capabilities they would lose.",
@@ -7009,6 +7156,53 @@
         "title": "CredentialDocument",
         "type": "object"
       },
+      "CredentialEntry": {
+        "additionalProperties": false,
+        "description": "A credential declared by slug: ``forge`` names its forge by id or slug, ``binding`` how it authenticates,\n``secret`` the secret it reads, and ``settings`` the binding's own fields. An omitted ``name`` stays as stored; a\n``forge`` or ``binding`` other than the stored credential's is refused.",
+        "properties": {
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Settings",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "forge",
+          "binding",
+          "secret"
+        ],
+        "title": "CredentialEntry",
+        "type": "object"
+      },
       "CredentialInUseProblem": {
         "additionalProperties": true,
         "description": "Enabled records still name the credential; ``referrers`` lists each.",
@@ -7054,6 +7248,103 @@
           "referrers"
         ],
         "title": "CredentialInUseProblem",
+        "type": "object"
+      },
+      "CredentialListItem": {
+        "description": "One ``GET /api/credentials`` row: the credential, with how many enabled repositories and work sources name it.",
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "forge_name": {
+            "title": "Forge Name",
+            "type": "string"
+          },
+          "forge_slug": {
+            "title": "Forge Slug",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "referrer_count": {
+            "title": "Referrer Count",
+            "type": "integer"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "slug",
+          "name",
+          "forge_id",
+          "forge_slug",
+          "forge_name",
+          "binding",
+          "secret_name",
+          "settings",
+          "authority",
+          "revision",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "retired",
+          "referrer_count"
+        ],
+        "title": "CredentialListItem",
         "type": "object"
       },
       "CredentialNotFoundProblem": {
@@ -7194,6 +7485,28 @@
         "title": "CredentialReferenceView",
         "type": "object"
       },
+      "CredentialSettingView": {
+        "description": "One setting a binding takes, by ``key``, with the values it accepts.",
+        "properties": {
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "choices"
+        ],
+        "title": "CredentialSettingView",
+        "type": "object"
+      },
       "CredentialSlugTakenProblem": {
         "additionalProperties": true,
         "description": "Another credential holds ``slug``.",
@@ -7331,18 +7644,26 @@
         "type": "object"
       },
       "CredentialsListView": {
-        "description": "Every stored credential by slug \u2014 ``GET /api/credentials``.",
+        "description": "Every stored credential by slug \u2014 ``GET /api/credentials`` \u2014 and every binding a credential may name.",
         "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialBindingView"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
           "credentials": {
             "items": {
-              "$ref": "#/components/schemas/CredentialSummary"
+              "$ref": "#/components/schemas/CredentialListItem"
             },
             "title": "Credentials",
             "type": "array"
           }
         },
         "required": [
-          "credentials"
+          "credentials",
+          "bindings"
         ],
         "title": "CredentialsListView",
         "type": "object"
@@ -20674,6 +20995,83 @@
         "title": "RepositoryEntry",
         "type": "object"
       },
+      "RepositoryEntryV3": {
+        "additionalProperties": false,
+        "description": "A version-3 repository entry: it names its forge, and the credential it acts with by id or slug.",
+        "properties": {
+          "allow_no_ci": {
+            "default": false,
+            "title": "Allow No Ci",
+            "type": "boolean"
+          },
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "landing_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandingPolicyName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "forge",
+          "owner",
+          "repo",
+          "base_branch",
+          "credential"
+        ],
+        "title": "RepositoryEntryV3",
+        "type": "object"
+      },
       "RepositoryLinkPatchRequest": {
         "additionalProperties": false,
         "description": "A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the\nlink's own integration branch \u2014 a valid git branch name, never checked against the forge \u2014 and an explicit\n``null`` clears it, so the link inherits the repository's ``base_branch`` again.",
@@ -30667,6 +31065,63 @@
           "forge"
         ],
         "title": "WorkSourceEntry",
+        "type": "object"
+      },
+      "WorkSourceEntryV3": {
+        "additionalProperties": false,
+        "description": "A version-3 work source entry: it names its forge, and the credential it acts with by id or slug \u2014 ``null``, or\nomitted, for none on a create, and the stored one on an edit.",
+        "properties": {
+          "annotate": {
+            "default": false,
+            "title": "Annotate",
+            "type": "boolean"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "provider",
+          "locator",
+          "forge"
+        ],
+        "title": "WorkSourceEntryV3",
         "type": "object"
       },
       "WorkSourceLocatorTakenProblem": {
@@ -41149,7 +41604,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,\nedit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,\nand every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,\nwith the same `outcomes` and no `apply_id`. 422 invalid \u2014 `config_version_retired` for any `version` but 2, a\nmissing one included \u2014 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a\ncadence write would leave it promoting its runs and the caller may not promote chunks.",
+        "description": "Reconcile a version-2 or version-3 document (YAML or JSON, by `Content-Type`; told apart by `version`) in one\ntransaction: create what is absent, edit only the fields an entry states, enable what is retired, leave unnamed\nrecords alone. Forges are declared, and every work source and repository names its forge by id or slug; a\nversion-3 document declares credentials too, and each work source and repository names the one it acts with by id\nor slug, as `credential`. `dry_run` rolls the same transaction back, with the same `outcomes` and no `apply_id`.\n422 invalid \u2014 `config_version_retired` for any `version` but 2 or 3, a missing one included \u2014 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. 403 when a cadence write would leave it promoting its\nruns and the caller may not promote chunks.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -41169,13 +41624,17 @@
               "schema": {
                 "discriminator": {
                   "mapping": {
-                    "2": "#/components/schemas/ConfigDocumentV2"
+                    "2": "#/components/schemas/ConfigDocumentV2",
+                    "3": "#/components/schemas/ConfigDocumentV3"
                   },
                   "propertyName": "version"
                 },
                 "oneOf": [
                   {
                     "$ref": "#/components/schemas/ConfigDocumentV2"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV3"
                   }
                 ]
               }
@@ -41184,13 +41643,17 @@
               "schema": {
                 "discriminator": {
                   "mapping": {
-                    "2": "#/components/schemas/ConfigDocumentV2"
+                    "2": "#/components/schemas/ConfigDocumentV2",
+                    "3": "#/components/schemas/ConfigDocumentV3"
                   },
                   "propertyName": "version"
                 },
                 "oneOf": [
                   {
                     "$ref": "#/components/schemas/ConfigDocumentV2"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV3"
                   }
                 ]
               }
@@ -41471,7 +41934,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every project with its standing links, every live urgency \u2014 an icon as its media type and base64 bytes \u2014 in\norder with the tenant's default, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by\nslug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.\nRetired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.",
+        "description": "Every project with its standing links, every live urgency \u2014 an icon as its media type and base64 bytes \u2014 in\norder with the tenant's default, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by\nslug, with every field, and every active secret name, as a document of `version` \u2014 2, the default, or 3 \u2014 that\napplies back as a no-op. Version 3 adds every active credential, and names the credential each work source and\nrepository acts with by slug; one acting with none but by its old secret field names the credential that field\nresolves to \u2014 and, when none exists yet, declares the one an apply of the document creates. Retired records are\nleft out, since applying one would enable it. 422 `config_version_retired` for any other `version`.",
         "operationId": "export_config_api_config_export_get",
         "parameters": [
           {
@@ -41480,7 +41943,6 @@
             "required": false,
             "schema": {
               "default": 2,
-              "maximum": 2,
               "minimum": 1,
               "title": "Version",
               "type": "integer"
@@ -41492,7 +41954,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigDocumentV2"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfigDocumentV2"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigDocumentV3"
+                    }
+                  ],
+                  "title": "Response Export Config Api Config Export Get"
                 }
               }
             },
@@ -41648,7 +42118,7 @@
     },
     "/api/config/schema/{kind}": {
       "get": {
-        "description": "The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422\n`config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,\nevery landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered\n(`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and\n`ForgeDetail.landing_policies`.",
+        "description": "The JSON Schema of a record kind's document entry at `version` \u2014 2, the default, or 3, which adds\n`credentials` and names a credential on `work-sources` and `repositories`; 404 for a kind with none at that\nversion, and 422 `config_version_retired` for any other version. The `repositories` schema lists, under\n`x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer (`requires`) and\nthe ones it uses when offered (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and\n`ForgeDetail.landing_policies`.",
         "operationId": "get_schema_api_config_schema__kind__get",
         "parameters": [
           {
@@ -41666,7 +42136,6 @@
             "required": false,
             "schema": {
               "default": 2,
-              "maximum": 2,
               "minimum": 1,
               "title": "Version",
               "type": "integer"
@@ -41767,7 +42236,7 @@
     },
     "/api/credentials": {
       "get": {
-        "description": "Every stored credential by slug, retired ones hidden unless `include_retired`.",
+        "description": "Every stored credential by slug, retired ones hidden unless `include_retired`, each with the count of enabled\nrepositories and work sources naming it; and every binding a credential may name, with the kind of forge it\nauthenticates against and each setting's choices.",
         "operationId": "list_credentials_api_credentials_get",
         "parameters": [
           {

@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    CredentialDeclaration,
     DeclaredOldField,
     ForgeDeclaration,
     PlannedPosition,
@@ -41,6 +42,7 @@ from blizzard.hub.domain.config.carry_over import (
 )
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
 from blizzard.hub.domain.config.credential_naming import CredentialConflict, CredentialId, credential_lock
+from blizzard.hub.domain.config.credentials import CredentialDraft, CredentialEdit
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, forge_lock
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import (
@@ -387,3 +389,18 @@ def test_an_import_declares_its_keys_once_and_one_recorded_first_rolls_its_unit_
     assert source.fields.forge_id == forge.forge_id
     assert units.committed == [not recorded]
     assert result.status is (ImportStatus.ALREADY_IMPORTED if recorded else ImportStatus.IMPORTED)
+
+
+def test_an_apply_plan_writing_a_credential_declares_its_forge_secret_and_own_keys() -> None:
+    created = CredentialId("cred_new")
+    declaration = ConfigDeclaration(
+        credentials=(
+            CredentialDeclaration(
+                CredentialDraft("deploy", None, _GHE, "github.token", "repo-tok", {}), CredentialEdit(), created
+            ),
+        ),
+    )
+
+    plan = reconcile(declaration, _STORED, _CTX, at=_AT)
+
+    assert plan.locks == tuple(sorted({forge_lock(_GHE), secret_lock("repo-tok"), credential_lock(created)}))

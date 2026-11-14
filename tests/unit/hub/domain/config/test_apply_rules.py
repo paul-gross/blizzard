@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 import pytest
 
@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    CredentialDeclaration,
     DeclaredForgeFacts,
     DeclaredReferences,
     EntryOutcome,
@@ -25,6 +26,15 @@ from blizzard.hub.domain.config.apply import (
     require_appliable_forges,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
+from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialBindingImmutable,
+    CredentialDraft,
+    CredentialEdit,
+    PlannedCredentials,
+    binding_named,
+)
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
@@ -498,3 +508,111 @@ def test_a_stored_forge_moved_off_an_origin_frees_it_for_a_new_forge() -> None:
         DeclaredForgeFacts("other", "github", ForgeFields("https://ghe.example.com", None), ForgeEdit()),
     ]
     require_appliable_forges(entries, held, {})
+
+
+# --- Credentials -------------------------------------------------------------------------
+
+
+_GHE_ID = ForgeId("frg_github")
+
+
+def _credential_draft(slug: str = "deploy", **fields: Any) -> CredentialDraft:
+    base: dict[str, Any] = {
+        "slug": slug,
+        "name": None,
+        "forge_id": _GHE_ID,
+        "binding": "github.token",
+        "secret_name": "gh",
+        "settings": {},
+    }
+    return CredentialDraft(**{**base, **fields})
+
+
+def _declared_credential(
+    draft: CredentialDraft | None = None, edit: CredentialEdit | None = None
+) -> CredentialDeclaration:
+    return CredentialDeclaration(draft or _credential_draft(), edit or CredentialEdit(), CredentialId("cred_deploy"))
+
+
+def _held_credential(*, retired: bool = False) -> ConfiguredCredential:
+    record, _ = ConfiguredCredential.new(
+        _credential_draft(), binding_named("github.token"), _CTX, at=_AT, credential_id=CredentialId("cred_deploy")
+    )
+    return replace(record, retired=retired)
+
+
+def _with_credential(held: ConfiguredCredential) -> StoredConfig:
+    return replace(_stored(), credentials={held.slug: held})
+
+
+def test_a_declared_credential_the_tenant_lacks_is_created_under_its_minted_id_before_the_referrers() -> None:
+    declaration = ConfigDeclaration(credentials=(_declared_credential(),), work_sources=(_declared_source(),))
+
+    plan = _plan(declaration, _stored())
+
+    assert [(w.section, w.change.op) for w in plan.writes] == [
+        ("credentials", ChangeOp.CREATE),
+        ("work_sources", ChangeOp.CREATE),
+    ]
+    created = plan.writes[0].record
+    assert isinstance(created, ConfiguredCredential)
+    assert (created.credential_id, created.authority) == ("cred_deploy", "secret/gh")
+
+
+def test_a_held_credential_as_declared_is_unchanged_and_a_retired_one_is_enabled() -> None:
+    unchanged = _plan(ConfigDeclaration(credentials=(_declared_credential(),)), _with_credential(_held_credential()))
+    assert unchanged.writes == ()
+    assert unchanged.outcomes == (EntryOutcome(RecordKind.CREDENTIAL, "deploy", None),)
+
+    enabled = _plan(
+        ConfigDeclaration(credentials=(_declared_credential(),)), _with_credential(_held_credential(retired=True))
+    )
+    assert [w.change.op for w in enabled.writes] == [ChangeOp.ENABLE]
+
+
+def test_a_declared_credential_edits_only_its_stated_secret_and_settings() -> None:
+    edit = CredentialEdit(secret_name="ops", settings={"variant": "classic"})
+
+    plan = _plan(
+        ConfigDeclaration(credentials=(_declared_credential(edit=edit),)), _with_credential(_held_credential())
+    )
+
+    (write,) = plan.writes
+    assert write.change.op is ChangeOp.EDIT
+    assert {d.field for d in write.change.diff} == {"secret", "settings"}
+    assert isinstance(write.record, ConfiguredCredential) and write.record.authority == "secret/ops"
+
+
+@pytest.mark.parametrize(
+    ("moved", "field"), [({"forge_id": ForgeId("frg_other")}, "forge"), ({"binding": "github.app"}, "binding")]
+)
+def test_a_credential_entry_changing_its_forge_or_binding_is_refused_at_that_field(
+    moved: dict[str, Any], field: str
+) -> None:
+    declaration = ConfigDeclaration(credentials=(_declared_credential(_credential_draft(**moved)),))
+
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(declaration, _with_credential(_held_credential()))
+
+    assert (caught.value.section, caught.value.index) == ("credentials", 0)
+    assert isinstance(caught.value.cause, CredentialBindingImmutable)
+    assert caught.value.cause.field == field
+
+
+def test_a_credential_slug_a_credential_left_is_refused_naming_that_credential() -> None:
+    left = _held_credential()
+    stored = replace(_stored(), former_credentials={"deploy": replace(left, fields=replace(left.fields, slug="now"))})
+
+    with pytest.raises(ApplyEntryRefused) as caught:
+        _plan(ConfigDeclaration(credentials=(_declared_credential(),)), stored)
+
+    assert isinstance(caught.value.cause, ConfigFieldError) and caught.value.cause.field == "slug"
+    assert "now" in caught.value.cause.message
+
+
+def test_planned_credentials_resolve_an_id_a_slug_or_a_slug_one_left() -> None:
+    held = _held_credential()
+    planned = PlannedCredentials((held,), {"old-deploy": held})
+
+    assert planned.resolve("cred_deploy") is planned.resolve("deploy") is planned.resolve("old-deploy") is held
+    assert planned.resolve("unknown") is None

@@ -1,8 +1,9 @@
 # Configuration documents
 
-A configuration document declares forges, work sources, repositories, projects, urgencies, the tenant's settings,
-scopes, routines, and cadences in one YAML or JSON file. `blizzard hub config apply` reconciles the hub's stored records
-to it in a single transaction, and `blizzard hub config export` writes the current records back out as a document.
+A configuration document declares forges, credentials, work sources, repositories, projects, urgencies, the tenant's
+settings, scopes, routines, and cadences in one YAML or JSON file. `blizzard hub config apply` reconciles the hub's
+stored records to it in a single transaction, and `blizzard hub config export` writes the current records back out as a
+document.
 
 ```bash
 blizzard hub config apply config.yaml --dry-run
@@ -79,15 +80,16 @@ cadences:
         urgency: urgent
 ```
 
-`version` is `2`: a document with any other `version`, or none, is refused `422 config_version_retired` at `version`,
-naming version 2. Version 1, whose entries carried the forge's address in place of `forge`, is retired
-([upgrade.md](../upgrade.md#forges-replace-the-address-fields)). Each entry carries the fields its own record takes, so
-[work sources](./work-sources.md), [repositories](./repositories.md), [scopes and routines](./routines-and-scopes.md),
-and [cadences](./cadences.md) own the field meanings, and `GET /api/config/schema/work-sources`, `/repositories`,
-`/scopes`, `/routines`, and `/cadences` serve each entry's JSON Schema, and `/api/config/schema/forges` serves forge
-entries; `?version=1` is refused `config_version_retired`. An unknown field is refused. `secrets` lists secret names
-that must already exist and be active; a document never carries a secret's value, so set one first with
-`blizzard hub secret create`. A document names no credential: each source and repository it applies acts with the
+`version` is `2` or `3` ([version 3](#version-3) declares credentials): a document with any other `version`, or none, is
+refused `422 config_version_retired` at `version`, naming both. Version 1, whose entries carried the forge's address in
+place of `forge`, is retired ([upgrade.md](../upgrade.md#forges-replace-the-address-fields)). Each entry carries the
+fields its own record takes, so [work sources](./work-sources.md), [repositories](./repositories.md),
+[scopes and routines](./routines-and-scopes.md), and [cadences](./cadences.md) own the field meanings, and
+`GET /api/config/schema/work-sources`, `/repositories`, `/scopes`, `/routines`, and `/cadences` serve each entry's JSON
+Schema, and `/api/config/schema/forges` serves forge entries — each at `?version=2`, the default, or `?version=3`; any
+other version is refused `config_version_retired`. An unknown field is refused. `secrets` lists secret names that must
+already exist and be active; a document never carries a secret's value, so set one first with
+`blizzard hub secret create`. A version-2 document names no credential: each source and repository it applies acts with the
 `github.token` credential reading its secret, and [credentials.md](./credentials.md) owns credentials and rebinding a
 record to another one.
 
@@ -164,10 +166,69 @@ naming a routine nobody declared is applied, and the cadence's view shows it as 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
 
+## Version 3
+
+A version-3 document has every section of version 2 and a `credentials` section, and each work source and repository
+entry names the credential it acts with as `credential`, an id or a slug, in place of version 2's `secret` and
+`secret_name`:
+
+```yaml
+version: 3
+forges:
+  - slug: github
+    kind: github
+    api_base: https://api.github.com
+secrets: [gh-token]
+credentials:
+  - slug: deploy
+    name: Deploy token
+    forge: github
+    binding: github.token
+    secret: gh-token
+    settings: { variant: classic }
+work_sources:
+  - slug: blizzard
+    provider: github
+    locator: paul-gross/blizzard
+    forge: github
+    credential: deploy
+repositories:
+  - slug: blizzard
+    forge: github
+    owner: paul-gross
+    repo: blizzard
+    base_branch: master
+    credential: deploy
+```
+
+A credential entry is keyed by its `slug` and carries `forge`, an id or a slug, `binding`, `secret`, `settings`, and an
+optional `name`. `GET /api/config/schema/credentials?version=3` serves its JSON Schema; at version 2 there is none, so
+it answers `404 config_schema_not_found`. A stored credential's `forge` and `binding` never change: an entry stating
+another is refused `422 credential_binding_immutable` at that field. An entry acting as an authority another credential
+on its forge holds is refused `422 credential_authority_taken` at its `secret`, and a slug another credential left `422`
+at its `slug`, naming that credential. A `settings` edit that would no longer offer what an enabled repository acting
+with the credential needs is refused `422 forge_capability_missing` at `settings`. A secret move rewrites the secret of
+every record acting with the credential in the same transaction. An apply never retires a credential the document leaves
+out.
+
+Credential entries reconcile after the forges and the secret check and before the work sources and repositories, so a
+referrer may name a credential declared in the same file. A referrer acts with the credential it names, as the apply
+leaves it, and holds that credential's secret. One naming a credential neither stored nor declared, or a retired one, is
+refused `422 credential_unavailable` at its `credential`, and one naming a credential of another forge
+`422 credential_forge_mismatch`. A repository entry must name a credential; a work source entry may leave it out, or
+state `null`, to create a source acting with none or to keep a stored source's. A version-3 entry carrying `secret` or
+`secret_name` is refused as an unknown field.
+
+In a version-2 document, a repository's `secret_name` or a work source's `secret` that differs from the record's
+resolves, in the apply's transaction, to the `github.token` credential reading that secret on the entry's forge, created
+when there is none. A field equal to the record's leaves its credential as stored, so a version-2 document re-applied
+over the same records changes nothing.
+
 ## What an apply does
 
-An apply looks at each record the document names, forges before work sources and repositories, projects next, then
-urgencies, the urgency order, and the settings, then scopes before routines, and cadences after routines:
+An apply looks at each record the document names, forges and then credentials before work sources and repositories,
+projects next, then urgencies, the urgency order, and the settings, then scopes before routines, and cadences after
+routines:
 
 | The record is…                        | The apply…                                           | Outcome row |
 | ------------------------------------- | ---------------------------------------------------- | ----------- |
@@ -212,9 +273,14 @@ repository also gets its `landing_order`; one that ranks nothing gets none. A pr
 base branch gets its `repository_branches`; one whose links all inherit gets none. The built-in `hub` work source is
 never exported.
 
-An export is a version-2 document, from the CLI and from `GET /api/config/export` alike; `--version 1`, or `?version=1`,
-is refused `config_version_retired`. `forges` follows `projects`, references use forge slugs, and even an unreferenced
-active forge is exported. An export applies back unchanged.
+An export is a version-2 document by default, from the CLI and from `GET /api/config/export` alike; `--version 3`, or
+`?version=3`, writes version 3, and any other version is refused `config_version_retired`. `forges` follows `projects`,
+references use forge slugs, and even an unreferenced active forge is exported. An export applies back unchanged.
+
+A version-3 export writes every active credential, ordered by slug, and each work source and repository names its
+credential by slug. A record acting with no credential but holding a secret names the credential its secret would
+resolve to; when no such credential exists yet, the export declares the one an apply of the document creates, and writes
+nothing itself.
 
 ## Recording
 

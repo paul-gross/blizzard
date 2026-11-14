@@ -832,7 +832,7 @@ def test_refusals_carry_their_status_and_entry_and_leave_the_store_unchanged(hub
     invalid = _apply_json(hub, {"version": 2, "work_sources": [_DEMO, {**_DEMO, "slug": "b", "provider": "x"}]})
     assert invalid.json()["detail"][0]["loc"] == ["body", "work_sources", 1, "provider"]
 
-    shape = _apply_json(hub, {"version": 3})
+    shape = _apply_json(hub, {"version": 4})
     assert shape.status_code == 422
     assert shape.json()["detail"][0]["loc"] == ["body", "version"]
 

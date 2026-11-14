@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -15,6 +16,7 @@ from blizzard.hub.domain.cadence.model import Cadence, ChoreShape, chore_urgenci
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.apply import (
     CADENCES_SECTION,
+    CREDENTIALS_SECTION,
     FORGES_SECTION,
     REPOSITORIES_SECTION,
     ROUTINES_SECTION,
@@ -23,6 +25,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    CredentialDeclaration,
     DeclaredForgeFacts,
     DeclaredOldField,
     DeclaredReferences,
@@ -36,15 +39,24 @@ from blizzard.hub.domain.config.apply import (
 )
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
-from blizzard.hub.domain.config.credential_naming import CredentialId
+from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD, CredentialId
 from blizzard.hub.domain.config.credential_resolution import CredentialChoice, decide_credential, held_for_old_field
-from blizzard.hub.domain.config.credentials import ConfiguredCredential, IReadCredentialRepository
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialSlug,
+    IReadCredentialRepository,
+    PlannedCredentials,
+    binding_named,
+    require_declarable_credential,
+)
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice, resolve_forge
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeId,
     ForgeSlug,
+    ForgeUnavailable,
     IReadForgeRepository,
     PlannedForges,
 )
@@ -65,7 +77,12 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlug,
     require_known_provider,
 )
-from blizzard.hub.domain.config_apply.entries import DeclaredCadence, DeclaredRoutine, DocumentEntries
+from blizzard.hub.domain.config_apply.entries import (
+    DeclaredCadence,
+    DeclaredCredential,
+    DeclaredRoutine,
+    DocumentEntries,
+)
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import (
     DEFAULT_URGENCY_FIELD,
@@ -184,25 +201,34 @@ class _UrgencyNames:
         ]
 
 
+class _HeldCredentials:
+    """Every credential of the tenant, retired ones included, read once, on the first entry needing them."""
+
+    def __init__(self, credentials: IReadCredentialRepository) -> None:
+        self._credentials = credentials
+        self._held: list[ConfiguredCredential] | None = None
+
+    def all(self) -> list[ConfiguredCredential]:
+        if self._held is None:
+            self._held = self._credentials.list_all(include_retired=True)
+        return self._held
+
+
 class _OldFieldCredentials:
     """The credential each old secret field the referrer entries resolve names, decided at the apply's edge: the one on
-    its forge acting as its ``github.token`` authority — every credential of the tenant read once, on the first old
-    field — else one fresh id per forge and secret, for the credential the apply creates. Each is collected as a
-    :class:`DeclaredOldField` for the apply's unit to resolve under its locks."""
+    its forge acting as its ``github.token`` authority, else one fresh id per forge and secret, for the credential the
+    apply creates. Each is collected as a :class:`DeclaredOldField` for the apply's unit to resolve under its locks."""
 
-    def __init__(self, credentials: IReadCredentialRepository, clock: IClock) -> None:
-        self._credentials = credentials
+    def __init__(self, held: _HeldCredentials, clock: IClock) -> None:
+        self._held = held
         self._clock = clock
-        self._held: list[ConfiguredCredential] | None = None
         self._minted: dict[tuple[ForgeId, str], CredentialId] = {}
         self.declared: list[DeclaredOldField] = []
 
     def planned(self, section: str, index: int, field: str, forge_id: ForgeId, secret_name: str) -> CredentialId:
         """The credential the entry at ``section`` and ``index`` names for its old ``field`` naming ``secret_name`` on
         ``forge_id``."""
-        if self._held is None:
-            self._held = self._credentials.list_all(include_retired=True)
-        held = held_for_old_field(forge_id, secret_name, self._held)
+        held = held_for_old_field(forge_id, secret_name, self._held.all())
         if held is not None:
             planned = held.credential_id
         else:
@@ -212,6 +238,19 @@ class _OldFieldCredentials:
             planned = self._minted[key]
         self.declared.append(DeclaredOldField(section, index, field, forge_id, secret_name, planned))
         return planned
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Credentials:
+    """The credentials a document's apply meets: the declared ones, each under the id it takes; every credential a
+    referrer entry may name, as the apply leaves it; the stored credential each declared slug names; and the one that
+    left each declared slug none holds."""
+
+    declarations: tuple[CredentialDeclaration, ...] = ()
+    planned: PlannedCredentials = field(default_factory=lambda: PlannedCredentials((), {}))
+    stored: dict[str, ConfiguredCredential] = field(default_factory=dict[str, ConfiguredCredential])
+    former: dict[str, ConfiguredCredential] = field(default_factory=dict[str, ConfiguredCredential])
 
 
 #: A document entry names no credential but by an old secret field.
@@ -280,11 +319,27 @@ class ConfigApplication:
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
         urgency_plan = self._plan_urgencies(entries, ctx)
         names = _UrgencyNames(self._urgencies, urgency_plan)
-        old_fields = _OldFieldCredentials(self._credentials, self._clock)
-        declaration = self._declaration(entries, projects, repositories, sources, lookup, names, old_fields)
+        held_credentials = _HeldCredentials(self._credentials)
+        credentials = self._held_credentials(entries, held_credentials, lookup, ctx)
+        old_fields = _OldFieldCredentials(held_credentials, self._clock)
+        declaration = self._declaration(
+            entries, projects, repositories, sources, lookup, credentials.planned, names, old_fields
+        )
         cadences, held_cadences = self._cadence_declarations(entries, projects, names, may_admit=may_admit)
-        declaration = replace(declaration, declared_forges=declared_forges, cadences=cadences, urgencies=urgency_plan)
+        declaration = replace(
+            declaration,
+            declared_forges=declared_forges,
+            credentials=credentials.declarations,
+            cadences=cadences,
+            urgencies=urgency_plan,
+        )
         stored = self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences)
+        stored = replace(
+            stored,
+            credentials=credentials.stored,
+            former_credentials=credentials.former,
+            acting_credentials={c.credential_id: c for c in held_credentials.all()} if entries.repositories else {},
+        )
         guards = _reference_guards(declaration, stored, names)
         declaration = replace(
             declaration,
@@ -330,6 +385,84 @@ class ConfigApplication:
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(FORGES_SECTION, index, exc) from exc
         return tuple(declarations), PlannedForges(tuple(projected.values()), former), former
+
+    def _held_credentials(
+        self, entries: DocumentEntries, held: _HeldCredentials, forges: PlannedForges, ctx: ChangeContext
+    ) -> _Credentials:
+        """The credentials the entries meet: each declared one on the forge it names, under the id it takes — a stored
+        record's, or one minted for a credential the document creates — and every credential a referrer entry may
+        name, as the document leaves it. Nothing is read for a document declaring and naming none."""
+        named = [
+            entry.credential
+            for entry in (*entries.work_sources, *entries.repositories)
+            if not isinstance(entry.credential, UnsetType)
+        ]
+        if not entries.credentials and not named:
+            return _Credentials()
+        by_slug = {c.slug: c for c in held.all()}
+        former: dict[str, ConfiguredCredential] = {}
+        for value in sorted({e.slug for e in entries.credentials} - by_slug.keys()):
+            if (slug := CredentialSlug.of(value)) is not None and (left := self._credentials.get_by_former_slug(slug)):
+                former[value] = left
+        at = self._clock.now()
+        projected = {c.credential_id: c for c in held.all()}
+        declarations: list[CredentialDeclaration] = []
+        for index, entry in enumerate(entries.credentials):
+            try:
+                declaration, record = self._declared_credential(entry, by_slug, former, forges, ctx, at=at)
+            except ConfigFieldError as exc:
+                raise ApplyEntryRefused(CREDENTIALS_SECTION, index, exc) from exc
+            projected[record.credential_id] = record
+            declarations.append(declaration)
+        declared = {d.slug: former[d.slug] for d in declarations if d.slug in former}
+        for value in sorted(set(named)):
+            if any(value in (c.credential_id, c.slug) for c in projected.values()) or value in former:
+                continue
+            if (slug := CredentialSlug.of(value)) is not None and (left := self._credentials.get_by_former_slug(slug)):
+                former[value] = left
+        return _Credentials(
+            declarations=tuple(declarations),
+            planned=PlannedCredentials(tuple(projected.values()), former),
+            stored={d.slug: by_slug[d.slug] for d in declarations if d.slug in by_slug},
+            former=declared,
+        )
+
+    def _declared_credential(
+        self,
+        entry: DeclaredCredential,
+        held: dict[str, ConfiguredCredential],
+        former: dict[str, ConfiguredCredential],
+        forges: PlannedForges,
+        ctx: ChangeContext,
+        *,
+        at: datetime,
+    ) -> tuple[CredentialDeclaration, ConfiguredCredential]:
+        """The declaration of one credential entry, on the forge it names, and the credential as the apply leaves it."""
+        forge = forges.resolve(entry.forge)
+        if forge is None:
+            raise ForgeUnavailable("forge", f"forge {entry.forge} is unknown")
+        stored = held.get(entry.slug)
+        require_declarable_credential(entry.slug, forge.forge_id, entry.binding, stored, former.get(entry.slug))
+        draft = CredentialDraft(
+            slug=entry.slug,
+            name=entry.name,
+            forge_id=forge.forge_id,
+            binding=entry.binding,
+            secret_name=entry.secret,
+            settings=entry.settings,
+        )
+        if stored is None:
+            credential_id = CredentialId(Id.mint(IdPrefix.CREDENTIAL, self._clock).value)
+            record, _ = ConfiguredCredential.new(
+                draft, binding_named(entry.binding), ctx, at=at, credential_id=credential_id
+            )
+        else:
+            credential_id = stored.credential_id
+            enabled = stored.set_retired(False, ctx, if_match=None, at=at) if stored.retired else None
+            record = stored if enabled is None else enabled[0]
+            edited = record.edit(entry.edit, binding_named(record.fields.binding), ctx, if_match=None, at=at)
+            record = record if edited is None else edited[0]
+        return CredentialDeclaration(draft, entry.edit, credential_id), record
 
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
         stored = {r.slug: r for r in self._repositories.list_all(include_retired=True)}
@@ -477,13 +610,29 @@ class ConfigApplication:
         held: _Repositories,
         sources_held: _WorkSources,
         forges: PlannedForges,
+        credentials: PlannedCredentials,
         names: _UrgencyNames,
         old_fields: _OldFieldCredentials,
     ) -> ConfigDeclaration:
         """The domain's declarations from the entries: each record under the id it takes, on the forge it names and
         acting with the credential its old secret field resolves to — decided by the old-field table as every door
         decides it (:func:`decide_credential`) — and each scope and routine within the project it names, as the apply
-        leaves the projects. An entry's :class:`ConfigFieldError` on its forge is refused at the entry."""
+        leaves the projects. An entry naming a credential acts with it, as the apply leaves it, and holds its secret.
+        An entry's :class:`ConfigFieldError` on its forge or credential is refused at the entry."""
+
+        def named(section: str, index: int, reference: str) -> ConfiguredCredential:
+            try:
+                decision = decide_credential(
+                    CredentialChoice(reference, credentials.resolve(reference)),
+                    UNSET,
+                    current=UNSET,
+                    field=CREDENTIAL_FIELD,
+                    required=False,
+                )
+            except ConfigFieldError as exc:
+                raise ApplyEntryRefused(section, index, exc) from exc
+            assert decision.use is not None
+            return decision.use
 
         def resolved(choice: ForgeChoice, provider: str | None, current: ForgeId | None) -> ConfiguredForge | None:
             return resolve_forge(
@@ -523,6 +672,11 @@ class ConfigApplication:
                 planned = old_fields.planned(WORK_SOURCES_SECTION, index, "secret", forge_id, decision.resolve)
                 fields = entry.draft.on(forge_id, credential_id=planned, secret=decision.resolve)
                 edit = replace(edit, credential_id=planned, secret=decision.resolve)
+            if not isinstance(entry.credential, UnsetType):
+                use = named(WORK_SOURCES_SECTION, index, entry.credential)
+                secret = use.fields.secret_name
+                fields = entry.draft.on(forge_id, credential_id=use.credential_id, secret=secret)
+                edit = replace(edit, credential_id=use.credential_id, secret=secret)
             work_sources.append(
                 WorkSourceDeclaration(
                     slug=entry.slug,
@@ -558,6 +712,11 @@ class ConfigApplication:
                 planned = old_fields.planned(REPOSITORIES_SECTION, index, "secret_name", forge_id, decision.resolve)
                 repo_fields = repo.draft.on(forge_id, credential_id=planned, secret_name=decision.resolve)
                 repo_edit = replace(repo_edit, credential_id=planned, secret_name=decision.resolve)
+            if not isinstance(repo.credential, UnsetType):
+                use = named(REPOSITORIES_SECTION, index, repo.credential)
+                secret_name = use.fields.secret_name
+                repo_fields = repo.draft.on(forge_id, credential_id=use.credential_id, secret_name=secret_name)
+                repo_edit = replace(repo_edit, credential_id=use.credential_id, secret_name=secret_name)
             repositories.append(
                 RepositoryDeclaration(
                     slug=repo.slug,

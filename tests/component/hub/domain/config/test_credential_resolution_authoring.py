@@ -177,7 +177,7 @@ def test_two_resolutions_of_one_new_authority_leave_one_credential_both_naming_i
     store = world.authoring._credentials  # pyright: ignore[reportPrivateUsage]
     blind = {"reads": 2, "holders": 1, "lost": 0}
     real_read, real_holder = store.get_by_authority, credential_record_store._authority_holder  # pyright: ignore[reportPrivateUsage]
-    real_lost = credential_record_store._lost_race  # pyright: ignore[reportPrivateUsage]
+    real_lost = credential_record_store.lost_race
 
     def unseen_read(*args: Any, **kwargs: Any) -> ConfiguredCredential | None:
         if blind["reads"]:
@@ -197,7 +197,7 @@ def test_two_resolutions_of_one_new_authority_leave_one_credential_both_naming_i
 
     monkeypatch.setattr(store, "get_by_authority", unseen_read)
     monkeypatch.setattr(credential_record_store, "_authority_holder", unseen_holder)
-    monkeypatch.setattr(credential_record_store, "_lost_race", counted_loss)
+    monkeypatch.setattr(credential_record_store, "lost_race", counted_loss)
 
     loser = world.authoring.create_repository_naming("second", None, _repo("second"), world.on_forge, _API)
 

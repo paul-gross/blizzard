@@ -3351,7 +3351,7 @@
     "config": {
       "commands": {
         "apply": {
-          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The\nhub applies a version-2 document only.",
+          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The\nhub applies a version-2 or a version-3 document; version 3 declares credentials, and names the one each work\nsource and repository acts with.",
           "params": [
             {
               "hidden": false,
@@ -3539,7 +3539,7 @@
           "short_help": "Name every record the forge migration would refuse \u2014 offline, read-only, while the hub serves."
         },
         "export": {
-          "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it. The hub exports version 2 only, and refuses\nversion 1 naming it.",
+          "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it. The hub exports version 2 or 3 \u2014 version 3\ndeclares credentials, and names the one each work source and repository acts with \u2014 and refuses version 1.",
           "params": [
             {
               "help": "Configuration document version to print.",
