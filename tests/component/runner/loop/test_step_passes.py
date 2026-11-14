@@ -478,3 +478,37 @@ def test_stepper_close_waits_for_tick_and_trace_context_borrowers(tmp_path: Path
         trace_thread.join(10)
         closer.join(10)
         assert closed.is_set() and old.is_closed and new.is_closed
+
+
+def test_retirement_after_trace_waits_for_tick_borrowing_old_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    timeout = [30.0]
+    tick_entered, release_tick = threading.Event(), threading.Event()
+    with loop_graph(config) as graph:
+        stepper = RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+
+        def held_tick(_ctx: LoopContext) -> None:
+            tick_entered.set()
+            release_tick.wait(30)
+
+        monkeypatch.setattr(loop_wiring, "tick", held_tick)
+        tick_thread = threading.Thread(target=stepper.timed_tick)
+        tick_thread.start()
+        try:
+            assert tick_entered.wait(10)
+            old = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert old is not None
+            timeout[0] = 5.0
+            monkeypatch.setattr(stepper, "_sweep_traces", lambda: stepper._context())  # pyright: ignore[reportPrivateUsage]
+            stepper.timed_trace_sweep()
+            new = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert new is not None and new is not old
+            assert not old.is_closed
+        finally:
+            release_tick.set()
+            tick_thread.join(10)
+            stepper.close()
+        assert not tick_thread.is_alive()
+        assert old.is_closed and new.is_closed
