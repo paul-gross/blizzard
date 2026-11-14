@@ -62,6 +62,11 @@ _ROOT = "BLIZZARD_REHEARSAL_ROOT"
 _MOCK_BIN = "BLIZZARD_REHEARSAL_MOCK_BIN"
 _FORGE_BIN = "BLIZZARD_REHEARSAL_FORGE_BIN"
 
+#: The value :func:`ensure_fixture_secret` stores, registered with the strict forge as a classic token.
+_FIXTURE_TOKEN = "fixture-token"
+#: The rehearsal's own token for filing issues, kept apart so only the hub's calls depend on the fixture token.
+_HARNESS_TOKEN = "rehearsal-harness"
+
 pytestmark = [
     pytest.mark.rehearsal,
     pytest.mark.skipif(
@@ -274,6 +279,11 @@ class _Rehearsal:
 
     def seed_the_baseline(self) -> None:
         step = "1 seed the baseline"
+        # Only registered tokens authenticate, so every later forge call proves the hub still sends the baseline's token.
+        assert self.forge.post("/_levers/strict_tokens", json={}).status_code == 200
+        for token in (_FIXTURE_TOKEN, _HARNESS_TOKEN):
+            registered = {"token": token, "token_kind": "classic", "scopes": ["repo"]}
+            assert self.forge.post("/_levers/register_token", json=registered).status_code == 200
         self.hub.init(self.baseline)
         client = self._client(self.hub.start(self.baseline))
         self.seed.init(self.baseline, self.hub.url)
@@ -322,6 +332,19 @@ class _Rehearsal:
         )  # fmt: skip
         if probe.returncode:
             raise self._fail(step, f"release chunk-page probe failed:\n{probe.stdout}\n{probe.stderr}")
+        self._hold_the_carried_credentials(client, step)
+
+    def _hold_the_carried_credentials(self, client: httpx2.Client, step: str) -> None:
+        """The baseline's secret-only repository and source each name a ``github.token`` credential after the upgrade."""
+        for route in (f"/api/repositories/{REPO_NAME}", f"/api/work-sources/{REPO_NAME}"):
+            record = client.get(route)
+            assert record.status_code == 200, record.text
+            slug = record.json().get("credential_slug")
+            if not slug:
+                raise self._fail(step, f"{route} names no credential after the carry-over")
+            binding = client.get(f"/api/credentials/{slug}").json().get("binding")
+            if binding != "github.token":
+                raise self._fail(step, f"{route} carried over onto credential {slug!r} bound {binding!r}")
 
     def keep_the_old_runner(self) -> None:
         step = "3 keep the old runner"
@@ -498,7 +521,11 @@ class _Rehearsal:
         self.graph_id = minted.json()["graph_id"]
 
     def _ingest(self, client: httpx2.Client, title: str, *, promote: bool = True) -> str:
-        issue = self.forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": title})
+        issue = self.forge.post(
+            f"/repos/{REPO}/issues",
+            json={"title": title, "body": title},
+            headers={"Authorization": f"Bearer {_HARNESS_TOKEN}"},
+        )
         assert issue.status_code == 201, issue.text
         ingested = client.post(
             "/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"], "project": _PROJECT}

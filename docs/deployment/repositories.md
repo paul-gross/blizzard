@@ -1,14 +1,15 @@
 # Repositories
 
 A hub holds the repositories work lands in as stored records, managed with `blizzard hub repo`. Each record names one
-repository on a [forge](./forges.md) and the stored secret that authenticates against it, and has a slug you type, a
-display name, and an id the hub mints:
+repository on a [forge](./forges.md) and the [credential](./credentials.md) that authenticates against it, and has a
+slug you type, a display name, and an id the hub mints:
 
 ```bash
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 blizzard hub forge create github --kind github --api-base https://api.github.com
+blizzard hub credential create gh-token --forge github --binding github.token --secret gh-token --variant classic
 blizzard hub repo create blizzard --forge github --owner paul-gross --repo blizzard \
-  --base-branch master --secret gh-token
+  --base-branch master --credential gh-token
 blizzard hub repo list
 blizzard hub repo get blizzard
 ```
@@ -45,18 +46,19 @@ Name such a repository by its new slug.
 
 ## Fields
 
-| Field                | Meaning                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                                 |
-| `name`               | The display name, free text. It may be edited.                                                                           |
-| `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                             |
-| `owner`              | The repository's owner on the forge.                                                                                     |
-| `repo`               | The repository's name on the forge.                                                                                      |
-| `base_branch`        | The branch work lands on — the default a project's link may override ([projects.md](./projects.md#a-links-base-branch)). |
-| `secret_name`        | The stored [secret](./secrets.md) holding the forge token (`--secret`).                                                  |
-| `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                          |
-| `allow_no_ci`        | Opt in to landing without CI (`--allow-no-ci`); defaults to false.                                                       |
-| `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it.    |
+| Field                | Meaning                                                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                                                               |
+| `name`               | The display name, free text. It may be edited.                                                                                                         |
+| `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                                                           |
+| `owner`              | The repository's owner on the forge.                                                                                                                   |
+| `repo`               | The repository's name on the forge.                                                                                                                    |
+| `base_branch`        | The branch work lands on — the default a project's link may override ([projects.md](./projects.md#a-links-base-branch)).                               |
+| `credential`         | The [credential](./credentials.md) it acts with, by id or slug (`--credential`); reads carry `credential_id`, `credential_slug` and `credential_name`. |
+| `secret_name`        | The stored [secret](./secrets.md) the credential reads. `--secret` still names the `github.token` credential reading it.                               |
+| `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                                                        |
+| `allow_no_ci`        | Opt in to landing without CI (`--allow-no-ci`); defaults to false.                                                                                     |
+| `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it.                                  |
 
 Every field but `landing_policy`, `allow_no_ci` and `park_timeout_hours` is required; a create without `forge` is
 refused `422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours`
@@ -70,41 +72,20 @@ origin, so a `forge_api_url` is refused `422 field_moved_to_forge`, naming the f
 
 ### The forge token
 
-On GitHub, delivery needs a token on the repository with these permissions. A classic token is the supported path for
-reading checks; a fine-grained token is not promised the Checks API:
-
-| Permission      | Access       | Why                                                                         |
-| --------------- | ------------ | --------------------------------------------------------------------------- |
-| Contents        | Read & write | Read and move branches, compare revisions                                   |
-| Pull requests   | Read & write | Open, update and merge pull requests                                        |
-| Checks          | Read         | Read each check on a revision                                               |
-| Commit statuses | Read         | Read commit statuses alongside check runs                                   |
-| Actions         | Read & write | Re-run, once, a GitHub Actions check that is failing on the base branch too |
-
-`land` waits for every check on the change to finish before it asks for that re-run. Without Actions write, an inherited
-failure is never re-run and routes as the change's own failure. Upgrade existing tokens too: Checks read alone does not
-grant access to commit statuses. See [delivery policy](./delivery-policy.md#checks-and-missing-ci) for the strict
-default and recovery.
-
-The hub recognizes a fine-grained token by its `github_pat_` prefix and treats it as unable to read checks, so it does
-not offer `checks.read` for a repository using one. A repository on such a token behind a landing policy that reads
-checks, `merge-on-checks` or `fast-forward`, escalates `forge-capability-missing` at the start of each `deliver` pass,
-before anything is sent to the forge ([forges.md](./forges.md#a-missing-capability)). Hub start logs one warning for
-each such token, naming its secret, the variant it was recognized as, and the repositories whose policies it cannot
-serve. A check read GitHub refuses for a fine-grained token escalates `forge-auth` as `token-unsupported`, naming the
-capability. Replace the token with a classic one, or move the repository to `park`.
+[credentials.md](./credentials.md#setting-up-a-github-token) owns the token a repository acts with: the permissions
+delivery needs on GitHub, and what a fine-grained token cannot do.
 
 ## Verbs
 
 `create <slug>` stores the repository at revision 1, named `--name` (default: the slug), landing by `--policy` (default:
 `merge-on-checks`). It is refused when another repository holds the slug as its current one, when the forge, owner and
-repo are already taken, when the secret is missing or retired, or when the forge cannot honour the policy. Taking a slug
-another repository left moves it to the new repository. Every later change moves the revision by one:
+repo are already taken, when the credential or secret is missing or retired, or when the forge cannot honour the policy.
+Taking a slug another repository left moves it to the new repository. Every later change moves the revision by one:
 
 - `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--owner`, `--repo`, `--base-branch`,
-  `--secret`, `--policy`, `--allow-no-ci` / `--no-allow-no-ci`, and `--park-timeout`; `--clear park-timeout` clears the
-  timeout, and is refused beside `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the
-  revision.
+  `--credential`, `--secret`, `--policy`, `--allow-no-ci` / `--no-allow-no-ci`, and `--park-timeout`;
+  `--clear park-timeout` clears the timeout, and is refused beside `--park-timeout`. An edit that leaves every field as
+  it is writes nothing and keeps the revision.
 - `retire <repository>` hides the repository from `list` unless `--include-retired` is given. A retired repository keeps
   its forge, owner and repo, so `create` for another slug on the same coordinate is refused with a message naming the
   holder; `enable` the holder instead.

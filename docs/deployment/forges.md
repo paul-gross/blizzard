@@ -2,8 +2,8 @@
 
 A forge is the server that hosts a tenant's repositories and work items, such as github.com or a GitHub Enterprise host.
 A hub holds each one as a stored record, managed with `blizzard hub forge`. A forge holds no credential: every
-[repository](./repositories.md) and [work source](./work-sources.md) names the forge it lives on and carries a stored
-[secret](./secrets.md) of its own.
+[repository](./repositories.md) and [work source](./work-sources.md) names the forge it lives on and a
+[credential](./credentials.md) of its own on that forge.
 
 ```bash
 blizzard hub forge create github --kind github --api-base https://api.github.com
@@ -138,9 +138,9 @@ credential the repository acts with (`null` when it names only a secret), writes
 artifact, and escalates the chunk to a person with cause `forge-capability-missing`. What a forge offers is narrowed per
 repository by the token it uses: a fine-grained GitHub token is not offered `checks.read`, so a repository on one lacks
 it even on a forge whose kind offers it, and the artifact names the token
-([repositories.md](./repositories.md#the-forge-token)). A step that needs a forge handle reveals credentials only for
-the repositories that handle serves. Only an operator can change what a forge offers, so the remedy is a forge of a kind
-that offers the capability, a token that can use it, or an action that does not ask for it.
+([credentials.md](./credentials.md#classic-and-fine-grained-tokens)). A step that needs a forge handle reveals
+credentials only for the repositories that handle serves. Only an operator can change what a forge offers, so the remedy
+is a forge of a kind that offers the capability, a token that can use it, or an action that does not ask for it.
 
 An action can live without some operations, unlike the necessities above. `land` re-runs a failing check once only when
 the forge offers it, and otherwise routes the failure as it would after one re-run.

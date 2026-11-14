@@ -1,11 +1,12 @@
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { type ApiResponse, type Engine, expecting, type Json, type LogContext, send, type Verbs, verbs } from './engine';
 import type { Ledger } from './ledger';
-import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing } from './mock';
+import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing, MockTokenRegistration } from './mock';
 import type { SweepPassResponse } from './wire/hub/types.gen';
 import { identityFor } from '../auth';
 import type { ClockMode } from '../clock-stack';
 import { requireFreshHub } from '../factories';
+import { FIXTURE_TOKEN } from '../hubs';
 import type { Level } from '../tenancy';
 
 /** The sweeps a pass over one tenant serves; the other three run over every tenant only. */
@@ -160,16 +161,32 @@ export interface ForgeApi {
   readonly url: string;
   createRepository(owner: string, name: string): Promise<MockRepositoryCreated>;
   createIssue(repository: string, issue: { title: string; body?: string; labels?: string[] }): Promise<MockIssue>;
+  /**
+   * Arms `strict_tokens`: from then on only a registered token authenticates `/repos/…` and `/graphql`. Global to the
+   * forge, so refused below `fresh-hub` on the hub's own forge. Register the fixture token first, or the hub's reads
+   * under it, and this client's own, answer `401`.
+   */
+  strictTokens(): Promise<void>;
+  /** Registers a personal access token with the forge. */
+  registerToken(registration: MockTokenRegistration): Promise<void>;
+  /** Makes a registered token answer `401` from then on. */
+  revokeToken(token: string): Promise<void>;
+  /** Makes `owner/name` private, where a fine-grained token's withholdings apply. */
+  privateRepository(repository: string): Promise<void>;
   /** A raw call for the lever and control routes the forge's own README documents. */
   call(method: string, route: string, data?: unknown): Promise<ApiResponse>;
 }
 
-/** The hub's mock forge, reached at its own URL. Its repositories and issues are recorded as the test's own. */
-export function forgeApi(options: { context: APIRequestContext; testInfo: TestInfo; url: string; ledger: Ledger }): ForgeApi {
+/**
+ * The hub's mock forge, reached at its own URL. Its repositories and issues are recorded as the test's own. Every call
+ * carries the fixture token, so it still authenticates once `strict_tokens` holds and the token is registered. `level`
+ * is the hub's served isolation; absent on a test-owned forge, whose global levers reach no other test.
+ */
+export function forgeApi(options: { context: APIRequestContext; testInfo: TestInfo; url: string; ledger: Ledger; level?: Level }): ForgeApi {
   const engine: Engine = {
     context: options.context,
     testInfo: options.testInfo,
-    headers: {},
+    headers: { Authorization: `token ${FIXTURE_TOKEN}` },
     ledger: options.ledger,
     logContext: () => '',
   };
@@ -178,6 +195,9 @@ export function forgeApi(options: { context: APIRequestContext; testInfo: TestIn
   const expectOk = (response: ApiResponse, what: string): Json => {
     if (!response.ok) throw new Error(`${what} answered ${response.status}: ${JSON.stringify(response.body)}`);
     return response.body;
+  };
+  const lever = async (kind: string, data: unknown, what: string): Promise<void> => {
+    expectOk(await call('POST', `/_levers/${kind}`, data), what);
   };
   return {
     url: options.url,
@@ -192,5 +212,12 @@ export function forgeApi(options: { context: APIRequestContext; testInfo: TestIn
       options.ledger.add('issue', `${repository}#${created.number}`);
       return created;
     },
+    async strictTokens() {
+      if (options.level !== undefined) requireFreshHub(options.level, 'forge.strictTokens()');
+      await lever('strict_tokens', {}, 'arming strict_tokens');
+    },
+    registerToken: (registration) => lever('register_token', registration, `registering a ${registration.token_kind} token`),
+    revokeToken: (token) => lever('revoke_token', { token }, 'revoking a token'),
+    privateRepository: (repository) => lever('private_repository', { repo: repository }, `making ${repository} private`),
   };
 }

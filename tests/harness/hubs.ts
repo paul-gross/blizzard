@@ -12,6 +12,8 @@ import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
 export const FIXTURE_SECRET = 'fixture-forge-token';
+/** The fixture secret's value, the token the hub sends its forge; a spec arming `strict_tokens` registers it. */
+export const FIXTURE_TOKEN = 'fixture-token';
 /** The forge every fixture repository and work source of a hub names: the hub's own mock forge. */
 export const FIXTURE_FORGE = 'fixture-forge';
 export const COMMON_OWNER = 'blizzard';
@@ -148,7 +150,7 @@ export async function furnishCommonTenant(hub: HubCoordinates, admin: HubInterna
   const tenant = await admin.createTenant('common', adminUserId);
   await admin.call('POST', '/api/secrets', {
     tenant: tenant.tenant_id,
-    body: { name: FIXTURE_SECRET, value: 'fixture-token' },
+    body: { name: FIXTURE_SECRET, value: FIXTURE_TOKEN },
   });
   const created = await fetch(`${hub.forgeUrl}/_repos`, {
     method: 'POST',

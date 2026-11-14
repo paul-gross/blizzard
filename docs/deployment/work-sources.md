@@ -4,22 +4,24 @@ The hub reads every chunk's work item through a configured work source: a creden
 as a record and managed with `blizzard hub source`. Like a [repository](./repositories.md), each record has a slug you
 type, a display name, and an id the hub mints. Work sources are independent of delivery's forge access: a
 [repository](./repositories.md) record controls where a chunk's PR is opened and landed, a work source record controls
-where its work item is read from, and each carries a stored [secret](./secrets.md) of its own.
+where its work item is read from, and each names a [credential](./credentials.md) of its own.
 
 A hub with zero work source records is fully operable: the built-in hub source is always seated, needs no configuration
 or credential, and resolves hub-authored work items (`hub:<n>`); records are for external forge repos only, one per repo
 to ingest from.
 
 The hub reads a source's record on every call, so a created, edited, retired or re-enabled source, and a replaced
-secret, takes effect on the next ingest, label sweep or closure with no restart. A `[[work_source]]` block left in
-`blizzard-hub.toml` stops the hub from starting; `blizzard hub config import-legacy` carries the blocks into records,
-and [install.md](./install.md#work-sources-and-forge-settings-are-records) owns that upgrade step.
+credential or secret, takes effect on the next ingest, label sweep or closure with no restart. A `[[work_source]]` block
+left in `blizzard-hub.toml` stops the hub from starting; `blizzard hub config import-legacy` carries the blocks into
+records, and [install.md](./install.md#work-sources-and-forge-settings-are-records) owns that upgrade step.
 
 ## Work source records
 
 ```bash
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
-blizzard hub source create blizzard --provider github --locator paul-gross/blizzard --secret gh-token --annotate
+blizzard hub credential create gh-token --forge github --binding github.token --secret gh-token --variant classic
+blizzard hub source create blizzard --provider github --locator paul-gross/blizzard --forge github \
+  --credential gh-token --annotate
 blizzard hub source list
 blizzard hub source get blizzard
 ```
@@ -37,15 +39,18 @@ blizzard hub source get blizzard
 - A source carries no address of its own: an `api_base` or `web_base` is refused `422 field_moved_to_forge`, naming the
   forge that carries it ([forges.md](./forges.md#records-that-name-a-forge)). Check stored addresses before the forge
   migration with [`config check-forges`](./repositories.md#checking-forge-addresses-before-the-forge-migration).
-- `secret` names the stored secret holding the forge token, revealed only when the hub calls the forge.
+- `credential` names the [credential](./credentials.md) the source acts with, by id or slug; its token is revealed only
+  when the hub calls the forge, and reads carry `credential_id`, `credential_slug` and `credential_name`. `secret` still
+  names the `github.token` credential reading that secret.
 
 `create <slug>` stores the source at revision 1, named `--name` (default: the slug). It is refused when another source
 holds the slug as its current one or the slug is `hub`. Taking a slug another source left moves it to the new source.
 Every later change moves the revision by one:
 
-- `edit <source>` changes only the flags given: `--slug`, `--name`, `--provider`, `--locator`, `--secret`, `--forge`,
-  and `--annotate` or `--no-annotate`. `--clear secret` unsets the secret, and is refused for a provider that needs a
-  credential, which includes `github`. An edit that leaves every field as it is writes nothing and keeps the revision.
+- `edit <source>` changes only the flags given: `--slug`, `--name`, `--provider`, `--locator`, `--credential`,
+  `--secret`, `--forge`, and `--annotate` or `--no-annotate`. `--clear secret` unsets the secret, and is refused for a
+  provider that needs a credential, which includes `github`. An edit that leaves every field as it is writes nothing and
+  keeps the revision.
 - `retire <source>` hides the source from `list` unless `--include-retired` is given, and ingest naming it is refused
   with a 422. Items already ingested from it keep their labels, close and annotate through it. A retired source keeps
   its provider and locator, so `create` for another slug on the same locator is refused with a message naming the

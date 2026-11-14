@@ -10,7 +10,7 @@ import { mockClock } from './client/clock';
 import { startMockRunner } from './daemons/mock-runner';
 import { type DaemonRecord, stopDaemon } from './daemons/process';
 import { runDir } from './env';
-import { COMMON_OWNER, COMMON_REPOSITORY, COMMON_SOURCE, FIXTURE_FORGE, FIXTURE_SECRET } from './hubs';
+import { COMMON_OWNER, COMMON_REPOSITORY, COMMON_SOURCE, FIXTURE_FORGE, FIXTURE_SECRET, FIXTURE_TOKEN } from './hubs';
 import { scanLog } from './logs';
 import { type Level, type Project, sharesTenant, type TestHub } from './tenancy';
 
@@ -100,7 +100,7 @@ async function declare(context: FactoryContext, repository: string, linked: stri
   linked.push(repository);
   const created = await context.forge.createRepository(COMMON_OWNER, repository);
   // The work source and the repository each name a credential; a second call finds the secret already there.
-  const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: 'fixture-token' } });
+  const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: FIXTURE_TOKEN } });
   if (secret.status !== 201 && secret.status !== 409) {
     throw new Error(`creating the fixture secret answered ${secret.status}: ${JSON.stringify(secret.body)}`);
   }
