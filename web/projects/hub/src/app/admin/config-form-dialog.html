@@ -52,6 +52,16 @@
             <fleet-kit-button [testid]="testidPrefix() + '-field-' + field.key + '-clear'" (click)="onMarkText(field.key, '')">Clear mark</fleet-kit-button>
           }
           <fleet-kit-error-line [message]="markError()" />
+        } @else if (field.kind === 'secret-text') {
+          <fleet-kit-text-input
+            multiline
+            type="password"
+            [rows]="6"
+            [ariaLabel]="field.label"
+            [value]="textOf(field.key)"
+            [testid]="testidPrefix() + '-field-' + field.key"
+            (valueChange)="onText(field.key, $event)"
+          />
         } @else {
           <fleet-kit-text-input
             [type]="field.kind === 'password' ? 'password' : 'text'"

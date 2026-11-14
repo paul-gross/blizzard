@@ -61,10 +61,10 @@ export function secretRecordVm(secret: SecretView | undefined): ConfigRecordVm |
 /** A new secret's form fields — its name and its write-only value. */
 export const SECRET_CREATE_FIELDS: readonly ConfigFieldDef<keyof SecretCreateRequestWritable>[] = [
   { key: 'name', label: 'Name', kind: 'text', required: true },
-  { key: 'value', label: 'Value', kind: 'password', required: true },
+  { key: 'value', label: 'Value', kind: 'secret-text', required: true },
 ];
 
 /** The replace form's one field. */
 export const SECRET_REPLACE_FIELDS: readonly ConfigFieldDef<keyof SecretReplaceRequest>[] = [
-  { key: 'value', label: 'New value', kind: 'password', required: true },
+  { key: 'value', label: 'New value', kind: 'secret-text', required: true },
 ];
