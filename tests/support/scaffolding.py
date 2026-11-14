@@ -657,7 +657,7 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
     store = hub_store_connections(engine)
-    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store), transactions=HubTransactions(store))
+    return build_chunk_stores(store, clock)
 
 
 @contextmanager
@@ -2394,13 +2394,15 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     """Insert ``chunk``'s rows the way ingest does — under its pointers' locks — for a fixture
     that needs a chunk without going through an ingest's guard. A chunk built naming no project
     lands in the tenant's only one."""
-    with stores.exclusive.locked([], keys=[work_ref_lock(pointer) for pointer in chunk.work_refs]) as handle:
+    connections = cast(Any, stores.record)._store
+    with HubTransactions(connections).begin() as begun:
+        unit = begun.lock_set(chunks=[], keys=[work_ref_lock(pointer) for pointer in chunk.work_refs])
         if chunk.project_id is None:
             chunk = replace(
                 chunk,
-                project_id=_only_project_on(connection_for(cast(Any, stores.record)._store, handle.transaction)),
+                project_id=_only_project_on(connection_for(connections, unit)),
             )
-        stores.record.mint(chunk, transaction=handle.transaction)
+        stores.record.mint(chunk, transaction=unit)
 
 
 def _only_project_on(conn: sa.Connection) -> ProjectId:

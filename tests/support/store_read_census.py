@@ -1409,7 +1409,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         return decide_close_enqueue(chunk.work_refs, lambda _source: True)
 
     # --- graphs -------------------------------------------------------------------------
-    default_graph = hub.services.graph_mint.ensure_default(
+    default_graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_GRAPH_YAML})
@@ -1816,7 +1816,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- movement ------------------------------------------------------------------------------
     chunk_transition = "ch_hub_transition"
     _mint(chunk_transition, "1004", at=_ht(35))
-    with write.exclusive.locked([chunk_transition]) as handle:
+    with chunk_unit(store_connections, chunk_transition) as unit:
         write.movement.record_transition(
             transition_id="tr_hub_1",
             chunk_id=chunk_transition,
@@ -1830,9 +1830,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=_close_decision(chunk_transition),
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with write.exclusive.locked([chunk_transition]) as handle:
+    with chunk_unit(store_connections, chunk_transition) as unit:
         write.movement.record_transition(
             transition_id="tr_hub_2",
             chunk_id=chunk_transition,
@@ -1846,7 +1846,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=_close_decision(chunk_transition),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- garden / review delivery markers: each store's own replay probe reads these ---------------
@@ -1917,7 +1917,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
 
     chunk_migration = "ch_hub_migration"
     _mint(chunk_migration, "1005", at=_ht(40))
-    with write.exclusive.locked([chunk_migration]) as handle:
+    with chunk_unit(store_connections, chunk_migration) as unit:
         write.movement.record_migration(
             chunk_migration,
             from_node_id=build_node.node_id,
@@ -1934,7 +1934,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=_close_decision(chunk_migration),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- decisions -----------------------------------------------------------------------------
@@ -1942,7 +1942,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_decision_2 = "ch_hub_decision_2"
     _mint(chunk_decision_1, "1006", at=_ht(42))
     _mint(chunk_decision_2, "1007", at=_ht(43))
-    with write.exclusive.locked([chunk_decision_1]) as handle:
+    with chunk_unit(store_connections, chunk_decision_1) as unit:
         write.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id="dec_hub_1",
@@ -1959,9 +1959,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=_close_decision(chunk_decision_1),
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with write.exclusive.locked([chunk_decision_2]) as handle:
+    with chunk_unit(store_connections, chunk_decision_2) as unit:
         write.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id="dec_hub_2",
@@ -1975,7 +1975,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=_close_decision(chunk_decision_2),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- escalations ---------------------------------------------------------------------------
@@ -2114,17 +2114,17 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_hub_exec_released = "ch_hub_exec_released"
     _mint(chunk_hub_exec_live, "1013", at=_ht(61))
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
-    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+    with chunk_unit(store_connections, chunk_hub_exec_released) as unit:
         write.hub_exec.record_hub_node_poll(
             chunk_hub_exec_released,
             node_id=deliver_node.node_id,
             epoch=1,
             kind="pending",
             at=_ht(64),
-            transaction=handle.transaction,
+            transaction=unit,
         )
     hub_exec_close_decision = _close_decision(chunk_hub_exec_released)
-    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+    with chunk_unit(store_connections, chunk_hub_exec_released) as unit:
         write.hub_exec.record_hub_step_transition(
             chunk_hub_exec_released,
             from_node_id=deliver_node.node_id,
@@ -2139,16 +2139,16 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=hub_exec_close_decision,
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with write.exclusive.locked([chunk_hub_exec_live]) as handle:
+    with chunk_unit(store_connections, chunk_hub_exec_live) as unit:
         write.hub_exec.record_hub_node_poll(
             chunk_hub_exec_live,
             node_id=deliver_node.node_id,
             epoch=1,
             kind="pending",
             at=_ht(68),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- delivery + close intents -----------------------------------------------------------------
@@ -2225,21 +2225,21 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_dependency_prerequisite, "1018", at=_ht(78))
     _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
     _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
-    with write.exclusive.locked([chunk_dependency_dependent, chunk_dependency_prerequisite]) as handle:
+    with chunk_unit(store_connections, chunk_dependency_dependent, chunk_dependency_prerequisite) as unit:
         write.dependencies.declare(
             chunk_dependency_dependent,
             chunk_dependency_prerequisite,
             by="operator",
             at=_ht(81),
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with write.exclusive.locked(["ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2"]) as handle:
+    with chunk_unit(store_connections, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2") as unit:
         write.dependencies.declare(
             "ch_hub_dep_dependent_2",
             "ch_hub_dep_prerequisite_2",
             by="operator",
             at=_ht(82),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- lifecycle (ephemeral via a real fold) ---------------------------------------------------
@@ -2254,7 +2254,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_route_b = "ch_hub_route_b"
     _mint(chunk_route_a, "1023", at=_ht(86))
     _mint(chunk_route_b, "1024", at=_ht(87))
-    with write.exclusive.locked([chunk_route_a]) as handle:
+    with chunk_unit(store_connections, chunk_route_a) as unit:
         write.route.record_route(
             Route(
                 chunk_id=chunk_route_a,
@@ -2265,7 +2265,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
             token_hash="route-hash-a",
             at=_ht(88),
-            transaction=handle.transaction,
+            transaction=unit,
         )
     with chunk_unit(store_connections, chunk_route_a) as unit:
         write.route.record_lease_minted(
@@ -2273,11 +2273,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     with transactions.begin() as unit:
         write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, expected=0, at=_ht(90), transaction=unit)
-    with write.exclusive.locked([chunk_route_a]) as handle:
-        write.route.record_route_token(
-            chunk_route_a, token_hash="route-hash-a2", at=_ht(91), transaction=handle.transaction
-        )
-    with write.exclusive.locked([chunk_route_b]) as handle:
+    with chunk_unit(store_connections, chunk_route_a) as unit:
+        write.route.record_route_token(chunk_route_a, token_hash="route-hash-a2", at=_ht(91), transaction=unit)
+    with chunk_unit(store_connections, chunk_route_b) as unit:
         write.route.record_route(
             Route(
                 chunk_id=chunk_route_b,
@@ -2288,7 +2286,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
             token_hash="route-hash-b",
             at=_ht(92),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- artifacts -------------------------------------------------------------------------------
@@ -2326,12 +2324,12 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- extra work ref -----------------------------------------------------------------------
     chunk_work_refs_extra = "ch_hub_work_refs_extra"
     _mint(chunk_work_refs_extra, "1026", at=_ht(96))
-    with write.exclusive.locked([chunk_work_refs_extra]) as handle:
+    with chunk_unit(store_connections, chunk_work_refs_extra) as unit:
         write.work_refs.add_work_refs(
             chunk_work_refs_extra,
             [WorkRef(source="secondary", ref="99")],
             at=_ht(97),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # --- hub-owned work items ------------------------------------------------------------------

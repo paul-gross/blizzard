@@ -19,12 +19,13 @@ from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     TEST_CATALOGUE,
     HubHarness,
     build_hub,
-    chunk_stores,
     hub_scoped,
+    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -112,7 +113,7 @@ def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id:
     assert graph is not None
     merge = graph.node_by_name("merge")
     assert merge is not None
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
             transition_id="tr_parked",
             close_decision=decide_close_enqueue([WorkRef("default", "7")], lambda _: True),
@@ -126,7 +127,7 @@ def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id:
             artifacts=[],
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
 

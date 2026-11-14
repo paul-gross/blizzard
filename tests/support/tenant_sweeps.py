@@ -10,8 +10,6 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.scaffolding import (
     HubHarness,
@@ -26,9 +24,7 @@ _NOW = datetime(2026, 7, 13, tzinfo=UTC)
 
 def _stores_of(hub: HubHarness, tenant: TenantId) -> ChunkStores:
     connections = hub_level_connections(hub.engine).scoped(StoreScope(tenant))
-    return build_chunk_stores(
-        connections, hub.clock, registry=RunnerRegistryStore(connections), transactions=HubTransactions(connections)
-    )
+    return build_chunk_stores(connections, hub.clock)
 
 
 def landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkStores:

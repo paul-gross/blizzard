@@ -163,7 +163,7 @@ def test_a_source_unlinked_after_the_project_was_chosen_refuses_the_ingest(tmp_p
     """An unlink landing between the project's choice and the mint refuses the ingest instead of minting a
     chunk the project no longer draws from."""
     hub, first, _ = two_projects(tmp_path)
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     ingest = hub.services.ingest

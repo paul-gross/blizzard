@@ -228,7 +228,7 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
     ``HubServices``/engine, same on-disk store)."""
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
-    graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
     hub.services.graph_lifecycle.retire(graph, by="operator")
     assert hub.services.graphs.get_enabled_by_name(doc.name) is None
 
@@ -236,7 +236,7 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
     # Python objects the first boot already ran `ensure_default` against.
     restarted = build_hub(tmp_path)
     with pytest.raises(DefaultGraphRetired):
-        restarted.services.graph_mint.ensure_default(
+        restarted.services.default_graph.ensure_default(
             restarted.services.default_graph_doc, definition_yaml=restarted.services.default_graph_yaml
         )
     # Only the one graph this test itself minted exists — the retire was not undone
@@ -261,12 +261,12 @@ def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_
     for i in range(10):
         _mint(hub, _GRAPH_A.replace("name: alpha", f"name: other-{i}"))
     doc = hub.services.default_graph_doc
-    graph = hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+    graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
     hub.services.graph_lifecycle.retire(graph, by="operator")
 
     def _retry() -> None:
         with pytest.raises(DefaultGraphRetired):
-            hub.services.graph_mint.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
+            hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
 
     # The pre-lock get_enabled_by_name, the cross-graph warning read (none for a graph with no
     # cross-graph target), the name lock's own statements, the write's open-tenant lock and closed-tenant read, and

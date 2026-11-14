@@ -12,7 +12,6 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.chunk_exclusive_store import ChunkExclusiveWrites
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from tests.support.scaffolding import add_tenant, build_hub, default_tenant, tenant_services_of
@@ -80,10 +79,7 @@ def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) ->
     first = core.open(StoreScope(default_tenant(hub.engine)))
     second = core.open(StoreScope(add_tenant(hub.engine, "other")))
 
-    exclusive = first.chunk_stores.exclusive
-    assert isinstance(exclusive, ChunkExclusiveWrites)
     assert first.delete._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
-    assert exclusive._transactions is first.transactions  # pyright: ignore[reportPrivateUsage]  # the shared binding is wiring, observable only on the private seam
     assert second.transactions is not first.transactions
 
 

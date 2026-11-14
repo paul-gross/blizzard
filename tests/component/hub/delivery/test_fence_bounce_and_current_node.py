@@ -25,7 +25,7 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
-from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
+from tests.support.chunk_units import chunk_unit
 from tests.support.hub_command_graphs import post_build_pass
 from tests.support.scaffolding import (
     HubHarness,
@@ -134,7 +134,7 @@ def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Pat
 
 @pytest.mark.parametrize("writer", [restart_under_lock, stop_under_lock], ids=["restart", "stop"])
 def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: Callable[[Chunk], Callable[[object], None]]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: Callable[[Chunk], Callable[[LockedTransaction], None]]
 ) -> None:
     """The writer lands after the hub turn decided to kick the chunk back and before the routing's own locked
     write — the window the fence closes: the escalation the crossing would record is refused, so the turn
@@ -142,7 +142,6 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     hub, chunk_id = _bounce_capped_chunk(tmp_path)
     current_node_id: str = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
     standing = _StandingChunk(hub, chunk_id, current_node_id)
-    stores = standing.stores
     real_route = HubNodeRouter.route_pending_timeout
     real_escalate = ChunkEscalationsStore.record_bounce_escalation
     landed: list[bool] = []
@@ -151,8 +150,8 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     def _after_the_writer(
         self: HubNodeRouter, chunk: ChunkRecord, graph: Graph, node: Node, *, epoch: int, ending: ITurnEnd = NO_TURN
     ) -> None:
-        with stores.exclusive.locked([chunk_id]) as handle:
-            writer(standing)(handle)
+        with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
+            writer(standing)(tx)
         landed.append(True)
         return real_route(self, chunk, graph, node, epoch=epoch, ending=ending)
 
@@ -250,8 +249,7 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
 def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_twice(tmp_path: Path) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
-    def _land_the_first(handle: object) -> None:
-        assert isinstance(handle, LockedChunkTransaction)
+    def _land_the_first(tx: LockedTransaction) -> None:
         chunk.stores.movement.record_transition(
             transition_id="tr_raced",
             chunk_id=chunk.chunk_id,
@@ -265,7 +263,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
             at=chunk.hub.clock.now(),
             artifacts=[],
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     result = held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)
@@ -277,8 +275,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
 def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: Path) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
-    def _open_the_first(handle: object) -> None:
-        assert isinstance(handle, LockedChunkTransaction)
+    def _open_the_first(tx: LockedTransaction) -> None:
         chunk.stores.decisions.record_decision(
             decision_id="dec_raced",
             chunk_id=chunk.chunk_id,
@@ -292,7 +289,7 @@ def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: 
             artifacts=[],
             imposed_by_runner_id="r1",
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     result = held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), _open_the_first)

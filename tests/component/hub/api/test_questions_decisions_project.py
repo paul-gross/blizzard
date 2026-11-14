@@ -65,7 +65,7 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
             stores,
             Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0, project_id=ProjectId(project)),
         )
-        with stores.exclusive.locked([chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
             stores.decisions.record_decision(
                 imposed_by_runner_id=None,
                 decision_id=f"dec_{chunk_id}",
@@ -79,7 +79,7 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
                 artifacts=[],
                 admission=EpochAdmission.AT_OR_ABOVE,
                 terminal=False,
-                transaction=handle.transaction,
+                transaction=tx,
             )
         with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
             stores.questions.record_question(

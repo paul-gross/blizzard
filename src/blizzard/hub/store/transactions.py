@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import Connection, Select, event
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.kernel.locks import HubLock, LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import (
     GraduationError,
@@ -76,19 +75,6 @@ class _LockedTransaction(_Transaction):
     @property
     def locked(self) -> bool:
         return True
-
-
-class ChunkHandle:
-    transaction: LockedTransaction
-
-
-def chunk_handle_connection(handle: ILockedChunkRead, store: ScopedConnections, *chunks: str) -> Connection:
-    if not isinstance(handle, ChunkHandle):
-        raise TransactionMisuse("invalid chunk lock handle")
-    conn = connection_for(store, handle.transaction)
-    for chunk in chunks:
-        connection_for(store, handle.transaction, chunk=chunk)
-    return conn
 
 
 class HubTransactions:

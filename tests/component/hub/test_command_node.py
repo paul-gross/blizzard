@@ -178,7 +178,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
     stores = chunk_stores(hub.engine, hub.clock)
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         recorded = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=merge_node.node_id,
@@ -192,8 +192,8 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
-            terminal=terminal_under_lock(stores.facts, chunk_id, transaction=handle.transaction),
-            transaction=handle.transaction,
+            terminal=terminal_under_lock(stores.facts, chunk_id, transaction=tx),
+            transaction=tx,
         ).wrote
 
     assert recorded is False

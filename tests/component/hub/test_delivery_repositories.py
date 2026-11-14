@@ -27,17 +27,18 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema
+from tests.support.chunk_units import chunk_unit
 from tests.support.github_double import GitHubDouble
 from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
     build_hub,
-    chunk_stores,
     create_repositories,
     default_tenant,
     emitted_events,
     ensure_fixture_forge,
     fixture_repository,
+    hub_store_connections,
     link_project,
     pointer_token,
     report_lease,
@@ -92,7 +93,7 @@ def _seed_at_deliver(
     ]
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
             transition_id=f"tr_seed_{chunk_id}",
             close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
@@ -108,7 +109,7 @@ def _seed_at_deliver(
                 "blizzard.hub.domain.chunk.ports.fence", fromlist=["EpochAdmission"]
             ).EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
     report_lease(hub, chunk_id, epoch=1, seq=1)
 

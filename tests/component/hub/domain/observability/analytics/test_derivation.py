@@ -36,6 +36,7 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.scoped import ScopedConnections
+from tests.support.chunk_units import chunk_unit
 from tests.support.factory_fields import TranscriptSliceFields
 from tests.support.scaffolding import (
     SeedingTranscriptSegmentStore,
@@ -108,7 +109,7 @@ class _Fixture:
         self.clock = FixedClock(_NOW)
         self.corpus = build_hub_scoped_reads(hub_level_connections(self.engine)).corpus
         seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        with self.chunks.exclusive.locked(["ch_1"]) as handle:
+        with chunk_unit(hub_store_connections(self.engine), ["ch_1"]) as tx:
             self.chunks.movement.record_transition(
                 transition_id="tr_1",
                 close_decision=decide_close_enqueue([], lambda _: True),
@@ -122,7 +123,7 @@ class _Fixture:
                 artifacts=[],
                 admission=EpochAdmission.AT_OR_ABOVE,
                 terminal=False,
-                transaction=handle.transaction,
+                transaction=tx,
             )
         self.service = EventDerivationService(
             extractors=shipped_extractors(),
@@ -145,7 +146,7 @@ class _Fixture:
 
     def mint_chunk(self, chunk_id: str, *, node_id: str = "nd_build") -> None:
         seed_chunk_record(self.chunks, Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
-        with self.chunks.exclusive.locked([chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(self.engine), [chunk_id]) as tx:
             self.chunks.movement.record_transition(
                 transition_id=f"tr_{chunk_id}",
                 close_decision=decide_close_enqueue([], lambda _: True),
@@ -159,7 +160,7 @@ class _Fixture:
                 artifacts=[],
                 admission=EpochAdmission.AT_OR_ABOVE,
                 terminal=False,
-                transaction=handle.transaction,
+                transaction=tx,
             )
 
     def drop_chunk_row(self, chunk_id: str) -> None:

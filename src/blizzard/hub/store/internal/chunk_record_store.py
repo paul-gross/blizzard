@@ -109,16 +109,10 @@ class ChunkRecordStore:
     def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
         connection = connection_in(self._store, transaction, "get")
         with connection as conn:
-            return self.get_conn(conn, chunk_id)
-
-    def get_conn(self, conn: Connection, chunk_id: str) -> Chunk | None:
-        """`get`'s already-open-connection sibling — the locked-transaction seam's own
-        read (``bzh:store-exclusive-write``), resolved on the caller's connection rather
-        than a fresh one."""
-        row = conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-        if row is None or is_ephemeral_id(conn, chunk_id):
-            return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
-        return chunk_row(conn, row)
+            row = conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
+            if row is None or is_ephemeral_id(conn, chunk_id):
+                return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
+            return chunk_row(conn, row)
 
     def get_many(self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None) -> dict[str, Chunk]:
         """`src/blizzard/hub/domain/chunk/ports/record.py`'s `IReadChunkRecordRepository.get_many`.
@@ -127,46 +121,38 @@ class ChunkRecordStore:
         if not chunk_ids:
             return {}
         with connection_in(self._store, transaction, "get_many") as conn:
-            return self.get_many_conn(conn, chunk_ids)
-
-    def get_many_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
-        """`get_many`'s already-open-connection sibling — the locked-transaction seam's
-        own batched read (``bzh:store-exclusive-write``), resolved on the caller's
-        connection rather than a fresh one."""
-        if not chunk_ids:
-            return {}
-        result: dict[str, Chunk] = {}
-        for batch in id_batches(chunk_ids):
-            rows = {
-                r.chunk_id: r
-                for r in conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))).all()
-            }
-            if not rows:
-                continue
-            ephemeral = ephemeral_ids_in(conn, batch)
-            surviving = [chunk_id for chunk_id in rows if chunk_id not in ephemeral]
-            pointers: dict[str, list[WorkRef]] = defaultdict(list)
-            for p in conn.execute(
-                self._store.select(s.chunk_work_refs)
-                .where(s.chunk_work_refs.c.chunk_id.in_(surviving))
-                .order_by(s.chunk_work_refs.c.id)
-            ).all():
-                pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
-            for chunk_id in surviving:
-                r = rows[chunk_id]
-                result[chunk_id] = Chunk(
-                    chunk_id=r.chunk_id,
-                    graph_id=r.graph_id,
-                    work_refs=pointers[r.chunk_id],
-                    minted_at=r.minted_at,
-                    default_model=DEFAULT_MODEL.decode(r.default_model),
-                    default_effort=r.default_effort,
-                    default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
-                    intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
-                    project_id=r.project_id,
-                    urgency_id=r.urgency_id,
-                )
-        return result
+            result: dict[str, Chunk] = {}
+            for batch in id_batches(chunk_ids):
+                rows = {
+                    r.chunk_id: r
+                    for r in conn.execute(self._store.select(s.chunks).where(s.chunks.c.chunk_id.in_(batch))).all()
+                }
+                if not rows:
+                    continue
+                ephemeral = ephemeral_ids_in(conn, batch)
+                surviving = [chunk_id for chunk_id in rows if chunk_id not in ephemeral]
+                pointers: dict[str, list[WorkRef]] = defaultdict(list)
+                for p in conn.execute(
+                    self._store.select(s.chunk_work_refs)
+                    .where(s.chunk_work_refs.c.chunk_id.in_(surviving))
+                    .order_by(s.chunk_work_refs.c.id)
+                ).all():
+                    pointers[p.chunk_id].append(WorkRef(source=p.source, ref=p.ref))
+                for chunk_id in surviving:
+                    r = rows[chunk_id]
+                    result[chunk_id] = Chunk(
+                        chunk_id=r.chunk_id,
+                        graph_id=r.graph_id,
+                        work_refs=pointers[r.chunk_id],
+                        minted_at=r.minted_at,
+                        default_model=DEFAULT_MODEL.decode(r.default_model),
+                        default_effort=r.default_effort,
+                        default_harnesses=DEFAULT_HARNESSES.decode(r.default_harnesses),
+                        intended_migration=INTENDED_MIGRATION.decode(r.intended_migration),
+                        project_id=r.project_id,
+                        urgency_id=r.urgency_id,
+                    )
+            return result
 
     def graph_id_of_many(self, chunk_ids: Sequence[str]) -> dict[str, str]:
         """`get_many`'s narrow sibling — just the chunk_id -> graph_id pins, ephemeral

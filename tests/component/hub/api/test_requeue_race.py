@@ -1,7 +1,7 @@
 """Concurrent requeues are atomic (component tier).
 
 ``RequeueService.requeue`` re-derives the open-escalation guard it refuses on from
-``handle.facts()``, inside the same row-locked transaction its writes land under
+the locked ``load_facts``, inside the same row-locked transaction its writes land under
 (``bzh:store-exclusive-write``) — never from a pre-lock snapshot. Drives two concurrent
 clients through a barrier, mirroring ``tests/component/hub/api/test_claim_exactly_once.py``'s own pattern,
 to expose the check-then-act gap a pre-lock read would leave open — a second requeue

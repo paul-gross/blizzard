@@ -26,8 +26,10 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
     Node,
     NodeDoc,
+    graph_name_lock,
 )
 from blizzard.hub.domain.graph.validation import Validator, cross_graph_warnings
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 class DefaultGraphRetired(Exception):
@@ -154,6 +156,41 @@ class Reification:
         ]
 
 
+class DefaultGraphService:
+    """Mint the configured default graph once, by name.
+
+    Holds the :class:`GraphMintService` for :meth:`GraphMintService.prepared`, the write graph
+    repository, and the unit of work the name-keyed decision runs in."""
+
+    def __init__(
+        self, *, mint: GraphMintService, graphs: IWriteGraphRepository, transactions: IHubTransactions
+    ) -> None:
+        self._mint = mint
+        self._graphs = graphs
+        self._transactions = transactions
+
+    def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
+        """Mint the configured default graph if no graph of its name has ever existed.
+
+        Idempotent by name, and once under concurrency: the decision runs in a unit holding
+        :func:`graph_name_lock` (``bzh:transaction-graduation``). A ``None`` from ``get_enabled_by_name`` is
+        ambiguous, so :meth:`IReadGraphRepository.any_minted` disambiguates, pinned by
+        tests/component/hub/api/test_graphs_lifecycle.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
+        existing = self._graphs.get_enabled_by_name(doc.name)
+        if existing is not None:
+            return existing  # an enabled graph of the name stands; nothing to decide under the lock
+        graph, _ = self._mint.prepared(doc)
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[graph_name_lock(doc.name)])
+            existing = self._graphs.get_enabled_by_name(doc.name, transaction=locked)
+            any_minted = existing is None and self._graphs.any_minted(doc.name, transaction=locked)
+            resolved = resolve_default(doc.name, enabled=existing, any_minted=any_minted)
+            if resolved is not None:
+                return resolved
+            self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at, transaction=locked)
+        return graph
+
+
 class GraphMintService:
     """Validate, reify, and persist a graph.
 
@@ -191,23 +228,4 @@ class GraphMintService:
         if not doc.differs_from(minted):
             return None
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
-        return graph
-
-    def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
-        """Mint the configured default graph if no graph of its name has ever existed.
-
-        Idempotent by name, and once under concurrency (``bzh:store-exclusive-write``). A ``None`` from
-        ``get_enabled_by_name`` is ambiguous, so :meth:`IReadGraphRepository.any_minted` disambiguates, pinned by
-        tests/component/hub/api/test_graphs_lifecycle.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
-        existing = self._graphs.get_enabled_by_name(doc.name)
-        if existing is not None:
-            return existing  # an enabled graph of the name stands; nothing to decide under the lock
-        graph, _ = self.prepared(doc)
-        with self._graphs.locked_name(doc.name) as handle:
-            existing = handle.get_enabled_by_name(doc.name)
-            any_minted = existing is None and handle.any_minted(doc.name)
-            resolved = resolve_default(doc.name, enabled=existing, any_minted=any_minted)
-            if resolved is not None:
-                return resolved
-            self._graphs.mint_locked(handle, graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph

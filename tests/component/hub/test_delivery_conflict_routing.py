@@ -75,7 +75,7 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     # (idempotent per `(chunk_id, epoch)`) so this run's kick-back crosses it.
     stores = chunk_stores(hub.engine, hub.clock)
     for epoch in range(1, DEFAULT_BOUNCE_CAP + 1):
-        with stores.exclusive.locked([chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
             stores.escalations.record_bounce(
                 chunk_id,
                 epoch=epoch,
@@ -84,7 +84,7 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
                 cause="conflict",
                 envelope="{}",
                 at=hub.clock.now(),
-                transaction=handle.transaction,
+                transaction=tx,
             )
     report_lease(hub, chunk_id, epoch=DEFAULT_BOUNCE_CAP + 1, seq=1)
 

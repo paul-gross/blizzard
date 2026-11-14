@@ -18,6 +18,7 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     chunk_stores,
     hub_store_connections,
@@ -59,14 +60,14 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
 
     _mint(store, "ch_terminal", work_refs=[terminal_ref])
     seed_promote(store, engine, "ch_terminal", at=_T0)
-    with store.exclusive.locked(["ch_terminal"]) as handle:
+    with chunk_unit(hub_store_connections(engine), ["ch_terminal"]) as tx:
         store.lifecycle.record_completion(
             "ch_terminal",
             by="op",
             at=_T0,
             close_decision=decide_close_enqueue([terminal_ref], lambda _: True),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     pointers = [live_ref, grouped_ref, terminal_ref, absent_ref]
@@ -83,14 +84,14 @@ def test_live_holders_prefers_a_live_holder_over_an_earlier_terminal_one(tmp_pat
 
     _mint(store, "ch_a_terminal", work_refs=[shared_ref])
     seed_promote(store, engine, "ch_a_terminal", at=_T0)
-    with store.exclusive.locked(["ch_a_terminal"]) as handle:
+    with chunk_unit(hub_store_connections(engine), ["ch_a_terminal"]) as tx:
         store.lifecycle.record_completion(
             "ch_a_terminal",
             by="op",
             at=_T0,
             close_decision=decide_close_enqueue([shared_ref], lambda _: True),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     _mint(store, "ch_b_live", work_refs=[shared_ref])

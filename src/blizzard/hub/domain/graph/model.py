@@ -8,7 +8,6 @@ compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 from __future__ import annotations
 
 from collections.abc import Buffer, Collection, Mapping, Sequence
-from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -22,6 +21,7 @@ from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.graph.actions import ArtifactFormat, HubActionCatalogue
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import Transaction
 
 
@@ -1002,7 +1002,7 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
     """Read-only graph access."""
 
     def get(self, graph_id: str) -> Graph | None: ...
-    def get_enabled_by_name(self, name: str) -> Graph | None:
+    def get_enabled_by_name(self, name: str, *, transaction: Transaction | None = None) -> Graph | None:
         """The newest non-retired graph with ``name`` — the default-graph pin lookup.
 
         Excludes every retired ``graph_id``, so a name whose every mint is
@@ -1019,7 +1019,7 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         without reifying a graph (``bzh:bulk-reconstitution``)."""
         ...
 
-    def any_minted(self, name: str) -> bool:
+    def any_minted(self, name: str, *, transaction: Transaction | None = None) -> bool:
         """Whether any graph of ``name`` has ever been minted, retired or not
         — a cheap existence probe, in place of a full listing, to check membership by
         name."""
@@ -1081,36 +1081,17 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         ...
 
 
-class ILockedGraphNameRead(Protocol):
-    """The guard reads a name-keyed graph decision consults, resolved on the one connection its
-    name lock was taken on (``bzh:store-exclusive-write``) — so neither can race the mint it
-    precedes."""
-
-    def get_enabled_by_name(self, name: str) -> Graph | None:
-        """:meth:`IReadGraphRepository.get_enabled_by_name`, read under the lock."""
-        ...
-
-    def any_minted(self, name: str) -> bool:
-        """:meth:`IReadGraphRepository.any_minted`, read under the lock."""
-        ...
+def graph_name_lock(name: str) -> LockKey:
+    """The keyed lock on graph ``name`` (``bzh:transaction-graduation``): a name-keyed decision whose race has no
+    graph row yet to lock takes it."""
+    return LockKey(LockNamespace.GRAPH_NAME, name)
 
 
 class IWriteGraphRepository(IReadGraphRepository, Protocol):
     """Adds the graph writes."""
 
-    def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        """Persist a reified, immutable graph and its source YAML."""
-        ...
-
-    def locked_name(self, name: str) -> AbstractContextManager[ILockedGraphNameRead]:
-        """Lock graph ``name``'s key, first, then yield the read handle bound to that one
-        connection — for a decision whose race has no graph row yet to lock
-        (``bzh:store-exclusive-write``). A write under the lock goes through
-        :meth:`mint_locked`, taking this same handle."""
-        ...
-
-    def mint_locked(self, handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        """:meth:`mint`, on ``handle``'s already-locked connection."""
+    def mint(self, graph: Graph, *, definition_yaml: str, at: datetime, transaction: Transaction | None = None) -> None:
+        """Persist a reified, immutable graph and its source YAML — in ``transaction`` when given one."""
         ...
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:

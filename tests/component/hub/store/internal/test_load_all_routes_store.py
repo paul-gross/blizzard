@@ -12,8 +12,9 @@ from sqlalchemy import Engine
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.route import Route
+from tests.support.chunk_units import chunk_unit
 from tests.support.load_all_facts_seed import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
-from tests.support.scaffolding import count_queries, seed_chunk_record, seed_promote
+from tests.support.scaffolding import count_queries, hub_store_connections, seed_chunk_record, seed_promote
 
 
 def test_bulk_read_matches_per_chunk_route_of_across_the_fixture(tmp_path: Path) -> None:
@@ -67,10 +68,10 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
 def _seed_route(store: ChunkStores, engine: Engine, chunk_id: str) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
     seed_promote(store, engine, chunk_id, at=T0)
-    with store.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), [chunk_id]) as tx:
         store.route.record_route(
             Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash=f"th_{chunk_id}",
             at=T0,
-            transaction=handle.transaction,
+            transaction=tx,
         )

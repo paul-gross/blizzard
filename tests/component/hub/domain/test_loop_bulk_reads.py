@@ -1,6 +1,6 @@
 """The hub domain loops' set-keyed reads (component tier) — ``IWriteTranscriptSegments.epoch_owners``,
-the batched sibling of ``epoch_owner`` (`bzh:bulk-reconstitution`), the locked handle's
-``standing_edges_touching``, the retire pass's one record read, and the candidacy markers read
+the batched sibling of ``epoch_owner`` (`bzh:bulk-reconstitution`), the locked
+``standing_edges_for``, the retire pass's one record read, and the candidacy markers read
 bounded by the visible-segment set.
 
 The plural matches its singular per key and drops an unknown key, issues no statement for no
@@ -33,6 +33,7 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.analytics_events_world import record_transcript, tool_turn
+from tests.support.chunk_units import chunk_unit
 from tests.support.hub_request_auth import ingest_chunk
 from tests.support.scaffolding import (
     HubHarness,
@@ -177,7 +178,7 @@ def test_transcript_ingest_reads_epoch_owners_once_across_record_counts(tmp_path
     assert counts == [1, 1]
 
 
-# --- ILockedChunkRead.standing_edges_touching -----------------------------------------
+# --- standing_edges_for under a chunk lock --------------------------------------------
 
 
 def _edged(tmp_path: Path, *, others: int) -> tuple[ChunkStores, Engine]:
@@ -187,17 +188,17 @@ def _edged(tmp_path: Path, *, others: int) -> tuple[ChunkStores, Engine]:
     _mint(chunks, "ch_t", "ch_p", "ch_d", *[f"ch_o{i}" for i in range(others)], *[f"ch_q{i}" for i in range(others)])
     pairs = [("ch_t", "ch_p"), ("ch_d", "ch_t"), *[(f"ch_o{i}", f"ch_q{i}") for i in range(others)]]
     for dependent, prerequisite in pairs:
-        with chunks.exclusive.locked([dependent, prerequisite]) as handle:
-            chunks.dependencies.declare(dependent, prerequisite, by="operator", at=_T0, transaction=handle.transaction)
+        with chunk_unit(hub_store_connections(engine), [dependent, prerequisite]) as tx:
+            chunks.dependencies.declare(dependent, prerequisite, by="operator", at=_T0, transaction=tx)
     return chunks, engine
 
 
 def test_standing_edges_touching_answers_the_chunk_s_edges_in_either_role(tmp_path: Path) -> None:
-    chunks, _ = _edged(tmp_path, others=2)
+    chunks, engine = _edged(tmp_path, others=2)
 
-    with chunks.exclusive.locked(["ch_t"]) as handle:
-        touching = handle.standing_edges_touching("ch_t")
-        fleet = handle.standing_edges()
+    with chunk_unit(hub_store_connections(engine), ["ch_t"]) as tx:
+        touching = chunks.dependencies.standing_edges_for("ch_t", transaction=tx)
+        fleet = chunks.dependencies.list_standing_edges(transaction=tx)
 
     assert touching == chunks.dependencies.standing_edges_for("ch_t")
     assert touching == [e for e in fleet if "ch_t" in (e.dependent_chunk_id, e.prerequisite_chunk_id)]
@@ -210,9 +211,9 @@ def test_standing_edges_touching_reads_flat_rows_as_other_chunks_edges_grow(tmp_
     for others in (1, 6):
         chunks, engine = _edged(_dir(tmp_path, others), others=others)
 
-        def read(chunks: ChunkStores = chunks) -> None:
-            with chunks.exclusive.locked(["ch_t"]) as handle:
-                handle.standing_edges_touching("ch_t")
+        def read(chunks: ChunkStores = chunks, engine: Engine = engine) -> None:
+            with chunk_unit(hub_store_connections(engine), ["ch_t"]) as tx:
+                chunks.dependencies.standing_edges_for("ch_t", transaction=tx)
 
         rows.append(count_rows_read(engine, read))
         statements.append(count_queries(engine, read))

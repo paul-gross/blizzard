@@ -6,7 +6,7 @@ module.
 
 Every statement a helper builds goes through the scope: a helper handed a ``Connection``
 recovers the builders with :func:`statements_of` (so the connection must come from a scoped
-``read``/``write`` or a locked handle over one), and one that builds a reusable statement takes
+``read``/``write`` or a locked transaction over one), and one that builds a reusable statement takes
 the caller's :class:`ScopedStatements`.
 """
 

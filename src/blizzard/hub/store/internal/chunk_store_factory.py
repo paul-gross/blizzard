@@ -5,14 +5,12 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
-from blizzard.hub.store.internal.chunk_exclusive_store import ChunkExclusiveWrites
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
@@ -23,27 +21,20 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
 
 
 def build_chunk_stores(
     store: ScopedConnections,
     clock: IClock,
-    *,
-    registry: RunnerRegistryStore,
-    transactions: IHubTransactions,
 ) -> ChunkStores:
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
-    first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
-    their own read collaborator; ``exclusive`` holds the caller's shared ``registry``."""
+    first since ``work_refs`` and ``escalations`` each hold it as their own read collaborator."""
     facts = ChunkFactsStore(store, clock)
-    record = ChunkRecordStore(store, clock)
-    dependencies = ChunkDependenciesStore(store, clock)
     work_refs = ChunkWorkRefsStore(store, clock, facts=facts)
     return ChunkStores(
         facts=facts,
-        record=record,
+        record=ChunkRecordStore(store, clock),
         lifecycle=ChunkLifecycleStore(store),
         work_refs=work_refs,
         queue=ChunkQueueStore(store, clock),
@@ -57,13 +48,5 @@ def build_chunk_stores(
         usage=ChunkUsageStore(store, clock),
         delivery=ChunkDeliveryStore(store),
         hub_exec=ChunkHubExecStore(store, clock),
-        dependencies=dependencies,
-        exclusive=ChunkExclusiveWrites(
-            store,
-            transactions=transactions,
-            facts=facts,
-            record=record,
-            dependencies=dependencies,
-            registry=registry,
-        ),
+        dependencies=ChunkDependenciesStore(store, clock),
     )

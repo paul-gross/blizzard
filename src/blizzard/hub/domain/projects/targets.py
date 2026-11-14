@@ -160,17 +160,13 @@ class ChunkTargets:
             for chunk in chunks
         }
 
-    def effective_locked(
-        self, chunk: TargetChunk, *, transaction: LockedTransaction
+    def effective(
+        self, chunk: TargetChunk, *, transaction: Transaction | None = None
     ) -> dict[RepositoryId, BranchTarget]:
-        """:meth:`effective` with the captured targets read in ``transaction``, which locks the chunk."""
+        """:meth:`effective_for` for one chunk, its captured targets read in ``transaction`` when given one."""
         captured = self._targets.captured_for([chunk.chunk_id], transaction=transaction).get(chunk.chunk_id, {})
         live = self.live_for([chunk.project_id]).get(chunk.project_id, {}) if chunk.project_id else {}
         return effective_targets(captured, live)
-
-    def effective(self, chunk: TargetChunk) -> dict[RepositoryId, BranchTarget]:
-        """:meth:`effective_for` for one chunk."""
-        return self.effective_for([chunk])[chunk.chunk_id]
 
     def capture_prepared(
         self, chunk: TargetChunk, prepared: Mapping[str, str] | None, *, at: datetime, transaction: LockedTransaction
@@ -178,7 +174,7 @@ class ChunkTargets:
         """A claim's capture: read the chunk's effective targets once in ``transaction``, which locks the chunk, and
         capture exactly those when environments ``prepared`` stand at them (:func:`prepared_at`). Answers the targets
         checked and captured; ``None``, capturing nothing, when the environments are stale."""
-        checked = self.effective_locked(chunk, transaction=transaction)
+        checked = self.effective(chunk, transaction=transaction)
         if not prepared_at(checked, prepared):
             return None
         fresh = [target.captured(at) for target in checked.values() if target.captured_at is None]

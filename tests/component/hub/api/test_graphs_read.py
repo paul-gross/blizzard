@@ -255,7 +255,7 @@ def test_posting_the_served_body_back_unchanged_mints_the_same_graph_again(tmp_p
 
 def test_the_default_graphs_body_round_trips_with_its_prompts_inlined(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     first = hub.client.get(f"/api/graphs/{graph.graph_id}").json()

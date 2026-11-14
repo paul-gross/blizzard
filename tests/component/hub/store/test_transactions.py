@@ -11,7 +11,7 @@ from structlog import get_logger
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import GraduationError, TransactionMisuse
 from blizzard.hub.store import schema as s
@@ -19,10 +19,9 @@ from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.borrowed import BorrowedConnections, PinnedConnections
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions, chunk_handle_connection
 from blizzard.hub.tenancy import StoreScope, TenantId
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 
@@ -115,14 +114,12 @@ def test_real_repositories_share_commit_and_rollback(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=now)
     store = hub_store_connections(engine)
-    chunks = build_chunk_stores(
-        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-    )
+    chunks = build_chunk_stores(store, FixedClock(now))
     for chunk_id in ("ch_a", "ch_b", "ch_c"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
-    with chunks.exclusive.locked(["ch_a", "ch_b", "ch_c"]) as locked:
-        chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked.transaction)
-        chunks.dependencies.declare("ch_a", "ch_c", by="test", at=now, transaction=locked.transaction)
+    with chunk_unit(store, ["ch_a", "ch_b", "ch_c"]) as locked:
+        chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
+        chunks.dependencies.declare("ch_a", "ch_c", by="test", at=now, transaction=locked)
     service = tx.HubTransactions(store)
     with pytest.raises(ValueError), service.begin() as unit:
         assert chunks.record.get("ch_a", transaction=unit) is not None
@@ -143,9 +140,7 @@ def test_locked_decision_requires_both_chunk_locks(tmp_path: Path) -> None:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=now)
     store = hub_store_connections(engine)
-    chunks = build_chunk_stores(
-        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-    )
+    chunks = build_chunk_stores(store, FixedClock(now))
     for chunk_id in ("ch_a", "ch_b"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
     service = tx.HubTransactions(store)
@@ -166,9 +161,7 @@ def _declare_fixture(tmp_path: Path) -> tuple[Any, Any, Any, datetime]:
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=now)
     store = hub_store_connections(engine)
-    chunks = build_chunk_stores(
-        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-    )
+    chunks = build_chunk_stores(store, FixedClock(now))
     for chunk_id in ("ch_a", "ch_b"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
     return engine, store, chunks, now
@@ -197,9 +190,7 @@ def test_declare_refuses_another_scopes_token(tmp_path: Path) -> None:
     other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
     with tx.HubTransactions(store).begin() as unit:
         locked = unit.lock_chunks(["ch_a", "ch_b"])
-        other_chunks = build_chunk_stores(
-            other, FixedClock(now), registry=RunnerRegistryStore(other), transactions=HubTransactions(other)
-        )
+        other_chunks = build_chunk_stores(other, FixedClock(now))
         with pytest.raises(TransactionMisuse):
             other_chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
     assert chunks.dependencies.standing_edges_for("ch_a") == []
@@ -223,44 +214,4 @@ def test_declare_in_a_unit_that_raises_leaves_no_standing_edge(tmp_path: Path) -
         chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
         raise ValueError("abort")
     assert chunks.dependencies.standing_edges_for("ch_a") == []
-    engine.dispose()
-
-
-def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> None:
-    now = datetime(2026, 1, 1, tzinfo=UTC)
-    _, engine = migrate_to(tmp_path, "head")
-    with engine.begin() as conn:
-        seed_graph(conn, "gr_1", at=now)
-    store = hub_store_connections(engine)
-    chunks = build_chunk_stores(
-        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-    )
-    seed_chunk_record(chunks, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=now))
-    with chunks.exclusive.locked(["ch_a"]) as handle:
-        assert handle.record("ch_a") is not None
-        assert handle.record("ch_b") is None
-        assert handle.records_for(["ch_a", "ch_b"]) == {"ch_a": handle.record("ch_a")}
-        assert handle.facts("ch_b") is None
-        assert "ch_b" not in handle.facts_for(["ch_a", "ch_b"])
-        with pytest.raises(TransactionMisuse):
-            chunks.record.set_graph("ch_b", graph_id="gr_1", transaction=handle.transaction)
-        with pytest.raises(TransactionMisuse):
-            chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=handle.transaction)
-        other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
-        other_chunks = build_chunk_stores(
-            other, FixedClock(now), registry=RunnerRegistryStore(other), transactions=HubTransactions(other)
-        )
-        with pytest.raises(TransactionMisuse):
-            other_chunks.record.set_graph("ch_a", graph_id="gr_1", transaction=handle.transaction)
-    with pytest.raises(TransactionMisuse):
-        chunk_handle_connection(handle, store)
-    with pytest.raises(TransactionMisuse):
-        handle.record("ch_a")
-    pointer = WorkRef(source="source", ref="1")
-    with chunks.exclusive.locked([]) as unkeyed:
-        assert chunks.work_refs.live_holders([pointer], transaction=unkeyed.transaction) == {}
-    with chunks.exclusive.locked([]) as unkeyed, pytest.raises(TransactionMisuse):
-        chunks.record.mint(
-            Chunk(chunk_id="ch_b", graph_id="gr_1", work_refs=[pointer], minted_at=now), transaction=unkeyed.transaction
-        )
     engine.dispose()

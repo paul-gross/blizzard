@@ -8,6 +8,7 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.work_sources.source import WorkItem
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     FakeWorkSource,
     build_hub,
@@ -93,7 +94,7 @@ def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     # Every ingest refuses an empty batch, so write the degenerate empty-pointer chunk straight
     # to the record store to prove the route still answers one.
     hub = build_hub(tmp_path)
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     chunk = Chunk(chunk_id="ch_empty", graph_id=graph.graph_id, work_refs=[], minted_at=hub.clock.now())
@@ -115,7 +116,7 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     pointer's entry carries neither, and its existing fields are unchanged."""
     forge = FakeWorkSource(name="widget", title="flaky test", body="please fix the flake")
     hub = build_hub(tmp_path, work_sources={"widget": forge})
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     hub_store = hub_store_connections(hub.engine)
@@ -134,10 +135,8 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     # — grow *that* chunk with the forge pointer to avoid re-holding it.
     chunk_id = work_refs.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
     assert chunk_id is not None
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
-        work_refs.add_work_refs(
-            chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
+        work_refs.add_work_refs(chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now(), transaction=tx)
 
     # The proposing runner's name is read at render time, the registry's latest.
     seed_runner(hub, "runner-local", name="r-proposer", register=False)
@@ -195,10 +194,8 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub_store = hub_store_connections(hub.engine)
     work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
-        work_refs.add_work_refs(
-            chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
+        work_refs.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now(), transaction=tx)
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 

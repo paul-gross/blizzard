@@ -31,6 +31,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
+from tests.support.chunk_units import chunk_unit
 from tests.support.linked_projects_world import (
     N,
     apply_config,
@@ -45,7 +46,6 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,
-    chunk_stores,
     count_queries,
     hub_store_connections,
 )
@@ -454,11 +454,12 @@ def test_the_transaction_taking_source_links_answer_every_source_flat_across_sou
     links_hub: HubHarness,
 ) -> None:
     sources = [_source_id(links_hub, f"s{i}") for i in range(N)]
-    exclusive = chunk_stores(links_hub.engine, links_hub.clock).exclusive
     links = links_hub.services.project_links
 
-    with exclusive.locked([], keys=[work_ref_lock(WorkRef(source=s, ref="1")) for s in sources]) as handle:
-        found = links.projects_linking_sources([*sources, "wsrc_never"], transaction=handle.transaction)
-        _flat(links_hub, lambda n: links.projects_linking_sources(sources[:n], transaction=handle.transaction))
+    with chunk_unit(
+        hub_store_connections(links_hub.engine), [], keys=[work_ref_lock(WorkRef(source=s, ref="1")) for s in sources]
+    ) as tx:
+        found = links.projects_linking_sources([*sources, "wsrc_never"], transaction=tx)
+        _flat(links_hub, lambda n: links.projects_linking_sources(sources[:n], transaction=tx))
 
     assert found == {s: linking for s in sources if (linking := links.projects_linking_source(s))}

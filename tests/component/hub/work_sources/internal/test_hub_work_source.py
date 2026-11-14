@@ -49,6 +49,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import (
     chunk_stores,
     default_project,
@@ -417,10 +418,8 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         graph=_graph(engine),
         project_id=ProjectId(default_project(engine)),
     )
-    with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop(
-            created.chunk_id, by="operator", at=_T0, waiting=(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(engine), [created.chunk_id]) as tx:
+        chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=_T0, waiting=(), transaction=tx)
 
     withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
@@ -440,10 +439,8 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
         project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop(
-            created.chunk_id, by="operator", at=_T0, waiting=(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(engine), [created.chunk_id]) as tx:
+        chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=_T0, waiting=(), transaction=tx)
     source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
@@ -509,7 +506,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
         project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    with chunks.exclusive.locked([created.chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), [created.chunk_id]) as tx:
         chunks.route.record_route(
             Route(
                 chunk_id=created.chunk_id,
@@ -520,7 +517,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
             ),
             token_hash="deadbeef",
             at=clock.instant,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     with pytest.raises(WorkItemHeldByLiveChunk) as excinfo:
@@ -547,9 +544,9 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
     # `DeleteService.delete`, not the live-holder refusal.
     dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
     seed_chunk_record(chunks, dependent)
-    with chunks.exclusive.locked([dependent.chunk_id, created.chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(engine), [dependent.chunk_id, created.chunk_id]) as tx:
         chunks.dependencies.declare(
-            dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant, transaction=handle.transaction
+            dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant, transaction=tx
         )
 
     with pytest.raises(WorkItemHeldByDependents) as excinfo:
@@ -569,10 +566,8 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
         project_id=ProjectId(default_project(engine)),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop(
-            created.chunk_id, by="operator", at=_T0, waiting=(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(engine), [created.chunk_id]) as tx:
+        chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=_T0, waiting=(), transaction=tx)
 
     withdrawn = source.withdraw(pointer, by="operator")
 
@@ -897,10 +892,8 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
         author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
         at=_T0,
     )
-    with chunks.exclusive.locked([f"ch_{created.ref}"]) as handle:
-        chunks.lifecycle.record_stop(
-            f"ch_{created.ref}", by="operator", at=_T0, waiting=(), transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(engine), [f"ch_{created.ref}"]) as tx:
+        chunks.lifecycle.record_stop(f"ch_{created.ref}", by="operator", at=_T0, waiting=(), transaction=tx)
     stale = items.get("hub", created.ref)
     assert stale is not None and stale.closure is None
     close_item(items, "hub", created.ref, closure=WorkItemClosure.DELIVERED, at=_T0)

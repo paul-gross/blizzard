@@ -43,7 +43,7 @@ _AUTHOR = WorkItemAuthor.user("usr_1")
 
 
 def _default_graph(hub: HubHarness) -> Graph:
-    return hub.services.graph_mint.ensure_default(
+    return hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
 

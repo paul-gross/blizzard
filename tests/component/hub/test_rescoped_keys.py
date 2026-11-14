@@ -32,20 +32,18 @@ from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, Forg
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.domain.graph.model import graph_name_lock
 from blizzard.hub.domain.kernel.locks import LockNamespace
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.forge_referrers import ForgeReferrersStore
-from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
-from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -53,6 +51,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
+from tests.support.chunk_units import chunk_unit as locked_unit
 from tests.support.scaffolding import (
     chunk_unit,
     default_project,
@@ -242,8 +241,8 @@ def _lock_rows(tenants: _Tenants, namespace: LockNamespace) -> list[tuple[str, s
 
 def test_two_tenants_locking_one_graph_name_each_hold_their_own_lock_row(tenants: _Tenants) -> None:
     for tenant in (tenants.first, tenants.second):
-        with GraphStore(scoped_connections(tenants.engine, tenant)).locked_name("release"):
-            pass
+        with HubTransactions(scoped_connections(tenants.engine, tenant)).begin() as unit:
+            unit.lock_set(keys=[graph_name_lock("release")])
 
     assert _lock_rows(tenants, LockNamespace.GRAPH_NAME) == sorted(
         [(tenants.first, "release"), (tenants.second, "release")]
@@ -254,10 +253,7 @@ def test_two_tenants_locking_one_work_ref_each_hold_their_own_lock_row(tenants: 
     pointer = WorkRef(source="hub", ref="7")
     for tenant in (tenants.first, tenants.second):
         store = scoped_connections(tenants.engine, tenant)
-        stores = build_chunk_stores(
-            store, FixedClock(_AT), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
-        )
-        with stores.exclusive.locked([], keys=[work_ref_lock(pointer)]):
+        with locked_unit(store, [], keys=[work_ref_lock(pointer)]):
             pass
 
     held = [tenant for tenant, _ in _lock_rows(tenants, LockNamespace.WORK_REF)]

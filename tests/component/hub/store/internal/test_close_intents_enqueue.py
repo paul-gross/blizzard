@@ -148,14 +148,14 @@ def test_completion_skips_an_unbound_ref_and_returns_its_row_id_publishing_nothi
     stores = chunk_stores(hub.engine, hub.clock)
     since = hub.events.latest_id()
 
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         written = stores.lifecycle.record_completion(
             chunk_id,
             by="test",
             at=hub.clock.now(),
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     assert _pending_intents(hub) == set()
@@ -313,7 +313,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
     )
 
     def transition(target: str, transition_id: str) -> tuple[int, ...]:
-        with stores.exclusive.locked([chunk_id]) as handle:
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
             if hub_step:
                 stepped = stores.hub_exec.record_hub_step_transition(
                     chunk_id,
@@ -329,7 +329,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                     artifacts=[],
                     release_route=False,
                     close_decision=decision,
-                    transaction=handle.transaction,
+                    transaction=tx,
                 )
                 assert stepped.wrote
                 return stepped.close_skipped
@@ -346,7 +346,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                 at=hub.clock.now(),
                 artifacts=[],
                 close_decision=decision,
-                transaction=handle.transaction,
+                transaction=tx,
             )
             assert isinstance(moved, TransitionWrite)
             return moved.close_skipped
@@ -367,7 +367,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     stores = chunk_stores(hub.engine, hub.clock)
     decision = CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset())
-    with pytest.raises(RuntimeError), stores.exclusive.locked([chunk_id]) as handle:
+    with pytest.raises(RuntimeError), chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         if hub_step:
             assert stores.hub_exec.record_hub_step_transition(
                 chunk_id,
@@ -383,7 +383,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                 artifacts=[],
                 release_route=False,
                 close_decision=decision,
-                transaction=handle.transaction,
+                transaction=tx,
             ).wrote
         else:
             assert isinstance(
@@ -400,7 +400,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                     at=hub.clock.now(),
                     artifacts=[],
                     close_decision=decision,
-                    transaction=handle.transaction,
+                    transaction=tx,
                 ),
                 TransitionWrite,
             )

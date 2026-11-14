@@ -13,31 +13,30 @@ from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.scoped import ScopedConnections
+from tests.support.chunk_units import chunk_unit
 from tests.support.scaffolding import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 
 
-def _dependencies(tmp_path: Path) -> tuple[IWriteChunkDependenciesRepository, IChunkExclusiveWrites, Engine]:
+def _dependencies(tmp_path: Path) -> tuple[IWriteChunkDependenciesRepository, ScopedConnections, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_NOW)
         seed_chunk(conn, "ch_dependent", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_prereq", graph_id="gr_1", at=_NOW)
-    stores = chunk_stores(engine, FixedClock(instant=_NOW))
-    return stores.dependencies, stores.exclusive, engine
+    connections = hub_store_connections(engine)
+    return chunk_stores(engine, FixedClock(instant=_NOW)).dependencies, connections, engine
 
 
 def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
-    dependencies, exclusive, _ = _dependencies(tmp_path)
+    dependencies, connections, _ = _dependencies(tmp_path)
 
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+        declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
 
     assert declared.dependent_chunk_id == "ch_dependent"
     assert declared.prerequisite_chunk_id == "ch_prereq"
@@ -53,11 +52,9 @@ def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
 
 
 def test_released_edge_reads_released_and_still_exists(tmp_path: Path) -> None:
-    dependencies, exclusive, engine = _dependencies(tmp_path)
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    dependencies, connections, engine = _dependencies(tmp_path)
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+        declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     released_at = _NOW + timedelta(hours=1)
 
     released = dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=released_at)
@@ -89,16 +86,14 @@ def test_release_is_a_no_op_when_no_edge_stands(tmp_path: Path) -> None:
 
 
 def test_declare_after_release_mints_a_fresh_row(tmp_path: Path) -> None:
-    dependencies, exclusive, _ = _dependencies(tmp_path)
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        first = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    dependencies, connections, _ = _dependencies(tmp_path)
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+        first = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
 
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
         second = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=2), transaction=handle.transaction
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=2), transaction=tx
         )
 
     assert second.dependency_id != first.dependency_id
@@ -110,17 +105,15 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
     delegates entirely to this ordering, so it must be pinned here — declared with
     genuinely different ``declared_at`` instants, and out of chronological call order, so
     a store that returned insertion order rather than sorting would fail this."""
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
-    with exclusive.locked(["ch_dependent", "ch_prereq", "ch_prereq_2"]) as handle:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"]) as tx:
         later = dependencies.declare(
-            "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1), transaction=handle.transaction
+            "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1), transaction=tx
         )
-        earlier = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+        earlier = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
 
     ordered = dependencies.list_standing_edges()
 
@@ -130,19 +123,17 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
 def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None:
     """``standing_edges_for`` — the one-hop-each-way bounded read: every
     standing edge naming the chunk as dependent or as prerequisite, in one list."""
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_dependent_2", graph_id="gr_1", at=_NOW)
-    with exclusive.locked(["ch_dependent", "ch_dependent_2", "ch_prereq"]) as handle:
-        as_dependent = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    with chunk_unit(connections, ["ch_dependent", "ch_dependent_2", "ch_prereq"]) as tx:
+        as_dependent = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
         as_prerequisite = dependencies.declare(
             "ch_dependent_2",
             "ch_dependent",
             by="user:alice",
             at=_NOW + timedelta(hours=1),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     edges = dependencies.standing_edges_for("ch_dependent")
@@ -151,19 +142,19 @@ def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None
 
 
 def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -> None:
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_other", graph_id="gr_1", at=_NOW)
-    with exclusive.locked(["ch_other", "ch_prereq"]) as handle:
-        dependencies.declare("ch_other", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction)
+    with chunk_unit(connections, ["ch_other", "ch_prereq"]) as tx:
+        dependencies.declare("ch_other", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
 
     assert dependencies.standing_edges_for("ch_dependent") == []
 
 
 def test_standing_edges_for_excludes_a_released_edge(tmp_path: Path) -> None:
-    dependencies, exclusive, _ = _dependencies(tmp_path)
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction)
+    dependencies, connections, _ = _dependencies(tmp_path)
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+        dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
 
     assert dependencies.standing_edges_for("ch_dependent") == []
@@ -173,16 +164,14 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     """``ChunkDependenciesStore.record_fold`` — the fold's own composite write:
     a chunk's own ``chunk_grouped`` row, one release, and one mint, all in one
     transaction. The minted pair never revives the released row's ``dependency_id``."""
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
-    with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+        declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     at = _NOW + timedelta(hours=1)
 
-    with exclusive.locked(["ch_dependent", "ch_prereq", "ch_survivor"]) as handle:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_survivor"]) as tx:
         grouped_ids = dependencies.record_fold(
             [
                 FoldTarget(
@@ -194,7 +183,7 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
             grouped_into="ch_survivor",
             by="fold",
             at=at,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     assert grouped_ids["ch_prereq"] > 0
@@ -226,14 +215,14 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
     """A fault partway through a later target's write rolls back an earlier target's row
     too — proven against the real engine, since a cross-target rollback
     is not observable through a seam double."""
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=_NOW)
         seed_chunk(conn, "ch_b", graph_id="gr_1", at=_NOW)
     at = _NOW + timedelta(hours=1)
 
-    with pytest.raises(HubStoreError), exclusive.locked(["ch_a", "ch_b", "ch_survivor"]) as handle:
+    with pytest.raises(HubStoreError), chunk_unit(connections, ["ch_a", "ch_b", "ch_survivor"]) as tx:
         dependencies.record_fold(
             [
                 FoldTarget(chunk_id="ch_a", release=[], mint=[]),
@@ -244,7 +233,7 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
             grouped_into="ch_survivor",
             by="fold",
             at=at,
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     with engine.connect() as conn:
@@ -255,17 +244,13 @@ def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path:
     """The same rule's tiebreak (``bzh:sql-portable`` — an explicit total order, never an
     implicit one): two edges declared at the identical instant still resolve to one
     deterministic order, ascending by the minted ``dependency_id``."""
-    dependencies, exclusive, engine = _dependencies(tmp_path)
+    dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
-    with exclusive.locked(["ch_dependent", "ch_prereq", "ch_prereq_2"]) as handle:
-        first = dependencies.declare(
-            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
-        second = dependencies.declare(
-            "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW, transaction=handle.transaction
-        )
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"]) as tx:
+        first = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
+        second = dependencies.declare("ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW, transaction=tx)
 
     ordered = dependencies.list_standing_edges()
 

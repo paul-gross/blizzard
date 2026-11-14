@@ -100,13 +100,13 @@ def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
 
 
 def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.route.record_route(
             Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
             token_hash="deadbeef",
             at=_at(1),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "claimed")
     assert row.chunk_id == "ch_1"
@@ -116,8 +116,8 @@ def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
 
 
 def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
@@ -131,7 +131,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
@@ -141,8 +141,8 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
 
 
 def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_transition(
             transition_id="tr_1",
             chunk_id="ch_1",
@@ -156,7 +156,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
@@ -166,8 +166,8 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
 
 
 def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_migration(
             "ch_1",
             from_node_id=None,
@@ -183,7 +183,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "migrated")
     assert row.chunk_id == "ch_1"
@@ -192,8 +192,8 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
 
 
 def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id="dec_1",
@@ -207,7 +207,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
@@ -217,7 +217,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id="dec_1",
@@ -231,7 +231,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
         store.decisions.record_decision_resolution(
@@ -244,8 +244,8 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
 
 
 def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.questions.record_question(
             question_id="qn_1",
             chunk_id="ch_1",
@@ -258,7 +258,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
             asked_at=_at(1),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "question-asked")
     assert row.chunk_id == "ch_1"
@@ -269,7 +269,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.questions.record_question(
             question_id="qn_1",
             chunk_id="ch_1",
@@ -282,7 +282,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
             asked_at=_at(1),
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
-            transaction=handle.transaction,
+            transaction=tx,
         )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
         store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
@@ -293,8 +293,8 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.escalations.record_escalation(
             "ch_1",
             epoch=1,
@@ -304,7 +304,7 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
@@ -313,12 +313,12 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
 
 
 def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_requeue(
             "ch_1",
             at=_at(1),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "requeued")
     assert row.chunk_id == "ch_1"
@@ -327,9 +327,9 @@ def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
 
 
 def test_detached_reads_off_route_released(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.route.record_route_released("ch_1", at=_at(1), transaction=handle.transaction)
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.route.record_route_released("ch_1", at=_at(1), transaction=tx)
     row = _row_for(store, "detached")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -337,20 +337,24 @@ def test_detached_reads_off_route_released(tmp_path: Path) -> None:
 
 
 def _route_and_release(
-    store: ChunkStores, *, runner_id: str, at: int, cause: RouteReleaseCause | None, reason: str | None = None
+    store: ChunkStores,
+    engine: sa.Engine,
+    *,
+    runner_id: str,
+    at: int,
+    cause: RouteReleaseCause | None,
+    reason: str | None = None,
 ) -> None:
     route = Route(chunk_id="ch_1", runner_id=runner_id, workspace_id="w1", environment_ids=[], created_at=_at(at))
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.route.record_route(route, token_hash="h", at=_at(at), transaction=handle.transaction)
-        store.route.record_route_released(
-            "ch_1", at=_at(at + 1), cause=cause, reason=reason, transaction=handle.transaction
-        )
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.route.record_route(route, token_hash="h", at=_at(at), transaction=tx)
+        store.route.record_route_released("ch_1", at=_at(at + 1), cause=cause, reason=reason, transaction=tx)
 
 
 def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    _route_and_release(store, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
-    _route_and_release(store, runner_id="rn_second", at=3, cause=RouteReleaseCause.RELEASE, reason="throttled")
+    store, engine = _store(tmp_path)
+    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
+    _route_and_release(store, engine, runner_id="rn_second", at=3, cause=RouteReleaseCause.RELEASE, reason="throttled")
     row = _row_for(store, "released")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -361,8 +365,8 @@ def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path:
 
 @pytest.mark.parametrize("cause", [None, RouteReleaseCause.DETACH, RouteReleaseCause.RETIREMENT])
 def test_every_other_route_released_row_still_reads_detached(tmp_path: Path, cause: RouteReleaseCause | None) -> None:
-    store, _ = _store(tmp_path)
-    _route_and_release(store, runner_id="rn_first", at=1, cause=cause)
+    store, engine = _store(tmp_path)
+    _route_and_release(store, engine, runner_id="rn_first", at=1, cause=cause)
     row = _row_for(store, "detached")
     assert row.runner_id is None
     assert row.reason is None
@@ -388,9 +392,9 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 
 
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.lifecycle.record_stop("ch_1", by="alice", at=_T0, waiting=(), transaction=handle.transaction)
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.lifecycle.record_stop("ch_1", by="alice", at=_T0, waiting=(), transaction=tx)
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -398,15 +402,15 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 
 
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.lifecycle.record_completion(
             "ch_1",
             by="alice",
             at=_T0,
             close_decision=decide_close_enqueue([], lambda _: True),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
@@ -415,8 +419,8 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
 
 
 def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
         store.movement.record_restart(
             "ch_1",
             from_node_id=None,
@@ -424,7 +428,7 @@ def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
             by="alice",
             at=_at(1),
             waiting=(),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"
@@ -472,15 +476,15 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
 
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
     """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
-    store, _ = _store(tmp_path)
-    with store.exclusive.locked(["ch_1"]) as handle:
-        store.record.set_graph("ch_1", graph_id="gr_2", transaction=handle.transaction)
+    store, engine = _store(tmp_path)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as tx:
+        store.record.set_graph("ch_1", graph_id="gr_2", transaction=tx)
         store.record.set_defaults(
             "ch_1",
             default_model=["opus"],
             default_effort="high",
             default_harnesses=[],
-            transaction=handle.transaction,
+            transaction=tx,
         )
     rows = store.events.activity_facts_since(_T0, limit=50)
     assert all(r.cause != "edited" for r in rows)

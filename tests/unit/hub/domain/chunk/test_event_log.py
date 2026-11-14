@@ -23,6 +23,8 @@ from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalations
 from tests.support.migrations.event_log import T0
 from tests.support.scaffolding import (
     chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     migrate_to,
     seed_chunk,
     seed_graph,
@@ -177,7 +179,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         seed_chunk(conn, "ch_f", graph_id="gr_1", at=T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
-    with store.exclusive.locked(["ch_a"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_a") as unit:
         store.escalations.record_escalation(
             "ch_a",
             epoch=1,
@@ -187,10 +189,10 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=unit,
         )
     # ch_b: escalation then a LATER lease mint -> superseded (closed).
-    with store.exclusive.locked(["ch_b"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_b") as unit:
         store.escalations.record_escalation(
             "ch_b",
             epoch=1,
@@ -200,11 +202,11 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=unit,
         )
     seed_lease(engine, "ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
-    with store.exclusive.locked(["ch_c"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_c") as unit:
         store.escalations.record_escalation(
             "ch_c",
             epoch=1,
@@ -214,17 +216,17 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with store.exclusive.locked(["ch_c"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_c") as unit:
         store.movement.record_requeue(
             "ch_c",
             at=_at(20),
-            transaction=handle.transaction,
+            transaction=unit,
         )
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
-    with store.exclusive.locked(["ch_d"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_d") as unit:
         store.escalations.record_escalation(
             "ch_d",
             epoch=1,
@@ -234,16 +236,16 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=unit,
         )
     clock.instant = _at(20)
-    with store.exclusive.locked(["ch_d"]) as handle:
-        store.lifecycle.record_stop("ch_d", by="operator", at=_at(20), waiting=(), transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_d") as unit:
+        store.lifecycle.record_stop("ch_d", by="operator", at=_at(20), waiting=(), transaction=unit)
     # ch_e: stop then a LATER escalation -> still dropped; a stopped chunk is terminal, so the
     # store query excludes it before the escalation's ordering is ever consulted.
     clock.instant = _at(10)
-    with store.exclusive.locked(["ch_e"]) as handle:
-        store.lifecycle.record_stop("ch_e", by="operator", at=_at(10), waiting=(), transaction=handle.transaction)
+    with chunk_unit(hub_store_connections(engine), "ch_e") as unit:
+        store.lifecycle.record_stop("ch_e", by="operator", at=_at(10), waiting=(), transaction=unit)
     # Seeded as a raw row: the write fence refuses an escalation on a stopped chunk, so the
     # store cannot produce this ordering — only the read's exclusion can be pinned.
     with engine.begin() as conn:
@@ -261,7 +263,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         )
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.
-    with store.exclusive.locked(["ch_f"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_f") as unit:
         store.escalations.record_escalation(
             "ch_f",
             epoch=1,
@@ -271,9 +273,9 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             terminal=False,
             cause=None,
             detail=None,
-            transaction=handle.transaction,
+            transaction=unit,
         )
-    with store.exclusive.locked(["ch_f"]) as handle:
+    with chunk_unit(hub_store_connections(engine), "ch_f") as unit:
         store.movement.record_transition(
             transition_id="tr_f1",
             chunk_id="ch_f",
@@ -287,7 +289,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([], lambda _: True),
-            transaction=handle.transaction,
+            transaction=unit,
         )
 
     # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.

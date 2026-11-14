@@ -100,8 +100,8 @@ class ChunkWorkRefsStore:
         return self._resolve(pairs, maybe_live_ids, facts_by_id)
 
     def live_holders_conn(self, conn: Connection, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
-        """`live_holders`, resolved wholly on the caller's connection — the locked-transaction
-        seam's own read (``bzh:store-exclusive-write``)."""
+        """`live_holders`, resolved wholly on the caller's connection — a read joining the
+        caller's locked transaction (``bzh:store-exclusive-write``)."""
         pointers = list(pointers)
         if not pointers:
             return {}

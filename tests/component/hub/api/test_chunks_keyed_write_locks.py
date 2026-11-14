@@ -18,8 +18,8 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunk.model import Chunk
-from blizzard.hub.domain.graph.model import Graph, ILockedGraphNameRead
-from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
@@ -100,22 +100,22 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     graph_store: Any = services.graph_mint.graphs
     entered = threading.Event()
     release = threading.Event()
-    real_mint_locked = graph_store.mint_locked
+    real_mint = graph_store.mint
 
-    def _blocking_mint_locked(
-        handle: ILockedGraphNameRead, graph: Graph, *, definition_yaml: str, at: datetime
+    def _blocking_mint(
+        graph: Graph, *, definition_yaml: str, at: datetime, transaction: Transaction | None = None
     ) -> None:
         entered.set()
         assert release.wait(timeout=60), "test never released the first mint"
-        return real_mint_locked(handle, graph, definition_yaml=definition_yaml, at=at)
+        return real_mint(graph, definition_yaml=definition_yaml, at=at, transaction=transaction)
 
-    graph_store.mint_locked = _blocking_mint_locked
+    graph_store.mint = _blocking_mint
     ids: dict[str, str] = {}
     errors: dict[str, BaseException] = {}
 
     def _ensure(name: str) -> None:
         try:
-            graph = services.graph_mint.ensure_default(
+            graph = services.default_graph.ensure_default(
                 services.default_graph_doc, definition_yaml=services.default_graph_yaml
             )
             ids[name] = graph.graph_id
@@ -133,7 +133,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     release.set()
     first.join(timeout=60)
     second.join(timeout=60)
-    graph_store.mint_locked = real_mint_locked
+    graph_store.mint = real_mint
     assert not first.is_alive() and not second.is_alive(), "a resolution never finished after the first was released"
     for name, error in errors.items():
         raise AssertionError(f"the {name} resolution raised") from error

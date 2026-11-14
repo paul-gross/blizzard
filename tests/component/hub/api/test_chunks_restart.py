@@ -565,9 +565,9 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     # HTTP edit path refuses for a moved chunk.
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph(
-            chunk_id, graph_id=other, transaction=handle.transaction
+            chunk_id, graph_id=other, transaction=tx
         )
 
     resp = _restart(hub, chunk_id)
@@ -587,7 +587,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
     build_node = _detail(hub, chunk_id)["current_node_id"]
 
     stores = chunk_stores(hub.engine, hub.clock)
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         wrote = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=plan_node,
@@ -602,7 +602,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         ).wrote
 
     assert wrote is False
@@ -617,7 +617,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
     plan_node = _detail(hub, chunk_id)["current_node_id"]
 
     stores = chunk_stores(hub.engine, hub.clock)
-    with stores.exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         wrote = stores.hub_exec.record_hub_step_transition(
             chunk_id,
             from_node_id=plan_node,
@@ -632,7 +632,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
             admission=EpochAdmission.ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         ).wrote
 
     assert wrote is True

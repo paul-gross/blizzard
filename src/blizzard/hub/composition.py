@@ -150,7 +150,7 @@ from blizzard.hub.domain.garden.runs.history import GardenRunService
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
-from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -343,6 +343,7 @@ class TenantServices:
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
+    default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
     graph_yaml: IConfigCodec
     graph_lifecycle: GraphLifecycleService
@@ -690,7 +691,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
     transactions = tenant_transactions(connections)
-    chunk_stores = build_chunk_stores(connections, clock, registry=registry, transactions=transactions)
+    chunk_stores = build_chunk_stores(connections, clock)
     cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
@@ -1165,6 +1166,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     host_report = HostReportService(hosts=host_store, clock=clock)
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock, catalogue=parts.actions.catalogue)
+    default_graph = DefaultGraphService(mint=graph_mint, graphs=graph_store, transactions=stores.transactions)
     default_graph_yaml = PACKAGED.default.inlined_yaml(parts.graph_yaml)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
@@ -1432,6 +1434,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             caps=transcript_caps,
         ),
         graph_mint=graph_mint,
+        default_graph=default_graph,
         graph_yaml=parts.graph_yaml,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         questions=QuestionService(
@@ -1644,7 +1647,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store,
             items=stores.work_item_edits,
-            default_graph=lambda: graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=default_graph_yaml),
+            default_graph=lambda: default_graph.ensure_default(
+                PACKAGED.default.doc, definition_yaml=default_graph_yaml
+            ),
             clock=clock,
             transactions=stores.transactions,
         ),

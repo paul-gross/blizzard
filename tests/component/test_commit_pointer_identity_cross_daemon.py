@@ -21,6 +21,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.node_steps.submissions import CompletionArtifact
+from tests.support.chunk_units import chunk_unit
 from tests.support.github_double import GitHubDouble
 from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.pin_hub_delivery_world import mint_and_claim, writable
@@ -34,7 +35,12 @@ from tests.support.runner_fakes import (
     make_store,
 )
 from tests.support.runner_mint import new_mint
-from tests.support.scaffolding import DEFAULT_FIXTURE_REPOSITORIES, build_hub, chunk_stores, report_lease
+from tests.support.scaffolding import (
+    DEFAULT_FIXTURE_REPOSITORIES,
+    build_hub,
+    hub_store_connections,
+    report_lease,
+)
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -131,7 +137,7 @@ def _deliver(
         )
         for a in submitted
     ]
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), [chunk_id]) as tx:
         writable(hub).record_transition(
             transition_id="tr_seed_deliver",
             chunk_id=chunk_id,
@@ -145,7 +151,7 @@ def _deliver(
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-            transaction=handle.transaction,
+            transaction=tx,
         )
     report_lease(hub, chunk_id, epoch=1, seq=1)
     result = _Delivered(hub.turn_outcome(chunk_id))

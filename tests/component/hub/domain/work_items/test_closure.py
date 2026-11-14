@@ -39,7 +39,6 @@ from tests.support.scaffolding import (
     HubHarness,
     WorkSourceRegistry,
     build_hub,
-    chunk_stores,
     chunk_unit,
     count_queries,
     emitted_events,
@@ -520,7 +519,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
-    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as tx:
         cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
             transition_id="tr_seed_terminal",
             chunk_id=chunk_id,
@@ -534,7 +533,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
             admission=EpochAdmission.AT_OR_ABOVE,
             terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
-            transaction=handle.transaction,
+            transaction=tx,
         )
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)

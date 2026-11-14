@@ -36,7 +36,7 @@ def _project(hub: HubHarness) -> str:
 
 
 def _routine(hub: HubHarness, slug: str, scope: str) -> Routine:
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     return hub.services.routine_authoring.create(

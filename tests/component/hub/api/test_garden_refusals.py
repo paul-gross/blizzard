@@ -70,7 +70,7 @@ def _refused(
 
 
 def _routine(hub: HubHarness, slug: str = "nightly") -> str:
-    graph = hub.services.graph_mint.ensure_default(
+    graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
     routine = hub.services.routine_authoring.create(
