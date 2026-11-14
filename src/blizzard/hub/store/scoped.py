@@ -30,8 +30,8 @@ A table is tenant-owned when it has a ``tenant_id`` column and is not on ``schem
 (:func:`is_tenant_owned`, the one place that test lives). A table outside that test passes through
 every builder untouched.
 
-Code that holds only the ``Connection`` a scoped ``read``/``write`` yielded — a shared helper, a
-locked handle's sibling adapter — recovers the same builders with :func:`statements_of`. The scope
+Code that holds only the ``Connection`` a scoped ``read``/``write`` yielded — a shared helper, an
+adapter joining a locked transaction — recovers the same builders with :func:`statements_of`. The scope
 travels as an execution option on that ``Connection`` object, which is discarded at the end of the
 block, never on the pooled driver connection behind it.
 

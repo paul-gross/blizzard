@@ -71,31 +71,25 @@ class RunnerRegistryStore:
 
     def get_runner(self, runner_id: str, *, transaction: Transaction | None = None) -> RunnerRegistration | None:
         with connection_in(self._store, transaction, "get_runner") as conn:
-            return self.get_runner_conn(conn, runner_id)
+            row = conn.execute(
+                self._store.select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
+            ).one_or_none()
+            if row is None:
+                return None
+            hosted = row.host_id is not None
+            registration = self._registration(
+                row,
+                self._paused(conn, runner_id),
+                self._local_pause_detail(conn, runner_id),
+                [] if hosted else self._external_usage(conn, runner_id),
+                [] if hosted else self._external_usage_misses(conn, runner_id),
+                self._lifecycle(conn, runner_id),
+            )
+            return self._reading_hosts(conn, [registration])[0]
 
     def is_retired(self, runner_id: str) -> bool:
         with self._store.read("is_retired") as conn:
             return self._lifecycle(conn, runner_id)[0]
-
-    def get_runner_conn(self, conn: Connection, runner_id: str) -> RunnerRegistration | None:
-        """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
-        own read (``bzh:store-exclusive-write``), resolved on the caller's connection
-        rather than a fresh one."""
-        row = conn.execute(
-            self._store.select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
-        ).one_or_none()
-        if row is None:
-            return None
-        hosted = row.host_id is not None
-        registration = self._registration(
-            row,
-            self._paused(conn, runner_id),
-            self._local_pause_detail(conn, runner_id),
-            [] if hosted else self._external_usage(conn, runner_id),
-            [] if hosted else self._external_usage_misses(conn, runner_id),
-            self._lifecycle(conn, runner_id),
-        )
-        return self._reading_hosts(conn, [registration])[0]
 
     def list_runners(self, *, include_retired: bool = False, host_id: str | None = None) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:

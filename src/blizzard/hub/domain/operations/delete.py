@@ -141,12 +141,12 @@ class DeleteService:
         them runs the delete again over the union, having written nothing."""
         pointers = frozenset(_hub_refs(chunk))
         while True:
-            outcome = self._delete_locked(chunk, pointers, by=by)
+            outcome = self._delete(chunk, pointers, by=by)
             if isinstance(outcome, int):
                 return outcome
             pointers = pointers | outcome
 
-    def _delete_locked(self, chunk: Chunk, pointers: frozenset[WorkRef], *, by: str) -> int | frozenset[WorkRef]:
+    def _delete(self, chunk: Chunk, pointers: frozenset[WorkRef], *, by: str) -> int | frozenset[WorkRef]:
         """One run of the delete's unit over ``pointers``: the deleted fact's id, or — writing nothing — the hub
         refs the re-read found outside the declared keys."""
         keys = sorted(work_item_lock(p) for p in pointers)

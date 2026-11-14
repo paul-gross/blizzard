@@ -2,7 +2,7 @@
 submission, or records a landing — the way ``chunk_rows`` serves the chunk stores.
 
 Each helper takes the writer's own ``Connection`` and recovers its builders with :func:`statements_of`, so the
-connection must come from a scoped ``write`` or a locked handle over one. Facts only (``bzh:facts-not-status``): a
+connection must come from a scoped ``write`` or a locked transaction over one. Facts only (``bzh:facts-not-status``): a
 submission is open while it has no closure, a turn while it has no ``ended_at``."""
 
 from __future__ import annotations

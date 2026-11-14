@@ -303,12 +303,8 @@ class GraphStore:
 
     def get_enabled_by_name(self, name: str, *, transaction: Transaction | None = None) -> Graph | None:
         with connection_in(self._store, transaction, "get_enabled_by_name") as conn:
-            return self.enabled_by_name_conn(conn, name)
-
-    def enabled_by_name_conn(self, conn: Connection, name: str) -> Graph | None:
-        """`get_enabled_by_name`, resolved on the caller's connection."""
-        row = conn.execute(self._enabled_by_name_select(name)).first()
-        return self._reify(conn, row) if row is not None else None
+            row = conn.execute(self._enabled_by_name_select(name)).first()
+            return self._reify(conn, row) if row is not None else None
 
     def get_enabled_by_names(self, names: Sequence[str]) -> dict[str, Graph]:
         """:meth:`get_enabled_by_name` for each of ``names``, keyed by name: per name batch one select resolves each
@@ -557,14 +553,12 @@ class GraphStore:
 
     def any_minted(self, name: str, *, transaction: Transaction | None = None) -> bool:
         with connection_in(self._store, transaction, "any_minted") as conn:
-            return self.any_minted_conn(conn, name)
-
-    def any_minted_conn(self, conn: Connection, name: str) -> bool:
-        """`any_minted`, resolved on the caller's connection."""
-        return (
-            conn.execute(self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name == name).limit(1)).first()
-            is not None
-        )
+            return (
+                conn.execute(
+                    self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name == name).limit(1)
+                ).first()
+                is not None
+            )
 
     def is_retired(self, graph_id: str, *, transaction: Transaction | None = None) -> bool:
         with connection_in(self._store, transaction, "is_retired") as conn:

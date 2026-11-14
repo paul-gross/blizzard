@@ -691,7 +691,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
     transactions = tenant_transactions(connections)
-    chunk_stores = build_chunk_stores(connections, clock, registry=registry, transactions=transactions)
+    chunk_stores = build_chunk_stores(connections, clock)
     cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,

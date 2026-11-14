@@ -329,14 +329,14 @@ class UrgencyLifecycle:
             keys.append(urgency_lock(named.urgency_id))
         chunk_ids = frozenset(self._chunks.open_chunks(urgency.urgency_id))
         while True:
-            outcome = self._retire_locked(
+            outcome = self._retire(
                 urgency, ctx, keys, chunk_ids, move_to=move_to, may_control=may_control, if_match=if_match
             )
             if isinstance(outcome, Retired):
                 return outcome
             chunk_ids = chunk_ids | outcome
 
-    def _retire_locked(
+    def _retire(
         self,
         urgency: Urgency,
         ctx: ChangeContext,

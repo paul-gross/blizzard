@@ -19,7 +19,6 @@ from blizzard.hub.domain.chunk.ports.escalations import (
     IWriteChunkEscalationsRepository,
 )
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository, IWriteChunkEventsRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository, IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository, IWriteChunkLifecycleRepository
@@ -54,9 +53,6 @@ class ChunkStores:
     delivery: IWriteChunkDeliveryRepository
     hub_exec: IWriteChunkHubExecRepository
     dependencies: IWriteChunkDependenciesRepository
-    #: The locked-transaction seam (``bzh:store-exclusive-write``) every writer racing a
-    #: chunk's exactly-one-wins decision shares.
-    exclusive: IChunkExclusiveWrites
 
 
 @dataclass(frozen=True)

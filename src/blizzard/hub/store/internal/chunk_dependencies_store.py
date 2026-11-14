@@ -37,19 +37,13 @@ class ChunkDependenciesStore:
 
     def list_standing_edges(self, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
         with connection_in(self._store, transaction, "list_standing_edges") as conn:
-            return self.list_standing_edges_conn(conn)
-
-    def list_standing_edges_conn(self, conn: Connection) -> list[DependencyEdge]:
-        """`list_standing_edges`'s already-open-connection sibling — the
-        locked-transaction seam's own read (``bzh:store-exclusive-write``), resolved on
-        the caller's connection rather than a fresh one."""
-        rows = conn.execute(
-            self._store.select(s.chunk_dependencies)
-            .where(s.chunk_dependencies.c.released_at.is_(None))
-            # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
-            .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
-        ).all()
-        return [_edge(row) for row in rows]
+            rows = conn.execute(
+                self._store.select(s.chunk_dependencies)
+                .where(s.chunk_dependencies.c.released_at.is_(None))
+                # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
+                .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
+            ).all()
+            return [_edge(row) for row in rows]
 
     def standing_edges_for_dependents(self, dependent_chunk_ids: Sequence[str]) -> list[DependencyEdge]:
         edges: list[DependencyEdge] = []
@@ -73,24 +67,19 @@ class ChunkDependenciesStore:
     def standing_edges_for(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
         connection = connection_in(self._store, transaction, "standing_edges_for")
         with connection as conn:
-            return self.standing_edges_for_conn(conn, chunk_id)
-
-    def standing_edges_for_conn(self, conn: Connection, chunk_id: str) -> list[DependencyEdge]:
-        """`standing_edges_for`'s already-open-connection sibling — the locked handle's read of
-        one chunk's unreleased edges in either role (``bzh:store-exclusive-write``)."""
-        rows = conn.execute(
-            self._store.select(s.chunk_dependencies)
-            .where(
-                s.chunk_dependencies.c.released_at.is_(None)
-                & (
-                    (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
-                    | (s.chunk_dependencies.c.prerequisite_chunk_id == chunk_id)
+            rows = conn.execute(
+                self._store.select(s.chunk_dependencies)
+                .where(
+                    s.chunk_dependencies.c.released_at.is_(None)
+                    & (
+                        (s.chunk_dependencies.c.dependent_chunk_id == chunk_id)
+                        | (s.chunk_dependencies.c.prerequisite_chunk_id == chunk_id)
+                    )
                 )
-            )
-            # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
-            .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
-        ).all()
-        return [_edge(row) for row in rows]
+                # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
+                .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
+            ).all()
+            return [_edge(row) for row in rows]
 
     def declare(
         self,

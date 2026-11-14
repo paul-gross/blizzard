@@ -348,7 +348,7 @@ class ClaimService:
         # Re-resolves the chunk's graph fresh under the lock — see `_claim`.
         self._graphs = graphs
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
-        # goes through the locked handle instead (`_claim`'s own re-fetch).
+        # is a repository read in the locked transaction instead (`_claim`'s own re-fetch).
         self._registry = registry
         # The host report the claim re-judges its binding against, read on the locked unit.
         self._hosts = hosts
