@@ -10,19 +10,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialEdit,
+    resolve_credential,
+)
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
+from blizzard.hub.forge.auth import ForgeScope
+from blizzard.hub.live_config import CacheKey
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.schema import work_sources
 from blizzard.hub.tenancy import StoreScope
+from tests.support.forge_auth import sent_token
 from tests.support.scaffolding import (
     OP,
     config_authoring,
@@ -73,11 +83,42 @@ class _World:
         def build() -> _Client:
             self.builds += 1
             record = self.stores.work_source_records.get(self.source_id)
-            assert record is not None and record.fields.secret is not None
-            token = live.secrets.reveal(SecretName.parse(record.fields.secret)).expose()
+            credential = resolve_credential(record, self.stores.credential_records) if record is not None else None
+            assert record is not None and credential is not None
+            token = sent_token(live.authorizations.authorization(credential, ForgeScope.WORK_SOURCE))
             return _Client(record.fields.locator, record.fields.annotate, token)
 
         return live.objects.get(RecordKind.WORK_SOURCE, self.source_id, build)
+
+    def key(self) -> CacheKey:
+        revisions = self.live.objects.revisions_for(RecordKind.WORK_SOURCE, [self.source_id])[self.source_id]
+        return CacheKey.of(RecordKind.WORK_SOURCE, self.source_id, revisions)
+
+    def act_with_credential(self) -> ConfiguredCredential:
+        """Point the work source at a new credential reading its own secret, in place of the one its write resolved."""
+        self.authoring.create_secret(SecretName.parse("deploy"), "tok-deploy", OP)
+        credential = self.authoring.create_credential(
+            CredentialDraft(
+                slug="deploy",
+                name=None,
+                forge_id=self.source().fields.forge_id,
+                binding="github.token",
+                secret_name="deploy",
+                settings={},
+            ),
+            OP,
+        )
+        with self.engine.begin() as conn:
+            conn.execute(
+                update(work_sources)
+                .where(
+                    work_sources.c.tenant_id == default_tenant(self.engine),
+                    work_sources.c.work_source_id == self.source_id,
+                )
+                .values(credential_id=credential.credential_id)
+            )
+        assert self.source().fields.credential_id == credential.credential_id
+        return credential
 
     def source(self):
         record = self.stores.work_source_records.get(self.source_id)
@@ -161,3 +202,41 @@ def _on_github(engine: Engine) -> ForgeChoice:
     forge = ForgeRecordStore(hub_store_connections(engine)).get(seed_forge(engine, "https://api.github.com"))
     assert forge is not None
     return ForgeChoice(forge=forge.forge_id, named=forge)
+
+
+def test_a_referrer_written_naming_a_secret_keys_on_the_credential_that_write_resolved(world: _World) -> None:
+    key = world.key()
+
+    assert (key.secret_name, key.secret_revision, key.credential_revision) == ("gh", 1, 1)
+    assert key.credential_id == world.source().fields.credential_id is not None
+
+
+def test_a_credential_referrer_keys_on_the_credential_and_its_secret(world: _World) -> None:
+    credential = world.act_with_credential()
+
+    key = world.key()
+
+    assert (key.secret_name, key.credential_id, key.credential_revision) == ("deploy", credential.credential_id, 1)
+
+
+def test_a_credential_edit_changes_a_referrer_s_key(world: _World) -> None:
+    credential = world.act_with_credential()
+    before = world.key()
+
+    world.authoring.edit_credential(credential, CredentialEdit(settings={"variant": "classic"}), OP)
+
+    after = world.key()
+    assert after != before and after.credential_revision == 2
+
+
+def test_a_credential_secret_replace_changes_a_referrer_s_key(world: _World) -> None:
+    world.act_with_credential()
+    before = world.key()
+    secret = world.stores.secrets.get("deploy")
+    assert secret is not None
+
+    world.authoring.replace_secret(secret, "tok-deploy-2", OP)
+
+    after = world.key()
+    assert before.secret_revision is not None
+    assert after != before and after.secret_revision == before.secret_revision + 1

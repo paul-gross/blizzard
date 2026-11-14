@@ -138,7 +138,6 @@ from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
-from blizzard.hub.domain.config.forges import ForgeKindOffers
 from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
 from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
@@ -160,10 +159,12 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.forge.auth import ForgeScope, ScopedAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.refusals import refusal_reader
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
+from blizzard.hub.forge.token_check import undeclared_tokens
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
@@ -359,7 +360,6 @@ def import_legacy_config(
         authoring = build_config_authoring(
             stores,
             cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
-            offers=ForgeKindOffers(),
         )
         existing = ExistingConfig(
             secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
@@ -420,6 +420,32 @@ def warn_forge_refusals(engine: Engine) -> None:
                 slugs=list(refusal.slugs),
                 reason=refusal.reason,
             )
+
+
+def warn_undeclared_tokens(stores: TenantStores, forges: ForgeRegistry) -> None:
+    """Log one warning per undeclared token of ``stores``' tenant whose effective variant withholds what a repository
+    acting with it needs. A pre-flight aid only: a failure to check is itself a warning, and nothing here stops the hub
+    starting."""
+    log = get_logger("blizzard.hub.forge_check")
+    try:
+        found = undeclared_tokens(
+            authorizations=forges.authorizations,
+            repositories=stores.repository_records,
+            credentials=stores.credential_records,
+        )
+    except Exception as exc:  # the check never stops startup
+        log.warning("undeclared token check could not run", tenant_id=stores.scope.tenant, error=str(exc))
+        return
+    for token in found:
+        log.warning(
+            "an undeclared token cannot serve its repositories' landing policies; declare its variant",
+            tenant_id=stores.scope.tenant,
+            credential=token.credential,
+            secret=token.secret,
+            variant=token.variant,
+            withheld=list(token.withheld),
+            repositories=list(token.repositories),
+        )
 
 
 def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: TenantId | None) -> TenantId:
@@ -675,8 +701,9 @@ def build_hosted_app(
             return WorkSourceEntry.registry(
                 records=stores.work_source_records,
                 forges=stores.forge_records,
+                credentials=stores.credential_records,
                 objects=live.objects,
-                secrets=live.secrets,
+                authorizations=ScopedAuthorizations(live.authorizations, ForgeScope.WORK_SOURCE),
                 users=core.users,
                 work_item_store=stores.work_item_store,
                 edits=stores.work_item_edits,
@@ -693,8 +720,9 @@ def build_hosted_app(
             return build_forge_registry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
+                credentials=stores.credential_records,
                 objects=live.objects,
-                secrets=live.secrets,
+                authorizations=live.authorizations,
                 clock=stores.clock,
                 budgets=budgets,
                 write_locks=write_locks,
@@ -777,6 +805,8 @@ def build_hosted_app(
             except ProvidersOrphaned as refusal:
                 raise ConfigError(str(refusal)) from refusal
             warn_forge_refusals(engine)
+            for stores in tenants:
+                warn_undeclared_tokens(stores, services.tenants.open_services(stores.scope).forges)
             try:
                 require_keys_covered(
                     {key_id for stores in tenants for key_id in stores.secrets.key_ids_in_use()},

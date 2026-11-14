@@ -11,10 +11,13 @@ import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretReader
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
@@ -32,24 +35,32 @@ def build_forge_adapter(
     return kinds[binding.kind](binding, clock=clock, instrument=instrument)
 
 
+def build_forge_authorizations(secrets: ISecretReader) -> IForgeAuthorizations:
+    """A tenant's forge authorization boundary over its secret reader — the reader's one forge holder."""
+    return ForgeAuthorizations(secrets=secrets)
+
+
 def build_forge_registry(
     *,
     records: IReadRepositoryRecordRepository,
     forges: IReadForgeRepository,
+    credentials: IReadCredentialRepository,
     objects: ConfigObjectCache,
-    secrets: ISecretReader,
+    authorizations: IForgeAuthorizations,
     clock: IClock,
     budgets: ForgeBudgets,
     write_locks: WriteLocks,
     capabilities: Mapping[str, frozenset[Capability]] = FORGE_KIND_CAPABILITIES,
     instrument: Callable[[httpx2.AsyncClient], None] | None = None,
 ) -> ForgeRegistry:
-    """A tenant's registry over its repository and forge records, cache, secret reader, and rate budgets."""
+    """A tenant's registry over its repository, forge and credential records, cache, authorization boundary, and rate
+    budgets."""
     return ForgeRegistry(
         records=records,
         forges=forges,
+        credentials=credentials,
         objects=objects,
-        secrets=secrets,
+        authorizations=authorizations,
         build=lambda binding: build_forge_adapter(binding, clock=clock, instrument=instrument),
         capabilities=capabilities,
         budgets=budgets,

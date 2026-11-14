@@ -29,7 +29,9 @@ from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, forge_lock
 from blizzard.hub.domain.config.references import referred_forge
+from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.secrets import SecretMetadata, secret_lock
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.locks import LockKey
@@ -97,6 +99,17 @@ class CredentialSecretUnavailable(ConfigFieldError):
     def __init__(self, secret: str, *, retired: bool) -> None:
         super().__init__("secret", f"secret {secret} is {'retired' if retired else 'unknown'}")
         self.secret = secret
+        self.retired = retired
+
+
+class CredentialUnavailable(Exception):
+    """The credential or secret a record acts with is unknown or retired, so no authorization can be built for it."""
+
+    code = "credential_unavailable"
+
+    def __init__(self, reference: str, *, retired: bool) -> None:
+        super().__init__(f"{reference} is {'retired' if retired else 'unknown'}")
+        self.reference = reference
         self.retired = retired
 
 
@@ -367,6 +380,65 @@ def require_credential_references(
     secret = secrets.get(record.fields.secret_name)
     if secret is None or secret.retired:
         raise CredentialSecretUnavailable(record.fields.secret_name, retired=secret is not None)
+
+
+# --- Resolution ------------------------------------------------------------------------------------------------------
+
+#: The binding a record naming no credential acts with: its secret, as a GitHub token of undeclared variant.
+IMPLICIT_BINDING = "github.token"
+
+
+@domain_model
+@dataclass(frozen=True)
+class ResolvedCredential:
+    """The authority a configured record acts with. ``credential_id``, ``slug`` and ``revision`` are ``None`` for a
+    record naming no credential, which acts with its secret as an implicit ``github.token`` of no declared variant."""
+
+    credential_id: CredentialId | None
+    forge_id: ForgeId
+    binding: str
+    secret_name: str
+    settings: Mapping[str, object]
+    revision: int | None
+    authority: str
+    slug: str | None = None
+    retired: bool = False
+
+
+def resolve_credential(
+    record: ConfiguredRepository | ConfiguredWorkSource, credentials: IReadCredentialRepository
+) -> ResolvedCredential | None:
+    """The credential ``record`` acts with: the one it names, retired or not; else an implicit ``github.token`` over
+    its secret; else ``None``, an anonymous work source. :class:`CredentialUnavailable` when the credential it names
+    does not exist."""
+    if record.fields.credential_id is not None:
+        credential = credentials.get(record.fields.credential_id)
+        if credential is None:
+            raise CredentialUnavailable(f"credential {record.fields.credential_id}", retired=False)
+        return ResolvedCredential(
+            credential_id=credential.credential_id,
+            forge_id=credential.fields.forge_id,
+            binding=credential.fields.binding,
+            secret_name=credential.fields.secret_name,
+            settings=credential.fields.settings,
+            revision=credential.revision,
+            authority=credential.authority,
+            slug=credential.slug,
+            retired=credential.retired,
+        )
+    secret_name = record.fields.secret_name if isinstance(record, ConfiguredRepository) else record.fields.secret
+    if secret_name is None:
+        return None
+    binding = CREDENTIAL_BINDINGS[IMPLICIT_BINDING]
+    return ResolvedCredential(
+        credential_id=None,
+        forge_id=record.fields.forge_id,
+        binding=binding.name,
+        secret_name=secret_name,
+        settings={},
+        revision=None,
+        authority=binding.authority(secret_name, {}),
+    )
 
 
 # --- Seams -----------------------------------------------------------------------------------------------------------

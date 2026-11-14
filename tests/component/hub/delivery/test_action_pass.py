@@ -23,12 +23,12 @@ from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.model import HubNodePollFact, WorkItemAuthor
-from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
+from tests.support.forge_auth import retire_secrets
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
@@ -487,11 +487,7 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
     )
     revealed: list[str] = []
 
-    def retired(name: SecretName):
-        revealed.append(name.value)
-        raise SecretRetired(name.value)
-
-    monkeypatch.setattr(hub.services.forges.secrets, "reveal", retired)
+    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda _name: True, revealed)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
     before = _event_log_kinds(hub, chunk_id)

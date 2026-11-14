@@ -25,6 +25,7 @@ class AuthRefusal(StrEnum):
 
     CREDENTIAL_INVALID = "credential-invalid"
     PERMISSION_MISSING = "permission-missing"
+    TOKEN_UNSUPPORTED = "token-unsupported"
     SSO_REQUIRED = "sso-required"
 
 
@@ -33,7 +34,9 @@ class AuthRefusal(StrEnum):
 class ForgeDiagnostic:
     """The forge's refusing answer, as the hub keeps it. ``operation`` is the seam method or work-source call that was
     refused; ``endpoint`` its method and route template, never a filled-in path or query; ``message`` is the forge's
-    own words, sanitized. Each field the forge's answer does not carry is ``None``."""
+    own words, sanitized. ``credential``, ``binding`` and ``variant`` name the credential the call carried — its slug,
+    its binding and its effective variant — and are ``None`` where the caller named none. Each field the forge's answer
+    does not carry is ``None``."""
 
     status: int
     operation: str
@@ -43,6 +46,9 @@ class ForgeDiagnostic:
     documentation_url: str | None
     request_id: str | None
     accepted_permissions: str | None
+    credential: str | None = None
+    binding: str | None = None
+    variant: str | None = None
 
 
 @domain_model
@@ -57,6 +63,7 @@ class ClassifiedRefusal:
 _SENTENCES = {
     AuthRefusal.CREDENTIAL_INVALID: "the token is wrong, expired, or revoked",
     AuthRefusal.PERMISSION_MISSING: "the token lacks a permission the call needs",
+    AuthRefusal.TOKEN_UNSUPPORTED: "this kind of token cannot make the call",
     AuthRefusal.SSO_REQUIRED: "the token is not authorized for the organization's SSO",
 }
 
@@ -66,14 +73,18 @@ def refusal_sentence(refusal: AuthRefusal) -> str:
     return _SENTENCES[refusal]
 
 
-def refusal_remedy(refusal: AuthRefusal, diagnostic: ForgeDiagnostic) -> str:
-    """What the operator does about the refusal, as one sentence with its closing period."""
+def refusal_remedy(refusal: AuthRefusal, diagnostic: ForgeDiagnostic, *, capability: str | None = None) -> str:
+    """What the operator does about the refusal, as one sentence with its closing period. ``capability`` is what the
+    refused call needed, as the caller maps it from the diagnostic's operation."""
     match refusal:
         case AuthRefusal.CREDENTIAL_INVALID:
             return "Replace the token, or check the App's installation."
         case AuthRefusal.PERMISSION_MISSING:
             granted = diagnostic.accepted_permissions or "the permission the call needs"
             return f"Grant {granted} to the token or the App installation."
+        case AuthRefusal.TOKEN_UNSUPPORTED:
+            needed = f"`{capability}`" if capability is not None else "what the call needs"
+            return f"Use a classic token or a GitHub App, or a landing policy that does not need {needed}."
         case AuthRefusal.SSO_REQUIRED:
             return "Authorize the token for the organization's SSO."
 

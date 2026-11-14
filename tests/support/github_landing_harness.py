@@ -15,6 +15,7 @@ from blizzard.hub.forge.budget import BudgetReading
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
+from tests.support.forge_auth import token_authorization
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 
@@ -74,7 +75,7 @@ class Harness:
             api_url=api_url,
             owner="acme",
             repo="widget",
-            token="tok",
+            authorization=token_authorization(),
             write_lock=lambda: self.lock,
             dialect=rate_dialect("github"),
             learn=self.learned.append,

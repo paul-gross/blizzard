@@ -15,6 +15,7 @@ from blizzard.hub.forge.landing import Check, CheckOutcome, CheckSource
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding
 from tests.support.fleet_launchers import run_forge
+from tests.support.forge_auth import token_authorization
 from tests.support.mock_fleet import require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -62,7 +63,7 @@ def test_adapter_reads_all_check_runs_and_latest_status_contexts(tmp_path: Path,
             api_url=str(client.base_url).rstrip("/"),
             owner="acme",
             repo="widget",
-            token="test",
+            authorization=token_authorization("test"),
             write_lock=asyncio.Lock,
             dialect=rate_dialect("github"),
             learn=lambda _reading: None,

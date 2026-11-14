@@ -739,6 +739,9 @@ def test_a_refused_source_records_one_event_per_pass_naming_the_source_and_its_f
         "documentation_url": None,
         "request_id": "AB12:34",
         "accepted_permissions": None,
+        "credential": None,
+        "binding": None,
+        "variant": None,
     }
 
 

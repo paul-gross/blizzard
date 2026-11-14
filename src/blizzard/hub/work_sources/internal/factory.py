@@ -1,22 +1,27 @@
 """Builds the hub's work source registry over the stored records.
 
-One credentialed ``httpx2.Client`` per configured source record — never a shared client,
-never a shared token — on the addresses of the forge the record names. A ``provider -> entry``
-map selects the adapter; confined to ``internal/`` (``bzh:dependency-inversion``), keeping ``httpx2`` out of the root.
+One credentialed ``httpx2.Client`` per configured source record — never a shared client — on the addresses of the
+forge the record names, authenticated by the authorization of the credential the record acts with. The family reveals
+nothing: it asks its own :class:`IWorkSourceAuthorizations` for an authorization. A ``provider -> entry`` map selects
+the adapter; confined to ``internal/`` (``bzh:dependency-inversion``), keeping ``httpx2`` out of the root.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 import httpx2
 
-from blizzard.foundation.roles import collaborator
-from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.config.credentials import (
+    CredentialUnavailable,
+    IReadCredentialRepository,
+    ResolvedCredential,
+    resolve_credential,
+)
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
-from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
@@ -30,15 +35,34 @@ from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceR
 from blizzard.hub.work_sources.source import IWorkSource, WorkSourceError
 
 
-@collaborator
+class IWorkSourceAuthorization(Protocol):
+    """What a source's client is authenticated with: the ``auth`` on each request, and the ``authority`` it acts as,
+    which keys the forge budget it shares with every caller acting as that authority."""
+
+    @property
+    def auth(self) -> httpx2.Auth: ...
+
+    @property
+    def authority(self) -> str: ...
+
+
+class IWorkSourceAuthorizations(Protocol):
+    """The family's narrow view of the forge authorization boundary, fixed to work-source use."""
+
+    def authorization(self, credential: ResolvedCredential) -> IWorkSourceAuthorization:
+        """``credential``'s authorization; :class:`CredentialUnavailable` when it or its secret is unknown or
+        retired."""
+        ...
+
+
 @dataclass(frozen=True)
 class WorkSourceEntry:
-    """One stored source record with the forge it names and its revealed credential, resolved to the adapter it
-    names."""
+    """One stored source record with the forge it names and the authorization of the credential it acts with —
+    ``None`` for a source naming none — resolved to the adapter it names."""
 
     record: ConfiguredWorkSource
     forge: ConfiguredForge
-    secret: SecretValue | None
+    authorization: IWorkSourceAuthorization | None
     #: Applied to the source's client as it is built — the composition root's tracing hook.
     instrument: Callable[[httpx2.Client], None] = lambda _client: None
     #: The source's forge key's rate gate; its client's answers teach it, and its adapter admits each call through it.
@@ -51,26 +75,25 @@ class WorkSourceEntry:
         cls,
         record: ConfiguredWorkSource,
         forge: ConfiguredForge,
-        secret: SecretValue | None,
+        authorization: IWorkSourceAuthorization | None,
         instrument: Callable[[httpx2.Client], None] | None = None,
         budgets: IWorkSourceRateBudgets | None = None,
         refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
     ) -> WorkSourceEntry:
-        """The entry ``record``'s provider names; with ``budgets``, gated by the budget of the forge it names under the
-        secret it names — the forge's anonymous budget when it names none; with ``refusals``, reading its forge's
-        credential refusals by that forge's kind."""
+        """The entry ``record``'s provider names; with ``budgets``, gated by the budget of the forge it names as the
+        authorization's authority — the forge's anonymous budget when it has none; with ``refusals``, reading its
+        forge's credential refusals by that forge's kind."""
         kinds: dict[str, type[WorkSourceEntry]] = {"github": GithubEntry}
         kind = kinds.get(record.fields.provider)
         if kind is None:
             raise WorkSourceError(f"work source {record.slug} has unknown provider {record.fields.provider!r}")
-        gate = (
-            budgets.sweeping(record.fields.forge_id, record.fields.secret, forge.kind) if budgets is not None else None
-        )
+        authority = authorization.authority if authorization is not None else None
+        gate = budgets.sweeping(record.fields.forge_id, authority, forge.kind) if budgets is not None else None
         reader = refusals(forge.kind) if refusals is not None else None
         if gate is None:
             if instrument is None:
-                return kind(record, forge, secret, refusals=reader)
-            return kind(record, forge, secret, instrument, refusals=reader)
+                return kind(record, forge, authorization, refusals=reader)
+            return kind(record, forge, authorization, instrument, refusals=reader)
 
         def learn(response: httpx2.Response) -> None:
             gate.learn(response.headers)
@@ -80,7 +103,7 @@ class WorkSourceEntry:
             if instrument is not None:
                 instrument(client)
 
-        return kind(record, forge, secret, teach, gate, reader)
+        return kind(record, forge, authorization, teach, gate, reader)
 
     @classmethod
     def built(
@@ -88,23 +111,24 @@ class WorkSourceEntry:
         record: ConfiguredWorkSource,
         *,
         forges: IReadForgeRepository,
-        secrets: ISecretReader,
+        credentials: IReadCredentialRepository,
+        authorizations: IWorkSourceAuthorizations,
         budgets: IWorkSourceRateBudgets,
         instrument: Callable[[httpx2.Client], None] | None = None,
         refusals: Callable[[str], IWorkSourceRefusalReader] | None = None,
     ) -> BuiltWorkSource:
-        """Build the record's adapter on its forge's addresses, over a client carrying its revealed secret."""
+        """Build the record's adapter on its forge's addresses, over a client authenticated by the authorization of
+        the credential it acts with."""
         forge = forges.get(record.fields.forge_id)
         if forge is None:
             raise WorkSourceError(f"work source {record.slug} names no forge")
-        secret: SecretValue | None = None
-        if record.fields.secret is not None:
-            try:
-                secret = secrets.reveal(SecretName.parse(record.fields.secret))
-            except (SecretNotFound, SecretRetired) as exc:
-                raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
-        entry = cls.of(record, forge, secret, instrument, budgets, refusals)
-        client = entry.client
+        try:
+            credential = resolve_credential(record, credentials)
+            authorization = authorizations.authorization(credential) if credential is not None else None
+        except CredentialUnavailable as exc:
+            raise WorkSourceError(f"work source {record.slug}: {exc}") from exc
+        entry = cls.of(record, forge, authorization, instrument, budgets, refusals)
+        client = entry.client()
         return BuiltWorkSource(record=record, source=entry.source(client), release=client.close)
 
     @classmethod
@@ -113,8 +137,9 @@ class WorkSourceEntry:
         *,
         records: IReadWorkSourceRepository,
         forges: IReadForgeRepository,
+        credentials: IReadCredentialRepository,
         objects: ConfigObjectCache,
-        secrets: ISecretReader,
+        authorizations: IWorkSourceAuthorizations,
         users: IReadUserRepository,
         work_item_store: IReadWorkItemRepository,
         edits: WorkItemEditService,
@@ -133,7 +158,8 @@ class WorkSourceEntry:
             build=lambda record: cls.built(
                 record,
                 forges=forges,
-                secrets=secrets,
+                credentials=credentials,
+                authorizations=authorizations,
                 budgets=budgets,
                 instrument=instrument_client,
                 refusals=refusals,
@@ -142,16 +168,11 @@ class WorkSourceEntry:
             close_forge_writes_enabled=close_forge_writes_enabled,
         )
 
-    @property
-    def token(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        if self.secret is None:
-            raise WorkSourceError(f"work source {self.record.slug} names no secret")
-        return self.secret.expose()
-
-    @property
     def client(self) -> httpx2.Client:
-        headers = {"Authorization": f"token {self.token}"}
-        client = httpx2.Client(base_url=self.api_base, headers=headers, timeout=30.0)
+        """A new client on the forge's API, authenticated by the entry's authorization."""
+        if self.authorization is None:
+            raise WorkSourceError(f"work source {self.record.slug} names no secret")
+        client = httpx2.Client(base_url=self.api_base, auth=self.authorization.auth, timeout=30.0)
         self.instrument(client)
         return client
 

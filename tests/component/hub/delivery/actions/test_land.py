@@ -12,7 +12,7 @@ from types import MappingProxyType
 
 import httpx2
 import pytest
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -22,18 +22,25 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.declarations import GitCommits
-from blizzard.hub.domain.actions.effects import ActionEscalation, ForgeAuthReason, LandingRecord, MissingCapability
+from blizzard.hub.domain.actions.effects import (
+    ActionEscalation,
+    ForgeAuthReason,
+    LandingRecord,
+    MissingCapability,
+    Pass,
+)
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.credentials import CredentialDraft
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     ResolvedRepository,
 )
-from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
+from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
@@ -65,6 +72,7 @@ from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
+from tests.support.forge_auth import retire_secrets, token_authorization
 from tests.support.github_double import GREEN, GitHubDouble, change, check, comparison
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.land_action_doubles import (
@@ -78,6 +86,7 @@ from tests.support.land_action_doubles import (
     _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
 )
 from tests.support.scaffolding import (
+    OP,
     HubHarness,
     RepositorySeed,
     build_hub,
@@ -127,7 +136,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
         api_url="https://api.github.example",
         owner="acme",
         repo="widget",
-        token="tok",
+        authorization=token_authorization(),
         write_lock=asyncio.Lock,
         dialect=rate_dialect("github"),
         learn=lambda _reading: None,
@@ -157,6 +166,63 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
     lookups = [request for request, _ in answers if request.url.path.endswith("/pulls")]
     assert len([request for request in lookups if request.url.params["state"] == "closed"]) == 10
     assert all(request.url.params["head"] == "acme:feat/x" for request in lookups)
+
+
+def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupported_naming_the_credential() -> None:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        path = request.url.path
+        if path == f"/repos/{_WIDGET}/pulls":
+            return httpx2.Response(200, json=[] if request.url.params["state"] == "closed" else [_pending_pull()])
+        if path == f"/repos/{_WIDGET}/pulls/1":
+            return httpx2.Response(200, json=_pending_pull())
+        if path == f"/repos/{_WIDGET}/compare/main...{_SUBMITTED}":
+            return httpx2.Response(
+                200, json={"status": "ahead", "ahead_by": 1, "behind_by": 0, "commits": [], "files": []}
+            )
+        if path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
+            return httpx2.Response(
+                403,
+                json={"message": "Resource not accessible by personal access token"},
+                headers={"X-GitHub-Request-Id": "ABCD:1234"},
+            )
+        raise AssertionError(f"unexpected landing read: {request.url}")
+
+    binding = ForgeBinding(
+        kind="github",
+        api_url="https://api.github.example",
+        owner="acme",
+        repo="widget",
+        authorization=token_authorization("github_pat_fine", credential="deploy"),
+        write_lock=asyncio.Lock,
+        dialect=rate_dialect("github"),
+        learn=lambda _reading: None,
+    )
+    forge = GitHubLanding(
+        binding, clock=FixedClock(datetime(2026, 10, 23, tzinfo=UTC)), transport=httpx2.MockTransport(answer)
+    )
+    forges = MappingProxyType(
+        {RepositoryId("re_widget"): RepositoryForge(RepositoryId("re_widget"), forge, forge, forge, forge.OFFERED)}
+    )
+
+    async def take() -> Pass:
+        try:
+            return await Land().take(_visit(), forges, _Sink())
+        finally:
+            forge.close()
+            await asyncio.sleep(0)
+
+    escalation = asyncio.run(take()).escalation
+    assert escalation is not None and escalation.auth is not None
+    assert escalation.auth.refusal is AuthRefusal.TOKEN_UNSUPPORTED
+    diagnostic = escalation.auth.diagnostic
+    assert (diagnostic.credential, diagnostic.binding, diagnostic.variant) == ("deploy", "github.token", "fine-grained")
+    lines = escalation.detail.splitlines()
+    assert lines[0].endswith("was refused: this kind of token cannot make the call.")
+    assert lines[2] == (
+        "Credential deploy (github.token, fine-grained). Use a classic token or a GitHub App, or a landing policy "
+        "that does not need `checks.read`."
+    )
+    assert "github_pat_fine" not in escalation.detail
 
 
 def _pending_pull() -> dict[str, object]:
@@ -1172,7 +1238,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     chunk_id = _chunk(hub, _WIDGET)
 
     assert _take(hub, chunk_id) == "escalated"
-    assert double.calls == [] and double.tokens == {}
+    assert double.calls == []
     with hub.engine.begin() as conn:
         rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
     assert [(row.epoch, row.cause) for row in rows] == [(2, "forge-capability-missing")]
@@ -1209,6 +1275,39 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     assert _event_kinds(hub).count("forge-capability-missing") == 1
     names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
     assert names.count("hub-log.forge-capability-missing") == 1
+
+
+def _act_with_fine_grained_credential(hub: HubHarness) -> None:
+    """Point every repository at credential ``deploy``, a ``github.token`` over a fine-grained token declaring no
+    variant; no verb writes ``credential_id`` yet."""
+    authoring = hub.services.config_authoring
+    authoring.create_secret(SecretName.parse("deploy"), "github_pat_fine", OP)
+    forge_id = hub.services.repository_records.list_all(include_retired=False)[0].fields.forge_id
+    draft = CredentialDraft(
+        slug="deploy", name=None, forge_id=forge_id, binding="github.token", secret_name="deploy", settings={}
+    )
+    credential = authoring.create_credential(draft, OP)
+    with hub.engine.begin() as conn:
+        conn.execute(hub_scoped(update(s.repositories).values(credential_id=credential.credential_id)))
+
+
+def test_a_fine_grained_token_behind_merge_on_checks_escalates_naming_its_credential_before_any_call(
+    tmp_path: Path,
+) -> None:
+    double = _forge(_WIDGET)
+    hub = _hub(tmp_path, double)
+    _act_with_fine_grained_credential(hub)
+    chunk_id = _chunk(hub, _WIDGET)
+
+    assert _take(hub, chunk_id) == "escalated"
+    assert double.calls == []
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
+    assert [(row.epoch, row.cause) for row in rows] == [(2, "forge-capability-missing")]
+    assert "does not offer `checks.read` to credential deploy (github.token, fine-grained)" in rows[0].detail
+    (warning,) = _warnings(hub, chunk_id)
+    assert warning["capability"] == "checks.read"
+    assert warning["credential"] == "deploy"
 
 
 def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplicate(tmp_path: Path) -> None:
@@ -1391,17 +1490,8 @@ def test_a_parked_watch_visit_reveals_and_checks_only_the_watched_repository(
     )
     offered = frozenset(Capability) - {Capability.REFS_ADVANCE}
     hub = build_hub(tmp_path, repositories=seeds, forges=double.forges_offering({"github": offered}))
-    secrets = hub.services.forges.secrets
-    reveal = secrets.reveal
     revealed: list[str] = []
-
-    def reveal_unless_gadget(name: SecretName):
-        revealed.append(name.value)
-        if name.value == "other-forge-token":
-            raise SecretRetired(name.value)
-        return reveal(name)
-
-    monkeypatch.setattr(secrets, "reveal", reveal_unless_gadget)
+    retire_secrets(monkeypatch, hub.services.forges.authorizations, lambda name: name == "other-forge-token", revealed)
     chunk_id = _chunk(hub, _WIDGET, _GADGET)
     record_hub_asset(
         hub,

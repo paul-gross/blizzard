@@ -18,10 +18,10 @@ from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryId
-from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.landing import ChangeState
 from blizzard.hub.store import schema as s
+from tests.support.forge_auth import retire_secrets
 from tests.support.github_double import GitHubDouble, change, forge_holding
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
@@ -156,13 +156,13 @@ class _World:
     def c_unavailable(self) -> None:
         """C's credential raises when revealed, and C's forge offers nothing."""
         forges = self.hub.services.forges
-        reveal, offered = forges.secrets.reveal, forges.offered
+        offered = forges.offered
 
-        def retired(name: SecretName):
-            if name.value == "charlie-token":
-                self.revealed_c.append(name.value)
-                raise SecretRetired(name.value)
-            return reveal(name)
+        def retired(name: str) -> bool:
+            if name == "charlie-token":
+                self.revealed_c.append(name)
+                return True
+            return False
 
         def lacking(forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
             if repository is not None and str(repository) == self.ids[_C]:
@@ -170,7 +170,7 @@ class _World:
                 return frozenset()
             return offered(forge, repository)
 
-        self.monkeypatch.setattr(forges.secrets, "reveal", retired)
+        retire_secrets(self.monkeypatch, forges.authorizations, retired)
         self.monkeypatch.setattr(forges, "offered", lacking)
 
     def c_available(self) -> None:

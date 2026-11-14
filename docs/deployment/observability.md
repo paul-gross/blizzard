@@ -55,20 +55,24 @@ is linking the repository to the project ([projects.md](./projects.md#links)), t
 
 `forge-capability-missing` (warning): a `deliver` step's repository sits on a forge that lacks an operation the step's
 action requires. The hub refuses the visit before the unsupported operation, writes a `hub-log.forge-capability-missing`
-artifact, and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the
-forge. The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
+artifact, and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, the
+forge, and the `credential` the repository acts with, `null` when it names only a secret. The remedy is the forge, the
+token, or the action ([forges.md](./forges.md#a-missing-capability)).
 
 `forge-auth-refused` (warning): GitHub refused the credential a call carried with a 401 or 403 that is not a rate
 refusal. A `deliver` step records it once when it escalates the chunk `forge-auth`, and the forge-status pass records it
 once per work source per pass. The event names the repository and forge, the refusal, and GitHub's sanitized answer: the
-operation and route, status, message, documentation URL, and request id. It never carries the token. The remedy is in
-the escalation's detail and the work item's `error`, not the event.
+operation and route, status, message, documentation URL, and request id, and the credential, binding, and token variant
+the call carried. Its refusal is `credential-invalid`, `permission-missing`, `sso-required`, or `token-unsupported`, a
+call the token's variant cannot make, such as a fine-grained token's check read. It never carries the token. The remedy
+is in the escalation's detail and the work item's `error`, not the event.
 
 `forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
 before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of
-that forge and secret waits until the refusal lifts. Each is recorded at most once per budget per reset window, naming
-the forge, the secret, the bucket, the last remaining and limit, and the reset; it names no chunk. Nothing needs doing
-unless it recurs: the callers wait and resume on their own. A notice lost to a restart is not recorded.
+that forge and token authority waits until the refusal lifts. Each is recorded at most once per budget per reset window,
+naming the forge, the `authority`, the secret, the bucket, the last remaining and limit, and the reset; it names no
+chunk. Nothing needs doing unless it recurs: the callers wait and resume on their own. A notice lost to a restart is not
+recorded.
 
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
 right now. The runner binds every enabled declared harness ([worker-spawn.md](./worker-spawn.md) owns that binding).

@@ -30,6 +30,7 @@ from blizzard.hub.domain.config.forges import (
     ForgeSlugTaken,
 )
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES, missing_capabilities
+from blizzard.hub.forge.budget import authority_secret
 from blizzard.wire.forge import (
     ForgeBudgetView,
     ForgeCreateRequest,
@@ -88,7 +89,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
         ],
         budgets=[
             ForgeBudgetView(
-                secret_name=key.secret_name,
+                secret_name=authority_secret(key.authority),
                 bucket=reading.bucket,
                 limit=reading.limit,
                 remaining=reading.remaining,

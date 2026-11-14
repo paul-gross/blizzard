@@ -9,7 +9,6 @@ import httpx2
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
@@ -20,11 +19,12 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
+from tests.support.forge_auth import token_authorization
 
 _NOW = datetime(2026, 10, 1, 12, tzinfo=UTC)
 _RESET = _NOW + timedelta(minutes=10)
 _FORGE = ForgeId("frg_example")
-_KEY = BudgetKey(_FORGE, "gh")
+_KEY = BudgetKey(_FORGE, "secret/gh")
 _POINTER = WorkRef(source="widget", ref="12")
 
 
@@ -59,8 +59,8 @@ class _World:
         self.requests.append(request)
         return self._answer(request)
 
-    def source(self, secret: str | None = "gh") -> GitHubWorkSource:
-        gate = self.budgets.sweeping(_FORGE, secret, "github")
+    def source(self, authority: str | None = _KEY.authority) -> GitHubWorkSource:
+        gate = self.budgets.sweeping(_FORGE, authority, "github")
         client = httpx2.Client(base_url="http://forge", transport=httpx2.MockTransport(self._handle))
 
         def learn(response: httpx2.Response) -> None:
@@ -158,8 +158,8 @@ def test_a_source_with_no_secret_spends_the_forge_s_anonymous_budget() -> None:
     world = _World()
     world.budgets.learn(BudgetKey(_FORGE, None), _reading(_rate(10)))
     with pytest.raises(WorkSourceError):
-        world.source(secret=None).fetch(_POINTER)
-    world.source(secret="gh").fetch(_POINTER)
+        world.source(authority=None).fetch(_POINTER)
+    world.source(authority="secret/gh").fetch(_POINTER)
     assert len(world.requests) == 2
 
 
@@ -192,13 +192,14 @@ _CONFIGURED_FORGE = ConfiguredForge(
 @pytest.mark.parametrize("secret", ["gh", None])
 def test_the_factory_binds_each_source_to_its_forge_key_s_budget(secret: str | None) -> None:
     budgets = ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect)
-    entry = WorkSourceEntry.of(_record(secret), _CONFIGURED_FORGE, SecretValue("token"), budgets=budgets)
-    assert entry.gate == budgets.sweeping(_FORGE, secret, "github")
+    authorization = token_authorization(secret_name=secret) if secret is not None else None
+    entry = WorkSourceEntry.of(_record(secret), _CONFIGURED_FORGE, authorization, budgets=budgets)
+    assert entry.gate == budgets.sweeping(_FORGE, f"secret/{secret}" if secret is not None else None, "github")
 
 
 def test_the_factory_s_client_teaches_the_budget_from_each_answer() -> None:
     budgets = ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect)
-    client = WorkSourceEntry.of(_record("gh"), _CONFIGURED_FORGE, SecretValue("token"), budgets=budgets).client
+    client = WorkSourceEntry.of(_record("gh"), _CONFIGURED_FORGE, token_authorization(), budgets=budgets).client()
     for hook in client.event_hooks["response"]:
         hook(httpx2.Response(200, headers=_rate(7)))
     assert [reading.remaining for reading in budgets.readings(_KEY)] == [7]

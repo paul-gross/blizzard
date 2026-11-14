@@ -86,6 +86,14 @@ failure is never re-run and routes as the change's own failure. Upgrade existing
 grant access to commit statuses. See [delivery policy](./delivery-policy.md#checks-and-missing-ci) for the strict
 default and recovery.
 
+The hub recognizes a fine-grained token by its `github_pat_` prefix and treats it as unable to read checks, so it does
+not offer `checks.read` for a repository using one. A repository on such a token behind a landing policy that reads
+checks, `merge-on-checks` or `fast-forward`, escalates `forge-capability-missing` at the start of each `deliver` pass,
+before anything is sent to the forge ([forges.md](./forges.md#a-missing-capability)). Hub start logs one warning for
+each such token, naming its secret, the variant it was recognized as, and the repositories whose policies it cannot
+serve. A check read GitHub refuses for a fine-grained token escalates `forge-auth` as `token-unsupported`, naming the
+capability. Replace the token with a classic one, or move the repository to `park`.
+
 ## Verbs
 
 `create <slug>` stores the repository at revision 1, named `--name` (default: the slug), landing by `--policy` (default:

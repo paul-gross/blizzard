@@ -27,6 +27,7 @@ from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
 from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic, refusal_remedy, refusal_sentence
 from blizzard.hub.forge.landing import (
+    OPERATION_CAPABILITY,
     Comparison,
     ComparisonStatus,
     ForgeAuthRefused,
@@ -171,14 +172,16 @@ class RepoLanding:
 
     def _auth_refused(self, exc: ForgeAuthRefused) -> ActionEscalation:
         """The ``forge-auth`` escalation of a credential the forge refused: what was refused and why, the forge's own
-        sanitized words, the secret the call carried, and what to do about it."""
+        sanitized words, the credential or secret the call carried, and what to do about it."""
         diagnostic = exc.diagnostic
+        needed = OPERATION_CAPABILITY.get(diagnostic.operation)
+        capability = str(needed) if needed is not None else None
         detail = "\n".join(
             (
                 f"{self.repo} on forge {self.forge_label}: {_operation_sentence(diagnostic)} was refused: "
                 f"{refusal_sentence(exc.refusal)}.",
                 f"GitHub said: {_forge_said(diagnostic)}.",
-                f"Secret {self.record.secret_name}. {refusal_remedy(exc.refusal, diagnostic)}",
+                f"{self._carried(diagnostic)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
             )
         )
         reason = ForgeAuthReason(
@@ -188,6 +191,12 @@ class RepoLanding:
             forge=self.record.forge_id,
         )
         return ActionEscalation(EscalationCause.FORGE_AUTH, detail, auth=reason)
+
+    def _carried(self, diagnostic: ForgeDiagnostic) -> str:
+        """The credential the refused call carried, as its binding and variant; the secret when it names none."""
+        if diagnostic.credential is None:
+            return f"Secret {self.record.secret_name}"
+        return f"Credential {diagnostic.credential} ({diagnostic.binding}, {diagnostic.variant})"
 
     async def compare(self, base: str, head: str) -> Comparison | None:
         """The forge's ``base...head`` comparison; ``None`` when the forge refused it or does not know a

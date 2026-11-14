@@ -41,6 +41,7 @@ from blizzard.hub.forge.landing import (
 )
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
+from tests.support.forge_auth import sent_token
 
 
 def check(
@@ -146,7 +147,7 @@ class GitHubDouble:
     def adapter(self, binding: ForgeBinding) -> IForgeAdapter:
         """The registry's build callable: one repository's adapter, every call landing on this double."""
         repo = f"{binding.owner}/{binding.repo}"
-        self.tokens[repo] = binding.token
+        self.tokens[repo] = sent_token(binding.authorization)
         return _Adapter(self, repo)
 
     def forges(
@@ -164,8 +165,9 @@ class GitHubDouble:
             return ForgeRegistry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
+                credentials=stores.credential_records,
                 objects=live.objects,
-                secrets=live.secrets,
+                authorizations=live.authorizations,
                 build=self.adapter,
                 capabilities=capabilities,
                 budgets=budgets,

@@ -1,9 +1,10 @@
 """The forge registry — each repository's forge roles, built from its records on use.
 
-Every hand-out reads the repository's revisions — its own, its secret's and its forge's — and takes the adapter built
-under them from the tenant's :class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit to any of the three
-reaches the next use with no restart (``bzh:config-read-on-use``). Only whoever builds a visit calls it, never an
-action; each role it hands out checks every call against what the forge offers."""
+Every hand-out reads the repository's revisions — its own, its credential's, its secret's and its forge's — and takes
+the adapter built under them, beside the authorization it was built from, from the tenant's
+:class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit to any of them reaches the next use with no restart
+(``bzh:config-read-on-use``). Only whoever builds a visit calls it, never an action; each role it hands out checks
+every call against what the forge offers."""
 
 from __future__ import annotations
 
@@ -19,13 +20,10 @@ from typing import Protocol
 
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository, resolve_credential
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
-from blizzard.hub.domain.config.repositories import (
-    IReadRepositoryRecordRepository,
-    RepositoryId,
-    RepositorySecretUnavailable,
-)
-from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository, RepositoryId
+from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope, IForgeAuthorizations
 from blizzard.hub.forge.budget import (
     BudgetKey,
     BudgetReading,
@@ -64,46 +62,62 @@ class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
 
 @dataclass(frozen=True)
 class ForgeBinding:
-    """Everything one repository's adapter is built from. ``write_lock`` answers the lock every write on this forge
-    and credential goes out under; it is called on the loop the adapter runs on. ``dialect`` is the forge kind's way of
-    reading its answers' rate facts, and ``learn`` takes every reading into the forge and credential's rate budget."""
+    """Everything one repository's adapter is built from. ``authorization`` authenticates its every request.
+    ``write_lock`` answers the lock every write on this forge as this authority goes out under; it is called on the
+    loop the adapter runs on. ``dialect`` is the forge kind's way of reading its answers' rate facts, and ``learn``
+    takes every reading into the forge and authority's rate budget."""
 
     kind: str
     api_url: str
     owner: str
     repo: str
-    token: str
+    authorization: ForgeAuthorization
     write_lock: Callable[[], asyncio.Lock]
     dialect: IForgeRateDialect
     learn: Callable[[BudgetReading], None]
 
 
 class WriteLocks:
-    """One write lock per (forge id, secret name), each created on the first call for its pair — made from the
-    action loop, so the lock belongs to the loop every adapter runs on."""
+    """One write lock per (forge id, authority), each created on the first call for its pair — made from the action
+    loop, so the lock belongs to the loop every adapter runs on."""
 
     def __init__(self) -> None:
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._guard = threading.Lock()
 
-    def lock(self, forge: ForgeId, secret: str) -> asyncio.Lock:
+    def lock(self, forge: ForgeId, authority: str) -> asyncio.Lock:
         with self._guard:
-            return self._locks.setdefault((forge, secret), asyncio.Lock())
+            return self._locks.setdefault((forge, authority), asyncio.Lock())
+
+
+@dataclass(frozen=True)
+class _Built:
+    """One repository's adapter, the authorization it was built from, and the budget key its calls spend, cached and
+    released as one."""
+
+    adapter: IForgeAdapter
+    authorization: ForgeAuthorization
+    key: BudgetKey
+
+    def close(self) -> None:
+        self.adapter.close()
 
 
 class ForgeRegistry:
     """``build`` turns a binding into its adapter; ``capabilities`` names what each forge kind offers —
-    ``FORGE_KIND_CAPABILITIES`` in production. ``budgets`` is the tenant's, held apart from the adapters so a rebuilt
-    adapter spends the budget its predecessor did; every role it hands out is admitted against it at its caller's
-    priority."""
+    ``FORGE_KIND_CAPABILITIES`` in production. ``authorizations`` builds the authorization of the credential each
+    repository acts with, resolved through ``credentials``. ``budgets`` is the tenant's, held apart from the adapters
+    so a rebuilt adapter spends the budget its predecessor did; every role it hands out is admitted against it at its
+    caller's priority."""
 
     def __init__(
         self,
         *,
         records: IReadRepositoryRecordRepository,
         forges: IReadForgeRepository,
+        credentials: IReadCredentialRepository,
         objects: ConfigObjectCache,
-        secrets: ISecretReader,
+        authorizations: IForgeAuthorizations,
         build: Callable[[ForgeBinding], IForgeAdapter],
         capabilities: Mapping[str, frozenset[Capability]],
         budgets: ForgeBudgets,
@@ -112,8 +126,9 @@ class ForgeRegistry:
     ) -> None:
         self._records = records
         self._forges = forges
+        self._credentials = credentials
         self._objects = objects
-        self._secrets = secrets
+        self._authorizations = authorizations
         self._build = build
         self._capabilities = capabilities
         self._locks = write_locks
@@ -121,31 +136,42 @@ class ForgeRegistry:
         self._budgets = budgets
 
     @property
-    def secrets(self) -> ISecretReader:
-        return self._secrets
+    def authorizations(self) -> IForgeAuthorizations:
+        return self._authorizations
 
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
-        """What ``forge`` offers, for ``repository`` when one is named; every forge is its kind's set for now."""
-        return self._capabilities[forge.kind]
+        """What ``forge`` offers: its kind's set, narrowed for ``repository`` when one is named to what the
+        authorization it acts with can do there. :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable`
+        when that repository's credential or secret is unknown or retired."""
+        kind = self._capabilities[forge.kind]
+        if repository is None:
+            return kind
+        return kind & self._built(repository).authorization.offered
+
+    def authorization(self, repository: RepositoryId) -> ForgeAuthorization:
+        """The authorization ``repository`` acts with, as its adapter was built from;
+        :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable` as :meth:`offered` raises it."""
+        return self._built(repository).authorization
 
     def refs(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeRefs:
-        return RefsHandle(self._adapter(repository), self._offered_for(repository), self._gate(repository, priority))
+        built = self._built(repository)
+        return RefsHandle(built.adapter, self._offered_for(repository), self._gate(built, priority))
 
     def changes(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeChanges:
-        return _ChangesHandle(
-            self._adapter(repository), self._offered_for(repository), self._gate(repository, priority)
-        )
+        built = self._built(repository)
+        return _ChangesHandle(built.adapter, self._offered_for(repository), self._gate(built, priority))
 
     def checks(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeChecks:
-        return _ChecksHandle(self._adapter(repository), self._offered_for(repository), self._gate(repository, priority))
+        built = self._built(repository)
+        return _ChecksHandle(built.adapter, self._offered_for(repository), self._gate(built, priority))
 
     def repository_forge(
         self, repository: RepositoryId, *, cut_off: TurnCutOff, priority: ForgePriority
     ) -> RepositoryForge:
         """The three roles of ``repository``'s forge bundled, as a turn hands them to an action that lands, each
         refusing once ``cut_off`` is set."""
-        adapter, offered = self._adapter(repository), self._offered_for(repository)
-        gate = self._gate(repository, priority)
+        built, offered = self._built(repository), self._offered_for(repository)
+        adapter, gate = built.adapter, self._gate(built, priority)
         return RepositoryForge(
             repository_id=repository,
             refs=RefsHandle(adapter, offered, gate, cut_off),
@@ -159,10 +185,8 @@ class ForgeRegistry:
         assert record is not None
         return self.offered(self._forge_of(record.fields.forge_id), repository)
 
-    def _gate(self, repository: RepositoryId, priority: ForgePriority) -> BudgetGate:
-        record = self._records.get(repository)
-        assert record is not None
-        return BudgetGate(self._budgets, BudgetKey(record.fields.forge_id, record.fields.secret_name), priority)
+    def _gate(self, built: _Built, priority: ForgePriority) -> BudgetGate:
+        return BudgetGate(self._budgets, built.key, priority)
 
     def _forge_of(self, forge_id: ForgeId) -> ConfiguredForge:
         forge = self._forges.get(forge_id)
@@ -170,37 +194,38 @@ class ForgeRegistry:
         assert forge is not None
         return forge
 
-    def _adapter(self, repository: RepositoryId) -> IForgeAdapter:
+    def _built(self, repository: RepositoryId) -> _Built:
         """The adapter built under the repository's current revisions — a retired record's too, so a chunk that named
-        it still lands. :class:`RepositorySecretUnavailable` when its secret cannot be revealed."""
-        adapter = self._objects.get(RecordKind.REPOSITORY, repository, partial(self._build_current, repository))
+        it still lands. :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable` when its credential or
+        secret is unknown or retired."""
+        built = self._objects.get(RecordKind.REPOSITORY, repository, partial(self._build_current, repository))
         # The executor resolved the repository from the records, and a configured record is never deleted.
-        assert adapter is not None
-        return adapter
+        assert built is not None
+        return built
 
-    def _build_current(self, repository: RepositoryId) -> IForgeAdapter:
+    def _build_current(self, repository: RepositoryId) -> _Built:
         record = self._records.get(repository)
         assert record is not None
         fields = record.fields
         forge = self._forge_of(fields.forge_id)
-        try:
-            token = self._secrets.reveal(SecretName.parse(fields.secret_name)).expose()
-        except SecretNotFound as exc:
-            raise RepositorySecretUnavailable(fields.secret_name, retired=False) from exc
-        except SecretRetired as exc:
-            raise RepositorySecretUnavailable(fields.secret_name, retired=True) from exc
-        return self._build(
+        credential = resolve_credential(record, self._credentials)
+        # A repository always names a secret, so it always resolves a credential.
+        assert credential is not None
+        authorization = self._authorizations.authorization(credential, ForgeScope.LANDING)
+        key = BudgetKey(forge.forge_id, authorization.authority)
+        adapter = self._build(
             ForgeBinding(
                 kind=forge.kind,
                 api_url=forge.fields.api_base,
                 owner=fields.owner,
                 repo=fields.repo,
-                token=token,
-                write_lock=partial(self._locks.lock, forge.forge_id, fields.secret_name),
+                authorization=authorization,
+                write_lock=partial(self._locks.lock, forge.forge_id, authorization.authority),
                 dialect=self._dialects(forge.kind),
-                learn=partial(self._budgets.learn, BudgetKey(forge.forge_id, fields.secret_name)),
+                learn=partial(self._budgets.learn, key),
             )
         )
+        return _Built(adapter, authorization, key)
 
 
 class TurnCutOff:

@@ -57,12 +57,12 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.forges import IReadForgeRepository
+from blizzard.hub.domain.config.credentials import CredentialUnavailable
+from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryId,
     RepositoryResolution,
-    RepositorySecretUnavailable,
     ResolvedRepository,
 )
 from blizzard.hub.domain.delivery.flows import (
@@ -97,6 +97,7 @@ from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, AC
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
+from blizzard.hub.forge.auth import ForgeAuthorization
 from blizzard.hub.forge.budget import ForgePriority
 from blizzard.hub.forge.landing import RepositoryForge
 from blizzard.hub.forge.registry import ForgeRegistry, TurnCutOff
@@ -127,6 +128,15 @@ _log = get_logger("blizzard.hub.flow_turn")
 
 class TurnEndRefused(Exception):
     """A turn's end found the turn already ended, or the turn let go; the writes beside it roll back."""
+
+
+class _TargetUnavailable(Exception):
+    """``target``'s credential or secret could not be read while checking what its forge offers."""
+
+    def __init__(self, target: ResolvedRepository, cause: CredentialUnavailable) -> None:
+        super().__init__(str(cause))
+        self.target = target
+        self.cause = cause
 
 
 class _TurnEnding:
@@ -404,18 +414,26 @@ class TurnRunner:
             now=self._clock.now(),
         )
         watch = visit.watched_repo() if spec.lands else None
-        if (missing := self._missing_capability(spec.name, resolution, only=watch)) is not None:
+        try:
+            missing = self._missing_capability(spec.name, resolution, only=watch, narrowed=spec.lands)
+        except _TargetUnavailable as unavailable:
+            self._refuse_unavailable(at, ending, unavailable.target, unavailable.cause)
+            return None
+        if missing is not None:
             target, capability = missing
             forge = resolution.forge_of(target)
+            # Only an action that lands is handed the forge, so only its check read the credential.
+            authorization = self._forges.authorization(RepositoryId(target.record)) if spec.lands else None
             self._router.escalate_capability_missing(
                 chunk,
                 node,
                 target,
                 MissingCapability(RepositoryId(target.record), (capability,)),
-                f"repository {target.slug or target.record} on forge {forge.label} does not offer `{capability}`, "
-                f"which `{spec.name}` requires",
+                f"repository {target.slug or target.record} on forge {forge.label} does not offer `{capability}`"
+                f"{self._withheld_by(forge, target, capability, authorization)}, which `{spec.name}` requires",
                 forge=forge,
                 epoch=epoch,
+                credential=authorization.credential_slug if authorization is not None else None,
                 ending=ending,
             )
             return None
@@ -429,10 +447,8 @@ class TurnRunner:
                     forges[repository] = self._forges.repository_forge(
                         repository, cut_off=cut_off, priority=ForgePriority.LANDING
                     )
-                except RepositorySecretUnavailable as exc:
-                    detail = f"repository {target.slug}: {exc}"
-                    step = "repository-secret-unavailable"
-                    self._router.refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail, ending=ending)
+                except CredentialUnavailable as exc:
+                    self._refuse_unavailable(at, ending, target, exc)
                     return None
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
@@ -452,21 +468,58 @@ class TurnRunner:
         return _Visit(chunk, graph, node, submission.epoch)
 
     def _missing_capability(
-        self, action_name: str, resolution: RepositoryResolution, *, only: RepositoryId | None = None
+        self,
+        action_name: str,
+        resolution: RepositoryResolution,
+        *,
+        only: RepositoryId | None = None,
+        narrowed: bool = False,
     ) -> tuple[ResolvedRepository, Capability] | None:
         """The first resolved repository whose forge lacks a capability ``action_name`` requires of it, and that
-        capability; ``None`` when every forge offers what the action needs."""
+        capability; ``None`` when every forge offers what the action needs. Only an action ``narrowed`` to what each
+        repository's credential can do — one that lands, and so is handed its forge — reads that credential; any other
+        is checked against its forge's kind."""
         requirement = self._requirements.get(action_name)
         if requirement is None:
             return None
         for target in resolution.targets:
             if only is not None and target.record != only:
                 continue
-            offered = self._forges.offered(resolution.forge_of(target), RepositoryId(target.record))
+            try:
+                forge = resolution.forge_of(target)
+                offered = self._forges.offered(forge, RepositoryId(target.record) if narrowed else None)
+            except CredentialUnavailable as exc:
+                raise _TargetUnavailable(target, exc) from exc
             missing = sorted(requirement(target) - offered)
             if missing:
                 return target, missing[0]
         return None
+
+    def _withheld_by(
+        self,
+        forge: ConfiguredForge,
+        target: ResolvedRepository,
+        capability: Capability,
+        authorization: ForgeAuthorization | None,
+    ) -> str:
+        """The clause naming the credential, or the secret, ``target`` acts with when it is what withholds
+        ``capability`` — ``forge``'s kind offers it; empty when the kind itself does not."""
+        if authorization is None or capability not in self._forges.offered(forge):
+            return ""
+        who = (
+            f"credential {authorization.credential_slug}"
+            if authorization.credential_slug is not None
+            else f"secret {target.secret_name}"
+        )
+        return f" to {who} ({authorization.binding}, {authorization.variant})"
+
+    def _refuse_unavailable(
+        self, at: _Visit, ending: _TurnEnding, target: ResolvedRepository, cause: CredentialUnavailable
+    ) -> None:
+        """Refuse the visit: ``target`` acts with a credential or secret that is unknown or retired."""
+        detail = f"repository {target.slug}: {cause}"
+        step = "repository-secret-unavailable"
+        self._router.refuse(at.chunk, at.graph, at.node, epoch=at.epoch, step=step, detail=detail, ending=ending)
 
     def _stuck(self, node: Node) -> ActionEscalation:
         bound = self._passes.bound.deadline_seconds()
@@ -654,6 +707,12 @@ class TurnRunner:
         if reason is None or target is None:
             self._router.escalate(chunk, escalation, epoch=epoch, ending=ending)
             return
+        try:
+            credential = self._forges.authorization(reason.repository).credential_slug
+        except CredentialUnavailable:
+            # The credential was retired or replaced after the visit was built; the escalation still reaches a person,
+            # just without naming one.
+            credential = None
         self._router.escalate_capability_missing(
             chunk,
             node,
@@ -662,6 +721,7 @@ class TurnRunner:
             escalation.detail,
             forge=ready.resolution.forge_of(target),
             epoch=epoch,
+            credential=credential,
             ending=ending,
         )
 

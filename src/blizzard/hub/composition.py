@@ -92,12 +92,11 @@ from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
-from blizzard.hub.domain.config.forges import IReadForgeRepository
+from blizzard.hub.domain.config.forges import ForgeKindOffers, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import ISecretCatalog, ISecretReader
+from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
@@ -229,11 +228,12 @@ from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.forge.auth import IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
-from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.internal.factory import build_forge_authorizations, build_forge_registry
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
@@ -950,30 +950,33 @@ class HubCore:
 
 @dataclass(frozen=True)
 class LiveConfig:
-    """One tenant's built-object cache and the one secret reader its builders reveal
-    through — the reader reaches nothing else (``bzh:secret-write-only``)."""
+    """One tenant's built-object cache and its forge authorization boundary, the one holder of the secret reader its
+    builders authenticate through (``bzh:secret-write-only``)."""
 
     objects: ConfigObjectCache
-    secrets: ISecretReader
+    authorizations: IForgeAuthorizations
 
 
 def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveConfig:
     """The :class:`LiveConfig` of the tenant ``stores`` serve."""
     return LiveConfig(
         objects=ConfigObjectCache(ConfigRevisionsStore(stores.connections)),
-        secrets=StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher),
+        authorizations=build_forge_authorizations(
+            StoreSecretReader(catalog=stores.secrets, sealed=stores.secrets, cipher=cipher)
+        ),
     )
 
 
-def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offers: IForgeOffers) -> ConfigAuthoring:
+def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> ConfigAuthoring:
     """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and checking a
-    repository's landing policy against what ``offers`` says its forge offers."""
+    repository's landing policy against what its forge's kind offers — configuration, never the runtime offer, so a
+    write reveals no secret."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
         forges=stores.forge_records,
         credentials=stores.credential_records,
-        offers=offers,
+        offers=ForgeKindOffers(),
         secrets=stores.secrets,
         cipher=cipher,
         apply_writer=stores.config_apply,
@@ -1059,8 +1062,9 @@ def default_forge_registry(
     return build_forge_registry(
         records=stores.repository_records,
         forges=stores.forge_records,
+        credentials=stores.credential_records,
         objects=live.objects,
-        secrets=live.secrets,
+        authorizations=live.authorizations,
         clock=stores.clock,
         budgets=budgets,
         write_locks=write_locks,
@@ -1175,7 +1179,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     cadence_store = CadenceStore(tenant_connections)
     urgency_references = UrgencyReferences(urgencies=stores.urgencies, transactions=stores.transactions)
     errand_runs_store = ErrandRunsStore(tenant_connections)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, offers=forges)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)
