@@ -806,11 +806,14 @@ def _export_v3(
     services: TenantServices,
 ) -> ConfigDocumentV3:
     """``exported`` as a version-3 document: every section but its work sources and repositories, then the live
-    credentials, work sources and repositories, each referrer naming its credential by slug."""
+    credentials — and each retired one a referrer names, so the document applies — work sources and repositories, each
+    referrer naming its credential by slug."""
     named = ExportedCredentials(held, services.credential_records.held_slugs)
-    source_credentials = [named.slug_of(r.fields.forge_id, r.fields.credential_id, r.fields.secret) for r in sources]
+    source_credentials = [
+        named.slug_if_any(r.fields.forge_id, r.fields.credential_id, r.fields.secret) for r in sources
+    ]
     repository_credentials = [
-        named.slug_of(r.fields.forge_id, r.fields.credential_id, r.fields.secret_name) or "" for r in repositories
+        named.slug_of(r.fields.forge_id, r.fields.credential_id, r.fields.secret_name) for r in repositories
     ]
     declared = [
         CredentialEntry(
@@ -822,7 +825,7 @@ def _export_v3(
             settings=dict(c.fields.settings),
         )
         for c in held
-        if not c.retired
+        if not c.retired or c.credential_id in named.named
     ] + [
         CredentialEntry(
             slug=d.slug,

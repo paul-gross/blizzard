@@ -922,11 +922,11 @@ class ConfigAuthoring:
         """For each credential edit of ``writes``, written in ``locked``: refuse a settings edit falling short of an
         enabled repository acting with the credential
         (:func:`~blizzard.hub.domain.config.credential_resolution.require_referrers_honoured`), and mirror a secret move
-        to every record acting with it — each but the records the document declares, which carry the secret
-        themselves."""
+        to every record acting with it — each but the records whose entry names a credential or an old secret field,
+        which carry the secret themselves."""
         declared = {
-            *(entry.work_source_id for entry in declaration.work_sources),
-            *(entry.repository_id for entry in declaration.repositories),
+            *(e.work_source_id for e in declaration.work_sources if not isinstance(e.edit.credential_id, UnsetType)),
+            *(e.repository_id for e in declaration.repositories if not isinstance(e.edit.credential_id, UnsetType)),
         }
         for write in writes:
             edited = write.record

@@ -226,6 +226,19 @@ def test_a_credential_entry_moving_its_secret_moves_every_record_acting_with_it(
     assert {o["op"] for o in again.json()["outcomes"]} == {"unchanged"}
 
 
+def test_a_credential_secret_move_reaches_a_declared_work_source_that_names_no_credential(hub: HubHarness) -> None:
+    assert _apply(hub, _document()).status_code == 200
+    source = {k: v for k, v in _SOURCE.items() if k != "credential"}
+
+    stated = _apply(hub, {"credentials": [{**_CREDENTIAL, "secret": "ops"}], "work_sources": [source]})
+
+    assert stated.status_code == 200, stated.text
+    moved = hub.client.get("/api/work-sources/issues").json()
+    assert (moved["secret"], moved["credential_id"]) == ("ops", _credential(hub)["credential_id"])
+    again = _apply(hub, {"work_sources": [{**source, "annotate": True}]})
+    assert again.status_code == 200, again.text
+
+
 def test_a_credential_entry_narrowing_below_a_repository_s_policy_is_refused_in_a_dry_run_too(
     hub: HubHarness,
 ) -> None:
@@ -279,6 +292,25 @@ def test_a_version_3_export_declares_the_credential_a_referrer_s_old_field_would
     applied = _apply(hub, {k: v for k, v in exported.items() if k != "version"})
     assert applied.status_code == 200, applied.text
     assert hub.client.get("/api/repositories/code").json()["credential_id"] == _credential(hub, "gh")["credential_id"]
+
+
+def test_a_version_3_export_declares_a_retired_credential_a_referrer_s_old_field_resolves_to(
+    hub: HubHarness,
+) -> None:
+    repository = {k: v for k, v in _REPO.items() if k != "credential"}
+    carried = {"version": 2, "forges": [_FORGE], "repositories": [{**repository, "secret_name": "gh"}]}
+    assert hub.client.post("/api/config/apply", json=carried).status_code == 200
+    with hub.engine.begin() as conn:
+        conn.execute(hub_scoped(sa.update(s.repositories).values(credential_id=None)))
+    assert hub.client.post("/api/credentials/gh/retire").status_code == 200
+
+    exported = hub.client.get("/api/config/export", params={"version": 3}).json()
+
+    assert [c["slug"] for c in exported["credentials"]] == ["gh"]
+    assert [r["credential"] for r in exported["repositories"]] == ["gh"]
+    applied = _apply(hub, {k: v for k, v in exported.items() if k != "version"})
+    assert applied.status_code == 200, applied.text
+    assert _credential(hub, "gh")["retired"] is False
 
 
 def test_the_credentials_schema_is_served_at_version_3_only(hub: HubHarness) -> None:
