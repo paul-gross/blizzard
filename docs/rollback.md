@@ -98,6 +98,10 @@ upgraded hub. A rolled-back runner whose older config names a different id reads
 older hub also refuses to export into the widened egress `_schema/` documents until they are moved aside
 ([`docs/deployment/egress.md`](./deployment/egress.md#upgrading-to-hub-minted-runner-ids)).
 
+A rollback past the `app_credentials` migration is refused while any credential bound to `github.app-installation`
+exists, and the refusal names each one. No hub command deletes a credential: with the hub stopped, remove each named
+credential by the direct store edit the refusal spells out, then roll back again.
+
 A rollback past the tenants migrations is refused while the hub holds more than one tenant, or while a tenant's deletion
 is underway, and the refusal names them: only a hub that holds `default` alone rolls back past them
 ([`docs/upgrade.md`](./upgrade.md#tenants-boundary)).

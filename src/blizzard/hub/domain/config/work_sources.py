@@ -45,7 +45,7 @@ KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})
 
 #: The credential bindings each provider can act with; a provider absent here acts with none.
-PROVIDER_BINDINGS: Mapping[str, frozenset[str]] = {"github": frozenset({"github.token"})}
+PROVIDER_BINDINGS: Mapping[str, frozenset[str]] = {"github": frozenset({"github.token", "github.app-installation"})}
 
 _GITHUB_LOCATOR = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 

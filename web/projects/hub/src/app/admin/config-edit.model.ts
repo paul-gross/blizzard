@@ -1,8 +1,10 @@
 import type { FieldChangeView } from 'fleet';
 
 /** How a config form field is entered. `password` is a write-only value the board
- * never reads back; `number` is a whole number, entered as text and sent as a number. */
-export type ConfigFieldKind = 'text' | 'password' | 'checkbox' | 'select' | 'number' | 'color' | 'mark';
+ * never reads back; `secret-text` is one that may span lines — a key file — masked, and
+ * sent exactly as entered; `number` is a whole number, entered as text and sent as a
+ * number. */
+export type ConfigFieldKind = 'text' | 'password' | 'secret-text' | 'checkbox' | 'select' | 'number' | 'color' | 'mark';
 
 /** One choice of a select field. A disabled choice is shown but cannot be picked. */
 export interface ConfigFieldOption {
@@ -148,7 +150,8 @@ export function missingRequired(fields: readonly ConfigFieldDef[], form: ConfigF
     .map((field) => field.label);
 }
 
-/** The body a create sends: every shown non-empty field, text trimmed. A `number`
+/** The body a create sends: every shown non-empty field, text trimmed except a
+ * `secret-text` value, which is sent as entered. A `number`
  * field stays text here; its record's create request converts it. */
 export function createBody(
   fields: readonly ConfigFieldDef[],
@@ -160,7 +163,7 @@ export function createBody(
     if (typeof value === 'boolean') {
       body[field.key] = value;
     } else if (value !== undefined && value.trim() !== '') {
-      body[field.key] = value.trim();
+      body[field.key] = field.kind === 'secret-text' ? value : value.trim();
     }
   }
   return body;

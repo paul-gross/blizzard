@@ -13,6 +13,7 @@ import { KitTextInput } from './kit-text-input';
       [ariaLabel]="ariaLabel()"
       [multiline]="multiline()"
       [rows]="rows()"
+      [type]="type()"
       testid="fld"
       (valueChange)="value.set($event)"
     />
@@ -24,6 +25,7 @@ class TestHost {
   readonly ariaLabel = signal<string | null>(null);
   readonly multiline = signal(false);
   readonly rows = signal(3);
+  readonly type = signal<'text' | 'password'>('text');
 }
 
 describe('KitTextInput', () => {
@@ -119,5 +121,18 @@ describe('KitTextInput', () => {
     const control = el.querySelector<HTMLInputElement>('[data-testid="fld"]')!;
     control.focus();
     expect(document.activeElement).toBe(control);
+  });
+
+  it('masks a password textarea and keeps its line breaks', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.multiline.set(true);
+    fixture.componentInstance.type.set('password');
+    fixture.componentInstance.value.set('line one\nline two');
+    await fixture.whenStable();
+    const control = (fixture.nativeElement as HTMLElement).querySelector<HTMLTextAreaElement>('[data-testid="fld"]');
+
+    expect(control?.tagName).toBe('TEXTAREA');
+    expect(control?.classList).toContain('masked');
+    expect(control?.value).toBe('line one\nline two');
   });
 });

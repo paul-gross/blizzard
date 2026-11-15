@@ -11,11 +11,11 @@ from pathlib import Path
 from blizzard.foundation.secrets.factories import key_exists, key_provider
 from blizzard.foundation.secrets.key_variables import KeyVariables
 from blizzard.foundation.secrets.sealing import IRotatableKeyProvider, ISealedSecretRepository, ISecretCipher
-from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.config.secrets import (
     ISecretCatalog,
     ISecretReader,
+    RevealedSecret,
     SecretName,
     SecretNotFound,
     require_revealable,
@@ -57,12 +57,12 @@ class StoreSecretReader:
         self._sealed = sealed
         self._cipher = cipher
 
-    def reveal(self, name: SecretName) -> SecretValue:
+    def reveal(self, name: SecretName) -> RevealedSecret:
         secret = self._sealed.get_sealed(name.value)
         if secret is None:
             raise SecretNotFound(name.value)
         require_revealable(name.value, retired=self._catalog.is_retired(name.value))
-        return self._cipher.open(secret)
+        return RevealedSecret(self._cipher.open(secret), secret.revision)
 
 
 _store_secret_reader_conforms: type[ISecretReader] = StoreSecretReader

@@ -17,7 +17,7 @@ const meta: Meta<KitTextInput> = {
     valueChange: fn(),
   },
   argTypes: {
-    type: { control: 'inline-radio', options: ['text', 'password'] },
+    type: { control: 'inline-radio', options: ['text', 'password', 'number'] },
   },
   render: (args) => ({
     props: args,
@@ -33,11 +33,30 @@ export const Filled: Story = { args: { value: 'Use the hosted hub' } };
 export const Password: Story = {
   args: { value: 'hunter2-hunter2', type: 'password' },
 };
+export const Numeric: Story = {
+  args: { value: '7890123', type: 'number', placeholder: 'Installation id', ariaLabel: 'Installation id' },
+};
 export const Multiline: Story = {
   args: {
     multiline: true,
     value: 'Sweep the kit for\nparts without a stories file.',
   },
+};
+export const MultilinePassword: Story = {
+  args: {
+    multiline: true,
+    type: 'password',
+    rows: 4,
+    value: '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----',
+  },
+};
+export const MultilinePasswordPhone: Story = {
+  ...MultilinePassword,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const MultilinePasswordPhoneSm: Story = {
+  ...MultilinePassword,
+  globals: { viewport: { value: 'phone-sm', isRotated: false } },
 };
 export const LongValue: Story = {
   args: {

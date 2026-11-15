@@ -1,5 +1,6 @@
 import {
   type CredentialBindingView,
+  type CredentialSettingView,
   type CredentialCreateRequest,
   type CredentialDocument,
   type CredentialListItem,
@@ -7,6 +8,7 @@ import {
   type CredentialSummary,
   type ForgeBindingsView,
   type ForgeSummary,
+  unlisted,
 } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
@@ -29,8 +31,27 @@ export function bindingOptions(forgeBindings: readonly ForgeBindingsView[]): rea
   return forgeBindings.flatMap((forge) => forge.bindings.map((name) => ({ value: name, label: name, kind: forge.forge_id })));
 }
 
+/** How a setting is entered: a select of its choices, a whole-number field, or plain text for a
+ * kind this build does not know. */
+function settingInput(setting: CredentialSettingView): Pick<ConfigFieldDef, 'kind' | 'options'> {
+  switch (setting.kind) {
+    case 'choice':
+      return { kind: 'select', options: setting.choices.map((choice) => ({ value: choice, label: choice })) };
+    case 'positive-integer':
+      return { kind: 'number' };
+    default:
+      unlisted(setting.kind);
+      return { kind: 'text' };
+  }
+}
+
+/** A setting's form text as the wire takes it — a whole-number setting as a number. */
+function settingValue(setting: CredentialSettingView, text: string): string | number {
+  return setting.kind === 'positive-integer' ? Number(text) : text;
+}
+
 /** A credential's form fields. The forge and binding are fixed at create; each binding's settings
- * are selects of the choices the hub lists for it. */
+ * are entered as their kind says, shown only while that binding is picked. */
 export function credentialFields(
   forges: readonly ForgeSummary[],
   bindings: readonly CredentialBindingView[],
@@ -46,8 +67,7 @@ export function credentialFields(
       binding.settings.map((setting): ConfigFieldDef => ({
         key: settingField(binding.name, setting.key),
         label: setting.key,
-        kind: 'select',
-        options: setting.choices.map((choice) => ({ value: choice, label: choice })),
+        ...settingInput(setting),
         shownWhen: { key: 'binding', value: binding.name },
       })),
     ),
@@ -55,11 +75,11 @@ export function credentialFields(
 }
 
 /** The settings the form holds for `binding` — each one left empty is omitted. */
-function formSettings(values: Readonly<Record<string, string | boolean>>, binding: string, bindings: readonly CredentialBindingView[]): Record<string, string> {
-  const settings: Record<string, string> = {};
+function formSettings(values: Readonly<Record<string, string | boolean>>, binding: string, bindings: readonly CredentialBindingView[]): Record<string, string | number> {
+  const settings: Record<string, string | number> = {};
   for (const setting of bindings.find((candidate) => candidate.name === binding)?.settings ?? []) {
     const value = values[settingField(binding, setting.key)];
-    if (typeof value === 'string' && value.trim() !== '') settings[setting.key] = value.trim();
+    if (typeof value === 'string' && value.trim() !== '') settings[setting.key] = settingValue(setting, value.trim());
   }
   return settings;
 }

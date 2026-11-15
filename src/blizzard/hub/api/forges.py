@@ -90,6 +90,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
         budgets=[
             ForgeBudgetView(
                 secret_name=authority_secret(key.authority),
+                authority=key.authority,
                 bucket=reading.bucket,
                 limit=reading.limit,
                 remaining=reading.remaining,

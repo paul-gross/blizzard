@@ -20,6 +20,8 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   align-self: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .kv dd {
   margin: 0;

@@ -6,6 +6,7 @@ with, and authenticate their clients through its ``auth``; neither reveals a sec
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -38,6 +39,10 @@ class ForgeAuthorization:
     authority: str
     offered: frozenset[Capability]
     auth: httpx2.Auth
+    #: Whether its access reaches only the repositories a grant includes.
+    grant_scoped: bool = False
+    #: Whether the forge has since narrowed what it offers, so its holder builds it again.
+    outdated: Callable[[], bool] = lambda: False
 
 
 class IForgeAuthorizations(Protocol):

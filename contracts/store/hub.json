@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261112_0900_hub_settings",
+  "head_revision": "20261114_0900_app_credentials",
   "store": "hub",
   "tables": {
     "answer_deliveries": {

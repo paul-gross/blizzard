@@ -37,9 +37,9 @@ export class KitTextInput {
    * `<input>`. */
   readonly rows = input(3);
 
-  /** The single-line `<input>`'s type — `password` for a value that must not echo.
-   * No effect on a multiline control. */
-  readonly type = input<'text' | 'password'>('text');
+  /** `password` for a value that must not echo. The single-line `<input>` takes it as
+   * its type; a multiline control masks each character and keeps its line breaks. */
+  readonly type = input<'text' | 'password' | 'number'>('text');
 
   readonly valueChange = output<string>();
 

@@ -58,7 +58,7 @@ class _World:
     def reveal(self, environ: dict[str, str], name: str) -> str:
         keys = hub_key_provider(environ, data_dir=self.config.data_dir)
         reader = StoreSecretReader(catalog=self.store, sealed=self.store, cipher=secret_cipher(keys))
-        return reader.reveal(SecretName.parse(name)).expose()
+        return reader.reveal(SecretName.parse(name)).value.expose()
 
     def key_ids(self) -> set[str]:
         return self.store.key_ids_in_use()
@@ -82,8 +82,8 @@ def test_directory_rotation_moves_every_row_and_a_hub_opened_before_still_reveal
     meta = json.loads(world.meta.read_text())
     assert meta == {"current": result.key_id, "previous": old_id}
     reader = StoreSecretReader(catalog=world.store, sealed=world.store, cipher=secret_cipher(before))
-    assert reader.reveal(SecretName.parse("gh")).expose() == "tok-1"
-    assert reader.reveal(SecretName.parse("slack")).expose() == "tok-2"
+    assert reader.reveal(SecretName.parse("gh")).value.expose() == "tok-1"
+    assert reader.reveal(SecretName.parse("slack")).value.expose() == "tok-2"
 
 
 def test_rotation_keeps_the_revision_and_replacement_stamp(world: _World) -> None:
