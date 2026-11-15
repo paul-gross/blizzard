@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { KitBadge, type UnenforceableGateView } from 'fleet';
+import type { UnenforceableGateView } from '../api/hub';
+import { KitBadge } from '../kit/kit-badge';
 
 /**
  * The runner registry's gate render — "Gates:" followed by one badge per node name the
@@ -12,7 +13,7 @@ import { KitBadge, type UnenforceableGateView } from 'fleet';
  * Presentational only.
  */
 @Component({
-  selector: 'app-gate-badge-group',
+  selector: 'fleet-gate-badge-group',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitBadge],
   templateUrl: './gate-badge-group.html',

@@ -66,6 +66,13 @@ function one(runner: runnerApi.HostRunnerView, status?: runnerApi.RunnerStatusVi
 }
 
 describe('hostRunnerRows', () => {
+  it('carries the hub gate verdict from the dashboard and tolerates an absent verdict', () => {
+    const warning = { node: 'deliver', reason: 'hub-executed' as const };
+    expect(one(RUNNER(), STATUS({ gates: ['deliver'], unenforceable_gates: [warning] })).unenforceableGates).toEqual([warning]);
+    expect(one(RUNNER(), STATUS({ unenforceable_gates: null })).unenforceableGates).toEqual([]);
+    expect(one(RUNNER()).unenforceableGates).toEqual([]);
+  });
+
   it('shows a read-only declining floor from the host before the runner dashboard arrives', () => {
     const row = one(RUNNER({ throttle: {
       state: 'declining', declining: ['floor'], floor: { subscription: 'anthropic', admits: false, clear: null,

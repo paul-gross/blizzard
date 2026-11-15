@@ -165,11 +165,7 @@
   @if (row().gates.length === 0) {
     <span class="none-inline">none</span>
   } @else {
-    <span class="badges">
-      @for (gate of row().gates; track gate) {
-        <fleet-kit-badge variant="soft" tone="waiting">{{ gate }}</fleet-kit-badge>
-      }
-    </span>
+    <fleet-gate-badge-group [labelled]="false" [gates]="row().gates" [unenforceable]="row().unenforceableGates" />
   }
 </ng-template>
 <ng-template #problems>

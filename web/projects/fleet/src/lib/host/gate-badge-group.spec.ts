@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { UnenforceableGateView } from 'fleet';
+import type { UnenforceableGateView } from '../api/hub';
 
 import { GateBadgeGroup } from './gate-badge-group';
 
@@ -48,6 +48,14 @@ describe('GateBadgeGroup', () => {
 
     expect(el.querySelector('[data-testid="runner-gates"]')).toBeNull();
     expect(el.querySelector('[data-testid="runner-gate-badge"]')).toBeNull();
+  });
+
+  it('preserves an empty gate name from the wire', async () => {
+    const el = await render(['']);
+
+    const badge = el.querySelector('[data-testid="runner-gate-badge"]')!;
+    expect(badge.getAttribute('data-gate')).toBe('');
+    expect(badge.textContent?.trim()).toBe('');
   });
 
   it.each([

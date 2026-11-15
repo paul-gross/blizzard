@@ -23,6 +23,11 @@
   padding: 0;
   min-width: 0;
 }
+.gate-list li {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .unenforceable {
   margin-left: 4px;
   font-size: var(--fs-xs);

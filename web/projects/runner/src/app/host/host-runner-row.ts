@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FleetWhen, KitAsyncState, KitBadge, KitBeacon, type KitAsyncStateValue, type KitFact, KitFactList, KitSwatch } from 'fleet';
+import { GateBadgeGroup, FleetWhen, KitAsyncState, KitBadge, KitBeacon, type KitAsyncStateValue, type KitFact, KitFactList, KitSwatch } from 'fleet';
 
 import type { HostRunnerRow } from './host-runner-row.model';
 
@@ -15,7 +15,7 @@ import type { HostRunnerRow } from './host-runner-row.model';
 @Component({
   selector: 'app-host-runner-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitSwatch, RouterLink],
+  imports: [GateBadgeGroup, FleetWhen, KitAsyncState, KitBadge, KitBeacon, KitFactList, KitSwatch, RouterLink],
   templateUrl: './host-runner-row.html',
   styleUrl: './host-runner-row.css',
 })

@@ -5,3 +5,4 @@ export { hostSubscriptionPaces, hostWorkspaceRows, hubSubscriptionPaces } from '
 export { runnerSubscriptionLines, runnerSubscriptionPaces } from './runner-host.model';
 export { SubscriptionBlocks } from './subscription-blocks';
 export { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
+export { GateBadgeGroup } from './gate-badge-group';

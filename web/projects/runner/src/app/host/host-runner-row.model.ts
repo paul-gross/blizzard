@@ -80,6 +80,7 @@ export interface HostRunnerRow {
   readonly spends: readonly string[];
   readonly harnesses: readonly HostRunnerHarness[];
   readonly gates: readonly string[];
+  readonly unenforceableGates: readonly runnerApi.UnenforceableGateView[];
   readonly throttle: { readonly summary: string; readonly lines: readonly ThrottleLine[] } | null;
   readonly hub: HostRunnerHub | null;
   /** What the runner cannot act on — entries naming one project twice, environments held under no binding. */
@@ -213,6 +214,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
       spends: id === null ? [] : reads.subscriptions.filter((sub) => sub.spenders?.includes(id)).map((sub) => sub.name),
       harnesses: health,
       gates: status?.gates ?? [],
+      unenforceableGates: status?.unenforceable_gates ?? [],
       throttle: throttle ? { summary: throttleSummary(throttle), lines: throttleLines(throttle) } : null,
       hub: status
         ? {
