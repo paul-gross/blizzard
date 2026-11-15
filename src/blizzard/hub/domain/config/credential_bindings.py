@@ -15,10 +15,6 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.errors import ConfigFieldError
 
-#: What a fine-grained GitHub token cannot do, whatever its forge's kind offers: GitHub grants a fine-grained token no
-#: read of check runs.
-FINE_GRAINED_WITHHELD: frozenset[Capability] = frozenset({Capability.CHECKS_READ})
-
 
 class CredentialSettingsInvalid(ConfigFieldError):
     """A credential's settings are refused by its binding, naming the setting."""
@@ -76,7 +72,7 @@ _TOKEN_VARIANTS = ("classic", "fine-grained")
 @dataclass(frozen=True)
 class GitHubTokenBinding:
     """A GitHub personal access token the operator supplies, as the secret's value. Its one setting, ``variant``, is
-    ``classic`` or ``fine-grained``, or absent; a fine-grained token is withheld :data:`FINE_GRAINED_WITHHELD`."""
+    ``classic`` or ``fine-grained``, or absent; either variant is offered everything its forge's kind offers."""
 
     name: str = "github.token"
     forge_kind: str = "github"
@@ -105,8 +101,6 @@ class GitHubTokenBinding:
         return f"secret/{secret_name}"
 
     def declared_offers(self, settings: Mapping[str, object], kind: frozenset[Capability]) -> frozenset[Capability]:
-        if settings.get("variant") == "fine-grained":
-            return kind - FINE_GRAINED_WITHHELD
         return kind
 
 

@@ -7,4 +7,5 @@ names the failed operation, the HTTP status, GitHub's message, its request id, a
 `forge-auth-refused` event in the event log records each refusal, and a work item whose source is refused shows the
 refusal and its remedy in its `error`. The token never appears in any of them.
 
-The forge token docs no longer promise that a fine-grained token reads checks; use a classic token for delivery.
+The forge token docs no longer promise that a fine-grained token reads checks on a private repository; use a classic
+token for delivery there.

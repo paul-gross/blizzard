@@ -31,7 +31,9 @@ blizzard hub credential get gh-token
 | `retired`     | Whether it is retired.                                                                                                                                                                                                                                   |
 
 A credential with no `variant` is read for what its token is: the hub recognizes a fine-grained token by its
-`github_pat_` prefix, and treats any other as classic. Declaring the variant makes it explicit.
+`github_pat_` prefix, and treats any other as classic. Declaring the variant makes it explicit. The variant decides only
+how a refused check read is reported ([Classic and fine-grained tokens](#classic-and-fine-grained-tokens)) and is named
+in each refusal's diagnostic; it never narrows what a repository may do.
 
 A repository and a work source name their credential with `--credential`, by id or slug, on `create` and `edit`; their
 reads carry `credential_id`, `credential_slug` and `credential_name`. The older `--secret` still works on both, and
@@ -80,20 +82,10 @@ default and recovery.
 
 ### Classic and fine-grained tokens
 
-GitHub grants a fine-grained token no read of check runs, so the hub never offers `checks.read` for a repository acting
-with a fine-grained credential, whether it declares `--variant fine-grained` or its token carries the `github_pat_`
-prefix. A repository on one behind a landing policy that reads checks, `merge-on-checks` or `fast-forward`:
-
-- is refused `422 forge_capability_missing` when it is created or edited onto that policy, and a credential edit that
-  would take the capability away from an enabled repository is refused `credential_capability_missing`, naming each
-  repository and what it would lose;
-- escalates `forge-capability-missing` at the start of each `deliver` pass, naming the credential, before anything is
-  sent to the forge ([forges.md](./forges.md#a-missing-capability));
-- is named in one warning per such token at hub start, with its secret, the variant it was recognized as, and the
-  repositories whose policies it cannot serve.
-
-A check read GitHub refuses for a fine-grained token escalates `forge-auth` as `token-unsupported`, naming the
-capability. The remedy is a classic token behind the credential, or the repository moved to `park`.
+Either variant delivers through every landing policy. A fine-grained token with the permissions above reads checks on a
+public repository, but GitHub refuses its check reads on a private one. That refusal escalates the chunk `forge-auth` as
+`token-unsupported` at the check read, naming the credential and the capability. The remedy is a classic token behind
+the credential, or the repository moved to `park`.
 
 ## GitHub App installations
 
@@ -131,9 +123,8 @@ permission keeps working without what that permission serves:
 
 GitHub names these Metadata, Contents, Pull requests, Checks, Commit statuses, Actions, and Issues. An installation
 without Checks read or Commit statuses read offers no `checks.read`, so a repository on it behind a landing policy that
-reads checks escalates `forge-capability-missing` at the start of each `deliver` pass, as a fine-grained token does
-([Classic and fine-grained tokens](#classic-and-fine-grained-tokens)). Without Actions write, an inherited failure is
-never re-run.
+reads checks escalates `forge-capability-missing` at the start of each `deliver` pass
+([forges.md](./forges.md#a-missing-capability)). Without Actions write, an inherited failure is never re-run.
 
 ### Registering the credential
 

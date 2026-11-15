@@ -260,20 +260,13 @@ def test_a_credential_secret_move_reaches_a_declared_work_source_that_names_no_c
     assert again.status_code == 200, again.text
 
 
-def test_a_credential_entry_narrowing_below_a_repository_s_policy_is_refused_in_a_dry_run_too(
-    hub: HubHarness,
-) -> None:
+def test_a_fine_grained_credential_entry_behind_a_merge_on_checks_repository_applies(hub: HubHarness) -> None:
     assert _apply(hub, _document()).status_code == 200
-    before = _change_rows(hub)
-    narrowed = {**_CREDENTIAL, "settings": {"variant": "fine-grained"}}
+    fine = {**_CREDENTIAL, "settings": {"variant": "fine-grained"}}
 
-    for dry_run in (True, False):
-        refused = _apply(hub, {"credentials": [narrowed]}, dry_run=dry_run)
+    applied = _apply(hub, {"credentials": [fine]})
 
-        assert refused.status_code == 422, refused.text
-        (detail,) = refused.json()["detail"]
-        assert (detail["loc"], detail["type"]) == (["body", "credentials", 0, "settings"], "forge_capability_missing")
-    assert _change_rows(hub) == before
+    assert applied.status_code == 200, applied.text
 
 
 def test_a_credential_entry_taking_an_authority_another_credential_holds_is_refused_at_its_secret(

@@ -28,7 +28,6 @@ from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.untyped import as_table
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.credential_bindings import FINE_GRAINED_WITHHELD
 from blizzard.hub.domain.config.credentials import ResolvedCredential
 from blizzard.hub.domain.config.secrets import RevealedSecret
 from blizzard.hub.domain.kernel.forge_refusals import (
@@ -67,15 +66,15 @@ def effective_variant(declared: object, token: str) -> TokenVariant:
     return TokenVariant.UNSPECIFIED
 
 
-def variant_withholds(variant: str | None) -> frozenset[Capability]:
-    """What a credential of effective ``variant`` cannot do whatever its forge's kind offers — empty for any
-    credential that is no fine-grained token."""
-    return FINE_GRAINED_WITHHELD if variant == TokenVariant.FINE_GRAINED else frozenset()
+#: What GitHub refuses a fine-grained token on a private repository, though it grants the same token them on a public
+#: one: never withheld up front, only read to classify a refusal GitHub answered.
+_FINE_GRAINED_PRIVATE_REFUSALS: frozenset[Capability] = frozenset({Capability.CHECKS_READ})
 
 
-def token_offers(variant: TokenVariant, kind: frozenset[Capability]) -> frozenset[Capability]:
-    """What a token of ``variant`` can do on a forge whose kind offers ``kind``."""
-    return kind - variant_withholds(variant)
+def variant_refusals(variant: str | None) -> frozenset[Capability]:
+    """What GitHub may refuse a credential of effective ``variant`` whatever it was granted — a fine-grained token's
+    check read, on a private repository; empty for any credential that is no fine-grained token."""
+    return _FINE_GRAINED_PRIVATE_REFUSALS if variant == TokenVariant.FINE_GRAINED else frozenset()
 
 
 class GitHubTokenAuth(httpx2.Auth):
@@ -101,7 +100,7 @@ def github_token_authorization(
         binding=credential.binding,
         variant=variant.value,
         authority=credential.authority,
-        offered=token_offers(variant, kind),
+        offered=kind,
         auth=GitHubTokenAuth(token),
     )
 

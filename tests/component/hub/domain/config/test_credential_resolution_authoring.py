@@ -17,9 +17,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind, RecordRef
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.credential_naming import CredentialConflict, CredentialUnavailable
-from blizzard.hub.domain.config.credential_resolution import CredentialCapabilityMissing, CredentialChoice
+from blizzard.hub.domain.config.credential_resolution import CredentialChoice
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
     CredentialDraft,
@@ -27,7 +27,6 @@ from blizzard.hub.domain.config.credentials import (
 )
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields
-from blizzard.hub.domain.config.landing_policies import ForgeCapabilityMissing
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft
@@ -236,30 +235,21 @@ def test_a_credential_s_secret_edit_rewrites_every_referrer_s_mirror_with_its_ow
     assert world.violations() == []
 
 
-def test_a_fine_grained_edit_behind_a_merge_on_checks_repository_is_refused_listing_it(world: _World) -> None:
-    gated = world.repository()
-    world.repository("parked", policy=LandingPolicy.PARK)
+def test_a_fine_grained_edit_behind_a_merge_on_checks_repository_is_accepted(world: _World) -> None:
+    world.repository()
     (credential,) = world.credentials.list_all(include_retired=True)
 
-    with pytest.raises(CredentialCapabilityMissing) as caught:
-        world.authoring.edit_credential(credential, CredentialEdit(settings={"variant": "fine-grained"}), _API)
+    edited = world.authoring.edit_credential(credential, CredentialEdit(settings={"variant": "fine-grained"}), _API)
 
-    assert caught.value.code == "forge_capability_missing"
-    assert caught.value.referrers == [RecordRef(RecordKind.REPOSITORY, gated.repository_id, "demo")]
-    assert world.credentials.get(credential.credential_id) == credential
-    classic = world.authoring.edit_credential(credential, CredentialEdit(settings={"variant": "classic"}), _API)
-    assert classic.fields.settings == {"variant": "classic"}
+    assert edited.fields.settings == {"variant": "fine-grained"}
     assert world.violations() == []
 
 
-def test_a_fine_grained_credential_behind_merge_on_checks_is_refused_at_repository_create(world: _World) -> None:
+def test_a_fine_grained_credential_behind_merge_on_checks_is_accepted_at_repository_create(world: _World) -> None:
     fine = world.credential(variant="fine-grained")
 
-    with pytest.raises(ForgeCapabilityMissing, match="through credential deploy") as caught:
-        world.repository(secret=None, credential=CredentialChoice(credential="deploy", named=fine))
+    created = world.repository(secret=None, credential=CredentialChoice(credential="deploy", named=fine))
 
-    assert caught.value.credential == "deploy"
-    assert world.repositories.list_all(include_retired=True) == []
-    parked = world.repository(secret=None, policy=LandingPolicy.PARK, credential=CredentialChoice("deploy", fine))
-    assert parked.fields.credential_id == fine.credential_id
+    assert created.fields.landing_policy is LandingPolicy.MERGE_ON_CHECKS
+    assert created.fields.credential_id == fine.credential_id
     assert world.violations() == []

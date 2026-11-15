@@ -162,10 +162,9 @@ def test_each_credential_refusal_answers_its_status_and_code(hub: HubHarness) ->
     in_use = hub.client.post("/api/credentials/deploy/retire")
     assert _code(in_use) == (409, "credential-in-use")
     assert in_use.json()["referrers"] == [{"kind": "repository", "key": repository["repository_id"], "label": "demo"}]
-    narrowed = hub.client.patch("/api/credentials/deploy", json={"settings": {"variant": "fine-grained"}})
-    assert _code(narrowed) == (422, "credential-capability-missing")
-    assert (narrowed.json()["referrers"], narrowed.json()["missing"]) == (in_use.json()["referrers"], ["checks.read"])
-    assert hub.client.get("/api/credentials/deploy").json()["revision"] == held["revision"]
+    fine = hub.client.patch("/api/credentials/deploy", json={"settings": {"variant": "fine-grained"}})
+    assert fine.status_code == 200, fine.text
+    assert hub.client.get("/api/credentials/deploy").json()["revision"] == held["revision"] + 1
 
     with hub.engine.begin() as conn:
         conn.execute(hub_scoped(sa.update(s.forges).where(s.forges.c.slug == "other").values(kind="gitlab")))
@@ -187,9 +186,6 @@ def test_each_referrer_refusal_answers_its_status_and_code(hub: HubHarness) -> N
         422,
         "credential_conflict",
     )
-    refused = post("/api/repositories", json=_repository(credential="fine"))
-    assert _code(refused) == (422, "forge_capability_missing")
-    assert "through credential fine" in refused.json()["detail"][0]["msg"]
     neither = post("/api/repositories", json=_repository())
     assert (_code(neither), neither.json()["detail"][0]["loc"]) == ((422, "value_error"), ["body", "credential"])
     assert _code(post("/api/work-sources", json=_source(credential="elsewhere"))) == (

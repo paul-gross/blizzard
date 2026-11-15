@@ -73,7 +73,7 @@ origin, so a `forge_api_url` is refused `422 field_moved_to_forge`, naming the f
 ### The forge token
 
 [credentials.md](./credentials.md#setting-up-a-github-token) owns the token a repository acts with: the permissions
-delivery needs on GitHub, and what a fine-grained token cannot do.
+delivery needs on GitHub, and where a fine-grained token's check reads are refused.
 
 ## Verbs
 

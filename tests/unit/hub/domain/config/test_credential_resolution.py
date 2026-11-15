@@ -362,25 +362,30 @@ def test_a_record_naming_a_credential_declares_its_lock() -> None:
 _KIND = frozenset(Capability)
 
 
-def test_a_classic_or_undeclared_token_offers_its_forge_s_kind_and_a_fine_grained_one_withholds_checks() -> None:
+def test_every_token_variant_offers_its_forge_s_kind() -> None:
     assert credential_offers(_credential(variant="classic"), _KIND) == _KIND
     assert credential_offers(_CRED, _KIND) == _KIND
-    assert credential_offers(_credential(variant="fine-grained"), _KIND) == _KIND - {Capability.CHECKS_READ}
+    assert credential_offers(_credential(variant="fine-grained"), _KIND) == _KIND
 
 
-def test_a_fine_grained_token_behind_merge_on_checks_is_refused_naming_the_repository() -> None:
+def test_a_fine_grained_token_behind_merge_on_checks_is_honoured() -> None:
     repository = _repository()
     assert repository.fields.landing_policy is LandingPolicy.MERGE_ON_CHECKS
-    require_referrers_honoured(_credential(variant="classic"), [(repository, _KIND)])
+    require_referrers_honoured(_credential(variant="fine-grained"), [(repository, _KIND)])
+
+
+def test_a_credential_behind_a_policy_its_forge_s_kind_cannot_serve_is_refused_naming_the_repository() -> None:
+    repository = _repository()
+    without_checks = _KIND - {Capability.CHECKS_READ}
     with pytest.raises(CredentialCapabilityMissing) as caught:
-        require_referrers_honoured(_credential(variant="fine-grained"), [(repository, _KIND)])
+        require_referrers_honoured(_credential(variant="classic"), [(repository, without_checks)])
     assert caught.value.code == "forge_capability_missing"
     assert caught.value.referrers == [RecordRef(RecordKind.REPOSITORY, "repo_demo", "demo")]
     assert caught.value.missing == (Capability.CHECKS_READ,)
 
 
-def test_a_fine_grained_token_behind_a_policy_reading_no_checks_or_a_retired_repository_is_honoured() -> None:
+def test_a_policy_reading_no_checks_or_a_retired_repository_is_honoured_where_the_kind_offers_no_checks() -> None:
     parked = replace(_repository(), fields=replace(_repository().fields, landing_policy=LandingPolicy.PARK))
     assert Capability.CHECKS_READ not in POLICY_CAPABILITIES[LandingPolicy.PARK].requires
-    fine_grained = _credential(variant="fine-grained")
-    require_referrers_honoured(fine_grained, [(parked, _KIND), (_repository(retired=True), _KIND)])
+    without_checks = _KIND - {Capability.CHECKS_READ}
+    require_referrers_honoured(_CRED, [(parked, without_checks), (_repository(retired=True), without_checks)])

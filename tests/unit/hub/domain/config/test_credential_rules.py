@@ -13,7 +13,6 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
 from blizzard.hub.domain.config.credential_bindings import (
     CREDENTIAL_BINDINGS,
-    FINE_GRAINED_WITHHELD,
     CredentialSettingsInvalid,
 )
 from blizzard.hub.domain.config.credential_naming import CredentialId
@@ -83,10 +82,9 @@ def test_a_github_token_acts_as_its_secret() -> None:
     assert (_TOKEN.name, _TOKEN.forge_kind, _TOKEN.supplied) == ("github.token", "github", True)
 
 
-def test_a_fine_grained_token_declares_its_kind_less_what_it_is_withheld() -> None:
+def test_every_token_variant_declares_its_forge_s_whole_kind() -> None:
     kind = frozenset(Capability)
-    assert _TOKEN.declared_offers({"variant": "fine-grained"}, kind) == kind - FINE_GRAINED_WITHHELD
-    assert Capability.CHECKS_READ not in _TOKEN.declared_offers({"variant": "fine-grained"}, kind)
+    assert _TOKEN.declared_offers({"variant": "fine-grained"}, kind) == kind
     assert _TOKEN.declared_offers({"variant": "classic"}, kind) == kind
     assert _TOKEN.declared_offers({}, kind) == kind
 

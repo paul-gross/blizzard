@@ -27,7 +27,7 @@ from blizzard.hub.domain.kernel.forge_refusals import (
     ForgeMintRefused,
     sanitize_forge_text,
 )
-from blizzard.hub.forge.internal.github_auth import variant_withholds
+from blizzard.hub.forge.internal.github_auth import variant_refusals
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (
@@ -531,10 +531,11 @@ class GitHubLanding:
         return CallCredential(authorization.credential_slug, authorization.binding, authorization.variant)
 
     def _withheld(self, call: _Call) -> bool:
-        """Whether ``call`` needs a capability the variant of the token it carries withholds — not what an
-        installation's grant left unoffered, which is a missing permission."""
+        """Whether GitHub refusing ``call`` is a limit of the token's variant rather than a missing grant — a
+        fine-grained token's check read, refused on a private repository — not what an installation's grant left
+        unoffered, which is a missing permission."""
         capability = OPERATION_CAPABILITY.get(call.operation)
-        return capability is not None and capability in variant_withholds(self._binding.authorization.variant)
+        return capability is not None and capability in variant_refusals(self._binding.authorization.variant)
 
     def _repository_unseen(self) -> str:
         """How a repository the forge answers 404 for is worded: a grant-scoped credential cannot see a repository its

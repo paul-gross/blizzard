@@ -1,5 +1,5 @@
 """The ``github.token`` binding's authorization (unit tier): every row of the effective-variant table, what each
-variant leaves the forge's kind offering, the header its auth sends, and the boundary refusing a retired credential
+variant offering the forge's whole kind, the header its auth sends, and the boundary refusing a retired credential
 or an unknown or retired secret."""
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def _authorizations(reader: _Reader) -> ForgeAuthorizations:
 @pytest.mark.parametrize(
     ("token", "variant", "offered"),
     [
-        (_FINE, "fine-grained", _KIND - {Capability.CHECKS_READ}),
+        (_FINE, "fine-grained", _KIND),
         (_CLASSIC, "classic", _KIND),
         (_OTHER, "unspecified", _KIND),
     ],
