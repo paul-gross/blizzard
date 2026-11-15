@@ -22,7 +22,7 @@ const GRAPH = JSON.stringify({
   },
 });
 
-test('test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populated_fleet', async ({ api, issue, runnerHost, page, narrowViewport }) => {
+test('test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populated_fleet', async ({ api, issue, runnerHost, page }) => {
   test.setTimeout(120000);
   expect((await api.post('/api/graphs', { data: { definition_yaml: GRAPH } })).status).toBe(201);
   const { chunk } = await issue('glance board');
@@ -37,7 +37,7 @@ test('test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_popul
     if (released) await route.continue();
     else held.push(() => route.continue());
   });
-  await page.setViewportSize(narrowViewport);
+  await page.setViewportSize({ width: 390, height: 844 });
   // `commit`, not `load`: `load` waits on every in-flight request, including the held one.
   await page.goto('/board', { waitUntil: 'commit' });
 
@@ -50,6 +50,7 @@ test('test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_popul
   released = true;
   for (const release of held) await release();
   await expect(page.locator(`[data-testid="glance-card"][data-chunk="${chunkId}"]`)).toHaveCount(1);
+  await expect(page.getByTestId('new-hub-item')).toHaveCount(0);
   await expect(page.getByTestId('glance-list-loading')).toHaveCount(0);
   await expect(page.getByTestId('glance-list-empty')).toHaveCount(0);
 });
@@ -121,13 +122,14 @@ test.describe('server-selected done on the phone', () => {
     await page.goto('/board');
     const card = page.locator(`[data-testid="glance-card"][data-chunk="${chunk.chunk_id}"]`);
     await expect(card).toBeVisible();
-    await expect(page.getByTestId('glance-done-policy')).toContainText('within 48 hours');
-    await expect(page.getByTestId('glance-done-policy')).toContainText('newest 10');
+    await expect(page.getByTestId('vital-done-today')).toHaveAccessibleName('1 Done');
+    await expect(page.getByTestId('glance-done-divider').locator('.divider-label').last()).toHaveText('Done ▼');
 
     // The same rows still render when an older server omits the policy field.
     omitPolicy = true;
     await page.reload();
     await expect(card).toBeVisible();
-    await expect(page.getByTestId('glance-done-policy')).toHaveText('Server-selected completed work');
+    await expect(page.getByTestId('vital-done-today')).toHaveAccessibleName('1 Done');
+    await expect(page.getByTestId('glance-done-divider').locator('.divider-label').last()).toHaveText('Done ▼');
   });
 });

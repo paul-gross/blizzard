@@ -18,13 +18,12 @@
           </p>
         </header>
 
-        <div class="pp-sec">
-          <fleet-kit-prose-block [text]="panel.body" />
+        <div class="pp-sec pp-body">
+          <fleet-kit-markdown [text]="panel.body" />
         </div>
 
         @if (panel.closure === null && canControl()) {
           <div class="pp-sec pp-actions" data-testid="gardening-proposal-actions">
-            <fleet-kit-fact-list [rows]="cliRows(panel.proposalId)" testid="gardening-proposal-cli" />
             <div class="pp-actions-bar">
               <fleet-kit-button size="cta" (click)="pass.emit()" testid="gardening-proposal-pass">
                 Pass

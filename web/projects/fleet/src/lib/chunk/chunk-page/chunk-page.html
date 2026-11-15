@@ -42,7 +42,7 @@
           [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
           [graphLinkBase]="graphLinkBase"
           [chunkLinkBase]="chunkLinkBase()"
-          [eventsLinkBase]="eventsLinkBase"
+          [eventsLinkBase]="mobile() ? null : eventsLinkBase"
           [showNodeHistory]="!mobile()"
           (answerQuestion)="onAnswer($event)"
           (resolveDecision)="onResolve($event)"

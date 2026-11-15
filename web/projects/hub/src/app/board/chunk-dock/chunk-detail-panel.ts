@@ -37,6 +37,8 @@ export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */
   readonly detail = input.required<ChunkDetail>();
 
+  readonly boardChunkIds = input<ReadonlySet<string>>(new Set());
+
   /** The chunk's project's color, forwarded to {@link ChunkDetailHeader}; `null` when unknown. */
   readonly projectColor = input<string | null>(null);
 

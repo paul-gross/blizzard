@@ -22,7 +22,7 @@ const row = (chunkId: string, fields: Partial<DeliveryRow> = {}): DeliveryRow =>
 });
 
 const LIST: DeliveryList = {
-  delivering: [row('ch_pr'), row('ch_bounced', { bounce: { compact: { identity: null, reason: 'conflict', full: 'conflict' }, cause: 'conflict', withdrawn: false, reason: 'conflict', count: 1, title: '', at: fixtureInstant(-60) } })],
+  delivering: [row('ch_pr'), row('ch_bounced', { bounce: { label: 'merge conflict', compact: { identity: null, reason: 'conflict', full: 'conflict' }, cause: 'conflict', withdrawn: false, reason: 'conflict', count: 1, title: '', at: fixtureInstant(-60) } })],
   delivered: [row('ch_new', { stage: 3, at: fixtureInstant(-3600) }), row('ch_old', { stage: 3, at: fixtureInstant(-49 * 3600) })],
 };
 
@@ -51,7 +51,7 @@ describe('DeliveryGlanceView', () => {
     const { el } = await render('ready', list);
     expect(cards(el)).toEqual(['ch_timeout']);
     const stage = el.querySelector('[data-testid="delivery-card"] .stage');
-    expect(stage?.textContent?.trim()).toBe('poll-timeout');
+    expect(stage?.textContent?.trim()).toBe('timed out');
     const hit = el.querySelector<HTMLAnchorElement>('[data-testid="delivery-card"] a.hit');
     expect(hit?.title).toBe(`poll-timeout\n${formatAbsolute(fixtureInstant(-60))}`);
     expect(hit?.getAttribute('href')).toBe('/delivery/chunk/ch_timeout');
@@ -65,7 +65,7 @@ describe('DeliveryGlanceView', () => {
     expect(cards(el)).toEqual(['ch_pr', 'ch_bounced', 'ch_new']);
     expect(el.querySelector('[data-testid="delivery-filter-delivering"] .cell-count')?.textContent).toBe('2');
     expect(el.querySelector('[data-testid="delivery-filter-recent"] .cell-count')?.textContent).toBe('1');
-    expect(el.querySelector('[data-chunk="ch_bounced"] .stage')?.textContent?.trim()).toBe('conflict');
+    expect(el.querySelector('[data-chunk="ch_bounced"] .stage')?.textContent?.trim()).toBe('merge conflict');
   });
 
   it('narrows to one group on its tile, and back on a second press', async () => {

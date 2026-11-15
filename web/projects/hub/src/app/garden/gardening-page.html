@@ -1,12 +1,3 @@
-<app-gardening-breadcrumb-view
-  [doorwayHref]="doorwayUrl"
-  [projectLabel]="projectName()"
-  [checkedSlug]="lensSlug()"
-  [surfaceLabel]="surfaceLabel()"
-  [choices]="projectChoices()"
-  (doorwayClick)="openDoorway($event)"
-  (projectSelected)="chooseProject($event)"
-/>
 <nav fleetKitTabStrip variant="sub" class="subnav" data-testid="gardening-subnav">
   @for (tab of tabs(); track tab.surface) {
     <a

@@ -11,11 +11,11 @@
     [style.--project-tint]="projectTint(row.projectColor)"
   >
     <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+    @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
+      <fleet-chunk-urgency class="urgency-banner" [detail]="{ chunk_id: row.chunkId, terminal: row.terminal, urgency: row.urgency ?? null }" [resolvedUrgency]="urgency" [banner]="true" bannerLayout="mobile" />
+    }
     <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
     <span class="grow">
-      @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
-        <app-urgency-pill [urgency]="urgency" />
-      }
       <span class="head">
         @if (row.lines[0]?.label; as label) {
           <span class="iss" data-testid="glance-work-ref">{{ label }}</span>
@@ -27,7 +27,7 @@
           <span class="iss" data-testid="glance-work-ref">{{ line.label }}</span>
         }
         @if (!row.itemsRead) {
-          <fleet-kit-skeleton class="title-skeleton" data-testid="glance-title-skeleton" [rows]="1" />
+          <fleet-kit-skeleton class="title-skeleton" data-testid="glance-title-skeleton" [rows]="titleSkeletonRows(row.chunkId, $index)" />
         } @else if (line.title) {
           <span class="title" data-testid="glance-title">{{ line.title }}</span>
         }
@@ -72,10 +72,11 @@
 </ng-template>
 
 <div class="glance" data-testid="glance-board">
-  <ng-content select="[glanceActions]" />
-  <fleet-kit-count-strip testid="glance-vitals" [cells]="vitalCells()" [selected]="filter()" (cellClick)="toggleFilter($event)" />
-
-  <p class="done-policy" data-testid="glance-done-policy">{{ donePolicy().explanation }}</p>
+  @if (vitalsLoading()) {
+    <fleet-kit-count-strip-skeleton data-testid="glance-vitals-loading" [captions]="['needs you', 'running', 'ready', donePolicy().heading, 'runners up']" [counts]="['0', '0', '0', '0', '0/000']" />
+  } @else {
+    <fleet-kit-count-strip testid="glance-vitals" [cells]="vitalCells()" [selected]="filter()" (cellClick)="toggleFilter($event)" />
+  }
 
   <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state
@@ -101,7 +102,23 @@
     emptyText="NOTHING ON THE BOARD"
     emptyTestid="glance-list-empty"
   >
-    <div loading data-testid="glance-list-loading"><fleet-kit-skeleton [rows]="4" /></div>
+    <div loading class="loading-cards" data-testid="glance-list-loading">
+      @for (rows of loadingRows; track $index) {
+        <div class="loading-card" data-testid="glance-loading-card">
+          <fleet-kit-skeleton class="sk-lane" [rows]="1" />
+          <div class="sk-body">
+            <div class="sk-pair"><fleet-kit-skeleton class="sk-ref" [rows]="1" /><fleet-kit-skeleton class="sk-id" [rows]="1" /></div>
+            <fleet-kit-skeleton class="sk-title" [rows]="rows" />
+            <div class="sk-nodes">
+              @for (node of [1, 2, 3, 4, 5]; track node) {
+                <fleet-kit-skeleton class="sk-node" [rows]="1" />
+              }
+            </div>
+            <div class="sk-pair"><fleet-kit-skeleton class="sk-meta" [rows]="1" /><fleet-kit-skeleton class="sk-cost" [rows]="1" /></div>
+          </div>
+        </div>
+      }
+    </div>
     <ul class="cards" data-testid="glance-list">
       @if (filter() === null) {
       @for (row of list().live; track row.chunkId) {

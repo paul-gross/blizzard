@@ -1,16 +1,11 @@
-<nav class="crumbs" aria-label="Breadcrumb" data-testid="gardening-doorway-crumbs">
-  <span class="crumb current">Gardening</span>
-  <span class="sep" aria-hidden="true">›</span>
-  <span class="crumb current">All projects</span>
-</nav>
-<fleet-kit-panel class="doorway" label="Gardens">
-  <fleet-kit-async-state
-    [state]="state()"
-    emptyText="NO PROJECTS IN THIS TENANT"
-    loadingTestid="gardening-doorway-loading"
-    emptyTestid="gardening-doorway-empty"
-    errorTestid="gardening-doorway-error"
-  >
-    <app-gardening-doorway-cards [cards]="cards()" />
-  </fleet-kit-async-state>
-</fleet-kit-panel>
+<fleet-kit-async-state
+  [state]="state()"
+  loadingMode="content"
+  emptyText="NO PROJECTS IN THIS TENANT"
+  loadingTestid="gardening-doorway-loading"
+  emptyTestid="gardening-doorway-empty"
+  errorTestid="gardening-doorway-error"
+>
+  <app-gardening-doorway-cards loading [cards]="[]" [isLoading]="true" role="status" aria-label="Loading projects" data-testid="gardening-doorway-loading" />
+  <app-gardening-doorway-cards [cards]="cards()" (projectSelected)="chooseProject($event)" />
+</fleet-kit-async-state>

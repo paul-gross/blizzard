@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, resource } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { LensLink } from 'fleet/shell';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, openLookup, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, formatSeenTag, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
+import { eventFingerprints } from './event-detail.model';
 
 /** Each severity's chip label; a severity this build does not know reads raw. */
 const SEVERITY_LABEL = openLookup<hubApi.EventLogSeverity, string>(
@@ -13,7 +16,7 @@ const SEVERITY_LABEL = openLookup<hubApi.EventLogSeverity, string>(
  * derived from the feed's own ids — {@link EventsView.toOptions}). The chips read in
  * ascending severity, the generated const's order reversed. */
 const SEVERITY_OPTIONS: readonly KitChipOption[] = [
-  { value: '', label: 'All', testid: 'events-filter-all' },
+  { value: '', label: 'Severity', testid: 'events-filter-all' },
   ...[...Object.values(hubApi.EventLogSeverity)].reverse().map((severity) => ({
     value: severity,
     label: SEVERITY_LABEL(severity),
@@ -21,11 +24,9 @@ const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   })),
 ];
 
-/** `EventView.severity` → {@link Tone} — critical reads as the board's alarm red,
- * warning as its live-work amber, and info as its dim/idle color, so the badge
- * agrees with the rest of the board's derived-status vocabulary rather than
- * inventing a severity-only color scale. A severity this build does not know reads idle. */
-const SEVERITY_TONE = openLookup<EventView['severity'], Tone>({ critical: 'stale', warning: 'running', info: 'idle' }, () => 'idle');
+const SEVERITY_ICON = openLookup<EventView['severity'], string>(
+  { critical: 'critical', warning: 'warning', info: 'info' }, () => 'unknown',
+);
 
 /**
  * The Events tab's presentational half — the operational
@@ -38,22 +39,32 @@ const SEVERITY_TONE = openLookup<EventView['severity'], Tone>({ critical: 'stale
  * container hands their id **universe** in (`runnerIds`/`chunkIds`) and this view
  * renders one chip per id. An empty id array hides its row.
  *
- * Events render as-received. Each row is a **time-first grid** — time, chunk,
- * severity, kind, runner, message, lease. Every test handle is `events-`prefixed.
+ * Events render as-received as compact cards; selecting one opens its detail page.
  */
 @Component({
   selector: 'app-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitBadge, KitButton, KitChips, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitSelect, KitSkeleton, LensLink, RouterLink],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })
 export class EventsView {
   /** The event feed to render, in the order given (server-sorted). */
   readonly events = input.required<readonly EventView[]>();
+  private readonly identities = resource({
+    params: () => this.events(),
+    loader: ({ params }) => eventFingerprints(params),
+  });
+  protected fingerprint(event: EventView): string | null {
+    return this.identities.value()?.get(event) ?? null;
+  }
 
   /** Each runner's host name by runner id — a runner the map omits shows no host. */
   readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
+  readonly runnerFleetIds = input<ReadonlyMap<string, string>>(new Map());
+  readonly now = input.required<number>();
+  readonly mobile = input(false);
+  protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
   /** The active severity filter, or `null` for "all" — highlights the matching chip. */
   readonly severity = input<string | null>(null);
@@ -78,9 +89,6 @@ export class EventsView {
    * until the read resolves. */
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Emitted with a chunk id when its row's chunk button is activated. */
-  readonly selectChunk = output<string>();
-
   /** Emitted with the chosen severity filter (`''` for "all", handed through as-is —
    * the container maps it to `null`). */
   readonly filterChange = output<string>();
@@ -96,34 +104,34 @@ export class EventsView {
   /** The runner filter chips — an "All" option plus one per id in {@link runnerIds},
    * labelled with the runner's display name. Empty when the container handed no ids (nothing to filter). */
   protected readonly runnerFilterOptions = computed(() =>
-    EventsView.toOptions(this.runnerIds(), 'events-runner-filter', (id) =>
+    EventsView.toOptions(this.runnerIds(), 'events-runner-filter', 'Runners', (id) =>
       runnerDisplayName(id, this.runnerNames().get(id), this.runnerHosts().get(id)),
     ),
   );
 
   /** The chunk filter chips — same shape as {@link runnerFilterOptions}. */
   protected readonly chunkFilterOptions = computed(() =>
-    EventsView.toOptions(this.chunkIds(), 'events-chunk-filter', compactRef),
+    EventsView.toOptions(this.chunkIds(), 'events-chunk-filter', 'Chunks', compactRef),
   );
 
-  /** Build a chip row from an id universe: an "All" reset plus one chip per id, keyed
-   * by the raw id (unique testid) and labelled by `label`. `[]` in → `[]` out,
-   * so the row hides when there is nothing to filter. */
+  /** Build dropdown options from an id universe, including an "All" reset. */
   private static toOptions(
     ids: readonly string[],
     testidPrefix: string,
+    allLabel: string,
     label: (id: string) => string,
   ): readonly KitChipOption[] {
-    if (ids.length === 0) return [];
     return [
-      { value: '', label: 'All', testid: `${testidPrefix}-all` },
+      { value: '', label: allLabel, testid: `${testidPrefix}-all` },
       ...ids.map((id) => ({ value: id, label: label(id), testid: `${testidPrefix}-${id}` })),
     ];
   }
 
-  protected toneFor(severity: EventView['severity']): Tone {
-    return SEVERITY_TONE(severity);
-  }
+  protected iconFor(severity: EventView['severity']): string { return SEVERITY_ICON(severity); }
+
+  protected age(recordedAt: string): string { return formatSeenTag(recordedAt, this.now()); }
+
+  protected fleetId(runnerId: string): string { return this.runnerFleetIds().get(runnerId) ?? runnerId; }
 
   protected shortId(id: string): string {
     return compactRef(id);

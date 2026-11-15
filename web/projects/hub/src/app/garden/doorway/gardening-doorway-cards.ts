@@ -1,27 +1,25 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { FleetWhen, KitBadge, KitLinkTile } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { KitLinkTile, KitSkeleton, KitSwatch } from 'fleet';
 
-import { type DoorwayCard, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
+import type { DoorwayCard } from './gardening-doorway.model';
 
-/**
- * The gardening doorway's cards — one per project, each giving its garden's standing at a glance and the way into it
- * under the project's lens. Presentational: {@link GardeningDoorway} reads and groups the records, this draws the
- * {@link DoorwayCard}s it is handed.
- */
+/** Compact project choices for the All-project gardening doorway. */
 @Component({
   selector: 'app-gardening-doorway-cards',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitLinkTile, LensLink, RouterLink],
+  imports: [KitLinkTile, KitSkeleton, KitSwatch],
   templateUrl: './gardening-doorway-cards.html',
   styleUrl: './gardening-doorway-cards.css',
 })
 export class GardeningDoorwayCards {
   readonly cards = input.required<readonly DoorwayCard[]>();
+  readonly isLoading = input(false);
+  readonly projectSelected = output<string>();
 
-  protected readonly waitingLabel = waitingLabel;
-  protected readonly sweepingLabel = sweepingLabel;
-  protected readonly openGardenLabel = openGardenLabel;
+  protected select(event: MouseEvent, slug: string): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    this.projectSelected.emit(slug);
+  }
 }

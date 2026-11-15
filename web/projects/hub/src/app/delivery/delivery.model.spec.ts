@@ -161,7 +161,7 @@ describe('a row\'s bounce', () => {
   it('reads the hub\'s latest bounce, its reason without code ticks, and the chunk\'s bounce count', () => {
     const row = only(inputs([bounced(50, { open_prs: [prView()] })]));
     expect(row.bounce).toMatchObject({ cause: 'failure', reason: 'pre-push checks failed in lint', count: 2, at: fixtureInstant(-50 * MIN) });
-    expect(row.bounce?.title.split('\n')[0]).toBe('pre-push checks failed in lint');
+    expect(row.bounce?.title).toContain('failure\npre-push checks failed in lint');
     expect(row.statusColor).toBe(toneColor('stale'));
   });
 
@@ -190,7 +190,7 @@ describe('a row\'s bounce', () => {
       only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN), ...bounce }), bounce_count: 1 })], { facts }));
     const row = withdrawn({ withdrawn: true });
     expect(row.bounce?.withdrawn).toBe(true);
-    expect(cardStageLabel(row)).toBe('failure · withdrawn');
+    expect(cardStageLabel(row)).toBe('unknown failure · withdrawn');
     const turn = fact('fl_a', 'ch_1', 'turn-ended', 50 * MIN, 'failure');
     const withdrawal = { ...fact('fl_a', 'ch_1', 'withdrawn', 50 * MIN, 'failure'), at: turn.at };
     expect(withdrawn({ withdrawn: false }, [turn, withdrawal]).bounce?.withdrawn).toBe(false);
@@ -241,7 +241,7 @@ describe('the phone\'s cards', () => {
     const bounce = only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'conflict', recorded_at: fixtureInstant(-MIN) }), bounce_count: 1 })]));
     const inLine = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 2)] })]));
     const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done' })]));
-    expect([bounce, inLine, landed].map(cardStageLabel)).toEqual(['conflict', 'in line #2', 'landed']);
+    expect([bounce, inLine, landed].map(cardStageLabel)).toEqual(['merge conflict', 'in line #2', 'landed']);
     expect([bounce, inLine, landed].map(cardStageColor)).toEqual([toneColor('stale'), toneColor('spawning'), toneColor('done')]);
     expect([bounce, inLine, landed].map(stageTone)).toEqual(['stale', 'spawning', 'done']);
   });

@@ -10,6 +10,8 @@ import {
   logoutErrorText,
   selectedTenantName,
   tenancyOf,
+  shellUrl,
+  shellView,
 } from './app.model';
 
 const ACME: MeTenant = {
@@ -18,6 +20,20 @@ const ACME: MeTenant = {
   role: 'admin',
   permissions: ['fleet:view'],
 };
+
+describe('shell loading route', () => {
+  it('prefers the navigation in flight, then the completed route, then the initial address', () => {
+    expect(shellUrl('/events/7', false, '/', '/board')).toBe('/events/7');
+    expect(shellUrl(null, true, '/fleet', '/board')).toBe('/fleet');
+    expect(shellUrl(null, false, '/', '/login')).toBe('/login');
+  });
+
+  it('finds the active view through a project lens and detail path', () => {
+    expect(shellView('/p/blizzard/events/-1?at=now')).toBe('events');
+    expect(shellView('/board/chunk/one')).toBe('board');
+    expect(shellView('/gardening/proposals')).toBe('gardening');
+  });
+});
 
 describe('authState', () => {
   it('is loading while the identity read is pending', () => {

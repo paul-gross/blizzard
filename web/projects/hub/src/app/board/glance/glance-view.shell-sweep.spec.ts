@@ -190,9 +190,32 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
+
+  it.each([390, 320])('matches loaded summary height while captions wrap at %ipx', async (width) => {
+    await page.viewport(width, 800);
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({ imports: [GlanceView], providers: [provideZonelessChangeDetection(), provideRouter([])] }).compileComponents();
+    const fixture = TestBed.createComponent(GlanceView);
+    fixture.componentRef.setInput('vitals', VITALS);
+    fixture.componentRef.setInput('list', { live: [], ready: [], backlog: [], done: [] });
+    fixture.componentRef.setInput('listState', 'empty');
+    fixture.componentRef.setInput('spendState', 'empty');
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.cssText = 'width: calc(100% - 32px); margin: 16px; height: auto; overflow: visible;';
+    document.body.appendChild(root);
+    try {
+      await fixture.whenStable();
+      await document.fonts.ready;
+      const loaded = root.querySelector<HTMLElement>('[data-testid="glance-vitals"]')!.getBoundingClientRect().height;
+      fixture.componentRef.setInput('vitalsLoading', true);
+      await fixture.whenStable();
+      const skeleton = root.querySelector<HTMLElement>('[data-testid="glance-vitals-loading"]')!.getBoundingClientRect().height;
+      expect(skeleton).toBeCloseTo(loaded, 0);
+    } finally { fixture.destroy(); root.remove(); }
+  });
 });
 
-it('keeps the urgency mark after the lane at phone width', async () => {
+it('aligns the urgency mark with the lane gutter at phone width', async () => {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [GlanceView],
@@ -202,8 +225,15 @@ it('keeps the urgency mark after the lane at phone width', async () => {
   fixture.componentRef.setInput('vitals', VITALS);
   fixture.componentRef.setInput('listState', 'ready');
   fixture.componentRef.setInput('spendState', 'ready');
-  fixture.componentRef.setInput('urgencies', [{ urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, retired: false, color: 'red', emoji: '🔥', icon: null }]);
-  fixture.componentRef.setInput('list', { live: [row('ch_urgent', { urgency: { urgency_id: 'u', slug: 'urgent' } })], ready: [], backlog: [], done: [] });
+  fixture.componentRef.setInput('urgencies', [
+    { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, retired: false, color: '#000000', emoji: '🔥', icon: null },
+    { urgency_id: 'normal', name: 'Normal', slug: 'normal', default: true, retired: false, color: 'red', emoji: null, icon: null },
+  ]);
+  fixture.componentRef.setInput('list', {
+    live: [row('ch_urgent', { urgency: { urgency_id: 'u', slug: 'urgent' } }), row('ch_normal', { urgency: { urgency_id: 'normal', slug: 'normal' } })],
+    ready: [], backlog: [],
+    done: [row('ch_terminal', { terminal: true, urgency: { urgency_id: 'u', slug: 'urgent' } })],
+  });
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -211,9 +241,19 @@ it('keeps the urgency mark after the lane at phone width', async () => {
   try {
     const card = root.querySelector<HTMLElement>('[data-testid="glance-card"]')!;
     const lane = card.querySelector<HTMLElement>('fleet-lane-icon')!;
-    const pill = card.querySelector<HTMLElement>('app-urgency-pill')!;
-    expect(pill).not.toBeNull();
-    expect(pill.getBoundingClientRect().left).toBeGreaterThan(lane.getBoundingClientRect().left);
+    const mark = card.querySelector<HTMLElement>('.banner .mark')!;
+    const banner = card.querySelector<HTMLElement>('.banner')!;
+    const label = card.querySelector<HTMLElement>('.banner-label')!;
+    const content = card.querySelector<HTMLElement>('.grow')!;
+    expect(mark).not.toBeNull();
+    expect(mark.getBoundingClientRect().left).toBeCloseTo(lane.getBoundingClientRect().left, 0);
+    expect(mark.getBoundingClientRect().width).toBe(16);
+    expect(label.getBoundingClientRect().left).toBeCloseTo(content.getBoundingClientRect().left, 0);
+    expect(getComputedStyle(banner).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(banner).color).not.toBe('rgb(0, 0, 0)');
+    for (const side of ['Top', 'Bottom', 'Left', 'Right'] as const) expect(getComputedStyle(banner)[`border${side}Width`]).toBe('0px');
+    expect(root.querySelector('[data-chunk="ch_normal"] .banner')).toBeNull();
+    expect(root.querySelector('[data-chunk="ch_terminal"] .banner')).toBeNull();
     expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
   } finally { root.remove(); }
 });

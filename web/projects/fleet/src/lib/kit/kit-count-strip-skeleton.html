@@ -1,0 +1,8 @@
+<div class="strip" [style.grid-template-columns]="columns()" role="status" aria-label="Loading summary">
+  @for (index of indexes(); track index) {
+    <div class="cell">
+      <span class="count" aria-hidden="true">{{ count(index) }}<fleet-kit-skeleton [rows]="1" /></span>
+      <span class="caption" aria-hidden="true">{{ caption(index) }}<fleet-kit-skeleton [rows]="1" /></span>
+    </div>
+  }
+</div>

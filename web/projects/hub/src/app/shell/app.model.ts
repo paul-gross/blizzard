@@ -2,6 +2,16 @@ import { type SseStatus } from 'fleet';
 import { type MeResponse, type MeTenant, errorMessage } from 'fleet/shell';
 
 import { type TenantResolution } from '../core/auth/tenant-context';
+import { viewOf } from '../core/project-lens';
+
+/** Before initial navigation settles, the address bar is the only completed route. */
+export function shellUrl(pendingUrl: string | null, navigated: boolean, routerUrl: string, pathname: string): string {
+  return pendingUrl ?? (navigated ? routerUrl : pathname);
+}
+
+export function shellView(url: string): string {
+  return viewOf(url).split('/')[1];
+}
 
 /** The session gate, decided above the shell. */
 export type AuthState = 'loading' | 'unauthenticated' | 'no-access' | 'choose' | 'ready';

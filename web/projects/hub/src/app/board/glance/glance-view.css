@@ -32,6 +32,39 @@
   flex-direction: column;
   gap: 4px;
 }
+.loading-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loading-card {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 8px;
+  border-left: 2px solid var(--line);
+  background: var(--surface-resting);
+}
+.sk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.sk-pair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sk-lane { --kit-skeleton-height: 16px; }
+.sk-ref { width: 35%; --kit-skeleton-height: 11px; }
+.sk-id { width: 18%; --kit-skeleton-height: 13px; }
+.sk-title { width: 80%; --kit-skeleton-height: 12px; }
+.sk-nodes { display: flex; gap: 2px; margin: 3px 0 2px; }
+.sk-node { width: 1.5rem; --kit-skeleton-height: 9px; }
+.sk-meta { width: 45%; --kit-skeleton-height: 10px; }
+.sk-cost { width: 15%; --kit-skeleton-height: 10px; }
 /* A card: the lane icon in its own track beside the work, a 2px status edge on the left, and the
    project's tint behind it, as a desktop list row has. */
 .card {
@@ -49,6 +82,10 @@
 .card.tinted {
   --bg-resting: color-mix(in srgb-linear, var(--project-tint) 2%, black);
   --bg-pressed: color-mix(in srgb-linear, var(--project-tint) 3.5%, black);
+}
+.urgency-banner {
+  grid-column: 1 / -1;
+  margin: -7px -8px 0;
 }
 .lane {
   margin-top: 1px;
@@ -249,10 +286,4 @@
   color: var(--label-dim);
   font-size: var(--fs-xs);
   white-space: nowrap;
-}
-
-.done-policy {
-  color: var(--label-dim);
-  font-size: 0.75rem;
-  margin: 0;
 }

@@ -40,10 +40,11 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await expect.poll(async () => (await list()).map((u) => u.slug)).toEqual(['expedite', standard.slug]);
 
   await page.goto('/board');
+  await expect(page.getByTestId('new-hub-item')).toHaveCount(0);
   const ready = page.locator('[data-col="ready"]');
   const card = ready.locator(`[data-chunk="${urgent}"]`);
   await expect(card).toBeVisible();
-  // Keep the runner's detail open across the board edit and retirement, to exercise live Next updates.
+  // Keep the runner's detail open across the API edit and retirement, to exercise live Next updates.
   const fleetPage = await page.context().newPage();
   // Hold the real stream's frames at the browser boundary. Releasing only the edited chunk's frame makes the
   // subsequent Next read attributable to that frame, not another event or a reconnect.
@@ -98,14 +99,16 @@ test('urgency created and reordered in admin changes ready work and retirement m
     (globalThis as unknown as { urgencyStream: { held: string[] } }).urgencyStream.held.length = 0;
   });
   await card.click();
-  await page.getByTestId('chunk-detail').getByTestId('chunk-urgency-menu').click();
-  await page.getByRole('menuitemradio', { name: 'Expedite' }).click();
+  await expect(page.getByTestId('chunk-detail').getByTestId('chunk-urgency-menu')).toHaveCount(0);
+  expect((await api.patch(`/api/chunks/${urgent}`, { data: { urgency: 'expedite' } })).status).toBe(202);
   await expect.poll(async () => (await api.get(`/api/chunks/${urgent}`)).body.urgency.slug).toBe('expedite');
   const queueAfter = await api.get('/api/queue');
   expect(queueAfter.status).toBe(200);
   expect(queueAfter.body.entries.map((entry: { chunk_id: string }) => entry.chunk_id)).toEqual(rankedIds);
-  await expect(card.getByTestId('chunk-urgency-menu')).toHaveAttribute('aria-label', 'Change urgency: Expedite');
-  await expect(card.locator('fleet-kit-urgency-pill')).toContainText('🔥');
+  await expect(page.getByTestId('chunk-detail').getByTestId('chunk-urgency')).toHaveText('Expedite');
+  await expect(card.locator('fleet-chunk-urgency')).toContainText('Expedite');
+  await expect(card.locator('fleet-chunk-urgency')).toContainText('🔥');
+  await expect(card.getByTestId('chunk-urgency-menu')).toHaveCount(0);
   const next = async () => (await api.get(`/api/runners/${runnerId}/next-claim`)).body.next?.chunk_id;
   await expect.poll(next).toBe(urgent);
   await expect.poll(async () => fleetPage.evaluate((id) => {
@@ -146,8 +149,8 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', first);
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toHaveCount(0);
   await page.goto('/board');
-  await expect(card.getByTestId('chunk-urgency-menu')).toHaveAttribute('aria-label', `Change urgency: ${standard.name}`);
-  await expect(card.locator('fleet-kit-urgency-pill')).toHaveCount(0);
+  await expect(card.getByTestId('chunk-urgency-menu')).toHaveCount(0);
+  await expect(card.locator('fleet-chunk-urgency')).toHaveCount(0);
   // A real stepped host follows the changed next-claim ordering, rather than merely reading the explanation.
   await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${first}`)).body.status as string, (status) => status === 'running');
   expect((await api.get(`/api/chunks/${urgent}`)).body.status).toBe('ready');

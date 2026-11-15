@@ -53,10 +53,11 @@ or enable; retiring an urgency with open work asks where to move it and also req
 must first be changed. Detail also shows its change history. On a phone the administration screen is read-only and shows
 CLI commands for these actions.
 
-The [board](./board.md#urgency-on-the-board) shows a pill on unfinished, non-default work and lets a person with
-`chunk:control` change a chunk's urgency. New hub items and accepted garden proposals offer a choice starting at the
-tenant default. A routine run can choose an urgency or follow the routine default; a routine can follow the tenant
-default, and a cadence chore can follow the routine default. These choices use the [chain](#the-chain).
+The [board](./board.md#urgency-on-the-board) highlights unfinished, nondefault work and names the urgency read-only in
+chunk details. Change a chunk's urgency through `chunk set --urgency`; Board cards, details and action menus do not edit
+it. Accepted garden proposals offer a choice starting at the tenant default. A routine run can choose an urgency or
+follow the routine default; a routine can follow the tenant default, and a cadence chore can follow the routine default.
+These choices use the [chain](#the-chain).
 
 The board polls its urgency configuration every 15 seconds while active, and refreshes on focus and reconnect, so a
 change made elsewhere normally appears within that interval. Its lists remain in rank order; the runner's

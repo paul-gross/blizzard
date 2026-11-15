@@ -7,9 +7,7 @@ import {
   gardenProposalsPageView,
   gardenProposalView,
   gardenRoutineView,
-  gardenScopeView,
   type RequestClientStub,
-  runRowView,
   settle,
   stubHubClient,
 } from 'fleet/testing';
@@ -20,9 +18,8 @@ import { GardeningDoorway } from './gardening-doorway';
 /**
  * The gardening doorway's layout (the tooled half of `blizzard-context:/verification/blizzard.md`'s
  * `web:shell-sweep` method) — a real, headless-Chromium proof that the project cards reflow to one column at phone
- * widths with no horizontal overflow, that no card narrows below the grid's 340px minimum column where the panel has
- * room for one, that a long project name or routine list wraps inside its card rather than widening it, that the last
- * run reads as a relative time, that every card's way in stays on screen, and that the loading and no-projects states
+ * widths with no horizontal overflow, that a long project name wraps inside its card rather than widening it,
+ * that every card's way in stays on screen, and that the loading and no-projects states
  * each render on their own.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) because it needs
@@ -44,20 +41,10 @@ function routes(): DoorwayRoutes {
   return {
     'GET /api/projects': () => ({ projects: PROJECTS }),
     'GET /api/routines': () => ROUTINES,
-    'GET /api/scopes': () => [gardenScopeView({ slug: 'hub-api', project_id: 'proj_2' })],
+    'GET /api/cadences': () => [],
     'GET /api/garden-proposals': () =>
       gardenProposalsPageView({ proposals: [gardenProposalView({ proposal_id: 'gp_1', project_id: 'proj_2' })] }),
     'GET /api/runners': () => ({ runners: [] }),
-    'GET /api/runs': () => [
-      runRowView({
-        chunk_id: 'ch_1',
-        project_id: 'proj_2',
-        routine_name: 'garden-weekly',
-        scope_slug: 'hub-api',
-        mode: 'delta',
-        minted_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      }),
-    ],
   };
 }
 
@@ -73,8 +60,7 @@ async function mount(overrides: DoorwayRoutes = {}) {
   }).compileComponents();
   const fixture = TestBed.createComponent(GardeningDoorway);
   const root = fixture.nativeElement as HTMLElement;
-  root.style.display = 'flex';
-  root.style.width = '100%';
+  // Leave the padded host auto-sized, as it is in the shell; 100% content width adds padding outside the viewport.
   document.body.appendChild(root);
   return { fixture, root };
 }
@@ -103,8 +89,7 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(GardeningDoorway);
     const root = fixture.nativeElement as HTMLElement;
-    root.style.display = 'flex';
-    root.style.width = '100%';
+    // Match the auto-sized shell host rather than imposing a 100% content-box width.
     document.body.appendChild(root);
 
     try {
@@ -127,14 +112,9 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
         const rect = card.getBoundingClientRect();
         expect(rect.right, `${project.slug}'s way in leaves the viewport at ${width}px`).toBeLessThanOrEqual(width);
         expect(rect.width).toBeGreaterThan(0);
-        if (cards.clientWidth >= 340) {
-          expect(card.getBoundingClientRect().width, `${project.slug}'s card is under 340px at ${width}px`).toBeGreaterThanOrEqual(340);
-        }
       }
 
-      const lastRun = root.querySelector<HTMLElement>('[data-testid="gardening-doorway-last-run-long"]')!;
-      expect(lastRun.textContent).toContain('last run 3 days ago');
-      expect(lastRun.querySelector('fleet-when')?.getAttribute('title'), 'the relative time keeps its tooltip').toBeTruthy();
+      expect(root.querySelector('[data-testid="gardening-doorway-card-long"]')?.textContent).toContain('3 routines · 1 pending proposal');
     } finally {
       root.remove();
       window.removeEventListener('error', onError);
@@ -165,8 +145,7 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
       await settle(empty.fixture, 8);
       const shown = empty.root.querySelector<HTMLElement>('[data-testid="gardening-doorway-empty"]')!;
       expect(shown).not.toBeNull();
-      const panel = empty.root.querySelector<HTMLElement>('fleet-kit-panel')!;
-      expect(shown.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right);
+      expect(shown.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       expect(empty.root.querySelector('[data-testid="gardening-doorway-loading"]')).toBeNull();
     } finally {
       empty.root.remove();

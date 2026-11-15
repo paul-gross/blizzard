@@ -8,7 +8,7 @@
 }
 .d-sub .st {
   color: var(--label);
-  font-size: var(--fs-label);
+  font-size: var(--fs-sm);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -17,10 +17,14 @@
 .d-sub .runner {
   min-width: 0;
   color: var(--cyan);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.d-sub .project,
+.d-sub .sep {
+  font-size: var(--fs-sm);
 }
 @media (max-width: 600px) {
   .d-sub {

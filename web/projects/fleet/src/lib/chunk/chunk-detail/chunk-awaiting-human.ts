@@ -53,6 +53,9 @@ const ANSWERED_TRAIL_LIMIT = 3;
   styleUrl: './chunk-awaiting-human.css',
 })
 export class ChunkAwaitingHuman {
+  /** Render one independently placed part, or the complete legacy presentation. */
+  readonly section = input<'all' | 'asks' | 'answered' | 'decisions'>('all');
+
   protected questionOptions(options: readonly string[]): readonly KitChipOption[] {
     return options.map((value) => ({ value, label: value, testid: 'question-option' }));
   }

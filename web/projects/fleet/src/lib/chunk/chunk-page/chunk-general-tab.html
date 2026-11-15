@@ -2,6 +2,10 @@
   <!-- Delivery, work item and issues stack in one column, so Delivery always sits
        directly above Work item at every width. -->
   <div class="lhs">
+  <fleet-chunk-detail-awaiting-human
+    class="open-asks" section="asks" [detail]="detail()" [canAnswer]="canAnswer()"
+    [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()" (answerQuestion)="answerQuestion.emit($event)"
+  />
   @if (showDelivery()) {
     <fleet-kit-panel class="section" data-testid="section-delivery" label="delivery">
       <fleet-chunk-delivery [detail]="detail()" />
@@ -13,6 +17,11 @@
   <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
     <fleet-chunk-detail-issue-pane [workItems]="workItems()" [placement]="issuePanePlacement()" />
   </fleet-kit-panel>
+  <fleet-chunk-detail-awaiting-human class="answered-questions" section="answered" [detail]="detail()" />
+  <fleet-chunk-detail-awaiting-human
+    class="decisions" section="decisions" [detail]="detail()" [canResolve]="canResolve()"
+    [resolvePending]="resolvePending()" (resolveDecision)="resolveDecision.emit($event)"
+  />
   </div>
   @if (showNodeHistory()) {
     <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
@@ -41,17 +50,6 @@
   @if (!showNodeHistory() && eventsLinkBase()) {
     <div class="section events-row"><ng-container [ngTemplateOutlet]="eventsLink" /></div>
   }
-  <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
-    <fleet-chunk-detail-awaiting-human
-      [detail]="detail()"
-      [canAnswer]="canAnswer()"
-      [canResolve]="canResolve()"
-      [resolvePending]="resolvePending()"
-      [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
-      (answerQuestion)="answerQuestion.emit($event)"
-      (resolveDecision)="resolveDecision.emit($event)"
-    />
-  </fleet-kit-panel>
 </div>
 <!-- The chunk's own events, on the daemon's events view filtered by `?chunk=` — beside
      node history when General shows it, on a line of its own otherwise. -->

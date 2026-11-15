@@ -247,8 +247,8 @@
  *     one line below the step row, flush right, without overflowing the card, at 800px
  *     and at 390/320px.
  *   - projects/fleet/src/lib/chunk/chunk-card/chunk-card-tone.shell-sweep.spec.ts — the
- *     fleet chunk card's and list row's left edge and id resolve to `toneColor` of the
- *     view's tone, in every tone, and a selected one's edge to the selection cyan.
+ *     fleet chunk card's and list row's left edge resolve to `toneColor` in every tone;
+ *     card ids stay gold, list-row ids retain their tone, and selected edges turn cyan.
  *   - projects/hub/src/app/board/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
@@ -340,6 +340,7 @@ const { readdirSync } = require('node:fs');
 const { join, relative, sep } = require('node:path');
 
 const SWEEPS = [
+  { project: 'hub', spec: 'projects/hub/src/app/shell/app-boot.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/app-nav-menu.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-artifacts-tab-layout.shell-sweep.spec.ts' },

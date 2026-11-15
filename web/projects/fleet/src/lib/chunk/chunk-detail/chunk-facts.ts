@@ -27,6 +27,9 @@ export class ChunkFacts {
   /** The chunk detail route's own path segments, before the chunk id — each neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
+  /** Neighbors rendered in the current board, eligible for selection in place. */
+  readonly boardChunkIds = input<ReadonlySet<string>>(new Set());
+
   protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.prerequisites ?? []);
 
   protected readonly dependents = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.dependents ?? []);

@@ -2,6 +2,8 @@
   <!-- Sign-in and an invitation's landing carry their own full-page chrome and
        render whatever the session. -->
   <router-outlet />
+} @else if (publicLanding()) {
+  <div class="boot" data-testid="auth-loading"></div>
 } @else {
   @switch (authState()) {
     @case ('unauthenticated') {
@@ -82,17 +84,42 @@
             <fleet-kit-button testid="lens-notice-dismiss" (click)="dismissLensNotice()">Dismiss</fleet-kit-button>
           </div>
         }
-        <router-outlet />
+        @if (!routeActive()) {
+          <div class="boot-content" aria-hidden="true"></div>
+        }
+        <router-outlet (activate)="routeActive.set(true)" (deactivate)="routeActive.set(false)" />
         @if (mobile()) {
           <app-mobile-tab-bar shell-tab-bar />
         }
       </fleet-app-shell>
     }
     @default {
-      <!-- 'loading' — the first /api/me round trip has not resolved yet. No
-           header/nav until the session state is known, so nothing gated flashes
-           visible-then-hidden. -->
-      <div class="boot" data-testid="auth-loading"></div>
+      <fleet-app-shell>
+        <header shell-header class="boot-header" [class.boot-header-mobile]="mobile()" aria-label="Blizzard loading">
+          <img class="boot-mark" src="favicon.svg" alt="" [attr.width]="mobile() ? 22 : 30" [attr.height]="mobile() ? 22 : 30" />
+          <span class="boot-brand">blizzard</span>
+          <span class="boot-placeholder boot-tenant" aria-hidden="true"></span>
+          <span class="boot-spacer"></span>
+          <span class="boot-placeholder boot-stat" aria-hidden="true"></span>
+          <span class="boot-placeholder boot-stat" aria-hidden="true"></span>
+          <span class="boot-placeholder boot-account" aria-hidden="true"></span>
+        </header>
+        @if (!mobile()) {
+          <nav shell-nav fleetKitTabStrip aria-label="Navigation loading" aria-disabled="true">
+            @for (tab of desktopTabs; track tab.key) {
+              <span fleetKitTab class="boot-tab" [class.active]="bootView() === tab.key">{{ tab.label }}</span>
+            }
+          </nav>
+        }
+        <div class="boot-content" data-testid="auth-loading" role="status" aria-label="Loading session"></div>
+        @if (mobile()) {
+          <nav shell-tab-bar fleetKitTabStrip variant="bottom" aria-label="Navigation loading" aria-disabled="true">
+            @for (tab of mobileTabs; track tab.key) {
+              <span fleetKitTab variant="bottom" class="boot-tab" [class.active]="bootView() === tab.key">{{ tab.label }}</span>
+            }
+          </nav>
+        }
+      </fleet-app-shell>
     }
   }
 }

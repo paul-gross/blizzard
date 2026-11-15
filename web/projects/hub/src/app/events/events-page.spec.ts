@@ -1,73 +1,23 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { Router, provideRouter } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { vi } from 'vitest';
-
+import { stubHubClient } from 'fleet/testing';
 import { EventsPage } from './events-page';
 
-/**
- * Exercises `EventsPage`'s composition of `app-events-panel` and its
- * `selectChunk` wiring. The hub client's transport is stubbed to answer every
- * read `404`, so `EventsPanel` settles into its own error state — enough to
- * prove the page mounts it and forwards its output, without duplicating
- * `EventsPanel`'s own read/filter coverage (`events-panel.spec.ts`).
- */
 describe('EventsPage', () => {
-  beforeEach(() => {
-    hubClient.setConfig({
-      baseUrl: 'http://localhost',
-      fetch: (async () => new Response(JSON.stringify({ detail: 'not found' }), { status: 404 })) as typeof fetch,
-    });
-  });
-
-  afterEach(() => {
-    hubClient.setConfig({ baseUrl: '', fetch: undefined });
-    TestBed.inject(ViewportService).setOverride('auto');
-  });
-
-  async function mount(mode: 'desktop' | 'mobile' = 'desktop') {
-    await TestBed.configureTestingModule({
-      imports: [EventsPage],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideRouter([]),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
-    }).compileComponents();
-    TestBed.inject(ViewportService).setOverride(mode);
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    const fixture = TestBed.createComponent(EventsPage);
-    await fixture.whenStable();
-    return { fixture, navigate };
-  }
-
   it('mounts the events panel', async () => {
-    const { fixture } = await mount();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('app-events-panel')).toBeTruthy();
-  });
-
-  it('opens the selected chunk in the desktop board dock', async () => {
-    const { fixture, navigate } = await mount();
-
-    const panel = fixture.debugElement.query(By.css('app-events-panel'));
-    panel.componentInstance.selectChunk.emit('ch_live');
-    await fixture.whenStable();
-
-    // The row's chunk id rides along as the `chunk` param `BoardPage` selects from —
-    // it is not dropped on the way to the board.
-    expect(navigate).toHaveBeenCalledWith(['/board'], { queryParams: { chunk: 'ch_live' } });
-  });
-
-  it('opens the chunk detail route from the mobile events page', async () => {
-    const { fixture, navigate } = await mount('mobile');
-    fixture.debugElement.query(By.css('app-events-panel')).componentInstance.selectChunk.emit('ch_live');
-    await fixture.whenStable();
-
-    expect(navigate).toHaveBeenCalledWith(['/board', 'chunk', 'ch_live']);
+    const stub = stubHubClient({ 'GET /api/events': () => ({ events: [] }) });
+    try {
+      TestBed.configureTestingModule({
+        imports: [EventsPage],
+        providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(new QueryClient())],
+      });
+      const fixture = TestBed.createComponent(EventsPage);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelector('app-events-panel')).not.toBeNull();
+    } finally {
+      stub.restore();
+    }
   });
 });

@@ -161,22 +161,39 @@ describe('Mobile chunk drill-down', () => {
     expect(link?.getAttribute('href')).toBe(`/events?chunk=${CHUNK_ID}`);
   });
 
+  it('withholds the chunk events link on mobile', async () => {
+    TestBed.inject(ViewportService).setOverride('mobile');
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+    expect(el.querySelector('[data-testid="chunk-events-link"]')).toBeNull();
+  });
+
   it('keeps Node history in the desktop General tab', async () => {
+    stub.restore();
+    stub = stubHubClient(chunkRoutes({
+      ...DETAIL,
+      questions: [
+        questionView({ question_id: 'open', chunk_id: CHUNK_ID, question: 'Open?', answered: false }),
+        questionView({ question_id: 'answered', chunk_id: CHUNK_ID, question: 'Answered?', answered: true, answer: 'Yes' }),
+      ],
+      decision: decisionView({ decision_id: 'decision', chunk_id: CHUNK_ID, node_id: 'gate', node_name: 'gate', transitioned: false }),
+    }));
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('[data-testid="board-chunk-detail"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="tab-general"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('false');
 
-    const sections = Array.from(el.querySelectorAll('[data-testid^="section-"]')).map((node) =>
+    const sections = Array.from(el.querySelectorAll('.lhs [data-testid="open-question"], .lhs [data-testid="section-work-item"], .lhs [data-testid="section-issues"], .lhs [data-testid="answered-questions"], .lhs [data-testid="open-decision"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
     expect(sections).toEqual([
+      'open-question',
       'section-work-item',
       'section-issues',
-      'section-node-history',
-      'section-asks',
+      'answered-questions',
+      'open-decision',
     ]);
+    expect(el.querySelector('[data-testid="section-node-history"]')).not.toBeNull();
   });
 
   it('on mobile, keeps General free of Node history and shows an unselected Node history tab as its timeline only', async () => {

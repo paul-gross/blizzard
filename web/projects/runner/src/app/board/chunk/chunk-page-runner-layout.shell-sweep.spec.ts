@@ -7,7 +7,9 @@ import { type runnerApi } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
+  decisionView,
   hostRunnerView,
+  questionView,
   runnerLeaseView,
   settle,
   stubError,
@@ -23,7 +25,7 @@ import { RunnerChunkPage } from './runner-chunk-page';
  * The shared chunk page, mounted through the runner's own route table, as its half of
  * `web:shell-sweep` (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep) — a real,
  * headless-Chromium proof that every tab — General (work item, issues, node
- * history summary, asks · decisions), Node history, Artifacts, Transcripts —
+ * history summary, asks, answered questions and decisions), Node history, Artifacts, Transcripts —
  * renders with no horizontal overflow at phone widths, the way the hub's own
  * chunk detail page is proven (`chunk-page-layout.shell-sweep.spec.ts`). The
  * General tab's `@media (min-width: 720px)` two-column grid
@@ -61,6 +63,15 @@ const DETAIL: runnerApi.ChunkDetail = chunkDetail({
   closed_prs: [],
   landed_repos: [],
   work_refs: [workRefView({ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: null })],
+  questions: [
+    questionView({ question_id: 'qn_open', chunk_id: CHUNK_ID, question: 'What next?', answered: false }),
+    questionView({ question_id: 'qn_answered', chunk_id: CHUNK_ID, question: 'Earlier question?', answered: true, answer: 'Yes' }),
+  ],
+  decision: decisionView({
+    decision_id: 'de_01', chunk_id: CHUNK_ID, node_id: 'nd_review', node_name: 'review',
+    choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
+    check_results: [], transitioned: false,
+  }),
   history: [
     transitionView({
       choice_name: 'pass',
@@ -179,6 +190,19 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
             expect(distinctTops.size, `${label}: sections did not stack — tops were ${tops.join(', ')}`).toBe(
               sections.length,
             );
+            const ordered = ['open-question', 'section-work-item', 'section-issues', 'answered-questions', 'open-decision']
+              .map((id) => {
+                const matches = root.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`);
+                expect(matches.length, `${label}: ${id} must occur once`).toBe(1);
+                return matches[0].getBoundingClientRect();
+              });
+            for (let i = 1; i < ordered.length; i += 1) {
+              expect(ordered[i].top, `${label}: section ${i} is not below its predecessor`)
+                .toBeGreaterThanOrEqual(ordered[i - 1].bottom);
+            }
+            // The runner view is read-only even when live asks and gates are present.
+            expect(root.querySelector('[data-testid="answer-submit"]')).toBeNull();
+            expect(root.querySelector('[data-testid="decision-choice"]')).toBeNull();
           }
         }
       }

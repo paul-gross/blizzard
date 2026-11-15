@@ -98,7 +98,7 @@
                     @if (entry.bounce; as bounce) {
                       <span class="compact-bounce" [title]="bounce.full">
                         @if (bounce.identity; as identity) {<span>{{ identity }}</span>}
-                        <span class="detail">{{ bounce.reason }}</span>
+                        <span class="detail">{{ entry.text }}</span>
                       </span>
                     } @else if (entry.move; as move) {
                       <!-- Each part keeps whole — a name never breaks at its hyphens — and a line breaks only before a separator, which
@@ -112,7 +112,7 @@
                         ></span
                       >
                     } @else {
-                      <span class="text">{{ entry.text }}</span>
+                      <span class="text" [title]="entry.rawOutcome">{{ entry.text }}</span>
                     }
                     @if (entry.logKey; as key) {
                       <a class="log" [routerLink]="'/board/chunk/' + id + '/artifact/' + key | lensLink">log</a>

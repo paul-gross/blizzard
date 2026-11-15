@@ -3,7 +3,7 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import { type HostRegistryView, listHostsApiHostsGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubHostsKey } from 'fleet/shell';
 
 /**
- * Hub `GET /api/hosts` read — the host registry the runners view groups its runners under,
+ * Hub `GET /api/hosts` read — the shared host registry,
  * each host with its reported workspaces and subscription usage, through TanStack Query and
  * the generated hub client (bzh:generated-client).
  * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).

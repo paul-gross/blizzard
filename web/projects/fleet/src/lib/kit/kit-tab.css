@@ -63,7 +63,7 @@
 :host(.bottom) {
   flex: 1;
   justify-content: center;
-  padding: 10px 0 8px;
+  padding: 19px 0;
   border-right: 0;
   color: var(--label-dim);
   position: relative;

@@ -50,21 +50,32 @@ describe('ChunkGeneralTab', () => {
 
   it('renders the wrapper handle and every section off plain inputs, in attention order', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
-    fixture.componentRef.setInput('detail', DETAIL);
+    fixture.componentRef.setInput('detail', {
+      ...DETAIL,
+      questions: [
+        questionView({ question_id: 'open', chunk_id: DETAIL.chunk_id, question: 'Open?', answered: false }),
+        questionView({ question_id: 'answered', chunk_id: DETAIL.chunk_id, question: 'Answered?', answered: true, answer: 'Yes' }),
+      ],
+      decision: decisionView({ decision_id: 'decision', chunk_id: DETAIL.chunk_id, node_id: 'gate', node_name: 'gate', transitioned: false }),
+    });
     fixture.componentRef.setInput('workItems', WORK_ITEMS);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="chunk-general-tab"]')).not.toBeNull();
-    const sections = Array.from(el.querySelectorAll('[data-testid^="section-"]')).map((node) =>
+    const sections = Array.from(el.querySelectorAll('.lhs [data-testid="open-question"], .lhs [data-testid="section-work-item"], .lhs [data-testid="section-issues"], .lhs [data-testid="answered-questions"], .lhs [data-testid="open-decision"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
     expect(sections).toEqual([
+      'open-question',
       'section-work-item',
       'section-issues',
-      'section-node-history',
-      'section-asks',
+      'answered-questions',
+      'open-decision',
     ]);
+    expect(el.querySelector('[data-testid="section-node-history"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="answer-submit"]')).toBeNull();
+    expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
     expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
   });
 
@@ -171,7 +182,7 @@ describe('ChunkGeneralTab', () => {
     expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: DETAIL.chunk_id });
   });
 
-  it('re-emits resolveDecision from the asks section when canResolve opts in', async () => {
+  it('re-emits resolveDecision from the decisions section when canResolve opts in', async () => {
     const waiting: ChunkDetail = {
       ...DETAIL,
       status: 'waiting_on_human',

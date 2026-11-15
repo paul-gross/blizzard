@@ -77,7 +77,7 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-card"]')];
     expect(cards.map((card) => card.getAttribute('data-chunk'))).toEqual(['a', 'b', 'c']);
-    expect(cards.map((card) => card.querySelector('app-urgency-pill')?.textContent?.replace(/\s+/g, ' ').trim() ?? null)).toEqual(['🔥', null, null]);
+    expect(cards.map((card) => card.querySelector('.banner-label')?.textContent?.trim() ?? null)).toEqual(['Urgent', null, null]);
   });
 
   it('renders the five vitals', async () => {
@@ -97,17 +97,19 @@ describe('GlanceView', () => {
     expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('Done');
   });
 
-  it('keeps the supplied policy visible when a vital filters the list', async () => {
+  it('uses the supplied policy heading without showing policy prose', async () => {
     const fixture = render();
     fixture.componentRef.setInput('donePolicy', { heading: 'Finished', explanation: 'Server-selected completed work', cutoffs: [] });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('Finished');
     expect(text(el.querySelector('[data-testid="glance-done-divider"]'))).toContain('Finished');
+    expect(el.textContent).not.toContain('Server-selected completed work');
     el.querySelector<HTMLElement>('[data-testid="vital-done-today"]')?.click();
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="glance-done-divider"]')).toBeNull();
-    expect(text(el.querySelector('[data-testid="glance-done-policy"]'))).toBe('Server-selected completed work');
+    expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('Finished');
+    expect(el.textContent).not.toContain('Server-selected completed work');
   });
 
   it('shows the list\'s loading, error, and empty states in place of the list', async () => {

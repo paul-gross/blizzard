@@ -47,10 +47,8 @@
           [canControl]="canControl()"
           (selectChunk)="selectChunk.emit($event)"
         >
-          @if (chunkControl()?.canControl() && !urgencyDetail(card.chunkId).terminal) {
-            <fleet-chunk-urgency chunkCardUrgency [detail]="urgencyDetail(card.chunkId)" [control]="chunkControl()" />
-          } @else if (urgencyFor(card.chunkId); as urgency) {
-            <app-urgency-pill chunkCardUrgency [urgency]="urgency" />
+          @if (urgencyFor(card.chunkId); as urgency) {
+            <fleet-chunk-urgency chunkCardUrgency [detail]="urgencyDetail(card.chunkId)" [resolvedUrgency]="urgency" [banner]="true" />
           }
           @if (strips().get(card.chunkId); as strip) {
             <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />
@@ -69,10 +67,8 @@
         [canControl]="canControl()"
         (selectChunk)="selectChunk.emit($event)"
       >
-        @if (chunkControl()?.canControl() && !urgencyDetail(card.chunkId).terminal) {
-          <fleet-chunk-urgency chunkCardUrgency [detail]="urgencyDetail(card.chunkId)" [control]="chunkControl()" />
-        } @else if (urgencyFor(card.chunkId); as urgency) {
-          <app-urgency-pill chunkCardUrgency [urgency]="urgency" />
+        @if (urgencyFor(card.chunkId); as urgency) {
+          <fleet-chunk-urgency chunkCardUrgency [detail]="urgencyDetail(card.chunkId)" [resolvedUrgency]="urgency" [banner]="true" />
         }
         @if (strips().get(card.chunkId); as strip) {
           <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />

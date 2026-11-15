@@ -29,6 +29,7 @@ import {
 import { withinDoneWindow } from '../core/done-window';
 import { ordinal, placeInLine } from '../core/flow-place.model';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../core/step-label';
+import { deliveryDiagnostic, deliveryFailureLabel, type DeliveryFailureLabel } from './delivery-failure-label.model';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;
@@ -110,6 +111,7 @@ function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
 /** The chunk's latest recorded bounce, as a row names it. */
 export interface DeliveryBounce {
   readonly compact: ReturnType<typeof compactBounce>;
+  readonly label: DeliveryFailureLabel;
   /** `failure`, `conflict`, `poll-timeout` — the answer that bounced it. */
   readonly cause: string;
   /** Whether the bounce's turn withdrew its submission from its flows, as the hub records it. */
@@ -205,12 +207,13 @@ function chunkBounce(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryBounc
   const reason = compact.reason;
   return {
     compact,
+    label: deliveryFailureLabel(latest.cause),
     cause: latest.cause,
     withdrawn: latest.withdrawn,
     reason,
     count: chunk.bounce_count,
     at: latest.recorded_at,
-    title: [compact.full, latest.withdrawn ? 'withdrawn' : null, formatAbsolute(latest.recorded_at)].filter((part) => part !== null).join('\n'),
+    title: [deliveryDiagnostic(compact.full, latest.cause), latest.withdrawn ? 'withdrawn' : null, formatAbsolute(latest.recorded_at)].filter((part) => part !== null).join('\n'),
   };
 }
 
@@ -369,7 +372,7 @@ export function deliveredRecently(list: DeliveryList, now: number): readonly Del
 
 /** The stage a phone's card names: a bounce, its place in line, or the furthest stage reached. */
 export function cardStageLabel(row: DeliveryRow): string {
-  if (row.bounce) return `${row.bounce.cause}${row.bounce.withdrawn ? ' · withdrawn' : ''}`;
+  if (row.bounce) return `${row.bounce.label}${row.bounce.withdrawn ? ' · withdrawn' : ''}`;
   if (row.stage === 1 && row.line) return `in line ${row.line.best}`;
   return row.stage >= 0 ? STAGES[row.stage] : 'no stage';
 }

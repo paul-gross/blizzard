@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { eventChunkIds, eventRunnerIds, eventRunnerNames, filterUniverse } from './events-panel.model';
 
 describe('filterUniverse', () => {
-  it('is empty with at most one distinct id and no selection', () => {
+  it('retains a single distinct id with no selection', () => {
     expect(filterUniverse([], null)).toEqual([]);
-    expect(filterUniverse(['r1', 'r1'], null)).toEqual([]);
+    expect(filterUniverse(['r1', 'r1'], null)).toEqual(['r1']);
   });
 
   it('sorts the distinct ids once there are two', () => {
@@ -52,7 +52,7 @@ describe('eventChunkIds', () => {
     expect(eventChunkIds(events, null)).toEqual(['ch_a', 'ch_b']);
   });
 
-  it('hides the row for a single chunk with no selection', () => {
-    expect(eventChunkIds([{ chunk_id: 'ch_a' }, { chunk_id: undefined }], null)).toEqual([]);
+  it('offers a single chunk alongside chunkless events', () => {
+    expect(eventChunkIds([{ chunk_id: 'ch_a' }, { chunk_id: undefined }], null)).toEqual(['ch_a']);
   });
 });

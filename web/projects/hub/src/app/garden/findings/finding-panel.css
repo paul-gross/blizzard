@@ -68,6 +68,9 @@
   color: var(--label);
 }
 .fp-content {
+  width: 100%;
+  max-width: 1200px;
+  box-sizing: border-box;
   min-width: 0;
   overflow-wrap: anywhere;
 }

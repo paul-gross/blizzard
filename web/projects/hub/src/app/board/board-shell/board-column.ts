@@ -1,4 +1,3 @@
-import { UrgencyPill } from '../../core/urgency-pill';
 import { urgencyPill } from '../../core/urgencies.model';
 import type { UrgencyView } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
@@ -67,7 +66,7 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [UrgencyPill, BoardCardSkeleton, ChunkCard, ChunkCardProgress, ChunkUrgency, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
+  imports: [BoardCardSkeleton, ChunkCard, ChunkCardProgress, ChunkUrgency, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',

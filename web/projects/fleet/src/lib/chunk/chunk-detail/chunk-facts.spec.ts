@@ -1,10 +1,28 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { provideRouter, Router, RouterLink } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, chunkNeighborhoodView, chunkNeighborView, chunkUsageTotalView } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
+import { IN_APP_LINK, type InAppLink } from '../../core/lens-link';
+
+@Component({
+  imports: [ChunkFacts],
+  template: `<fleet-chunk-detail-facts [detail]="detail" [boardChunkIds]="ids" />`,
+})
+class BoardFactsRoute {
+  readonly ids = new Set(['ch_on']);
+  readonly detail = chunkDetail({ neighborhood: chunkNeighborhoodView({
+    prerequisites: [chunkNeighborView({ chunk_id: 'ch_on' })],
+    dependents: [chunkNeighborView({ chunk_id: 'ch_off' })],
+  }) });
+}
+
+@Component({ template: '' })
+class StandaloneRoute {}
 
 describe('ChunkFacts', () => {
   beforeEach(async () => {
@@ -102,5 +120,47 @@ describe('ChunkFacts', () => {
     );
     expect(el.querySelector('[data-testid="fact-blocks"] .empty')?.textContent).toBe('—');
     expect(el.querySelector('[data-testid="fact-depends-on"] .empty')).toBeNull();
+  });
+
+  it('merges an in-board neighbor selection and leaves off-board neighbors as standalone links', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', chunkDetail({
+      neighborhood: chunkNeighborhoodView({
+        prerequisites: [chunkNeighborView({ chunk_id: 'ch_on' })],
+        dependents: [chunkNeighborView({ chunk_id: 'ch_off' })],
+      }),
+    }));
+    fixture.componentRef.setInput('boardChunkIds', new Set(['ch_on']));
+    await fixture.whenStable();
+    const links = fixture.debugElement.queryAll(By.directive(RouterLink)).map((el) => el.injector.get(RouterLink));
+    expect(links[0].queryParamsHandling).toBe('merge');
+    expect(links[0].queryParams).toEqual({ chunk: 'ch_on', step: null, at: null });
+    expect(links[1].queryParamsHandling).toBe('replace');
+    expect(links[1].queryParams).toBeNull();
+    expect(links[1].urlTree?.toString()).toContain('/board/chunk/ch_off');
+  });
+});
+
+describe('ChunkFacts navigation', () => {
+  it('selects an on-board neighbor in place and falls back to lensed standalone detail', async () => {
+    const rewrite = (link: InAppLink): InAppLink =>
+      Array.isArray(link) && typeof link[0] === 'string' && link[0].startsWith('/')
+        ? ['/p', 'example', link[0].slice(1), ...link.slice(1)] : link;
+    TestBed.configureTestingModule({ providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([
+        { path: 'p/example/board', component: BoardFactsRoute },
+        { path: 'p/example/board/chunk/:id', component: StandaloneRoute },
+      ]),
+      { provide: IN_APP_LINK, useValue: rewrite },
+    ] });
+    const harness = await RouterTestingHarness.create('/p/example/board?layout=list&chunk=old&step=build&at=12&filter=ready');
+    const router = TestBed.inject(Router);
+    harness.routeNativeElement!.querySelector<HTMLElement>('[data-testid="depends-on-neighbor"]')!.click();
+    await harness.fixture.whenStable();
+    expect(router.url).toBe('/p/example/board?layout=list&chunk=ch_on&filter=ready');
+    harness.routeNativeElement!.querySelector<HTMLElement>('[data-testid="blocks-neighbor"]')!.click();
+    await harness.fixture.whenStable();
+    expect(router.url).toBe('/p/example/board/chunk/ch_off');
   });
 });

@@ -54,7 +54,7 @@ const WIDTHS = [800, 390, 320];
 
 /** Every in-flow control the fixture above makes live at once — Pause, Detach,
  * Complete, and Delete live in the `⋯` trigger's own menu. */
-const SWEPT = ['chunk-urgency-menu', 'chunk-actions-menu', 'detail-close'] as const;
+const SWEPT = ['chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk
  * (`blocking` gate open) makes all four live at once. */
@@ -164,18 +164,11 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
       }
     });
 
-    it(`keeps the opened urgency menu on-viewport at width ${width}`, async () => {
+    it(`renders urgency read-only at width ${width}`, async () => {
       const { root, fixture } = await renderHeader(width);
       try {
-        root.querySelector<HTMLElement>('[data-testid="chunk-urgency-menu"]')!.click();
-        await fixture.whenStable();
-        const items = document.body.querySelectorAll<HTMLElement>('[data-testid="chunk-urgency-options"] [role="menuitemradio"]');
-        expect(items.length).toBe(2);
-        for (const item of items) {
-          const rect = item.getBoundingClientRect();
-          expect(rect.left).toBeGreaterThanOrEqual(-0.5);
-          expect(rect.right).toBeLessThanOrEqual(width + 0.5);
-        }
+        expect(root.querySelector('[data-testid="chunk-urgency"]')?.textContent).toBe('Normal');
+        expect(root.querySelector('[data-testid="chunk-urgency-menu"]')).toBeNull();
       } finally { fixture.destroy(); root.remove(); }
     });
 

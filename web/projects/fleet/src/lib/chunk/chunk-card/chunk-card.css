@@ -63,6 +63,13 @@
 .urgency-slot:not(:has(> *)) {
   display: none;
 }
+.urgency-slot:has(> *) {
+  margin: -4px -6px 0;
+}
+:host(.reorder-armed) .urgency-slot:has(> *) {
+  margin-left: -22px;
+  --urgency-inset-left: 22px;
+}
 .card:has(.card-open :focus-visible) {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
@@ -126,7 +133,7 @@
 .card-id {
   flex: none;
   margin-left: auto;
-  color: var(--edge);
+  color: var(--amber);
   font-size: var(--fs-sm);
   letter-spacing: 0.04em;
   white-space: nowrap;

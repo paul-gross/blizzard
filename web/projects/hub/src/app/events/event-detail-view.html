@@ -1,0 +1,25 @@
+<fleet-kit-panel class="fill" label="Event details" aria-label="Event details">
+  <fleet-kit-async-state [state]="state()" loadingMode="content" errorText="FAILED TO LOAD EVENTS" emptyText="EVENT UNAVAILABLE IN THE CURRENT FEED" emptyTestid="event-detail-unavailable">
+    <div loading class="loading"><fleet-kit-skeleton [rows]="5" /></div>
+    @if (event(); as ev) {
+      <div class="details" data-testid="event-detail">
+        <div><strong>Kind</strong> {{ ev.kind }}</div>
+        <div><strong>Severity</strong> {{ ev.severity }}</div>
+        <div><strong>Message</strong> {{ ev.message }}</div>
+        <div><strong>Recorded at</strong> {{ ev.recorded_at }}</div>
+        @if (ev.runner_id; as id) {
+          <div><strong>Runner</strong> <a class="runner-link" data-testid="event-detail-runner"
+            [routerLink]="['/fleet', runnerFleetIds().get(id) ?? id] | lensLink">{{ runnerName(id, ev.runner_name) }} ({{ id }})</a></div>
+        }
+        @if (ev.chunk_id; as id) {
+          <div><strong>Chunk</strong> <a class="chunk-link" data-testid="event-detail-chunk"
+            [routerLink]="(mobile() ? ['/board', 'chunk', id] : ['/board']) | lensLink"
+            [queryParams]="mobile() ? null : { chunk: id }">{{ id }}</a></div>
+        }
+        @if (ev.lease_id; as id) { <div><strong>Lease</strong> {{ id }}</div> }
+        @if (ev.node_name; as node) { <div><strong>Node</strong> {{ node }}</div> }
+        @if (ev.detail) { <div><strong>Detail</strong><pre>{{ payload(ev) }}</pre></div> }
+      </div>
+    }
+  </fleet-kit-async-state>
+</fleet-kit-panel>

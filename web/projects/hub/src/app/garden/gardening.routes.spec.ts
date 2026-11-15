@@ -333,8 +333,7 @@ describe('the /gardening route subtree', () => {
     const unnestedGardenReads = paths.filter((path) =>
       /^\/api\/(scopes|routines|cadences|runs|findings|garden-proposals)(\/|$)/.test(path),
     );
-    // Two tenant-wide lists set the project beside the others — the crumb menu's proposals waiting per project and the
-    // scope detail's same-slug callout. No other garden list, and no record, is read outside the project.
-    expect([...new Set(unnestedGardenReads)].sort()).toEqual(['/api/garden-proposals', '/api/scopes']);
+    // The scope detail's same-slug callout reads scopes tenant-wide.
+    expect([...new Set(unnestedGardenReads)].sort()).toEqual(['/api/scopes']);
   });
 });

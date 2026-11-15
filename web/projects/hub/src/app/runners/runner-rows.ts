@@ -6,7 +6,7 @@ import { injectProjectFilter } from 'fleet/shell';
 import { boardChunksQueryOptions } from '../core/chunks.query';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
 import { foldHostCards, type HostCard } from './host-rows.model';
-import { injectHubHostsQuery } from './hosts.query';
+import { injectHubHostsQuery } from '../core/hosts.query';
 import { injectHubRunnersQuery } from '../core/runners.query';
 
 /**
@@ -32,6 +32,8 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   readonly rows: () => readonly RunnerRow[];
   readonly cards: () => readonly HostCard[];
   readonly state: () => KitAsyncStateValue;
+  readonly chunksState: () => KitAsyncStateValue;
+  readonly chunksError: () => boolean;
 } {
   const runnersQuery = injectHubRunnersQuery(includeRetired);
   const hostsQuery = injectHubHostsQuery(includeRetired);
@@ -70,5 +72,9 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
     asyncStateOf([runnersQuery, hostsQuery], rows().length === 0 && cards().length === 0),
   );
 
-  return { rows, cards, state };
+  const chunksState = computed<KitAsyncStateValue>(() =>
+    chunksQuery.data() !== undefined ? 'ready' : chunksQuery.isError() ? 'error' : 'loading',
+  );
+
+  return { rows, cards, state, chunksState, chunksError: chunksQuery.isError };
 }

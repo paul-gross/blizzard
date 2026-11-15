@@ -25,7 +25,6 @@
       (reposition)="reposition($event)"
       (laneMove)="moveAcrossLanes($event)"
     >
-      <app-new-hub-item boardActions (created)="select($event)" />
       @if (layout() === 'tracks') {
         <app-tracks-panel boardTracks class="tracks" />
       }
@@ -38,6 +37,7 @@
         class="dock"
         [class.closed]="!selected()"
         [chunkId]="selected()"
+        [boardChunkIds]="boardChunkIds()"
         [graphLinkBase]="['/graphs']"
         (dismiss)="select(null)"
       />

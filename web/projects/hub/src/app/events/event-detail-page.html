@@ -1,0 +1,5 @@
+<div class="page" data-testid="event-detail-page">
+  <a class="back-row" [routerLink]="['/events'] | lensLink" [queryParams]="backParams()" data-testid="event-detail-back"><fleet-kit-back-bar label="Events" /></a>
+  <app-event-detail-view [event]="event()" [state]="state()" [runnerHosts]="hosts()"
+    [runnerFleetIds]="runnerFleetIds()" [mobile]="viewport.mode() === 'mobile'" />
+</div>

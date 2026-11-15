@@ -47,6 +47,8 @@ export class ChunkDetail {
   /** The selected chunk id, or `null` when the dock is closed. */
   readonly chunkId = input<string | null>(null);
 
+  readonly boardChunkIds = input<ReadonlySet<string>>(new Set());
+
   /** The graphs view's path segments, forwarded to {@link ChunkDetailPanel.graphLinkBase};
    * `null` withholds the graph links. */
   readonly graphLinkBase = input<readonly string[] | null>(null);

@@ -1,56 +1,43 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { FLEET_CLOCK, KitAsyncState, KitPanel, asyncStateOf } from 'fleet';
+import { KitAsyncState, asyncStateOf } from 'fleet';
 
+import { ProjectLens } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
+import { injectHubCadencesQuery } from '../core/cadences.query';
+import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
 import { injectHubRoutinesQuery } from '../core/routines.query';
-import { defaultRoutineWindow } from '../core/routine-window';
-import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectHubGardenProposalsQuery } from '../proposals/garden-proposals.query';
-import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningDoorwayCards } from './gardening-doorway-cards';
 import { doorwayCards } from './gardening-doorway.model';
 
-/**
- * The gardening tab on All — a doorway, not a garden. Every scope, routine, run, finding and proposal belongs to one
- * project, so there is no tenant-wide garden to show: one card per project gives its standing at a glance (its
- * routines; its scopes and whether a run is sweeping; the findings its recent runs added and when one last finished;
- * proposals waiting) and opens its garden under its lens.
- *
- * The container reads and groups; {@link GardeningDoorwayCards} draws the cards.
- *
- * Every count comes from the tenant-wide list reads, grouped by each record's own `project_id`; the run figures cover
- * the reporting window.
- */
+/** The All-project doorway into a project's garden. */
 @Component({
   selector: 'app-gardening-doorway',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GardeningDoorwayCards, KitAsyncState, KitPanel],
+  imports: [GardeningDoorwayCards, KitAsyncState],
   templateUrl: './gardening-doorway.html',
   styleUrl: './gardening-doorway.css',
 })
 export class GardeningDoorway {
-  private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
+  private readonly lens = inject(ProjectLens);
   private readonly projectsQuery = injectProjectsQuery();
-  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
 
-  protected readonly cards = computed(() =>
-    doorwayCards({
-      projects: this.projectsQuery.data() ?? [],
-      scopes: this.scopesQuery.data() ?? [],
-      routines: this.routinesQuery.data() ?? [],
-      runs: this.runsQuery.data() ?? [],
-      proposals: this.proposalsQuery.data() ?? [],
-    }),
-  );
+  protected readonly cards = computed(() => doorwayCards(
+    this.projectsQuery.data() ?? [],
+    this.cadencesQuery.data() ?? [],
+    this.routinesQuery.data() ?? [],
+    this.proposalsQuery.data() ?? [],
+  ));
+  protected readonly state = computed(() => asyncStateOf(
+    [this.projectsQuery, this.cadencesQuery, this.routinesQuery, this.proposalsQuery],
+    this.cards().length === 0,
+  ));
 
-  protected readonly state = computed(() =>
-    asyncStateOf(
-      [this.projectsQuery, this.scopesQuery, this.routinesQuery, this.runsQuery, this.proposalsQuery],
-      this.cards().length === 0,
-    ),
-  );
+  protected chooseProject(slug: string): void {
+    void this.lens.switchTo(slug, `${GARDENING_DOORWAY_URL}/${GARDENING_LANDING_TAB}`);
+  }
 }

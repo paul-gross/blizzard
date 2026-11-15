@@ -92,6 +92,7 @@ describe('HostDetail', () => {
   async function render(detail: HostDetailVm): Promise<HTMLElement> {
     const fixture = TestBed.createComponent(HostDetail);
     fixture.componentRef.setInput('detail', detail);
+    fixture.componentRef.setInput('origin', detail.card.url ? { kind: 'link', href: detail.card.url } : { kind: 'none' });
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }

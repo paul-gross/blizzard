@@ -66,6 +66,8 @@ export const VIEW_ROUTES: Routes = [
   { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },
+  // A shared event detail link remains available in either viewport.
+  { path: 'events/:eventId', loadComponent: () => import('../events/event-detail-page').then((m) => m.EventDetailPage) },
   // The Fleet tab is **one URL, two shells**, like `board`: the phone's `RunnersPage` first, guarded by
   // `matchesMobileViewport`, then the desktop `FleetPage` the router falls through to. Each carries the `:id`
   // child that selects within it — a host or runner id the desktop list keeps mounted across, and which a phone

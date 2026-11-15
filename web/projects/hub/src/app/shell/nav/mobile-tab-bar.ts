@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/shell';
+import { MobileTabBar as FleetMobileTabBar } from 'fleet/shell';
+import { MOBILE_TAB_ITEMS } from './navigation.model';
 
 /**
  * The hub's mobile bottom tab bar (mock screen C's `.tabbar`,
@@ -18,11 +19,5 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
   templateUrl: './mobile-tab-bar.html',
 })
 export class MobileTabBar {
-  protected readonly items: readonly MobileTabItem[] = [
-    { testid: 'tab-board', label: 'Board', route: '/board' },
-    { testid: 'tab-delivery', label: 'Delivery', route: '/delivery' },
-    { testid: 'tab-fleet', label: 'Fleet', route: '/fleet' },
-    { testid: 'tab-gardening', label: 'Gardening', route: '/gardening' },
-    { testid: 'tab-events', label: 'Events', route: '/events' },
-  ];
+  protected readonly items = MOBILE_TAB_ITEMS;
 }

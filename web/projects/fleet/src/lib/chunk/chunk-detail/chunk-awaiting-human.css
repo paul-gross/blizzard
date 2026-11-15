@@ -1,6 +1,14 @@
 :host {
   display: contents;
 }
+@media (max-width: 719px) {
+  :host(.answered-questions) .answered {
+    order: 1;
+  }
+  :host(.decisions) .awaiting {
+    order: 2;
+  }
+}
 .awaiting,
 .answered {
   margin-bottom: 8px;

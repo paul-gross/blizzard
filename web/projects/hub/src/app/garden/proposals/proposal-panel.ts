@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
+import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
 import type { FindingTriageVerb } from '../core/finding-list';
 import { findingStateTone, isFindingExited } from '../core/finding-state';
 import { LensLink } from 'fleet/shell';
@@ -111,15 +111,15 @@ export interface ProposalPanelVm {
  * any finding's state — the surface's own answer to the two things acceptance does
  * not do.
  *
- * A still-waiting proposal (`vm.closure === null`) offers Pass and Accept, each
- * naming the CLI verb behind it — withheld without `chunk:control`, the
+ * A still-waiting proposal (`vm.closure === null`) offers Pass and Accept,
+ * withheld without `chunk:control`, the
  * same permission the closing routes themselves require, via the `canControl` input
  * a viewer identity resolves to `false`.
  */
 @Component({
   selector: 'app-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, KitSectionHead, RouterLink, LensLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, RouterLink, LensLink],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })
@@ -166,14 +166,4 @@ export class FleetProposalPanel {
     return findingStateTone(row.state);
   }
 
-  /** The pass/accept CLI hints as an aligned fact grid, above the action bar
-   * (`fleet-kit-fact-list`, `KitFact`'s own shape) — a method, not a stored
-   * computed, since it depends on the still-waiting proposal's id, already read
-   * off `vm()` at the one call site in the template. */
-  protected cliRows(proposalId: string): readonly KitFact[] {
-    return [
-      { label: 'pass', value: `hub garden-proposal pass ${proposalId}` },
-      { label: 'accept', value: `hub garden-proposal accept ${proposalId}` },
-    ];
-  }
 }

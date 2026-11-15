@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type hubApi, type KitAsyncStateValue, asyncState, injectRunnerHostNames } from 'fleet';
+import { type KitAsyncStateValue, asyncState, injectNowSignal, injectRunnerHostNames, ViewportService } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
+import { injectHubHostsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';
-import { eventChunkIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
+import { eventChunkIds, eventRunnerFleetIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
 import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
@@ -27,15 +28,16 @@ import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
   styleUrl: './events-panel.css',
 })
 export class EventsPanel {
-  /** Emitted with a chunk id when a row's chunk deep-link is activated. */
-  readonly selectChunk = output<string>();
-
   /** The active severity filter, or `null` for "every severity". */
-  protected readonly severity = signal<hubApi.EventLogSeverity | null>(null);
+  protected readonly severity = computed(() => narrowEventSeverity(this.filters.read('severity') ?? ''));
   /** The active runner filter, or `null` for "every runner". */
-  protected readonly runnerId = signal<string | null>(null);
+  protected readonly runnerId = computed(() => this.filters.read('runner'));
   private readonly filters = injectQueryFilters();
   protected readonly runnerHosts = injectRunnerHostNames();
+  protected readonly now = injectNowSignal();
+  protected readonly viewport = inject(ViewportService);
+  private readonly hostsQuery = injectHubHostsQuery();
+  protected readonly runnerFleetIds = computed(() => eventRunnerFleetIds(this.hostsQuery.data() ?? []));
 
   /** The active chunk filter, or `null` for "every chunk" — read from `?chunk=` and
    * sent to the hub as `chunk_id`, never applied client-side. */
@@ -58,16 +60,14 @@ export class EventsPanel {
    * severity-only {@link optionsQuery} only supplies the filter chip universe. */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.query, this.events().length === 0));
 
-  /** The runner-id universe for the filter chips: the distinct runners in the
-   * severity-scoped feed, plus the active runner so its chip never disappears, sorted.
-   * Empty (row hidden) when there is at most one runner and none is selected — nothing
-   * worth filtering.
+  /** The runner-id universe for the dropdown: the distinct runners in the
+   * severity-scoped feed, plus the active runner so its option never disappears, sorted.
    *
    * Falsy ids are stripped, mirroring the chunk side below: a projected escalation names
    * no runner, and an id-less row must not become a label-less chip whose `''` value
    * collides with the "All" chip's own reset sentinel. */
   protected readonly runnerIds = computed(() => eventRunnerIds(this.optionsQuery.data() ?? [], this.runnerId()));
-  /** The runner chips' names, from the same options read. */
+  /** The runner options' names, from the same options read. */
   protected readonly runnerNames = computed(() => eventRunnerNames(this.optionsQuery.data() ?? []));
 
   /** The chunk-id universe for the filter chips — same rule as {@link runnerIds}, over
@@ -75,11 +75,11 @@ export class EventsPanel {
   protected readonly chunkIds = computed(() => eventChunkIds(this.optionsQuery.data() ?? [], this.chunkId()));
 
   protected onFilterChange(severity: string): void {
-    this.severity.set(severity === '' ? null : narrowEventSeverity(severity));
+    this.filters.patch({ severity: severity || null });
   }
 
   protected onRunnerFilterChange(runnerId: string): void {
-    this.runnerId.set(runnerId === '' ? null : runnerId);
+    this.filters.patch({ runner: runnerId || null });
   }
 
   protected onChunkFilterChange(chunkId: string): void {

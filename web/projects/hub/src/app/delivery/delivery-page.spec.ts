@@ -142,8 +142,8 @@ describe('DeliveryPage', () => {
 
     const bounce = row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"]');
     expect(bounce).not.toBeNull();
-    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('checks failed in lint');
-    expect(bounce?.getAttribute('title')).toBe(`checks failed in lint\n${formatAbsolute(fixtureInstant(-600))}`);
+    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('unknown failure');
+    expect(bounce?.getAttribute('title')).toBe(`failure\nchecks failed in lint\n${formatAbsolute(fixtureInstant(-600))}`);
     expect(bounce?.textContent).not.toContain('withdrawn');
     expect(row(el, LANDED).querySelector('[data-testid="delivery-link"]')?.textContent).toContain('9f2c4e1');
   });
@@ -160,7 +160,7 @@ describe('DeliveryPage', () => {
     }));
     const { el } = await open();
     const bounce = row(el, BOUNCED).querySelector('[data-testid="delivery-bounce"]');
-    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('poll-timeout');
+    expect(bounce?.querySelector('.reason')?.textContent?.trim()).toBe('timed out');
     expect(bounce?.getAttribute('title')).toBe(`poll-timeout\nwithdrawn\n${formatAbsolute(fixtureInstant(-600))}`);
   });
 
@@ -221,7 +221,7 @@ describe('DeliveryPage', () => {
       when: entry.querySelector('.when')?.getAttribute('title'),
     }))).toEqual([
       { transition: true, from: 'build/start', to: '→ build/build', reason: null, hover: null, when: formatAbsolute(fixtureInstant(-60)) },
-      { transition: false, from: null, to: null, reason: 'The step ended without declaring commit.', hover: 'The step ended without declaring commit.', when: formatAbsolute(fixtureInstant(-7200)) },
+      { transition: false, from: null, to: null, reason: 'bounced · unknown failure', hover: 'missing_artifact\nThe step ended without declaring commit.', when: formatAbsolute(fixtureInstant(-7200)) },
     ]);
     expect(repos[0].querySelector('a')?.getAttribute('href')).toBe(prView({ number: 41 }).url);
   });

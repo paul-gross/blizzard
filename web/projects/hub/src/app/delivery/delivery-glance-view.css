@@ -22,6 +22,37 @@
   flex-direction: column;
   gap: 4px;
 }
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.loading-card {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 8px;
+  border-left: 2px solid var(--line);
+  background: var(--surface-resting);
+}
+.sk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sk-pair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sk-lane { --kit-skeleton-height: 16px; }
+.sk-ref { width: 35%; --kit-skeleton-height: 11px; }
+.sk-id { width: 18%; --kit-skeleton-height: 13px; }
+.sk-title { width: 80%; --kit-skeleton-height: 12px; }
+.sk-stage { width: 45%; --kit-skeleton-height: 10px; }
+.sk-age { width: 15%; --kit-skeleton-height: 10px; }
 /* A card, as the board's glance draws one: the lane icon beside the work, the status edge, the project's tint. */
 .card {
   position: relative;

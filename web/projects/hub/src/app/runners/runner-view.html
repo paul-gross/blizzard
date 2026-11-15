@@ -1,3 +1,8 @@
+@if (mobileOverview()) {
+  <section class="mobile-overview" aria-label="Runner registry" data-testid="runner-panel">
+    <ng-container *ngTemplateOutlet="content" />
+  </section>
+} @else {
 <fleet-kit-panel
   aria-label="Runner registry"
   data-testid="runner-panel"
@@ -5,8 +10,13 @@
   [count]="rail().rows.length || null"
   countTestid="runners-count"
 >
+  <ng-container *ngTemplateOutlet="content" />
+</fleet-kit-panel>
+}
+<ng-template #content>
   <fleet-kit-async-state
     [state]="state()"
+    [loadingMode]="mobileOverview() ? 'content' : 'text'"
     placement="inline"
     loadingText="LOADING…"
     loadingTestid="runners-loading"
@@ -15,6 +25,46 @@
     emptyText="NO RUNNERS REGISTERED"
     emptyTestid="runners-empty"
   >
+    <div loading class="mobile-loading" data-testid="runners-loading" aria-label="Loading runners">
+      <div class="subs">
+        @for (row of [0, 1]; track row) {
+          <div class="skeleton-usage subscription">
+            <div class="skeleton-who"><fleet-kit-skeleton [rows]="1" /><fleet-kit-skeleton [rows]="1" /></div>
+            <div class="skeleton-windows">
+              @for (window of [0, 1]; track window) {
+                <div class="skeleton-gauge">
+                  <fleet-kit-skeleton class="skeleton-caption" [rows]="1" />
+                  <div class="skeleton-cells">@for (cell of [0, 1, 2, 3, 4, 5]; track cell) { <fleet-kit-skeleton [rows]="1" /> }</div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+      <div class="runners">
+        @for (row of [0, 1]; track row) {
+          <div class="runner">
+            <div class="skeleton-header">
+              <fleet-kit-skeleton class="skeleton-light" [rows]="1" />
+              <fleet-kit-skeleton class="skeleton-name" [rows]="1" />
+              <fleet-kit-skeleton class="skeleton-host" [rows]="1" />
+              <fleet-kit-skeleton class="skeleton-seen" [rows]="1" />
+            </div>
+            <div class="skeleton-usage">
+              <fleet-kit-skeleton class="skeleton-label" [rows]="1" />
+              <div class="skeleton-cells">@for (cell of [0, 1, 2, 3, 4, 5]; track cell) { <fleet-kit-skeleton [rows]="1" /> }</div>
+            </div>
+            @if (canPause()) { <fleet-kit-skeleton class="skeleton-toggle" [rows]="1" /> }
+          </div>
+        }
+      </div>
+      <div class="envs">
+        <div class="skeleton-usage">
+          <fleet-kit-skeleton class="skeleton-label" [rows]="1" />
+          <div class="skeleton-cells">@for (cell of [0, 1, 2, 3, 4, 5]; track cell) { <fleet-kit-skeleton [rows]="1" /> }</div>
+        </div>
+      </div>
+    </div>
     <!-- Most important first: what the fleet can still spend, who is spending it, then the room it has. -->
     @if (rail().subscriptions.length > 0) {
       <div class="subs" data-testid="runner-subscriptions">
@@ -24,6 +74,9 @@
       </div>
     }
     <fleet-kit-error-line [message]="actionError()" testid="runner-action-error" />
+    @if (mobileOverview() && chunksError()) {
+      <fleet-kit-error-line message="Failed to load usage." testid="runner-usage-error" />
+    }
     <ul class="runners" data-testid="runner-list">
       @for (entry of rail().rows; track entry.row.runner_id) {
         <li
@@ -38,6 +91,10 @@
           [attr.data-hub-paused]="entry.row.hub_paused"
           [attr.data-locally-paused]="entry.row.locally_paused"
         >
+          @if (mobileOverview()) {
+            <a class="runner-hit" data-testid="runner-card-link" [routerLink]="['/fleet', entry.fleetId] | lensLink"
+              [attr.aria-label]="'Open ' + entry.row.runner_name + ' on Fleet'"></a>
+          }
           <div class="r1">
             <span class="name" data-testid="runner-name">
               <!-- A fixed-width light: green online, yellow held by a brake, blinking red offline. -->
@@ -45,9 +102,13 @@
                 <app-status-light [light]="entry.light" />
               </span>
               <!-- The name opens this runner on the Fleet tab — its host's detail, or its own when it has none. -->
-              <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | lensLink">{{
-                entry.row.runner_name
-              }}</a>
+              @if (mobileOverview()) {
+                <span class="name-link" data-testid="runner-fleet-link">{{ entry.row.runner_name }}</span>
+              } @else {
+                <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | lensLink">{{
+                  entry.row.runner_name
+                }}</a>
+              }
               <!-- Two brakes, two glyphs, outside the link: a runner stopped by both shows both, because
                    they are cleared by different people in different places. -->
               @if (entry.row.locally_paused) {
@@ -65,6 +126,9 @@
             </span>
           </div>
           @for (agents of entry.agents; track $index) {
+            @if (mobileOverview() && chunksState() === 'loading') {
+              <ng-container *ngTemplateOutlet="usageSkeleton" />
+            } @else if (!mobileOverview() || chunksState() === 'ready') {
             <fleet-kit-slot-bar
               data-testid="runner-agents"
               unit="agents"
@@ -72,6 +136,7 @@
               [used]="agents.used"
               [total]="agents.total"
             />
+            }
           }
           <!-- The hub's brake, spanning the runner — big enough to hit on a phone. -->
           @if (canPause()) {
@@ -95,6 +160,9 @@
     @if (rail().envs.length > 0) {
       <div class="envs">
         @for (envs of rail().envs; track $index) {
+          @if (mobileOverview() && chunksState() === 'loading') {
+            <ng-container *ngTemplateOutlet="usageSkeleton" />
+          } @else if (!mobileOverview() || chunksState() === 'ready') {
           <fleet-kit-slot-bar
             data-testid="runner-env-strip"
             unit="envs"
@@ -102,8 +170,15 @@
             [used]="envs.used"
             [total]="envs.total"
           />
+          }
         }
       </div>
     }
   </fleet-kit-async-state>
-</fleet-kit-panel>
+</ng-template>
+<ng-template #usageSkeleton>
+  <div class="skeleton-usage" aria-label="Loading usage">
+    <fleet-kit-skeleton class="skeleton-label" [rows]="1" />
+    <div class="skeleton-cells">@for (cell of [0, 1, 2, 3, 4, 5]; track cell) { <fleet-kit-skeleton [rows]="1" /> }</div>
+  </div>
+</ng-template>

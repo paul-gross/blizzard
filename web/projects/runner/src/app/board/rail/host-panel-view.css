@@ -67,8 +67,3 @@
   color: var(--label);
   font-size: var(--fs-label);
 }
-/* Environments fill in grey, apart from the agents' amber — the hub board rail's environment strip. */
-.envs {
-  --kit-slot-bar-on: var(--grey);
-  --kit-slot-bar-on-border: var(--grey-dim);
-}

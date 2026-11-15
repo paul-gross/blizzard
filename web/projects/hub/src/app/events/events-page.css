@@ -7,7 +7,7 @@
   box-sizing: border-box;
   height: 100%;
   min-height: 0;
-  padding: 6px;
+  padding: 0;
   display: flex;
 }
 .feed {

@@ -54,18 +54,17 @@ chunk and step.
 
 ## Urgency on the board
 
-With `chunk:control`, **New hub item** in the desktop board header, or at the top of the phone board, opens a form for a
-title, body and urgency. Under the All projects lens the form also requires a project; under a project lens it uses that
-project. The urgency starts at the tenant's default.
+Board cards highlight unfinished, nondefault urgency with colored text and an optional emoji or image. The name sits on
+the left, with its mark on the right on desktop and in the status-icon gutter on a phone. Finished work and work at the
+default have no urgency banner. The chunk detail header names the urgency even at the default.
 
-Cards, list rows and phone rows show a colored urgency pill on unfinished work when its urgency is not the tenant's
-default. The pill shows its emoji, icon, or name. Finished work and work at the default have no pill in the lanes. The
-chunk detail header names the urgency even at the default; with `chunk:control`, its control and the card's actions can
-change an unfinished chunk to another live urgency. The board still displays ready work in rank order, not claim order.
+Urgency is read-only on cards, in chunk details and in their action menus. Create hub items and change a chunk's urgency
+through the CLI; the Board has no hub-item creation control. The board still displays ready work in rank order, not
+claim order.
 
-The tenant's urgency set and default are managed under **Admin → Urgencies**. The new hub item, garden proposal accept,
-routine run, routine and cadence chore forms also offer urgency choices. Their defaults and how urgency affects a
-runner's next claim are described in [urgencies.md](./urgencies.md#on-the-board).
+The tenant's urgency set and default are managed under **Admin → Urgencies**. Garden proposal accept, routine run,
+routine and cadence chore forms also offer urgency choices. Their defaults and how urgency affects a runner's next claim
+are described in [urgencies.md](./urgencies.md#on-the-board).
 
 On the Fleet tab, each runner row in a host's detail, including a hostless runner's detail, has a **Next** line. It
 links the chunk the hub expects that runner to reach for, with its project and urgency, or says `Nothing claimable`.
@@ -112,6 +111,11 @@ it first. With `chunk:control`, the dock's ⋮ menu carries the chunk's actions.
 its Work item; the Work item box names the chunk's session efficiency and, beside it, the chunks it depends on and the
 chunks it blocks, each led by its lane's icon.
 
+Open asks appear first in the left column, answered questions below Issues, and decisions last. A dependency link to a
+chunk visible in the current Board or List selects it in the same dock and preserves the layout and lens; other
+dependency links open the standalone chunk page. On a phone, open asks come first and decisions last in General, and the
+chunk-specific Events link is omitted.
+
 The dock's Node history lists the chunk's steps oldest first, grouping consecutive steps under graph headings that link
 to their graphs. Where usage is recorded, a step's usage row names its dollar cost and who ran it as
 `host/runner · harness`; the full chunk page's Node history keeps the richer session efficiency figure. A bounce shows
@@ -144,6 +148,10 @@ text, a `withdrawn` marker if its submission was withdrawn right after the bounc
 bounced chunk with no other delivery footprint drops off the list after 24 hours. A tenant with nothing delivering or
 delivered reads "Nothing delivering or delivered."
 
+Failure captions use structured evidence: `merge conflict`, `existing check failures`, `timed out`, or
+`unknown failure`. A repository failure without a precise reason stays unknown rather than inheriting a chunk-wide
+timeout.
+
 Clicking a row opens the chunk in a drawer beside the list, held in the URL's `?chunk=`; clicking it again, the drawer's
 ✕, or Escape closes it. The drawer lists the chunk's Repositories — each with its delivery state, branch, PRs, landed
 commit and last update — and its Delivery history newest first: its facts on every flow, its bounces with compact
@@ -155,8 +163,10 @@ screen of its own; that route resolves on a desktop too, so a shared link still 
 
 ## The Gardening tab
 
-`/gardening` shows a project's gardening records under one strip of tabs: Scopes, Routines, Cadences, Runs, Findings and
-Proposals. Each opens a list beside the selected record's detail.
+Under All projects, `/gardening` shows one card per project with cadence, routine and pending-proposal counts. Selecting
+a card changes the global project lens and opens Proposals; browser Back returns to the project cards. Under a project
+lens, one strip carries Scopes, Routines, Cadences, Runs, Findings and Proposals. Each opens a list beside the selected
+record's detail. Proposal bodies render Markdown; proposal bodies and finding text have a bounded reading width.
 
 **Cadences** lists the project's cadences at `/p/{project}/gardening/cadences`. A row names the cadence, its rhythm —
 its cron and zone, then its spacing, as in `0 20 * * * America/Chicago, at least 10 days apart` — and when its next
@@ -177,6 +187,19 @@ A routine's detail names what keeps it under **Kept by**: each chore that runs i
 with the cadence linked, the chore's key and its next moment. A routine no cadence keeps reads "No cadence keeps it — it
 runs when started." and its row in the routines list reads `manual` rather than `cadence`. A run a cadence minted names
 it on the run's detail — `Kept by` the cadence, linked, and the chore — or that its chore was removed since.
+
+## The Events tab
+
+Events shows compact cards beneath severity, runner and chunk filters. Clicking a card opens its detail page; its Back
+link preserves the filters and project lens. Runner links open Fleet and chunk links open Board independently of the
+card. Details are available only while the event is in the current bounded feed; otherwise the page says it is
+unavailable.
+
+## Fleet host links
+
+A host's URL is a navigation hint, not a reachability verdict. Fleet selects the first reported HTTP or HTTPS URL whose
+hostname matches the browser's hostname, ignoring port, without contacting candidate URLs. With no match, it shows a
+dash. Mobile runner cards open their details; Pause and Resume remain separate controls.
 
 ## On a phone
 

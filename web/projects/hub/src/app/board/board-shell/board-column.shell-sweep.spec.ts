@@ -133,10 +133,18 @@ describe('board urgency layout shell sweep', () => {
     await loadDesignTokens();
     const root = await render(READY, drag, drag, null, true);
     try {
-      const pill = root.querySelector<HTMLElement>('app-urgency-pill')!;
+      const pill = root.querySelector<HTMLElement>('fleet-chunk-urgency .banner')!;
       const work = root.querySelector<HTMLElement>('[data-testid="work-ref-chip"]')!;
       expect(pill).not.toBeNull();
       expect(pill.getBoundingClientRect().bottom).toBeLessThanOrEqual(work.getBoundingClientRect().top);
+      const label = pill.querySelector<HTMLElement>('.banner-label')!;
+      const mark = pill.querySelector<HTMLElement>('.mark')!;
+      const style = getComputedStyle(pill);
+      expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(pill.getBoundingClientRect().height).toBe(24);
+      for (const side of ['Top', 'Bottom', 'Left', 'Right'] as const) expect(style[`border${side}Width`]).toBe('0px');
+      expect(label.getBoundingClientRect().left).toBeCloseTo(work.getBoundingClientRect().left, 0);
+      expect(mark.getBoundingClientRect().right).toBeCloseTo(pill.getBoundingClientRect().right - 6, 0);
       expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
     } finally { root.remove(); }
   });
