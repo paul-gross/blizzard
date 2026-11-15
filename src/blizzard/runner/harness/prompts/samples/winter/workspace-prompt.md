@@ -23,5 +23,10 @@ at one with `winter ws connect <env> <feature-branch>`, and push it with `winter
 If the task needs the environment running, start it with `winter service up <env> --wait`, then confirm readiness
 against the app's own signal — a health endpoint, a startup log line — before verifying anything through it.
 
-Keep your changes scoped to your assigned environment and to what the task asks. When the work is done, end your session
-cleanly.
+Your environment is yours to maintain. Fast-forwarding a worktree to its base's `origin` tip, `winter provision <env>`,
+and stopping or restarting the environment's services are upkeep, not edits outside your task's scope — do them without
+asking. When you rebase onto the base, fast-forward every other worktree in the environment to its base's `origin` tip
+too, so the whole environment verifies against one current base.
+
+Keep your changes to your assigned environment and to what the task asks; never touch another environment, the source
+checkouts, or the host's own runtime. When the work is done, end your session cleanly.
