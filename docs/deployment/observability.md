@@ -64,8 +64,8 @@ refusal. A `deliver` step records it once when it escalates the chunk `forge-aut
 once per work source per pass. The event names the repository and forge, the refusal, and GitHub's sanitized answer: the
 operation and route, status, message, documentation URL, and request id, and the credential, binding, and token variant
 the call carried. Its refusal is `credential-invalid`, `permission-missing`, `sso-required`, or `token-unsupported`, a
-call the token's variant cannot make, such as a fine-grained token's check read. It never carries the token. The remedy
-is in the escalation's detail and the work item's `error`, not the event.
+call the token's variant cannot make, such as a fine-grained token's check read on a private repository. It never
+carries the token. The remedy is in the escalation's detail and the work item's `error`, not the event.
 
 `forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
 before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of

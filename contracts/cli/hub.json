@@ -3988,7 +3988,7 @@
               "type": "text"
             },
             {
-              "help": "Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
+              "help": "Which kind of GitHub token the secret holds; it names how a refused check read is reported.",
               "hidden": false,
               "kind": "option",
               "name": "variant",
@@ -4114,7 +4114,7 @@
               "type": "text"
             },
             {
-              "help": "Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
+              "help": "Which kind of GitHub token the secret holds; it names how a refused check read is reported.",
               "hidden": false,
               "kind": "option",
               "name": "variant",

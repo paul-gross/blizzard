@@ -16,7 +16,7 @@ _VARIANT = click.option(
     "--variant",
     type=click.Choice(["classic", "fine-grained"]),
     default=None,
-    help="Which kind of GitHub token the secret holds; a fine-grained token is withheld what GitHub never grants it.",
+    help="Which kind of GitHub token the secret holds; it names how a refused check read is reported.",
 )
 _APP_ID = click.option(
     "--app-id", type=int, default=None, help="The GitHub App's id, for a github.app-installation credential."

@@ -76,10 +76,11 @@ test.describe('at fresh-hub', () => {
   test('test_supplied_tokens_authenticate_land_refuse_and_rebind_under_strict_tokens', async ({ api, forge, issue, repository, runnerHosts }) => {
     test.slow();
     const classic = await repository();
+    const fineGrainedPublic = await repository();
     const fineGrained = await repository();
     const revoked = await repository();
     const rebound = await repository();
-    const repos = [classic, fineGrained, revoked, rebound];
+    const repos = [classic, fineGrainedPublic, fineGrained, revoked, rebound];
     const host = await runnerHosts.create({ runnerRepositories: Object.fromEntries(repos.map((r) => [r.name, r.origin!])) });
     const graphs = new Map<string, string>();
     for (const [index, repo] of repos.entries()) {
@@ -113,22 +114,35 @@ test.describe('at fresh-hub', () => {
       expect((await pulls(forge, classic)).filter((pull) => pull.merged)).toHaveLength(1);
     });
 
-    await test.step('a fine-grained token escalates forge-capability-missing before any forge write', async () => {
+    await test.step('a fine-grained token lands a public repository through merge-on-checks', async () => {
       // The carried-over shape: a `github.token` credential with no variant, which the hub derives from the prefix.
+      const token = 'github_pat_fine-grained-public-token';
+      await forge.registerToken({ token, token_kind: 'fine-grained' });
+      await credential(api, 'fine-grained-public-pat', token);
+      await bind(api, fineGrainedPublic, 'fine-grained-public-pat', true);
+      const id = await promoted(fineGrainedPublic, 'land with a fine-grained token');
+      const done = await drive(host, api, id, settled);
+      expect(done.status, JSON.stringify(done.escalation)).toBe('done');
+      expect(done.landed).toBe(true);
+      expect((await events(id)).filter((event) => event.kind === 'forge-capability-missing')).toEqual([]);
+      expect((await pulls(forge, fineGrainedPublic)).filter((pull) => pull.merged)).toHaveLength(1);
+    });
+
+    await test.step('a fine-grained token refused a private repository\'s checks escalates forge-auth as token-unsupported', async () => {
       const token = 'github_pat_fine-grained-supplied-token';
       await forge.registerToken({ token, token_kind: 'fine-grained' });
       await forge.privateRepository(`${fineGrained.owner}/${fineGrained.name}`);
       await credential(api, 'fine-grained-pat', token);
       await bind(api, fineGrained, 'fine-grained-pat', true);
-      const id = await promoted(fineGrained, 'refuse a fine-grained token');
+      const id = await promoted(fineGrained, 'refuse a fine-grained token on a private repository');
       const escalated = await drive(host, api, id, settled);
       expect(escalated.status).toBe('needs_human');
-      expect(escalated.escalation!.cause).toBe('forge-capability-missing');
+      expect(escalated.escalation!.cause).toBe('forge-auth');
+      expect(escalated.escalation!.detail || '').toContain('fine-grained-pat');
       expect(escalated.current_node_name).toBe('deliver');
-      const missing = (await events(id)).filter((event) => event.kind === 'forge-capability-missing');
-      expect(missing).toHaveLength(1);
-      expect(missing[0]!.detail?.credential).toBe('fine-grained-pat');
-      expect(await pulls(forge, fineGrained)).toEqual([]);
+      const refused = (await events(id)).filter((event) => event.kind === 'forge-auth-refused');
+      expect(refused.map((event) => event.detail?.refusal)).toEqual(['token-unsupported']);
+      expect((await pulls(forge, fineGrained)).some((pull) => pull.merged)).toBe(false);
     });
 
     await test.step('a revoked token escalates forge-auth naming its credential', async () => {

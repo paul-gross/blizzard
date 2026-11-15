@@ -139,12 +139,10 @@ also need an operation only some work reveals, such as the branch operations a d
 hub checks those when it finds the need, before any unsupported mutation. A repository whose forge lacks one refuses the
 visit: the hub records a `forge-capability-missing` event naming the capability, the repository, the forge, and the
 credential the repository acts with (`null` when it names only a secret), writes a `hub-log.forge-capability-missing`
-artifact, and escalates the chunk to a person with cause `forge-capability-missing`. What a forge offers is narrowed per
-repository by the token it uses: a fine-grained GitHub token is not offered `checks.read`, so a repository on one lacks
-it even on a forge whose kind offers it, and the artifact names the token
-([credentials.md](./credentials.md#classic-and-fine-grained-tokens)). A step that needs a forge handle reveals
-credentials only for the repositories that handle serves. Only an operator can change what a forge offers, so the remedy
-is a forge of a kind that offers the capability, a token that can use it, or an action that does not ask for it.
+artifact, and escalates the chunk to a person with cause `forge-capability-missing`. A step that needs a forge handle
+reveals credentials only for the repositories that handle serves. Only an operator can change what a forge offers, so
+the remedy is a forge of a kind that offers the capability, a token that can use it, or an action that does not ask for
+it.
 
 An action can live without some operations, unlike the necessities above. `land` re-runs a failing check once only when
 the forge offers it, and otherwise routes the failure as it would after one re-run.

@@ -43,9 +43,9 @@ def classify_auth_refusal(
     withheld: bool = False,
 ) -> ClassifiedRefusal:
     """A 401 is an invalid credential; a 403 is an SSO refusal when ``X-GitHub-SSO`` says ``required`` or the message
-    names SAML enforcement, an unsupported token when ``withheld`` — the caller found the call's capability one the
-    credential's variant withholds — and a missing permission otherwise. Call it only once GitHub's rate dialect has
-    declined the answer as a rate refusal."""
+    names SAML enforcement, an unsupported token when ``withheld`` — the caller found the refusal a limit of the
+    credential's variant rather than a missing grant — and a missing permission otherwise. Call it only once GitHub's
+    rate dialect has declined the answer as a rate refusal."""
     diagnostic = diagnostic_of(
         status,
         headers,

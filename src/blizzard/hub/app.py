@@ -176,7 +176,6 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.refusals import refusal_reader
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
-from blizzard.hub.forge.token_check import undeclared_tokens
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
@@ -532,32 +531,6 @@ def warn_forge_refusals(engine: Engine) -> None:
                 slugs=list(refusal.slugs),
                 reason=refusal.reason,
             )
-
-
-def warn_undeclared_tokens(stores: TenantStores, forges: ForgeRegistry) -> None:
-    """Log one warning per undeclared token of ``stores``' tenant whose effective variant withholds what a repository
-    acting with it needs. A pre-flight aid only: a failure to check is itself a warning, and nothing here stops the hub
-    starting."""
-    log = get_logger("blizzard.hub.forge_check")
-    try:
-        found = undeclared_tokens(
-            authorizations=forges.authorizations,
-            repositories=stores.repository_records,
-            credentials=stores.credential_records,
-        )
-    except Exception as exc:  # the check never stops startup
-        log.warning("undeclared token check could not run", tenant_id=stores.scope.tenant, error=str(exc))
-        return
-    for token in found:
-        log.warning(
-            "an undeclared token cannot serve its repositories' landing policies; declare its variant",
-            tenant_id=stores.scope.tenant,
-            credential=token.credential,
-            secret=token.secret,
-            variant=token.variant,
-            withheld=list(token.withheld),
-            repositories=list(token.repositories),
-        )
 
 
 def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: TenantId | None) -> TenantId:
@@ -965,8 +938,6 @@ def build_hosted_app(
             except ProvidersOrphaned as refusal:
                 raise ConfigError(str(refusal)) from refusal
             warn_forge_refusals(engine)
-            for stores in tenants:
-                warn_undeclared_tokens(stores, services.tenants.open_services(stores.scope).forges)
             try:
                 require_keys_covered(
                     {key_id for stores in tenants for key_id in stores.secrets.key_ids_in_use()},

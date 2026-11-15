@@ -34,7 +34,7 @@ def test_a_403_requiring_sso_by_header_or_by_message_is_sso_required() -> None:
     assert _classify(403, "Resource protected by organization SAML enforcement.") is AuthRefusal.SSO_REQUIRED
 
 
-def test_a_403_on_a_call_the_tokens_variant_withholds_is_an_unsupported_token() -> None:
+def test_a_403_on_a_call_the_tokens_variant_is_refused_is_an_unsupported_token() -> None:
     assert _classify(403, "Resource not accessible by personal access token", withheld=True) is (
         AuthRefusal.TOKEN_UNSUPPORTED
     )

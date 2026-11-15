@@ -170,9 +170,17 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
     assert all(request.url.params["head"] == "acme:feat/x" for request in lookups)
 
 
-def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupported_naming_the_credential() -> None:
+def _escalation_refused_at(token: str, refused: str) -> ActionEscalation:
+    """The escalation a landing acting with ``token`` ends in when GitHub answers 403 at the route ending ``refused``."""
+
     def answer(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
+        if path.endswith(refused):
+            return httpx2.Response(
+                403,
+                json={"message": "Resource not accessible by personal access token"},
+                headers={"X-GitHub-Request-Id": "ABCD:1234"},
+            )
         if path == f"/repos/{_WIDGET}/pulls":
             return httpx2.Response(200, json=[] if request.url.params["state"] == "closed" else [_pending_pull()])
         if path == f"/repos/{_WIDGET}/pulls/1":
@@ -181,12 +189,6 @@ def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupport
             return httpx2.Response(
                 200, json={"status": "ahead", "ahead_by": 1, "behind_by": 0, "commits": [], "files": []}
             )
-        if path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
-            return httpx2.Response(
-                403,
-                json={"message": "Resource not accessible by personal access token"},
-                headers={"X-GitHub-Request-Id": "ABCD:1234"},
-            )
         raise AssertionError(f"unexpected landing read: {request.url}")
 
     binding = ForgeBinding(
@@ -194,7 +196,7 @@ def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupport
         api_url="https://api.github.example",
         owner="acme",
         repo="widget",
-        authorization=token_authorization("github_pat_fine", credential="deploy"),
+        authorization=token_authorization(token, credential="deploy"),
         write_lock=asyncio.Lock,
         dialect=rate_dialect("github"),
         learn=lambda _reading: None,
@@ -215,6 +217,12 @@ def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupport
 
     escalation = asyncio.run(take()).escalation
     assert escalation is not None and escalation.auth is not None
+    return escalation
+
+
+def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupported_naming_the_credential() -> None:
+    escalation = _escalation_refused_at("github_pat_fine", f"/commits/{_SUBMITTED}/check-runs")
+    assert escalation.auth is not None
     assert escalation.auth.refusal is AuthRefusal.TOKEN_UNSUPPORTED
     diagnostic = escalation.auth.diagnostic
     assert (diagnostic.credential, diagnostic.binding, diagnostic.variant) == ("deploy", "github.token", "fine-grained")
@@ -225,6 +233,19 @@ def test_a_check_read_refused_for_a_fine_grained_token_escalates_token_unsupport
         "that does not need `checks.read`."
     )
     assert "github_pat_fine" not in escalation.detail
+
+
+@pytest.mark.parametrize(
+    ("token", "refused"),
+    [
+        ("ghp_classic", f"/commits/{_SUBMITTED}/check-runs"),
+        ("github_pat_fine", f"/compare/main...{_SUBMITTED}"),
+    ],
+    ids=["classic-check-read", "fine-grained-compare"],
+)
+def test_any_other_refusal_of_a_token_is_a_missing_permission(token: str, refused: str) -> None:
+    escalation = _escalation_refused_at(token, refused)
+    assert escalation.auth is not None and escalation.auth.refusal is AuthRefusal.PERMISSION_MISSING
 
 
 def _pending_pull() -> dict[str, object]:
@@ -1293,23 +1314,15 @@ def _act_with_fine_grained_credential(hub: HubHarness) -> None:
         conn.execute(hub_scoped(update(s.repositories).values(credential_id=credential.credential_id)))
 
 
-def test_a_fine_grained_token_behind_merge_on_checks_escalates_naming_its_credential_before_any_call(
-    tmp_path: Path,
-) -> None:
+def test_a_fine_grained_token_behind_merge_on_checks_lands_through_the_forge(tmp_path: Path) -> None:
     double = _forge(_WIDGET)
     hub = _hub(tmp_path, double)
     _act_with_fine_grained_credential(hub)
     chunk_id = _chunk(hub, _WIDGET)
 
-    assert _take(hub, chunk_id) == "escalated"
-    assert double.calls == []
-    with hub.engine.begin() as conn:
-        rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
-    assert [(row.epoch, row.cause) for row in rows] == [(2, "forge-capability-missing")]
-    assert "does not offer `checks.read` to credential deploy (github.token, fine-grained)" in rows[0].detail
-    (warning,) = _warnings(hub, chunk_id)
-    assert warning["capability"] == "checks.read"
-    assert warning["credential"] == "deploy"
+    assert _take(hub, chunk_id) == "landed"
+    assert double.named("merge") != []
+    assert "forge-capability-missing" not in _event_kinds(hub)
 
 
 def test_a_refused_credential_records_one_forge_auth_event_and_none_for_a_duplicate(tmp_path: Path) -> None:
