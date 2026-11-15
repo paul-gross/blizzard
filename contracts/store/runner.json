@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261111_1000_binding_targets",
+  "head_revision": "20261114_1000_execution_observations",
   "store": "runner",
   "tables": {
     "asks": {
@@ -630,6 +630,83 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "execution_observations": {
+      "checks": [],
+      "columns": {
+        "activity": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "diagnostic": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "evidence_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "lease_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "liveness": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "observed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "progress_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "warned_anchor_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
         }
       },
       "deprecated": null,

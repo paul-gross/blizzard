@@ -11,9 +11,17 @@ import pytest
 
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, LeaseActivity, Liveness
+from blizzard.runner.leases.activity import (
+    HEARTBEAT_STALENESS_THRESHOLD,
+    NO_PROGRESS_THRESHOLD,
+    LeaseActivity,
+    Liveness,
+    progress_anchor,
+    warns_no_progress,
+)
+from blizzard.runner.leases.execution_observation import WarnedStall
 from blizzard.runner.leases.lease_auth import LeaseToken, LeaseTokenRejected
-from blizzard.runner.leases.liveness import LeaseLivenessFacts
+from blizzard.runner.leases.liveness import ExecutionEvidence, LeaseLivenessFacts
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_lease import WORKER_VERBS, WorkerLease, WorkerLeaseStanding, WorkerVerb
 
@@ -75,6 +83,64 @@ def test_the_baseline_is_the_newest_of_mint_heartbeat_and_spawn() -> None:
 
 def test_a_fact_older_than_the_mint_never_lowers_the_baseline() -> None:
     assert Liveness.of(_lease(), heartbeat=_MINT - timedelta(hours=1), spawn=None).last_activity == _MINT
+
+
+def test_current_evidence_joins_the_baseline() -> None:
+    spawn, evidence = _MINT + timedelta(minutes=1), _MINT + timedelta(hours=2)
+    facts = LeaseLivenessFacts(
+        latest_heartbeat=None,
+        latest_spawn=spawn,
+        generation=2,
+        latest_evidence=ExecutionEvidence(generation=2, evidence_at=evidence),
+    )
+    assert Liveness.of_facts(_lease(), facts).last_activity == evidence
+
+
+@pytest.mark.parametrize(
+    ("generation", "evidence_at"),
+    [
+        (1, _MINT + timedelta(hours=2)),  # an older generation's evidence
+        (2, _MINT),  # evidence produced before the current spawn
+    ],
+)
+def test_evidence_not_of_the_current_execution_never_counts(generation: int, evidence_at: datetime) -> None:
+    spawn = _MINT + timedelta(minutes=1)
+    facts = LeaseLivenessFacts(
+        latest_heartbeat=None,
+        latest_spawn=spawn,
+        generation=2,
+        latest_evidence=ExecutionEvidence(generation=generation, evidence_at=evidence_at),
+    )
+    assert facts.current_evidence() is None
+    assert Liveness.of_facts(_lease(), facts).last_activity == spawn
+
+
+# --- the no-progress warning -----------------------------------------------------------
+
+
+def test_the_progress_anchor_is_the_newest_of_spawn_heartbeat_and_reported_progress() -> None:
+    spawn = _MINT
+    assert progress_anchor(spawn=spawn, heartbeat=None, progress=None) == spawn
+    later = _MINT + timedelta(minutes=3)
+    assert progress_anchor(spawn=spawn, heartbeat=later, progress=_MINT + timedelta(minutes=1)) == later
+    assert progress_anchor(spawn=spawn, heartbeat=_MINT + timedelta(minutes=1), progress=later) == later
+
+
+def test_a_stall_past_the_threshold_warns_only_while_alive() -> None:
+    now = _MINT + NO_PROGRESS_THRESHOLD + timedelta(seconds=1)
+    assert warns_no_progress(alive=True, generation=1, anchor=_MINT, warned=None, now=now)
+    assert not warns_no_progress(alive=False, generation=1, anchor=_MINT, warned=None, now=now)
+    at_line = _MINT + NO_PROGRESS_THRESHOLD
+    assert not warns_no_progress(alive=True, generation=1, anchor=_MINT, warned=None, now=at_line)
+
+
+def test_a_stall_warns_once_and_a_moved_anchor_or_new_generation_re_arms() -> None:
+    now = _MINT + timedelta(hours=1)
+    warned = WarnedStall(generation=1, anchor_at=_MINT)
+    assert not warns_no_progress(alive=True, generation=1, anchor=_MINT, warned=warned, now=now)
+    moved = _MINT + timedelta(minutes=10)
+    assert warns_no_progress(alive=True, generation=1, anchor=moved, warned=warned, now=now)
+    assert warns_no_progress(alive=True, generation=2, anchor=_MINT, warned=warned, now=now)
 
 
 # --- LeaseActivity.of -----------------------------------------------------------------

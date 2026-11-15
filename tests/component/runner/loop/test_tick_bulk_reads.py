@@ -27,6 +27,7 @@ from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.observation import ExecutionActivity, ExecutionLiveness, ExecutionObservation
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.overload import backing_off_facts
@@ -220,6 +221,87 @@ def test_context_sample_states_matches_across_a_batch_boundary(tmp_path: Path, m
         assert result[lease_id] == store.context_sample_state(lease_id)
 
 
+# --- execution_observation_states and evidence ------------------------------------------------
+
+
+def _alive(at: datetime) -> ExecutionObservation:
+    return ExecutionObservation(
+        liveness=ExecutionLiveness.ALIVE, activity=ExecutionActivity.TOOL, evidence_at=at, progress_at=at
+    )
+
+
+def test_execution_observation_states_matches_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, _ = _store(tmp_path)
+    ids = [f"lease_{i}" for i in range(7)]
+    for i, lease_id in enumerate(ids):
+        store.record_execution_observation(
+            lease_id=lease_id,
+            chunk_id="ch",
+            generation=1,
+            observation=_alive(_NOW),
+            observed_at=_NOW,
+            warned_anchor_at=_NOW if i % 2 else None,
+        )
+        store.record_execution_observation(
+            lease_id=lease_id,
+            chunk_id="ch",
+            generation=1,
+            observation=ExecutionObservation.unknown("later"),
+            observed_at=_NOW + timedelta(minutes=1),
+        )
+
+    result = store.execution_observation_states([*ids, "lease_never_observed"])
+
+    assert set(result) == set(ids)
+    for i, lease_id in enumerate(ids):
+        state = result[lease_id]
+        assert state.last_observed_at == _NOW + timedelta(minutes=1)
+        assert state.latest_progress_at == _NOW
+        assert (state.warned is not None) == bool(i % 2)
+
+
+def test_execution_observation_states_statement_count_is_flat_across_id_set_sizes(tmp_path: Path) -> None:
+    store, engine = _store(tmp_path)
+    ids = [f"lease_{i}" for i in range(10)]
+    for lease_id in ids:
+        store.record_execution_observation(
+            lease_id=lease_id, chunk_id="ch", generation=1, observation=_alive(_NOW), observed_at=_NOW
+        )
+
+    one = support.count_queries(engine, lambda: store.execution_observation_states(ids[:1]))
+    ten = support.count_queries(engine, lambda: store.execution_observation_states(ids))
+
+    assert one == ten
+
+
+def test_liveness_facts_carries_the_newest_generations_evidence_never_one_produced_after_its_sample(
+    tmp_path: Path,
+) -> None:
+    store, _ = _store(tmp_path)
+    for generation, at in ((1, _NOW), (2, _NOW + timedelta(minutes=5))):
+        store.record_execution_observation(
+            lease_id="lease_1", chunk_id="ch", generation=generation, observation=_alive(at), observed_at=at
+        )
+    # Evidence stamped after its own sample is no evidence.
+    store.record_execution_observation(
+        lease_id="lease_1",
+        chunk_id="ch",
+        generation=2,
+        observation=_alive(_NOW + timedelta(hours=1)),
+        observed_at=_NOW + timedelta(minutes=6),
+    )
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+
+    facts = store.liveness_facts(["lease_1"])["lease_1"]
+
+    assert facts.latest_evidence is not None
+    assert facts.latest_evidence.generation == 2
+    assert facts.latest_evidence.evidence_at == _NOW + timedelta(minutes=5)
+
+
 # --- in_flight_elicitations ------------------------------------------------------------------
 
 
@@ -321,6 +403,13 @@ def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: dateti
     store.record_context_sample(
         lease_id=lease_id, chunk_id=chunk_id, context_tokens=100, sampled_at=sampled_at, session=session
     )
+    store.record_execution_observation(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        generation=1,
+        observation=ExecutionObservation.unknown("seeded"),
+        observed_at=sampled_at,
+    )
 
 
 def _tick_statement_count(
@@ -381,13 +470,14 @@ def test_a_full_tick_is_still_flat_at_n1_and_n10_with_transcript_shipping_on(tmp
     assert one == ten
 
 
-def test_a_full_tick_adds_one_statement_per_lease_when_every_lease_is_due_for_a_sample(tmp_path: Path) -> None:
-    """The sample INSERT is legitimately per lease; the binding read that locates its transcript
-    must not be a second one."""
+def test_a_full_tick_adds_two_statements_per_lease_when_every_lease_is_due_for_a_sample(tmp_path: Path) -> None:
+    """The context-sample INSERT and the execution-observation INSERT are legitimately per lease;
+    the binding read that locates the transcript, and every fact either sampler judges by, must
+    not add a third."""
     one = _tick_statement_count(tmp_path / "n1", 1, due=True)
     ten = _tick_statement_count(tmp_path / "n10", 10, due=True)
 
-    assert ten - one == 9
+    assert ten - one == 18
 
 
 def test_a_full_tick_is_flat_across_1_and_10_held_chunks_with_no_lease(tmp_path: Path) -> None:
@@ -690,5 +780,6 @@ def test_crash_marking_read_count_grows_per_batch_not_per_lease(
     marked, batched = _crash_marking_read_count(tmp_path / "narrow", 6)
 
     assert marked == 6
-    # Two batches instead of one: the liveness read repeats per batch (two grouped reads each).
-    assert batched == unbatched + 2
+    # Two batches instead of one: the liveness read repeats per batch (three grouped reads each —
+    # heartbeat, spawn, execution evidence).
+    assert batched == unbatched + 3

@@ -307,6 +307,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.context_sample import ContextSampleContext
     from blizzard.runner.lifecycle.dormant import DormantContext
     from blizzard.runner.lifecycle.drain import DrainContext
+    from blizzard.runner.lifecycle.execution_observation import ExecutionObservationContext
     from blizzard.runner.lifecycle.fill import FillContext
     from blizzard.runner.lifecycle.held_binding_completion import HeldBindingCompletionContext
     from blizzard.runner.lifecycle.held_chunk import HeldChunkContext
@@ -380,6 +381,8 @@ if TYPE_CHECKING:
     _retention_conforms: type[RetentionContext] = LoopContext
 
     _context_sample_conforms: type[ContextSampleContext] = LoopContext
+
+    _execution_observation_conforms: type[ExecutionObservationContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
 

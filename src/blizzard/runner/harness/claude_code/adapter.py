@@ -33,10 +33,12 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
+from blizzard.runner.harness.claude_code.execution_stream import observe_stream, read_stream_snapshot
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
@@ -79,6 +81,10 @@ _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^
 # name — never a generic 5xx: any other server error stays unclassified.
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
+# A worker invocation's stdout format: one event per line, ending in the `result` envelope. `stream-json` needs
+# `--verbose` in print mode. A judgement keeps the single `json` envelope.
+_WORKER_OUTPUT_FORMAT = ("--output-format", "stream-json", "--verbose")
+
 
 def _as_int(value: JsonValue) -> int:
     """``value`` as a count, or ``0`` — a numeric usage field reads as ``int()`` reads it, a malformed one as absent."""
@@ -101,7 +107,8 @@ def _matches_model(expected: str, observed: str) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class ResultEnvelope:
-    """A worker invocation's final ``--output-format json`` envelope.
+    """A worker invocation's final ``result`` envelope — the one line of a judgement's ``json``
+    output, or the last event of a worker's ``stream-json`` output.
 
     A killed worker's stdout can carry partial or non-JSON lines ahead of (or instead of) the
     final envelope, so :meth:`of` scans in reverse and skips anything that fails to parse."""
@@ -361,7 +368,8 @@ class ClaudeCodeAdapter:
         # The rule's one owner is `SpawnCwd`. `environments` was checked
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
-        cmd = [settings.binary, "-p", "--output-format", "json"]
+        # A worker streams one event per line, so its own stdout file is its execution evidence.
+        cmd = [settings.binary, "-p", *_WORKER_OUTPUT_FORMAT]
         # Claude Code does not reliably restore the model on --resume; reassert every
         # request parameter so the continuation keeps the worker's cache identity.
         if model or not resume_from:
@@ -492,7 +500,7 @@ class ClaudeCodeAdapter:
     ) -> ResumeHandle:
         settings = session_settings
         model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
-        cmd = [settings.binary, "-p", "--output-format", "json", "--resume", session_id]
+        cmd = [settings.binary, "-p", *_WORKER_OUTPUT_FORMAT, "--resume", session_id]
         if model:
             cmd += ["--model", model]
         if effort:
@@ -822,6 +830,10 @@ class ClaudeCodeAdapter:
             candidate += timedelta(days=1)
         # `now` is always UTC (``bzh:injected-clock``); the reply matches its own tzinfo.
         return candidate.astimezone(now.tzinfo)
+
+    def observe_execution(self, request: ExecutionObservationRequest) -> ExecutionObservation:
+        """Read off the generation's own ``stream-json`` stdout: one stat and a bounded head and tail."""
+        return observe_stream(read_stream_snapshot(request.stdout_path), request.now)
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

@@ -1,5 +1,5 @@
 """The tick driver — CEILING → REAP → RESUME → PULL → COMPLETE → FILL → ADVANCE → TRANSCRIPT DRAIN →
-RETENTION → CONTEXT → SAMPLE.
+RETENTION → CONTEXT SAMPLE → EXECUTION OBSERVE.
 
 ``tick`` composes the steps in order — the single synchronous pass both the CLI verb and
 the periodic daemon driver call. Order is load-bearing throughout — each step's own inline
@@ -20,6 +20,7 @@ from blizzard.runner.loop.steps import (
     Advance,
     CompleteHeldBindings,
     ContextSample,
+    ExecutionObserve,
     Fill,
     Pull,
     Reap,
@@ -101,6 +102,9 @@ def _tick(ctx: LoopContext) -> None:
     # reads its samples. Placed after ADVANCE so a lease that finished this tick is already
     # closed and not sampled one last time on its way out.
     _traced(ctx, ContextSample)
+    # Observation only, beside CONTEXT SAMPLE and for the same reason: after ADVANCE, so a lease that
+    # finished this tick is not observed on its way out. REAP reads what it records from the next tick on.
+    _traced(ctx, ExecutionObserve)
     _log.debug("tick end", runner_name=ctx.config.runner_name)
 
 

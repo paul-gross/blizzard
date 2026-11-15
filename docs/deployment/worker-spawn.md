@@ -46,6 +46,67 @@ Nothing about a turn's completion or a lease's correctness rests on it — proce
 harnesses alike — so a runner whose OpenCode plugin never loads still executes work correctly and merely goes quiet
 between tool calls.
 
+## Execution evidence
+
+What each harness tells the runner about a live lease's current execution, which
+[recovery.md](./recovery.md#execution-evidence-and-the-no-progress-warning) owns the effect of.
+
+**Claude Code.** A worker's spawn and its `resume_with_message` turns launch with
+`-p --output-format stream-json --verbose` (print mode refuses `stream-json` without `--verbose`), so the generation's
+own stdout file holds one JSON event per line and ends in the same `result` envelope the runner reads for the verdict,
+usage and cost. A judgement and the takeover command a person pastes keep `--output-format json` and no format flag
+respectively. The stream lines carry no wall-clock time, so the file's mtime is the evidence: once a minute the runner
+reads one stat, the first line and a bounded tail of that file, and reports:
+
+| What the file shows                                                     | Answer                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| A `result` event last                                                   | exited                                                       |
+| Written within the last 90 s (three heartbeat periods), no `result`     | alive; `tool` while a tool call is outstanding, else `model` |
+| Last written more than 90 s ago                                         | unknown                                                      |
+| Missing, unreadable, no `system/init` event first, or no complete event | unknown                                                      |
+| An `init` naming a version older than 2.1.322                           | unknown, with a diagnostic naming the version                |
+
+While a foreground tool runs, Claude Code writes a `tool_progress` event with `heartbeat: true` every 30 s, so a long
+tool keeps the file fresh. Measured coverage, recorded under `src/blizzard/runner/harness/contracts/claude_code/`:
+
+- **2.1.322 and 2.1.325**: a main-session tool heartbeats every 30 s (`tool_name` the tool's, `parent_tool_use_id` the
+  tool call's own id, `tool_use_id` that id plus `-heartbeat-<n>`).
+- **A foreground subagent**, on both versions: the subagent's own tool does not heartbeat in the parent's stream; the
+  parent's `Agent` call does, every 30 s for as long as the subagent runs, so the lease is still observed alive and
+  `tool`.
+- **Older than 2.1.322**, though inside the admitted `>=2.1` range: not probed, so reported `unknown`; those leases keep
+  the hook heartbeat alone.
+
+The stream adds no progress: `progress_at` is always empty, and progress still comes from the `PostToolUse` hook
+heartbeat ("Harness configuration bundle" below), which fires when a main-session tool call completes. Whether it fires
+for a subagent's tool calls is not probed.
+
+**OpenCode 2.** The evidence is the operator's service's own live answer, read through the same registered-service
+binding the driver uses: the service answering at the registered address must report the registered pid and version, or
+the answer is unknown. Once a minute the runner walks the lease's own session tree (its root and every descendant) and
+asks the service once which sessions are active (`GET /api/session/active`); it never reads a session outside that tree,
+so another lease's session on the shared service never counts. It then reads one newest-first page of 20 messages from
+the root and from each active session, and the permission and form requests of each active session.
+
+| What the service answers                                                     | Answer           |
+| ---------------------------------------------------------------------------- | ---------------- |
+| A session of the tree active, with a pending permission or form request      | alive, `waiting` |
+| A session of the tree active, whose newest step has a tool call `running`    | alive, `tool`    |
+| A session of the tree active, otherwise                                      | alive, `model`   |
+| No session of the tree active, even with a tool call still marked `running`  | unknown          |
+| No service registered, another pid or version answering, or none within 10 s | unknown          |
+| An error status or an answer the binding cannot read                         | unknown          |
+
+The evidence time is the instant the runner asked. The service answering `/api/info` is its own health, never a lease's
+evidence. Progress is the newest time a step or a tool call completed in the pages read; a finished child counts through
+its parent's completed `subagent` call. The driver's own heartbeat when a tool call settles stays as it was. The whole
+observation is held to one 10 s bound. The answers it reads are recorded under
+`src/blizzard/runner/harness/contracts/opencode/2.2.6/`, built from the 2.1.4 corpus's recorded shapes rather than
+captured.
+
+**OpenCode 1** reports every execution unknown, naming itself unsupported; its leases stay alive on heartbeats alone,
+which come from the plugin channel above.
+
 ## Harness autonomy
 
 An unattended worker has no one to approve tool use, so the runner picks how freely it acts. One runner-wide setting,

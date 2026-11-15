@@ -246,6 +246,7 @@ from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.observation import ExecutionActivity, ExecutionLiveness, ExecutionObservation
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
@@ -256,6 +257,7 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, S
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.execution_observation import IReadExecutionObservationRepository
 from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
@@ -443,6 +445,16 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
         context_tokens=500,
         sampled_at=_t(3),
+    )
+    stores.execution_observations.record_execution_observation(
+        lease_id=lease_1,
+        chunk_id=chunk_1,
+        generation=1,
+        observation=ExecutionObservation(
+            liveness=ExecutionLiveness.ALIVE, activity=ExecutionActivity.TOOL, evidence_at=_t(3), progress_at=_t(3)
+        ),
+        observed_at=_t(3),
+        warned_anchor_at=_t(3),
     )
     stores.session.record_session_end(lease_id=lease_1, ended_at=_t(4))
     stores.lease_record.record_closure(
@@ -1002,6 +1014,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
     (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
+    (IReadExecutionObservationRepository, "execution_observation_states"): lambda w: (
+        w.read.execution_observations.execution_observation_states([w.lease_1])
+    ),
     (IReadUsageRepository, "lease_usage_facts"): lambda w: w.read.usage.lease_usage_facts(w.lease_1),
     (IReadUsageRepository, "invocations_for_chunk"): lambda w: w.read.usage.invocations_for_chunk(
         w.chunk_3, limit=10, offset=0

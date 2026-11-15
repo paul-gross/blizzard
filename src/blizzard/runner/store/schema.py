@@ -922,6 +922,32 @@ context_samples = Table(
     info={"scope": "runner"},
 )
 
+# --- Execution observations (the harness's evidence of a lease's own execution) ---
+# Append-only, one row per sample of a live lease's current execution. Evidence only renews
+# liveness from the generation it was observed in; progress and liveness are separate clocks.
+# Retention contract: see IWriteExecutionObservationRepository.prune_execution_observations.
+
+execution_observations = Table(
+    "execution_observations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("generation", Integer, nullable=False),  # the `lease_spawns` ordinal the sample asked about
+    Column("observed_at", UtcDateTime, nullable=False),  # injected-clock stamp of the sample
+    Column("liveness", String, nullable=False),  # ExecutionLiveness
+    Column("activity", String, nullable=False),  # ExecutionActivity
+    # When the harness produced its evidence, and its newest substantive progress — NULL = none seen.
+    Column("evidence_at", UtcDateTime, nullable=True),
+    Column("progress_at", UtcDateTime, nullable=True),
+    Column("diagnostic", Text, nullable=False),
+    # The progress anchor this row's no-progress warning fired on; NULL = the row warned nothing.
+    Column("warned_anchor_at", UtcDateTime, nullable=True),
+    Column("runner_id", String, nullable=False),
+    info={"scope": "runner"},
+)
+
+Index("ix_execution_observations_lease_id_id", execution_observations.c.lease_id, execution_observations.c.id)
+
 # --- Transcript segments (the segment ledger) ---------------
 # Mutable, like `leases`, not append-only; keyed `(chunk_id, node_id, epoch, generation)`.
 

@@ -138,7 +138,8 @@ The warn lane is the `[runner.context]` table of the runner's `[[runner]]` in `b
 A crossing surfaces as a worker-context-warned entry in the operational event feed
 ([observability.md](./observability.md)), carrying lease, node, measured context, and the configured line; the runner
 also logs it at WARNING. The warning fires once per lease, on the first crossing, not per sample; a session past the
-line keeps being sampled without re-reporting.
+line keeps being sampled without re-reporting. Its sibling, worker-no-progress, warns on a worker observed running but
+making no progress; [recovery.md](./recovery.md) owns it.
 
 The warn lane observes and gates nothing — no worker stopped, no chunk parked, no session rotated (rotation is the
 graph's `rotate` block; the intervening spend controls are `[runner.cost]`, [spend.md](./spend.md)). It ships no probe

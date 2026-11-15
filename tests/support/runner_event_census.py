@@ -267,6 +267,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),
     "prune_outbound": Silent(_RETENTION_PRUNE),
     "prune_heartbeats": Silent(_RETENTION_PRUNE),
+    "prune_execution_observations": Silent(_RETENTION_PRUNE),
     "prune_external_usage_samples": Silent(_RETENTION_PRUNE),
     "record_usage": Published(
         RunnerEventType.FACT_CHANGED,
@@ -284,6 +285,12 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "crossing (report_kind is empty otherwise, and nothing is enqueued to announce then). D7's "
         "elapsed-time-derived reason covers the sampler's own cadence, not this occasional fact-log "
         "row (blizzard#317 review round 4, F1 — same class as record_usage above).",
+    ),
+    "record_execution_observation": Published(
+        RunnerEventType.FACT_CHANGED,
+        "ExecutionObservationSweep._observe (runner/lifecycle/execution_observation.py) — kind='event.recorded', "
+        "only when the observation raises a no-progress warning (report_kind is empty otherwise, and nothing is "
+        "enqueued to announce then). The sampler's own cadence is elapsed-time-derived, not this occasional row.",
     ),
     "record_external_usage_attempt": Published(
         RunnerEventType.FACT_CHANGED,

@@ -437,8 +437,9 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path, s
 def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    # ``judge``'s resume must reuse the same flags, in the same order, as the session's
-    # real turns, or it recreates the cache instead of reading it.
+    # ``judge``'s resume must reuse the same request flags, in the same order, as the session's
+    # real turns, or it recreates the cache instead of reading it. The output format is the
+    # CLI's own presentation, never part of the request: a worker streams, a judgement does not.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -474,7 +475,8 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
     wait_for_exit(judge_handle.pid)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
-    assert judge_prefix == resumed_prefix
+    assert judge_prefix.replace("--output-format json", "--output-format stream-json --verbose") == resumed_prefix
+    assert "--output-format json" in judge_prefix
     assert resumed_arg == "continue"
     assert judge_arg == "assess"
     assert f"--settings {settings}" in judge_prefix
@@ -560,9 +562,12 @@ while i < len(args):
     else: prompt = a; i += 1
 sid = resume or session or "auto"
 result_text = "<Choice>pass</Choice>" if resume else ""
-if output_format != "json":
+if output_format not in ("json", "stream-json"):
     print(result_text)
 else:
+    if output_format == "stream-json":
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "claude_code_version": "2.1.325"}))
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": result_text}]}}))
     envelope = {
         "type": "result",
         "subtype": "success",
@@ -657,11 +662,9 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     assert sample.output_tokens == 50
 
 
-def test_resume_with_message_passes_output_format_json_so_cost_is_real(
-    tmp_path: Path, spawn_executor: Executor
-) -> None:
-    """Regression pin: ``resume_with_message`` must pass ``--output-format json`` so its
-    stdout is a JSON envelope and ``parse_usage`` reads the real ``total_cost_usd``."""
+def test_resume_with_message_streams_its_output_so_cost_is_real(tmp_path: Path, spawn_executor: Executor) -> None:
+    """Regression pin: ``resume_with_message`` must pass ``--output-format stream-json`` so its
+    stdout ends in the result envelope and ``parse_usage`` reads the real ``total_cost_usd``."""
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -683,8 +686,8 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(
     assert sample.cost_usd == 0.0123
 
 
-def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path, spawn_executor: Executor) -> None:
-    """The other side: a resume invocation that omits ``--output-format json`` emits
+def test_resume_without_an_output_format_yields_no_envelope(tmp_path: Path, spawn_executor: Executor) -> None:
+    """The other side: a resume invocation that omits ``--output-format`` emits
     plain text, not an envelope, so ``parse_usage`` returns ``None``."""
     binary = _fake_binary_with_usage(tmp_path)
     workdir = tmp_path / "e1"

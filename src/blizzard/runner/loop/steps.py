@@ -16,6 +16,7 @@ from blizzard.runner.lifecycle.advance import AdvanceSweep
 from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.lifecycle.context_sample import ContextSampleSweep
 from blizzard.runner.lifecycle.drain import OutboundDrain
+from blizzard.runner.lifecycle.execution_observation import ExecutionObservationSweep
 from blizzard.runner.lifecycle.fill import BindingFill
 from blizzard.runner.lifecycle.held_binding_completion import HeldBindingCompletion
 from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcile
@@ -35,6 +36,7 @@ __all__ = [
     "Advance",
     "CompleteHeldBindings",
     "ContextSample",
+    "ExecutionObserve",
     "Fill",
     "Pull",
     "Reap",
@@ -176,3 +178,13 @@ class ContextSample(Step):
 
     def run(self) -> None:
         ContextSampleSweep(self.ctx).run()
+
+
+class ExecutionObserve(Step):
+    """Every live lease's current execution, observed through its harness — evidence REAP reads as
+    liveness, and one warning per stall. Never kills a worker.
+
+    Owned by :class:`~blizzard.runner.lifecycle.execution_observation.ExecutionObservationSweep`."""
+
+    def run(self) -> None:
+        ExecutionObservationSweep(self.ctx).run()

@@ -152,7 +152,8 @@ class OpenCodeDeclaration:
             store_path=resolve_opencode_store_path(shared.worker_env.variables),
         )
         return HarnessAssembly(
-            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source), health_probes=(probe,)
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source, execution_observation=adapter),
+            health_probes=(probe,),
         )
 
     @property

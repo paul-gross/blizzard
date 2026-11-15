@@ -19,7 +19,9 @@ from blizzard.foundation.ids import Id
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter, window_tokens
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
@@ -105,12 +107,22 @@ class _Orphaner:
         return session_id in self.running
 
 
+class _Observer:
+    def __init__(self) -> None:
+        self.asked: list[tuple[str, datetime]] = []
+
+    def observe(self, session_id: str, now: datetime) -> ExecutionObservation:
+        self.asked.append((session_id, now))
+        return ExecutionObservation.unknown("asked")
+
+
 def _adapter(
     tmp_path: Path,
     *,
     keeper: _Keeper | None = None,
     hold: VersionHold | None = None,
     orphaner: _Orphaner | None = None,
+    observer: _Observer | None = None,
     transcript_source: FakeTranscriptSource | None = None,
     **kwargs: Any,
 ) -> tuple[OpenCodeTwoAdapter, _Launcher]:
@@ -126,6 +138,7 @@ def _adapter(
         clock=_Clock(),
         transcript_source=transcript_source or FakeTranscriptSource(),
         orphaner=orphaner or _Orphaner(),
+        observer=observer or _Observer(),
         model="openai/gpt-6-luna",
         **kwargs,
     )
@@ -329,6 +342,17 @@ def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path, orphaner=orphaner)
     adapter.orphan("ses_1")
     assert orphaner.orphaned == ["ses_1"] and launcher.requests == []
+
+
+def test_observe_execution_asks_the_observer_about_the_leases_own_session(tmp_path: Path) -> None:
+    observer = _Observer()
+    adapter, launcher = _adapter(tmp_path, observer=observer)
+    now = datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
+    request = ExecutionObservationRequest(
+        session=SessionReference(harness_id="opencode", session_id="ses_1"), generation=2, stdout_path="", now=now
+    )
+    assert adapter.observe_execution(request) == ExecutionObservation.unknown("asked")
+    assert observer.asked == [("ses_1", now)] and launcher.requests == []
 
 
 def test_reconcile_interrupts_each_session_it_is_handed_and_no_other(tmp_path: Path) -> None:

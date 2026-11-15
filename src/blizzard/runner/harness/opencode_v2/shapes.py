@@ -195,7 +195,8 @@ def _child_session_id(metadata: JsonObject) -> str | None:
 @domain_model
 @dataclass(frozen=True)
 class Part:
-    """One part of an assistant message. ``text`` is a text or reasoning part's; ``state`` a tool part's."""
+    """One part of an assistant message. ``text`` is a text or reasoning part's; ``state`` and ``completed`` (epoch
+    milliseconds, ``None`` until the call ends) a tool part's."""
 
     type: str
     text: str = ""
@@ -203,10 +204,15 @@ class Part:
     name: str | None = None
     state: ToolState | None = None
     created: int | None = None
+    completed: int | None = None
 
 
 def _created(record: JsonObject, what: str) -> int | None:
     return _optional_int(_optional_object(record, "time", what), "created", f"{what}.time")
+
+
+def _completed(record: JsonObject, what: str) -> int | None:
+    return _optional_int(_optional_object(record, "time", what), "completed", f"{what}.time")
 
 
 def _tool_output(state: JsonObject) -> str | None:
@@ -253,6 +259,7 @@ def parse_part(value: JsonValue) -> Part:
             error=_tool_error(state),
         ),
         created=_created(record, what),
+        completed=_completed(record, what),
     )
 
 

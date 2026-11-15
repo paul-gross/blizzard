@@ -85,6 +85,9 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
         "runner/transcripts/transcript_pump.py:TranscriptPump._warn_sidechains_dropped", "warning"
     ),
     "worker-context-warned": Recorded("runner/lifecycle/context_sample.py:ContextSampleSweep._event", "warning"),
+    "worker-no-progress": Recorded(
+        "runner/lifecycle/execution_observation.py:ExecutionObservationSweep._event", "warning"
+    ),
     "attempt-abandoned": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "info"),
     "work-item-closed": Recorded("hub/domain/work_items/closure.py:CloseIntentDrainer.drain", "info"),
     "trace-export-failed": Recorded("runner/tracing/sweep.py:LeaseTraceSweep._failed", "warning"),
