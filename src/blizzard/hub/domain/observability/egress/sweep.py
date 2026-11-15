@@ -11,7 +11,7 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
@@ -86,25 +86,25 @@ class EgressSweep:
         writer: IEgressWriter,
         events: HubEventLogService,
         clock: IClock,
-        config: EgressConfig,
+        config: EgressConfig | Callable[[], EgressConfig],
+        writer_for: Callable[[EgressConfig], IEgressWriter] | None = None,
         pass_lock: threading.Lock,
     ) -> None:
-        if EVENTS_SCHEMA.name in config.datasets and paths is None:
+        initial = config() if callable(config) else config
+        if EVENTS_SCHEMA.name in initial.datasets and paths is None:
             raise ValueError("the events dataset needs a file path policy")
         self._steps = steps
         self._egress = egress
         self._event_reads = event_reads
         self._paths = paths
-        self._extractor_version = EXTRACTOR_VERSION if config.extractor_versions == "current" else None
+        self._config = config if callable(config) else lambda: config
+        self._writer_for = writer_for
         self._writer = writer
         self._events = events
         self._clock = clock
-        self._datasets = config.datasets
-        self._settle = timedelta(seconds=config.settle_seconds)
-        self._batch_limit = config.batch_limit
         # A restart mid-outage must not announce the same failure again.
         self._latch = OutageLatch(
-            timedelta(seconds=config.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
+            timedelta(seconds=initial.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
         )
         self._pass_lock = pass_lock
 
@@ -118,9 +118,17 @@ class EgressSweep:
             self._pass_lock.release()
 
     def _pass(self) -> None:
+        config = self._config()
+        self._latch.set_base(timedelta(seconds=config.sweep_seconds))
         now = self._clock.now()
         if not self._latch.is_due(now):
             return
+        self._datasets = config.datasets
+        self._settle = timedelta(seconds=config.settle_seconds)
+        self._batch_limit = config.batch_limit
+        self._extractor_version = EXTRACTOR_VERSION if config.extractor_versions == "current" else None
+        if self._writer_for is not None:
+            self._writer = self._writer_for(config)
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in self._datasets}
         anchors = anchor_records(cursors, now, self._settle)
         if anchors:

@@ -48,6 +48,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.api.request_config import request_config
 from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.config import HubConfig
@@ -77,7 +78,11 @@ from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
-from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
+from blizzard.hub.domain.observability.transcripts import (
+    LeaseSegmentsNotOwned,
+    TranscriptCaps,
+    refuse_foreign_lease_read,
+)
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
 from blizzard.hub.domain.runners.registration import (
@@ -155,6 +160,7 @@ class FleetRequest:
     scope: StoreScope
     tenant_name: str
     services: TenantServices
+    live_settings: bool = False
 
     @classmethod
     def of(
@@ -163,7 +169,14 @@ class FleetRequest:
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal)],
         tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config, tenant.scope, tenant.name, tenant.services)
+        return cls(
+            principal,
+            request_config(request),
+            tenant.scope,
+            tenant.name,
+            tenant.services,
+            getattr(request.app.state, "hub_settings", None) is not None,
+        )
 
     @classmethod
     def of_even_if_retired(
@@ -172,7 +185,14 @@ class FleetRequest:
         principal: Annotated[RunnerPrincipal, Depends(require_runner_principal_even_if_retired)],
         tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
     ) -> FleetRequest:
-        return cls(principal, request.app.state.config, tenant.scope, tenant.name, tenant.services)
+        return cls(
+            principal,
+            request_config(request),
+            tenant.scope,
+            tenant.name,
+            tenant.services,
+            getattr(request.app.state, "hub_settings", None) is not None,
+        )
 
     @property
     def route_token_mode(self) -> str:
@@ -936,7 +956,14 @@ def ingest_transcript_segments(
     runner is retired."""
     runner_id = fleet.caller_id()
     records = [(record.seq, transcripts_api.to_domain_record(record, runner_id=runner_id)) for record in batch.records]
-    result = services.transcript_ingest.ingest(runner_id, records)
+    configured = fleet.config.transcripts
+    defaults = TranscriptCaps()
+    caps = TranscriptCaps(
+        record_max_bytes=configured.record_max_bytes or defaults.record_max_bytes,
+        chunk_budget_max_bytes=configured.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
+        runner_daily_rate_max_bytes=configured.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
+    )
+    result = services.transcript_ingest.ingest(runner_id, records, caps=caps if fleet.live_settings else None)
     return transcripts_api.to_ack(runner_id, result)
 
 

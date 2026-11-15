@@ -81,6 +81,48 @@ test('an external OpenCode worker config is left unchanged', async ({ runnerHost
   expect(host.hostFile()).toContain(external);
 });
 
+for (const present of [false, true]) {
+  test(`OpenCode 1 reconciles an ${present ? 'existing' : 'absent'} custom host config`, async ({ runnerHosts, scratchDirs, mockHub }) => {
+    const dir = scratchDirs.make('custom-config');
+    const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+    expect(init.code, init.stdout + init.stderr).toBe(0);
+    const config = path.join(dir, 'custom', 'worker.json');
+    const plugin = path.join(dir, 'plugins', 'blizzard-heartbeat.ts');
+    fs.rmSync(plugin, { force: true });
+    if (present) {
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'existing custom config\n');
+    }
+    await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+      runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode', worker_config_path: config } }],
+    } });
+    if (present) expect(fs.readFileSync(config, 'utf8')).toBe('existing custom config\n');
+    else expect(JSON.parse(fs.readFileSync(config, 'utf8')).plugin).toContain(`file://${plugin}`);
+    expect(fs.statSync(plugin).size).toBeGreaterThan(0);
+  });
+}
+
+for (const present of [false, true]) {
+  test(`OpenCode 2 leaves an ${present ? 'existing' : 'absent'} custom config and plugin alone`, async ({ runnerHosts, scratchDirs, mockHub }) => {
+    const dir = scratchDirs.make('opencode2');
+    const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+    expect(init.code, init.stdout + init.stderr).toBe(0);
+    const config = path.join(dir, 'custom', 'worker.json');
+    const plugin = path.join(dir, 'plugins', 'blizzard-heartbeat.ts');
+    fs.rmSync(plugin, { force: true });
+    if (present) {
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'operator config\n');
+    }
+    await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+      runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockOpencode2}', worker_config_path: config } }],
+    } });
+    if (present) expect(fs.readFileSync(config, 'utf8')).toBe('operator config\n');
+    else expect(fs.existsSync(config)).toBe(false);
+    expect(fs.existsSync(plugin)).toBe(false);
+  });
+}
+
 for (const present of ['config', 'plugin'] as const) {
   test(`a partial OpenCode scaffold preserves the existing ${present} and writes the missing file`, async ({ runnerHosts, scratchDirs, mockHub }) => {
     const dir = scratchDirs.make(`partial-${present}`);
@@ -163,15 +205,18 @@ test('a socket path over the limit is refused before init, naming the path and t
 
 test('a setup that fails after the host process spawned leaves no process and no scratch root', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's-'));
   try {
-    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot, runtimeRoot });
     // A workspace provider the host does not know: the process starts, and exits before it answers.
     const config = { workspace: [{ id: 'workspace-local', provider: 'no-such-provider' }] };
     await expect(builder.create({ runnerConfig: config })).rejects.toThrow(/exited early|did not answer/);
     expect(fs.readdirSync(scratchRoot)).toEqual([]);
+    expect(fs.readdirSync(runtimeRoot)).toEqual([]);
     await builder.disposeAll();
   } finally {
     fs.rmSync(scratchRoot, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 });
 
@@ -332,8 +377,9 @@ test.describe('no ambient credentials', () => {
 
 test('several hosts are all disposed at once, and their statement-guard refusals are reported in one error', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's-'));
   try {
-    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot, runtimeRoot });
     const hosts = [await builder.create(), await builder.create()];
     const pids = hosts.map((host) => host.pid as number);
     hosts.forEach((host, at) => {
@@ -348,7 +394,9 @@ test('several hosts are all disposed at once, and their statement-guard refusals
     expect(error?.message).toContain('UnscopedRunnerStatement: host 1');
     for (const pid of pids) expect(isAlive(pid)).toBe(false);
     expect(fs.readdirSync(scratchRoot)).toEqual([]);
+    expect(fs.readdirSync(runtimeRoot)).toEqual([]);
   } finally {
     fs.rmSync(scratchRoot, { recursive: true, force: true });
+    fs.rmSync(runtimeRoot, { recursive: true, force: true });
   }
 });

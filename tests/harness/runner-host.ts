@@ -285,6 +285,8 @@ export interface BuilderContext {
   clock?: ClockStack;
   /** Where each host's scratch root is made; the harness check alone overrides it. */
   scratchRoot?: string;
+  /** Where host runtime directories are made; the harness check alone overrides it. */
+  runtimeRoot?: string;
 }
 
 export interface RunnerHostBuilder {
@@ -432,7 +434,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
     if (ownDir !== undefined && adopted !== undefined) throw new Error('runnerDir and runnerAdopted cannot both be set');
     let defaultRunner = adopted?.name ?? (index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`);
     const root = path.join(ctx.scratchRoot ?? os.tmpdir(), `bzh-${crypto.randomBytes(4).toString('hex')}`);
-    const runtimeRoot = process.env.BLIZZARD_TEST_HOST_RUNTIME;
+    const runtimeRoot = ctx.runtimeRoot ?? process.env.BLIZZARD_TEST_HOST_RUNTIME;
     const dir = ownDir ?? (runtimeRoot ? path.join(runtimeRoot, path.basename(root)) : path.join(root, 'h'));
     const socket = path.join(dir, 'host.sock');
     const tooLong = socketPathProblem(socket);
@@ -668,8 +670,8 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, opencode, usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
-
-      // A profile can select a different harness after init; reconcile locally, without another enrollment.
+      // A profile can select a different harness after init; reconcile locally, without another enrollment or
+      // init's refresh of operator-selected runtime files.
       if (((profile.runner ?? []) as TomlTable[]).some((entry) => 'opencode' in entry || 'claude_code' in entry || 'codex' in entry)) {
         await run(requireBinary(binDir(), 'python'), [path.join(BLIZZARD_ROOT, 'tests', 'support', 'reconcile_runner_runtime.py'), dir], home);
       }

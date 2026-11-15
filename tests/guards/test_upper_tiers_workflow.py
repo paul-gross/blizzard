@@ -80,3 +80,10 @@ def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening
     assert mise["with"]["install_args"] == "node"
     assert not execution.get("continue-on-error", False)
     assert "--shard=${{ matrix.shard }}/${{ matrix.shards }}" in execution["run"]
+
+
+def test_playwright_checkout_includes_release_tags() -> None:
+    checkout = next(step for step in _JOBS["service-playwright"]["steps"] if step.get("name") == "checkout blizzard")
+    assert checkout["uses"] == "actions/checkout@v4"
+    assert checkout["with"]["fetch-depth"] == 0
+    assert checkout["with"].get("fetch-tags", True) is not False

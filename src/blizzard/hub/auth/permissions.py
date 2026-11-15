@@ -48,6 +48,8 @@ class Permission(StrEnum):
     HUB_ADMIN_GRANT = "hub-admin:grant"
     #: Operate the hub-wide exports every tenant shares — status, replay, cursor moves. Hub-level.
     EXPORT_ADMIN = "export:admin"
+    #: Operate the hub-wide settings shared by every tenant. Hub-level.
+    SETTINGS_ADMIN = "settings:admin"
 
 
 #: ``guest`` holds only the read permission.
@@ -104,6 +106,7 @@ HUB_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.MEMBERSHIP_GRANT_ANY,
         Permission.HUB_ADMIN_GRANT,
         Permission.EXPORT_ADMIN,
+        Permission.SETTINGS_ADMIN,
     }
 )
 

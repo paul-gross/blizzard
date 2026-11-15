@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { type APIRequestContext, expect, mergeTests } from '@playwright/test';
 import { clockEnv, RANK, type SessionHolder } from './clock-stack';
@@ -477,3 +478,16 @@ export type { Barrier, BarrierSubscription, Frame, Subscription } from './events
 export type { MockHubClient } from './client/mock-hub';
 export type { MockChunkSpec } from './client/mock';
 export type { HostRoutes, RunnerClient, RunnerHostClient, TickPass } from './client/runner';
+
+/** A real previous-release runner on a store migrated from that release to the candidate hub. */
+export const oldInstallationTest = test.extend<{ oldInstallation: import('./old-installation').OldInstallation }>({
+  isolation: 'common',
+  oldInstallation: async ({ playwright }, use, testInfo) => {
+    const { startOldInstallation } = await import('./old-installation');
+    const root = fs.mkdtempSync(path.join(process.env.BLIZZARD_TMPDIR ?? os.tmpdir(), 'old-installation-'));
+    try {
+      const world = await startOldInstallation(root, playwright, testInfo);
+      try { await use(world); } finally { await world.close(); }
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  },
+});

@@ -163,3 +163,7 @@ the newest mint per name should read effective.
 Minting is additive: the new definition becomes effective for future resolution while every in-flight chunk stays pinned
 to the definition it started under; moving one deliberately is `hub chunk migrate`, owned by
 [chunk-operations/migration.md](./chunk-operations/migration.md).
+
+Hub configuration seeds live settings; later file edits do not override stored live entries. Boot settings remain
+file-configured and take effect on restart. See [hub settings](./hub-settings.md) for operational changes and
+[upgrade](../upgrade.md#hub-settings-boundary) for migration and rollback.

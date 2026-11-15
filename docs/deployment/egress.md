@@ -11,7 +11,9 @@ rather than a persistent one.
 
 The export runs when `[egress] directory` is set in `blizzard-hub.toml`, and not otherwise: with it unset no sweep
 starts and the hub behaves as before. `format` chooses `ndjson` or `parquet`. The `[egress]` block of the generated
-config template owns every other key and its default.
+config template lists the other keys and their defaults. Directory, format, file path policy and path key are boot
+settings: edit them in the file and restart the hub. The other egress settings can be changed live through
+[hub settings](./hub-settings.md); a file edit does not override an existing stored live value.
 
 ```toml
 [egress]

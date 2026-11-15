@@ -7,6 +7,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.foundation.config_apply_op import ConfigApplyOp
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -270,7 +271,7 @@ class ConfigApplyOutcome(WireModel):
 
     kind: str
     key: str
-    op: str
+    op: Annotated[ConfigApplyOp | Unrecognized, OPEN]
     diff: list[FieldChangeView] = []
 
 

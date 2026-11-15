@@ -6,19 +6,29 @@ dance against the stub IdP is ``tests/service/``'s job."""
 
 from __future__ import annotations
 
+import signal
+from dataclasses import replace
 from pathlib import Path
+from socket import socket
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import sqlalchemy as sa
+from click.testing import CliRunner
+from fastapi import FastAPI
 from httpx2 import Response
 
 from blizzard.hub.auth.models import ProviderIdentity
-from blizzard.hub.config import LoginThrottleConfig
+from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
+from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
+from blizzard.hub.cli import runtime
+from blizzard.hub.config import AuthConfig, LoginThrottleConfig
 from blizzard.hub.store import schema
 from blizzard.wire import auth as auth_wire
+from tests.support.config_inputs import init_hub
 from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
+from tests.support.runner_client import UntimedTestClient
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped
 
 # --- providers ------------------------------------------------------------------
@@ -375,7 +385,6 @@ def test_disabled_login_throttle_admits_every_call_and_warns_once_at_boot(
     )
 
     assert 429 not in _throttled_statuses(hub, 40)
-    assert hub.hub_services.auth_throttle is None
     captured = capsys.readouterr()
     assert (captured.out + captured.err).count("sign-ins are unthrottled") == 1
 
@@ -390,3 +399,65 @@ def test_login_throttle_capacity_is_configurable(tmp_path: Path) -> None:
     )
 
     assert _throttled_statuses(hub, 3)[2] == 429
+
+
+def test_login_rebuilds_throttle_after_live_settings_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    github = FakeOAuthProvider(name="github")
+    github.codes["admin"] = ADA
+
+    def registry(*args: object, **kwargs: object) -> OAuthProviderRegistry:
+        return OAuthProviderRegistry({"github": github})
+
+    monkeypatch.setattr(ProviderEntry, "registry", registry)
+    config = init_hub(tmp_path / "hub")
+    config = replace(config, auth=AuthConfig(mode="oauth", superuser="ada@example.com"))
+    config.config_path.write_text(config.to_toml())
+
+    class TestServer:
+        def __init__(self, app: FastAPI) -> None:
+            self.app = app
+
+        def handle_exit(self, signum: int, frame: object) -> None:
+            pass
+
+        def run(self, sockets: list[socket]) -> None:
+            _exercise_hosted_throttle(self.app)
+
+    def server(app: FastAPI, **kwargs: object) -> TestServer:
+        return TestServer(app)
+
+    monkeypatch.setattr(runtime, "build_early_shutdown_server", server)
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    try:
+        result = CliRunner().invoke(runtime.host, ["--dir", str(config.root), "--port", "0"])
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+    assert result.exit_code == 0, repr(result.exception)
+
+
+def _exercise_hosted_throttle(app: FastAPI) -> None:
+    with UntimedTestClient(app) as client:
+        authorize = client.get("/api/auth/github/authorize", follow_redirects=False)
+        state = state_from_redirect(authorize.headers["location"])
+        assert (
+            client.get(f"/api/auth/github/callback?code=admin&state={state}", follow_redirects=False).status_code == 302
+        )
+
+        def edit(revision: int, key: str, value: int) -> None:
+            response = client.patch(
+                "/api/admin/settings", headers={"If-Match": str(revision)}, json={"set": {key: value}}
+            )
+            assert response.status_code == 200, response.text
+
+        def statuses(calls: int) -> list[int]:
+            return [client.get("/api/auth/github/authorize", follow_redirects=False).status_code for _ in range(calls)]
+
+        initial = client.get("/api/admin/settings")
+        assert initial.status_code == 200, initial.text
+        revision = initial.json()["revision"]
+        edit(revision, "auth.login_throttle.capacity", 1)
+        assert statuses(2) == [307, 429]
+        edit(revision + 1, "auth.login_throttle.capacity", 2)
+        assert statuses(3) == [307, 307, 429]
+        edit(revision + 2, "transcripts.record_max_bytes", 42)
+        assert statuses(1) == [429]

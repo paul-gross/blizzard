@@ -67,7 +67,7 @@ class StoreWorkSourceRegistry:
         objects: ConfigObjectCache,
         build: Callable[[ConfiguredWorkSource], BuiltWorkSource],
         built_in: IBuiltInWorkSource,
-        close_forge_writes_enabled: bool = True,
+        close_forge_writes_enabled: bool | Callable[[], bool] = True,
     ) -> None:
         self._records = records
         self._objects = objects
@@ -149,7 +149,8 @@ class StoreWorkSourceRegistry:
     def closer(self, source: str) -> IWorkCloser | None:
         if source == RESERVED_HUB_SOURCE_NAME:
             return self._built_in
-        if not self._close_forge_writes_enabled:
+        enabled = self._close_forge_writes_enabled
+        if not (enabled() if callable(enabled) else enabled):
             return None
         built = self._built(source)
         return cast(IWorkCloser, built.source) if built is not None else None

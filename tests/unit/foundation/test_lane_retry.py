@@ -98,3 +98,18 @@ def test_a_reader_that_raises_leaves_the_latch_unseeded() -> None:
     with pytest.raises(RuntimeError):
         latch.is_due(_NOW)
     assert latch.failed(_NOW) is False
+
+
+def test_changing_base_reschedules_from_last_failure_without_reopening() -> None:
+    latch = OutageLatch(_EVERY, lambda: False)
+    assert latch.failed(_NOW)
+    assert not latch.failed(_NOW + _EVERY)
+    latch.set_base(timedelta(seconds=10))
+    assert latch.failures == 2
+    assert not latch.is_due(_NOW + _EVERY + timedelta(seconds=19))
+    assert latch.is_due(_NOW + _EVERY + timedelta(seconds=20))
+    latch.set_base(timedelta(seconds=100))
+    assert not latch.is_due(_NOW + _EVERY + timedelta(seconds=20))
+    assert latch.succeeded()
+    latch.set_base(_EVERY)
+    assert latch.is_due(_NOW)

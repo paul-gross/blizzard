@@ -25,6 +25,12 @@ class OutageLatch:
         self._failing = False
         self._failures = 0
         self._next_due: datetime | None = None
+        self._last_failure: datetime | None = None
+
+    def set_base(self, base: timedelta) -> None:
+        self._base = base
+        if self._last_failure is not None:
+            self._next_due = self._last_failure + self.retry_in
 
     @property
     def failures(self) -> int:
@@ -41,6 +47,7 @@ class OutageLatch:
     def failed(self, now: datetime) -> bool:
         self._seed()
         self._failures += 1
+        self._last_failure = now
         self._next_due = now + self.retry_in
         opens = not self._failing
         self._failing = True
@@ -50,6 +57,7 @@ class OutageLatch:
         self._seed()
         self._failures = 0
         self._next_due = None
+        self._last_failure = None
         closes = self._failing
         self._failing = False
         return closes

@@ -905,3 +905,51 @@ def test_a_step_open_while_the_cursor_passed_is_written_once_when_it_closes(tmp_
 
     assert [r["chunk_id"] for r in egress_rows(writer, "steps")] == [chunk_id]
     assert len(egress_rows(writer, "invocations")) == 1
+
+
+def test_live_settings_apply_on_next_sweep_without_reanchoring(tmp_path: Path) -> None:
+    import threading
+
+    from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+    from tests.support.hub_event_rows import hub_event_log_of
+
+    hub, _ = egress_hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    config = replace(SETTLED, datasets=(STEPS_SCHEMA.name,))
+    corpus = build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus
+    sweep = EgressSweep(
+        steps=trace_store(hub),
+        egress=egress_store(hub),
+        event_reads=corpus,
+        paths=None,
+        writer=writer,
+        events=hub_event_log_of(hub.engine),
+        clock=hub.clock,
+        config=lambda: config,
+        pass_lock=threading.Lock(),
+    )
+    sweep.sweep()
+    first = egress_store(hub).newest_cursor(STEPS_SCHEMA.name)
+    config = replace(config, datasets=(STEPS_SCHEMA.name, INVOCATIONS_SCHEMA.name))
+    sweep.sweep()
+    assert egress_store(hub).newest_cursor(STEPS_SCHEMA.name) == first
+    assert egress_store(hub).newest_cursor(INVOCATIONS_SCHEMA.name) is not None
+
+
+def test_writer_rebuilt_only_for_file_and_space_settings() -> None:
+    from blizzard.hub.egress.factory import ConfiguredWriter
+
+    original = InMemoryEgressWriter()
+    built: list[EgressWriterSettings] = []
+
+    def build(settings: EgressWriterSettings) -> IEgressWriter:
+        built.append(settings)
+        return InMemoryEgressWriter()
+
+    settings = EgressWriterSettings(SETTLED.max_rows_per_file, SETTLED.min_free_bytes)
+    cached = ConfiguredWriter(original, settings, build)
+    assert cached.for_config(replace(SETTLED, batch_limit=1)) is original
+    replacement = cached.for_config(replace(SETTLED, min_free_bytes=2))
+    assert replacement is not original
+    assert cached.for_config(replace(SETTLED, min_free_bytes=2, batch_limit=3)) is replacement
+    assert built == [EgressWriterSettings(SETTLED.max_rows_per_file, 2)]

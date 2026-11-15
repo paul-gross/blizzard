@@ -48,6 +48,7 @@ from tests.support.store_scan_allowlist import (
     Allowance,
     IndexWalkAllowance,
     MethodScopedAllowance,
+    RowidPageAllowance,
     TableWideAllowance,
     walks_a_named_index,
 )
@@ -102,6 +103,15 @@ def _offending_scans_by_method(
 
 def _covered(allowed: list[Allowance], protocol: type, method: str, table: str, detail: str) -> bool:
     for entry in allowed:
+        if isinstance(entry, RowidPageAllowance):
+            if (
+                entry.protocol is protocol
+                and entry.method == method
+                and entry.table == table
+                and detail == f"SCAN {table}"
+            ):
+                return True
+            continue
         if isinstance(entry, IndexWalkAllowance):
             if (
                 entry.protocol is protocol
@@ -189,6 +199,10 @@ def test_allow_list_hygiene(store_case: _StoreCase) -> None:
     }
 
     for entry in store_case.allowed_scans:
+        if isinstance(entry, RowidPageAllowance):
+            assert entry.table in schema_tables
+            assert (entry.protocol, entry.method, entry.table) in offending_method_tables
+            continue
         if isinstance(entry, IndexWalkAllowance):
             for table in entry.tables:
                 assert table in schema_tables, f"{entry} names a table absent from schema.metadata: {table!r}"

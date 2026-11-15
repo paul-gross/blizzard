@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import httpx2
+import structlog
 from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -27,7 +28,7 @@ from starlette.exceptions import HTTPException
 from starlette.routing import Route
 
 from blizzard import __version__
-from blizzard.foundation.clock import ControlledClock, resolve_clock
+from blizzard.foundation.clock import ControlledClock, IClock, resolve_clock
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
@@ -50,6 +51,8 @@ from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.hub.api import problems
 from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_invariants import router as admin_invariants_router
+from blizzard.hub.api.admin_settings import router as admin_settings_router
+from blizzard.hub.api.admin_settings import validation_problem as hub_settings_validation_problem
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
@@ -100,6 +103,7 @@ from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.repositories import router as repositories_router
+from blizzard.hub.api.request_config import request_config
 from blizzard.hub.api.routines import project_router as project_routines_router
 from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
@@ -124,6 +128,7 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.auth.memberships import MembershipRoleRefused
 from blizzard.hub.composition import (
     HubServices,
+    HubSettingsGraph,
     LiveConfig,
     TenantStores,
     build_config_authoring,
@@ -133,7 +138,14 @@ from blizzard.hub.composition import (
     build_process_core,
     build_services,
 )
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
+from blizzard.hub.config import (
+    AUTH_MODE_OAUTH,
+    ConfigError,
+    HubConfig,
+    StoreUrl,
+    legacy_keys_from_document,
+    read_legacy_keys,
+)
 from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
@@ -169,6 +181,8 @@ from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
+from blizzard.hub.settings.pass_config import bind_pass_config, current_pass_config
+from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -207,6 +221,10 @@ class Sweep:
     shutdown: asyncio.Event
     jitter_seconds: float | None = None
     timer: Callable[[], float] = time.monotonic
+    live_interval: Callable[[], int] | None = None
+    subscribe: Callable[[Callable[[frozenset[str]], None]], Callable[[], None]] | None = None
+    interval_key: str | None = None
+    pass_config: Callable[[], HubConfig] | None = None
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
@@ -218,16 +236,28 @@ class Sweep:
             return
         config: HubConfig = app.state.config
         tracer = app.state.platform_tracing.tracer
+        settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
         for name in services.sweeps.names():
             if config.sweeps.of(name) is SweepMode.STEPPED:
                 continue
             interval = _sweep_interval(name, config)
+            interval_key = {
+                SweepName.FORGE_STATUS: "annotation_interval_seconds",
+                SweepName.TRACE_EXPORT: "tracing.sweep_seconds",
+                SweepName.EGRESS: "egress.sweep_seconds",
+            }.get(name)
             yield cls(
                 name,
                 partial(services.sweeps.pass_every_tenant, name, tracer),
                 interval,
                 app.state.shutdown,
                 jitter_seconds=random.uniform(0, interval),
+                live_interval=(
+                    partial(_live_sweep_interval, name, settings) if settings is not None and interval_key else None
+                ),
+                subscribe=settings.authoring.subscribe if settings is not None and interval_key else None,
+                interval_key=interval_key,
+                pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
             )
 
     @property
@@ -250,27 +280,109 @@ class Sweep:
         overrun logs a warning naming this sweep."""
         log = get_logger(self.logger_name)
         first = True
+        wake = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        def changed(keys: frozenset[str]) -> None:
+            if self.interval_key in keys:
+                loop.call_soon_threadsafe(wake.set)
+
+        unsubscribe = self.subscribe(changed) if self.subscribe is not None else lambda: None
+        try:
+            await self._run_passes(log, wake, first)
+        finally:
+            unsubscribe()
+
+    async def _run_passes(self, log: structlog.stdlib.BoundLogger, wake: asyncio.Event, first: bool) -> None:
+        # A single interval is captured for each pass and its overrun warning.
         while not self.shutdown.is_set():
+            try:
+                config = self.pass_config() if self.pass_config is not None else None
+                interval = (
+                    _sweep_interval(self.config_name, config)
+                    if config is not None and self.interval_key is not None
+                    else self.live_interval()
+                    if self.live_interval is not None
+                    else self.interval_seconds
+                )
+            except Exception as exc:
+                if not isinstance(exc, HubStoreError):
+                    log.exception("sweep settings read failed")
+                shutdown = asyncio.create_task(self.shutdown.wait())
+                changed = asyncio.create_task(wake.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        (shutdown, changed), timeout=max(self.interval_seconds, 1), return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if changed in done:
+                        wake.clear()
+                finally:
+                    shutdown.cancel()
+                    changed.cancel()
+                    await asyncio.gather(shutdown, changed, return_exceptions=True)
+                continue
             started = self.timer()
             try:
-                await asyncio.to_thread(self.reconciler)
+                with bind_pass_config(config) if config is not None else contextlib.nullcontext():
+                    await asyncio.to_thread(self.reconciler)
             except SweepInProgress:
                 log.info("sweep pass skipped", reason="in progress")
             else:
                 elapsed = self.timer() - started
                 log.info("sweep pass completed", elapsed_seconds=elapsed)
-                if elapsed > self.interval_seconds:
+                if elapsed > interval:
                     log.warning(
                         "sweep pass exceeded its own interval",
                         sweep=self.logger_name,
                         elapsed_seconds=elapsed,
-                        interval_seconds=self.interval_seconds,
+                        interval_seconds=interval,
                     )
-            if first and self.jitter_seconds is not None:
-                await self._wait(self.jitter_seconds)
-            else:
-                await self._wait(self.interval_seconds)
+            delay = self.jitter_seconds if first and self.jitter_seconds is not None else interval
+            if self.live_interval is None:
+                await self._wait(delay)
+                first = False
+                continue
+            wait_started = self.timer()
+            retry_read = False
+            while not self.shutdown.is_set():
+                if wake.is_set():
+                    wake.clear()
+                    try:
+                        delay = self.live_interval() if self.live_interval is not None else interval
+                        retry_read = False
+                    except Exception as exc:
+                        if not isinstance(exc, HubStoreError):
+                            log.exception("sweep settings read failed")
+                        retry_read = True
+                remaining = delay - (self.timer() - wait_started)
+                if remaining <= 0:
+                    break
+                shutdown = asyncio.create_task(self.shutdown.wait())
+                changed = asyncio.create_task(wake.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        (shutdown, changed),
+                        timeout=min(remaining, 1) if retry_read else remaining,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if not done:
+                        if not retry_read:
+                            break
+                        wake.set()
+                finally:
+                    shutdown.cancel()
+                    changed.cancel()
+                    await asyncio.gather(shutdown, changed, return_exceptions=True)
             first = False
+
+
+def _live_sweep_interval(name: SweepName, settings: HubSettingsGraph) -> int:
+    return _sweep_interval(name, _resolve_live_config(settings))
+
+
+def _resolve_live_config(settings: HubSettingsGraph) -> HubConfig:
+    snapshot = settings.reader.snapshot()
+    return settings.footing.resolve(snapshot.entries)
 
 
 def _sweep_interval(name: SweepName, config: HubConfig) -> int:
@@ -465,6 +577,13 @@ def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: Tenant
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     """The framework's 422, unless :func:`sanitized_validation_response` answers instead."""
     assert isinstance(exc, RequestValidationError)
+    if (request.method, request.url.path) in {
+        ("PATCH", "/api/admin/settings"),
+        ("POST", "/api/admin/settings/apply"),
+    }:
+        response = declared_problem_response(request, hub_settings_validation_problem(instance=request.url.path))
+        assert response is not None
+        return response
     if request.url.path == "/api/admin/clock":
         detail = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": detail})
@@ -511,6 +630,25 @@ async def _wait_for_task(task: asyncio.Task[None]) -> None:
     await task
 
 
+async def _bind_request_config(request: Request) -> AsyncGenerator[None, None]:
+    services = request.app.state.services
+    throttle = services.auth_throttle if services is not None else None
+    if throttle is None:
+        with bind_pass_config(request_config(request)):
+            yield
+        return
+
+    def read_config() -> tuple[HubConfig, tuple[bool, int, float]]:
+        config = request_config(request)
+        login = config.auth.login_throttle
+        return config, (login.enabled, login.capacity, login.refill_seconds)
+
+    with throttle.capture(read_config) as (config, generation):
+        request.state.auth_throttle_generation = generation
+        with bind_pass_config(config):
+            yield
+
+
 def create_app(
     config: HubConfig,
     *,
@@ -535,7 +673,7 @@ def create_app(
         version=__version__,
         lifespan=lifespan,
         telemetry=platform_tracing.fastapi_telemetry(),
-        dependencies=[Depends(_annotate_chunk)],
+        dependencies=[Depends(_annotate_chunk), Depends(_bind_request_config)],
     )
     app.state.platform_tracing = platform_tracing
     app.state.config = config
@@ -599,6 +737,7 @@ def create_app(
     app.include_router(egress_router)
     app.include_router(admin_tenants_router)
     app.include_router(admin_events_router)
+    app.include_router(admin_settings_router)
     app.include_router(admin_invariants_router)
     app.include_router(sweeps_router)
     app.include_router(admin_sweeps_router)
@@ -662,13 +801,15 @@ def build_hosted_app(
     platform_tracing: IPlatformTracing | None = None,
     oauth_http_client: httpx2.Client | None = None,
     version_window: VersionWindow,
+    settings: HubSettingsGraph | None = None,
+    clock: IClock | None = None,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
 
     ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
     ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
     instrumented through it. ``version_window`` judges each registering runner's version."""
-    resolved_clock = resolve_clock(os.environ)
+    resolved_clock = clock if clock is not None else resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
     owns_tracing = platform_tracing is None
     platform_tracing = (
@@ -697,6 +838,14 @@ def build_hosted_app(
         secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
         remove_retired_workdirs(config.data_dir)
 
+        def live_config() -> HubConfig:
+            bound = current_pass_config()
+            if bound is not None:
+                return bound
+            if settings is None:
+                return config
+            return _resolve_live_config(settings)
+
         def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
             return WorkSourceEntry.registry(
                 records=stores.work_source_records,
@@ -710,7 +859,7 @@ def build_hosted_app(
                 resolution=stores.garden_proposal_resolution,
                 budgets=budgets,
                 refusals=refusal_reader,
-                close_forge_writes_enabled=config.close_forge_writes_enabled,
+                close_forge_writes_enabled=lambda: live_config().close_forge_writes_enabled,
                 instrument_client=platform_tracing.instrument_client,
             )
 
@@ -780,6 +929,8 @@ def build_hosted_app(
             version_window=version_window,
             cadences_on=lambda: flags.on("cadences"),
             announce_minted=announce_minted,
+            live_config=live_config,
+            pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
         )
         cleanup.callback(services.action_loop.stop)
         cleanup.callback(services.close_tenant_objects)
@@ -793,7 +944,16 @@ def build_hosted_app(
                 # The import is the hub's, recorded once into the one tenant it wrote, so any tenant answers it.
                 LegacyStart(
                     recorded=any(stores.config_import.recorded() for stores in tenants),
-                    keys=read_legacy_keys(config.config_path, os.environ, strict=config.strict),
+                    keys=(
+                        legacy_keys_from_document(
+                            config.config_path,
+                            settings.footing.document,
+                            settings.footing.environ,
+                            strict=config.strict,
+                        )
+                        if settings is not None and settings.footing.document is not None
+                        else read_legacy_keys(config.config_path, os.environ, strict=config.strict)
+                    ),
                 ).check()
             except LegacyStartRefused as refusal:
                 raise ConfigError(str(refusal)) from refusal
@@ -855,6 +1015,7 @@ def build_hosted_app(
         )
         # Lifespan and the CLI fallback share the hosted resources' one-shot cleanup.
         app.state.engine = engine
+        app.state.hub_settings = settings
         # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
         app.state.flow_driver = None if controlled else flow_driver
         app.state.hosted_cleanup = cleanup.pop_all()
