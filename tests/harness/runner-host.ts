@@ -670,12 +670,8 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, opencode, usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
-      // Init selects the harness from the configured binary, which the profile installs only after the first init.
-      if (ownDir === undefined && adopted === undefined && ((merged.runner ?? []) as TomlTable[]).some((entry) => (entry.opencode as TomlTable | undefined)?.enabled === true)) {
-        await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
-      }
-
-      // A profile can select a different harness after init; reconcile locally, without another enrollment.
+      // A profile can select a different harness after init; reconcile locally, without another enrollment or
+      // init's refresh of operator-selected runtime files.
       if (((profile.runner ?? []) as TomlTable[]).some((entry) => 'opencode' in entry || 'claude_code' in entry || 'codex' in entry)) {
         await run(requireBinary(binDir(), 'python'), [path.join(BLIZZARD_ROOT, 'tests', 'support', 'reconcile_runner_runtime.py'), dir], home);
       }

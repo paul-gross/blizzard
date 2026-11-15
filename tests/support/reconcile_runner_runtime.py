@@ -14,7 +14,7 @@ from blizzard.runner.harness.opencode.plugin import (
     plugin_reference,
     render_plugin_source,
 )
-from blizzard.runner.harness.opencode.section import OPENCODE_WORKER_CONFIG_FILENAME, OpenCodeSection
+from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode.worker_config import render_worker_config
 from blizzard.runner.harness.wiring import declared
 from blizzard.runner.host_config import HostConfig
@@ -40,9 +40,9 @@ def main() -> None:
                     or not section.enabled
                 ):
                     continue
-                target = root / OPENCODE_WORKER_CONFIG_FILENAME
+                target = section.worker_config_at(root)
                 plugin = root / PLUGIN_DIRNAME / PLUGIN_FILENAME
-                if section.worker_config_at(root) != target:
+                if not target.resolve().is_relative_to(root):
                     continue
                 write_missing(root, plugin, render_plugin_source())
                 document = render_worker_config(shell=entry.own.worker_shell, plugins=(plugin_reference(plugin),))

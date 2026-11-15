@@ -81,6 +81,48 @@ test('an external OpenCode worker config is left unchanged', async ({ runnerHost
   expect(host.hostFile()).toContain(external);
 });
 
+for (const present of [false, true]) {
+  test(`OpenCode 1 reconciles an ${present ? 'existing' : 'absent'} custom host config`, async ({ runnerHosts, scratchDirs, mockHub }) => {
+    const dir = scratchDirs.make('custom-config');
+    const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+    expect(init.code, init.stdout + init.stderr).toBe(0);
+    const config = path.join(dir, 'custom', 'worker.json');
+    const plugin = path.join(dir, 'plugins', 'blizzard-heartbeat.ts');
+    fs.rmSync(plugin, { force: true });
+    if (present) {
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'existing custom config\n');
+    }
+    await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+      runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode', worker_config_path: config } }],
+    } });
+    if (present) expect(fs.readFileSync(config, 'utf8')).toBe('existing custom config\n');
+    else expect(JSON.parse(fs.readFileSync(config, 'utf8')).plugin).toContain(`file://${plugin}`);
+    expect(fs.statSync(plugin).size).toBeGreaterThan(0);
+  });
+}
+
+for (const present of [false, true]) {
+  test(`OpenCode 2 leaves an ${present ? 'existing' : 'absent'} custom config and plugin alone`, async ({ runnerHosts, scratchDirs, mockHub }) => {
+    const dir = scratchDirs.make('opencode2');
+    const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+    expect(init.code, init.stdout + init.stderr).toBe(0);
+    const config = path.join(dir, 'custom', 'worker.json');
+    const plugin = path.join(dir, 'plugins', 'blizzard-heartbeat.ts');
+    fs.rmSync(plugin, { force: true });
+    if (present) {
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'operator config\n');
+    }
+    await runnerHosts.create({ runnerDir: dir, runnerStarted: false, runnerConfig: {
+      runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockOpencode2}', worker_config_path: config } }],
+    } });
+    if (present) expect(fs.readFileSync(config, 'utf8')).toBe('operator config\n');
+    else expect(fs.existsSync(config)).toBe(false);
+    expect(fs.existsSync(plugin)).toBe(false);
+  });
+}
+
 for (const present of ['config', 'plugin'] as const) {
   test(`a partial OpenCode scaffold preserves the existing ${present} and writes the missing file`, async ({ runnerHosts, scratchDirs, mockHub }) => {
     const dir = scratchDirs.make(`partial-${present}`);
