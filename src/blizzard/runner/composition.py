@@ -115,6 +115,7 @@ from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
+    IRunnerIdentityStore,
     RunnerIdentityHolder,
 )
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
@@ -136,6 +137,7 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
+from blizzard.runner.settings.ports import IWriteRunnerSettings
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -172,6 +174,7 @@ from blizzard.runner.store.internal.projects_answer_store import ServedProjectsS
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
+from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
@@ -1011,7 +1014,7 @@ def _build_runner(
         ready = host.readiness.evaluate().ready
         connections = RunnerStoreConnections(host.engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         connections.bind(runner_id)
-        stores = _build_stores(connections)
+        stores = _build_stores(connections, host.clock)
         clock = host.clock
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
@@ -1184,13 +1187,21 @@ def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
     )
 
 
+def build_settings_stores(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
+) -> tuple[IRunnerIdentityStore, IWriteRunnerSettings]:
+    """Construct the runner-bound identity and settings adapters for the CLI edge."""
+    connections = RunnerStoreConnections(engine, errors, runner_id)
+    return RunnerIdentityStore(connections), RunnerSettingsStore(connections, SystemClock())
+
+
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerStores:
     """Construct and wire every extracted concept-store adapter over a migrated engine, bound to ``runner_id`` (or
     unbound, ``None``)."""
     return _build_stores(RunnerStoreConnections(engine, errors, runner_id))
 
 
-def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
+def _build_stores(connections: RunnerStoreConnections, clock: IClock | None = None) -> RunnerStores:
     return RunnerStores(
         lease_record=LeaseRecordStore(connections),
         session=LeaseSessionStore(connections),
@@ -1204,6 +1215,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         asks=AskStore(connections),
         pause=PauseStore(connections),
         identity=RunnerIdentityStore(connections),
+        settings=RunnerSettingsStore(connections, clock or SystemClock()),
         served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),

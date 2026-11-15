@@ -11,12 +11,17 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.settings_record.vocabulary import Change
+from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.runtime import migration_runner, sqlite_store_file
-from tests.support.config_inputs import host_runtime_of, selector_over
+from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
+from tests.support.config_inputs import host_runtime_of, load_host_config, selector_over
 from tests.support.host_files import load_runner_config
+from tests.support.runner_fakes import make_store
 from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, InitRunner, init_runner
 
 _HUB = "http://hub.test:8421"
@@ -51,6 +56,44 @@ def test_a_valid_host_checks_clean_resolving_each_token_to_its_id(tmp_path: Path
     assert "host ok" in result.output
     _nothing_started(root)
     assert (layout.lock_path.stat().st_mtime_ns if layout.lock_path.exists() else None) == lock_before
+
+
+def test_check_previews_seed_and_honors_stored_values_without_writing(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _joined(tmp_path, fake_init_hub)
+    layout = HostLayout(root)
+    original = layout.config_path.read_text()
+    layout.config_path.write_text(original.replace("agents = 1", 'agents = "invalid"'))
+    host = load_host_config(root)
+    settings = RunnerSettingsStore(make_store(host.db_url, "rn_init1").connections, SystemClock())
+    before = settings.snapshot()
+    refused = _check(fake_init_hub, root)
+    assert refused.exit_code != 0 and "agents" in refused.output
+    assert settings.snapshot() == before
+    assert not settings.changes(limit=100)
+
+    layout.config_path.write_text(original.replace("agents = 1", "agents = 3"))
+    host = load_host_config(root)
+    ready, halted = seed_runners(host, list(host.runners))
+    assert ready and not halted
+    snapshot = settings.snapshot()
+    layout.config_path.write_text(original.replace("agents = 1", 'agents = "invalid"'))
+    checked = _check(fake_init_hub, root)
+    assert checked.exit_code == 0, checked.output
+    assert settings.snapshot() == snapshot
+    settings.write(
+        Change("edit", unsets=frozenset({"agents"})),
+        if_match=snapshot.revision,
+        validate=lambda _: {},
+        door="cli",
+        actor="test",
+    )
+    snapshot = settings.snapshot()
+    history = settings.changes(limit=100)
+    checked = _check(fake_init_hub, root)
+    assert checked.exit_code != 0 and "has no agents" in checked.output
+    assert settings.snapshot() == snapshot and settings.changes(limit=100) == history
 
 
 def test_a_token_that_resolves_to_another_runner_is_named_with_both_ids(

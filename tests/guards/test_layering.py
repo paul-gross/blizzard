@@ -3087,6 +3087,7 @@ def test_the_layer_walker_holds_the_actions_package_in_its_row(tmp_path: Path, r
 #: Each runner node -> the nodes it may import besides itself (``bzh:domain-package-layers``); the rest are edges.
 _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "config_table": frozenset(),
+    "settings": frozenset(),
     "node_steps": frozenset(),
     "process": frozenset(),
     "route_paths": frozenset(),
@@ -3132,6 +3133,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
             "hub",
             "leases",
             "lifecycle",
+            "settings",
             "throttle",
             "tracing",
             "transcripts",
@@ -3172,6 +3174,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "loop_wiring",
         "public_origins",
         "runtime",
+        "settings_reader",
     }
 )
 

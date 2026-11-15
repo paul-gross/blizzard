@@ -36,6 +36,7 @@ from blizzard.foundation.operator_sessions.internal.session_file import SessionF
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import (
     MigrationConnectionError,
@@ -59,8 +60,10 @@ from blizzard.runner.composition import (
     build_identity_service,
     build_read_stores,
     build_runner_process,
+    build_settings_stores,
 )
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, resolve_tick_seconds, worker_shell_refusal
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
@@ -147,6 +150,8 @@ from blizzard.runner.runtime import (
     reset_command,
     runner_store_migrations,
 )
+from blizzard.runner.settings.keys import runner_keys
+from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
@@ -954,33 +959,74 @@ def host(
         config = replace(config, port=bound_port(sock))
         for warning in config.warnings:
             click.echo(f"warning: {warning}")
-        projections = config.projections()
-        runners = [built for built in projections if isinstance(built, BuiltRunner)]
-        halted = [runner for runner in projections if isinstance(runner, HaltedRunner)]
+        entries = [entry for entry in config.runners if entry.id is not None]
+        halted = [
+            projection
+            for projection in config.projections()
+            if isinstance(projection, HaltedRunner) and projection.id is None
+        ]
         ours = tuple(entry.id for entry in config.runners if entry.id is not None)
         with store_write_guard(
             config,
             action="start the host",
             door=Door.of(ctx),
             clock=CliCollaborators.of(ctx).wall_clock,
-            runners={built.id: built.config.name for built in runners},
+            runners={entry.id: entry.name for entry in entries if entry.id is not None},
             configured=ours,
             refuse_foreign=False,
         ) as foreign:
-            kept = [built for built in runners if built.id not in foreign]
+            kept = [entry for entry in entries if entry.id not in foreign]
             halted += [
-                HaltedRunner(name=built.config.name, id=built.id, errors=(foreign[built.id],))
-                for built in runners
-                if built.id in foreign
+                HaltedRunner(name=entry.name, id=entry.id, errors=(foreign[entry.id],))
+                for entry in entries
+                if entry.id is not None and entry.id in foreign
             ]
+            seeded, seed_halted = seed_runners(config, kept)
+            halted += seed_halted
             start(
                 config,
-                kept,
+                seeded,
                 halted,
                 InitCollaborators.of(ctx),
                 tcp_socket=sock,
                 listening_file=listening_file,
             )
+
+
+def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
+    """Seed and resolve identified runners only after the store guard has passed."""
+    engine = create_engine_from_url(config.db_url)
+    ready: list[BuiltRunner] = []
+    halted: list[HaltedRunner] = []
+    try:
+        for entry in runners:
+            assert entry.id is not None
+            identity, settings = build_settings_stores(
+                engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
+            )
+            if identity.runner_identity() is None:
+                halted.append(
+                    HaltedRunner(
+                        entry.name, entry.id, (f"identity is missing; re-run `blizzard runner init {config.root}`",)
+                    )
+                )
+                continue
+            assert entry.authored is not None
+            reader = RunnerSettingsReader(config, entry, settings)
+            try:
+                settings.seed(entry.authored, tuple(runner_keys(HOST_REGISTRY)), validate=reader.validate)
+                _, resolved = reader.snapshot()
+            except (SettingsInvalid, ValueError) as exc:
+                halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
+                continue
+            projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
+            if isinstance(projection, HaltedRunner):
+                halted.append(projection)
+            else:
+                ready.append(replace(projection, config=resolved))
+    finally:
+        engine.dispose()
+    return ready, halted
 
 
 def start(
@@ -1067,27 +1113,58 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
         ensure_current_revision(config)
         click.echo(f"store: {config.db_url} is at the revision this build expects")
         named = named_runners(config, CliCollaborators.of(ctx).wall_clock)
+        current = True
     except (RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError) as exc:
         problems.append(f"store: {exc}")
         named = ()
+        current = False
     collaborators = InitCollaborators.of(ctx)
-    for projection in config.projections():
-        if isinstance(projection, HaltedRunner):
-            problems.append(projection.describe())
-            continue
-        problem = foreign_store_reason(
-            named,
-            projection.id,
-            reset_command(config.root),
-            configured=tuple(entry.id for entry in config.runners if entry.id is not None),
-        ) or _resolve_token(collaborators, config.hub_url, projection)
-        if problem is None:
-            click.echo(
-                f"runner {projection.config.name} ({projection.id}): its token ({projection.token.source}) "
-                "resolves to its id"
-            )
-        else:
-            problems.append(f"runner {projection.config.name} ({projection.id}): {problem}")
+    engine = create_engine_from_url(config.db_url) if current else None
+    try:
+        for entry in config.runners:
+            if entry.id is not None and current:
+                problem = foreign_store_reason(
+                    named,
+                    entry.id,
+                    reset_command(config.root),
+                    configured=tuple(item.id for item in config.runners if item.id is not None),
+                )
+                if problem:
+                    problems.append(f"runner {entry.name} ({entry.id}): {problem}")
+                    continue
+                assert engine is not None
+                identity, settings = build_settings_stores(
+                    engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
+                )
+                if identity.runner_identity() is None:
+                    problems.append(
+                        HaltedRunner(
+                            entry.name, entry.id, (f"identity is missing; re-run `blizzard runner init {config.root}`",)
+                        ).describe()
+                    )
+                    continue
+                try:
+                    resolved = RunnerSettingsReader(config, entry, settings).preview_seed()
+                except (SettingsInvalid, ValueError) as exc:
+                    problems.append(HaltedRunner(entry.name, entry.id, (str(exc),)).describe())
+                    continue
+                projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
+            else:
+                projection = config.project(entry, os.environ)
+            if isinstance(projection, HaltedRunner):
+                problems.append(projection.describe())
+                continue
+            problem = _resolve_token(collaborators, config.hub_url, projection)
+            if problem is None:
+                click.echo(
+                    f"runner {projection.config.name} ({projection.id}): its token ({projection.token.source}) "
+                    "resolves to its id"
+                )
+            else:
+                problems.append(f"runner {projection.config.name} ({projection.id}): {problem}")
+    finally:
+        if engine is not None:
+            engine.dispose()
     if problems:
         raise click.ClickException("\n".join(problems))
     click.echo("host ok")
@@ -1374,25 +1451,24 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
     if host_pass:
         raise click.ClickException(f"no host is serving {directory}, so there is no host pass to run")
     config = load_host(directory)
-    built = [projection for projection in config.projections() if isinstance(projection, BuiltRunner)]
-    halted = [projection for projection in config.projections() if isinstance(projection, HaltedRunner)]
-    if halted:
-        raise click.ClickException("\n".join(runner.describe() for runner in halted))
     with click_exception_on(ConfigError):
         entry = config.sole_runner(runner)
-    picked = [projection for projection in built if projection.id == entry.id]
-    if not picked:
+    if entry.id is None:
         raise click.ClickException(f"runner {entry.name} is not built, so a tick cannot drive it")
-    (runner_built,) = picked
     with store_write_guard(
         config,
         action="run a tick",
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
-        runners={runner_built.id: runner_built.config.name},
+        runners={entry.id: entry.name},
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
+        seeded, seed_halted = seed_runners(config, [item for item in config.runners if item.id is not None])
+        seed_halted += [item for item in config.projections() if isinstance(item, HaltedRunner) and item.id is None]
+        if seed_halted:
+            raise click.ClickException("\n".join(item.describe() for item in seed_halted))
+        runner_built = next(item for item in seeded if item.id == entry.id)
         with click_exception_on(ConfigError):
             graph = build_runner_process(
                 runner_built.config,

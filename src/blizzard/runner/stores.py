@@ -62,6 +62,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessReposit
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
+from blizzard.runner.settings.ports import IReadRunnerSettings, IWriteRunnerSettings
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
     IReadRunnerUsageLimitRepository,
@@ -186,6 +187,7 @@ class RunnerStores:
     asks: IWriteAskRepository
     pause: IWritePauseRepository
     identity: IRunnerIdentityStore
+    settings: IWriteRunnerSettings
     served_projects: IWriteServedProjectsRepository
     takeover: IWriteTakeoverRepository
     requeue: IWriteRequeueRepository
@@ -223,6 +225,7 @@ class RunnerReadStores:
     asks: IReadAskRepository
     pause: IReadPauseRepository
     identity: IReadRunnerIdentityRepository
+    settings: IReadRunnerSettings
     served_projects: IReadServedProjectsRepository
     takeover: IReadTakeoverRepository
     requeue: IReadRequeueRepository
@@ -255,6 +258,7 @@ class RunnerReadStores:
             asks=stores.asks,
             pause=stores.pause,
             identity=stores.identity,
+            settings=stores.settings,
             served_projects=stores.served_projects,
             takeover=stores.takeover,
             requeue=stores.requeue,

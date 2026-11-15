@@ -130,13 +130,24 @@ def test_reset_names_a_runner_the_host_file_no_longer_declares_by_its_id(
     declared = config.read_text()
     config.write_text(declared[: declared.rindex("[[runner]]")])
     assert [r.name for r in load_host_config(root).runners] == ["runner-local"]
+    host = create_engine_from_url(load_host_config(root).db_url)
+    retained = {
+        name: contents(host, name, runner_id=_RESET)
+        for name in ("runner_identity", "runner_settings", "runner_setting_entries", "runner_setting_changes")
+    }
+    assert all(retained.values())
 
     result = ok(fake_init_hub, "store", "reset", str(root), "--runner", _RESET)
 
     [archive] = sorted(p for p in HostLayout(root).data_dir.iterdir() if p.name.startswith(f"host.db.{_RESET}."))
     assert f"archived runner {_RESET} ({_RESET}) to {archive}" in result.output
-    host = create_engine_from_url(load_host_config(root).db_url)
-    assert rows(host, "runner_identity", runner_id=_RESET) == []
+    archived = create_engine_from_url(sqlite_url(archive))
+    for name, expected in retained.items():
+        assert contents(archived, name, runner_id=_RESET) == expected
+        assert rows(host, name, runner_id=_RESET) == []
+    assert invariant_violations(host) == []
+    assert invariant_violations(archived) == []
+    archived.dispose()
     host.dispose()
 
 

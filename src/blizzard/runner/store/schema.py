@@ -31,6 +31,43 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
+runner_settings = Table(
+    "runner_settings",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("revision", Integer, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+    info={"scope": "runner"},
+)
+
+runner_setting_entries = Table(
+    "runner_setting_entries",
+    metadata,
+    Column("runner_id", String, nullable=False),
+    Column("key", String, nullable=False),
+    Column("value", Text, nullable=True),
+    Column("at_default", Boolean, nullable=False),
+    Column("revision", Integer, nullable=False),
+    PrimaryKeyConstraint("runner_id", "key"),
+    info={"scope": "runner"},
+)
+
+runner_setting_changes = Table(
+    "runner_setting_changes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("op", String, nullable=False),
+    Column("door", String, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("apply_id", String, nullable=True),
+    Column("diff", Text, nullable=False),
+    info={"scope": "runner"},
+)
+Index("ix_runner_setting_changes_runner_id_id", runner_setting_changes.c.runner_id, runner_setting_changes.c.id)
+
 # --- How a runner transfer treats each host-scoped table (``info["transfer"]``) ---
 # A runner-scoped row moves with its runner; a host row belongs to none, so its table declares what a copy does with it.
 
@@ -227,6 +264,9 @@ lease_spawns = Table(
     Column("identified_at", UtcDateTime, nullable=True),
     # The other way a provisional generation closes: identity never arrived.
     Column("identity_failed_at", UtcDateTime, nullable=True),
+    Column("host_settings_revision", Integer, nullable=True),
+    Column("runner_settings_revision", Integer, nullable=True),
+    Column("transcripts_root", Text, nullable=True),
     Column("runner_id", String, nullable=False),
     info={"scope": "runner"},
 )

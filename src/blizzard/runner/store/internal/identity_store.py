@@ -9,7 +9,13 @@ from blizzard.runner.hub.identity import (
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
 )
-from blizzard.runner.store.schema import runner_identity
+from blizzard.runner.store.internal.base import lock_identity_row
+from blizzard.runner.store.schema import (
+    runner_identity,
+    runner_setting_changes,
+    runner_setting_entries,
+    runner_settings,
+)
 from blizzard.runner.store.scoped import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 
 _log = get_logger("blizzard.runner.store")
@@ -69,13 +75,22 @@ class RunnerIdentityStore:
             tenant_id=identity.tenant_id,
         )
 
-    def forget_runner_identity(self) -> None:
+    def forget_runner_identity(self) -> bool:
         bound = self._store.runner_id
         if bound is None:
             raise RunnerUnbound(runner_identity.name)
         with self._store.begin() as conn:
-            conn.execute(self._store.delete(runner_identity))
-        _log.debug("runner identity forgotten", runner_id=bound)
+            lock_identity_row(conn, self._store)
+            deleted = conn.execute(
+                self._store.delete(runner_identity).where(
+                    ~self._store.exists(runner_settings),
+                    ~self._store.exists(runner_setting_entries),
+                    ~self._store.exists(runner_setting_changes),
+                )
+            ).rowcount
+        if deleted:
+            _log.debug("runner identity forgotten", runner_id=bound)
+        return bool(deleted)
 
 
 _runner_identity_store_conforms: type[IWriteRunnerIdentityRepository] = RunnerIdentityStore

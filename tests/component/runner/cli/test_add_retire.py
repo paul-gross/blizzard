@@ -6,12 +6,14 @@ runner as one the host reports for."""
 from __future__ import annotations
 
 import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.runtime import named_runners
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.host_config import BuiltRunner
@@ -21,6 +23,7 @@ from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.store.schema import runner_setting_changes
 from tests.support.config_inputs import load_host_config
 from tests.support.runner_add_retire import (
     _HUB,  # pyright: ignore[reportPrivateUsage]
@@ -234,6 +237,38 @@ def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaini
 
     assert result.exit_code == 0, result.output
     assert named_runners(load_host_config(root), SystemClock()) == ("rn_init1",)
+    again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
+    assert again.exit_code == 0, again.output
+
+
+def test_stopped_retire_retains_identity_with_history_until_explicit_reset(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "init", str(root), "--hub", _HUB).exit_code == 0
+    engine = create_engine_from_url(load_host_config(root).db_url)
+    with engine.begin() as conn:
+        conn.execute(
+            runner_setting_changes.insert().values(
+                runner_id="rn_init2",
+                recorded_at=datetime(2026, 11, 1, tzinfo=UTC),
+                revision=1,
+                op="set",
+                door="cli",
+                actor="test",
+                diff="[]",
+            )
+        )
+    engine.dispose()
+
+    result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
+    assert result.exit_code == 0, result.output
+    assert set(named_runners(load_host_config(root), SystemClock())) == {"rn_init1", "rn_init2"}
+    refused = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
+    assert refused.exit_code != 0
+    reset = _run(fake_init_hub, "store", "reset", str(root), "--runner", "rn_init2")
+    assert reset.exit_code == 0, reset.output
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert again.exit_code == 0, again.output
 

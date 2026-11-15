@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261114_1000_execution_observations",
+  "head_revision": "20261115_1000_runner_settings",
   "store": "runner",
   "tables": {
     "asks": {
@@ -1618,6 +1618,12 @@
           "server_default": false,
           "type": "String"
         },
+        "host_settings_revision": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
         "id": {
           "deprecated": null,
           "nullable": false,
@@ -1666,6 +1672,12 @@
           "server_default": false,
           "type": "String"
         },
+        "runner_settings_revision": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
         "session_id": {
           "deprecated": null,
           "nullable": true,
@@ -1677,6 +1689,12 @@
           "nullable": false,
           "server_default": false,
           "type": "DateTime"
+        },
+        "transcripts_root": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
         }
       },
       "deprecated": null,
@@ -2520,6 +2538,142 @@
           "runner_id"
         ]
       ]
+    },
+    "runner_setting_changes": {
+      "checks": [],
+      "columns": {
+        "actor": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "apply_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "diff": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "door": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "op": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "runner_setting_entries": {
+      "checks": [],
+      "columns": {
+        "at_default": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "key": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "value": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id",
+        "key"
+      ],
+      "unique": []
+    },
+    "runner_settings": {
+      "checks": [],
+      "columns": {
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "updated_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id"
+      ],
+      "unique": []
     },
     "runner_usage_limits": {
       "checks": [

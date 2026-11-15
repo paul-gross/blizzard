@@ -24,6 +24,7 @@ _RETIRED = TokenRefusal(RunnerTokenRefusalReason.RETIRED, runner_id="rn_a")
 class _Rows:
     row: RunnerIdentity | None = None
     forgotten: int = 0
+    retained_settings: bool = False
 
     def runner_identity(self) -> RunnerIdentity | None:
         return self.row
@@ -31,9 +32,12 @@ class _Rows:
     def record_runner_identity(self, identity: RunnerIdentity) -> None:
         self.row = identity
 
-    def forget_runner_identity(self) -> None:
+    def forget_runner_identity(self) -> bool:
+        if self.retained_settings or self.row is None:
+            return False
         self.row = None
         self.forgotten += 1
+        return True
 
 
 @dataclass
@@ -89,6 +93,17 @@ def test_a_retired_answer_forgets_the_row() -> None:
 
     assert watch.forget_if_retired() is True
     assert watched.rows.row is None
+
+
+def test_retired_runner_with_retained_settings_keeps_its_identity() -> None:
+    watched = _Watched(_Rows(row=RunnerIdentity("rn_a", "a", _AT), retained_settings=True))
+    watch, _ = watched.watch(_RETIRED)
+
+    assert watch.forget_if_retired() is False
+    assert watched.rows.row is not None
+    service = RunnerIdentityService(recorder=watched.rows, forgetter=watched.rows, clock=FixedClock(_AT))
+    assert service.forget() is False
+    assert watched.rows.row is not None
 
 
 @pytest.mark.parametrize(

@@ -79,9 +79,8 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
 class IWriteRetiredRunnerIdentity(Protocol):
     """Forget a retired runner's identity row — held only by the runner identity service."""
 
-    def forget_runner_identity(self) -> None:
-        """Delete the bound runner's identity row, so the host's store no longer names a runner the hub retired and
-        no ``[[runner]]`` configures; its other rows stay, inert. Deleting no row is not an error."""
+    def forget_runner_identity(self) -> bool:
+        """Delete the bound runner's identity unless settings or history remain; return whether a row was deleted."""
         ...
 
 

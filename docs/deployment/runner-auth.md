@@ -246,17 +246,18 @@ holds, refuses the add before it reaches the hub. A running host starts the new 
 so.
 
 `blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, then removes its
-`[[runner]]`; what it does with the runner's identity row in the host's store depends on whether the host runs. With the
-host stopped, `retire` forgets the row itself, before it removes the `[[runner]]`, so the store names only runners the
-host still configures and the next start or `init` serves the rest. With the host running, `retire` writes nothing to
-the store: the host halts the runner at its next tick, the hub refusing its token, and forgets the row then, which
-`retire` says. A runner still holding chunks refuses the retire, naming them; `--force` releases them. The runner's
-other rows stay in the host's store, inert. A runner retired or reinstated at the hub while `retire` is deciding refuses
-it with a `409`; run it again ([control-verbs.md](./control-verbs.md#retire-and-reinstate)). `--runner` also takes the
-id of a runner the host file no longer configures but the store's identity row still names, such as one a host crash
-left behind: with the host stopped it retires that runner at the hub and forgets the row, and a running host refuses it,
-naming that it must be stopped first. Both verbs refuse a host holding no host token, naming
-`blizzard hub runner-host add`.
+`[[runner]]`. Its identity stays with any retained settings or history. Otherwise, with the host stopped, `retire`
+forgets the row before removing the `[[runner]]`. With the host running, `retire` writes nothing to the store: the host
+halts the runner at its next tick and forgets the row only if no settings or history remain. A retained identity no
+longer in the host file triggers the wrong-store guard on a later start or `init`. Stop the host and run
+`blizzard runner store reset <dir> --runner <retired-runner-id>` to archive that runner's identity and scoped rows
+together before starting the configured siblings. A runner still holding chunks refuses the retire, naming them;
+`--force` releases them. The runner's other rows stay in the host's store, inert. A runner retired or reinstated at the
+hub while `retire` is deciding refuses it with a `409`; run it again
+([control-verbs.md](./control-verbs.md#retire-and-reinstate)). `--runner` also takes the id of a runner the host file no
+longer configures but the store's identity row still names, such as one a host crash left behind: with the host stopped
+it retires that runner at the hub and applies the same retention rule; a running host refuses it, naming that it must be
+stopped first. Both verbs refuse a host holding no host token, naming `blizzard hub runner-host add`.
 
 `GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
 `registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.
