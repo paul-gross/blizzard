@@ -42,9 +42,9 @@ exporting a variable. The same `BZ_HUB_URL` variable does live-target the operat
 consumers, two behaviors; the client obeying the variable does not mean the daemon does. Init refuses a `--hub` that
 differs from the hub an existing host file names.
 
-The runner renames itself: change `name` and restart it, and its next registration shows the new name everywhere from
-then on. Its id, token, pause state, and history stay as they were. The token's variable is derived from the name, so
-rename `BZ_HUB_TOKEN_<NAME>` in `.env` together with `name`.
+Change `name` through [runner settings](./deployment/runner-settings.md); the next registration shows the new label. Its
+id, token, pause state, and history stay as they were. Token lookup continues to use the host file name; do not rename
+the token variable merely because the live display name changes.
 
 ## Add
 

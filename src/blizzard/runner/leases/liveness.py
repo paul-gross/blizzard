@@ -58,6 +58,14 @@ class LeaseLivenessFacts:
         return evidence.evidence_at
 
 
+@domain_model
+@dataclass(frozen=True)
+class SpawnSettings:
+    host_revision: int | None = None
+    runner_revision: int | None = None
+    transcripts_root: str | None = None
+
+
 class IReadLeaseLivenessRepository(Protocol):
     """Read-only heartbeat and spawn queries backing the lease-liveness staleness baseline."""
 
@@ -93,6 +101,14 @@ class IReadLeaseLivenessRepository(Protocol):
         """This lease's current spawn generation — the count of its ``lease_spawns`` rows:
         1 at the initial spawn, incrementing at each resume that calls ``record_spawn``
         again under this lease."""
+        ...
+
+    def spawn_settings(self, lease_id: str, generation: int) -> SpawnSettings | None:
+        """Provenance of one invocation generation, or None when absent."""
+        ...
+
+    def latest_spawn_settings(self, lease_ids: Sequence[str]) -> dict[str, SpawnSettings]:
+        """Newest generation provenance per lease, in bounded batches."""
         ...
 
     def latest_spawn_harness_version(self, lease_id: str) -> str | None:
@@ -135,6 +151,9 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         pgid: int | None = None,
         spawn_cwd: str | None = None,
         park_resume: ParkResume | None = None,
+        host_settings_revision: int | None = None,
+        runner_settings_revision: int | None = None,
+        transcripts_root: str | None = None,
     ) -> int | None:
         """Fill a lease's spawn-return facts in one shot: pid, process start time, process
         group, session id — for identity known at spawn time (a fresh mint instead splits
@@ -156,6 +175,9 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         pgid: int | None,
         spawned_at: datetime,
         harness_id: str,
+        host_settings_revision: int | None = None,
+        runner_settings_revision: int | None = None,
+        transcripts_root: str | None = None,
     ) -> None:
         """Phase one of a two-phase spawn: durable BEFORE identity is known — the
         launched process's pid, start time, and owned group, plus a new ``lease_spawns``

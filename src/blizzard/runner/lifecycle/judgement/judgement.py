@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
@@ -499,6 +499,7 @@ class Judgement:
         settings = harness.launch_settings(
             lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
         )
+        observe_version = harness.observe_version
         if owners is not None:
             worker = WorkerInvocation(lease.lease_id, generation)
             if owners.find(worker) is None:
@@ -514,6 +515,7 @@ class Judgement:
             current_settings = current_harness.launch_settings(
                 lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
             )
+            observe_version = current_harness.observe_version
             owners.retire_judge(lease.lease_id, generation)
             selected = owners.retain_for(key, worker)
             try:
@@ -525,10 +527,13 @@ class Judgement:
             except BaseException:
                 owners.release(key)
                 raise
+        stamp = self.ctx.stores.liveness.spawn_settings(lease.lease_id, generation)
+        if stamp is not None and stamp.transcripts_root:
+            settings = replace(settings, transcript_root=stamp.transcripts_root)
         try:
             handle, _ = Spawner(self.ctx).launching(
                 session.harness_id,
-                harness.observe_version,
+                observe_version,
                 lambda: harness.judge(
                     SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
                     session.session_id,
@@ -538,7 +543,7 @@ class Judgement:
                     chunk_id=lease.chunk_id,
                     session_settings=settings,
                 ),
-                selected=owners.lookup(key) if owners is not None else None,
+                selected=owners.current if owners is not None else None,
             )
         except BaseException:
             if owners is not None:

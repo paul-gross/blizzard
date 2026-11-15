@@ -76,3 +76,31 @@ def test_unset_last_nested_setting_removes_its_empty_container(tmp_path: Path) -
     reader = RunnerSettingsReader(host, host.runners[0], Store())
     assert not reader.validate(Store().snapshot().entries)
     assert reader.snapshot()[1].throttle is None
+
+
+def test_validation_attributes_parser_errors_to_whole_setting_paths(tmp_path: Path) -> None:
+    from blizzard.foundation.settings_record.vocabulary import Entry
+    from blizzard.runner.settings.ports import SettingsSnapshot
+    from blizzard.runner.settings_reader import RunnerSettingsReader
+    from tests.support.config_inputs import load_host_config
+    from tests.support.host_files import write_minimal_host
+
+    write_minimal_host(tmp_path)
+    host = load_host_config(tmp_path)
+
+    class Store:
+        def snapshot(self) -> SettingsSnapshot:
+            return SettingsSnapshot(0, {})
+
+    reader = RunnerSettingsReader(host, host.runners[0], Store())
+    errors = reader.validate({"agents": Entry(-1), "projects": Entry("bad")})
+    assert set(errors) == {"agents", "projects"}
+    errors = reader.validate({"projects": Entry([]), "throttle.pace.taper": Entry([{"unexpected": "value"}])})
+    assert set(errors) == {"throttle.pace.taper"}
+    errors = reader.validate({"projects": Entry([]), "harness.autonomy": Entry("invalid")})
+    assert set(errors) == {"harness.autonomy"}
+    errors = reader.validate(
+        {"projects": Entry([]), "claude_code.enabled": Entry(False), "opencode.enabled": Entry(False)}
+    )
+    assert set(errors) == {"claude_code.enabled", "opencode.enabled"}
+    assert reader._error_keys("unrecognized parser diagnostic", {"agents": Entry(1)}) == {"agents"}  # pyright: ignore[reportPrivateUsage]

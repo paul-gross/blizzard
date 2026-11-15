@@ -50,6 +50,9 @@ class LeaseView(WireModel):
     resolved_effort: str | None
     #: The newest spawn's recorded harness version; ``None`` before a spawn records one.
     harness_version: str | None
+    #: Settings revisions held by the newest spawn; null for old rows.
+    host_settings_revision: int | None = None
+    runner_settings_revision: int | None = None
     #: The worker's declared commits, newest per ``(environment_id, repo)``.
     git_commits: list[LeaseGitCommitView]
 

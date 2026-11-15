@@ -1720,6 +1720,338 @@
       "path": "runner session-end",
       "short_help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's \"declared done\" signal."
     },
+    "settings": {
+      "commands": {
+        "changes": {
+          "help": "Read the settings change history.",
+          "params": [
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings changes",
+          "short_help": "Read the settings change history."
+        },
+        "get": {
+          "help": "Read the settings view, or one KEY.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings get",
+          "short_help": "Read the settings view, or one KEY."
+        },
+        "read": {
+          "help": "",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings read",
+          "short_help": ""
+        },
+        "set": {
+          "help": "Set KEY to VALUE, a TOML literal (including inline tables and lists).",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "value",
+              "opts": [
+                "value"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings set",
+          "short_help": "Set KEY to VALUE, a TOML literal (including inline tables and lists)."
+        },
+        "show": {
+          "help": "",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings show",
+          "short_help": ""
+        },
+        "unset": {
+          "help": "Restore KEY to its default.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings unset",
+          "short_help": "Restore KEY to its default."
+        }
+      },
+      "help": "Read and edit a runner's live settings.",
+      "params": [],
+      "path": "runner settings",
+      "short_help": "Read and edit a runner's live settings."
+    },
     "start": {
       "help": "Clear the pause ``blizzard runner pause`` set: this runner starts new workers again.\n\nWorks with the hub unreachable. A runner also paused at the hub stays paused until\n``blizzard hub runner resume <runner_id>`` clears that one too.",
       "params": [

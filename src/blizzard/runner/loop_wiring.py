@@ -418,6 +418,13 @@ class RunnerStepper:
         self._client_timeout: float | None = None
         self._retired: list[httpx2.Client] = []
         self._closed = False
+        self._revision: int | None = None
+        self.failed_revision: int | None = None
+        self.settings_in_force_revision: int | None = None
+        self.settings_in_force_since: str | None = None
+        self.settings_failure: tuple[int, str, str] | None = None
+        self._logged_failure: int | None = None
+        self._trace_interval = config.tracing.sweep_seconds
 
     @property
     def wiring(self) -> LoopWiring:
@@ -511,45 +518,98 @@ class RunnerStepper:
 
     def _sweep_traces(self) -> None:
         if self._graph.trace_sweep is not None:
-            self._graph.trace_sweep.sweep()
+            reader = self._graph.settings_reader
+            config = reader.snapshot()[1] if reader is not None else self._graph.config
+            self._trace_interval = config.tracing.sweep_seconds
+            self._graph.trace_sweep.sweep(config.tracing)
+
+    def trace_interval(self) -> float:
+        return self._trace_interval
+
+    def settings_status(self, read: Callable[[], _T]) -> tuple[_T, int | None, str | None, tuple[int, str, str] | None]:
+        """Read the store and the tick's published state without interleaving a rebuild."""
+        with self._build:
+            return read(), self.settings_in_force_revision, self.settings_in_force_since, self.settings_failure
 
     def _context(self) -> LoopContext:
         with self._build:
             if self._closed:
                 raise RuntimeError("runner stepper is closed")
             timeout = self._timeout()
-            selected = self._graph.harness_sets.current
-            if self._ctx is None or self._client_timeout != timeout:
-                config = self._wiring.config
-                client = httpx2.Client(
-                    base_url=config.hub_url, timeout=timeout, auth=HeldTokenAuth(self._graph.hub_token)
+            reader = self._graph.settings_reader
+            revision = None
+            client: httpx2.Client | None = None
+            new_client = False
+            try:
+                if reader is not None:
+                    snapshot, config = reader.snapshot()
+                    revision = snapshot.revision
+                else:
+                    config = self._wiring.config
+                wiring = LoopWiring.of(config, broker=self._graph.host.events)
+                key = (
+                    self._graph.harness_key(config)
+                    if reader is not None and self._graph.harness_key is not None
+                    else None
                 )
-                try:
-                    self._graph.platform_tracing.instrument_client(client)
-                    ctx = self._wiring.context(
-                        HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
+                selected = (
+                    self._graph.harness_sets.prepare(key) if key is not None else self._graph.harness_sets.current
+                )
+                if (
+                    self._ctx is not None
+                    and self._client_timeout == timeout
+                    and self._revision == revision
+                    and self._ctx_harness_set is selected
+                ):
+                    self.failed_revision = None
+                    self.settings_failure = None
+                    return self._ctx
+                if self._client is not None and self._client_timeout == timeout:
+                    client = self._client
+                else:
+                    client = httpx2.Client(
+                        base_url=config.hub_url, timeout=timeout, auth=HeldTokenAuth(self._graph.hub_token)
                     )
-                except BaseException:
-                    client.close()
-                    raise
-                if self._client is not None:
-                    self._retired.append(self._client)
-                self._client = client
-                self._client_timeout = timeout
-                self._ctx = ctx
-                self._ctx_harness_set = selected
-            elif self._ctx_harness_set is not selected:
-                self._ctx = replace(
-                    self._ctx,
-                    harnesses=selected.registry,
-                    harness_selector=HarnessSelector(harnesses=selected.registry, health=selected.health),
-                    sessions=replace(self._ctx.sessions, harnesses=selected.registry),
-                    usage=replace(self._ctx.usage, harnesses=selected.registry),
-                    harness_versions=selected.versions,
-                    harness_health=selected.health,
-                    capabilities=None,
+                    new_client = True
+                    self._graph.platform_tracing.instrument_client(client)
+                ctx = wiring.context(
+                    HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
                 )
-                self._ctx_harness_set = selected
+                ctx = replace(ctx, config=replace(ctx.config, runner_settings_revision=revision))
+                if self._ctx is not None:
+                    ctx = replace(ctx, retention_passes=self._ctx.retention_passes)
+            except Exception as exc:
+                if new_client and client is not None:
+                    client.close()
+                self.failed_revision = revision
+                if revision is not None and (self.settings_failure is None or self.settings_failure[0] != revision):
+                    from blizzard.foundation.store.utc import iso_utc
+
+                    self.settings_failure = (revision, str(exc), iso_utc(self._graph.host.clock.now()))
+                if self._ctx is None or reader is None:
+                    raise
+                if self._logged_failure != revision:
+                    _log.error("runner settings rebuild failed", revision=revision, detail=str(exc))
+                    self._logged_failure = revision
+                return self._ctx
+            if key is not None:
+                self._graph.harness_sets.publish(key, selected)
+            if self._client is not None and self._client is not client:
+                self._retired.append(self._client)
+            self._client = client
+            self._client_timeout = timeout
+            self._ctx = ctx
+            self._ctx_harness_set = selected
+            self._wiring = wiring
+            self._revision = revision
+            if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
+                from blizzard.foundation.store.utc import iso_utc
+
+                self.settings_in_force_revision = revision
+                self.settings_in_force_since = iso_utc(self._graph.host.clock.now())
+            self.settings_failure = None
+            self.failed_revision = None
+            self._logged_failure = None
             return self._ctx
 
 

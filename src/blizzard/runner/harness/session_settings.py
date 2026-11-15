@@ -83,12 +83,5 @@ class SessionSettings:
         return replace(
             self,
             environment=SessionEnvironment(tuple(env.items()), self.environment.shell),
-            binary=origin.binary,
-            settings_path=origin.settings_path,
-            settings_argv=origin.settings_argv,
-            config_dir=origin.config_dir,
             transcript_root=origin.transcript_root,
-            bundle_path=origin.bundle_path,
-            driver_command=origin.driver_command,
-            harness_id=origin.harness_id,
         )

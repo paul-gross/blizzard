@@ -8,6 +8,22 @@ import { expect, runnerTest as test } from '../../harness/fixtures';
 const RUNNER = 'runner-local';
 const WORKSPACE = 'workspace-local';
 
+test('live agents and name edits reach the next registration', async ({ mockHub, runnerHosts }) => {
+  const host = await runnerHosts.create();
+  const runner = host.runners[RUNNER]!;
+  const fleet = mockHub.fleetOf(host, RUNNER);
+  await host.step();
+  const editAgents = await host.cli(['settings', 'set', 'agents', '3', '--runner', runner.id]);
+  expect(editAgents.code, editAgents.stderr).toBe(0);
+  const editName = await host.cli(['settings', 'set', 'name', '"renamed-live"', '--runner', runner.id]);
+  expect(editName.code, editName.stderr).toBe(0);
+  expect((await host.step()).outcome).toBe('completed');
+  const view = await fleet.get(`/api/fleet/runners/${runner.id}`);
+  expect(view.status).toBe(200);
+  expect(view.body.runner_name).toBe('renamed-live');
+  expect(view.body.agents).toBe(3);
+});
+
 /** A runner with two agents binding `default` and `web` in the home workspace, which holds four environments. */
 const BOUND = {
   workspace: [{ id: WORKSPACE, max_environments: 4n }],

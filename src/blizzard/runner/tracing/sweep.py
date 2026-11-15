@@ -112,16 +112,17 @@ class LeaseTraceSweep:
         self._outbound = outbound
         self._exporter = exporter
         self._clock = clock
-        self._settle = timedelta(seconds=config.settle_seconds)
-        self._max_lag = timedelta(seconds=config.max_lag_seconds)
-        self._batch_limit = config.batch_limit
+        self._config = config
         # A restart mid-outage must not announce the same failure again.
         self._latch = OutageLatch(
             timedelta(seconds=config.sweep_seconds), lambda: leases.newest_trace_latch() == _FAILED
         )
         self._cursor_started = False
 
-    def sweep(self) -> None:
+    def sweep(self, config: TracingConfig | None = None) -> None:
+        config = config or self._config
+        settle = timedelta(seconds=config.settle_seconds)
+        max_lag = timedelta(seconds=config.max_lag_seconds)
         if self._identity.current() is None:
             return
         now = self._clock.now()
@@ -130,14 +131,14 @@ class LeaseTraceSweep:
         newest = self._leases.newest_trace_cursor()
         if not self._cursor_started:
             self._cursor_started = True
-            jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=LeaseCursorKey)
+            jump = first_pass_jump(newest.position if newest else None, now, max_lag, key=LeaseCursorKey)
             if jump is not None:
                 self._jump(jump, now)
                 return
         assert newest is not None  # the first pass always leaves a cursor row behind
         cursor = newest.position
-        keys = self._leases.closed_leases_after(cursor, now - self._settle, self._batch_limit)
-        lag_jump = lag_cap_jump(cursor, keys[0].at if keys else None, now, self._max_lag)
+        keys = self._leases.closed_leases_after(cursor, now - settle, config.batch_limit)
+        lag_jump = lag_cap_jump(cursor, keys[0].at if keys else None, now, max_lag)
         if lag_jump is not None:
             self._jump(lag_jump, now)
             return

@@ -110,7 +110,11 @@ def test_stepper_rebinds_all_harness_consumers_without_replacing_hub_client(
     monkeypatch.setattr(HarnessSets, "select", capture)
     config = _config(tmp_path)
     host = _host(config, "rn_a")
-    stepper = loop_wiring.RunnerStepper(config, process_graph=host.runners[0])
+    # An externally selected set is the source of truth for graphs without a
+    # live settings reader; reader-backed graphs instead select from the record.
+    stepper = loop_wiring.RunnerStepper(
+        config, process_graph=dataclasses.replace(host.runners[0], settings_reader=None)
+    )
     try:
         sets = host.runners[0].harness_sets
         original = stepper._context()  # pyright: ignore[reportPrivateUsage]
@@ -227,11 +231,15 @@ def test_production_selection_health_and_capabilities_share_binary_evidence(
         )
         assert calls.read_text().splitlines() == ["x", "x"]
 
+        held = sets.retain("running-worker")
         executable("2.0.0")
         replacement_key = composition.harness_assembly_key(inputs)
         assert replacement_key != keys[0]
         replacement = sets.select(replacement_key)
         assert replacement is not initial
+        assert sets.lookup("running-worker") is held
+        assert sets.lookup("running-worker").registry is held.registry
+        sets.release("running-worker")
         assert replacement.selection.of("opencode").service_version
         assert calls.read_text().splitlines() == ["x", "x", "x"]
         assert (

@@ -23,6 +23,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.usage.repository import ContextSampleState, IWriteUsageRepository
@@ -42,6 +43,8 @@ class ContextSampleConfig(Protocol):
 
 
 class ContextSampleStores(Protocol):
+    @property
+    def liveness(self) -> IReadLeaseLivenessRepository: ...
     @property
     def lease_record(self) -> IReadLeaseRecordRepository: ...
     @property
@@ -63,7 +66,9 @@ class ContextSampleContext(Protocol):
     def clock(self) -> IClock: ...
     @property
     def events(self) -> IRunnerEventPublisher | None: ...
-    def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource: ...
+    def lease_transcript_source_at_root(
+        self, lease_id: str, session: SessionReference, root: str | None
+    ) -> IHarnessTranscriptSource: ...
 
 
 @dataclass(frozen=True)
@@ -89,12 +94,20 @@ class ContextSampleSweep:
             # lease below filters "due" itself from its own already-fetched state.
             states = ctx.stores.usage.context_sample_states([lease.lease_id for lease in leases])
             bindings_by_chunk = group_bindings_by_chunk(ctx.stores.environments.held_bindings())
+            stamps = ctx.stores.liveness.latest_spawn_settings([lease.lease_id for lease in leases])
         except Exception as exc:  # a failed read skips this step only; the tick goes on
             _log.warning("context sample step failed", detail=str(exc))
             return
         for lease in leases:
             try:
-                self._sample(lease, warn_tokens, states.get(lease.lease_id), bindings_by_chunk.get(lease.chunk_id, []))
+                stamp = stamps.get(lease.lease_id)
+                self._sample(
+                    lease,
+                    warn_tokens,
+                    states.get(lease.lease_id),
+                    bindings_by_chunk.get(lease.chunk_id, []),
+                    stamp.transcripts_root if stamp else None,
+                )
             except Exception as exc:  # one lease's read must not end the sweep
                 _log.warning("context sample failed", lease_id=lease.lease_id, detail=str(exc))
 
@@ -104,6 +117,7 @@ class ContextSampleSweep:
         warn_tokens: int,
         state: ContextSampleState | None,
         bindings: list[EnvBinding],
+        root: str | None,
     ) -> None:
         ctx = self.ctx
         session = lease.session
@@ -114,7 +128,7 @@ class ContextSampleSweep:
         if not ContextSampleState.sample_due(state, now=now, interval=interval):
             return
         try:
-            source = ctx.lease_transcript_source(lease.lease_id, session)
+            source = ctx.lease_transcript_source_at_root(lease.lease_id, session, root)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # A read-only side lane: never escalates on its own, only skips this one lease's
             # sample for this tick — its own dispatch path (a wake, a judgement) escalates it.

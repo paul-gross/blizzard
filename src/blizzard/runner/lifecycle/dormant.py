@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
@@ -746,6 +746,8 @@ class DormantSession:
         session = lease.session
         assert session is not None
         generation = spawner.generation(lease.lease_id)
+        owners = getattr(self.ctx, "harness_sets", None)
+        origin_owner = owners.worker_for_lease(lease.lease_id) if owners is not None else None
         if not transcript_drained:
             self.drain_before_resume()
         if not self._worker_boundary_already_open(generation):
@@ -771,7 +773,6 @@ class DormantSession:
         # The version is observed BEFORE the resume, the same as a fresh spawn (src/blizzard/runner/lifecycle/spawn.py):
         # a hung or failing probe must never run after the worker is already live and unrecorded.
         spawn_cwd = SpawnCwd.of_session(self.ctx.workspaces.spawn_root(bindings[0].workspace_id), bindings[0].workdir)
-        owners = getattr(self.ctx, "harness_sets", None)
         invocation = WorkerInvocation(lease.lease_id, generation)
         if owners is not None:
             selected = owners.retain(invocation)
@@ -781,6 +782,17 @@ class DormantSession:
                 owners.release(invocation)
                 raise
         try:
+            settings = harness.launch_settings(
+                lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
+            )
+            if origin_owner is not None:
+                origin = origin_owner.registry.lifecycle(session.harness_id).launch_settings(
+                    lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
+                )
+                settings = settings.for_session(origin)
+            stamp = self.ctx.stores.liveness.latest_spawn_settings([lease.lease_id]).get(lease.lease_id)
+            if stamp is not None and stamp.transcripts_root:
+                settings = replace(settings, transcript_root=stamp.transcripts_root)
             resumed, version = spawner.launching(
                 session.harness_id,
                 harness.observe_version,
@@ -791,9 +803,7 @@ class DormantSession:
                     stdout_path=spawner.stdout_path(lease.lease_id),
                     preamble=spawner.preamble(lease, bindings),
                     chunk_id=lease.chunk_id,
-                    session_settings=harness.launch_settings(
-                        lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
-                    ),
+                    session_settings=settings,
                 ),
             )
         except BaseException:
@@ -818,6 +828,8 @@ class DormantSession:
                 harness_version=version,
                 spawn_cwd=spawn_cwd,
                 park_resume=park_resume,
+                runner_settings_revision=self.ctx.config.runner_settings_revision,
+                transcripts_root=settings.transcript_root or None,
             )
         except BaseException:
             # A plain raise here never disarms the trampoline on its own — kill it

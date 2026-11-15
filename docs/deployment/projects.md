@@ -212,8 +212,10 @@ agents = 1
 projects = [{ project = "default", workspace = "workspace-local" }]
 ```
 
-The runner sends the project list at every registration. A `[[runner]]` with no `projects` key is halted, naming the
-key, and only `projects = []` declares that the runner serves nothing.
+The runner sends the project list at every registration. After first seed, change `projects` and `agents` through
+[runner settings](./runner-settings.md), not by editing the host file. Live edits affect a later pass; existing work
+keeps its held binding. A `[[runner]]` with no `projects` key is halted, naming the key, and only `projects = []`
+declares that the runner serves nothing.
 
 A runner may bind its projects to several workspaces. A free agent asks the hub for the next ready chunk of any project
 whose workspace has a free environment, and the hub's ready-queue order alone decides which project that is; a project

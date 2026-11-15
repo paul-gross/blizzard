@@ -178,6 +178,8 @@ class LeaseStamps:
     its declared commits, newest per ``(environment_id, repo)``."""
 
     harness_version: str | None = None
+    host_settings_revision: int | None = None
+    runner_settings_revision: int | None = None
     git_commits: tuple[DeclaredLeaseCommit, ...] = ()
 
 
@@ -393,10 +395,16 @@ class LocalLeaseService:
     def _stamps(self, lease_ids: list[str]) -> dict[str, LeaseStamps]:
         """Each lease's :class:`LeaseStamps` — one grouped read of each, never per lease."""
         versions = self._liveness.latest_spawn_harness_versions(lease_ids)
+        settings = self._liveness.latest_spawn_settings(lease_ids)
         commits = self._git_commits.git_commit_declarations_for_leases(lease_ids)
         return {
-            lease_id: LeaseStamps(harness_version=versions.get(lease_id), git_commits=tuple(commits.get(lease_id, ())))
-            for lease_id in set(versions) | set(commits)
+            lease_id: LeaseStamps(
+                harness_version=versions.get(lease_id),
+                host_settings_revision=settings[lease_id].host_revision if lease_id in settings else None,
+                runner_settings_revision=settings[lease_id].runner_revision if lease_id in settings else None,
+                git_commits=tuple(commits.get(lease_id, ())),
+            )
+            for lease_id in set(versions) | set(settings) | set(commits)
         }
 
     def _active(self, leases: Sequence[Lease], stamps: Mapping[str, LeaseStamps]) -> list[LeaseActivity]:

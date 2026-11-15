@@ -203,7 +203,7 @@ class TranscriptBackfill:
         # An already-superseded source reships its chain's newest finalized superseder.
         target = newest_superseder(source, chunk_segments)
         try:
-            readable = self.ctx.transcript_source_for(source.session)
+            readable = self.ctx.invocation_transcript_source(source.session, source.lease_id, source.generation)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             raise TranscriptReshipError(
                 f"session {source.session_id}'s recorded owner {source.harness_id!r} is not "

@@ -205,10 +205,9 @@ export interface RunnerHost extends OriginReads {
   /** The installed `blizzard` CLI, by absolute path: a worker's own `PATH` need not hold it, as under `npx playwright test`. */
   readonly cliBinary: string;
   /**
-   * Merges `overlay` over the stopped host's file, checked as a profile is; the next boot reads it. Throws naming every
-   * problem, writing nothing, when the overlay is unsound or the host is running.
+   * Edits live runner settings through the API, or boot configuration in the stopped host's file.
    */
-  reconfigure(overlay: TomlTable): void;
+  reconfigure(overlay: TomlTable): Promise<void>;
   /** Removes the transcripts root, as an operator's rotation does. */
   rotateTranscripts(): void;
   /**
@@ -781,11 +780,53 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           return form === 'bearer' ? { Authorization: `Bearer ${token}` } : { 'X-Blizzard-Lease-Token': token };
         },
         leaseToken: (leaseId) => recordedLeaseToken(sessionsDir, leaseId),
-        reconfigure(overlay) {
+        async reconfigure(overlay) {
           const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];
-          if (daemon !== undefined && isAlive(daemon.pid)) problems.push('the host is running; stop() it before reconfigure()');
           if (problems.length > 0) throw new Error(`the host overlay is unsound:\n${problems.join('\n')}`);
-          const placed = expandProfile(overlay, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), usageBase: ctx.vendor.url });
+          const placed = expandProfile(overlay, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, opencode, usageBase: ctx.vendor.url, bundle, stubs });
+          const running = daemon !== undefined && isAlive(daemon.pid);
+          if (running) {
+            if (Object.keys(placed).some((key) => key !== 'runner') || !Array.isArray(placed.runner)) throw new Error('boot configuration requires stop() and restart()');
+            for (const item of placed.runner as TomlTable[]) {
+              const name = item.name;
+              if (typeof name !== 'string' || runners[name] === undefined) throw new Error(`unknown runner ${String(name)}`);
+              const client = runners[name];
+              const current = await client.settings();
+              if (!current.ok) throw new Error(`reading settings answered ${current.status}: ${JSON.stringify(current.body)}`);
+              const keys = new Set(current.body.settings.map((setting) => setting.key));
+              const set: Record<string, unknown> = {};
+              const visit = (value: unknown, key: string): void => {
+                if (keys.has(key)) {
+                  set[key] = JSON.parse(JSON.stringify(value, (_key, v: unknown) => {
+                    if (typeof v !== 'bigint') return v;
+                    const number = Number(v);
+                    if (!Number.isSafeInteger(number)) throw new Error(`${key}: integer cannot be represented in JSON`);
+                    return number;
+                  })) as unknown;
+                } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                  for (const [part, child] of Object.entries(value)) visit(child, key ? `${key}.${part}` : part);
+                } else {
+                  throw new Error(`${key}: not a live runner setting; boot configuration requires stop() and restart()`);
+                }
+              };
+              for (const [key, value] of Object.entries(item)) if (key !== 'name') visit(value, key);
+              const answer = await client.writeSettings({ set }, current.body.revision);
+              if (!answer.ok) throw new Error(`writing settings answered ${answer.status}: ${JSON.stringify(answer.body)}`);
+            }
+            return;
+          }
+          if (daemon !== undefined && Array.isArray(placed.runner)) {
+            const contract = JSON.parse(fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts/config/host.json'), 'utf8')) as { keys: { path: string; lifetime: string | null }[] };
+            const live = contract.keys.filter((key) => key.path.startsWith('runner[].') && (key.lifetime === 'pass' || key.lifetime === 'session')).map((key) => key.path.slice('runner[].'.length));
+            const containsLive = (value: unknown, key: string): boolean => {
+              if (live.includes(key) || live.some((candidate) => candidate.startsWith(`${key}[].`))) return true;
+              return value !== null && typeof value === 'object' && !Array.isArray(value)
+                && Object.entries(value).some(([part, child]) => containsLive(child, key ? `${key}.${part}` : part));
+            };
+            for (const item of placed.runner as TomlTable[]) {
+              if (Object.entries(item).some(([key, value]) => key !== 'name' && containsLive(value, key))) throw new Error('live runner settings require a running host; use reconfigure() before stop()');
+            }
+          }
           fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(mergeHostProfile(readHostFile(dir), placed)));
         },
         rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),

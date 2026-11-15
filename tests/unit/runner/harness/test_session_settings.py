@@ -42,15 +42,15 @@ def test_judge_combines_session_location_with_current_launch_values() -> None:
     )
     judge = current.for_session(old)
     assert (judge.binary, judge.config_dir, judge.settings_path, judge.settings_argv) == (
-        "old-bin",
-        "old-home",
-        "old-settings",
-        ("old-arg",),
+        "new-bin",
+        "new-home",
+        "new-settings",
+        ("new-arg",),
     )
     assert (judge.bundle_path, judge.transcript_root, judge.driver_command) == (
-        "old-bundle",
+        "new-bundle",
         "old-transcripts",
-        ("old-driver",),
+        ("new-driver",),
     )
     assert judge.environment.variables == {"PATH": "new-path", "HOME": "old-home"}
     assert judge.environment.shell == "/new-shell"

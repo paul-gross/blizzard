@@ -19,6 +19,32 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 [`docs/versioning.md`](./versioning.md) owns what counts as breaking and the floor a runner may lag its hub down to.
 
+## Upgrading to the next release
+
+### Runner settings move to the store
+
+Before starting the new runner, stop the host and back up its store and host file together. Migrate the store with the
+new release's explicit `blizzard runner migrate` procedure; startup does not migrate it. On the first start, each
+identified runner seeds explicitly authored per-runner settings from its file. Omitted settings use defaults. Check the
+result with `blizzard runner settings get --runner <id>` after startup. Existing store entries and explicit unsets win:
+editing a previously seeded file value later does not change it. Make subsequent changes with the settings CLI or API
+([runner settings](./deployment/runner-settings.md)).
+
+Host settings remain file-owned in this release. In particular, without explicit `[tools]`, the implicit host tools
+profile is derived from file runner values on every boot, even when stored worker settings differ. Declare `[tools]`
+explicitly. A later host-settings migration will seed the effective host profile on its first seed; review that profile
+before taking that release.
+
+Retirement can retain an unconfigured identity with settings or history, causing the existing wrong-store guard to
+refuse a sibling's startup. Stop the owned host and use
+`blizzard runner store reset <host-directory> --runner
+<retired-runner-id>` to archive that identity and its scoped rows
+before restarting the siblings. This does not reinstate a retired runner; do not treat archive ingest as reinstatement.
+
+Keep the pre-upgrade backup until the upgrade is accepted. Rolling back to an older release cannot preserve or apply
+settings changes made only in the new store: restore the matching pre-upgrade store and file if rolling back, and
+reconcile any work or settings changes made since that backup before resuming. Preserve archives separately.
+
 ## Upgrading to 0.4.0
 
 ### Store baseline at 0.2.0

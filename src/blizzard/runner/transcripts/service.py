@@ -39,12 +39,14 @@ class TranscriptService:
         archived: IReadArchivedTranscriptRepository,
         workspaces: IWorkspaceSpawnRoots,
         transcripts_for_lease: Callable[[str], ITranscriptRepositoryResolver] | None = None,
+        transcripts_for_invocation: Callable[[str, int], ITranscriptRepositoryResolver] | None = None,
     ) -> None:
         self._leases = leases
         self._transcript_ledger = transcript_ledger
         self._environments = environments
         self._transcripts = transcripts
         self._transcripts_for_lease = transcripts_for_lease
+        self._transcripts_for_invocation = transcripts_for_invocation
         self._archived = archived
         self._workspaces = workspaces
 
@@ -95,7 +97,12 @@ class TranscriptService:
             return None
         start_cursor = session_start_cursor(segment, self._transcript_ledger.transcript_segments_for_chunk(chunk_id))
         spawn_cwd = segment.spawn_cwd if segment.spawn_cwd is not None else self.spawn_cwd(chunk_id)
-        repository = self._resolver(segment.lease_id).transcript_repository(segment.session.harness_id)
+        resolver = (
+            self._transcripts_for_invocation(segment.lease_id, segment.generation)
+            if self._transcripts_for_invocation
+            else self._resolver(segment.lease_id)
+        )
+        repository = resolver.transcript_repository(segment.session.harness_id)
         local = repository.read_turns(segment.session.session_id, spawn_cwd=spawn_cwd, since=start_cursor)
         tail = None
         if local.available and segment.final and segment.cursor is not None:

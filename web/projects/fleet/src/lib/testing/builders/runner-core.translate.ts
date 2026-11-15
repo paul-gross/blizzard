@@ -20,6 +20,8 @@ export function runnerLeaseView(overrides: Partial<LeaseView> = {}): LeaseView {
     harness_version: null,
     resolved_effort: null,
     resolved_model: null,
+    host_settings_revision: null,
+    runner_settings_revision: null,
     git_commits: [],
     created_at: fixtureInstant(-3600),
     last_heartbeat_at: fixtureInstant(-30),

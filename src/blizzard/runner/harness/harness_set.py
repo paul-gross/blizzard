@@ -35,6 +35,7 @@ class HarnessAssemblyInputs:
     runner_id: str
     telemetry_enabled: bool
     runner_environ: tuple[tuple[str, str], ...] = field(repr=False)
+    spawn_roots: tuple[str, ...] = ()
     publish: bool = False
     bundle: BundleSnapshot | None = None
 
@@ -125,10 +126,18 @@ class HarnessSets:
         self._retained: dict[Hashable, HarnessSet] = {}
 
     def select(self, key: HarnessAssemblyKey) -> HarnessSet:
+        selected = self.prepare(key)
+        self.publish(key, selected)
+        return selected
+
+    def prepare(self, key: HarnessAssemblyKey) -> HarnessSet:
+        """Build without changing the owner used by running or new invocations."""
         if self._current is None or key != self._key:
-            selected = self._build(key)
-            self._key, self._current = key, selected
+            return self._build(key)
         return self._current
+
+    def publish(self, key: HarnessAssemblyKey, selected: HarnessSet) -> None:
+        self._key, self._current = key, selected
 
     @property
     def current(self) -> HarnessSet:

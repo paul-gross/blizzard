@@ -35,6 +35,15 @@ class RunnerSettingsStore:
             return tuple(_change(row) for row in conn.execute(stmt))
 
     def provenance(self) -> dict[str, SettingsChange]:
+        with self._store.read_transaction() as conn:
+            return self._provenance(conn)
+
+    def snapshot_with_provenance(self) -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
+        with self._store.read_transaction() as conn:
+            snapshot = SettingsSnapshot(self._record.revision(conn), self._record.entries(conn))
+            return snapshot, self._provenance(conn)
+
+    def _provenance(self, conn: Connection) -> dict[str, SettingsChange]:
         # Each entry carries the revision that last moved it, so no history scan is
         # needed to find its newest change. Join on both runner and revision.
         joined = self._store.scope_join(
@@ -43,8 +52,7 @@ class RunnerSettingsStore:
             runner_setting_entries.c.revision == runner_setting_changes.c.revision,
         )
         stmt = self._store.select(joined, runner_setting_entries.c.key, *runner_setting_changes.c)
-        with self._store.read_transaction() as conn:
-            return {row.key: _change(row) for row in conn.execute(stmt)}
+        return {row.key: _change(row) for row in conn.execute(stmt)}
 
     def _lock_identity(self, conn: Connection) -> None:
         locked = conn.execute(
@@ -53,12 +61,18 @@ class RunnerSettingsStore:
         if not locked:
             raise ValueError("runner settings require a retained runner identity")
 
-    def seed(self, file: ConfigView, keys: Sequence[str], *, validate: Validate) -> None:
+    def seed(
+        self, file: ConfigView, keys: Sequence[str], *, validate: Validate, aliases: Mapping[str, str] | None = None
+    ) -> None:
         with self._store.begin() as conn:
             self._lock_identity(conn)
             # Validate the complete resulting file seed, not transient prefixes:
             # related authored keys can be valid only when considered together.
             existing = self._record.entries(conn)
+            if aliases:
+                blocked = {alias for alias, key in aliases.items() if key in existing}
+                blocked.update(key for alias, key in aliases.items() if alias in existing)
+                keys = tuple(key for key in keys if key not in blocked)
             pending = {key: Entry(file.value(key)) for key in keys if key not in existing and file.states(key)}
 
             def validate_seed(entries: Mapping[str, Entry]) -> Mapping[str, str]:

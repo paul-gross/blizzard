@@ -138,6 +138,7 @@ from blizzard.runner.runtime import (
     sqlite_url,
 )
 from blizzard.runner.settings.ports import IWriteRunnerSettings
+from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -376,6 +377,8 @@ class RunnerProcess:
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
+    settings_reader: RunnerSettingsReader | None = None
+    harness_key: Callable[[RunnerConfig], HarnessAssemblyKey] | None = None
 
     @property
     def harnesses(self) -> HarnessRegistry:
@@ -666,21 +669,37 @@ def build_host_process(
     )
     try:
         for built in runners:
+            entry = next((entry for entry in host.runners if entry.id == built.id), None)
+            runner = _build_runner(
+                built.config,
+                graph,
+                bundle=(bundles or {}).get(built.id),
+                selection=(selections or {}).get(built.id),
+                publish_bundle=publish_bundles,
+                environ=environ,
+                trace_exporter=trace_exporter,
+                identity=None,
+                runner_id=built.id,
+                token=built.token,
+                closes_host=False,
+            )
+            if entry is not None:
+                identity_store = runner.stores.identity
+                runner = replace(
+                    runner,
+                    settings_reader=RunnerSettingsReader(
+                        host,
+                        entry,
+                        runner.stores.settings,
+                        deferred_seed=runner.stores.settings if identity_store.runner_identity() is None else None,
+                        identity_present=lambda identity_store=identity_store: (
+                            identity_store.runner_identity() is not None
+                        ),
+                    ),
+                )
             graph.runners = (
                 *graph.runners,
-                _build_runner(
-                    built.config,
-                    graph,
-                    bundle=(bundles or {}).get(built.id),
-                    selection=(selections or {}).get(built.id),
-                    publish_bundle=publish_bundles,
-                    environ=environ,
-                    trace_exporter=trace_exporter,
-                    identity=None,
-                    runner_id=built.id,
-                    token=built.token,
-                    closes_host=False,
-                ),
+                runner,
             )
         graph.halted = tuple(halted)
         graph.readiness = HostReadiness(
@@ -1032,6 +1051,7 @@ def _build_runner(
             runner_id=runner_id,
             telemetry_enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
             runner_environ=tuple(sorted(runner_environ.items())),
+            spawn_roots=bound_spawn_roots(config, host.workspaces),
             publish=publish_bundle,
             bundle=bundle,
         )
@@ -1085,7 +1105,7 @@ def _build_runner(
                 children=host.children,
                 clock=clock,
                 monotonic_clock=host.monotonic_clock,
-                spawn_roots=bound_spawn_roots(config, host.workspaces),
+                spawn_roots=inputs.spawn_roots,
                 corpus=corpus,
                 bundle=snapshot,
                 harness_telemetry_enabled=inputs.telemetry_enabled,
@@ -1116,6 +1136,23 @@ def _build_runner(
 
         harness_sets = HarnessSets(assemble)
         harness_sets.select(harness_assembly_key(assembly_inputs))
+
+        def key_for(current: RunnerConfig) -> HarnessAssemblyKey:
+            settings = replace(current.harness_settings(tracing), runner_id=runner_id)
+            return harness_assembly_key(
+                replace(
+                    assembly_inputs,
+                    root=settings.root,
+                    autonomy=settings.autonomy,
+                    config_dir=settings.config_dir,
+                    worker_env=settings.worker_env,
+                    transcripts_root=settings.transcripts_root,
+                    sections=settings.sections.sections,
+                    telemetry_enabled=current.tracing.harness_telemetry and platform_tracing.enabled,
+                    spawn_roots=bound_spawn_roots(current, host.workspaces),
+                )
+            )
+
         exporter = (
             host.bounded_trace_exporter(trace_exporter)
             if tracing.enabled() and trace_exporter is not None
@@ -1169,6 +1206,7 @@ def _build_runner(
             events=RunnerEventPublisher.over(host.events, runner_id),
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
+            harness_key=key_for,
         )
     except BaseException:
         try:

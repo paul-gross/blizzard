@@ -179,6 +179,8 @@ class SpawnHostStores(GateHostStores, Protocol):
 
 class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
     @property
+    def runner_settings_revision(self) -> int | None: ...
+    @property
     def default_retries_max(self) -> int: ...
     @property
     def local_api_url(self) -> str: ...
@@ -413,7 +415,10 @@ class Spawner:
         kind = spawn_boundary_kind(resumed=resume_from is not None)
         if resume_from is not None:
             workdir = environments[0].workdir if environments else None
-            start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir, workspace_id)
+            prior_lease_id = resumed.lease.lease_id if resumed is not None and resumed.lease is not None else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(
+                resume_from, workdir, workspace_id, lease_id=prior_lease_id
+            )
         else:
             start_position, start_unreadable = None, False
         self.ctx.stores.invocation_boundaries.record_boundary_open(
@@ -441,6 +446,20 @@ class Spawner:
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         try:
+            settings = harness.launch_settings(
+                lease.model, lease.effort, lease.compaction_window, prompt_prefix=rendered.text
+            )
+            if resumed is not None and resumed.lease is not None:
+                prior_id = resumed.lease.lease_id
+                origin_owner = owners.worker_for_lease(prior_id) if owners is not None else None
+                if origin_owner is not None:
+                    origin = origin_owner.registry.lifecycle(owner).launch_settings(
+                        lease.model, lease.effort, lease.compaction_window
+                    )
+                    settings = settings.for_session(origin)
+                stamp = self.ctx.stores.liveness.latest_spawn_settings([prior_id]).get(prior_id)
+                if stamp is not None and stamp.transcripts_root:
+                    settings = replace(settings, transcript_root=stamp.transcripts_root)
             pending, version = self.launching(
                 owner,
                 harness.observe_version,
@@ -449,9 +468,7 @@ class Spawner:
                     self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
                     session_hint=str(uuid.uuid4()),
                     resume_from=resume_from.session_id if resume_from is not None else None,
-                    session_settings=harness.launch_settings(
-                        lease.model, lease.effort, lease.compaction_window, prompt_prefix=rendered.text
-                    ),
+                    session_settings=settings,
                 ),
             )
         except LaunchVersionRefusedError as exc:
@@ -489,6 +506,8 @@ class Spawner:
                 pgid=pending.pgid,
                 spawned_at=now,
                 harness_id=owner,
+                runner_settings_revision=self.ctx.config.runner_settings_revision,
+                transcripts_root=settings.transcript_root or None,
             )
         except BaseException:
             # Unlike an OS crash, a plain raise here never disarms the trampoline on its

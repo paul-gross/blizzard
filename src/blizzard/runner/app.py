@@ -54,8 +54,10 @@ from blizzard.runner.api.federation import (
     ISignInClient,
     NeedsFederationBounce,
     RunnerSignInClient,
+    SuperuserRequired,
     require_human_api,
     require_human_session,
+    superuser_required_response,
 )
 from blizzard.runner.api.federation import router as auth_router
 from blizzard.runner.api.finding import router as finding_router
@@ -82,6 +84,7 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
+from blizzard.runner.api.settings import router as settings_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.ticks import host_router as host_ticks_router
 from blizzard.runner.api.ticks import router as ticks_router
@@ -205,6 +208,7 @@ _RUNNER_UNGATED = (
 # Each runner's human web lane: the panel's reads and writes of one runner, its own
 # pause brake reachable with the hub down, and the pass-throughs proxied to the hub.
 _RUNNER_HUMAN = (
+    settings_router,
     chunk_detail_router,
     leases_router,
     invocation_usage_router,
@@ -454,6 +458,7 @@ def create_app(
         if platform_tracing is not None
         else DISABLED_TELEMETRY,
     )
+    app.add_exception_handler(SuperuserRequired, superuser_required_response)
     app.state.config = config
     # Decided once: the one cross-origin caller `GET /api/health` admits.
     app.state.hub_origin = HubOrigin.of(config.hub_url)
@@ -782,6 +787,14 @@ def _wire_runner(
     def harnesses_for_lease(lease_id: str) -> HarnessRegistry:
         return _harnesses_for_lease(graph, lease_id)
 
+    def transcripts_for_lease(lease_id: str) -> HarnessTranscriptRepositories:
+        stamp = runner_stores.liveness.latest_spawn_settings([lease_id]).get(lease_id)
+        return HarnessTranscriptRepositories(harnesses_for_lease(lease_id), stamp.transcripts_root if stamp else None)
+
+    def transcripts_for_invocation(lease_id: str, generation: int) -> HarnessTranscriptRepositories:
+        stamp = runner_stores.liveness.spawn_settings(lease_id, generation)
+        return HarnessTranscriptRepositories(harnesses_for_lease(lease_id), stamp.transcripts_root if stamp else None)
+
     clock = host.clock
     process = host.process
     platform_tracing = host.platform_tracing
@@ -819,7 +832,8 @@ def _wire_runner(
         transcript_ledger=runner_stores.transcript_ledger,
         environments=runner_stores.environments,
         transcripts=HarnessTranscriptRepositories(harnesses),
-        transcripts_for_lease=lambda lease_id: HarnessTranscriptRepositories(harnesses_for_lease(lease_id)),
+        transcripts_for_lease=transcripts_for_lease,
+        transcripts_for_invocation=transcripts_for_invocation,
         archived=archived_transcripts,
         workspaces=workspaces,
     )
@@ -932,6 +946,7 @@ def _wire_runner(
         identity=graph.identity,
         stepper=stepper,
     )
+    served.seams.settings_reader = graph.settings_reader
     return _WiredRunner(served, stepper, harness_health, (archived_transcript_client, hub_proxy_client))
 
 

@@ -674,6 +674,92 @@
         "title": "CapacitiesView",
         "type": "object"
       },
+      "ChangeView": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "apply_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Id"
+          },
+          "diff": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeView"
+            },
+            "title": "Diff",
+            "type": "array"
+          },
+          "door": {
+            "title": "Door",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "op": {
+            "title": "Op",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "recorded_at",
+          "revision",
+          "op",
+          "door",
+          "actor",
+          "apply_id",
+          "diff"
+        ],
+        "title": "ChangeView",
+        "type": "object"
+      },
+      "ChangesPage": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeView"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "changes",
+          "next_before"
+        ],
+        "title": "ChangesPage",
+        "type": "object"
+      },
       "CheckResult": {
         "description": "One deterministic check's runner-executed outcome: the command and whether it passed.",
         "properties": {
@@ -2290,6 +2376,23 @@
         "title": "DecisionView",
         "type": "object"
       },
+      "EntryView": {
+        "properties": {
+          "at_default": {
+            "title": "At Default",
+            "type": "boolean"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "at_default"
+        ],
+        "title": "EntryView",
+        "type": "object"
+      },
       "EnvironmentChangeCause": {
         "enum": [
           "bound",
@@ -2721,6 +2824,57 @@
           "project_id"
         ],
         "title": "FactView",
+        "type": "object"
+      },
+      "FailureView": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "error",
+          "since"
+        ],
+        "title": "FailureView",
+        "type": "object"
+      },
+      "FieldChangeView": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "new": {
+            "$ref": "#/components/schemas/EntryView"
+          },
+          "old": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntryView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "old",
+          "new"
+        ],
+        "title": "FieldChangeView",
         "type": "object"
       },
       "FindingExit": {
@@ -4708,6 +4862,49 @@
         "title": "IdentityVerdictView",
         "type": "object"
       },
+      "InForce": {
+        "properties": {
+          "failed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "revision",
+          "since",
+          "failed"
+        ],
+        "title": "InForce",
+        "type": "object"
+      },
       "IntendedMigrationView": {
         "description": "A chunk's standing migration intent \u2014 editable at any non-terminal status and\nconsulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved\nserver-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``\nmode's landing target, null for ``auto``, whose landing is derived at consult time.",
         "properties": {
@@ -5174,6 +5371,17 @@
             ],
             "title": "Harness Version"
           },
+          "host_settings_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Settings Revision"
+          },
           "last_heartbeat_at": {
             "anyOf": [
               {
@@ -5245,6 +5453,17 @@
             ],
             "title": "Resolved Model"
           },
+          "runner_settings_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Settings Revision"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -5311,10 +5530,23 @@
           "resolved_model",
           "resolved_effort",
           "harness_version",
+          "host_settings_revision",
+          "runner_settings_revision",
           "git_commits"
         ],
         "title": "LeaseView",
         "type": "object"
+      },
+      "Lifetime": {
+        "description": "When a change to a key's value reaches the daemon reading it.",
+        "enum": [
+          "pass",
+          "session",
+          "boot",
+          "immutable"
+        ],
+        "title": "Lifetime",
+        "type": "string"
       },
       "MigrationMode": {
         "description": "How a chunk's intended migration fires at its next transition.\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
@@ -7110,6 +7342,205 @@
           "lease_id"
         ],
         "title": "SessionEndResponse",
+        "type": "object"
+      },
+      "SettingError": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "message"
+        ],
+        "title": "SettingError",
+        "type": "object"
+      },
+      "SettingRow": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lifetime": {
+            "$ref": "#/components/schemas/Lifetime"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "source": {
+            "enum": [
+              "entry",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          },
+          "written_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written At"
+          },
+          "written_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written By"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "source",
+          "lifetime",
+          "revision",
+          "written_at",
+          "written_by"
+        ],
+        "title": "SettingRow",
+        "type": "object"
+      },
+      "SettingsProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SettingError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "key",
+          "current",
+          "errors"
+        ],
+        "title": "SettingsProblem",
+        "type": "object"
+      },
+      "SettingsView": {
+        "properties": {
+          "in_force": {
+            "$ref": "#/components/schemas/InForce"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/SettingRow"
+            },
+            "title": "Settings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "in_force",
+          "settings"
+        ],
+        "title": "SettingsView",
+        "type": "object"
+      },
+      "SettingsWrite": {
+        "properties": {
+          "set": {
+            "additionalProperties": true,
+            "title": "Set",
+            "type": "object"
+          },
+          "unset": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unset",
+            "type": "array"
+          }
+        },
+        "title": "SettingsWrite",
         "type": "object"
       },
       "SidechainSegmentView": {
@@ -13660,6 +14091,211 @@
         "summary": "Get Selftest",
         "tags": [
           "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/settings": {
+      "get": {
+        "operationId": "get_settings_runners__runner_id__api_settings_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "runner settings"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_settings_runners__runner_id__api_settings_patch",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "Superuser required"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "Settings revision conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "Invalid settings edit"
+          }
+        },
+        "summary": "Patch Settings",
+        "tags": [
+          "runner settings"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/settings/changes": {
+      "get": {
+        "operationId": "settings_changes_runners__runner_id__api_settings_changes_get",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings Changes",
+        "tags": [
+          "runner settings"
         ]
       }
     },

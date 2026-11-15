@@ -71,6 +71,24 @@ test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on
   await stepUntil(host, declining, (levers) => levers.length === 0, { stallPasses: PASSES });
 });
 
+test('a live budget edit admits waiting work on the next passes', async ({ mockHub, runnerHosts }) => {
+  const host = await pricedHost(runnerHosts, false);
+  const runner = host.runners[RUNNER]!;
+  const fleet = mockHub.fleetOf(host, RUNNER);
+  const declining = async () => ((await fleet.get(`/api/fleet/runners/${runner.runnerId}`)).body.declining as { lever: string }[]).map((entry) => entry.lever);
+  await host.stepHost();
+  const first = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
+  const spent = await stepUntil(host, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === first), (lease) => lease !== undefined, { stallPasses: PASSES });
+  await stepUntil(host, async () => (await runner.leases()).body.items.find((item) => item.lease_id === spent!.lease_id)?.state, (state) => state === 'closed', { stallPasses: PASSES });
+  const second = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
+  await stepUntil(host, declining, (levers) => levers.includes('budget'), { stallPasses: PASSES });
+  expect((await runner.leases()).body.items.filter((item) => item.chunk_id === second)).toEqual([]);
+
+  await host.reconfigure({ runner: [{ name: RUNNER, throttle: { budget: { usd: 100 } } }] });
+  await stepUntil(host, async () => (await runner.leases()).body.items.some((item) => item.chunk_id === second), Boolean, { stallPasses: PASSES });
+  await stepUntil(host, declining, (levers) => !levers.includes('budget'), { stallPasses: PASSES });
+});
+
 test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped', async ({ mockHub, runnerHosts, clock }) => {
   const host = await pricedHost(runnerHosts, true);
   const runner = host.runners[RUNNER]!;

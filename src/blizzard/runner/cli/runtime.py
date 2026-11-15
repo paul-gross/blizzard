@@ -63,7 +63,6 @@ from blizzard.runner.composition import (
     build_settings_stores,
 )
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, resolve_tick_seconds, worker_shell_refusal
-from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
@@ -150,7 +149,6 @@ from blizzard.runner.runtime import (
     reset_command,
     runner_store_migrations,
 )
-from blizzard.runner.settings.keys import runner_keys
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -1005,16 +1003,26 @@ def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[li
                 engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
             )
             if identity.runner_identity() is None:
-                halted.append(
-                    HaltedRunner(
-                        entry.name, entry.id, (f"identity is missing; re-run `blizzard runner init {config.root}`",)
-                    )
-                )
+                # An adopted runner first obtains its identity from registration.
+                # Use its authored configuration until that happens; do not persist
+                # settings without the identity that owns them.
+                reader = RunnerSettingsReader(config, entry, settings)
+                try:
+                    resolved = reader.preview_seed()
+                    projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
+                    if isinstance(projection, HaltedRunner):
+                        halted.append(projection)
+                    else:
+                        ready.append(replace(projection, config=resolved))
+                except (SettingsInvalid, ValueError) as exc:
+                    halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
                 continue
             assert entry.authored is not None
             reader = RunnerSettingsReader(config, entry, settings)
             try:
-                settings.seed(entry.authored, tuple(runner_keys(HOST_REGISTRY)), validate=reader.validate)
+                settings.seed(
+                    entry.authored, (*reader.keys, *reader.aliases), validate=reader.validate, aliases=reader.aliases
+                )
                 _, resolved = reader.snapshot()
             except (SettingsInvalid, ValueError) as exc:
                 halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
@@ -1133,16 +1141,9 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
                     problems.append(f"runner {entry.name} ({entry.id}): {problem}")
                     continue
                 assert engine is not None
-                identity, settings = build_settings_stores(
+                _, settings = build_settings_stores(
                     engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
                 )
-                if identity.runner_identity() is None:
-                    problems.append(
-                        HaltedRunner(
-                            entry.name, entry.id, (f"identity is missing; re-run `blizzard runner init {config.root}`",)
-                        ).describe()
-                    )
-                    continue
                 try:
                     resolved = RunnerSettingsReader(config, entry, settings).preview_seed()
                 except (SettingsInvalid, ValueError) as exc:
@@ -1372,7 +1373,7 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
                 name="blizzard-runner-trace-sweep",
                 label="lease trace sweep",
                 log=get_logger("blizzard.runner.trace_export"),
-                interval=lambda: runner.config.tracing.sweep_seconds,
+                interval=stepper.trace_interval,
             )
         )
     return drivers

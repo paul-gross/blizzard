@@ -36,11 +36,17 @@ import type {
   WorkerArtifact,
   WorkItemsView,
   TranscriptSegmentIndexView,
+  SettingsView,
+  SettingsWrite,
+  ChangesPage,
 } from './wire/runner/types.gen';
 
 /** The calls one runner of a host answers, under `<host>/runners/<id>`. Types come from `wire/runner`. */
 export interface RunnerClient {
   readonly runnerId: string;
+  settings(options?: { headers?: Record<string, string> }): Promise<ApiResponse<SettingsView>>;
+  writeSettings(edit: SettingsWrite, revision?: number, options?: { headers?: Record<string, string> }): Promise<ApiResponse<SettingsView>>;
+  settingsChanges(options?: { limit?: number; before?: number }): Promise<ApiResponse<ChangesPage>>;
   /** `GET …/api/runner`. */
   status(): Promise<ApiResponse<RunnerStatusView>>;
   /** The outbound buffer's depth, read from the status's `hub.buffer_depth` and nothing else. */
@@ -206,6 +212,9 @@ export function runnerHostApi(options: {
       const chunk = (chunkId: string, verb: string): Promise<ApiResponse> => raw.post(`/api/chunks/${chunkId}/${verb}`);
       return {
         runnerId,
+        settings: (options) => raw.get('/api/settings', { headers: options?.headers }),
+        writeSettings: (edit, revision, options) => raw.patch('/api/settings', { data: edit, headers: { ...options?.headers, ...(revision === undefined ? {} : { 'If-Match': String(revision) }) } }),
+        settingsChanges: (options) => raw.get('/api/settings/changes', { params: options }),
         status,
         async bufferDepth() {
           const answer = await status();

@@ -21,7 +21,7 @@ from blizzard.runner.harness.registry import (
     UnknownHarnessError,
 )
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.transcript import TranscriptPosition
+from blizzard.runner.harness.transcript import IRootedTranscriptSource, TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import Lease
@@ -251,6 +251,9 @@ class UsageRecorder:
         ).path
         try:
             source = self._registry(lease_id, generation, judge=judge).transcript_source(session.harness_id)
+            stamp = self.leases.spawn_settings(lease_id, generation)
+            if stamp is not None and stamp.transcripts_root and isinstance(source, IRootedTranscriptSource):
+                source = source.at_root(stamp.transcripts_root)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # No transcript source registered for this owner: no fallback read, never a
             # raise out of a usage-recording or usage-limit-classifying call site.
