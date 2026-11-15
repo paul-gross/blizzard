@@ -101,7 +101,7 @@ def test_a_binary_and_service_of_different_major_versions_conflict(
 @pytest.mark.parametrize(
     ("observed", "available", "cause"),
     [
-        ("2.1.4", True, None),
+        ("2.1.4", True, HarnessHealthCause.DECLARED_DEGRADATION),
         ("3.0.0", False, HarnessHealthCause.INCOMPATIBLE_VERSION),
         ("1.18.33", False, HarnessHealthCause.INCOMPATIBLE_VERSION),
     ],
@@ -118,6 +118,7 @@ def test_the_service_version_is_admitted_by_the_opencode_2_range_alone(
     )
     result = cache.refresh("opencode", adapter=_Tiers(), observed_version=observed)
     assert result is not None and result.available is available and result.cause is cause
+    assert {d.key for d in result.degradations} == {"permission_rules", "session_environment"}
 
 
 def test_a_service_seen_on_another_major_version_stays_a_conflict_after_it_returns(tmp_path: Path) -> None:
@@ -198,3 +199,4 @@ def test_a_failing_check_leaves_the_capability_unavailable_as_a_named_conflict(t
     )
     result = cache.refresh("opencode", adapter=_Tiers(), observed_version="2.1.4")
     assert result is not None and not result.available and result.cause is HarnessHealthCause.CONFIG_CONFLICT
+    assert {d.key for d in result.degradations} == {"permission_rules", "session_environment"}

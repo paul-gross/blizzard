@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 from packaging.version import Version
 
@@ -17,6 +18,11 @@ from blizzard.runner.harness.internal.committed_corpus import DEFAULT_CORPUS_ROO
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode_v2.compatibility.rows import DECLARED_DEGRADATIONS
+from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
+from blizzard.runner.harness.opencode_v2.service import IServiceKeeper
+from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from tests.support.child_launch import version_probe
 from tests.support.repo_files import repo_root
 
@@ -39,11 +45,11 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
     assert Version(manifest["version"]) in probe.supported_version()
 
     degradations = probe.declared_degradations()
-    declared_probes = {degradation.probe for degradation in degradations}
+    declared_probes = {degradation.key for degradation in degradations}
     assert declared_probes == {
-        CompatibilityProbe.ROOT_HOOK,
-        CompatibilityProbe.USAGE_COST,
-        CompatibilityProbe.CHILD_SESSIONS,
+        CompatibilityProbe.ROOT_HOOK.value,
+        CompatibilityProbe.USAGE_COST.value,
+        CompatibilityProbe.CHILD_SESSIONS.value,
     }
     assert all(degradation.summary.strip() for degradation in degradations)
 
@@ -51,7 +57,7 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
     # run — a subset of what the binding declares degradable in general.
     diagnostic_degraded = set(manifest["live_evidence"]["fixtures"]["diagnostic"]["degraded"])
     assert diagnostic_degraded == {"root_hook", "child_sessions"}
-    assert diagnostic_degraded <= {probe.value for probe in declared_probes}
+    assert diagnostic_degraded <= declared_probes
 
 
 def test_claude_code_health_probe_declares_an_admitted_range_and_no_degradations() -> None:
@@ -81,5 +87,25 @@ def test_opencode_health_probe_declared_degradations_come_from_the_corpus_manife
 
     manifest = _manifest()
     manifest_degradations = {(entry["probe"], entry["summary"]) for entry in manifest["declared_degradations"]}
-    probe_degradations = {(d.probe.value, d.summary) for d in probe.declared_degradations()}
+    probe_degradations = {(d.key, d.summary) for d in probe.declared_degradations()}
     assert probe_degradations == manifest_degradations
+
+
+def test_opencode_two_exposes_binding_declarations_by_proof_row() -> None:
+    probe = OpenCodeTwoHealthProbe(
+        "opencode",
+        keeper=Mock(spec=IServiceKeeper),
+        hold=VersionHold(),
+        corpus=CommittedCorpus(),
+        versions=version_probe(),
+    )
+    actual = probe.declared_degradations()
+    assert [(d.key, d.summary) for d in actual] == [(d.row.value, d.summary) for d in DECLARED_DEGRADATIONS]
+    assert {d.key for d in actual} == {"permission_rules", "session_environment"}
+    corpus = CommittedCorpus()
+    versions = admitted_corpus_versions(corpus, "opencode", ADMITTED_OPENCODE_V2_RANGE)
+    assert versions
+    for version in versions:
+        manifest = corpus.manifest("opencode", version)
+        assert manifest is not None
+        assert manifest["declared_degradations"] == [{"row": d.key, "summary": d.summary} for d in actual]

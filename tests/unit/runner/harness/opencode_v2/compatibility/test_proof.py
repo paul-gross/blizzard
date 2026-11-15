@@ -91,6 +91,14 @@ def test_only_pricing_and_events_degrade_and_only_when_absent(
     assert classify_row(observation) is classification
 
 
+@pytest.mark.parametrize("row", [ProofRow.PERMISSION_RULES, ProofRow.SESSION_ENVIRONMENT])
+@pytest.mark.parametrize("state", [EvidenceState.ABSENT, EvidenceState.FAILED, EvidenceState.AMBIGUOUS])
+def test_declared_limit_does_not_make_its_required_proof_row_optional(row: ProofRow, state: EvidenceState) -> None:
+    report = _report(RowObservation(row, state, "not proved"))
+    assert report.classification() is CompatibilityClassification.BLOCKING
+    assert not report.admissible()
+
+
 def test_the_report_takes_its_worst_row_and_blocks_an_unadmitted_version() -> None:
     assert _report().classification() is CompatibilityClassification.SUPPORTED
     pricing_absent = RowObservation(ProofRow.PRICING, EvidenceState.ABSENT, "none")
