@@ -15,12 +15,15 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic.script import ScriptDirectory
 from click.testing import CliRunner
 from sqlalchemy import insert
 
+import blizzard.runner.cli.runtime as runner_runtime
+import blizzard.runner.composition as runner_composition
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.main import blizzard
 from blizzard.cli.operator_trace import UNTRACED
@@ -29,7 +32,6 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, Door, daemon_holding
 from blizzard.runner.cli.runtime import InitCollaborators
-from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
@@ -712,7 +714,9 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) 
     assert "`blizzard hub runner enroll <id>` prints the line to put there" in result.output
 
 
-def test_runner_host_probes_the_bindings_once_and_publishes_and_composes_that_one_selection(tmp_path: Path) -> None:
+def test_runner_host_probes_the_bindings_once_and_publishes_and_composes_that_one_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The bindings a runner's binaries choose are probed once as it starts, and the bundle it publishes and the
     process it composes both take that one selection."""
     runner = init_runner()
@@ -724,34 +728,41 @@ def test_runner_host_probes_the_bindings_once_and_publishes_and_composes_that_on
     config_path.write_text(
         config_path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{bundle}"\n', 1)
     )
-    selection = first_bindings()
     probed: list[object] = []
     published: list[object] = []
     composed: list[object] = []
+    select_bindings = runner_composition.select_harness_bindings
+    publish_bundle = runner_composition.publish_harness_bundle
+    build_harnesses = runner_composition.build_production_harnesses
 
-    def select(config: object) -> BindingSelection:
-        probed.append(config)
+    def select(*args: Any, **kwargs: Any) -> Any:
+        selection = select_bindings(*args, **kwargs)
+        probed.append(selection)
         return selection
 
-    def publish(*args: object, **kwargs: object) -> object:
+    def publish(*args: Any, **kwargs: Any) -> Any:
         published.append(kwargs["selection"])
-        return publish_harness_bundle(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+        return publish_bundle(*args, **kwargs)
+
+    def compose(*args: Any, **kwargs: Any) -> Any:
+        composed.append(kwargs["selection"])
+        return build_harnesses(*args, **kwargs)
 
     def stop(*_args: object, **kwargs: object) -> None:
-        composed.append(kwargs["selections"])
         raise RuntimeError("stop before serving")
 
-    collaborators = InitCollaborators(runner.hub.clients, runner.hub.host_clients, runner.sessions)
-    result = runner.invoke(
-        blizzard,
-        ["runner", "host", "--dir", str(root), "--port", "0"],
-        obj=replace(collaborators, select_bindings=select, publish_harness_bundle=publish, build_host_process=stop),
-    )
+    monkeypatch.setattr(runner_composition, "select_harness_bindings", select)
+    monkeypatch.setattr(runner_composition, "publish_harness_bundle", publish)
+    monkeypatch.setattr(runner_composition, "build_production_harnesses", compose)
+    monkeypatch.setattr(runner_runtime, "_serve_host", stop)
+    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root), "--port", "0"])
 
     assert isinstance(result.exception, RuntimeError), result.output
+    assert str(result.exception) == "stop before serving"
     assert len(probed) == 1
-    assert published == [selection]
-    assert [list(selections.values()) for selections in composed] == [[selection]]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
+    assert len(published) == len(composed) == 1
+    assert published[0] is probed[0]
+    assert composed[0] is probed[0]
 
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:

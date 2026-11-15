@@ -10,9 +10,9 @@ from packaging.specifiers import SpecifierSet
 
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.claude_code.ambient import AmbientSources, detect_ambient_conflicts
 from blizzard.runner.harness.health import DeclaredDegradation
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
@@ -55,7 +55,7 @@ class ClaudeCodeHealthProbe:
         credentials_path: str | None = None,
         ambient_sources: AmbientSources | None = None,
         permission_mode: str | None = None,
-        versions: VersionProbe,
+        versions: IVersionProbe,
     ) -> None:
         self._binary = binary
         self._versions = versions

@@ -62,7 +62,7 @@ def classify_worker_overload(
     session = lease.session
     if session is None:
         return None
-    harness = _overload_adapter(ctx, session)
+    harness = _overload_adapter(ctx, session, lease.lease_id)
     if harness is None:
         return None
     return harness.classify_provider_overload(output, lines)
@@ -84,7 +84,7 @@ def classify_judge_overload(
     session = lease.session
     if session is None:
         return None
-    harness = _overload_adapter(ctx, session)
+    harness = _overload_adapter(ctx, session, lease.lease_id, judge=True)
     if harness is None:
         return None
     return harness.classify_provider_overload(output, lines)
@@ -167,13 +167,17 @@ def _record(
     return fact.backing_off
 
 
-def _overload_adapter(ctx: OverloadContext, session: SessionReference) -> IHarnessProviderOverload | None:
+def _overload_adapter(
+    ctx: OverloadContext, session: SessionReference, lease_id: str, *, judge: bool = False
+) -> IHarnessProviderOverload | None:
     """This session's provider-overload classifier, resolved through the registry's own
     ``provider_overload`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
     exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
     escalation to make, not this classifier's."""
     try:
-        return ctx.harnesses.provider_overload(session.harness_id)
+        resolve = getattr(ctx, "harnesses_for_judge" if judge else "harnesses_for_lease", None)
+        harnesses = resolve(lease_id) if resolve is not None else ctx.harnesses
+        return harnesses.provider_overload(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):
         return None

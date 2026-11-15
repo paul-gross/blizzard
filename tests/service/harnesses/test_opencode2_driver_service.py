@@ -340,7 +340,9 @@ def test_the_adapter_launches_the_driver_through_the_real_launcher(
             make_envelope("chunk_1", "build", node_id="node_1", choices=[]),
             prompt="text('<Choice>go</Choice> fine')",
         )
-        handle = adapter.spawn(envelope, preamble, None, effort="high")
+        handle = adapter.spawn(
+            envelope, preamble, None, effort="high", session_settings=adapter.launch_settings(effort="high")
+        )
         handle.confirm_durable()
         _wait_exit(handle.pid)
         output = stdout.read_text()

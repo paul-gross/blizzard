@@ -12,9 +12,11 @@ import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from concurrent.futures import Executor
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
+from unittest.mock import Mock
 
 import pytest
 from structlog.testing import capture_logs
@@ -25,6 +27,7 @@ from blizzard.runner.harness.adapter import ResumeHandle, WorkerPreamble
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import (
@@ -43,6 +46,40 @@ from tests.support.runner_fakes import FakeProbe, make_envelope
 from tests.support.suite_plugin import DAEMON_ENV
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
+
+
+def test_launch_uses_captured_values_instead_of_adapter_settings(
+    tmp_path: Path, spawn_executor: Executor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SNAPSHOT_ALLOWED", "captured")
+    launcher = Mock()
+    launcher.launch.return_value = LaunchedProcess(10, 10, "start", lambda: None)
+    adapter = _adapter(
+        spawn_executor,
+        binary="constructor",
+        launcher=launcher,
+        worker_env=AllowlistedEnv.of(("SNAPSHOT_ALLOWED",)),
+        transcript_root="/snapshot/transcripts",
+    )
+    snapshot = replace(
+        adapter.launch_settings("sonnet", "high"),
+        binary="snapshot",
+        settings_argv=("--settings", "/snap/settings.json"),
+        permission_override="acceptEdits",
+        prompt_prefix="snapshot-prefix",
+    )
+    monkeypatch.setenv("SNAPSHOT_ALLOWED", "changed")
+    _, envelope, preamble = _spawn_fixture(spawn_executor)
+    adapter.spawn(envelope, preamble, "session", session_settings=snapshot)
+    adapter.judge(str(tmp_path), "session", "judge", str(tmp_path / "out"), session_settings=snapshot)
+    adapter.resume_with_message(str(tmp_path), "session", "continue", session_settings=snapshot)
+    assert launcher.launch.call_args_list[0].args[0][-1].startswith("snapshot-prefix\n\n")
+    assert snapshot.transcript_root == "/snapshot/transcripts"
+    assert launcher.launch.call_count == 3
+    for args, kwargs in launcher.launch.call_args_list:
+        assert args[0][0] == "snapshot"
+        assert "/snap/settings.json" in args[0] and "acceptEdits" in args[0]
+        assert kwargs["env"].variables["SNAPSHOT_ALLOWED"] == "captured"
 
 
 def _which_on_usr_bin(binary: str, path: object = None) -> str:
@@ -270,7 +307,13 @@ def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid").await_identity(0)
+    handle = adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="fresh-hint",
+        resume_from="prior-sid",
+        session_settings=adapter.launch_settings(),
+    ).await_identity(0)
 
     cmd = captured["cmd"]
     assert "--resume" in cmd
@@ -285,7 +328,9 @@ def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint").await_identity(0)
+    handle = adapter.spawn(
+        envelope, preamble, session_hint="fresh-hint", session_settings=adapter.launch_settings()
+    ).await_identity(0)
 
     cmd = captured["cmd"]
     assert "--session-id" in cmd
@@ -301,7 +346,7 @@ def test_spawn_omits_settings_without_a_bundle_or_settings_path(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid").await_identity(0)
+    adapter.spawn(envelope, preamble, session_hint="sid", session_settings=adapter.launch_settings()).await_identity(0)
 
     assert "--settings" not in captured["cmd"]
 
@@ -327,7 +372,7 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(
         local_api_url="http://127.0.0.1:8431",
     )
 
-    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", session_settings=adapter.launch_settings())
 
     assert handle.pid == _FakeSpawnedProcess.pid
     assert handle.process_start_time == "fake-start-time-token"
@@ -348,7 +393,13 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
     workdir = tmp_path / "e1"
     workdir.mkdir()
 
-    handle = adapter.judge(str(workdir), "sess-123", "Assess the build.", str(workdir / "judge-output.json"))
+    handle = adapter.judge(
+        str(workdir),
+        "sess-123",
+        "Assess the build.",
+        str(workdir / "judge-output.json"),
+        session_settings=adapter.launch_settings(),
+    )
 
     assert handle.pid == _FakeSpawnedProcess.pid
     assert handle.process_start_time == "fake-judge-start-time"
@@ -371,7 +422,7 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
         versions=version_probe(),
     )
 
-    resumed = adapter.resume_with_message("/ws", "sess-123", "continue")
+    resumed = adapter.resume_with_message("/ws", "sess-123", "continue", session_settings=adapter.launch_settings())
 
     assert resumed.pid == _FakeSpawnedProcess.pid
     assert resumed.process_start_time == "fake-resume-start-time"
@@ -557,27 +608,63 @@ def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_defaul
     adapter = _adapter(spawn_executor, binary="claude", model="fable")
     expected = {"--model": "opus", "--effort": "high", "--autocompact": "150k"}
 
-    adapter.spawn(envelope, preamble, session_hint="sid", model="opus", effort="high", compaction_window="150k")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sid",
+        model="opus",
+        effort="high",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="opus", effort="high", compaction_window="150k"),
+    )
     for flag, value in expected.items():
         assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
 
     adapter.judge(
-        "/ws", "sid", "assess", str(tmp_path / "judge.json"), model="opus", effort="high", compaction_window="150k"
+        "/ws",
+        "sid",
+        "assess",
+        str(tmp_path / "judge.json"),
+        model="opus",
+        effort="high",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="opus", effort="high", compaction_window="150k"),
     )
     for flag, value in expected.items():
         assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
 
-    adapter.resume_with_message("/ws", "sid", "continue", model="opus", effort="high", compaction_window="150k")
+    adapter.resume_with_message(
+        "/ws",
+        "sid",
+        "continue",
+        model="opus",
+        effort="high",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="opus", effort="high", compaction_window="150k"),
+    )
     for flag, value in expected.items():
         assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
 
     adapter.spawn(
-        envelope, preamble, session_hint="sid", resume_from="sid", model="opus", effort="high", compaction_window="150k"
+        envelope,
+        preamble,
+        session_hint="sid",
+        resume_from="sid",
+        model="opus",
+        effort="high",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="opus", effort="high", compaction_window="150k"),
     )
     for flag, value in expected.items():
         assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
 
-    adapter.spawn(envelope, preamble, session_hint="other", model="sonnet")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="other",
+        model="sonnet",
+        session_settings=adapter.launch_settings(model="sonnet"),
+    )
     assert captured["cmd"][captured["cmd"].index("--model") + 1] == "sonnet"
 
 
@@ -1078,7 +1165,14 @@ def test_spawn_at_mint_carries_the_resolved_model_and_effort(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid", model="sonnet", effort="high")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sid",
+        model="sonnet",
+        effort="high",
+        session_settings=adapter.launch_settings(model="sonnet", effort="high"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--model") + 1] == "sonnet"
@@ -1092,7 +1186,15 @@ def test_spawn_on_a_resume_reasserts_the_session_model_and_effort(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid", resume_from="prior", model="sonnet", effort="high")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sid",
+        resume_from="prior",
+        model="sonnet",
+        effort="high",
+        session_settings=adapter.launch_settings(model="sonnet", effort="high"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--model") + 1] == "sonnet"
@@ -1104,7 +1206,14 @@ def test_spawn_at_mint_carries_the_compaction_window(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid", model="sonnet", compaction_window="150k")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sid",
+        model="sonnet",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(model="sonnet", compaction_window="150k"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
@@ -1118,7 +1227,14 @@ def test_spawn_on_a_resume_reasserts_the_compaction_window(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid", resume_from="prior", compaction_window="150k")
+    adapter.spawn(
+        envelope,
+        preamble,
+        session_hint="sid",
+        resume_from="prior",
+        compaction_window="150k",
+        session_settings=adapter.launch_settings(compaction_window="150k"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
@@ -1131,7 +1247,7 @@ def test_spawn_supplying_no_compaction_window_omits_the_flag(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid")
+    adapter.spawn(envelope, preamble, session_hint="sid", session_settings=adapter.launch_settings())
 
     cmd = captured["cmd"]
     assert "--autocompact" not in cmd
@@ -1144,7 +1260,12 @@ def test_judge_carries_the_compaction_window(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
     _adapter(spawn_executor, binary="claude").judge(
-        "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), compaction_window="150k"
+        "/ws",
+        "sid",
+        "verdict?",
+        str(tmp_path / "judge-output.txt"),
+        compaction_window="150k",
+        session_settings=_adapter(spawn_executor, binary="claude").launch_settings(compaction_window="150k"),
     )
 
     cmd = captured["cmd"]
@@ -1157,7 +1278,13 @@ def test_resume_with_message_carries_the_compaction_window(
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    _adapter(spawn_executor, binary="claude").resume_with_message("/ws", "sid", "msg", compaction_window="150k")
+    _adapter(spawn_executor, binary="claude").resume_with_message(
+        "/ws",
+        "sid",
+        "msg",
+        compaction_window="150k",
+        session_settings=_adapter(spawn_executor, binary="claude").launch_settings(compaction_window="150k"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--autocompact") + 1] == "150k"
@@ -1170,7 +1297,7 @@ def test_spawn_supplying_neither_behaves_exactly_as_before(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="sid")
+    adapter.spawn(envelope, preamble, session_hint="sid", session_settings=adapter.launch_settings())
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--model") + 1] == "claude-opus-5"  # the adapter's own default
@@ -1184,7 +1311,13 @@ def test_judge_reasserts_the_session_model_and_effort(
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
     _adapter(spawn_executor, binary="claude").judge(
-        "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), effort="high", model="sonnet"
+        "/ws",
+        "sid",
+        "verdict?",
+        str(tmp_path / "judge-output.txt"),
+        effort="high",
+        model="sonnet",
+        session_settings=_adapter(spawn_executor, binary="claude").launch_settings(effort="high", model="sonnet"),
     )
 
     cmd = captured["cmd"]
@@ -1198,7 +1331,14 @@ def test_resume_with_message_reasserts_the_session_model_and_effort(
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    _adapter(spawn_executor, binary="claude").resume_with_message("/ws", "sid", "msg", model="sonnet", effort="high")
+    _adapter(spawn_executor, binary="claude").resume_with_message(
+        "/ws",
+        "sid",
+        "msg",
+        model="sonnet",
+        effort="high",
+        session_settings=_adapter(spawn_executor, binary="claude").launch_settings(model="sonnet", effort="high"),
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--model") + 1] == "sonnet"
@@ -1578,7 +1718,9 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
         graph_artifacts=[GraphArtifact(name="rubric", kind=ArtifactKind.ASSET, content="RUBRIC-BODY-7f3a")],
     )
 
-    adapter.spawn(envelope, preamble, session_hint="fresh-hint").await_identity(0)
+    adapter.spawn(
+        envelope, preamble, session_hint="fresh-hint", session_settings=adapter.launch_settings()
+    ).await_identity(0)
 
     cmd = captured["cmd"]
     assert envelope.prompt in cmd

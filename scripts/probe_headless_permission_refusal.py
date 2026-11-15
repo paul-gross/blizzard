@@ -153,7 +153,11 @@ def _spawn(
         judgement_prompt="assess",
     )
     handle = adapter.spawn(
-        envelope, preamble, None if isinstance(adapter, OpenCodeAdapter) else str(uuid.uuid4()), model=model
+        envelope,
+        preamble,
+        None if isinstance(adapter, OpenCodeAdapter) else str(uuid.uuid4()),
+        model=model,
+        session_settings=adapter.launch_settings(model=model),
     )
     handle.confirm_durable()
     return _wait(handle.pid)

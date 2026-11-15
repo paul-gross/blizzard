@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import shlex
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,8 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
+from blizzard.foundation.trace_export.exporter import ITraceExporter
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
@@ -45,6 +48,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCo
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
+from blizzard.runner.host_config import BuiltRunner, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -59,11 +63,12 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from blizzard.runner.tracing.bounded_export import BoundedTraceExporter
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
-from tests.support.host_files import load_runner_config, one_workspace, write_minimal_host
+from tests.support.host_files import host_config_of, load_runner_config, one_workspace, write_minimal_host
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -981,12 +986,21 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built: list[dict[str, object]] = []
+    wrapped: list[tuple[object, BoundedTraceExporter]] = []
 
     def record(**kwargs: object) -> object:
         built.append(kwargs)
         return object()
 
     monkeypatch.setattr(composition, "LeaseTraceSweep", record)
+
+    def bound(exporter: object) -> BoundedTraceExporter:
+        assert isinstance(exporter, InMemoryTraceExporter)
+        result = BoundedTraceExporter(exporter)
+        wrapped.append((exporter, result))
+        return result
+
+    monkeypatch.setattr(composition, "BoundedTraceExporter", bound)
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -1003,9 +1017,64 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
     try:
         (kwargs,) = built
         assert kwargs["config"] is config.tracing
-        assert kwargs["exporter"] is exporter
+        assert len(wrapped) == 1
+        assert wrapped[0][0] is exporter
+        assert kwargs["exporter"] is wrapped[0][1]
     finally:
         graph.close()
+
+
+def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    entered, release = threading.Event(), threading.Event()
+
+    class HeldExporter:
+        calls = 0
+
+        def export(self, spans: Sequence[FinishedSpan]) -> bool:
+            self.calls += 1
+            entered.set()
+            assert release.wait(5)
+            return True
+
+    exporters: list[ITraceExporter] = []
+
+    def record(**kwargs: object) -> object:
+        exporter = kwargs["exporter"]
+        assert isinstance(exporter, BoundedTraceExporter)
+        exporters.append(exporter)
+        return object()
+
+    monkeypatch.setattr(composition, "LeaseTraceSweep", record)
+    config = RunnerConfig(root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    env = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}
+    transport = HeldExporter()
+    host = composition.build_host_process(
+        host_config_of(config),
+        [BuiltRunner(rid, replace(config, runner_id=rid), ResolvedToken()) for rid in ("rn_a", "rn_b")],
+        environ=env,
+        trace_exporter=transport,
+    )
+    try:
+        composition.add_runner(
+            replace(config, runner_id="rn_c"), host, runner_id="rn_c", environ=env, trace_exporter=transport
+        )
+        assert len(exporters) == 3
+        assert exporters[0] is exporters[1] is exporters[2]
+        results: list[bool] = []
+        thread = threading.Thread(target=lambda: results.append(exporters[0].export([])))
+        thread.start()
+        try:
+            assert entered.wait(5)
+            assert exporters[1].export([]) is False
+            assert exporters[2].export([]) is False
+            assert transport.calls == 1
+        finally:
+            release.set()
+            thread.join(5)
+        assert not thread.is_alive()
+        assert results == [True]
+    finally:
+        host.close()
 
 
 def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_root(tmp_path: Path) -> None:
@@ -1057,3 +1126,148 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
         )
     finally:
         hosted.close()
+
+
+def test_stepper_reuses_timeout_and_defers_retirement_until_both_passes_idle(tmp_path: Path) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        with stepper._trace_lock.hold():  # pyright: ignore[reportPrivateUsage]
+            original = stepper._context()  # pyright: ignore[reportPrivateUsage]
+            client = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert client is not None
+            assert stepper._context() is original  # pyright: ignore[reportPrivateUsage]
+            timeout[0] = 10.0
+            assert stepper._context() is not original  # pyright: ignore[reportPrivateUsage]
+            stepper._retire_idle()  # pyright: ignore[reportPrivateUsage]
+            assert not client.is_closed
+        stepper.quiesce()
+        assert client.is_closed
+        replacement = stepper._client  # pyright: ignore[reportPrivateUsage]
+        stepper.close()
+        stepper.close()
+        assert replacement is not None and replacement.is_closed
+        with pytest.raises(RuntimeError, match="closed"):
+            stepper._context()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_stepper_failed_rebuild_closes_candidate_and_preserves_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        original = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        client = stepper._client  # pyright: ignore[reportPrivateUsage]
+        candidates: list[httpx2.Client] = []
+
+        def fail_instrument(candidate: httpx2.Client) -> None:
+            candidates.append(candidate)
+            raise RuntimeError("instrumentation failed")
+
+        monkeypatch.setattr(graph.platform_tracing, "instrument_client", fail_instrument)
+        timeout[0] = 10.0
+        with pytest.raises(RuntimeError, match="instrumentation failed"):
+            stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(candidates) == 1 and candidates[0].is_closed
+        assert client is not None and not client.is_closed
+        timeout[0] = 30.0
+        assert stepper._context() is original  # pyright: ignore[reportPrivateUsage]
+        stepper.close()
+
+
+def test_stepper_retirement_waits_for_concurrent_trace_borrower(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    timeout = [30.0]
+    entered, release = threading.Event(), threading.Event()
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph, timeout=lambda: timeout[0])
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        original = stepper._client  # pyright: ignore[reportPrivateUsage]
+        assert original is not None
+
+        def sweep() -> None:
+            entered.set()
+            assert release.wait(10)
+            assert not original.is_closed
+
+        def no_tick(_ctx: LoopContext) -> None:
+            pass
+
+        monkeypatch.setattr(stepper, "_sweep_traces", sweep)
+        monkeypatch.setattr(loop_wiring, "tick", no_tick)
+        thread = threading.Thread(target=stepper.timed_trace_sweep)
+        thread.start()
+        try:
+            assert entered.wait(10)
+            timeout[0] = 10.0
+            stepper.timed_tick()
+            assert not original.is_closed
+            assert stepper._client is not original  # pyright: ignore[reportPrivateUsage]
+        finally:
+            release.set()
+            thread.join(10)
+            stepper.close()
+        assert not thread.is_alive()
+        assert original.is_closed
+
+
+def test_stepper_close_waits_for_tick_and_refuses_subsequent_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    entered, release, closing, closed = (threading.Event() for _ in range(4))
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph)
+
+        def tick_held(_ctx: LoopContext) -> None:
+            entered.set()
+            assert release.wait(10)
+            client = stepper._client  # pyright: ignore[reportPrivateUsage]
+            assert client is not None and not client.is_closed
+
+        def close() -> None:
+            closing.set()
+            stepper.close()
+            closed.set()
+
+        monkeypatch.setattr(loop_wiring, "tick", tick_held)
+        worker = threading.Thread(target=stepper.timed_tick)
+        closer = threading.Thread(target=close)
+        worker.start()
+        try:
+            assert entered.wait(10)
+            closer.start()
+            assert closing.wait(10)
+            assert not closed.wait(0.05)
+        finally:
+            release.set()
+            worker.join(10)
+            closer.join(10)
+        assert closed.is_set()
+        with pytest.raises(RuntimeError, match="closed"):
+            stepper.request()
+
+
+def test_stepper_failed_context_wiring_closes_candidate_and_can_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    with loop_graph(config) as graph:
+        stepper = loop_wiring.RunnerStepper(config, process_graph=graph)
+        clients: list[httpx2.Client | httpx2.AsyncClient] = []
+        monkeypatch.setattr(graph.platform_tracing, "instrument_client", clients.append)
+        real_context = LoopWiring.context
+        with monkeypatch.context() as patch:
+            patch.setattr(LoopWiring, "context", _failing(real_context, "wiring failed"))
+            with pytest.raises(RuntimeError, match="wiring failed"):
+                stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(clients) == 1 and clients[0].is_closed
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert len(clients) == 2 and not clients[1].is_closed
+        stepper.close()
+        assert clients[1].is_closed

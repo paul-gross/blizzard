@@ -1,7 +1,7 @@
 """The runner's harness-health cache and the read-only seam its consumers depend on.
 
-Composition-root-owned and as long-lived as the runner process; readers go through
-:class:`IReadHarnessHealth`."""
+Composition constructs a cache per harness set; readers go through :class:`IReadHarnessHealth`.
+See ``bzh:pluggable-seams`` for set ownership."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class _ResolvesModelStrict(Protocol):
     def resolve_model_strict(self, preferences: Sequence[str]) -> str | None: ...
 
 
-#: How long a version is trusted before re-probing — long enough an idle runner isn't shelling out every tick.
+#: Refresh window for health and applicable service-version observations, not binary fingerprints.
 HARNESS_VERSION_REFRESH_SECONDS = 600.0
 
 #: Distinguishes "never computed" from a genuinely ``None``-valued previous observation.

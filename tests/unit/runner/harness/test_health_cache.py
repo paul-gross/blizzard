@@ -133,6 +133,26 @@ def test_repeat_refresh_within_window_reuses_the_cached_result() -> None:
     assert probe.calls == 1  # no second probe — nothing changed and the window has not elapsed
 
 
+def test_missing_binary_is_detected_and_recovers_on_health_refresh() -> None:
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe()
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+    adapter = _FakeAdapter()
+    initial = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert initial is not None and initial.available
+    probe.binary = False
+    clock.advance(timedelta(seconds=599))
+    assert cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0") is initial
+    clock.advance(timedelta(seconds=1))
+    missing = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert missing is not None and missing.cause is HarnessHealthCause.MISSING_BINARY
+    probe.binary = True
+    clock.advance(timedelta(seconds=600))
+    recovered = cache.refresh(_HARNESS_ID, adapter=adapter, observed_version="2.0")
+    assert recovered is not None and recovered.available
+    assert probe.calls == 3
+
+
 def test_refresh_after_the_window_elapses_recomputes() -> None:
     clock = FixedClock(_NOW)
     probe = _FakeProbe()

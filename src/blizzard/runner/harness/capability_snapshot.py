@@ -1,14 +1,15 @@
-"""This runner's own capability snapshot, shared by every outbound call that carries one."""
+"""This runner's capability snapshots and version evidence; ``bzh:pluggable-seams`` owns binding lifetime."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.binary_identity import BinaryIdentity, IBinaryIdentity
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.registry import (
@@ -34,19 +35,68 @@ class HarnessCapability:
 
 
 @dataclass
+class BinaryVersionCache:
+    """Successful version evidence shared by probes of the same executable identity.
+
+    Identity is read again after observation so a binary replaced during the probe cannot
+    attach the old result to the new file. A missing identity or failed observation is
+    never reusable. Service observations are deliberately outside this cache.
+    """
+
+    identities: IBinaryIdentity
+    _observed: dict[str, tuple[BinaryIdentity, str]] = field(default_factory=dict[str, tuple[BinaryIdentity, str]])
+    _paths: dict[str, str] = field(default_factory=dict[str, str])
+
+    def with_identities(self, identities: IBinaryIdentity) -> BinaryVersionCache:
+        """Share file evidence while resolving names under another tool profile."""
+        return BinaryVersionCache(identities=identities, _observed=self._observed)
+
+    def get(self, binary: str, observe: Callable[[], str | None]) -> str | None:
+        identity = self.identities.identify(binary)
+        previous = self._paths.get(binary)
+        path = str(identity.path) if identity is not None else None
+        if previous is not None and previous != path:
+            self._observed.pop(previous, None)
+            self._paths.pop(binary, None)
+        if identity is not None:
+            self._paths[binary] = str(identity.path)
+            cached = self._observed.get(str(identity.path))
+            if cached is not None and cached[0] == identity:
+                return cached[1]
+        version = observe()
+        if identity is not None and version and self.identities.identify(binary) == identity:
+            self._observed[str(identity.path)] = (identity, version)
+        return version
+
+    def forget(self, binary: str) -> None:
+        """Invalidate successful evidence for the executable currently named by ``binary``."""
+        identity = self.identities.identify(binary)
+        path = str(identity.path) if identity is not None else self._paths.get(binary)
+        if path is not None:
+            self._observed.pop(path, None)
+
+
+@dataclass
 class HarnessVersionCache:
-    """Every bound harness's last-observed binary version, cached **across ticks** (unlike
-    :class:`TickCapabilities`' own per-tick memo below), composition-root-owned and as
-    long-lived as the loop itself — so an idle runner with a harness installed no longer
-    pays ``observe_version``'s subprocess cost on every tick, only once per refresh window."""
+    """Cache service observations independently from shared binary-version evidence.
+
+    Binary probes are cached below lifecycle observations, so an adapter is called on
+    every read unless it has separately declared an answering service. The latter keeps
+    its own refresh cadence independently of binary identity.
+    """
 
     clock: IClock
     refresh_seconds: float = HARNESS_VERSION_REFRESH_SECONDS
+    binary_versions: BinaryVersionCache | None = None
+    binaries: Mapping[str, str] = field(default_factory=dict[str, str])
+    service_harnesses: frozenset[str] = frozenset()
     _observed: dict[str, tuple[str | None, datetime]] = field(
         default_factory=dict[str, tuple[str | None, datetime]], compare=False
     )
 
     def get(self, harness_id: str, observe: Callable[[], str | None]) -> str | None:
+        if harness_id not in self.service_harnesses:
+            return observe()
         now = self.clock.now()
         cached = self._observed.get(harness_id)
         if cached is not None and (now - cached[1]).total_seconds() < self.refresh_seconds:
@@ -58,6 +108,9 @@ class HarnessVersionCache:
     def forget(self, harness_id: str) -> None:
         """Drop ``harness_id``'s cached version, so the next read observes it afresh."""
         self._observed.pop(harness_id, None)
+        binary = self.binaries.get(harness_id)
+        if binary is not None and self.binary_versions is not None:
+            self.binary_versions.forget(binary)
 
 
 class CapabilityHarnesses(IHarnessKnownRegistry, IHarnessLifecycleRegistry, IHarnessModelResolutionRegistry, Protocol):

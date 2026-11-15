@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.config_keys import ConfigKey, ConfigView
@@ -24,6 +24,9 @@ from blizzard.runner.harness.registry import HarnessAssembly
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
+
+if TYPE_CHECKING:
+    from blizzard.runner.harness.binding_selection import IVersionProbe
 
 
 @domain_model
@@ -51,6 +54,11 @@ class HarnessSection(Protocol):
 
     @property
     def harness_id(self) -> str: ...
+
+    @property
+    def binary(self) -> str:
+        """Configured executable for this harness."""
+        ...
 
     @property
     def enabled(self) -> bool:
@@ -143,10 +151,15 @@ class SharedHarnessInputs:
 
 
 class IHarnessDeclaration(Protocol[SectionT_contra]):
-    """One harness binding, declared in one place."""
+    """One harness binding, declared in one place; ``bzh:pluggable-seams`` owns its selection lifetime."""
 
     @property
     def harness_id(self) -> str: ...
+
+    @property
+    def service_version(self) -> bool:
+        """Whether advertised versions also depend on an answering service."""
+        ...
 
     @property
     def normalizer_version(self) -> str:
@@ -185,11 +198,12 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
+        versions: IVersionProbe | None = None,
     ) -> HarnessAssembly:
         """The binding's adapter and transcript source, and one health probe per root of ``health_roots`` in its
-        order, built once for one runner so what they share is one object; ``launcher`` starts its worker, judge and
-        resume children, ``children`` every other child it runs (version probes, exports, resolvers), ``clock`` is the
-        runner's and ``monotonic_clock`` measures its deadlines. Building runs nothing: no child, no service, no
+        order, built once for one harness set so what they share is one object; ``launcher`` starts its worker, judge
+        and resume children, ``children`` every other child it runs (version probes, exports, resolvers), ``clock`` is
+        the runner's and ``monotonic_clock`` measures its deadlines. Building runs nothing: no child, no service, no
         health evaluation."""
         ...
 

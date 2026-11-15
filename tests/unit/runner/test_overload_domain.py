@@ -216,7 +216,7 @@ def test_overload_is_classified_by_the_sessions_own_harness(
     ctx = cast(LoopContext, SimpleNamespace(harnesses=registry))
 
     def on(harness_id: str) -> Lease:
-        return cast(Lease, SimpleNamespace(session=SessionReference(harness_id, "s")))
+        return cast(Lease, SimpleNamespace(lease_id="lease_1", session=SessionReference(harness_id, "s")))
 
     assert classify(ctx, on(CLAUDE_CODE_HARNESS_ID), "out", ["line"]) == overload
     assert classify(ctx, on(OPENCODE_HARNESS_ID), "out", ["line"]) is None

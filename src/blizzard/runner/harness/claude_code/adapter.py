@@ -30,15 +30,16 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.stdout_target import stdout_target
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
+from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageLimit, UsageSample
@@ -179,10 +180,14 @@ class ClaudeCodeAdapter:
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
-        versions: VersionProbe,
+        versions: IVersionProbe,
         harness_telemetry: HarnessTelemetryPlan | None = None,
+        transcript_root: str = "",
+        bundle_path: str | None = None,
     ) -> None:
         self._binary = binary
+        self._transcript_root = transcript_root
+        self._bundle_path = bundle_path
         self._versions = versions
         self._harness_telemetry = harness_telemetry or HarnessTelemetryPlan()
         self._settings_path = settings_path
@@ -218,6 +223,35 @@ class ClaudeCodeAdapter:
     @property
     def worker_env(self) -> AllowlistedEnv:
         return self._worker_env
+
+    def launch_settings(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        compaction_window: str | None = None,
+        *,
+        prompt_prefix: str = "",
+    ) -> SessionSettings:
+        return SessionSettings(
+            model,
+            effort,
+            compaction_window,
+            binary=self._binary,
+            default_model=self._model,
+            autonomy=self._autonomy,
+            environment=SessionEnvironment.capture(self._worker_env),
+            settings_path=self._settings_path,
+            settings_argv=tuple(self.settings_args()),
+            permission_override=self._permission_override,
+            telemetry=self._harness_telemetry,
+            harness_id="claude_code",
+            transcript_root=self._transcript_root,
+            bundle_path=self._bundle_path,
+            model_aliases=tuple(self._model_aliases.items()),
+            effort_aliases=tuple(self._effort_aliases.items()),
+            supported_models=self._supported_models,
+            prompt_prefix=prompt_prefix,
+        )
 
     @property
     def settings_path(self) -> str | None:
@@ -315,7 +349,10 @@ class ClaudeCodeAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> PendingWorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         # A resume reuses the original session id in place — forking is opt-in and never
@@ -324,11 +361,11 @@ class ClaudeCodeAdapter:
         # The rule's one owner is `SpawnCwd`. `environments` was checked
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
-        cmd = [self._binary, "-p", "--output-format", "json"]
+        cmd = [settings.binary, "-p", "--output-format", "json"]
         # Claude Code does not reliably restore the model on --resume; reassert every
         # request parameter so the continuation keeps the worker's cache identity.
         if model or not resume_from:
-            cmd += ["--model", model or self._model]
+            cmd += ["--model", model or settings.default_model]
         if effort:
             cmd += ["--effort", effort]
         if compaction_window:
@@ -337,13 +374,13 @@ class ClaudeCodeAdapter:
             cmd += ["--resume", resume_from]
         elif session_id:
             cmd += ["--session-id", session_id]
-        cmd += self.settings_args()
-        cmd += self._permission_args()
+        cmd += list(settings.settings_argv)
+        cmd += self._launch_permission_args(settings)
         # The preamble is composed in the core; the adapter only concatenates it ahead of
         # the envelope prompt (``bzh:deterministic-shell``).
-        cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
+        cmd.append("\n\n".join(part for part in (settings.prompt_prefix, envelope.prompt or "") if part))
 
-        env = self._worker_env.worker(self.spawn_env(envelope, preamble, session_id))
+        env = settings.environment.worker(self.identity_env(preamble, envelope.chunk_id, session_id, settings=settings))
         # Injected per-lease files surviving the process; both go through
         # `stdout_target`, empty meaning DEVNULL.
         with (
@@ -362,10 +399,10 @@ class ClaudeCodeAdapter:
                     defer_disarm=True,
                 )
             except OSError as exc:
-                _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
-                raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
+                _log.error("harness spawn failed", binary=settings.binary, cwd=workdir, detail=str(exc))
+                raise HarnessSpawnError(f"failed to spawn {settings.binary} in {workdir}: {exc}") from exc
 
-        _log.info("spawned worker", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+        _log.info("spawned worker", binary=settings.binary, pid=launched.pid, session_id=session_id, cwd=workdir)
         # Already identified — phase two is instant. Left armed: `Spawner.spawn`
         # calls `confirm_durable()` right after its own durable provisional record lands.
         return WorkerHandle(
@@ -391,10 +428,13 @@ class ClaudeCodeAdapter:
         effort: str | None = None,
         model: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> WorkerHandle:
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
         if not output_path:
             raise HarnessSpawnError("judge requires an output path — a detached verdict is unrecoverable without one")
-        cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        cmd = [settings.binary, "-p", "--output-format", "json", "--resume", session_id]
         if model:
             cmd += ["--model", model]
         if effort:
@@ -403,11 +443,13 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Prefix parity with `resume_with_message` — pinned by
         # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
-        cmd += self.settings_args()
-        cmd += self._permission_args()
+        cmd += list(settings.settings_argv)
+        cmd += self._launch_permission_args(settings)
         cmd.append(judgement_prompt)
-        env = self._worker_env.worker(
-            self.identity_env(preamble, chunk_id, session_id, elicitation=True) if preamble is not None else {}
+        env = settings.environment.worker(
+            self.identity_env(preamble, chunk_id, session_id, elicitation=True, settings=settings)
+            if preamble is not None
+            else {}
         )
         # Detached: the reply lands in `output_path`, never a pipe this
         # call waits on — the collect half reads it back once the process has exited.
@@ -419,9 +461,11 @@ class ClaudeCodeAdapter:
                     cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=Stream.DEVNULL, defer_disarm=True
                 )
         except OSError as exc:
-            _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
-            raise HarnessSpawnError(f"failed to launch {self._binary} in {session_cwd}: {exc}") from exc
-        _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=session_cwd)
+            _log.error("elicitation launch failed", binary=settings.binary, cwd=session_cwd, detail=str(exc))
+            raise HarnessSpawnError(f"failed to launch {settings.binary} in {session_cwd}: {exc}") from exc
+        _log.info(
+            "elicitation launched", binary=settings.binary, pid=launched.pid, session_id=session_id, cwd=session_cwd
+        )
         # Left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
         # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
@@ -444,8 +488,11 @@ class ClaudeCodeAdapter:
         model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
+        session_settings: SessionSettings,
     ) -> ResumeHandle:
-        cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        settings = session_settings
+        model, effort, compaction_window = settings.model, settings.effort, settings.compaction_window
+        cmd = [settings.binary, "-p", "--output-format", "json", "--resume", session_id]
         if model:
             cmd += ["--model", model]
         if effort:
@@ -454,12 +501,14 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Re-attach the worker hooks: this re-enters a long-lived session that later exits
         # on its own, and a resume does not carry the original spawn's `--settings`.
-        cmd += self.settings_args()
-        cmd += self._permission_args()
+        cmd += list(settings.settings_argv)
+        cmd += self._launch_permission_args(settings)
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
         # the token plaintext is never persisted, so the caller re-mints it.
-        env = self._worker_env.worker(self.identity_env(preamble, chunk_id, session_id) if preamble is not None else {})
+        env = settings.environment.worker(
+            self.identity_env(preamble, chunk_id, session_id, settings=settings) if preamble is not None else {}
+        )
         # Injected per-lease file; unset inherits the runner's own.
         # Deferred like spawn/judge.
         with stdout_target(stdout_path) as stdout_file:
@@ -487,6 +536,15 @@ class ClaudeCodeAdapter:
         if self._bundle is not None:
             return self._bundle.argv()
         return ["--settings", self._settings_path] if self._settings_path else []
+
+    @staticmethod
+    def _launch_permission_args(settings: SessionSettings) -> list[str]:
+        if settings.permission_override is not None:
+            return ["--permission-mode", settings.permission_override] if settings.permission_override else []
+        args = ["--permission-mode", PERMISSION_MODES[settings.autonomy]]
+        if settings.autonomy is Autonomy.Normal:
+            args += ["--permission-prompts", "none"]
+        return args
 
     def _permission_args(self, *, attended: bool = False) -> list[str]:
         """The one owner of the permission argv: the legacy override when set, else the
@@ -786,7 +844,13 @@ class ClaudeCodeAdapter:
         return 0
 
     def identity_env(
-        self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
+        self,
+        preamble: WorkerPreamble,
+        chunk_id: str,
+        session_id: str,
+        *,
+        elicitation: bool = False,
+        settings: SessionSettings | None = None,
     ) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
         ``BLIZZARD_*`` vars a worker's CLI and its hooks read to reach the runner for
@@ -794,11 +858,19 @@ class ClaudeCodeAdapter:
         all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
         env = harness_shared.build_identity_env(
-            preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
+            preamble,
+            chunk_id,
+            session_id,
+            settings.environment if settings is not None else self._worker_env,
+            elicitation=elicitation,
         )
         if preamble.lease_token:
             env.update(
-                telemetry.captured_env(self._harness_telemetry.captured(), preamble.local_api_url, preamble.lease_token)
+                telemetry.captured_env(
+                    (settings.telemetry if settings is not None else self._harness_telemetry).captured(),
+                    preamble.local_api_url,
+                    preamble.lease_token,
+                )
             )
         return env
 
