@@ -93,7 +93,7 @@
       @if (row.bounce; as bounce) {
         <span class="bounce" data-testid="delivery-bounce" [title]="bounce.title"
           >@if (bounce.compact.identity; as identity) {<span class="bounce-identity">{{ identity }}</span>}
-          <span class="reason">{{ bounce.compact.reason }}</span></span
+          <span class="reason">{{ bounce.label }}</span></span
         >
       }
       @if (row.line?.perRepo; as perRepo) {

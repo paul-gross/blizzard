@@ -61,6 +61,7 @@ describe('the gardening guards on All', () => {
       'GET /api/projects/{project}/findings': () => ({ findings: [], next_cursor: null }),
       'GET /api/runners': () => ({ runners: [] }),
       'GET /api/scopes': () => [],
+      'GET /api/cadences': () => [],
       'GET /api/routines': () => [],
       'GET /api/runs': () => [],
       ...records,

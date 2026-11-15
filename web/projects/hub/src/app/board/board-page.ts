@@ -4,7 +4,6 @@ import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../core/mutation-keys';
 import { CHUNK_URGENCY_ICON } from 'fleet';
 import { injectUrgencyIconUrl } from '../core/urgency-icon.query';
-import { NewHubItem } from './new-hub-item/new-hub-item';
 import { injectUrgenciesQuery } from '../core/urgencies.query';
 import { boardDonePolicy } from '../core/board-done-policy.model';
 import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
@@ -66,7 +65,7 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
   providers: [{ provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'onEscape($event)' },
-  imports: [NewHubItem, BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
+  imports: [BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -232,6 +231,11 @@ export class BoardPage {
   protected readonly layout = toSignal(
     this.route.queryParamMap.pipe(map((params): BoardLayout => boardLayoutOf(params.get('layout')))),
     { initialValue: 'board' as BoardLayout },
+  );
+
+  /** The cards or rows rendered by the board and list layouts. */
+  protected readonly boardChunkIds = computed<ReadonlySet<string>>(() =>
+    new Set(orderedChunkIds(this.boardChunks())),
   );
 
   /** Switch the layout by writing the URL, keeping every other param (the open chunk among them). */

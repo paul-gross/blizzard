@@ -83,16 +83,19 @@ test.describe('on a fresh tenant', () => {
     }
 
     // The severity filter narrows the list, then restores it.
+    await page.getByTestId('events-severity-filter').click();
     await page.getByTestId('events-filter-critical').click();
     await expect(page.getByTestId('events-row')).toHaveCount(1);
+    await page.getByTestId('events-severity-filter').click();
     await page.getByTestId('events-filter-all').click();
     await expect(page.getByTestId('events-row')).toHaveCount(seeded + 3);
 
-    // One runner in the feed so far: nothing to narrow by, so the runner filter row is hidden.
-    await expect(page.getByTestId('events-runner-filter')).toHaveCount(0);
+    // All three standard controls remain visible even with only one runner.
+    await expect(page.getByTestId('events-runner-filter')).toBeVisible();
+    await expect(page.getByTestId('events-chunk-filter')).toBeVisible();
 
     // A fresh event from a second runner arrives live over SSE, with no reload: the feed grows and the runner filter row
-    // appears, with two runners to choose from.
+    // offers two runners to choose from.
     await pushEvent(second, { seq: 1, severity: 'critical', kind: 'worker-lost', chunkId, message: 'other runner' });
     await expect(page.getByTestId('events-row')).toHaveCount(seeded + 4);
     await expect(page.getByTestId('events-runner-filter')).toBeVisible();
@@ -107,13 +110,19 @@ test.describe('on a fresh tenant', () => {
     await page.getByTestId('events-runner-filter-all').click();
     await expect(page.getByTestId('events-row')).toHaveCount(seeded + 4);
 
+    // Opening the card routes to a detail page; Back restores the feed.
+    await page.getByTestId('events-open').first().click();
+    await expect(page.getByTestId('event-detail')).toContainText('other runner');
+    await page.getByTestId('event-detail-back').click();
+    await expect(page.getByTestId('events-row')).toHaveCount(seeded + 4);
+
     // A row deep-links to its chunk, on the board.
     await page.getByTestId('events-chunk').first().click();
     await expect(page.getByTestId('board-shell')).toBeVisible();
   });
 
-  test('test_the_events_grid_does_not_collapse_at_a_narrow_viewport', async ({ page, api, fleet, issue, narrowViewport }) => {
-    await page.setViewportSize(narrowViewport);
+  test('test_the_events_grid_does_not_collapse_at_a_narrow_viewport', async ({ page, api, fleet, issue }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     const { chunk } = await issue('narrow events');
     const runner = await fleet('runner-ui');
     const seeded = await eventCount(api);

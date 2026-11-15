@@ -140,16 +140,23 @@ describe('FleetProposalPanel', () => {
     expect(el.textContent).toContain('Seventeen modules narrate their own change history.');
   });
 
-  it('keeps proposal body, evidence and closure reason as safe monospaced verbatim text, not Markdown', async () => {
-    const text = '# Literal heading\n\n  **indented** `code`\n[link](javascript:alert)\n<img src=x onerror=alert(1)>';
+  it('renders safe Markdown only for the body, leaving evidence and closure reason verbatim', async () => {
+    const text = '# Heading\n\n**bold** `code` [safe](https://example.com) [bad](javascript:alert)\n<img src=x onerror=alert(1)>';
     const fixture = await mount({
       vm: { ...BASE_VM, body: text, closure: { kind: 'passed', closedBy: 'u_1', closedAt: '2026-01-04T00:00:00Z', reason: text } },
       evidence: [{ ...EVIDENCE[0], summary: text }],
     });
     const el = fixture.nativeElement as HTMLElement;
     const blocks = el.querySelectorAll<HTMLElement>('fleet-kit-prose-block .tx');
-    expect(blocks).toHaveLength(3);
-    expect(el.querySelector('fleet-kit-markdown')).toBeNull();
+    expect(blocks).toHaveLength(2);
+    const body = el.querySelector('fleet-kit-markdown')!;
+    expect(body.querySelector('h1')?.textContent?.trim()).toBe('Heading');
+    expect(body.querySelector('strong')?.textContent).toBe('bold');
+    expect(body.querySelector('code')?.textContent).toBe('code');
+    expect(body.querySelector('a')?.getAttribute('href')).toBe('https://example.com');
+    expect(body.querySelector('[data-testid="markdown-inert-link"]')?.textContent).toBe('bad');
+    expect(body.querySelector('img')).toBeNull();
+    expect(body.textContent).toContain('<img src=x onerror=alert(1)>');
     for (const block of blocks) {
       expect(block.textContent).toBe(text);
       expect(block.querySelector('h1, strong, code, a, img')).toBeNull();
@@ -379,24 +386,14 @@ describe('FleetProposalPanel', () => {
     expect(accept?.classList.contains('primary')).toBe(true);
   });
 
-  it('renders the pass/accept CLI hints as an aligned fact grid above the action bar', async () => {
+  it('offers actions without pass or accept CLI hints', async () => {
     const fixture = await mount({ canControl: true });
     const el = fixture.nativeElement as HTMLElement;
 
-    const cli = el.querySelector('[data-testid="gardening-proposal-cli"]');
-    expect(cli?.tagName.toLowerCase()).toBe('dl');
-    expect(cli?.textContent).toContain('hub garden-proposal pass gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2');
-    expect(cli?.textContent).toContain('hub garden-proposal accept gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2');
-
     const actions = el.querySelector('[data-testid="gardening-proposal-actions"]');
-    const cliIndex = Array.from(actions?.children ?? []).findIndex((c) =>
-      c.querySelector('[data-testid="gardening-proposal-cli"]'),
-    );
-    const barIndex = Array.from(actions?.children ?? []).findIndex((c) =>
-      c.querySelector('[data-testid="gardening-proposal-pass"]'),
-    );
-    expect(cliIndex).toBeGreaterThanOrEqual(0);
-    expect(barIndex).toBeGreaterThan(cliIndex);
+    expect(actions?.querySelector('[data-testid="gardening-proposal-pass"]')).toBeTruthy();
+    expect(actions?.querySelector('[data-testid="gardening-proposal-accept"]')).toBeTruthy();
+    expect(actions?.textContent).not.toContain('hub garden-proposal');
   });
 
   it('no longer offers a read-with CLI hint under Evidence', async () => {

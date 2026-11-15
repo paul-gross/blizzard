@@ -42,7 +42,7 @@
   min-width: 0;
 }
 .cp-sub .st {
-  font-size: var(--fs-label);
+  font-size: var(--fs-sm);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -50,7 +50,7 @@
 .cp-sub .sep {
   flex: none;
   color: var(--label-dim);
-  font-size: var(--fs-label);
+  font-size: var(--fs-sm);
 }
 .cid {
   color: var(--amber);
@@ -64,7 +64,7 @@
   align-items: baseline;
   gap: 4px;
   color: var(--text);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 .cp-sub .project-swatch {
@@ -74,7 +74,7 @@
 .cp-sub .runner {
   min-width: 0;
   color: var(--cyan);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

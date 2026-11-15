@@ -1,30 +1,21 @@
-import { type OriginProbe, selectOrigin } from './host-origin.model';
+import type { FleetSelection } from './fleet-page.model';
+import { selectHostOrigin } from './host-origin.model';
 
-const A = 'https://a.example';
-const B = 'https://b.example';
-const host = (origin: string, hostId: string | null): OriginProbe => ({ origin, kind: 'host', hostId });
-const down = (origin: string): OriginProbe => ({ origin, kind: 'unreachable' });
+const host = (urls: string[], url: string | null = null): FleetSelection =>
+  ({ kind: 'host', card: { urls, url } }) as unknown as FleetSelection;
 
-describe('selectOrigin', () => {
-  it('links the first origin when it is verified', () => {
-    expect(selectOrigin([host(A, 'hs_1'), host(B, 'hs_1')], 'hs_1', A)).toEqual({ kind: 'verified', href: A });
+describe('selectHostOrigin', () => {
+  it('selects the first valid HTTP(S) URL on the browser hostname, ignoring ports', () => {
+    expect(selectHostOrigin(host(['bad', 'ftp://localhost:80', 'http://other', 'https://LOCALHOST:42/a', 'http://localhost:3']), 'localhost'))
+      .toEqual({ kind: 'link', href: 'https://LOCALHOST:42/a' });
   });
-  it('links the second when the first is unreachable', () => {
-    expect(selectOrigin([down(A), host(B, 'hs_1')], 'hs_1', A)).toEqual({ kind: 'verified', href: B });
+  it('uses the canonical URL only when the candidate list is empty', () => {
+    expect(selectHostOrigin(host([], 'http://localhost:42'), 'localhost')).toEqual({ kind: 'link', href: 'http://localhost:42' });
+    expect(selectHostOrigin(host(['http://other'], 'http://localhost:42'), 'localhost')).toEqual({ kind: 'none' });
   });
-  it('skips an origin answering as another host', () => {
-    expect(selectOrigin([host(A, 'hs_other'), host(B, 'hs_1')], 'hs_1', A)).toEqual({ kind: 'verified', href: B });
-  });
-  it('skips an origin whose host is not yet recorded', () => {
-    expect(selectOrigin([host(A, null)], 'hs_1', A)).toEqual({ kind: 'unreachable' });
-  });
-  it('is unreachable when none answers', () => {
-    expect(selectOrigin([down(A), down(B)], 'hs_1', A)).toEqual({ kind: 'unreachable' });
-  });
-  it('falls back to the plain url for a legacy answer', () => {
-    expect(selectOrigin([down(A), { origin: B, kind: 'legacy' }], 'hs_1', A)).toEqual({ kind: 'plain', href: A });
-  });
-  it('keeps the no-url rendering with no origins', () => {
-    expect(selectOrigin([], 'hs_1', null)).toEqual({ kind: 'none' });
+  it('does not treat loopback aliases as equal or link without a browser hostname', () => {
+    expect(selectHostOrigin(host(['http://127.0.0.1']), 'localhost')).toEqual({ kind: 'none' });
+    expect(selectHostOrigin(host(['http://localhost']), undefined)).toEqual({ kind: 'none' });
+    expect(selectHostOrigin(null, 'localhost')).toEqual({ kind: 'none' });
   });
 });

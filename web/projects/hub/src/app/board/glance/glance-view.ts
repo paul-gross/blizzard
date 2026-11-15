@@ -1,4 +1,3 @@
-import { UrgencyPill } from '../../core/urgency-pill';
 import { urgencyPill } from '../../core/urgencies.model';
 import type { UrgencyView } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
@@ -7,6 +6,7 @@ import { RouterLink } from '@angular/router';
 
 import {
   DONE_LANE,
+  ChunkUrgency,
   FleetWhen,
   KitAsyncState,
   KitBadge,
@@ -25,6 +25,7 @@ import {
   type KitAsyncStateValue,
   type KitCountCell,
   KitCountStrip,
+  KitCountStripSkeleton,
   type WorkLine,
   LaneIcon,
 } from 'fleet';
@@ -70,7 +71,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [UrgencyPill, FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [ChunkUrgency, FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitCountStripSkeleton, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
@@ -96,6 +97,7 @@ export class GlanceView {
   protected readonly urgencyPill = urgencyPill;
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
   readonly vitals = input.required<Vitals>();
+  readonly vitalsLoading = input(false);
   readonly list = input.required<GlanceListGroups>();
   readonly listState = input.required<KitAsyncStateValue>();
   readonly spend = input<FleetSpendView | null>(null);
@@ -103,6 +105,14 @@ export class GlanceView {
 
   /** The fleet-wide spend over yesterday, `null` until it resolves — its row is withheld until then. */
   readonly spendYesterday = input<FleetSpendView | null>(null);
+
+  protected readonly loadingRows = [1, 3, 2, 1, 3];
+
+  protected titleSkeletonRows(chunkId: string, lineIndex: number): number {
+    let hash = lineIndex;
+    for (const char of chunkId) hash = (hash * 31 + char.charCodeAt(0)) % 3;
+    return 3 + hash % 3;
+  }
 
 
   protected readonly DONE_LANE = DONE_LANE;

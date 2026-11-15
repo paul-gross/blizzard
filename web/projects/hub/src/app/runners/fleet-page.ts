@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -12,8 +13,7 @@ import { groupHostRows } from './host-rows.model';
 import { injectHostVerbs } from './host-verbs';
 import type { HostVerbEvent } from './host-verbs.model';
 import { pendingRunnerIds, withPendingRunnerPauses } from './runner-pause-override.model';
-import { hostProbeTarget } from './host-origin.model';
-import { injectHostOrigin } from './host-origin.query';
+import { selectHostOrigin } from './host-origin.model';
 import { injectRunnerRows } from './runner-rows';
 import { type RunnerRow } from './runner-rows.model';
 import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutations';
@@ -36,6 +36,7 @@ import { injectRunnerPauseMutation, type RunnerPauseVars } from './runners.mutat
   styleUrl: './fleet-page.css',
 })
 export class FleetPage {
+  private readonly document = inject(DOCUMENT);
   private readonly router = inject(Router);
   private readonly lens = inject(ProjectLens);
   private readonly meQuery = injectMeQuery();
@@ -55,7 +56,7 @@ export class FleetPage {
   );
   protected readonly list = computed(() => fleetList(this.groups()));
   protected readonly selection = computed(() => resolveSelection(this.groups(), this.selectedId()));
-  protected readonly hostOrigin = injectHostOrigin(() => hostProbeTarget(this.selection()));
+  protected readonly hostOrigin = computed(() => selectHostOrigin(this.selection(), this.document.location?.hostname));
 
   protected readonly actionError = signal<string | null>(null);
   private readonly hostVerbs = injectHostVerbs((message) => this.actionError.set(message));

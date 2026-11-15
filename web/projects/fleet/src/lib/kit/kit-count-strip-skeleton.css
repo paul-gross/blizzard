@@ -1,0 +1,65 @@
+:host {
+  display: block;
+  container-type: inline-size;
+}
+.strip {
+  display: grid;
+  border: 1px solid var(--bezel);
+  background: var(--panel-deep);
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 6px;
+  border-right: 1px solid var(--line);
+}
+.cell:last-child {
+  border-right: 0;
+}
+.count {
+  font-size: var(--fs-lg);
+  --kit-skeleton-height: 18px;
+}
+.caption {
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  --kit-skeleton-height: 10px;
+}
+.count,
+.caption {
+  position: relative;
+  display: block;
+  color: transparent;
+  text-align: center;
+}
+.count {
+  min-width: 35%;
+  max-width: 100%;
+}
+.caption {
+  max-width: 100%;
+  text-transform: uppercase;
+}
+.count fleet-kit-skeleton,
+.caption fleet-kit-skeleton {
+  position: absolute;
+  inset: 50% 0 auto;
+  transform: translateY(-50%);
+}
+@container (max-width: 300px) {
+  .cell {
+    padding-inline: 2px;
+  }
+  .count,
+  .caption {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .caption {
+    letter-spacing: 0.04em;
+  }
+}

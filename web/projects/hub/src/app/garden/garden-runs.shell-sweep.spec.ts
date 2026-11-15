@@ -9,6 +9,7 @@ function fact(fields: Pick<FindingFactView, 'kind' | 'recorded_at'> & Partial<Fi
 }
 
 import { FleetFindingPanel, type FindingPanelVm } from './findings/finding-panel';
+import { FleetProposalPanel } from './proposals/proposal-panel';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routines/routine-proposal-counts';
 import { FleetRunDelta, type RunDeltaVm } from './runs/run-delta';
 import { FleetScopePanel, type ScopePanelVm } from './scopes/scope-panel';
@@ -226,6 +227,76 @@ const PANEL_SCOPE: ScopePanelVm = {
 };
 
 describe('gardening panels shell sweep (web:shell-sweep)', () => {
+  it('caps populated proposal and finding prose at 1200px while filling narrower space', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FleetProposalPanel, FleetFindingPanel],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const proposal = TestBed.createComponent(FleetProposalPanel);
+    const finding = TestBed.createComponent(FleetFindingPanel);
+    const prose = Array.from(
+      { length: 20 },
+      (_, i) => `Paragraph ${i} describes the evidence and the intended change in representative detail.`,
+    ).join('\n\n');
+    proposal.componentRef.setInput('state', 'ready');
+    proposal.componentRef.setInput('vm', {
+      proposalId: 'gp_1',
+      origin: { kind: 'operator', createdBy: 'operator', routineName: null },
+      proposalClass: 'fix-the-source',
+      title: 'Improve the documentation',
+      body: `## Case\n\n${prose}`,
+      closure: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      hasFindings: false,
+    });
+    finding.componentRef.setInput('state', 'ready');
+    finding.componentRef.setInput('vm', { ...PANEL_FINDING, note: prose });
+    const proposalRoot = proposal.nativeElement as HTMLElement;
+    const findingRoot = finding.nativeElement as HTMLElement;
+    document.body.append(proposalRoot, findingRoot);
+    await Promise.all([proposal.whenStable(), finding.whenStable()]);
+
+    try {
+      for (const width of [1800, 390, 320]) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const body = proposalRoot.querySelector<HTMLElement>('.pp-body')!;
+        const markdown = body.querySelector<HTMLElement>('fleet-kit-markdown')!;
+        const note = findingRoot.querySelector<HTMLElement>('[data-testid="fp-note"]')!;
+        const noteParent = note.parentElement!;
+        expect(markdown.textContent).toContain('Paragraph 19');
+        expect(note.textContent).toContain('Paragraph 19');
+        const bodyStyle = getComputedStyle(body);
+        const bodyAvailable = body.clientWidth - parseFloat(bodyStyle.paddingLeft) - parseFloat(bodyStyle.paddingRight);
+        const noteParentStyle = getComputedStyle(noteParent);
+        const noteAvailable = noteParent.clientWidth - parseFloat(noteParentStyle.paddingLeft) -
+          parseFloat(noteParentStyle.paddingRight);
+        if (width === 1800) {
+          expect(bodyAvailable).toBeGreaterThan(1200);
+          expect(noteAvailable).toBeGreaterThan(1200);
+        }
+        for (const [label, element, available] of [
+          ['proposal Markdown', markdown, bodyAvailable],
+          ['finding Note', note, noteAvailable],
+        ] as const) {
+          const measured = element.getBoundingClientRect().width;
+          expect(measured, `${width}px: ${label} exceeds its cap`).toBeLessThanOrEqual(1200);
+          expect(measured, `${width}px: ${label} does not fill available width up to its cap`).toBeCloseTo(
+            Math.min(1200, available), 0,
+          );
+          expect(element.scrollWidth, `${width}px: ${label} overflows horizontally`).toBeLessThanOrEqual(element.clientWidth);
+        }
+        for (const root of [proposalRoot, findingRoot]) {
+          expect(root.scrollWidth, `${width}px: panel overflows horizontally`).toBeLessThanOrEqual(root.clientWidth);
+        }
+      }
+    } finally {
+      proposalRoot.remove();
+      findingRoot.remove();
+      await page.viewport(1280, 800);
+    }
+  });
+
   it('wraps the finding panel triage buttons rather than overflowing, at 1280/390/320px', async () => {
     await TestBed.configureTestingModule({
       imports: [FleetFindingPanel],

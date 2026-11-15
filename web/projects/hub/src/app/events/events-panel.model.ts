@@ -1,9 +1,7 @@
-/** Distinct ids ∪ the active selection, sorted — or `[]` when there is nothing worth
- * filtering (≤1 distinct id and no active selection), which hides the chip row. */
+/** Distinct ids plus the active selection, sorted, including a lone scoped option. */
 export function filterUniverse(ids: readonly string[], active: string | null): readonly string[] {
   const distinct = new Set(ids);
   if (active) distinct.add(active);
-  if (distinct.size < 2 && active === null) return [];
   return [...distinct].sort();
 }
 
@@ -36,4 +34,11 @@ export function eventChunkIds(
     events.map((e) => e.chunk_id).filter((c): c is string => !!c),
     selected,
   );
+}
+
+/** Fleet selects hosted runners by host id, and hostless runners by runner id. */
+export function eventRunnerFleetIds(
+  hosts: readonly { readonly host_id: string; readonly runner_ids?: readonly string[] }[],
+): ReadonlyMap<string, string> {
+  return new Map(hosts.flatMap((host) => (host.runner_ids ?? []).map((id) => [id, host.host_id] as const)));
 }

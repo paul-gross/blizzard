@@ -8,9 +8,8 @@ import type { ChunkCardView } from './chunk-card.model';
 import { ChunkListRow } from './chunk-list-row';
 
 /**
- * The fleet card's and list row's status colour under a real browser, with the design tokens loaded: in every tone,
- * the left edge and the id resolve to exactly the colour `toneColor` names for the view's tone, so neither app's
- * fill can colour a card through anything but its tone — and a selected one's edge yields to the selection cyan.
+ * Status edges retain their tone while the card's identity stays gold; list-row identities retain their tone.
+ * A selected card's or row's edge yields to the selection cyan.
  * See `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
  */
 const TONES: readonly Tone[] = ['running', 'needs', 'waiting', 'takeover', 'spawning', 'stale', 'done', 'idle'];
@@ -62,21 +61,22 @@ function resolved(root: HTMLElement, color: string): string {
 }
 
 const SURFACES = [
-  { name: 'card', component: ChunkCard, edge: '[data-testid="chunk-card"]', id: '[data-testid="chunk-id"]' },
-  { name: 'list row', component: ChunkListRow, edge: '[data-testid="list-row"]', id: '[data-testid="list-row-id"]' },
+  { name: 'card', component: ChunkCard, edge: '[data-testid="chunk-card"]', id: '[data-testid="chunk-id"]', goldId: true },
+  { name: 'list row', component: ChunkListRow, edge: '[data-testid="list-row"]', id: '[data-testid="list-row-id"]', goldId: false },
 ] as const;
 
 describe('chunk card tone shell sweep (web:shell-sweep)', () => {
   beforeAll(loadDesignTokens);
 
   for (const surface of SURFACES) {
-    it(`draws a ${surface.name}'s edge and id in toneColor of its tone, in every tone`, async () => {
+    it(`draws a ${surface.name}'s tone edge and ${surface.goldId ? 'gold' : 'tone'} identity in every tone`, async () => {
       for (const tone of TONES) {
         const root = await render(surface.component, { ...VIEW, tone });
         try {
           const want = resolved(root, toneColor(tone));
           expect(getComputedStyle(root.querySelector<HTMLElement>(surface.edge)!).borderLeftColor, `${tone}: edge`).toBe(want);
-          expect(getComputedStyle(root.querySelector<HTMLElement>(surface.id)!).color, `${tone}: id`).toBe(want);
+          const identity = surface.goldId ? resolved(root, 'var(--amber)') : want;
+          expect(getComputedStyle(root.querySelector<HTMLElement>(surface.id)!).color, `${tone}: id`).toBe(identity);
         } finally {
           root.remove();
         }

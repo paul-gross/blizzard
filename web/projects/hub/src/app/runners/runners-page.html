@@ -1,5 +1,8 @@
 @if (selectedId() === null) {
   <app-runner-view
+    [mobileOverview]="true"
+    [chunksState]="chunksState()"
+    [chunksError]="chunksError()"
     [rows]="rows()"
     [cards]="cards()"
     [state]="state()"

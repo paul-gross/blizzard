@@ -59,12 +59,18 @@ a.graph-link:focus-visible {
   text-decoration: underline;
   outline: none;
 }
-/* The left-hand stack — delivery, work item, issues, in source order. */
+/* On narrow screens history precedes the answered trail and decisions. */
 .lhs {
+  display: contents;
+}
+/* The left-hand stack on desktop. */
+@media (min-width: 720px) {
+ .lhs {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+ }
 }
 /* Delivery's own content carries no inset; give it the panel-content padding the
    work item facts use. */
@@ -73,8 +79,7 @@ fleet-kit-panel[data-testid='section-delivery'] fleet-chunk-delivery {
   padding: 8px;
 }
 /* The two-column General tab, at the same 720px breakpoint the hub's Artifacts tab's
-   nav-beside-viewer split uses — delivery, work item and issues stacked in the left
-   column, node history beside them, then asks · decisions full width below. */
+   nav-beside-viewer split uses — the left stack beside node history. */
 @media (min-width: 720px) {
   .general {
     display: grid;
@@ -89,7 +94,6 @@ fleet-kit-panel[data-testid='section-delivery'] fleet-chunk-delivery {
     grid-column: 2;
     grid-row: 1;
   }
-  fleet-kit-panel[data-testid='section-asks'],
   .events-row {
     grid-column: 1 / -1;
   }

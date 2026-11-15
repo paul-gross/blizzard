@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, type KitCountCell, KitCountStrip, KitSkeleton, LaneIcon } from 'fleet';
+import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, type KitCountCell, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { cardStageColor, cardStageLabel, deliveredRecently, type DeliveryList, type DeliveryRow } from './delivery.model';
 
@@ -17,7 +17,7 @@ type DeliveryFilter = 'delivering' | 'recent';
 @Component({
   selector: 'app-delivery-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitCountStrip, KitSkeleton, LaneIcon, LensLink, NgTemplateOutlet, RouterLink],
+  imports: [KitAsyncState, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon, LensLink, NgTemplateOutlet, RouterLink],
   templateUrl: './delivery-glance-view.html',
   styleUrl: './delivery-glance-view.css',
 })
@@ -25,6 +25,19 @@ export class DeliveryGlanceView {
   readonly state = input.required<KitAsyncStateValue>();
   readonly list = input.required<DeliveryList>();
   readonly now = input.required<number>();
+
+  protected readonly loadingDelivering = this.loadingRows(Math.floor(Math.random() * 3));
+  protected readonly loadingRecent = this.loadingRows(1 + Math.floor(Math.random() * 6));
+
+  private loadingRows(count: number): readonly number[] {
+    return Array.from({ length: count }, () => 1 + Math.floor(Math.random() * 3));
+  }
+
+  protected titleSkeletonRows(chunkId: string): number {
+    let hash = 0;
+    for (const char of chunkId) hash = (hash * 31 + char.charCodeAt(0)) % 3;
+    return 3 + hash;
+  }
 
   /** The delivered rows delivered recently ({@link deliveredRecently}). */
   protected readonly recent = computed(() => deliveredRecently(this.list(), this.now()));

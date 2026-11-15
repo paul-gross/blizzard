@@ -101,8 +101,8 @@ export class BoardHeader {
   readonly stats = input<readonly StatCell[] | null>(null);
 
   /**
-   * The live fleet counts, left → right: the whole fleet, then one cell per board
-   * lane in the board's own order.
+   * The live fleet counts, left → right: the whole fleet, then the board's
+   * columns in order, with the human-attention lanes combined.
    *
    * Every count is folded through {@link laneCounts}; `chunk-lanes` owns where a
    * status belongs.
@@ -113,10 +113,10 @@ export class BoardHeader {
     const perLane = laneCounts(counts);
     return [
       { key: 'total', label: 'Chunks', value: counts.total },
-      ...LANES.map((lane) => ({
+      ...LANES.filter((lane) => lane.key !== 'waiting').map((lane) => ({
         key: lane.key,
-        label: lane.headerLabel,
-        value: perLane.get(lane.key) ?? 0,
+        label: lane.key === 'needs' ? 'Human' : lane.headerLabel,
+        value: (perLane.get(lane.key) ?? 0) + (lane.key === 'needs' ? (perLane.get('waiting') ?? 0) : 0),
       })),
     ];
   });

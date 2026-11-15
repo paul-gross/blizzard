@@ -1,0 +1,4 @@
+:host { display: block; height: 100%; min-height: 0; }
+.page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.back-row { flex: none; text-decoration: none; }
+app-event-detail-view { flex: 1; min-height: 0; }

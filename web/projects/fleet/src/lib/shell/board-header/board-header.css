@@ -82,6 +82,10 @@
   border-right: 1px solid var(--line);
   white-space: nowrap;
 }
+.stats .cell {
+  align-items: center;
+  text-align: center;
+}
 .cell .v {
   color: var(--amber);
   font-size: var(--fs-lg);

@@ -21,6 +21,7 @@ export { KitColorInput } from './kit-color-input';
 export { KitButton } from './kit-button';
 export { KitCloseButton } from './kit-close-button';
 export { KitCountStrip, type KitCountCell } from './kit-count-strip';
+export { KitCountStripSkeleton } from './kit-count-strip-skeleton';
 export { KitSectionHead } from './kit-section-head';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitCheckbox } from './kit-checkbox';

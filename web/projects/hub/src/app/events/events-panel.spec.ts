@@ -62,7 +62,6 @@ describe('EventsPanel', () => {
 
     expect(stub.forRoute('/api/events', 'GET').length).toBeGreaterThan(0);
     expect(el.querySelectorAll('[data-testid="events-row"]')).toHaveLength(2);
-    expect(el.querySelector('[data-testid="events-count"]')?.textContent).toContain('2');
   });
 
   it('rests on an empty state when the hub reports no events', async () => {
@@ -73,22 +72,18 @@ describe('EventsPanel', () => {
     expect(el.querySelectorAll('[data-testid="events-row"]')).toHaveLength(0);
   });
 
-  it('emits the chunk id when a row is activated', async () => {
+  it('links a row to its chunk independently', async () => {
     const fixture = await render();
-    let selected: string | undefined;
-    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="events-chunk"]')?.click();
-    expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
+    expect(el.querySelector('[data-testid="events-chunk"]')?.getAttribute('href')).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
   });
 
   it('re-queries the hub when the severity filter changes', async () => {
     const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
     const before = stub.forRoute('/api/events', 'GET').length;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="events-filter-critical"]')?.click();
+    await openSelect(fixture, 'events-severity-filter');
+    inOverlay('events-filter-critical')?.click();
     await settle(fixture);
 
     const after = stub.forRoute('/api/events', 'GET').length;
@@ -125,10 +120,28 @@ describe('EventsPanel', () => {
 
     await openSelect(fixture, 'events-runner-filter');
     const chips = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')];
-    expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
-    // Only "All" reads as selected — no empty-valued chip shares its sentinel.
+    expect(chips.map((c) => c.textContent?.trim())).toEqual(['Runners', 'R-01', 'R-02']);
+    // Only the reset reads as selected — no empty-valued option shares its sentinel.
     expect(chips.filter((c) => c.getAttribute('aria-selected') === 'true')).toHaveLength(1);
     expect(inOverlay('events-runner-filter-all')?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it.each([
+    ['runner', 'rn_02', 'runner_id'],
+    ['chunk', 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', 'chunk_id'],
+  ] as const)('offers the lone %s option alongside unscoped events and sends the selected filter', async (filter, id, param) => {
+    const fixture = await render([
+      EVENTS[0],
+      eventView({ id: 3, runner_id: null, chunk_id: null, message: 'Hub-wide event' }),
+    ]);
+    await openSelect(fixture, `events-${filter}-filter`);
+    const option = inOverlay(`events-${filter}-filter-${id}`);
+    expect(option).not.toBeNull();
+    option!.click();
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams[filter]).toBe(id);
+    expect(stub.forRoute('/api/events', 'GET').some((read) => new URLSearchParams(read.search).get(param) === id)).toBe(true);
   });
 
   it('builds no blank runner option from a real, hub-authored event_log row either', async () => {
@@ -144,7 +157,7 @@ describe('EventsPanel', () => {
 
     await openSelect(fixture, 'events-runner-filter');
     const chips = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')];
-    expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
+    expect(chips.map((c) => c.textContent?.trim())).toEqual(['Runners', 'R-01', 'R-02']);
     expect(chips.filter((c) => c.getAttribute('aria-selected') === 'true')).toHaveLength(1);
     expect(inOverlay('events-runner-filter-all')?.getAttribute('aria-selected')).toBe('true');
   });

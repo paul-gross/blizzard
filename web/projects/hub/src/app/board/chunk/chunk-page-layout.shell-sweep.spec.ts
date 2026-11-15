@@ -10,6 +10,7 @@ import {
   chunkEscalationView,
   chunkUsageTotalView,
   chunkUsageView,
+  decisionView,
   OPERATOR_ME_RESPONSE,
   questionView,
   settle,
@@ -22,9 +23,8 @@ import {
   workRefView,
 } from 'fleet/testing';
 import { page } from 'vitest/browser';
-
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
-
+import { ChunkDetailPanel } from '../chunk-dock/chunk-detail-panel';
 /** The chunk page's layout under a real browser — see `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. */
 const DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
@@ -48,13 +48,7 @@ const DETAIL: hubApi.ChunkDetail = chunkDetail({
   artifacts: [],
 });
 
-/**
- * The same tab with an open ask, shaped the way agents actually write them: paragraph
- * breaks, a numbered list, and a bare unbroken repo path far wider than a 320px phone.
- * The dock preserves the newlines (`chunk-awaiting-human.ts` `.ask-q`), which is exactly
- * what stops lines breaking on spaces alone — so the long token has to be proven to break
- * rather than push the dock sideways, a claim only a real layout engine can make.
- */
+/** A multiline ask with an unbroken path wider than a phone. */
 const ASK_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   status: 'waiting_on_human',
@@ -76,11 +70,42 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
     }),
   ],
 };
-
-/** A subscription step: the total and its own history step each carry a runner-reported
- * estimate but no billed cost (an estimate-only total is kept non-partial) — proves the
- * token-breakdown's and the timeline's own combined `~$X.XX` cost figures both fit at
- * phone widths. */
+/** Both live controls and the answered trail must coexist without being promoted together. */
+const SPLIT_DETAIL: hubApi.ChunkDetail = {
+  ...ASK_DETAIL,
+  questions: [
+    ...ASK_DETAIL.questions!,
+    questionView({
+      question_id: 'qn_answered', chunk_id: DETAIL.chunk_id, question: 'Previously asked?',
+      answered: true, answer: 'Yes', answered_by: 'operator', answered_at: '2026-07-16T11:31:00Z',
+    }),
+  ],
+  decision: decisionView({
+    decision_id: 'de_01', chunk_id: DETAIL.chunk_id, node_id: 'nd_review', node_name: 'review',
+    choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
+    check_results: [], transitioned: false,
+  }),
+};
+function expectSplitOrder(root: HTMLElement, workSelector: string, issuesSelector: string, width: number): void {
+  const selectors = ['[data-testid="open-question"]', workSelector, issuesSelector,
+    '[data-testid="answered-questions"]', '[data-testid="open-decision"]'];
+  const elements = selectors.map((selector) => {
+    const matches = root.querySelectorAll<HTMLElement>(selector);
+    expect(matches.length, `${width}px: ${selector} must occur once`).toBe(1);
+    return matches[0];
+  });
+  const boxes = elements.map((element) => element.getBoundingClientRect());
+  for (let i = 1; i < boxes.length; i += 1) {
+    expect(boxes[i].top, `${width}px: ${selectors[i]} must follow ${selectors[i - 1]}`).toBeGreaterThanOrEqual(boxes[i - 1].bottom);
+  }
+  if (width >= 720) {
+    for (const box of boxes) {
+      expect(box.left, `${width}px: section left of work column`).toBeGreaterThanOrEqual(boxes[1].left - 1);
+      expect(box.right, `${width}px: section right of work column`).toBeLessThanOrEqual(boxes[1].right + 1);
+    }
+  }
+}
+/** Estimate-only figures in the total and timeline. */
 const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   history: [
@@ -91,16 +116,7 @@ const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
     chunkUsageView({ node_id: 'nd_build', epoch: 1, kind: 'spawn', model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 }),
   ],
 };
-
-/**
- * A `needs_human` chunk carrying both the runner-composed wrapped takeover command
- * and its raw `cd <workdir> && <harness resume>` fallback — realistically
- * long strings shaped the way they actually arrive: an absolute runtime dir plus a
- * `blizzard runner takeover` invocation, and an absolute worktree path plus a
- * `claude --resume <uuid>` invocation. The fallback renders inside a collapsed
- * `<details>` (`chunk-escalation.ts`), so the sweep below proves the dock does not
- * overflow with it collapsed *or* expanded.
- */
+/** Long primary and fallback commands exercise both takeover scroll containers. */
 const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
   status: 'needs_human',
@@ -115,7 +131,6 @@ const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
       'blizzard runner takeover ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9 --dir /home/blizzard/runner/data/runtime',
   }),
 };
-
 async function render(detail: hubApi.ChunkDetail = DETAIL) {
   await TestBed.configureTestingModule({
     imports: [ChunkGeneralTab],
@@ -127,25 +142,72 @@ async function render(detail: hubApi.ChunkDetail = DETAIL) {
   await fixture.whenStable();
   return fixture;
 }
-
 describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
+  it('places open asks first and decisions last around work, issues and answered questions', async () => {
+    const fixture = await render(SPLIT_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('canResolve', true);
+    const answers: unknown[] = [];
+    const decisions: unknown[] = [];
+    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event));
+    fixture.componentInstance.resolveDecision.subscribe((event) => decisions.push(event));
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      for (const width of [1024, 390, 320]) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expectSplitOrder(root, '[data-testid="section-work-item"]', '[data-testid="section-issues"]', width);
+        expect(root.querySelectorAll('[data-testid="answer-submit"]').length).toBe(1);
+        expect(root.querySelectorAll('[data-testid="decision-choice"]').length).toBe(1);
+      }
+      const input = root.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+      input.value = '  proceed  ';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await fixture.whenStable();
+      root.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')!.click();
+      expect(answers).toEqual([{ questionId: 'qn_long', answer: 'proceed', chunkId: DETAIL.chunk_id }]);
+      expect(decisions).toEqual([{ decisionId: 'de_01', choice: 'approve', chunkId: DETAIL.chunk_id }]);
+    } finally {
+      root.remove();
+    }
+  });
+  it('places the same split in the desktop dock left column', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ChunkDetailPanel],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', SPLIT_DETAIL);
+    fixture.componentRef.setInput('renderedStatus', 'waiting_on_human');
+    fixture.componentRef.setInput('workItems', { status: 'success', items: [] });
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      await page.viewport(1280, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expectSplitOrder(root, 'fleet-chunk-detail-facts', '[data-testid="issue-pane"]', 1280);
+    } finally {
+      root.remove();
+    }
+  });
   it('stacks work item, issues and node history at narrow widths with no horizontal overflow', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
-
     const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
-
     try {
       for (const width of [390, 320]) {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
-
         const label = `width ${width}`;
         const workItem = root.querySelector<HTMLElement>('[data-testid="section-work-item"]');
         const issues = root.querySelector<HTMLElement>('[data-testid="section-issues"]');
@@ -153,13 +215,11 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
         expect(workItem, `${label}: no work-item panel`).not.toBeNull();
         expect(issues, `${label}: no issues panel`).not.toBeNull();
         expect(history, `${label}: no node-history panel`).not.toBeNull();
-
         const rects = [workItem!, issues!, history!].map((el) => el.getBoundingClientRect());
         const tops = rects.map((r) => r.top);
         expect(new Set(tops).size, `${label}: panels did not stack — tops were ${tops.join(', ')}`).toBe(3);
         const lefts = new Set(rects.map((r) => r.left));
         expect(lefts.size, `${label}: stacked panels are not left-aligned — lefts were ${[...lefts].join(', ')}`).toBe(1);
-
         const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
         expect(
           general.scrollWidth,
@@ -171,10 +231,8 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     }
-
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
-
   it('renders the work item and timeline session efficiency figures without overflow at ~390px', async () => {
     const fixture = await render(ESTIMATE_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
@@ -187,10 +245,8 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
 
       const chunkFigure = root.querySelector<HTMLElement>('[data-testid="chunk-efficiency"]');
       expect(chunkFigure?.textContent?.trim()).toMatch(/^~\$0\.07/);
-
       const stepFigure = root.querySelector<HTMLElement>('[data-testid="history-step-efficiency"]');
       expect(stepFigure?.textContent?.trim()).toMatch(/^~\$0\.07/);
-
       const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
       expect(
         general.scrollWidth,
@@ -200,7 +256,6 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
-
   it('sits node history beside a shared work-item/issues left column at 1024px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
@@ -220,11 +275,9 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       const workItem = root.querySelector<HTMLElement>('[data-testid="section-work-item"]')!;
       const issues = root.querySelector<HTMLElement>('[data-testid="section-issues"]')!;
       const history = root.querySelector<HTMLElement>('[data-testid="section-node-history"]')!;
-
       const workItemRect = workItem.getBoundingClientRect();
       const issuesRect = issues.getBoundingClientRect();
       const historyRect = history.getBoundingClientRect();
-
       expect(
         historyRect.left,
         `node history's left (${historyRect.left}) is not beside the work-item column (right edge ${workItemRect.right})`,
@@ -242,7 +295,6 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
-
   it("renders an agent's multi-paragraph ask on its own lines without overflowing a phone", async () => {
     const fixture = await render(ASK_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
@@ -257,12 +309,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
         const label = `width ${width}`;
         const ask = root.querySelector<HTMLElement>('[data-testid="question-text"]');
         expect(ask, `${label}: no ask text in the DOM`).not.toBeNull();
-
-        // Height alone is weak — this question wraps to several lines even collapsed. The
-        // claim is that the *breaks* survive, so measure the same element both ways: only
-        // preserved newlines make it taller than its own collapsed rendering. Toggling in
-        // place keeps width, font, and box identical, so the height delta is the newlines
-        // and nothing else.
+        // Compare the same element with and without preserved newlines.
         const preserved = ask!.offsetHeight;
         ask!.style.whiteSpace = 'normal';
         await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -273,7 +320,6 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
           preserved,
           `${label}: ask rendered no taller than its own collapsed rendering (${preserved} vs ${collapsed}) — newlines were not preserved`,
         ).toBeGreaterThan(collapsed);
-
         // The long unbroken path must break rather than push the dock sideways.
         expect(
           ask!.scrollWidth,
@@ -289,7 +335,6 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
-
   it('keeps a long wrapped takeover command and its raw fallback scrollable, not clipped, at 320px', async () => {
     const fixture = await render(NEEDS_HUMAN_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
@@ -300,14 +345,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       await page.viewport(320, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      // The no-overflow half is structural here: `fleet-kit-panel`'s body clips
-      // horizontally (`kit-panel.ts` `overflow-x: hidden`), so the General tab
-      // cannot widen no matter what the takeover panel does. That same clip is
-      // exactly why the load-bearing claim is the opposite one — a command wider
-      // than the phone must be REACHABLE by scrolling its own box, or the clip
-      // silently amputates the tail of the one string the operator must paste
-      // whole. `scrollLeft` round-trips only on a genuine scroll container:
-      // losing `overflow-x: auto` on either `.cmd` leaves it stuck at 0.
+      // The panel clips horizontally, so each long command must itself scroll.
       const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
       expect(
         general.scrollWidth,
@@ -344,14 +382,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
     }
   });
 });
-
-/**
- * The Transcripts tab's own narrow-viewport case
- * (`bzh:narrow-viewport-tier-rule`) — its nav-beside-viewer split collapses to the
- * stacked layout below `KitMasterDetail`'s `@media (min-width: 720px)` (`kit-master-detail.css`), the
- * same query jsdom parses without evaluating, so a real headless-Chromium proof is
- * needed the same way the General tab's own two-column split needed one above.
- */
+/** Chromium proves the transcripts nav collapses above its viewer on phones. */
 describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () => {
   it('stacks the step nav above the segment viewer at 390px with no horizontal overflow', async () => {
     await TestBed.configureTestingModule({
@@ -425,12 +456,6 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep)', () =
     }
   });
 });
-
-/**
- * The Transcripts tab's real composed chain — `ChunkPage` → `ChunkTranscriptsContainer` →
- * `ChunkTranscriptsTab` — mounted through a real router, so the container's own box is in
- * the flex/height chain down to the scroll container (`.tx-view`).
- */
 /**
  * Pump change detection until `ready()` holds, without `settle()`'s `whenStable()`: a
  * query enabled only once an earlier one resolves registers a pending task zoneless
@@ -448,7 +473,6 @@ async function pumpUntil(fixture: ComponentFixture<unknown>, ready: () => boolea
 }
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-
 const CHAIN_DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
@@ -470,20 +494,13 @@ const CHAIN_ROUTES = [
   { path: 'board/chunk/:chunkId', component: ChunkPage, providers: HUB_CHUNK_PAGE_PROVIDERS },
 ];
 
-/** Stands in for `App`'s own `.layout` (`app.ts`) — the real height-capped, flex-column
- * ancestor that gives a routed page's `:host { flex: 1; min-height: 0 }` a definite
- * height to resolve against. `RouterTestingHarness` mounts the routed component as a
- * direct child of its own fixture root (the same slot `.layout` fills in the real app,
- * router-outlet-adjacent), so this styles that root itself rather than wrapping it —
- * wrapping it in a further div would only push the missing flex context out one level,
- * since the *root* is what needs to be the routed component's flex parent. */
+/** Give the router fixture root the real app layout's bounded flex context. */
 function mountInAppShell(root: HTMLElement): void {
   root.style.cssText = 'display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;';
   document.body.appendChild(root);
 }
 
-/** A tail-heavy segment: enough turns, each long enough, to overflow any viewport this
- * sweep uses — the load-bearing fixture for the "a long segment is unreachable" claim. */
+/** A segment long enough to overflow the phone viewport. */
 function overflowingTurns(): hubApi.TurnSegmentViewOutput[] {
   return Array.from({ length: 60 }, (_, i) =>
     turnSegmentView({
@@ -562,16 +579,13 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
         expect(tab, 'no chunk-transcripts-tab in the composed chain').not.toBeNull();
         expect(txView, 'no scroll section around the segment body').not.toBeNull();
 
-        // The regression's own signature: under the bug, the tab has no definite height
-        // (`height: auto`), so it grows to fit every turn rather than being clipped to the
-        // space `.cp-body` actually has — this bounds it to the real viewport.
+        // An unbounded tab would grow to fit every turn.
         expect(
           tab!.getBoundingClientRect().height,
           `the tab's own box is unbounded (${tab!.getBoundingClientRect().height}px) — the flex/height chain never reached it`,
         ).toBeLessThanOrEqual(700);
 
-        // With a real, bounded box, `.tx-view` (the detail slot element) is the one that overflows — and is a
-        // genuine scroll container an operator can actually reach the tail through.
+        // The bounded detail slot must actually scroll to the tail.
         expect(
           txView!.scrollHeight,
           'the segment view never overflows its own box — the long segment fixture is not actually long enough',
@@ -622,23 +636,14 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
         const hostRect = host!.getBoundingClientRect();
         const statusRect = status!.getBoundingClientRect();
 
-        // Under the bug, the host has no `position: relative` of its own, so the status
-        // line's `position: absolute` centers against the initial containing block — the
-        // browser viewport — rather than this permission-notice host.
+        // The status must center on the host, not the viewport.
         expect(hostRect.height, `the tab's own box is unreasonably small (${hostRect.height}px)`).toBeGreaterThan(100);
 
         const statusCenterY = statusRect.top + statusRect.height / 2;
         const hostCenterY = hostRect.top + hostRect.height / 2;
         const viewportCenterY = window.innerHeight / 2;
 
-        // Containment alone proves nothing here: the host fills the whole tab body, so
-        // the viewport's own center falls *inside* it too, and a status line centered on
-        // the viewport satisfies an inside-the-box check just as well — that weaker
-        // assertion survived removing this component's `position: relative` entirely.
-        // The discriminating claim is which box it centers **on**, so measure against
-        // both candidates. Neither distance is zero (`.status` is a `<p>`, and its
-        // un-reset user-agent top margin sits its center a line below the 50% line it is
-        // placed at), which is why this compares the two rather than pinning either.
+        // Compare both centers: containment alone cannot distinguish them.
         expect(
           Math.abs(hostCenterY - viewportCenterY),
           `fixture defect: the tab's center (${hostCenterY}) sits too near the viewport's (${viewportCenterY}) to tell the two apart`,

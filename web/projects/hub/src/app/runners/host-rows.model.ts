@@ -78,7 +78,7 @@ export interface HostCard {
   readonly subscriptionPaces: readonly SubscriptionPace[];
   /** The host's own wire facts, for the Fleet tab's Connection section. */
   readonly url: string | null;
-  /** Every origin the host declares, in declaration order; the board probes these. */
+  /** Every origin the host declares, in declaration order. */
   readonly urls: readonly string[];
   readonly enrolled: boolean;
   readonly registeredAt: string | null;

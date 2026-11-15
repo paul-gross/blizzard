@@ -13,6 +13,7 @@
     @if (detail(); as d) {
       <app-chunk-detail-panel
         [detail]="d"
+        [boardChunkIds]="boardChunkIds()"
         [projectColor]="projectColor()"
         [runnerHosts]="runnerHosts()"
         [workItems]="workItems()"

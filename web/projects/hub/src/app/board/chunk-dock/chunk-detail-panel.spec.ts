@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail, WorkItemsState } from 'fleet';
-import { chunkControlStub, chunkDetail, questionView, workItemEntry } from 'fleet/testing';
+import { chunkControlStub, chunkDetail, decisionView, questionView, workItemEntry } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -112,19 +112,45 @@ describe('ChunkDetailPanel', () => {
     expect(el.outerHTML.match(/Node history/g) ?? []).toHaveLength(1);
   });
 
-  it('orders the work-item column work item, asks/decisions, issues (issue #205)', async () => {
+  it('orders asks, work item, issues, answered questions and decisions without duplicating actions', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
-    fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_QUESTION_DETAIL,
+      questions: [
+        ...WAITING_QUESTION_DETAIL.questions!,
+        questionView({ question_id: 'qn_answered', chunk_id: WAITING_QUESTION_DETAIL.chunk_id, question: 'Earlier?', answered: true, answer: 'Yes' }),
+      ],
+      decision: decisionView({
+        decision_id: 'de_01', chunk_id: WAITING_QUESTION_DETAIL.chunk_id, node_id: 'gate', node_name: 'gate',
+        choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
+        check_results: [], transitioned: false,
+      }),
+    });
     fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('canResolve', true);
+    const answers: unknown[] = [];
+    const resolutions: unknown[] = [];
+    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event));
+    fixture.componentInstance.resolveDecision.subscribe((event) => resolutions.push(event));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const workItemSection = el.querySelector('[aria-label="Work item"]')!;
     const order = [
-      ...workItemSection.querySelectorAll('[data-testid="chunk-efficiency"], [data-testid="awaiting-human"], [data-testid="issue-pane"]'),
+      ...workItemSection.querySelectorAll('[data-testid="open-question"], [data-testid="chunk-efficiency"], [data-testid="issue-pane"], [data-testid="answered-question"], [data-testid="open-decision"]'),
     ].map((node) => node.getAttribute('data-testid'));
-    expect(order).toEqual(['chunk-efficiency', 'awaiting-human', 'issue-pane']);
+    expect(order).toEqual(['open-question', 'chunk-efficiency', 'issue-pane', 'answered-question', 'open-decision']);
+    expect(el.querySelectorAll('[data-testid="answer-submit"]')).toHaveLength(1);
+    expect(el.querySelectorAll('[data-testid="decision-choice"]')).toHaveLength(1);
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    input.value = 'rest';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')!.click();
+    expect(answers).toEqual([{ questionId: 'qn_01', answer: 'rest', chunkId: WAITING_QUESTION_DETAIL.chunk_id }]);
+    expect(resolutions).toEqual([{ decisionId: 'de_01', choice: 'approve', chunkId: WAITING_QUESTION_DETAIL.chunk_id }]);
   });
 
   it('links the chunk longname to its dedicated page (issue #205)', async () => {

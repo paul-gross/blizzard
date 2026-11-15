@@ -42,7 +42,7 @@ const WIDTHS = [800, 390, 320];
 @Component({
   imports: [ChunkCard, ChunkUrgency],
   template: `<fleet-chunk-card [card]="card" (selectChunk)="selections.push($event)">
-    <fleet-chunk-urgency chunkCardUrgency [detail]="detail" [control]="control" />
+    <fleet-chunk-urgency chunkCardUrgency [detail]="detail" [control]="control" [banner]="true" />
   </fleet-chunk-card>`,
 })
 class UrgencyCardHost {
@@ -75,7 +75,7 @@ function tokenColor(token: string): string {
 }
 
 describe('board card selected state shell sweep (web:shell-sweep)', () => {
-  it('reaches the projected urgency menu by pointer and keyboard without selecting the card', async () => {
+  it('keeps the urgency banner read-only while the card remains navigable', async () => {
     await page.viewport(1280, 800);
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({ imports: [UrgencyCardHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
@@ -85,19 +85,8 @@ describe('board card selected state shell sweep (web:shell-sweep)', () => {
     document.body.appendChild(root);
     await fixture.whenStable();
     try {
-      const trigger = root.querySelector<HTMLButtonElement>('[data-testid="chunk-urgency-menu"]')!;
-      const rect = trigger.getBoundingClientRect();
-      expect(trigger.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
-      expect(trigger.closest('button button')).toBeNull();
-      await page.getByRole('button', { name: 'Change urgency: Urgent' }).click();
-      expect(document.querySelector('[data-testid="chunk-urgency-options"]')).not.toBeNull();
-      expect(fixture.componentInstance.selections).toEqual([]);
-      await userEvent.keyboard('{Escape}');
-      trigger.focus();
-      await userEvent.keyboard('{Enter}');
-      expect(document.querySelector('[data-testid="chunk-urgency-options"]')).not.toBeNull();
-      expect(fixture.componentInstance.selections).toEqual([]);
-      await userEvent.keyboard('{Escape}');
+      expect(root.querySelector('[data-testid="chunk-urgency-menu"]')).toBeNull();
+      expect(root.querySelector('.banner-label')?.textContent).toBe('Urgent');
       await page.getByTestId('chunk-id').click();
       expect(fixture.componentInstance.selections).toEqual([CARD.chunkId]);
       const open = root.querySelector<HTMLButtonElement>('fleet-kit-select-row button')!;

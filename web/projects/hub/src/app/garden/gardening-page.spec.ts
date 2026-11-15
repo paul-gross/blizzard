@@ -131,50 +131,19 @@ describe('GardeningPage under a project lens', () => {
     return { fixture, router, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('shows the breadcrumb Gardening › {project} › {surface}', async () => {
+  it('renders project tabs without a breadcrumb or local project switcher', async () => {
     const { el } = await render();
 
-    const crumbs = el.querySelector('[data-testid="gardening-crumbs"]')!;
-    expect(crumbs.textContent).toContain('Gardening');
-    expect(el.querySelector('[data-testid="gardening-crumb-project"]')?.textContent).toContain('Blizzard');
-    expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Scopes');
+    expect(el.querySelector('[data-testid="gardening-crumbs"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-crumb-project"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-tab-scopes"]')?.classList.contains('active')).toBe(true);
   });
 
-  it('switches the lens from the project crumb and keeps the surface', async () => {
+  it('follows a global lens switch while keeping the surface', async () => {
     const { fixture, router } = await render();
-
-    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
-    await settle(fixture, 4);
-    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project-winter"]')!.click();
+    await TestBed.inject(ProjectLens).switchTo('winter', '/gardening/scopes');
     await settle(fixture, 8);
-
     expect(router.url).toBe('/p/winter/gardening/scopes');
-  });
-
-  it('lists each project with its proposals waiting, under a header naming the surface a switch keeps', async () => {
-    const { fixture } = await render();
-
-    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
-    await settle(fixture, 4);
-
-    expect(document.querySelector('[data-testid="gardening-crumb-project-head"]')?.textContent).toContain(
-      'Switch project — stays on Scopes',
-    );
-    expect(document.querySelector('[data-testid="gardening-crumb-waiting-winter"]')?.textContent).toContain(
-      '2 proposals waiting',
-    );
-    expect(document.querySelector('[data-testid="gardening-crumb-waiting-blizzard"]')?.textContent).toContain(
-      '1 proposal waiting',
-    );
-  });
-
-  it('opens the doorway from the Gardening crumb', async () => {
-    const { fixture, router, el } = await render();
-
-    el.querySelector<HTMLElement>('[data-testid="gardening-crumb-doorway"]')!.click();
-    await settle(fixture, 8);
-
-    expect(router.url).toBe('/gardening');
   });
 
   it('activates the Findings tab alone on a findings link', async () => {
@@ -182,7 +151,6 @@ describe('GardeningPage under a project lens', () => {
 
     expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.classList.contains('active')).toBe(true);
     expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(false);
-    expect(el.querySelector('[data-testid="gardening-crumb-surface"]')?.textContent).toContain('Findings');
   });
 
   it('activates the Runs tab alone on a runs link', async () => {
@@ -190,17 +158,6 @@ describe('GardeningPage under a project lens', () => {
 
     expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.classList.contains('active')).toBe(true);
     expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.classList.contains('active')).toBe(false);
-  });
-
-  it('opens the doorway from the project crumb\'s All projects choice', async () => {
-    const { fixture, router } = await render();
-
-    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project"]')!.click();
-    await settle(fixture, 4);
-    document.querySelector<HTMLElement>('[data-testid="gardening-crumb-project-all"]')!.click();
-    await settle(fixture, 8);
-
-    expect(router.url).toBe('/gardening/scopes');
   });
 
   it('renders no no-runner warning and never reads the runners', async () => {

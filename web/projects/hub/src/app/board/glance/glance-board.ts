@@ -2,12 +2,10 @@ import { withPendingUrgencies } from '../chunks/urgency.model';
 import type { ChunkUrgencyVars } from '../chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { injectPendingMutationVariables } from 'fleet';
-import { Router } from '@angular/router';
-import { IN_APP_LINK } from 'fleet/shell';
-import { NewHubItem } from '../new-hub-item/new-hub-item';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { asyncState, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { injectUrgencyIconUrl } from '../../core/urgency-icon.query';
+import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { asyncState, CHUNK_URGENCY_ICON, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
@@ -32,17 +30,13 @@ import { injectShowProjectColors, projectColorMap } from '../../core/project-len
 @Component({
   selector: 'app-glance-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GlanceView, NewHubItem],
+  providers: [{ provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl }],
+  imports: [GlanceView],
   templateUrl: './glance-board.html',
   styleUrl: './glance-board.css',
 })
 export class GlanceBoard {
   protected readonly urgenciesQuery = injectUrgenciesQuery();
-  private readonly router = inject(Router);
-  private readonly inAppLink = inject(IN_APP_LINK);
-  protected openCreated(chunkId: string): void {
-    void this.router.navigate(this.inAppLink(['/board', 'chunk', chunkId]) as readonly unknown[]);
-  }
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
@@ -91,6 +85,7 @@ export class GlanceBoard {
     const list = this.list();
     return asyncState(this.chunksQuery, list.live.length + list.ready.length + list.backlog.length + list.done.length === 0);
   });
+  protected readonly vitalsLoading = computed(() => this.listState() === 'loading' || this.runnersQuery.isPending());
 
   /** Never `'empty'`: the spend read always resolves to an aggregate. */
   protected readonly spendState = computed<KitAsyncStateValue>(() => asyncState(this.spendToday, false));

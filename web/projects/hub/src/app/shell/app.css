@@ -10,6 +10,71 @@ router-outlet {
 .boot {
   height: 100%;
 }
+.boot-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 14px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--bezel);
+  background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+  font-family: var(--mono);
+}
+.boot-header-mobile {
+  height: 43px;
+}
+.boot-brand {
+  flex: none;
+  color: var(--amber-hi);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+.boot-mark {
+  flex: none;
+}
+.boot-header-mobile .boot-brand {
+  color: var(--snow);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+.boot-spacer {
+  flex: 1;
+}
+.boot-placeholder {
+  display: block;
+  flex: none;
+  width: 48px;
+  height: 9px;
+  border-radius: 4px;
+  background: var(--line);
+}
+.boot-tenant {
+  width: 64px;
+}
+.boot-account {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.boot-header-mobile .boot-stat {
+  display: none;
+}
+.boot-content {
+  flex: 1;
+  min-height: 0;
+}
+.boot-tab {
+  cursor: default;
+}
+.boot-tab.active:not(.bottom) {
+  box-shadow: inset 0 2px 0 var(--amber);
+}
 /* The mobile titlebar's box while its @defer block loads — matches the fleet
    `MobileTitlebar`'s rendered height so the routed content does not jump
    when it arrives. */

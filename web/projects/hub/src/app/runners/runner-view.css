@@ -9,14 +9,11 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
-/* Environments fill in grey, apart from the agents' amber and an overload's cyan. */
 .envs {
   display: flex;
   flex-direction: column;
   gap: 3px;
   padding: 6px 8px;
-  --kit-slot-bar-on: var(--grey);
-  --kit-slot-bar-on-border: var(--grey-dim);
 }
 .subs {
   display: flex;
@@ -78,10 +75,6 @@
   color: var(--amber-hi);
   text-decoration: underline;
 }
-.runner.offline .name-link,
-.runner.never .name-link {
-  color: var(--label);
-}
 /* The status light's slot is fixed-width, so every name starts at one column. A square, per the
    mockup's status indicators — not a dot. */
 .light {
@@ -124,4 +117,80 @@
   display: grid;
   margin-top: 6px;
 }
+.mobile-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.mobile-overview .subs,
+.mobile-overview .envs {
+  margin: 0;
+  border: 0;
+  background: var(--surface-resting);
+}
+.mobile-overview .runners {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.mobile-overview .runner {
+  position: relative;
+  border: 0;
+  background: var(--surface-resting);
+}
+.runner-hit {
+  position: absolute;
+  inset: 0;
+}
+.runner-hit:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.mobile-overview .toggle {
+  position: relative;
+  z-index: 1;
+}
+.mobile-overview .runner:hover {
+  background: var(--surface-hover);
+}
+.mobile-overview .runner.paused {
+  background: var(--hatch-paused), var(--surface-resting);
+}
+.mobile-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skeleton-usage {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  align-items: center;
+  gap: 6px;
+  min-height: 12px;
+  --kit-skeleton-height: 8px;
+}
+.subscription {
+  align-items: start;
+}
+.skeleton-who,
+.skeleton-windows {
+  display: grid;
+  gap: 3px;
+}
+.skeleton-who fleet-kit-skeleton:first-child { width: 70%; }
+.skeleton-who fleet-kit-skeleton:last-child { width: 42%; }
+.skeleton-gauge { display: flex; align-items: center; gap: 4px; }
+.skeleton-caption { width: 22px; flex: none; }
+.skeleton-cells { display: flex; flex: 1; gap: 2px; }
+.skeleton-cells fleet-kit-skeleton { flex: 1; --kit-skeleton-height: 9px; }
+.skeleton-label { width: 65%; }
+.skeleton-header { display: flex; align-items: center; gap: 6px; min-height: 16px; }
+.skeleton-light { width: 7px; flex: none; --kit-skeleton-height: 7px; }
+.skeleton-name { width: 28%; --kit-skeleton-height: 12px; }
+.skeleton-host { width: 19%; margin-left: auto; --kit-skeleton-height: 8px; }
+.skeleton-seen { width: 12%; --kit-skeleton-height: 8px; }
+.skeleton-toggle { margin-top: 6px; --kit-skeleton-height: 36px; }
 /* A pause/resume failure reads above the runners. */

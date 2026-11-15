@@ -2,74 +2,80 @@
   display: block;
 }
 .cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 4px 12px 12px;
-  list-style: none;
-}
-.card {
   display: flex;
-  min-width: 0;
-}
-.card > a {
-  flex: 1;
-}
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--line);
-  background: var(--overlay-25);
-}
-.name {
-  color: var(--snow);
-  font-size: var(--fs-md);
-  overflow-wrap: anywhere;
-}
-.waiting {
-  flex: none;
-  color: var(--amber-hi);
-  font-size: var(--fs-xs);
-}
-.facts {
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-sm);
 }
-.facts li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
+.card {
+  gap: 5px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: none;
   border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  background: var(--surface-resting);
 }
-.fact-label {
-  flex: none;
-  color: var(--label);
-  font-size: var(--fs-xs);
+a.card:hover,
+a.card:active {
+  border-color: transparent transparent var(--line) transparent;
+  background: var(--surface-hover);
 }
-.fact {
+a.card:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+}
+.name {
   color: var(--snow);
+  font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
-.fact-right {
-  flex: none;
-  margin-left: auto;
+.counts {
   color: var(--label);
   font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
 }
-.fact-right.sweeping {
-  color: var(--cyan);
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
 }
-.unplanted {
-  margin: 0;
-  padding: 8px 10px;
-  font-size: var(--fs-sm);
-  color: var(--label);
+.skeleton-swatch {
+  width: 10px;
+  --kit-skeleton-height: 10px;
+}
+.skeleton-text {
+  position: relative;
+  color: transparent;
+}
+.skeleton-text > fleet-kit-skeleton {
+  position: absolute;
+  inset: 50% 0 auto;
+  transform: translateY(-50%);
+  --kit-skeleton-height: 10px;
+}
+.skeleton-counts {
+  position: absolute;
+  inset: 50% auto auto 0;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skeleton-counts fleet-kit-skeleton {
+  width: 50px;
+  --kit-skeleton-height: 8px;
+}
+.skeleton-counts fleet-kit-skeleton:nth-child(2) {
+  width: 42px;
+}
+.skeleton-counts fleet-kit-skeleton:nth-child(3) {
+  width: 58px;
 }

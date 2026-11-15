@@ -6,6 +6,7 @@ import {
   computed,
   effect,
   inject,
+  signal,
   untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -20,8 +21,11 @@ import {
   ViewportService,
   injectNowSignal,
   KitErrorLine,
+  KitTab,
+  KitTabStrip,
 } from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
+import { DESKTOP_TABS, MOBILE_TABS } from './nav/navigation.model';
 import { NoAccess } from '../core/auth/no-access';
 import { TenantContext } from '../core/auth/tenant-context';
 import { TenantPicker } from '../core/auth/tenant-picker';
@@ -48,6 +52,8 @@ import {
   logoutErrorText,
   selectedTenantName,
   tenancyOf,
+  shellUrl,
+  shellView,
 } from './app.model';
 
 /**
@@ -114,6 +120,8 @@ import {
     NoAccess,
     TenantPicker,
     KitErrorLine,
+    KitTab,
+    KitTabStrip,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -216,6 +224,21 @@ export class App {
   /** Whether the router has landed on a public page — see the class docstring. */
   protected readonly onPublicRoute = computed(() => isPublicUrl(this.routerUrl()));
 
+  /** Suppress boot chrome for a public landing until the router has actually reached its outlet. */
+  private readonly pendingUrl = computed(() => this.router.currentNavigation()?.extractedUrl.toString() ?? null);
+  private readonly bootUrl = computed(() =>
+    shellUrl(this.pendingUrl(), this.router.navigated, this.routerUrl(), globalThis.location?.pathname ?? '/'),
+  );
+  protected readonly publicLanding = computed(() => isPublicUrl(this.bootUrl()));
+
+  /** The static boot tabs follow the same unlensed view as the real route tabs. */
+  protected readonly bootView = computed(() => shellView(this.bootUrl()));
+  protected readonly desktopTabs = DESKTOP_TABS;
+  protected readonly mobileTabs = MOBILE_TABS;
+
+  /** Hold the content's space until the ready shell's routed component has mounted. */
+  protected readonly routeActive = signal(false);
+
   /** Whether a login mechanism is even configured — `GET /api/auth/providers`
    * answers `[]` outright under `auth.mode = "none"` (the hub's own answer, never
    * re-derived here; `/api/me`'s shape carries no `mode` field to read instead). */
@@ -229,6 +252,10 @@ export class App {
   protected readonly canManageUsers = computed(() => hasPermission(this.me(), 'user:manage') && this.authEnabled());
 
   constructor() {
+    effect(() => {
+      if (this.authState() !== 'ready') this.routeActive.set(false);
+    });
+
     // Enter the tenant the memberships settle on — the only one, or the one this tab
     // or browser remembered — so every call names it and the choice is remembered.
     effect(() => {

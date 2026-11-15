@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
@@ -25,7 +25,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, IN_APP_LINK, type InAppLink, provideFlags } from 'fleet/shell';
+import { type FlagsResponse, hubMeKey, IN_APP_LINK, type InAppLink, provideFlags } from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
 
@@ -139,6 +139,9 @@ const ACME_ADMIN: MeTenant = {
   permissions: ['fleet:view', 'user:manage'],
 };
 const BETA_GUEST: MeTenant = { tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] };
+
+@Component({ template: '<div data-testid="public-page">Public page</div>' })
+class DelayedPublicPage {}
 
 describe('hub App', () => {
   let queryClient: QueryClient;
@@ -450,6 +453,42 @@ describe('hub App', () => {
   });
 
   describe('session-aware UI (issue #93)', () => {
+    it.each([
+      ['/login', OPERATOR_ME_RESPONSE, 'ready'],
+      ['/invite/token', { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, 'choose'],
+      ['/login', MEMBERLESS, 'no-access'],
+    ] as const)('withholds chrome on %s while its lazy page loads with %s identity', async (url, identity, state) => {
+      sessionStorage.removeItem(TAB_TENANT_KEY);
+      localStorage.removeItem(LAST_TENANT_KEY);
+      queryClient.setQueryData(hubMeKey, identity);
+      let release!: (component: typeof DelayedPublicPage) => void;
+      let loadingStarted!: () => void;
+      const started = new Promise<void>((resolve) => (loadingStarted = resolve));
+      const delayed = new Promise<typeof DelayedPublicPage>((resolve) => (release = resolve));
+      const router = TestBed.inject(Router);
+      router.resetConfig([{
+        path: url === '/login' ? 'login' : 'invite/:token',
+        loadComponent: () => {
+          loadingStarted();
+          return delayed;
+        },
+      }]);
+      const fixture = TestBed.createComponent(App);
+      const navigation = router.navigateByUrl(url);
+      await started;
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect((fixture.componentInstance as unknown as { authState: () => string }).authState()).toBe(state);
+      expect(el.querySelector('[data-testid="auth-loading"]')).toBeTruthy();
+      expect(el.querySelector('fleet-app-shell, app-tenant-picker, app-no-access, [data-testid="public-page"]')).toBeNull();
+
+      release(DelayedPublicPage);
+      await navigation;
+      await settle(fixture);
+      expect(el.querySelector('[data-testid="public-page"]')).toBeTruthy();
+      expect(el.querySelector('fleet-app-shell, app-tenant-picker, app-no-access')).toBeNull();
+    });
+
     it('routes an unauthenticated session to /login, with no board chrome', async () => {
       authStub.restore();
       authStub = stubAuth(null, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);

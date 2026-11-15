@@ -1,7 +1,7 @@
 import { RunnerConnection, type RunnerRegistryView } from 'fleet';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { NavigationStart, provideRouter, Router } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import type { RunnerRow } from './runner-rows.model';
@@ -129,15 +129,22 @@ const ROWS: readonly RunnerRow[] = [
   },
 ];
 
-async function render(rows: readonly RunnerRow[] = ROWS, canPause = false) {
+@Component({ template: '' })
+class RoutePlaceholder {}
+
+async function render(rows: readonly RunnerRow[] = ROWS, canPause = false, mobileOverview = false) {
   await TestBed.configureTestingModule({
     imports: [RunnerPanelView],
-    providers: [provideZonelessChangeDetection(), provideRouter([])],
+    providers: [provideZonelessChangeDetection(), provideRouter([
+      { path: '', component: RoutePlaceholder },
+      { path: 'fleet/:id', component: RoutePlaceholder },
+    ])],
   }).compileComponents();
   const fixture = TestBed.createComponent(RunnerPanelView);
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('rows', rows);
   fixture.componentRef.setInput('canPause', canPause);
+  fixture.componentRef.setInput('mobileOverview', mobileOverview);
   await fixture.whenStable();
   return fixture;
 }
@@ -262,6 +269,60 @@ describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
         expect(toggle.right, `${width}px: the toggle overflows its runner`).toBeLessThanOrEqual(inner.right + 1);
       }
     } finally {
+      root.remove();
+    }
+  });
+
+  it.each([390, 320])('routes card whitespace and content, but not pause or resume, at %ipx', async (width) => {
+    await loadDesignTokens();
+    const fixture = await render(ROWS, true, true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    const router = TestBed.inject(Router);
+    const emitted: RunnerRow[] = [];
+    fixture.componentInstance.togglePause.subscribe((row) => emitted.push(row));
+    const navigations: string[] = [];
+    const subscription = router.events.subscribe((event) => {
+      if (event instanceof NavigationStart) navigations.push(event.url);
+    });
+
+    try {
+      await page.viewport(width, 800);
+      await router.navigateByUrl('/');
+      await fixture.whenStable();
+      const row = root.querySelector<HTMLElement>(`[data-runner="${ROW.runner_id}"]`)!;
+      const link = row.querySelector<HTMLElement>('[data-testid="runner-card-link"]')!;
+      const name = row.querySelector<HTMLElement>('[data-testid="runner-fleet-link"]')!;
+      const linkBox = link.getBoundingClientRect();
+      const nameBox = name.getBoundingClientRect();
+      const destination = `/fleet/${ROW.runner_id}`;
+
+      await page.elementLocator(link).click({ position: { x: 2, y: 2 } });
+      await fixture.whenStable();
+      expect(router.url).toBe(destination);
+
+      await router.navigateByUrl('/');
+      await fixture.whenStable();
+      await page.elementLocator(link).click({
+        position: { x: nameBox.left - linkBox.left + 5, y: nameBox.top - linkBox.top + nameBox.height / 2 },
+      });
+      await fixture.whenStable();
+      expect(router.url).toBe(destination);
+
+      await router.navigateByUrl('/');
+      await fixture.whenStable();
+      const before = navigations.length;
+      for (const expected of ROWS.slice(0, 2)) {
+        const button = root.querySelector<HTMLElement>(`[data-runner="${expected.runner_id}"] [data-testid="runner-toggle"]`)!;
+        expect(button.textContent).toContain(expected.hub_paused ? 'Resume' : 'Pause');
+        await page.elementLocator(button).click();
+        await fixture.whenStable();
+        expect(router.url).toBe('/');
+      }
+      expect(emitted).toEqual(ROWS.slice(0, 2));
+      expect(navigations).toHaveLength(before);
+    } finally {
+      subscription.unsubscribe();
       root.remove();
     }
   });

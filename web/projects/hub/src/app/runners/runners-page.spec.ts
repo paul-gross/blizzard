@@ -91,8 +91,8 @@ describe('RunnersPage (mobile Fleet screen)', () => {
       const { el } = await open('/fleet');
 
       expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(2);
-      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet/hs_h1');
-      expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet/rn_paused');
+      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-card-link"]')?.getAttribute('href')).toBe('/fleet/hs_h1');
+      expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-card-link"]')?.getAttribute('href')).toBe('/fleet/rn_paused');
       expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeNull();
     });
 

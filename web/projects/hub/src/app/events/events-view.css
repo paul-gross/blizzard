@@ -1,138 +1,29 @@
-:host {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  font-family: var(--mono);
-  font-size: var(--fs-base);
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-fleet-kit-panel.fill {
-  flex: 1;
-}
-/* The panel body only clips (bodyScroll false); this column bounds the list so
-   `.rows` is the one scroller and the filters stay put above it. */
-.body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-.filters {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  flex: none;
-}
-.filters fleet-kit-select {
-  align-self: flex-start;
-}
-.rows {
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
-}
-/* Time-first columns, matching the in-rail Activity feed's leading dim stamp
-   (activity-panel.ts). Every metadata track is FIXED, not content-sized:
-   each row is its own grid container, so only a fixed track aligns down the
-   feed — a content-sized one re-measures per row and the column wanders. That
-   covers the whole metadata block (time, chunk, severity, kind, runner), so
-   the message starts at one x on every row; the message takes the rest and the
-   lease trails.
-
-   Tracks are ch-based, so they scale with whatever face --mono resolves to on
-   the platform (tokens.css offers four) rather than assuming one face's advance
-   width. A ch here measures against the row's own --fs-sm, while the time and
-   runner cells render one step down at --fs-xs, so those two carry ~8% slack
-   for free. Kind and runner are open sets, so each is sized for its longest
-   known value and ellipsized past it — the full string stays in the title
-   attribute, so a truncation costs nothing. A runner's value is its display
-   name, `R-XXXX.` then its name: 20ch holds a name of up to 13 characters
-   (runner-local, r-chatgpt) whole, and its title adds the full id. */
-.ev {
-  display: grid;
-  grid-template-columns: 15ch 8ch 10ch 18ch 20ch 1fr auto;
-  align-items: baseline;
-  gap: 6px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--fs-sm);
-  line-height: 1.5;
-}
-.kind {
-  color: var(--cyan);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.runner {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.msg {
-  color: var(--text);
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.time {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-}
-.chunk {
-  --kit-button-pad: 0 4px;
-  --kit-button-fs: var(--fs-xs);
-  justify-self: start;
-}
-/* A chunk-less (runner-scoped) row still occupies the chunk column, so the
-   columns after it stay aligned with the rows that do name a chunk. The inset
-   matches the sibling .chunk button's own border + padding, so the dash sits
-   where that button's text sits rather than 5px to its left. */
-.chunk-none {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  justify-self: start;
-  padding: 0 5px;
-}
-.sev {
-  justify-self: start;
-}
-.lease {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
-/* Below the board's own mobile cutoff the fixed metadata tracks no longer fit:
-   they alone are wider than a handset's content box, so the message track
-   would resolve to 0 and — with overflow-wrap: anywhere — wrap one character
-   per line, turning every row into a ribbon hundreds of pixels tall.
-
-   So a narrow viewport drops back to the wrapping flex line the row used
-   before the grid, with the message on its own full-width line beneath the
-   metadata. Flex cannot collapse a track to nothing, so this degrades at any
-   width rather than only at the ones someone thought to measure. Nothing is
-   lost: cross-row alignment buys a reader a column to scan down, and a phone
-   is one column wide already.
-
-   This forks on a media query rather than on ViewportService.mode(), which is
-   how the app picks a *shell* (matches-mobile-viewport.ts). The two answer
-   different questions: mode() includes a manual override, so a user pinning
-   mobile on a wide monitor still has room for the grid and should keep it,
-   while a narrow *desktop* window has no room and still needs the fallback.
-   What breaks the layout is available width, so width is what it keys on —
-   at the same 767.98px cutoff ViewportService uses, so the two agree wherever
-   both apply. */
-@media (max-width: 767.98px) {
-  .ev {
-    display: flex;
-    flex-wrap: wrap;
-  }
-  .msg {
-    flex: 1 1 100%;
-  }
-}
+:host { display: flex; flex-direction: column; min-height: 0; flex: 1; font-family: var(--mono); font-size: var(--fs-base); color: var(--text); }
+.body { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; min-height: 0; flex: 1; }
+.filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 6px 8px; background: var(--surface-resting); flex: none; }
+.filters fleet-kit-select { min-width: 0; width: 100%; }
+.rows { display: grid; align-content: start; gap: 4px; overflow-y: auto; min-height: 0; flex: 1; }
+.ev { position: relative; font-size: var(--fs-sm); background: var(--surface-resting); }
+.ev:hover, .ev:active { background: var(--surface-hover); }
+.hit { position: absolute; inset: 0; z-index: 0; }
+.hit:focus-visible { outline: 1px solid var(--cyan); outline-offset: -2px; }
+.card-main, .meta { position: relative; z-index: 1; pointer-events: none; }
+.meta a { pointer-events: auto; }
+.card-main { display: flex; padding: 10px 10px 0; gap: 10px; align-items: flex-start; }
+.card-layout { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; text-align: left; }
+.card-content { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; text-align: left; }
+.headline { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.kind { color: var(--cyan); overflow-wrap: anywhere; }
+.time { color: var(--label-dim); font-size: var(--fs-xs); white-space: nowrap; }
+.msg { color: var(--text); overflow-wrap: anywhere; }
+.severity-icon { display: block; width: 20px; height: 20px; max-width: 20px; max-height: 20px; overflow: hidden; color: var(--label-dim); }
+.severity-icon[data-icon='info'] { color: var(--cyan); }
+.severity-icon[data-icon='warning'] { color: var(--amber, #e5ad46); }
+.severity-icon[data-icon='critical'] { color: var(--red, #ef5b5b); }
+.severity-icon svg { display: block; width: 20px; height: 20px; max-width: 20px; max-height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.meta { padding: 4px 10px 10px 40px; color: var(--label-dim); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.meta a { color: var(--cyan); text-decoration: underline; }
+.meta a:hover { filter: brightness(1.2); }
+.meta a:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
+.meta a.chunk { color: var(--amber); }
+.skeleton-card { padding: 12px 10px 12px 38px; background: var(--surface-resting); }

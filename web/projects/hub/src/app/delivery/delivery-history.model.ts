@@ -16,6 +16,7 @@ import {
 } from 'fleet';
 
 import { ordinal, placeInLine, placeStateLabel, placeStateTone } from '../core/flow-place.model';
+import { deliveryDiagnostic, deliveryFailureLabel } from './delivery-failure-label.model';
 
 /** A link the drawer draws. */
 export interface DrawerLink {
@@ -51,6 +52,7 @@ export interface HistoryEntry {
   /** The repositories it happened on, `blizzard · blizzard-context`, or `null` for a chunk-wide entry. */
   readonly repos: string | null;
   readonly text: string;
+  readonly rawOutcome: string | null;
   /** {@link HistoryTone}: `null` reads in the default text colour. */
   readonly tone: HistoryTone;
   /** A bounce's full account. */
@@ -151,7 +153,7 @@ interface Draft extends Omit<HistoryEntry, 'repos'> {
 }
 
 function draft(id: string, at: string, now: number, repo: string | null, text: string, tone: HistoryTone): Draft {
-  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, tone, detail: null, logKey: null, transition: false, move: null };
+  return { id, ...stamp(at, now), repos: repo ? [repo] : [], text, rawOutcome: null, tone, detail: null, logKey: null, transition: false, move: null };
 }
 
 /**
@@ -201,7 +203,8 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
       out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landed · no changes', historyTone('landed')));
     } else if (fact.kind === 'turn-ended') {
       const withdrawn = withdrawnAfter(facts, fact);
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${fact.outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.rework)));
+      const outcome = fact.verdict === 'bounced' ? deliveryFailureLabel(fact.outcome) : fact.outcome;
+      out.push({ ...draft(`f-${fact.id}`, fact.at, now, repo, `landing attempt ${outcome}${withdrawn ? ' · withdrawn' : ''}`, historyTone('turn-ended', fact.rework)), rawOutcome: fact.outcome });
     } else if (fact.kind === 'withdrawn') {
       const prev = facts[index - 1];
       if (prev?.submission_id === fact.submission_id && (prev.kind === 'landed' || (prev.kind === 'turn-ended' && !prev.wait))) return;
@@ -217,7 +220,7 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
 function mergeAcrossFlows(drafts: readonly Draft[]): Draft[] {
   const merged = new Map<string, Draft>();
   for (const entry of drafts) {
-    const key = `${entry.text.replace(/ · \d+ polls?.*$/, '')}@${entry.at.slice(0, 19)}`;
+    const key = JSON.stringify([entry.text.replace(/ · \d+ polls?.*$/, ''), entry.at.slice(0, 19), entry.rawOutcome]);
     const held = merged.get(key);
     merged.set(key, held ? { ...held, repos: [...held.repos, ...entry.repos] } : entry);
   }
@@ -233,9 +236,10 @@ function logKey(detail: ChunkDetail, name: string | null, at: string): string | 
 
 function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: number, now: number): Draft {
   const envelope = parseBounceEnvelope(bounce.envelope);
+  const compact = compactBounce(bounce.envelope, bounce.cause);
   return {
-    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${bounce.cause}`, historyTone('bounced', bounce.rework)),
-    bounce: compactBounce(bounce.envelope, bounce.cause),
+    ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${deliveryFailureLabel(bounce.cause)}`, historyTone('bounced', bounce.rework)),
+    bounce: { ...compact, full: deliveryDiagnostic(compact.full, bounce.cause) },
     repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
     detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
     logKey: logKey(detail, envelope?.action?.log_artifact ?? null, bounce.recorded_at),
@@ -318,7 +322,7 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
   // A turn that landed with nothing to merge leaves no landed repository behind.
   else if (settled?.verdict === 'landed') [state, tone] = ['landed · no changes', 'done'];
   else if (place) [state, tone] = [placeInLine(place) ? `in line · ${ordinal(place.position)}` : placeStateLabel(place.state), placeStateTone(place.state)];
-  else if (settled) [state, tone] = [`bounced · ${settled.outcome}`, verdictTone(settled)];
+  else if (settled) [state, tone] = [`bounced · ${deliveryFailureLabel(settled.outcome)}`, verdictTone(settled)];
   else if (openPrs.length) [state, tone] = [detail.awaiting_external_merge ? 'awaiting merge' : 'PR open', 'idle'];
   else [state, tone] = ['not submitted', 'idle'];
 

@@ -93,15 +93,17 @@ describe('BoardHeader', () => {
       chunk('ch_6', 'done'),
       chunk('ch_7', 'stopped'),
       chunk('ch_8', 'not_ready'),
+      chunk('ch_9', 'paused'),
     ]);
 
     const stat = (key: string) => el.querySelector(`[data-testid="stat-${key}"]`)?.textContent?.trim();
-    expect(stat('total')).toBe('8');
+    expect(stat('total')).toBe('9');
     expect(stat('ready')).toBe('1');
     expect(stat('notready')).toBe('1');
     expect(stat('running')).toBe('2');
-    expect(stat('waiting')).toBe('1');
-    expect(stat('needs')).toBe('1');
+    expect(stat('waiting')).toBeUndefined();
+    expect(stat('needs')).toBe('3');
+    expect(el.querySelector('[data-stat="needs"]')?.textContent).toContain('Human');
     expect(stat('done')).toBe('2');
   });
 
@@ -115,13 +117,13 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="stat-done"]')?.textContent?.trim()).toBe('3');
   });
 
-  it('shows one cell per board lane, in the board\'s order — it cannot list a lane the board lacks', async () => {
+  it('shows board lanes in order, combining the two human-attention lanes', async () => {
     // The header is grouped through the same LANES the board columns are built from,
     // so the two cannot drift apart; a lane added there appears in both or neither.
     const el = await render([]);
     const cells = [...el.querySelectorAll('[data-stat]')].map((c) => c.getAttribute('data-stat'));
     // Ready is one of those lane cells, not a cell of its own ahead of them.
-    expect(cells).toEqual(['total', ...LANES.map((l) => l.key)]);
+    expect(cells).toEqual(['total', ...LANES.filter((l) => l.key !== 'waiting').map((l) => l.key)]);
   });
 
   it('counts every wire status into some cell, so none can go silently missing', async () => {

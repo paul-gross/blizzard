@@ -1,8 +1,6 @@
-import { vi } from 'vitest';
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { UrgencyView } from '../../api/hub';
 import type { ChunkDetail } from '../../api/hub';
 import { runnerDisplayName } from '../../core/runner-display-name';
 import { chunkControlStub, chunkDetail, chunkEscalationView, type ChunkControlStub } from 'fleet/testing';
@@ -107,25 +105,14 @@ describe('ChunkActionsMenu', () => {
     }).compileComponents();
   });
 
-  it('offers the ordered live urgencies with the current one checked', async () => {
+  it('keeps chunk actions without offering urgency edits', async () => {
     const fixture = TestBed.createComponent(ChunkActionsMenu);
     fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, urgency: { urgency_id: 'normal', slug: 'normal' }, terminal: false });
-    const set = vi.fn();
-    const control = { ...chunkControlStub(), urgency: { values: signal([
-      { urgency_id: 'normal', name: 'Normal', place: 2, retired: false },
-      { urgency_id: 'old', name: 'Old', place: null, retired: true },
-      { urgency_id: 'urgent', name: 'Urgent', place: 1, retired: false },
-    ] as UrgencyView[]), pending: () => null, set } };
-    fixture.componentRef.setInput('control', control);
+    mount(fixture);
     await fixture.whenStable();
     await openMenu(fixture);
-    inOverlay('[data-testid="urgency-actions"]')!.click();
-    await fixture.whenStable();
-    const choices = [...document.querySelectorAll<HTMLElement>('[data-testid="chunk-actions-urgencies"] [role="menuitemradio"]')];
-    expect(choices.map((e) => e.querySelector('.label')?.textContent?.trim())).toEqual(['Urgent', 'Normal']);
-    expect(choices.map((e) => e.getAttribute('aria-checked'))).toEqual(['false', 'true']);
-    choices[0].click();
-    expect(set).toHaveBeenCalledWith(ISSUE_DETAIL.chunk_id, 'urgent');
+    expect(inOverlay('[data-testid="urgency-actions"]')).toBeNull();
+    expect(inOverlay('[data-testid="complete-chunk"]')).not.toBeNull();
   });
 
   it('withholds the actions menu trigger without chunk:control', async () => {

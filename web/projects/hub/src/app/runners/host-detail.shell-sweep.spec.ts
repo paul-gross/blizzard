@@ -7,6 +7,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 
 import { type HostDetailVm, resolveSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
+import { selectHostOrigin } from './host-origin.model';
 import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
 
@@ -69,6 +70,7 @@ async function loadDesignTokens(): Promise<void> {
 const NOW = new Date().toISOString();
 const WORKSPACE = 'workspace-with-a-long-operator-chosen-name';
 const RUNNER_NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
+const HOST_URL = `https://${window.location.hostname}:8443`;
 
 const CLAIMS = [
   { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYNCL01', shortId: 'C-CL01', node: 'build', status: 'running' as const },
@@ -103,8 +105,8 @@ const CARD: HostCard = {
   online: true,
   connection: RunnerConnection.ONLINE,
   reportLabel: 'seen 4s ago',
-  url: 'https://build-box-with-a-long-hostname.example.internal:8443',
-  urls: ['https://build-box-with-a-long-hostname.example.internal:8443'],
+  url: HOST_URL,
+  urls: ['https://other.example.internal:8443', HOST_URL, `http://${window.location.hostname}:8080`],
   enrolled: true,
   registeredAt: '2026-01-02T03:04:05Z',
   addedAt: '2026-01-01T00:00:00Z',
@@ -139,7 +141,9 @@ async function render() {
     providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(queryClient)],
   }).compileComponents();
   const fixture = TestBed.createComponent(HostDetail);
-  fixture.componentRef.setInput('detail', detail());
+  const selection = detail();
+  fixture.componentRef.setInput('detail', selection);
+  fixture.componentRef.setInput('origin', selectHostOrigin(selection, window.location.hostname));
   fixture.componentRef.setInput('canPause', true);
   await fixture.whenStable();
   return fixture;
@@ -191,7 +195,7 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
       root.appendChild(probe);
       probe.style.color = 'var(--amber)';
       expect(getComputedStyle(url).color).toBe(getComputedStyle(probe).color);
-      expect(url.getAttribute('href')).toBe(CARD.url);
+      expect(url.getAttribute('href')).toBe(HOST_URL);
       expect(url.getAttribute('rel')).toBe('noopener noreferrer');
       await userEvent.keyboard('{Tab}');
       url.focus();
@@ -253,10 +257,7 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
     document.body.appendChild(root);
     try {
       const states = [
-        { kind: 'verified', href: 'https://a-very-long-hostname-for-the-build-box.example.internal:8443/' },
-        { kind: 'plain', href: CARD.url! },
-        { kind: 'pending' },
-        { kind: 'unreachable' },
+        { kind: 'link', href: 'https://a-very-long-hostname-for-the-build-box.example.internal:8443/' },
         { kind: 'none' },
       ] as const;
       for (const origin of states) {
@@ -264,7 +265,7 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
         await fixture.whenStable();
         const fact = root.querySelector<HTMLElement>('[data-testid="fleet-fact-url"]')!;
         expect(fact.textContent, `${width}px: ${origin.kind}`).toContain(
-          { verified: 'example.internal', plain: 'example.internal', pending: 'Checking', unreachable: 'Unreachable', none: '—' }[origin.kind],
+          { link: 'example.internal', none: '—' }[origin.kind],
         );
         expect(root.scrollWidth, `${width}px: ${origin.kind} overflows`).toBeLessThanOrEqual(root.clientWidth);
         expect(fact.scrollWidth, `${width}px: ${origin.kind} fact overflows`).toBeLessThanOrEqual(fact.clientWidth + 1);

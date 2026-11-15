@@ -30,6 +30,10 @@
   color: var(--red);
 }
 .rd-set {
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 8px;

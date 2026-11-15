@@ -87,7 +87,7 @@ describe('Delivery glance diagnostic hit target shell sweep (web:shell-sweep)', 
         const cards = root.querySelectorAll('[data-testid="delivery-card"]');
         expect(cards).toHaveLength(1);
         const stage = cards[0].querySelector<HTMLElement>('.stage')!;
-        expect(stage.textContent?.trim()).toBe('poll-timeout');
+        expect(stage.textContent?.trim()).toBe('timed out');
         const rect = stage.getBoundingClientRect();
         expect(rect.width).toBeGreaterThan(0);
         expect(rect.height).toBeGreaterThan(0);
@@ -104,7 +104,7 @@ describe('Delivery glance diagnostic hit target shell sweep (web:shell-sweep)', 
         expect(root.querySelector('[data-testid="delivery-chunk-page"]')).not.toBeNull();
         const diagnostic = root.querySelector('.compact-bounce');
         expect(diagnostic?.getAttribute('title')).toBe('poll-timeout');
-        expect(diagnostic?.querySelector('.detail')?.textContent).toBe('poll-timeout');
+        expect(diagnostic?.querySelector('.detail')?.textContent).toBe('bounced · timed out');
       } finally {
         fixture.destroy();
         root.remove();
@@ -154,7 +154,7 @@ describe('Delivery desktop diagnostic hit target shell sweep (web:shell-sweep)',
       expect(hit).toBe(row.querySelector('[data-testid="delivery-row-open"]'));
       expect(hit.tagName).toBe('BUTTON');
       expect(hit.getAttribute('title')).toBeNull();
-      expect(hit.closest('[title]')?.getAttribute('title')).toBe(`${detail}\nwithdrawn\n${formatAbsolute(fixtureInstant(-60))}`);
+      expect(hit.closest('[title]')?.getAttribute('title')).toBe(`failure\n${detail}\nwithdrawn\n${formatAbsolute(fixtureInstant(-60))}`);
 
       const link = row.querySelector<HTMLAnchorElement>('[data-testid="delivery-link"]')!;
       const linkRect = link.getBoundingClientRect();
@@ -230,7 +230,7 @@ describe('Delivery drawer and full-screen scroll shell sweep (web:shell-sweep)',
           const history = [...main.querySelectorAll<HTMLElement>('[data-testid="delivery-history-entry"]')];
           expect(repos).toHaveLength(deliveryPrs.length);
           expect(history.map((entry) => entry.querySelector('.compact-bounce .detail')?.textContent?.trim())).toEqual(
-            deliveryBounces.map((_, index) => `Delivery diagnostic ${index}: repository checks failed.`),
+            deliveryBounces.map(() => 'bounced · unknown failure'),
           );
           const sideRect = side.getBoundingClientRect();
           const mainRect = main.getBoundingClientRect();

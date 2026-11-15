@@ -168,6 +168,29 @@ describe('ChunkAwaitingHuman', () => {
     }).compileComponents();
   });
 
+  it('renders each requested section without duplicating controls or history', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...MULTILINE_DETAIL,
+      decision: WAITING_DECISION_DETAIL.decision,
+      escalation: ESCALATED_DETAIL.escalation,
+    });
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('canResolve', true);
+    for (const [section, expected] of [
+      ['asks', ['open-question', 'escalation']],
+      ['answered', ['answered-question']],
+      ['decisions', ['open-decision']],
+    ] as const) {
+      fixture.componentRef.setInput('section', section);
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      for (const id of ['open-question', 'answered-question', 'open-decision', 'escalation']) {
+        expect(!!el.querySelector(`[data-testid="${id}"]`)).toBe((expected as readonly string[]).includes(id));
+      }
+    }
+  });
+
   it('surfaces a waiting_on_human chunk’s open question and its options (MVP criterion 7)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);

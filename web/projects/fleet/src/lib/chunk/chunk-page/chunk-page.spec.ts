@@ -1,4 +1,4 @@
-import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import { ApplicationRef, Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -194,6 +194,21 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-artifacts-panel')).toBeNull();
+  });
+
+  it('places asks before work and history sections after issues', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+    const lhs = el.querySelector('.lhs')!;
+    const sections = [...lhs.children].map((child) => child.getAttribute('section') ?? child.getAttribute('data-testid'));
+    expect(sections).toEqual(['asks', 'section-work-item', 'section-issues', 'answered', 'decisions']);
+  });
+
+  it('withholds the chunk events link only on mobile', async () => {
+    const el = await open(`/acting/chunk/${CHUNK_ID}`);
+    expect(el.querySelector('[data-testid="chunk-events-link"]')).not.toBeNull();
+    TestBed.inject(ViewportService).setOverride('mobile');
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(el.querySelector('[data-testid="chunk-events-link"]')).toBeNull();
   });
 
   it('opts the issue pane into inline placement, so its error status reads in flow at phone widths', async () => {

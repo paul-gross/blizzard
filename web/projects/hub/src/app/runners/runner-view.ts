@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks, KitErrorLine } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, RunnerConnection, SubscriptionBlocks, KitErrorLine } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
@@ -20,11 +21,14 @@ import { StatusLight } from './status-light';
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitGlyph, KitPanel, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks, KitErrorLine],
+  imports: [NgTemplateOutlet, KitAsyncState, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks, KitErrorLine],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })
 export class RunnerPanelView {
+  readonly mobileOverview = input(false);
+  readonly chunksState = input<KitAsyncStateValue>('ready');
+  readonly chunksError = input(false);
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
 

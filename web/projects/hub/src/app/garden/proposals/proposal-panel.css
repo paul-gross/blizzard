@@ -17,6 +17,15 @@
 .pp-sec:first-child {
   border-top: none;
 }
+.pp-body {
+  overflow-wrap: anywhere;
+}
+.pp-body fleet-kit-markdown {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+}
 .pp-title {
   margin: 0;
   overflow-wrap: anywhere;
@@ -24,10 +33,6 @@
 .pp-meta {
   margin: 4px 0 0;
   color: var(--label);
-}
-.pp-actions fleet-kit-fact-list {
-  display: block;
-  margin-bottom: 10px;
 }
 .pp-actions-bar {
   display: flex;

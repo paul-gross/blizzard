@@ -5,6 +5,7 @@ import { KitTab, KitTabStrip, LensLink } from 'fleet/shell';
 
 import { ProjectLensControl } from './project-lens-control';
 import type { LensChoice } from './project-lens.model';
+import { DESKTOP_TABS } from './navigation.model';
 
 /**
  * The top nav's tab strip — one `routerLink` per top-level route, with
@@ -31,6 +32,8 @@ import type { LensChoice } from './project-lens.model';
   styleUrl: './app-nav.css',
 })
 export class AppNav {
+  protected readonly tabs = DESKTOP_TABS;
+
   /** Whether the `Admin` tab renders — `user:manage`, gated by the app root. */
   readonly showAdmin = input(false);
 

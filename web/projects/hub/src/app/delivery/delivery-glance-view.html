@@ -18,7 +18,7 @@
         <span class="cid">{{ row.chunk.shortId }}</span>
       </span>
       @if (row.chunk.titlesPending) {
-        <fleet-kit-skeleton class="title-skeleton" [rows]="1" />
+        <fleet-kit-skeleton class="title-skeleton" [rows]="titleSkeletonRows(row.chunk.chunkId)" />
       } @else if (row.chunk.lines[0]?.title; as title) {
         <span class="title" [title]="title">{{ title }}</span>
       }
@@ -27,6 +27,17 @@
         <span class="age">{{ age(row) }}</span>
       </span>
     </span>
+  </li>
+</ng-template>
+
+<ng-template #loadingCard let-rows>
+  <li class="loading-card" data-testid="delivery-loading-card">
+    <fleet-kit-skeleton class="sk-lane" [rows]="1" />
+    <div class="sk-body">
+      <div class="sk-pair"><fleet-kit-skeleton class="sk-ref" [rows]="1" /><fleet-kit-skeleton class="sk-id" [rows]="1" /></div>
+      <fleet-kit-skeleton class="sk-title" [rows]="rows" />
+      <div class="sk-pair"><fleet-kit-skeleton class="sk-stage" [rows]="1" /><fleet-kit-skeleton class="sk-age" [rows]="1" /></div>
+    </div>
   </li>
 </ng-template>
 
@@ -40,7 +51,24 @@
     emptyText="Nothing delivering or delivered."
     emptyTestid="delivery-empty"
   >
-    <fleet-kit-skeleton loading variant="card" [rows]="6" />
+    <div loading class="loading-content" data-testid="delivery-glance-loading">
+      <fleet-kit-count-strip-skeleton [cells]="2" [captions]="['delivering', 'delivered 48h']" />
+      <ul class="cards">
+        @for (rows of loadingDelivering; track $index) {
+          <ng-container *ngTemplateOutlet="loadingCard; context: { $implicit: rows }" />
+        }
+        @if (loadingDelivering.length > 0) {
+          <li class="divider" role="separator" aria-label="Delivering above, delivered in the last 48 hours below">
+            <span>▲ Delivering</span>
+            <span class="divider-rule"></span>
+            <span>Delivered 48h ▼</span>
+          </li>
+        }
+        @for (rows of loadingRecent; track $index) {
+          <ng-container *ngTemplateOutlet="loadingCard; context: { $implicit: rows }" />
+        }
+      </ul>
+    </div>
     <fleet-kit-count-strip testid="delivery-filter" [cells]="filterCells()" [selected]="filter()" (cellClick)="toggle($event)" />
     <ul class="cards">
       @if (filter() !== 'recent') {

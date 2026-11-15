@@ -93,7 +93,7 @@ describe('DeliveryDrawer', () => {
     const entries = (fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="delivery-history-entry"]');
     expect(entries).toHaveLength(1);
     const bounce = entries[0].querySelector('.compact-bounce');
-    expect(bounce?.querySelector('.detail')?.textContent).toBe('poll-timeout');
+    expect(bounce?.querySelector('.detail')?.textContent).toBe('bounced · timed out');
     expect(bounce?.getAttribute('title')).toBe('poll-timeout');
   });
 
@@ -104,8 +104,8 @@ describe('DeliveryDrawer', () => {
     const el = fixture.nativeElement as HTMLElement;
     const entry = el.querySelector<HTMLElement>('[data-testid="delivery-history-entry"]')!;
 
-    expect(entry.querySelector('.compact-bounce')?.getAttribute('title')).toBe('checks failed in test');
-    expect([...entry.querySelectorAll('.detail')].map((each) => each.textContent?.trim())).toEqual(['checks failed in test']);
+    expect(entry.querySelector('.compact-bounce')?.getAttribute('title')).toBe('failure\nchecks failed in test');
+    expect([...entry.querySelectorAll('.detail')].map((each) => each.textContent?.trim())).toEqual(['bounced · unknown failure']);
     expect(entry.textContent).not.toContain('exited');
     expect(entry.textContent).not.toContain('out 19');
   });
@@ -126,9 +126,9 @@ describe('DeliveryDrawer', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const bounce = el.querySelector('.compact-bounce');
-    expect(bounce?.getAttribute('title')).toBe(full);
+    expect(bounce?.getAttribute('title')).toBe(`missing_artifact\n${full}`);
     expect(bounce?.textContent).toContain('org/repo · PR #42');
-    expect(bounce?.textContent).toContain('Pre-push: failure');
+    expect(bounce?.textContent).toContain('bounced · unknown failure');
     expect(el.querySelector('a.log')?.getAttribute('href')).toBe(`/board/chunk/${CHUNK}/artifact/log-key`);
     expect(el.querySelector(`a[href="${pr.url}"]`)).not.toBeNull();
   });

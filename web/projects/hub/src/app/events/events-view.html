@@ -1,77 +1,54 @@
-<fleet-kit-panel
-  class="fill"
-  aria-label="Events"
-  data-testid="events-panel"
-  label="Events · operational log"
-  [count]="events().length || null"
-  countTestid="events-count"
-  [bodyScroll]="false"
->
-  <div class="body">
+  <section class="body" aria-label="Events" data-testid="events-panel">
     <div class="filters" data-testid="events-filters">
-      <fleet-kit-chips [options]="severityOptions" [selectedValue]="severity() ?? ''" (choose)="onChoose($event)" />
-      @if (runnerFilterOptions().length) {
-        <fleet-kit-select
-          ariaLabel="Runner"
-          testid="events-runner-filter"
-          [options]="runnerFilterOptions()"
-          [selectedValue]="runner() ?? ''"
-          (choose)="onRunnerChoose($event)"
-        />
-      }
-      @if (chunkFilterOptions().length) {
-        <fleet-kit-select
-          ariaLabel="Chunk"
-          testid="events-chunk-filter"
-          [options]="chunkFilterOptions()"
-          [selectedValue]="chunk() ?? ''"
-          (choose)="onChunkChoose($event)"
-        />
-      }
+      <fleet-kit-select ariaLabel="Severity" testid="events-severity-filter" [options]="severityOptions"
+        [selectedValue]="severity() ?? ''" (choose)="onChoose($event)" />
+      <fleet-kit-select ariaLabel="Runner" testid="events-runner-filter" [options]="runnerFilterOptions()"
+        [selectedValue]="runner() ?? ''" (choose)="onRunnerChoose($event)" />
+      <fleet-kit-select ariaLabel="Chunk" testid="events-chunk-filter" [options]="chunkFilterOptions()"
+        [selectedValue]="chunk() ?? ''" (choose)="onChunkChoose($event)" />
     </div>
-    <fleet-kit-async-state
-      [state]="state()"
-      loadingText="LOADING…"
-      loadingTestid="events-loading"
-      errorText="FAILED TO LOAD EVENTS"
-      errorTestid="events-error"
-      emptyText="NO EVENTS"
-      emptyTestid="events-empty"
-    >
+    <fleet-kit-async-state [state]="state()" loadingMode="content" loadingTestid="events-loading"
+      errorText="FAILED TO LOAD EVENTS" errorTestid="events-error" emptyText="NO EVENTS" emptyTestid="events-empty">
+      <div loading class="rows skeletons" data-testid="events-loading" aria-label="Loading events">
+        @for (row of skeletonRows; track row) {
+          <div class="skeleton-card"><fleet-kit-skeleton [rows]="3" /></div>
+        }
+      </div>
       <div class="rows" data-testid="events-rows">
         @for (ev of events(); track ev.id) {
           <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
-            <fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" />
-            @if (ev.chunk_id; as chunkId) {
-              <fleet-kit-button
-                class="chunk"
-                data-testid="events-chunk"
-                [ariaLabel]="'Open chunk ' + shortId(chunkId)"
-                (click)="selectChunk.emit(chunkId)"
-              >
-                {{ shortId(chunkId) }}
-              </fleet-kit-button>
-            } @else {
-              <span class="chunk-none" aria-hidden="true">—</span>
-            }
-            <fleet-kit-badge class="sev" [tone]="toneFor(ev.severity)" variant="soft" data-testid="events-severity">{{
-              ev.severity
-            }}</fleet-kit-badge>
-            <span class="kind" data-testid="events-kind" [title]="ev.kind">{{ ev.kind }}</span>
-            @if (ev.runner_id; as runnerId) {
-              <span class="runner" data-testid="events-runner" [title]="runnerTitle(runnerId, ev.runner_name)">{{
-                runnerName(runnerId, ev.runner_name)
-              }}</span>
-            } @else {
-              <span class="runner" data-testid="events-runner" aria-hidden="true">—</span>
-            }
-            <span class="msg" data-testid="events-message">{{ ev.message }}</span>
-            @if (ev.lease_id; as leaseId) {
-              <span class="lease" data-testid="events-lease">{{ shortId(leaseId) }}</span>
-            }
+            <a class="hit" [routerLink]="['/events', ev.id] | lensLink"
+              [queryParams]="{ severity: severity(), runner: runner(), chunk: chunk(), at: ev.recorded_at, kind: ev.kind, eventChunk: ev.chunk_id, fingerprint: fingerprint(ev) }"
+              [attr.aria-label]="'Open event ' + ev.kind + ', ' + ev.severity" data-testid="events-open"></a>
+            <div class="card-main">
+              <span class="card-layout">
+              <span class="severity-icon" [attr.data-icon]="iconFor(ev.severity)" [attr.title]="ev.severity" [attr.aria-label]="ev.severity">
+                @switch (iconFor(ev.severity)) {
+                  @case ('info') { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7v.2"/></svg> }
+                  @case ('warning') { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 20H2L12 3ZM12 9v5M12 17v.2"/></svg> }
+                  @case ('critical') { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8l6 6v8l-6 6H8l-6-6V8l6-6ZM12 7v7M12 17v.2"/></svg> }
+                  @default { <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1.2-1.5 2.5M12 17v.2"/></svg> }
+                }
+              </span>
+              <span class="card-content">
+                <span class="headline"><span class="kind" data-testid="events-kind">{{ ev.kind }}</span><span class="time" data-testid="events-time" [title]="ev.recorded_at">{{ age(ev.recorded_at) }}</span></span>
+                <span class="msg" data-testid="events-message">{{ ev.message }}</span>
+              </span>
+              </span>
+            </div>
+            <div class="meta">
+              @if (ev.runner_id; as runnerId) {
+                <a data-testid="events-runner" [routerLink]="['/fleet', fleetId(runnerId)] | lensLink" [title]="runnerTitle(runnerId, ev.runner_name)" (click)="$event.stopPropagation()">{{ runnerName(runnerId, ev.runner_name) }}</a>
+              }
+              @if (ev.runner_id && ev.chunk_id) { <span aria-hidden="true"> · </span> }
+              @if (ev.chunk_id; as chunkId) {
+                <a class="chunk" data-testid="events-chunk" [attr.aria-label]="'Open chunk ' + shortId(chunkId)"
+                  [routerLink]="(mobile() ? ['/board', 'chunk', chunkId] : ['/board']) | lensLink"
+                  [queryParams]="mobile() ? null : { chunk: chunkId }" (click)="$event.stopPropagation()">{{ shortId(chunkId) }}</a>
+              }
+            </div>
           </div>
         }
       </div>
     </fleet-kit-async-state>
-  </div>
-</fleet-kit-panel>
+  </section>

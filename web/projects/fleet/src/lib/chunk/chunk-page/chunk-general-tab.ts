@@ -25,10 +25,9 @@ import { LensLink } from '../../core/lens-link';
  * {@link ChunkFacts},
  * {@link ChunkIssuePane}, {@link ChunkTimeline},
  * {@link ChunkAwaitingHuman} — this component only picks the arrangement: a
- * two-column grid at ≥720px — work item (its facts and, when the
- * chunk has any, its dependency edges either way) and issues stacked in the left
- * column, node history beside them spanning both rows, asks · decisions spanning
- * the full width below — collapsing to one stacked column, DOM order, below it.
+ * two-column grid at ≥720px — open asks, work item, issues, answered questions
+ * and decisions in the left column, node history beside them. On mobile node
+ * history precedes the answered trail and decisions.
  *
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
  * the three operator-action outputs plus {@link pickStep} back out, no

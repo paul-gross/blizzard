@@ -93,9 +93,9 @@ describe('deliveryHistory', () => {
     expect(texts(detail({ flow_record: [fact('fl_a', 'turn-started', 1)] }))).toEqual(['landing attempt started']);
     const withdrawn = [fact('fl_a', 'turn-started', 5), fact('fl_a', 'turn-ended', 4, { outcome: 'failure' }), fact('fl_a', 'withdrawn', 3, { outcome: 'failure' })];
     const history = deliveryHistory(detail({ flow_record: withdrawn }), FORGES, FIXTURE_NOW);
-    expect(history.map((entry) => entry.text)).toEqual(['landing attempt failure · withdrawn']);
+    expect(history.map((entry) => entry.text)).toEqual(['landing attempt unknown failure · withdrawn']);
     expect(history[0].tone).toBe('needs');
-    expect(texts(detail({ flow_record: [fact('fl_a', 'turn-ended', 4, { outcome: 'conflict' })] }))).toEqual(['landing attempt conflict']);
+    expect(texts(detail({ flow_record: [fact('fl_a', 'turn-ended', 4, { outcome: 'conflict' })] }))).toEqual(['landing attempt merge conflict']);
   });
 
   it('reads a withdrawal on its own with its reason, and drops one that followed a landing into the landing', () => {
@@ -138,6 +138,21 @@ describe('deliveryHistory', () => {
     expect(history[0].repos).toBe('blizzard · blizzard-context');
   });
 
+  it('keeps distinct raw outcomes at the same instant while merging identical diagnostics', () => {
+    const first = fact('fl_a', 'turn-ended', 5, { outcome: 'failure' });
+    const second = fact('fl_b', 'turn-ended', 5, { outcome: 'failure' });
+    const distinct = deliveryHistory(detail({ flow_record: [first, { ...second, outcome: 'future-outcome' }] }), FORGES, FIXTURE_NOW);
+    expect(distinct.map((entry) => [entry.text, entry.rawOutcome, entry.repos])).toEqual([
+      ['landing attempt unknown failure', 'failure', 'blizzard'],
+      ['landing attempt unknown failure', 'future-outcome', 'blizzard-context'],
+    ]);
+
+    const identical = deliveryHistory(detail({ flow_record: [first, second] }), FORGES, FIXTURE_NOW);
+    expect(identical.map((entry) => [entry.text, entry.rawOutcome, entry.repos])).toEqual([
+      ['landing attempt unknown failure', 'failure', 'blizzard · blizzard-context'],
+    ]);
+  });
+
   it('stitches in the graph transitions just before and just after each delivery event, whatever the nodes are named', () => {
     const history = [
       transitionView({ epoch: 1, from_node_name: 'build', to_node_name: 'review', recorded_at: fixtureInstant(-40 * MIN) }),
@@ -168,13 +183,13 @@ describe('deliveryHistory', () => {
       assetArtifactView({ name: 'deliver-log', key: 'log-later', recorded_at: fixtureInstant(-MIN) }),
     ];
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'failure', envelope, recorded_at: fixtureInstant(-10 * MIN) })], artifacts }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · failure', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
+    expect(entry).toMatchObject({ text: 'bounced · unknown failure', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
     expect(entry).not.toHaveProperty('step');
   });
 
   it('reads a bounce whose envelope is not JSON as carrying nothing but its cause', () => {
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', envelope: '<html>' })] }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · conflict', tone: 'needs', repos: null, detail: null, logKey: null });
+    expect(entry).toMatchObject({ text: 'bounced · merge conflict', tone: 'needs', repos: null, detail: null, logKey: null });
   });
 });
 
@@ -221,8 +236,28 @@ describe('deliveryDrawerView', () => {
       REPOSITORIES,
       FIXTURE_NOW,
     )!;
-    expect(view.repos.map((repo) => repo.state)).toEqual(['bounced · conflict', 'not submitted']);
+    expect(view.repos.map((repo) => repo.state)).toEqual(['bounced · merge conflict', 'not submitted']);
     expect(view.repos[0].lastAttempt).toMatchObject({ outcome: 'conflict', age: '[5m 0s]' });
+  });
+
+  it('does not attribute a chunk timeout to an uncorrelated repository settlement', () => {
+    const view = deliveryDrawerView(detail({
+      flow_record: [fact('fl_a', 'turn-ended', 5, { outcome: 'failure' })],
+      bounces: [bounceView({ cause: 'poll-timeout' })],
+    }), FLOWS, REPOSITORIES, FIXTURE_NOW)!;
+    expect(view.repos[0].state).toBe('bounced · unknown failure');
+    expect(deliveryHistory(detail({ bounces: [bounceView({ cause: 'poll-timeout' })] }), FORGES, FIXTURE_NOW)[0].text)
+      .toBe('bounced · timed out');
+  });
+
+  it('retains future raw causes and outcomes beside the unknown caption', () => {
+    const entry = deliveryHistory(detail({
+      bounces: [bounceView({ cause: 'future-cause', envelope: JSON.stringify({ detail: 'raw diagnostic' }) })],
+      flow_record: [{ ...fact('fl_a', 'turn-ended', 5, { outcome: 'failure' }), outcome: 'future-outcome' }],
+    }), FORGES, FIXTURE_NOW);
+    expect(entry.find((item) => item.bounce)?.text).toBe('bounced · unknown failure');
+    expect(entry.find((item) => item.bounce)?.bounce?.full).toBe('future-cause\nraw diagnostic');
+    expect(entry.find((item) => item.rawOutcome === 'future-outcome')?.text).toBe('landing attempt unknown failure');
   });
 
   it('reads a turn or bounce the hub marks as rework waiting, in the repo block and the history, and any other bounce stale', () => {
@@ -230,11 +265,11 @@ describe('deliveryDrawerView', () => {
     expect([repo('conflict').tone, repo('conflict').lastAttempt?.tone]).toEqual(['waiting', 'waiting']);
     expect([repo('failure').tone, repo('failure').lastAttempt?.tone]).toEqual(['stale', 'stale']);
     const history = deliveryHistory(detail({ flow_record: [fact('fl_a', 'turn-started', 6), fact('fl_a', 'turn-ended', 5, { outcome: 'conflict' })] }), FORGES, FIXTURE_NOW);
-    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt conflict', 'waiting']]);
+    expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt merge conflict', 'waiting']]);
     const bounces = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', rework: true }), bounceView({ cause: 'failure', recorded_at: fixtureInstant(-30) })] }), FORGES, FIXTURE_NOW);
     expect(bounces.map((entry) => [entry.text, entry.tone])).toEqual([
-      ['bounced · failure', 'needs'],
-      ['bounced · conflict', 'waiting'],
+      ['bounced · unknown failure', 'needs'],
+      ['bounced · merge conflict', 'waiting'],
     ]);
   });
 
