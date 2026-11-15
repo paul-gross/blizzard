@@ -1779,7 +1779,7 @@ def test_spawn_streams_its_output(monkeypatch: pytest.MonkeyPatch, spawn_executo
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture(spawn_executor)
 
-    adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+    adapter.spawn(envelope, preamble, session_hint="fresh-hint", session_settings=adapter.launch_settings())
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--output-format") :][:3] == ["--output-format", "stream-json", "--verbose"]
@@ -1789,7 +1789,8 @@ def test_resume_with_message_streams_its_output(monkeypatch: pytest.MonkeyPatch,
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    _adapter(spawn_executor, binary="claude").resume_with_message("/ws", "sid", "msg")
+    adapter = _adapter(spawn_executor, binary="claude")
+    adapter.resume_with_message("/ws", "sid", "msg", session_settings=adapter.launch_settings())
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--output-format") :][:3] == ["--output-format", "stream-json", "--verbose"]
@@ -1801,7 +1802,10 @@ def test_judge_keeps_the_single_json_envelope(
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    _adapter(spawn_executor, binary="claude").judge("/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"))
+    adapter = _adapter(spawn_executor, binary="claude")
+    adapter.judge(
+        "/ws", "sid", "verdict?", str(tmp_path / "judge-output.txt"), session_settings=adapter.launch_settings()
+    )
 
     cmd = captured["cmd"]
     assert cmd[cmd.index("--output-format") + 1] == "json"
