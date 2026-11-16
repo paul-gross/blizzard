@@ -74,6 +74,12 @@ class RunnerSettingsReader:
         """Resolve the entries a first seed would produce, without writing them."""
         return self._preview_entries(self.store.snapshot().entries)
 
+    def resolve_for_read(self, entries: Mapping[str, Entry]) -> RunnerConfig:
+        """Show authored inputs until registration makes a durable seed possible."""
+        if self._deferred_seed is not None:
+            return self._preview_entries(entries)
+        return self.resolve(entries)
+
     def _preview_entries(self, current: Mapping[str, Entry]) -> RunnerConfig:
         entries = dict(current)
         authored = self.entry.authored

@@ -6,6 +6,27 @@ import { expect, runnerTest as test } from '../../../harness/fixtures';
 // The subject is what a freshly initialized runner host looks like, so `init` runs for real.
 test.use({ coldInit: true });
 
+test('a newly added runner serves settings after its first tick without reinitializing', async ({ mockHub, runnerHost }) => {
+  test.slow();
+  const first = runnerHost.runners['runner-local']!;
+  const added = await runnerHost.cli(['add', 'r2', '--project', 'default']);
+  expect(added.code, added.stdout + added.stderr).toBe(0);
+  const record = await mockHub.fleetOf(runnerHost).get('/api/fleet/host');
+  expect(record.status).toBe(200);
+  const runners = record.body.runners as { runner_id: string }[];
+  const r2 = runners.find((runner) => runner.runner_id !== first.id)!.runner_id;
+
+  await runnerHost.restart();
+  expect((await runnerHost.socketApi.stepRunner(r2)).outcome).toBe('completed');
+  const settings = await runnerHost.api.runner(r2).settings();
+  expect(settings.status).toBe(200);
+  expect(settings.body.settings.find((row) => row.key === 'projects')).toMatchObject({
+    value: [{ project: 'default', workspace: 'workspace-local' }],
+    source: 'entry',
+    written_by: 'seed',
+  });
+});
+
 // A runner added to a registered host with no hub session, and retired from it, on real `blizzard-runner` processes and a
 // test-owned mock hub: `runner add` holds no session, yet the mock holds the runner under the host and the host runs it
 // after a restart; `runner retire` halts it on the running host at its next tick and removes its entry, after which

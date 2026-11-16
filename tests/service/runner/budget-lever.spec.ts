@@ -1,4 +1,4 @@
-import { BILLED_ZERO_VAR, expect, PRICES, pricedChunk, pricedProfile, runnerTest as test, stepUntil } from '../../harness/fixtures';
+import { BILLED_ZERO_VAR, expect, PRICES, pricedChunk, pricedProfile, runnerTest as test, seedSyntheticSpend, stepUntil } from '../../harness/fixtures';
 import type { Clock, RunnerHost, RunnerHosts } from '../../harness/fixtures';
 
 // A dollar budget throttles a runner below its ceiling: one stepped host, one runner spending a priced worker's estimate
@@ -114,4 +114,27 @@ test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_trip
   expect(status.throttle?.state).toBe('braked');
   expect(await leasesOf('review')).toEqual([]);
   expect(await leasesOf('build')).toHaveLength(1);
+});
+
+test('a live budget edit agrees across host, hub and claim enforcement', async ({ mockHub, runnerHosts }) => {
+  const host = await runnerHosts.create();
+  const runner = host.runners[RUNNER]!;
+  const fleet = mockHub.fleetOf(host, RUNNER);
+  seedSyntheticSpend(host, runner.id, 7);
+  for (const [budget, declined] of [[5, true], [10, false]] as const) {
+    const edit = await host.cli(['settings', 'set', 'throttle.budget.usd', String(budget), '--runner', runner.id]);
+    expect(edit.code, edit.stderr).toBe(0);
+    await mockHub.captured.reset();
+    expect((await host.step()).outcome).toBe('completed');
+    const peeks = (await mockHub.captured.read()).body.requests.filter((request) => request.path === '/api/fleet/queue/peek');
+    expect(peeks.length > 0).toBe(!declined);
+    const local = (await host.api.runners()).body.items.find((item) => item.runner_id === runner.id)!.throttle;
+    const detail = (await runner.status()).body.throttle;
+    expect(local).toEqual(detail);
+    expect(local?.state).toBe(declined ? 'declining' : 'admitting');
+    expect(local?.declining).toEqual(declined ? ['budget'] : []);
+    expect(local?.levers.find((lever) => lever.name === 'budget')?.reading).toBe(`$7.00 of $${budget.toFixed(2)} over the trailing 24h`);
+    const hub = (await fleet.get(`/api/fleet/runners/${runner.id}`)).body;
+    expect((hub.declining as { lever: string }[]).map((item) => item.lever)).toEqual(declined ? ['budget'] : []);
+  }
 });

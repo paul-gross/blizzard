@@ -7,7 +7,7 @@ no fact of its own, so it is derived from how stale ``hub_contact_at`` reads aga
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -37,7 +37,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessReposit
 from blizzard.runner.lifecycle.model import SlotBinding, binding_usage, free_slots, open_lease_count
 from blizzard.runner.lifecycle.routing import RoutingConflict, RoutingMap, routing_map
 from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository, resolve_resume_command
-from blizzard.runner.throttle.gate import GateVerdict, ThrottleGate
+from blizzard.runner.throttle.gate import GateReadConfig, GateReadContext, GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 from blizzard.runner.throttle.settings import ThrottleSettings
 
@@ -309,6 +309,7 @@ class RunnerStatusService:
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
         throttle_gate: ThrottleGate | None = None,
         throttle: ThrottleSettings | None = None,
+        throttle_config: Callable[[], GateReadConfig] | None = None,
     ) -> None:
         self._pause = pause
         self._daemon_liveness = daemon_liveness
@@ -336,6 +337,7 @@ class RunnerStatusService:
         self._contact_staleness = contact_staleness
         self._throttle_gate = throttle_gate
         self._throttle = throttle
+        self._throttle_config = throttle_config
 
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._pause.local_paused()
@@ -344,6 +346,13 @@ class RunnerStatusService:
         identity = self._identity.current()
         answer = self._served_projects.served_projects_answer() if self._served_projects is not None else None
         routing = routing_map(self._bindings, answer)
+        gate = self._throttle_gate
+        throttle = self._throttle
+        if gate is not None and self._throttle_config is not None:
+            config = self._throttle_config()
+            ctx = gate.ctx
+            gate = ThrottleGate(GateReadContext(ctx.stores, ctx.host_stores, config, ctx.clock, ctx.subscriptions))
+            throttle = config.throttle
         return RunnerStatusSummary(
             runner_id=identity.runner_id if identity is not None else None,
             runner_name=identity.runner_name if identity is not None else self._runner_name,
@@ -369,10 +378,8 @@ class RunnerStatusService:
             served_projects=served_projects_status(self._projects, answer),
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
             routing_conflicts=routing.conflicts,
-            throttle=ThrottleStatus.of(
-                self._throttle_gate.verdict(), braked=local_paused or hub_paused, settings=self._throttle
-            )
-            if self._throttle_gate is not None
+            throttle=ThrottleStatus.of(gate.verdict(), braked=local_paused or hub_paused, settings=throttle)
+            if gate is not None
             else None,
         )
 

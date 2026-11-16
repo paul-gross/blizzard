@@ -27,6 +27,63 @@ from tests.support.runner_fakes import make_store, make_stores
 from tests.support.runner_mint import new_mint
 
 
+def test_first_registration_seeds_settings_for_http_without_another_tick(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from blizzard.foundation.settings_record.vocabulary import Entry
+    from blizzard.runner.lifecycle.registration import Registration
+    from tests.support.runner_fakes import FakeHub
+
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    monkeypatch.setenv("BZ_HUB_TOKEN_SIBLING", "test-token")
+    monkeypatch.setenv("BZ_HOST_TOKEN", "host-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    with (tmp_path / "blizzard-host.toml").open("a") as config:
+        config.write('\n[[runner]]\nid = "rn_sibling"\nname = "sibling"\nprojects = []\n')
+    host = load_host_config(tmp_path)
+    base = make_store(url, TEST_RUNNER_ID)
+    sibling = make_store(url, "rn_sibling")
+    RunnerIdentityStore(sibling.connections).record_runner_identity(
+        RunnerIdentity("rn_sibling", "sibling", datetime.now(UTC))
+    )
+    ready, halted = seed_runners(host, list(host.runners))
+    assert len(ready) == 2 and not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    app = create_runner_app(runner.config)
+    seams = runner_seams(app)
+    seams.settings_reader = runner.settings_reader
+    seams.stepper = stepper
+    hub = FakeHub(default_runner_id=TEST_RUNNER_ID)
+
+    def register(ctx: loop_wiring.LoopContext) -> None:
+        Registration(replace(ctx, hub=hub)).run()
+
+    monkeypatch.setattr(loop_wiring, "tick", register)
+    try:
+        with runner_client(app) as client:
+            before = client.get("/api/settings")
+            assert before.status_code == 200, before.text
+            assert RunnerIdentityStore(base.connections).runner_identity() is None
+            assert runner.stores.settings.snapshot().entries == {}
+            stepper.request()
+            assert RunnerIdentityStore(base.connections).runner_identity() is not None
+            assert runner.stores.settings.snapshot().entries == {}
+            response = client.get("/api/settings")
+            assert response.status_code == 200, response.text
+            rows = {row["key"]: row for row in response.json()["settings"]}
+            assert rows["agents"]["value"] == 3
+            assert runner.stores.settings.snapshot().entries["agents"] == Entry(3)
+            assert runner.stores.settings.snapshot().entries["projects"] == Entry([])
+    finally:
+        stepper.close()
+        graph.close()
+
+
 def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

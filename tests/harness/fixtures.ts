@@ -480,6 +480,7 @@ export type { MockHubClient } from './client/mock-hub';
 export type { MockChunkSpec, MockJournal } from './client/mock';
 export type { HostRoutes, RunnerClient, RunnerHostClient, TickPass } from './client/runner';
 
+export { seedSyntheticSpend } from './synthetic-spend';
 /** A real previous-release runner on a store migrated from that release to the candidate hub. */
 export const oldInstallationTest = test.extend<{ oldInstallation: import('./old-installation').OldInstallation }>({
   isolation: 'common',

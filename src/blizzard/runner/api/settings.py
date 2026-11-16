@@ -134,10 +134,15 @@ def _view(wiring: RunnerWiring) -> SettingsView:
     stepper = wiring.stepper()
     snapshot: SettingsSnapshot
     provenance: Mapping[str, SettingsChange]
-    (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(
-        store.snapshot_with_provenance
-    )
-    resolved = service.resolve(snapshot.entries)
+
+    def read_settings() -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
+        # Registration may have established identity during the last tick. Seed
+        # before reading provenance, rather than waiting for another tick.
+        service.snapshot()
+        return store.snapshot_with_provenance()
+
+    (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(read_settings)
+    resolved = service.resolve_for_read(snapshot.entries)
     defaults = _resolved_values(resolved)
     rows: list[SettingRow] = []
     keys = dict(service.keys)
@@ -282,6 +287,7 @@ def patch_settings(
         )
     try:
         check_keys(HOST_REGISTRY, [*body.set, *body.unset])
+        service.snapshot()
         cast(IWriteRunnerSettings, service.store).write(
             Change("edit", sets=body.set, unsets=frozenset(body.unset)),
             if_match=revision,

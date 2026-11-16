@@ -854,6 +854,15 @@ def _wire_runner(
         archived=archived_transcripts,
         workspaces=workspaces,
     )
+
+    stepper = RunnerStepper(graph.config, process_graph=graph)
+    subscriptions = config.resolved_subscriptions()
+    initial_gate_config = GateReadConfig(
+        subscription=subscriptions[0].slug if subscriptions else None,
+        throttle=config.throttle,
+        host_zone=host.zone,
+    )
+
     runner_status = RunnerStatusService(
         clock,
         pause=read_stores.pause,
@@ -882,16 +891,13 @@ def _wire_runner(
             GateReadContext(
                 stores=read_stores,
                 host_stores=graph.host.host_stores,
-                config=GateReadConfig(
-                    subscription=config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None,
-                    throttle=config.throttle,
-                    host_zone=host.zone,
-                ),
+                config=initial_gate_config,
                 clock=clock,
                 subscriptions=host.subscriptions,
             )
         ),
         throttle=config.throttle,
+        throttle_config=lambda: stepper.gate_config(initial_gate_config),
     )
     takeover = TakeoverService(
         clock,
@@ -922,7 +928,6 @@ def _wire_runner(
         outbound=runner_stores.outbound,
         lease_lock=runner_stores.lease_lock,
     )
-    stepper = RunnerStepper(graph.config, process_graph=graph)
     served = runner_seams(
         config,
         clock=clock,

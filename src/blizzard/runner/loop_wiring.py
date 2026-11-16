@@ -63,6 +63,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
+from blizzard.runner.throttle.gate import GateReadConfig
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -537,6 +538,14 @@ class RunnerStepper:
         """Read the store and the tick's published state without interleaving a rebuild."""
         with self._build:
             return read(), self.settings_in_force_revision, self.settings_in_force_since, self.settings_failure
+
+    def gate_config(self, fallback: GateReadConfig) -> GateReadConfig:
+        """Read the last successfully built pass configuration as one snapshot."""
+        with self._build:
+            if self._ctx is None:
+                return fallback
+            config = self._ctx.config
+            return GateReadConfig(config.subscription, config.throttle, config.host_zone)
 
     def _context(self) -> LoopContext:
         with self._build:
