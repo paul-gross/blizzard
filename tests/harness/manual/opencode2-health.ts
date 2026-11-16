@@ -7,8 +7,9 @@ const root = path.resolve(import.meta.dirname, '../../..');
 const scratch = process.env.BLIZZARD_TMPDIR;
 const runtime = process.env.BZ_RUNNER_RUNTIME;
 const port = process.env.BZ_RUNNER_PORT;
-if (!scratch || !path.isAbsolute(scratch) || !runtime || !port || process.env.WINTER_ENV !== 'bz5') {
-  throw new Error('source winter env bz5 and set BLIZZARD_TMPDIR to an absolute scratch directory');
+const winterEnv = process.env.WINTER_ENV;
+if (!scratch || !path.isAbsolute(scratch) || !runtime || !port || !winterEnv) {
+  throw new Error('source `winter env <env> --resolve` and set BLIZZARD_TMPDIR to an absolute scratch directory');
 }
 if (!process.argv[2]) throw new Error('supply a command to run while the candidate runner is serving');
 const scenario = process.env.OPENCODE2_HEALTH_SCENARIO ?? 'NEVER_REGISTERED';
@@ -63,10 +64,15 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {
 try {
   run(path.join(root, '../blizzard-mock/.venv/bin/mock-opencode-2'), ['emit-engine', '--out', binary, ...(scenario === 'NEVER_REGISTERED' ? ['--lever', scenario] : [])]);
   restore = true;
-  run('winter', ['service', 'down', 'bz5/runner']);
+  run('winter', ['service', 'down', `${winterEnv}/runner`]);
   if (interrupted) throw new Error('interrupted during setup');
   fs.cpSync(runtime, host, { recursive: true, filter: (source) => {
-    const stat = fs.lstatSync(source);
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(source); } catch (error) {
+      // Sockets and pid files can vanish while the stopped runner finishes exiting.
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
     if (stat.isSymbolicLink()) throw new Error(`runtime contains a symlink: ${source}`);
     if (stat.isSocket()) return false;
     if (!stat.isDirectory() && !stat.isFile()) throw new Error(`runtime contains a special file: ${source}`);
@@ -105,7 +111,7 @@ try {
   try {
     await stopGroups([command, candidate]);
   } finally {
-    if (restore) run('winter', ['service', 'up', 'bz5/runner', '--wait']);
+    if (restore) run('winter', ['service', 'up', `${winterEnv}/runner`, '--wait']);
     console.log(`Evidence retained at ${dir}`);
   }
 }
