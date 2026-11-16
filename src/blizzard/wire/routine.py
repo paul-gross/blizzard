@@ -11,6 +11,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -100,6 +101,9 @@ class RoutineView(WireModel):
     default_harnesses: list[str] = []
     #: The slug of a run's urgency when nothing above names one; ``None`` takes the tenant's default.
     default_urgency: str | None = None
+    #: The urgency a run of the routine mints at when the run names none — the routine's live default, else the
+    #: tenant's; ``None`` only when the tenant's default cannot be resolved live.
+    effective_urgency: UrgencyRef | None
     created_at: str
     retired: bool = False
     revision: int | None = None

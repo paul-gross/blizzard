@@ -13,7 +13,7 @@ describe('routine run urgency', () => {
     fixture.componentRef.setInput('sweptSlugs', new Set());
     fixture.componentRef.setInput('baselines', []);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('routineUrgency', 'urgent');
+    fixture.componentRef.setInput('effectiveUrgency', { urgency_id: 'u', slug: 'urgent' });
     fixture.componentRef.setInput('urgencies', [
       { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
       { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
@@ -32,6 +32,21 @@ describe('routine run urgency', () => {
     await fixture.whenStable();
     root.querySelector<HTMLElement>('[data-testid="run-dialog-submit"]')!.click();
     expect(values[1].urgency).toBe('normal');
+    fixture.destroy();
+  });
+
+  it('names the effective urgency by its slug while the urgency list is unresolved', async () => {
+    await TestBed.configureTestingModule({ imports: [GardeningRunDialogView], providers: [provideZonelessChangeDetection(), provideRouter([])] }).compileComponents();
+    const fixture = TestBed.createComponent(GardeningRunDialogView);
+    fixture.componentRef.setInput('routineName', 'nightly');
+    fixture.componentRef.setInput('scopes', [{ slug: 'web', description: 'web' } as ScopeView]);
+    fixture.componentRef.setInput('sweptSlugs', new Set());
+    fixture.componentRef.setInput('baselines', []);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('effectiveUrgency', { urgency_id: 'u', slug: 'urgent' });
+    await fixture.whenStable();
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="run-urgency"]')!;
+    expect(trigger.textContent).toContain('Routine default (urgent)');
     fixture.destroy();
   });
 });

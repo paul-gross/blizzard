@@ -60,6 +60,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.chain import ChainLinks, resolve_chain
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
@@ -75,6 +76,7 @@ from blizzard.wire.routine import (
     RoutineRunResponse,
     RoutineView,
 )
+from blizzard.wire.urgency import UrgencyRef
 
 _GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
 router = APIRouter(prefix="/api", tags=["routines"], dependencies=_GUARDS)
@@ -86,6 +88,7 @@ def _routine_view(
     labels: ProjectLabelFields,
     urgencies: Mapping[UrgencyId, Urgency],
     keeping: tuple[KeptBy, ...],
+    default_id: UrgencyId,
 ) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
@@ -97,6 +100,7 @@ def _routine_view(
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
         default_urgency=urgency_slug(routine.default_urgency_id, urgencies),
+        effective_urgency=effective_urgency(routine, urgencies, default_id),
         created_at=iso_utc(routine.created_at),
         retired=routine.retired,
         revision=routine.revision,
@@ -113,6 +117,19 @@ def _routine_view(
     )
 
 
+def effective_urgency(
+    routine: Routine, urgencies: Mapping[UrgencyId, Urgency], default_id: UrgencyId
+) -> UrgencyRef | None:
+    """The urgency a run of ``routine`` mints at when the run names none, resolved through the chain against the
+    tenant's urgency set read once per response; ``None`` when the tenant's default cannot be resolved live."""
+    routine_link = None if routine.default_urgency_id is None else urgencies[routine.default_urgency_id]
+    try:
+        resolved = resolve_chain(ChainLinks(routine=routine_link), urgencies[default_id])
+    except UrgencyRetired:
+        return None
+    return UrgencyRef(urgency_id=resolved.urgency_id, slug=resolved.slug)
+
+
 def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
     """``routine``'s view, labelled from one read of its project."""
     return _routine_view(
@@ -120,6 +137,7 @@ def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
         ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id),
         services.urgency_reading.by_id(),
         _keeping(routine, services),
+        services.urgency_reading.default_id(),
     )
 
 
@@ -132,7 +150,10 @@ def _listing(services: TenantServices, project_id: str | None, *, include_retire
     labels = ProjectLabels.read(services, (r.project_id for r in routines))
     urgencies = services.urgency_reading.by_id()
     keeping = services.cadence_reading.kept_by(routines, project_id=project_id)
-    return [_routine_view(r, labels.fields(r.project_id), urgencies, keeping[r.routine_id]) for r in routines]
+    default_id = services.urgency_reading.default_id()
+    return [
+        _routine_view(r, labels.fields(r.project_id), urgencies, keeping[r.routine_id], default_id) for r in routines
+    ]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -201,6 +222,7 @@ def _create(
         ProjectLabels.of_project(project).fields(routine.project_id),
         services.urgency_reading.by_id(),
         _keeping(routine, services),
+        services.urgency_reading.default_id(),
     )
 
 

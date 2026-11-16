@@ -201,6 +201,10 @@ class UrgencyReading:
         chunks' urgencies joins them to."""
         return {u.urgency_id: u for u in self._urgencies.list_all()}
 
+    def default_id(self) -> UrgencyId:
+        """The id of the urgency the tenant's settings name as the default, in one read of the settings."""
+        return _settings(self._settings).default_urgency_id
+
     def view(self, urgency: Urgency) -> UrgencyView:
         (view,) = self._views([urgency], self._order.order())
         return view
