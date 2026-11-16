@@ -21,6 +21,7 @@ import {
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
 import { LensLink } from 'fleet/shell';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** What the view asks the container to do once the operator submits. */
 export interface RunSubmission {
@@ -100,10 +101,7 @@ export class GardeningRunDialogView {
   protected readonly urgencyOptions = computed(() => {
     const ref = this.effectiveUrgency();
     const name = ref === null ? null : (this.urgencies().find((u) => u.urgency_id === ref.urgency_id)?.name ?? ref.slug);
-    return [
-      { value: '', label: `Routine default${name === null ? '' : ` (${name})`}` },
-      ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name })),
-    ];
+    return urgencyOptions(this.urgencies(), { key: 'slug', retired: 'exclude', inherit: { label: 'Routine default', name } });
   });
 
   /** The delta baseline for the currently selected scope, or `undefined` for a

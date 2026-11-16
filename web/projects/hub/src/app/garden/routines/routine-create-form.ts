@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { KitButton, KitErrorLine, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 export interface RoutineCreateDraft {
   readonly slug: string;
@@ -23,11 +24,12 @@ export class RoutineCreateForm {
   readonly saved = output<RoutineCreateDraft>();
   readonly cancelled = output<void>();
   protected readonly draft = signal<RoutineCreateDraft>({ slug: '', name: '', graph: '', scope: '', urgency: '' });
-  protected readonly options = computed(() => {
-    const tenantDefault = this.urgencies().find((u) => u.default);
-    return [{ value: '', label: `Tenant default${tenantDefault ? ` (${tenantDefault.name})` : ''}` },
-      ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name }))];
-  });
+  protected readonly options = computed(() =>
+    urgencyOptions(this.urgencies(), {
+      key: 'slug',
+      retired: 'exclude',
+      inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
+    }));
   protected set(field: keyof RoutineCreateDraft, value: string): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
   }
