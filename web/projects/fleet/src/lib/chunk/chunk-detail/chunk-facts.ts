@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import type { ChunkDetail, ChunkNeighborView, ChunkStatus } from '../../api/hub';
 import { STATUS_LANE } from '../../core/chunk-lanes';
 import { compactRef } from '../../core/compact-ref';
-import { LensLink } from '../../core/lens-link';
+import { AppLink, AppPath } from '../../core/app-scope';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { LaneIcon } from '../chunk-card/lane-icon';
 
@@ -17,7 +17,7 @@ import { LaneIcon } from '../chunk-card/lane-icon';
 @Component({
   selector: 'fleet-chunk-detail-facts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LaneIcon, LensLink, NgTemplateOutlet, RouterLink, SessionEfficiency],
+  imports: [AppLink, AppPath, LaneIcon, NgTemplateOutlet, RouterLink, SessionEfficiency],
   templateUrl: './chunk-facts.html',
   styleUrl: './chunk-facts.css',
 })

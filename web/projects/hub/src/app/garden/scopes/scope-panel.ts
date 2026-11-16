@@ -13,7 +13,7 @@ import {
   KitTextInput,
   KitErrorLine,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import type { ScopeDescriptionEditEvent, ScopeSweptVm } from './scope-list';
@@ -64,7 +64,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, LensLink, RouterLink, KitErrorLine],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, AppLink, RouterLink, KitErrorLine],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })

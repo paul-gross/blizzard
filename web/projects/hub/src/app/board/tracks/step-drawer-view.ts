@@ -24,7 +24,7 @@ import {
   hasDelivery,
   hubApi,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { ChunkArtifacts } from '../chunk-dock/chunk-artifacts';
 import type { LeaseTranscript } from './lease-transcript.query';
@@ -73,7 +73,7 @@ const TRANSCRIPT_SKELETON: readonly (readonly string[])[] = [
     KitSectionHead,
     KitSkeleton,
     KitSwatch,
-    LensLink,
+    AppLink,
     RouterLink,
     SessionEfficiency,
     TranscriptViewer,

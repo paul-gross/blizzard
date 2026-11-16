@@ -22,7 +22,7 @@ import {
   ChunkActionsMenu,
   ChunkUrgency,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 /**
  * The chunk detail dock's header — the chunk's identity (short name, work item, state,
@@ -42,7 +42,7 @@ import { LensLink } from 'fleet/shell';
     ChunkActionsMenu,
     ChunkUrgency,
     RouterLink,
-    LensLink,
+    AppLink,
   ],
   templateUrl: './chunk-detail-header.html',
   styleUrls: ['../drawer/drawer-header.css', './chunk-detail-header.css'],

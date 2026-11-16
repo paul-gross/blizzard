@@ -10,7 +10,7 @@
     [class.tinted]="projectTint(row.projectColor) !== null"
     [style.--project-tint]="projectTint(row.projectColor)"
   >
-    <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
+    <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | appLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
     @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
       <fleet-chunk-urgency class="urgency-banner" [detail]="{ chunk_id: row.chunkId, terminal: row.terminal, urgency: row.urgency ?? null }" [resolvedUrgency]="urgency" [iconUrl]="urgencyIconUrls()[urgency.urgency_id] ?? null" [banner]="true" bannerLayout="mobile" />
     }

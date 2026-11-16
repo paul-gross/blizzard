@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { KitTab, KitTabStrip } from '../../kit/kit-tab';
-import { LensLink } from '../../core/lens-link';
+import { AppLink, AppPath } from '../../core/app-scope';
 
 /**
  * One tab the {@link MobileTabBar} renders — the minimal shape both the
@@ -29,7 +29,7 @@ export interface MobileTabItem {
    * exclusive with {@link active}; omit both for a plain, unhighlighted tab. */
   readonly route?: string | null;
   /** How this tab's link handles the current query params on navigation —
-   * `''` (default) drops them, right for a shell with no cross-route
+   * `''` (default) drops them, keeping only the app's scope — right for a shell with no cross-route
    * selection state. A consumer whose routes share one (the runner's
    * `?chunk=`, `injectChunkUrlSelection`) sets `'preserve'` per tab
    * that needs it — each consumer's own route wiring stays theirs, never a
@@ -57,7 +57,7 @@ export interface MobileTabItem {
 @Component({
   selector: 'fleet-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive, LensLink],
+  imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive, AppLink, AppPath],
   templateUrl: './mobile-tab-bar.html',
   styleUrl: './mobile-tab-bar.css',
 })

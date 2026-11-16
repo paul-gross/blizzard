@@ -28,7 +28,7 @@
         @for (row of rows(); track row.permit.permit_id) {
           <tr data-testid="permits-row" [attr.data-permit-id]="row.permit.permit_id">
             <td>
-              <a [routerLink]="['/permits', row.permit.permit_id] | lensLink">{{ row.permit.capability }}</a>
+              <a [routerLink]="['/permits', row.permit.permit_id] | appLink">{{ row.permit.capability }}</a>
             </td>
             <td>{{ row.permit.holder }}</td>
             <td data-testid="permits-project">{{ projectLabel(row) }}</td>

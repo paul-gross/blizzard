@@ -125,7 +125,7 @@
             <ul class="rp-kept-by">
               @for (k of panel.keptBy ?? []; track k.cadenceSlug + k.choreKey) {
                 <li [attr.data-testid]="'gardening-routine-kept-by-' + k.cadenceSlug + '-' + k.choreKey">
-                  <a class="rp-link" [routerLink]="['/gardening', 'cadences', k.cadenceSlug] | lensLink">{{
+                  <a class="rp-link" [routerLink]="['/gardening', 'cadences', k.cadenceSlug] | appLink">{{
                     k.cadenceName
                   }}</a>
                   · chore {{ k.choreKey }}

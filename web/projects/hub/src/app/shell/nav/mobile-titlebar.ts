@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { RouterLink } from '@angular/router';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, formatCost, type FleetSpendView } from 'fleet';
-import { KitSwatch, LensLink } from 'fleet/shell';
+import { KitSwatch, AppLink } from 'fleet/shell';
 
 import { injectLensedProject } from '../../core/lensed-project';
 import { LENS_PICKER_PATH, ProjectLens } from '../../core/project-lens';
@@ -31,7 +31,7 @@ import { injectTenantSwitch } from './tenant-switch';
 @Component({
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, KitSwatch, LensLink, RouterLink, TenantMenu, ViewportMenu],
+  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, KitSwatch, AppLink, RouterLink, TenantMenu, ViewportMenu],
   templateUrl: './mobile-titlebar.html',
   styleUrl: './mobile-titlebar.css',
 })
@@ -55,7 +55,7 @@ export class MobileTitlebar {
 
   protected readonly lensName = computed(() => this.lensed()?.name ?? 'All projects');
 
-  /** The picker, kept under the lens the board is on through `lensLink`. */
+  /** The picker, kept under the lens the board is on through `appLink`. */
   protected readonly pickerLink = ['/', LENS_PICKER_PATH];
 
   /** The unlensed location the board is on, for the picker to return to and switch the lens from. */

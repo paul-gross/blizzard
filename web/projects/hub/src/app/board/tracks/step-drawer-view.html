@@ -45,18 +45,18 @@
               </span>
               <span class="sep" aria-hidden="true">·</span>
             }
-            <a class="chunk" data-testid="step-drawer-chunk" [title]="s.title ? s.chunk_id + ' · ' + s.title : s.chunk_id" [routerLink]="['/board', 'chunk', s.chunk_id] | lensLink" [queryParams]="origin()">{{
+            <a class="chunk" data-testid="step-drawer-chunk" [title]="s.title ? s.chunk_id + ' · ' + s.title : s.chunk_id" [routerLink]="['/board', 'chunk', s.chunk_id] | appLink: origin()">{{
               ref(s.chunk_id)
             }}</a>
             <span class="sep" aria-hidden="true">·</span>
             @if (s.graph_id) {
-              <a class="node" data-testid="step-drawer-graph" [routerLink]="['/graphs', s.graph_id] | lensLink">{{ s.graph_name === null ? '' : s.graph_name + '/' }}<b>{{ s.node_name }}</b></a>
+              <a class="node" data-testid="step-drawer-graph" [routerLink]="['/graphs', s.graph_id] | appLink">{{ s.graph_name === null ? '' : s.graph_name + '/' }}<b>{{ s.node_name }}</b></a>
             } @else {
               <span class="node">{{ s.graph_name === null ? '' : s.graph_name + '/' }}<b>{{ s.node_name }}</b></span>
             }
             <span class="sep" aria-hidden="true">·</span>
             <!-- The fleet page lists a host's runners on the host's own page, and only a hostless runner on its own. -->
-            <a class="runner" data-testid="step-drawer-runner" [routerLink]="['/fleet', here.host_id ?? s.runner_id] | lensLink">{{ host(here) }}/{{ s.runner_name }}</a>
+            <a class="runner" data-testid="step-drawer-runner" [routerLink]="['/fleet', here.host_id ?? s.runner_id] | appLink">{{ host(here) }}/{{ s.runner_name }}</a>
             @if (stepPending()) {
               <span class="sep" aria-hidden="true">·</span>
               <fleet-kit-skeleton class="sd-sk-model" [rows]="1" />

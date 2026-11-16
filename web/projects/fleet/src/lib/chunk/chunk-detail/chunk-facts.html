@@ -14,17 +14,26 @@
 }
 <ng-template #edges let-list let-testid="testid">
   @for (n of list; track n.chunk_id) {
-    <a class="edge" [attr.data-testid]="testid"
-      [routerLink]="(boardChunkIds().has(n.chunk_id) ? [] : [...chunkLinkBase(), n.chunk_id]) | lensLink"
-      [queryParams]="boardChunkIds().has(n.chunk_id) ? { chunk: n.chunk_id, step: null, at: null } : null"
-      [queryParamsHandling]="boardChunkIds().has(n.chunk_id) ? 'merge' : 'replace'"
-      [title]="n.chunk_id">
-      @if (n.status) {
-        <fleet-lane-icon class="edge-icon" [lane]="lane(n.status)" [status]="n.status" />
-      }
-      <span class="edge-ref">{{ shortId(n.chunk_id) }}</span>
-    </a>
+    @if (boardChunkIds().has(n.chunk_id)) {
+      <a class="edge" [attr.data-testid]="testid"
+        [routerLink]="[] | appPath"
+        [queryParams]="{ chunk: n.chunk_id, step: null, at: null }"
+        queryParamsHandling="merge"
+        [title]="n.chunk_id">
+        <ng-container [ngTemplateOutlet]="edgeBody" [ngTemplateOutletContext]="{ $implicit: n }" />
+      </a>
+    } @else {
+      <a class="edge" [attr.data-testid]="testid" [routerLink]="[...chunkLinkBase(), n.chunk_id] | appLink" [title]="n.chunk_id">
+        <ng-container [ngTemplateOutlet]="edgeBody" [ngTemplateOutletContext]="{ $implicit: n }" />
+      </a>
+    }
   } @empty {
     <span class="empty">—</span>
   }
+</ng-template>
+<ng-template #edgeBody let-n>
+  @if (n.status) {
+    <fleet-lane-icon class="edge-icon" [lane]="lane(n.status)" [status]="n.status" />
+  }
+  <span class="edge-ref">{{ shortId(n.chunk_id) }}</span>
 </ng-template>

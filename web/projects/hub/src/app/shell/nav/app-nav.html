@@ -1,9 +1,9 @@
 <nav fleetKitTabStrip data-testid="app-nav">
   @for (tab of tabs; track tab.key) {
-    <a fleetKitTab [routerLink]="tab.route | lensLink" routerLinkActive="active" [attr.data-testid]="'nav-' + tab.key">{{ tab.label }}</a>
+    <a fleetKitTab [routerLink]="tab.route | appLink" routerLinkActive="active" [attr.data-testid]="'nav-' + tab.key">{{ tab.label }}</a>
   }
   @if (showAdmin()) {
-    <a fleetKitTab [routerLink]="'/admin' | lensLink" routerLinkActive="active" data-testid="nav-admin">Admin</a>
+    <a fleetKitTab [routerLink]="'/admin' | appLink" routerLinkActive="active" data-testid="nav-admin">Admin</a>
   }
   <app-project-lens-control [choices]="lensChoices()" [current]="lensCurrent()" (choose)="lensChoose.emit($event)" />
 </nav>

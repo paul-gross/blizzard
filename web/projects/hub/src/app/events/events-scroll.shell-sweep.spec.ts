@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { eventView, settle, stubHubClient } from 'fleet/testing';
-import { HUB_PROJECT_FILTER, IN_APP_LINK, type InAppLink } from 'fleet/shell';
+import { APP_SCOPE, HUB_PROJECT_FILTER, type InAppLink } from 'fleet/shell';
 import { page } from 'vitest/browser';
 
 import { EventsPage } from './events-page';
@@ -66,7 +66,7 @@ describe('events feed scroll shell sweep (web:shell-sweep)', () => {
     let events = [original];
     const stub = stubHubClient({ 'GET /api/events': () => ({ events }) });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const lensLink = (link: InAppLink): InAppLink =>
+    const lensPath = (link: InAppLink): InAppLink =>
       typeof link === 'string' ? `/p/blizzard${link}` : ['/p/blizzard', ...link.map((part, i) =>
         i === 0 && typeof part === 'string' ? part.replace(/^\//, '') : part)];
     let root: HTMLElement | undefined;
@@ -81,7 +81,7 @@ describe('events feed scroll shell sweep (web:shell-sweep)', () => {
           ]),
           provideTanStackQuery(client),
           { provide: HUB_PROJECT_FILTER, useValue: signal('blizzard') },
-          { provide: IN_APP_LINK, useValue: lensLink },
+          { provide: APP_SCOPE, useValue: { path: lensPath, query: () => ({}) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(RoutedEventsShell);

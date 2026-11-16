@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
 
 import { asyncState } from 'fleet';
+import { AppScope } from 'fleet/shell';
 
 import { LENS_PICKER_FROM, ProjectLens, lensSource } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
@@ -24,6 +25,7 @@ import { LensPickerView } from './lens-picker-view';
 })
 export class LensPicker {
   private readonly lens = inject(ProjectLens);
+  private readonly appScope = inject(AppScope);
   private readonly projects = injectProjectsQuery();
 
   /** The unlensed location the picker was opened from. */
@@ -33,7 +35,7 @@ export class LensPicker {
   );
 
   /** Back: the source, under the lens the board is still on. */
-  protected readonly backLink = computed(() => this.lens.linkTree(this.source()));
+  protected readonly backLink = computed(() => this.appScope.link(this.source()));
 
   protected readonly choices = computed(() => lensChoices(this.projects.data() ?? []));
 

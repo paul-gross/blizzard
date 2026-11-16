@@ -3,7 +3,7 @@
   <fleet-kit-section-head class="head" [label]="'Node history'" labelId="chunk-timeline-heading">
     <span class="graph-sep" aria-hidden="true">·</span>
     @if (graphLinkBase(); as base) {
-      <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | lensLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
+      <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | appLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
     } @else {
       <span class="graph-link" data-testid="node-history-graph" [title]="detail().graph_id">{{ graphLabel() }}</span>
     }
@@ -51,8 +51,7 @@
             [attr.data-testid]="rowTestid(row)"
             [attr.data-choice]="rowChoice(row)"
             [attr.title]="row.title"
-            [routerLink]="[...linkBase(), chunkId()] | lensLink"
-            [queryParams]="{ tab: 'node-history', step: row.key }"
+            [routerLink]="[...linkBase(), chunkId()] | appLink: { tab: 'node-history', step: row.key }"
           >
             <ng-container [ngTemplateOutlet]="rowContent" [ngTemplateOutletContext]="{ $implicit: row }" />
           </a>
@@ -90,8 +89,7 @@
             [class.selected]="a.key === selectedKey()"
             [attr.data-step-key]="a.key"
             [attr.data-choice]="a.choice"
-            [routerLink]="[...linkBase(), chunkId()] | lensLink"
-            [queryParams]="{ tab: 'node-history', step: a.key }"
+            [routerLink]="[...linkBase(), chunkId()] | appLink: { tab: 'node-history', step: a.key }"
           >
             <ng-container [ngTemplateOutlet]="activeContent" [ngTemplateOutletContext]="{ $implicit: a }" />
           </a>
@@ -155,7 +153,7 @@
 <ng-template #graphHeader let-graph>
   @if (graphLinkBase(); as base) {
     @if (graph.id) {
-      <a class="graph-link" data-testid="history-graph" [routerLink]="[...base, graph.id] | lensLink" [title]="graph.id" [attr.aria-label]="'Graph ' + graph.label">{{ graph.label }}</a>
+      <a class="graph-link" data-testid="history-graph" [routerLink]="[...base, graph.id] | appLink" [title]="graph.id" [attr.aria-label]="'Graph ' + graph.label">{{ graph.label }}</a>
     } @else {
       <span class="graph-link" data-testid="history-graph">{{ graph.label }}</span>
     }

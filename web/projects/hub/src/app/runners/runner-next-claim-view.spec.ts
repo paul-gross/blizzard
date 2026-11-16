@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { type hubApi, type UrgencyView } from 'fleet';
-import { IN_APP_LINK, type InAppLink } from 'fleet/shell';
+import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import { RunnerNextClaimView } from './runner-next-claim-view';
 
 const entry: hubApi.NextClaimEntry = { chunk_id: 'ch_next', graph_id: 'gr_1', position: 3, project_id: 'p', project_name: 'Example', project_slug: 'example', urgency: { urgency_id: 'u', slug: 'urgent' } };
@@ -12,7 +12,7 @@ const data: hubApi.NextClaimResponse = { next: entry, passed: [blocked], passed_
 describe('RunnerNextClaimView', () => {
   beforeEach(() => TestBed.configureTestingModule({
     imports: [RunnerNextClaimView],
-    providers: [provideZonelessChangeDetection(), provideRouter([]), { provide: IN_APP_LINK, useValue: (link: InAppLink) => ['/p/example/board', ...(link as string[]).slice(1)] }],
+    providers: [provideZonelessChangeDetection(), provideRouter([]), { provide: APP_SCOPE, useValue: { path: (link: InAppLink) => ['/p/example/board', ...(link as string[]).slice(1)], query: () => ({}) } }],
   }));
   it('shows the hub walk, its truncated details and lens-aware links', async () => {
     const fixture = TestBed.createComponent(RunnerNextClaimView);

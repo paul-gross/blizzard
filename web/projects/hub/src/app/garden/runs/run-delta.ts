@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { compactRef, KitAsyncState, type KitAsyncStateValue, KitProseBlock, FleetWhen } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 /** One `add` op a delivered set's artifact published — `findingClass` rather than
  * the wire's `class` (`AddedFindingView.class`), so a template never confuses it
@@ -97,7 +97,7 @@ function findingRoute(findingId: string): readonly string[] {
 @Component({
   selector: 'app-run-delta',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitProseBlock, RouterLink, FleetWhen, LensLink],
+  imports: [KitAsyncState, KitProseBlock, RouterLink, FleetWhen, AppLink],
   templateUrl: './run-delta.html',
   styleUrl: './run-delta.css',
 })

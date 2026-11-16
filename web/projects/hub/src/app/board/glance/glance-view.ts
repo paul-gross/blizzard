@@ -29,7 +29,7 @@ import {
   type WorkLine,
   LaneIcon,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { FleetSpend } from '../fleet-spend/fleet-spend';
 import { NodeStrip } from '../node-strip/node-strip';
@@ -71,7 +71,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkUrgency, FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitCountStripSkeleton, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [ChunkUrgency, FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitCountStripSkeleton, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, AppLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })

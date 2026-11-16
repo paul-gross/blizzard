@@ -23,7 +23,7 @@ import type { ConfigActionsVm } from './config-actions.model';
 import type { LastChangeVm, RevisionRowVm } from './config-history.model';
 import type { ConfigBadgeVm } from './config-record-list';
 import { ConfigRevisions } from './config-revisions';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 /** One link from a record to another record. */
 export interface ConfigLinkVm {
@@ -64,7 +64,7 @@ export interface ConfigRecordVm {
 @Component({
   selector: 'app-config-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitFactList, RouterLink, LensLink],
+  imports: [ConfigRevisions, FleetWhen, KitAsyncState, KitBadge, KitButton, KitErrorLine, KitFactList, RouterLink, AppLink],
   templateUrl: './config-record-panel.html',
   styleUrl: './config-record-panel.css',
 })

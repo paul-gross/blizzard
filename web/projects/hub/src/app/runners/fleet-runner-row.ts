@@ -14,7 +14,7 @@ import {
   STATUS_TONE,
   type Tone,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
@@ -42,7 +42,7 @@ import { StatusLight } from './status-light';
     KitBadge,
     KitButton,
     KitFactList,
-    LensLink,
+    AppLink,
     RouterLink,
     RunnerSubscription,
     RunnerNextClaim,

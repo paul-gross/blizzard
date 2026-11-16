@@ -115,7 +115,7 @@
                       <span class="text" [title]="entry.rawOutcome">{{ entry.text }}</span>
                     }
                     @if (entry.logKey; as key) {
-                      <a class="log" [routerLink]="'/board/chunk/' + id + '/artifact/' + key | lensLink">log</a>
+                      <a class="log" [routerLink]="'/board/chunk/' + id + '/artifact/' + key | appLink">log</a>
                     }
                   </span>
                   @if (!entry.bounce && entry.repos; as repos) {

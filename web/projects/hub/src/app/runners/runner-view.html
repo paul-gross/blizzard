@@ -92,7 +92,7 @@
           [attr.data-locally-paused]="entry.row.locally_paused"
         >
           @if (mobileOverview()) {
-            <a class="runner-hit" data-testid="runner-card-link" [routerLink]="['/fleet', entry.fleetId] | lensLink"
+            <a class="runner-hit" data-testid="runner-card-link" [routerLink]="['/fleet', entry.fleetId] | appLink"
               [attr.aria-label]="'Open ' + entry.row.runner_name + ' on Fleet'"></a>
           }
           <div class="r1">
@@ -105,7 +105,7 @@
               @if (mobileOverview()) {
                 <span class="name-link" data-testid="runner-fleet-link">{{ entry.row.runner_name }}</span>
               } @else {
-                <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | lensLink">{{
+                <a class="name-link" data-testid="runner-fleet-link" [routerLink]="['/fleet', entry.fleetId] | appLink">{{
                   entry.row.runner_name
                 }}</a>
               }

@@ -25,8 +25,8 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, hubMeKey, IN_APP_LINK, type InAppLink, provideFlags } from 'fleet/shell';
-import { ProjectLens } from '../core/project-lens';
+import { type FlagsResponse, APP_SCOPE, hubMeKey, provideFlags } from 'fleet/shell';
+import { ProjectLens, lensScope } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
@@ -433,8 +433,8 @@ describe('hub App', () => {
     });
 
     it('names the lensed project in the mobile titlebar from the same read, and opens the lens picker from it', async () => {
-      // The app's own lens-keeping link rewrite, as `app.config.ts` provides it.
-      TestBed.overrideProvider(IN_APP_LINK, { useFactory: () => (link: InAppLink) => TestBed.inject(ProjectLens).link(link) });
+      // The app's own lens-keeping link scope, as `app.config.ts` provides it.
+      TestBed.overrideProvider(APP_SCOPE, { useFactory: () => lensScope(TestBed.inject(ProjectLens)) });
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);

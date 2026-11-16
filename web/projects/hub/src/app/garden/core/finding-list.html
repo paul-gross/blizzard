@@ -43,7 +43,7 @@
                     @if (row.raisedByChunkId; as raisedByChunkId) {
                       <a
                         class="fl-raised-by"
-                        [routerLink]="['/board', 'chunk', raisedByChunkId] | lensLink"
+                        [routerLink]="['/board', 'chunk', raisedByChunkId] | appLink"
                         [title]="raisedByChunkId"
                         [attr.data-testid]="'gardening-finding-raised-by-' + row.findingId"
                         >{{ compactRef(raisedByChunkId) }}</a

@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, input, output, signal } from '@angu
 import { RouterLink } from '@angular/router';
 
 import { type KitAsyncStateValue, openLookup, PermitVerb, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { type PermitRow, permitProjectLabel } from './permits-page.model';
 import type { PermitMove, PermitMoveVars, PermitRevokeVars } from './permits.mutations';
 
@@ -16,7 +16,7 @@ const MOVE_LABEL = openLookup<PermitMove, string>({ grant: 'Grant', suspend: 'Su
 @Component({
   selector: 'app-permits-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput, LensLink, RouterLink],
+  imports: [FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput, AppLink, RouterLink],
   templateUrl: './permits-view.html',
 })
 export class PermitsView {

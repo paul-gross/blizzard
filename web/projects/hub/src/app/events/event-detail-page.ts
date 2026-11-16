@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, resource } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { injectRunnerHostNames, KitBackBar, ViewportService } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { injectQueryFilters, injectRouteParam } from '../core/route-state';
 import { injectHubHostsQuery } from '../core/hosts.query';
 import { EventDetailView } from './event-detail-view';
@@ -12,7 +12,7 @@ import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
 @Component({
   selector: 'app-event-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EventDetailView, KitBackBar, LensLink, RouterLink],
+  imports: [EventDetailView, KitBackBar, AppLink, RouterLink],
   templateUrl: './event-detail-page.html',
   styleUrl: './event-detail-page.css',
 })

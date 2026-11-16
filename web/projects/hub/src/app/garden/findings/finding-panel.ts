@@ -6,7 +6,7 @@ import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingSeverityTone, findingStateTone, isFindingExited } from '../core/finding-state';
 import type { FindingTriageVerb } from '../core/finding-list';
 import type { ProposalWorkItemVm } from '../proposals/proposal-panel';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 /** Every single-finding triage verb this panel can dispatch — {@link FindingTriageVerb}
  * minus `supersede`, which names a *second* finding (the absorbing one) that a
@@ -70,7 +70,7 @@ export interface FindingPanelVm {
     KitMarkdown,
     FleetFindingFactTimeline,
     FleetWhen,
-    RouterLink, LensLink,
+    RouterLink, AppLink,
   ],
   templateUrl: './finding-panel.html',
   styleUrl: './finding-panel.css',

@@ -13,7 +13,7 @@ import {
   KitFactList,
   type Tone,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type CadenceDraft, FleetCadenceForm } from './cadence-form';
@@ -118,7 +118,7 @@ const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full
     KitConfirmDialog,
     KitErrorLine,
     KitFactList,
-    LensLink,
+    AppLink,
     RouterLink,
   ],
   templateUrl: './cadence-panel.html',

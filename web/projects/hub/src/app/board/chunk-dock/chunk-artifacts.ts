@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RouterLink } from '@angular/router';
 
 import { type ArtifactView, type ChunkDetail, KitAsyncState, KitSectionHead, ChunkArtifactBody, sortArtifacts } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 /**
  * The chunk's artifact store (relinked #160) — every entry keyed
@@ -26,7 +26,7 @@ import { LensLink } from 'fleet/shell';
 @Component({
   selector: 'app-chunk-detail-artifacts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, KitAsyncState, KitSectionHead, RouterLink, LensLink],
+  imports: [ChunkArtifactBody, KitAsyncState, KitSectionHead, RouterLink, AppLink],
   templateUrl: './chunk-artifacts.html',
   styleUrl: './chunk-artifacts.css',
 })
