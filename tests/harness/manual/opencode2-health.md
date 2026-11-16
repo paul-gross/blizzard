@@ -4,9 +4,9 @@ This tool replaces only the `<env>/runner` service for the duration of a command
 into lease scratch, disables Claude, and serves the candidate production runner at the normal <env> port with the fenced
 engine-backed mock OpenCode 2. The default scenario uses `NEVER_REGISTERED`; set `OPENCODE2_HEALTH_SCENARIO=available`
 to emit the mock without that lever. Set `OPENCODE2_HEALTH_GATES=build,deliver,no-such-node` (comma-separated) to write
-those gates into the copied runner config, so the live gate warnings can be inspected. The normal service is restarted on completion, failure, SIGINT or SIGTERM. Do not
-run concurrently with another user of <env>. SIGKILL or machine failure cannot be caught; in that case run
-`winter service up <env>/runner --wait` manually.
+those gates into the copied runner config, so the live gate warnings can be inspected. The normal service is restarted
+on completion, failure, SIGINT or SIGTERM. Do not run concurrently with another user of <env>. SIGKILL or machine
+failure cannot be caught; in that case run `winter service up <env>/runner --wait` manually.
 
 The copy refuses symlinks and special files (other than skipped sockets). The command and candidate run in their own
 process groups; cleanup sends TERM then KILL after two seconds. Do not run commands that detach into a new session:
