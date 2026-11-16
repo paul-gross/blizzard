@@ -1,0 +1,5 @@
+<app-hub-settings-view [allowed]="allowed()" [identityPending]="me.isPending()" [state]="state()"
+  [rows]="settings.data()?.settings ?? []" [editing]="editing()" [value]="value()" [failure]="failure()" [busy]="busy()"
+  [revisions]="revisions()" [historyState]="historyState()" [changes]="changes()"
+  [hasNext]="history.hasNextPage()" [loadingNext]="history.isFetchingNextPage()"
+  (edit)="edit($event)" (valueChange)="value.set($event)" (save)="save($event)" (cancelled)="cancel()" (loadMore)="history.fetchNextPage()" />

@@ -34,6 +34,7 @@ import { injectWorkSourcesQuery } from './work-sources/work-sources.query';
 })
 export class AdminShell {
   private readonly meQuery = injectMeQuery();
+  protected readonly canManageSettings = computed(() => hasPermission(this.meQuery.data(), 'settings:admin'));
   private readonly membersQuery = injectMembersQuery(() => hasPermission(this.meQuery.data(), 'user:manage'));
   private readonly projectsQuery = injectProjectsQuery();
   private readonly urgenciesQuery = injectUrgenciesQuery();

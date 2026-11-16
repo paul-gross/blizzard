@@ -176,7 +176,13 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     const keys = [...this.pendingInvalidations.values()];
     this.pendingInvalidations.clear();
     for (const queryKey of keys) {
-      void this.opts.queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+      const client = this.opts.queryClient;
+      // A read already in flight may have taken its snapshot before this frame's
+      // write committed. Let it finish, then read again rather than aborting it or
+      // accepting that older snapshot as the result of this invalidation.
+      const fetching = client.isFetching({ queryKey }) > 0;
+      const refresh = client.invalidateQueries({ queryKey }, { cancelRefetch: false });
+      if (fetching) void refresh.then(() => client.invalidateQueries({ queryKey }, { cancelRefetch: false }));
     }
   }
 }

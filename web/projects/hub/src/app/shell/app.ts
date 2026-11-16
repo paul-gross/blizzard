@@ -249,7 +249,7 @@ export class App {
    * the implicit operator carries every permission including this one, but there
    * are no real users for an admin page to administer — the nav stays hidden
    * exactly as it always has. */
-  protected readonly canManageUsers = computed(() => hasPermission(this.me(), 'user:manage') && this.authEnabled());
+  protected readonly canManageUsers = computed(() => (hasPermission(this.me(), 'user:manage') && this.authEnabled()) || hasPermission(this.me(), 'settings:admin'));
 
   constructor() {
     effect(() => {

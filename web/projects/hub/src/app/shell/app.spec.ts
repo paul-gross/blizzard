@@ -722,6 +722,25 @@ describe('hub App', () => {
   });
 
   describe('the Admin nav tab', () => {
+    it('shows Admin for settings administrators without user management', async () => {
+      const permissions: MeResponse['permissions'] = ['fleet:view', 'settings:admin'];
+      authStub.restore();
+      authStub = stubAuth({ ...OPERATOR_ME_RESPONSE, permissions, tenants: OPERATOR_ME_RESPONSE.tenants.map((t) => ({ ...t, permissions })) }, []);
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="nav-admin"]')).toBeTruthy();
+    });
+
+    it('hides Admin without either permission', async () => {
+      const permissions: MeResponse['permissions'] = ['fleet:view'];
+      authStub.restore();
+      authStub = stubAuth({ ...OPERATOR_ME_RESPONSE, permissions, tenants: OPERATOR_ME_RESPONSE.tenants.map((t) => ({ ...t, permissions })) }, OIDC);
+      const fixture = TestBed.createComponent(App);
+      await TestBed.inject(Router).navigateByUrl('/');
+      await settle(fixture);
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="nav-admin"]')).toBeNull();
+    });
     it('shows the Admin nav tab only with user:manage under oauth, and hides it under none', async () => {
       authStub.restore();
       authStub = stubAuth(OPERATOR_ME_RESPONSE, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
