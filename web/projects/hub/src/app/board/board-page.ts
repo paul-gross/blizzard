@@ -258,10 +258,10 @@ export class BoardPage {
   /** Each runner's host name, which a list row names its runner by. */
   protected readonly runnerHosts = injectRunnerHostNames();
 
-  /** Every chunk's work items, read once the chunk list has answered. */
   /** The image marks the board's banners show, read once per digest. */
   protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks(), this.urgenciesQuery.data()));
 
+  /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
   /** Select a chunk — or clear the selection — by writing the URL. A different chunk drops the Tracks layout's
