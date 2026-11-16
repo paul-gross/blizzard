@@ -286,6 +286,7 @@ HUMAN: dict[tuple[str, str], Permission] = {
     ("PATCH", "/api/credentials/{credential}"): Permission.CONFIG_EDIT,
     ("POST", "/api/credentials/{credential}/retire"): Permission.CONFIG_EDIT,
     ("POST", "/api/credentials/{credential}/enable"): Permission.CONFIG_EDIT,
+    ("POST", "/api/credentials/{credential}/checks"): Permission.CONFIG_EDIT,
     ("GET", "/api/urgencies"): Permission.FLEET_VIEW,
     ("POST", "/api/urgencies"): Permission.CONFIG_EDIT,
     ("PUT", "/api/urgencies/order"): Permission.CONFIG_EDIT,

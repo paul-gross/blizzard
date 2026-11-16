@@ -4281,6 +4281,73 @@ export type CredentialCapabilityMissingProblem = {
     [key: string]: unknown;
 };
 
+export const CredentialCheckOutcome = {
+    PROVEN: 'proven',
+    GRANTED: 'granted',
+    UNPROVEN: 'unproven',
+    REFUSED: 'refused',
+    UNSUPPORTED: 'unsupported'
+} as const;
+
+export type CredentialCheckOutcome = typeof CredentialCheckOutcome[keyof typeof CredentialCheckOutcome];
+
+/**
+ * CredentialCheckRequest
+ *
+ * The ``POST /api/credentials/{credential}/checks`` body: the repositories and work sources to check, each by id
+ * or slug; with neither, every enabled record acting with the credential.
+ */
+export type CredentialCheckRequest = {
+    /**
+     * Repositories
+     */
+    repositories?: Array<string> | null;
+    /**
+     * Work Sources
+     */
+    work_sources?: Array<string> | null;
+};
+
+/**
+ * CredentialCheckView
+ *
+ * A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the
+ * permissions its grant exposes, each use's operations, and what the check did not judge. Nothing is stored.
+ */
+export type CredentialCheckView = {
+    /**
+     * Binding
+     */
+    binding: string;
+    /**
+     * Credential
+     */
+    credential: string;
+    /**
+     * Granted Permissions
+     */
+    granted_permissions: {
+        [key: string]: string;
+    } | null;
+    mint: OperationResultView | null;
+    /**
+     * Not Evaluated
+     */
+    not_evaluated: string;
+    /**
+     * Uses
+     */
+    uses: Array<UseResultView>;
+    /**
+     * Variant
+     */
+    variant: string | null;
+    /**
+     * Variant Contradicted
+     */
+    variant_contradicted: boolean;
+};
+
 /**
  * CredentialCreateRequest
  *
@@ -4559,6 +4626,44 @@ export type CredentialNotFoundProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:credential-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * CredentialNotUsedByProblem
+ *
+ * A check named repositories or work sources that do not act with the credential; ``uses`` lists each, the
+ * unknown ones by the value named. Its ``code`` is ``credential_not_used_by``.
+ */
+export type CredentialNotUsedByProblem = {
+    /**
+     * Code
+     */
+    code: 'credential_not_used_by';
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:credential-not-used-by';
+    /**
+     * Uses
+     */
+    uses: Array<RecordReferrer>;
     [key: string]: unknown;
 };
 
@@ -7818,6 +7923,59 @@ export type ForgeDetail = {
      * Work Sources
      */
     work_sources: Array<ForgeReferenceView>;
+};
+
+/**
+ * ForgeDiagnosticView
+ *
+ * The forge's refusing answer, sanitized: its status, the call (``endpoint`` a method and route template), the
+ * forge's own words, and the credential it carried; each field the answer did not carry is ``null``.
+ */
+export type ForgeDiagnosticView = {
+    /**
+     * Accepted Permissions
+     */
+    accepted_permissions: string | null;
+    /**
+     * Binding
+     */
+    binding: string | null;
+    /**
+     * Credential
+     */
+    credential: string | null;
+    /**
+     * Documentation Url
+     */
+    documentation_url: string | null;
+    /**
+     * Endpoint
+     */
+    endpoint: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Operation
+     */
+    operation: string;
+    /**
+     * Repository
+     */
+    repository: string | null;
+    /**
+     * Request Id
+     */
+    request_id: string | null;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Variant
+     */
+    variant: string | null;
 };
 
 /**
@@ -12101,6 +12259,24 @@ export type OpenDecisionsResponse = {
      * Decisions
      */
     decisions: Array<DecisionView>;
+};
+
+/**
+ * OperationResultView
+ *
+ * One operation's outcome: ``operation`` is ``access``, ``mint``, or a capability a use asks of its forge.
+ */
+export type OperationResultView = {
+    /**
+     * Detail
+     */
+    detail: string | null;
+    diagnostic: ForgeDiagnosticView | null;
+    /**
+     * Operation
+     */
+    operation: string;
+    outcome: CredentialCheckOutcome;
 };
 
 /**
@@ -19292,6 +19468,35 @@ export const UsageKind = {
 export type UsageKind = typeof UsageKind[keyof typeof UsageKind];
 
 /**
+ * UseResultView
+ *
+ * One repository or work source checked; ``reached`` is ``false`` when the check ended before it was wholly
+ * answered.
+ */
+export type UseResultView = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Operations
+     */
+    operations: Array<OperationResultView>;
+    /**
+     * Reached
+     */
+    reached: boolean;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * UserIdentityView
  *
  * One linked provider identity.
@@ -25208,6 +25413,60 @@ export type PatchCredentialApiCredentialsCredentialPatchResponses = {
 };
 
 export type PatchCredentialApiCredentialsCredentialPatchResponse = PatchCredentialApiCredentialsCredentialPatchResponses[keyof PatchCredentialApiCredentialsCredentialPatchResponses];
+
+export type CheckCredentialApiCredentialsCredentialChecksPostData = {
+    body: CredentialCheckRequest;
+    path: {
+        /**
+         * Credential
+         */
+        credential: string;
+    };
+    query?: never;
+    url: '/api/credentials/{credential}/checks';
+};
+
+export type CheckCredentialApiCredentialsCredentialChecksPostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | CredentialNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type CheckCredentialApiCredentialsCredentialChecksPostError = CheckCredentialApiCredentialsCredentialChecksPostErrors[keyof CheckCredentialApiCredentialsCredentialChecksPostErrors];
+
+export type CheckCredentialApiCredentialsCredentialChecksPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CredentialCheckView;
+};
+
+export type CheckCredentialApiCredentialsCredentialChecksPostResponse = CheckCredentialApiCredentialsCredentialChecksPostResponses[keyof CheckCredentialApiCredentialsCredentialChecksPostResponses];
 
 export type EnableCredentialApiCredentialsCredentialEnablePostData = {
     body?: never;

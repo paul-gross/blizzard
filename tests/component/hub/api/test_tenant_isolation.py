@@ -295,6 +295,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PATCH", "/api/credentials/{credential}"): _f({}),
     ("POST", "/api/credentials/{credential}/retire"): _f(),
     ("POST", "/api/credentials/{credential}/enable"): _f(),
+    ("POST", "/api/credentials/{credential}/checks"): _f({}),
     ("GET", "/api/urgencies"): _LIST,
     ("POST", "/api/urgencies"): _own({"slug": "beta-extra-urgency"}, status=201),
     ("PUT", "/api/urgencies/order"): _f(

@@ -3925,6 +3925,84 @@
         "read"
       ],
       "commands": {
+        "check": {
+          "help": "Check CREDENTIAL read-only against the repositories and work sources it acts for \u2014 those given by --repo and\n--source, else every enabled one naming it \u2014 reporting each operation proven, granted, unproven, refused or\nunsupported. Nothing is written to the forge or stored.\n\nExits 1 when any operation is refused or unsupported, else 0. Refused when a --repo or --source does not act with\nCREDENTIAL, or when its secret is missing or retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "credential",
+              "opts": [
+                "credential"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Check only this repository, by id or slug; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "repositories",
+              "opts": [
+                "--repo"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Check only this work source, by id or slug; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "work_sources",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub credential check",
+          "short_help": "Check CREDENTIAL read-only against the repositories and work sources it acts for \u2014 those given by --repo and --source, else every enabled one naming it \u2014 reporting each operation proven, granted, unproven, refused or unsupported."
+        },
         "create": {
           "help": "Add credential SLUG at revision 1 on the forge --forge names.\n\nRefused when SLUG is another credential's, when another credential on the forge already acts as the same\nauthority, or when the secret is missing or retired.",
           "params": [

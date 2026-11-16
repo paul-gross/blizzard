@@ -31,11 +31,16 @@ from blizzard.hub.domain.config.credentials import (
     CredentialEdit,
     CredentialInUse,
     CredentialSlugTaken,
+    CredentialUnavailable,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
+from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic
+from blizzard.hub.forge.readiness import CredentialCheck, CredentialNotUsedBy, OperationResult
 from blizzard.wire.credential import (
     CredentialBindingView,
+    CredentialCheckRequest,
+    CredentialCheckView,
     CredentialCreateRequest,
     CredentialDocument,
     CredentialListItem,
@@ -45,6 +50,9 @@ from blizzard.wire.credential import (
     CredentialsListView,
     CredentialSummary,
     ForgeBindingsView,
+    ForgeDiagnosticView,
+    OperationResultView,
+    UseResultView,
 )
 from blizzard.wire.record_referrer import RecordReferrer
 
@@ -274,3 +282,76 @@ def enable_credential(
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _shown(record, services)
+
+
+@router.post("/{credential}/checks", response_model=CredentialCheckView)
+def check_credential(
+    _identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
+    credential: PathCredential,
+    request: CredentialCheckRequest,
+    services: Services,
+) -> CredentialCheckView:
+    """Check a credential read-only against the repositories and work sources named by id or slug, else against every
+    enabled record acting with it: each read landing and ingestion make, and each write judged from the grant the
+    credential exposes, never exercised. Stops at 60 seconds, answering the uses not reached; stores nothing but one
+    `credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the
+    credential, and `secret_unavailable` for a retired credential or an unknown or retired secret."""
+    try:
+        check = services.credential_readiness.check(
+            credential, repositories=request.repositories, work_sources=request.work_sources
+        )
+    except CredentialNotUsedBy as exc:
+        uses = [RecordReferrer(kind=use.kind.value, key=use.key, label=use.label) for use in exc.uses]
+        raise ProblemHTTPException(partial(problems_admin.credential_not_used_by_problem, str(exc), uses)) from exc
+    except CredentialUnavailable as exc:
+        raise ProblemHTTPException(
+            partial(problems_admin.config_field_invalid_problem, "path", "credential", str(exc), "secret_unavailable")
+        ) from exc
+    return _check_view(check)
+
+
+def _check_view(check: CredentialCheck) -> CredentialCheckView:
+    return CredentialCheckView(
+        credential=check.credential,
+        binding=check.binding,
+        variant=check.variant,
+        variant_contradicted=check.variant_contradicted,
+        mint=_operation_view(check.mint) if check.mint is not None else None,
+        granted_permissions=dict(check.granted_permissions) if check.granted_permissions is not None else None,
+        uses=[
+            UseResultView(
+                kind=use.kind,
+                id=use.id,
+                slug=use.slug,
+                operations=[_operation_view(operation) for operation in use.operations],
+                reached=use.reached,
+            )
+            for use in check.uses
+        ],
+        not_evaluated=check.not_evaluated,
+    )
+
+
+def _operation_view(operation: OperationResult) -> OperationResultView:
+    return OperationResultView(
+        operation=operation.operation,
+        outcome=operation.outcome.value,
+        detail=operation.detail,
+        diagnostic=_diagnostic_view(operation.diagnostic) if operation.diagnostic is not None else None,
+    )
+
+
+def _diagnostic_view(diagnostic: ForgeDiagnostic) -> ForgeDiagnosticView:
+    return ForgeDiagnosticView(
+        status=diagnostic.status,
+        operation=diagnostic.operation,
+        endpoint=diagnostic.endpoint,
+        repository=diagnostic.repository,
+        message=diagnostic.message,
+        documentation_url=diagnostic.documentation_url,
+        request_id=diagnostic.request_id,
+        accepted_permissions=diagnostic.accepted_permissions,
+        credential=diagnostic.credential,
+        binding=diagnostic.binding,
+        variant=diagnostic.variant,
+    )

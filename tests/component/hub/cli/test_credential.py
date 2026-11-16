@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -179,3 +180,90 @@ def test_repo_and_source_edit_take_a_credential(client: TestClient) -> None:
     assert edited.exit_code == 0, edited.output
     assert source_edit.exit_code == 0, source_edit.output
     assert client.get("/api/work-sources/issues").json()["credential_slug"] == "gh"
+
+
+def _operation(operation: str, outcome: str, detail: str | None = None) -> dict[str, Any]:
+    return {"operation": operation, "outcome": outcome, "detail": detail, "diagnostic": None}
+
+
+def _check(*, mint: dict[str, Any] | None = None, outcome: str = "proven", reached: bool = True) -> dict[str, Any]:
+    return {
+        "credential": "gh",
+        "binding": "github.token",
+        "variant": "classic",
+        "variant_contradicted": False,
+        "mint": mint,
+        "granted_permissions": None,
+        "uses": [
+            {
+                "kind": "repository",
+                "id": "repo-1",
+                "slug": "widget",
+                "operations": [_operation("access", "proven"), _operation("refs.read", outcome, "said why")],
+                "reached": reached,
+            }
+        ],
+        "not_evaluated": "Branch protection, required reviews, and rulesets are not evaluated.",
+    }
+
+
+class _CheckHub:
+    """A hub answering every check with ``answer``, recording each request's body and client timeout."""
+
+    def __init__(self, answer: dict[str, Any]) -> None:
+        self.answer = answer
+        self.sent: list[tuple[str, object, float]] = []
+        _bound["hub"] = bind_stubs(request=self.forward)
+
+    def forward(self, method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
+        self.sent.append((f"{method.upper()} {urlsplit(url).path}", kwargs.get("json"), timeout))
+        return httpx2.Response(200, json=self.answer, request=httpx2.Request(method.upper(), url))
+
+
+def test_check_prints_each_use_s_table_and_exits_0_when_nothing_is_refused() -> None:
+    hub = _CheckHub(_check())
+
+    result = _cred(["check", "gh"])
+
+    assert result.exit_code == 0, result.output
+    assert hub.sent == [("POST /api/credentials/gh/checks", {}, 75.0)]
+    assert result.output.splitlines() == [
+        "credential gh  github.token  classic",
+        "repository widget  repo-1",
+        "  access  proven",
+        "  refs.read  proven  said why",
+        "Branch protection, required reviews, and rulesets are not evaluated.",
+    ]
+
+
+@pytest.mark.parametrize("outcome", ["refused", "unsupported"])
+def test_check_exits_1_on_a_refused_or_unsupported_operation(outcome: str) -> None:
+    _CheckHub(_check(outcome=outcome))
+
+    assert _cred(["check", "gh"]).exit_code == 1
+
+
+@pytest.mark.parametrize("outcome", ["granted", "unproven"])
+def test_check_exits_0_on_a_granted_or_unproven_write(outcome: str) -> None:
+    _CheckHub(_check(outcome=outcome))
+
+    assert _cred(["check", "gh"]).exit_code == 0
+
+
+def test_check_exits_1_on_a_refused_mint_and_prints_it() -> None:
+    _CheckHub(_check(mint=_operation("mint", "refused", "The installation is gone.")))
+
+    result = _cred(["check", "gh"])
+
+    assert result.exit_code == 1
+    assert "mint  refused  The installation is gone." in result.output.splitlines()
+
+
+def test_check_posts_its_repositories_and_sources_and_marks_an_unreached_use() -> None:
+    hub = _CheckHub(_check(reached=False))
+
+    result = _cred(["check", "gh", "--repo", "widget", "--repo", "gadget", "--source", "issues"])
+
+    assert hub.sent[0][1] == {"repositories": ["widget", "gadget"], "work_sources": ["issues"]}
+    assert "repository widget  repo-1  (not reached)" in result.output.splitlines()
+    assert json.loads(_cred(["check", "gh", "--json"]).stdout) == _check(reached=False)

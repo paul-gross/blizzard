@@ -13,8 +13,15 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.auth_core import Role
+from blizzard.hub import composition
+from blizzard.hub.forge.internal.github_readiness import GitHubReadinessProbe
 from blizzard.hub.store import schema as s
-from blizzard.wire.credential import CredentialDocument, CredentialsListView, CredentialSummary
+from blizzard.wire.credential import (
+    CredentialCheckView,
+    CredentialDocument,
+    CredentialsListView,
+    CredentialSummary,
+)
 from blizzard.wire.repository import RepositorySummary
 from blizzard.wire.work_source import WorkSourceSummary
 from tests.support.scaffolding import (
@@ -294,3 +301,95 @@ def test_credential_reads_and_writes_require_their_permissions(tmp_path: Path) -
     assert hub.client.patch("/api/credentials/deploy", json={}, headers=contributor).status_code == 403
     for verb in ("retire", "enable"):
         assert hub.client.post(f"/api/credentials/deploy/{verb}", headers=contributor).status_code == 403
+
+
+def _forge_answer(request: httpx2.Request) -> httpx2.Response:
+    """The forge a check reaches: every read answers, a classic token's ``repo`` scope on each."""
+    path = request.url.path
+    body: dict[str, object] = {}
+    if "/git/ref/heads/" in path:
+        body = {"object": {"sha": "c0ffee0" + "0" * 33}}
+    elif path.endswith("/check-runs"):
+        body = {"total_count": 0}
+    return httpx2.Response(200, content=json.dumps(body).encode(), headers={"X-OAuth-Scopes": "repo"})
+
+
+@pytest.fixture
+def checking_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubHarness:
+    """A hub whose credential checks reach a forge answering every read."""
+    probe = GitHubReadinessProbe(transport=httpx2.MockTransport(_forge_answer))
+    monkeypatch.setattr(composition, "build_readiness_probes", lambda: {"github": probe})
+    harness = build_hub(tmp_path, repositories=(), link=False)
+    ensure_fixture_secret(harness.client)
+    assert harness.client.post("/api/secrets", json={"name": _SPARE, "value": "v"}).status_code == 201
+    for slug, api_base in (("ghe", "https://ghe.example/api/v3"), ("other", "https://other.example")):
+        assert (
+            harness.client.post("/api/forges", json={"slug": slug, "kind": "github", "api_base": api_base}).status_code
+            == 201
+        )
+    return harness
+
+
+def test_a_check_answers_each_use_s_operations_and_records_one_event(checking_hub: HubHarness) -> None:
+    hub = checking_hub
+    _credential(hub, variant="classic")
+    assert hub.client.post("/api/repositories", json=_repository(credential="deploy")).status_code == 201
+
+    response = hub.client.post("/api/credentials/deploy/checks", json={})
+
+    assert response.status_code == 200, response.text
+    check = CredentialCheckView.model_validate(response.json())
+    assert (check.credential, check.binding, check.variant, check.mint) == ("deploy", "github.token", "classic", None)
+    assert [(use.kind, use.slug, use.reached) for use in check.uses] == [("repository", "demo", True)]
+    outcomes = {op.operation: op.outcome for op in check.uses[0].operations}
+    assert outcomes["access"] == "proven"
+    assert set(outcomes.values()) == {"proven", "granted"}
+    assert check.not_evaluated == "Branch protection, required reviews, and rulesets are not evaluated."
+    with hub.engine.connect() as conn:
+        events = conn.execute(
+            hub_scoped(sa.select(s.event_log.c.detail).where(s.event_log.c.kind == "credential-check"))
+        ).all()
+    assert len(events) == 1
+
+
+def test_a_check_named_a_use_of_another_credential_is_refused_naming_it(checking_hub: HubHarness) -> None:
+    hub = checking_hub
+    _credential(hub)
+    _credential(hub, "other", secret=FIXTURE_FORGE_SECRET)
+    assert hub.client.post("/api/repositories", json=_repository(credential="other")).status_code == 201
+
+    response = hub.client.post("/api/credentials/deploy/checks", json={"repositories": ["demo", "nowhere"]})
+
+    assert _code(response) == (422, "credential-not-used-by")
+    problem = response.json()
+    assert problem["code"] == "credential_not_used_by"
+    assert [(use["kind"], use["label"]) for use in problem["uses"]] == [("repository", "demo"), ("repository", None)]
+
+
+def test_a_check_of_an_unknown_credential_is_404_and_of_a_retired_one_is_422(checking_hub: HubHarness) -> None:
+    hub = checking_hub
+    _credential(hub)
+    assert hub.client.post("/api/credentials/nobody/checks", json={}).status_code == 404
+    assert hub.client.post("/api/credentials/deploy/retire").status_code == 200
+
+    response = hub.client.post("/api/credentials/deploy/checks", json={})
+
+    assert _code(response) == (422, "secret_unavailable")
+
+
+def test_a_runner_is_refused_a_check(tmp_path: Path) -> None:
+    from tests.support.hub_request_auth import bearer, seed_enrolled
+
+    token = seed_enrolled(tmp_path)
+    hub = build_hub(tmp_path)
+
+    assert hub.client.post("/api/credentials/deploy/checks", json={}, headers=bearer(token)).status_code == 403
+
+
+def test_a_check_requires_config_edit(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth", repositories=(), link=False)
+    contributor = {
+        "Authorization": f"Bearer {seed_session(hub, seed_user(hub, username='con', role=Role.CONTRIBUTOR))}"
+    }
+    assert hub.client.post("/api/credentials/deploy/checks", json={}).status_code == 401
+    assert hub.client.post("/api/credentials/deploy/checks", json={}, headers=contributor).status_code == 403
