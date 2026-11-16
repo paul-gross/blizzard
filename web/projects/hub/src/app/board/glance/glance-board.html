@@ -1,5 +1,6 @@
 <app-glance-view
   [urgencies]="urgenciesQuery.data() ?? []"
+  [urgencyIconUrls]="urgencyIconUrls()"
   [donePolicy]="donePolicy()"
   [vitals]="vitals()"
   [vitalsLoading]="vitalsLoading()"

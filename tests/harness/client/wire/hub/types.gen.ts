@@ -14436,6 +14436,7 @@ export type RoutineView = {
      * Default Urgency
      */
     default_urgency: string | null;
+    effective_urgency: UrgencyRef | null;
     /**
      * Graph Name
      */

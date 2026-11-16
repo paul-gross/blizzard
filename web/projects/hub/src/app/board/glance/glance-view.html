@@ -12,7 +12,7 @@
   >
     <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
     @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
-      <fleet-chunk-urgency class="urgency-banner" [detail]="{ chunk_id: row.chunkId, terminal: row.terminal, urgency: row.urgency ?? null }" [resolvedUrgency]="urgency" [banner]="true" bannerLayout="mobile" />
+      <fleet-chunk-urgency class="urgency-banner" [detail]="{ chunk_id: row.chunkId, terminal: row.terminal, urgency: row.urgency ?? null }" [resolvedUrgency]="urgency" [iconUrl]="urgencyIconUrls()[urgency.urgency_id] ?? null" [banner]="true" bannerLayout="mobile" />
     }
     <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
     <span class="grow">

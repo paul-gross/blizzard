@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, outp
 import { type KitChipOption, type UrgencyView, KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
 import { choreModeLabel } from './cadence-vocabulary';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** A chore as its form states it, every field as typed. */
 export interface ChoreDraft {
@@ -43,10 +44,8 @@ export class FleetChoreForm {
   readonly cancelled = output<void>();
 
   protected readonly draft = linkedSignal(() => this.initial());
-  protected readonly urgencyOptions = computed(() => [
-    { value: '', label: 'Routine default' },
-    ...this.urgencies().filter((u) => !u.retired || u.slug === this.draft().urgency || u.urgency_id === this.draft().urgency).map((u) => ({ value: u.slug, label: u.name })),
-  ]);
+  protected readonly urgencyOptions = computed(() =>
+    urgencyOptions(this.urgencies(), { key: 'slug', retired: { current: this.draft().urgency ?? null }, inherit: { label: 'Routine default', name: null } }));
 
   protected readonly urgencyValue = computed(() => {
     const value = this.draft().urgency ?? '';

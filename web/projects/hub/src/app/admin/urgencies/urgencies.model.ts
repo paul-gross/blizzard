@@ -1,4 +1,4 @@
-import type { UrgencyView } from 'fleet';
+import type { KitChipOption, UrgencyView } from 'fleet';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 
 /** Keep the hub's live ordering; retired records follow the live set. */
@@ -9,6 +9,7 @@ export function visibleUrgencies(records: readonly UrgencyView[], filter: Lifecy
 import { ProjectColor, type UrgencyCreateRequest, type UrgencyPatchRequest, type UrgencyPositionRequest } from 'fleet';
 import { movedItem } from '../../core/array-move';
 import { type ConfigFieldDef, type ConfigFormValues, markIsImage } from '../config-edit.model';
+import { urgencyOptions as buildUrgencyOptions } from '../../core/urgency-options.model';
 
 export const URGENCY_FIELDS: readonly ConfigFieldDef[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true, createOnly: true },
@@ -67,6 +68,6 @@ export function liveUrgencies(records: readonly UrgencyView[]): readonly Urgency
   return records.filter((record) => !record.retired);
 }
 
-export function urgencyOptions(records: readonly UrgencyView[]): readonly { value: string; label: string }[] {
-  return records.map((record) => ({ value: record.urgency_id, label: record.name }));
+export function urgencyOptions(records: readonly UrgencyView[]): readonly KitChipOption[] {
+  return buildUrgencyOptions(records, { key: 'urgency_id', retired: 'include' });
 }

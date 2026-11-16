@@ -23586,6 +23586,16 @@
             ],
             "title": "Default Urgency"
           },
+          "effective_urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "graph_name": {
             "title": "Graph Name",
             "type": "string"
@@ -23670,6 +23680,7 @@
           "default_effort",
           "default_harnesses",
           "default_urgency",
+          "effective_urgency",
           "created_at",
           "retired",
           "revision",

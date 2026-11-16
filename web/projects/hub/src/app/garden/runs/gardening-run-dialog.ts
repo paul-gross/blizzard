@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { asyncStateOf, errorMessage, type RoutineRunResponse, type ScopeView } from 'fleet';
+import { asyncStateOf, errorMessage, hubApi, type RoutineRunResponse, type ScopeView } from 'fleet';
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 import { injectHubRoutineScopesQuery } from '../core/routines.query';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
@@ -36,7 +36,7 @@ import { liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './garden
 })
 export class GardeningRunDialog {
   protected readonly urgenciesQuery = injectUrgenciesQuery();
-  readonly routineUrgency = input<string | null>(null);
+  readonly effectiveUrgency = input<hubApi.UrgencyRef | null>(null);
   readonly routineId = input.required<string>();
   readonly routineName = input.required<string>();
 

@@ -80,6 +80,15 @@ describe('GlanceView', () => {
     expect(cards.map((card) => card.querySelector('.banner-label')?.textContent?.trim() ?? null)).toEqual(['Urgent', null, null]);
   });
 
+  it("shows the image mark of a row's (pending) urgency from the icon URL map", async () => {
+    const imaged = { urgency_id: 'p', name: 'Pending', slug: 'pending', default: false, emoji: null, color: 'red', icon: { digest: 'd', media_type: 'image/png' } } as UrgencyView;
+    const fixture = render({ live: [row({ chunkId: 'a', urgency: { urgency_id: 'p', slug: 'pending' } })] });
+    fixture.componentRef.setInput('urgencies', [imaged]);
+    fixture.componentRef.setInput('urgencyIconUrls', { p: 'blob:pending' });
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="glance-card"] img.mark')?.getAttribute('src')).toBe('blob:pending');
+  });
+
   it('renders the five vitals', async () => {
     const fixture = render();
     fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, done: 5, runnersUpLabel: '1/2' });

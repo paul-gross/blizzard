@@ -25,7 +25,7 @@
   <app-gardening-run-dialog
     [routineId]="routine.routine_id"
     [routineName]="routine.name"
-    [routineUrgency]="routine.default_urgency"
+    [effectiveUrgency]="routine.effective_urgency"
     (closed)="closeDialog()"
   />
 }

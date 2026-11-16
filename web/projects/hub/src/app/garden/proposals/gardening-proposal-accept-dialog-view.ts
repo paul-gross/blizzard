@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine, KitSelect, type UrgencyView } from 'fleet';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** What the view asks the container to submit — `mintWorkItem` mirrors the CLI's
  * `--no-work-item` (inverted), `body`/`reason` ride only when they carry something,
@@ -53,10 +54,12 @@ export class GardeningProposalAcceptDialogView {
   protected readonly body = signal('');
   protected readonly reason = signal('');
   protected readonly urgency = signal('');
-  protected readonly urgencyOptions = computed(() => [
-    { value: '', label: `Tenant default${this.urgencies().find((u) => u.default) ? ` (${this.urgencies().find((u) => u.default)!.name})` : ''}` },
-    ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name })),
-  ]);
+  protected readonly urgencyOptions = computed(() =>
+    urgencyOptions(this.urgencies(), {
+      key: 'slug',
+      retired: 'exclude',
+      inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
+    }));
 
   constructor() {
     // Prefills the editable body with the proposal's own — the container passes an

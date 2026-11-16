@@ -577,4 +577,22 @@ describe('FleetRoutinePanel', () => {
     fixture.destroy();
   });
 
+  it.each([
+    ['old', ['Tenant default (Normal)', 'Normal', 'Old']],
+    [null, ['Tenant default (Normal)', 'Normal']],
+  ])('offers a retired urgency only while it is the routine default (%s)', async (current, expected) => {
+    const fixture = await mount({ canEdit: true });
+    fixture.componentRef.setInput('urgenciesReady', true);
+    fixture.componentRef.setInput('urgencies', [
+      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
+      { urgency_id: 'o', slug: 'old', name: 'Old', default: false, retired: true } as UrgencyView,
+    ]);
+    fixture.componentRef.setInput('defaultUrgency', current);
+    await fixture.whenStable();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="gardening-routine-urgency-select"]')!.click();
+    await fixture.whenStable();
+    expect([...document.body.querySelectorAll<HTMLElement>('[role="option"]')].map((o) => o.textContent?.trim())).toEqual(expected);
+    fixture.destroy();
+  });
+
 });

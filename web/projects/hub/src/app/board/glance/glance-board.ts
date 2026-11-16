@@ -3,9 +3,10 @@ import type { ChunkUrgencyVars } from '../chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { injectPendingMutationVariables } from 'fleet';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
-import { injectUrgencyIconUrl } from '../../core/urgency-icon.query';
+import { bannerUrgencyIcons } from '../../core/urgencies.model';
+import { injectUrgencyIconUrls } from '../../core/urgency-icon.query';
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, CHUNK_URGENCY_ICON, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { asyncState, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
@@ -30,7 +31,6 @@ import { injectShowProjectColors, projectColorMap } from '../../core/project-len
 @Component({
   selector: 'app-glance-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [{ provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl }],
   imports: [GlanceView],
   templateUrl: './glance-board.html',
   styleUrl: './glance-board.css',
@@ -61,6 +61,8 @@ export class GlanceBoard {
   protected readonly spendYesterday = this.spend.yesterday;
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
+  /** The image marks the glance banners show, read once per digest. */
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks(), this.urgenciesQuery.data()));
   protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 

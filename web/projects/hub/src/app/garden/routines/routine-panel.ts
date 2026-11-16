@@ -21,6 +21,7 @@ import {
 import { LensLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** The routine's own record — its graph alone is editable here. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
@@ -177,10 +178,12 @@ export class FleetRoutinePanel {
   readonly defaultUrgency = input<string | null>(null);
   readonly editUrgency = output<string>();
   protected readonly urgencyDraft = signal<{ slug: string; original: string | null; value: string } | null>(null);
-  protected readonly urgencyOptions = computed(() => [
-    { value: '', label: `Tenant default${this.urgencies().find((u) => u.default) ? ` (${this.urgencies().find((u) => u.default)!.name})` : ''}` },
-    ...this.urgencies().filter((u) => !u.retired || u.slug === this.defaultUrgency() || u.urgency_id === this.defaultUrgency()).map((u) => ({ value: u.slug, label: u.name })),
-  ]);
+  protected readonly urgencyOptions = computed(() =>
+    urgencyOptions(this.urgencies(), {
+      key: 'slug',
+      retired: { current: this.defaultUrgency() },
+      inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
+    }));
   protected urgencyEditing(): boolean {
     const draft = this.urgencyDraft();
     return draft !== null && draft.slug === this.vm()?.record.slug && draft.original === this.defaultUrgency();

@@ -30,6 +30,7 @@
             @for (col of columns(); track col.key) {
               <app-board-column
                 [urgencies]="urgencies()"
+                [urgencyIconUrls]="urgencyIconUrls()"
                 [chunkControl]="chunkControl()"
                 [column]="col"
                 [cards]="boardCardsFor(col.key)"

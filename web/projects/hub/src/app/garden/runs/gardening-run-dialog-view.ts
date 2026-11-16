@@ -21,6 +21,7 @@ import {
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
 import { LensLink } from 'fleet/shell';
+import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** What the view asks the container to do once the operator submits. */
 export interface RunSubmission {
@@ -62,7 +63,8 @@ export interface RunSubmission {
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
   readonly urgencies = input<readonly UrgencyView[]>([]);
-  readonly routineUrgency = input<string | null>(null);
+  /** The urgency a run of the routine mints at when it names none; `null` when the hub could not resolve one. */
+  readonly effectiveUrgency = input<hubApi.UrgencyRef | null>(null);
 
   /** Every non-retired scope, previously-swept-by-this-routine first;
    * rendered in the order given. */
@@ -97,12 +99,9 @@ export class GardeningRunDialogView {
   protected readonly note = signal('');
   protected readonly urgency = signal('');
   protected readonly urgencyOptions = computed(() => {
-    const ref = this.routineUrgency();
-    const inherited = ref === null ? this.urgencies().find((u) => u.default) : this.urgencies().find((u) => u.slug === ref || u.urgency_id === ref);
-    return [
-      { value: '', label: `Routine default${inherited ? ` (${inherited.name})` : ref ? ` (${ref})` : ''}` },
-      ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name })),
-    ];
+    const ref = this.effectiveUrgency();
+    const name = ref === null ? null : (this.urgencies().find((u) => u.urgency_id === ref.urgency_id)?.name ?? ref.slug);
+    return urgencyOptions(this.urgencies(), { key: 'slug', retired: 'exclude', inherit: { label: 'Routine default', name } });
   });
 
   /** The delta baseline for the currently selected scope, or `undefined` for a
