@@ -15,6 +15,8 @@ from tests.support.repo_files import repo_root
 _DOC = repo_root() / "docs" / "deployment" / "credentials.md"
 _HEADING = "### App permissions"
 _CELL = re.compile(r"^`([^`]+)`$")
+#: What an optional permission withholding no capability is documented as needed for: the check's issue read.
+_NO_CAPABILITY = "a work source's check"
 
 
 def _documented() -> set[tuple[str, str, str, str]]:
@@ -45,7 +47,7 @@ def _minted() -> set[tuple[str, str, str, str]]:
         for permission, access in permissions.items()
     }
     rows |= {
-        (str(scope), permission, access, str(capability))
+        (str(scope), permission, access, str(capability) if capability is not None else _NO_CAPABILITY)
         for scope, permissions in APP_OPTIONAL_PERMISSIONS.items()
         for permission, (access, capability) in permissions.items()
     }

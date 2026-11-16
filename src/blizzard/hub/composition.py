@@ -23,7 +23,7 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.flags import (
     Flags,
     resolve_flags,
@@ -237,8 +237,10 @@ from blizzard.hub.forge.internal.factory import (
     build_forge_authorizations,
     build_forge_registry,
     build_installation_tokens,
+    build_readiness_probes,
 )
 from blizzard.hub.forge.rates import rate_dialect
+from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
@@ -384,6 +386,8 @@ class TenantServices:
     forges: ForgeRegistry
     #: Each forge key's rate budget, shared by every caller of that forge and credential.
     forge_budgets: ForgeBudgets
+    #: Checks a credential read-only against the records acting with it.
+    credential_readiness: CredentialReadiness
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
@@ -1320,6 +1324,18 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
+        credential_readiness=CredentialReadiness(
+            repositories=stores.repository_records,
+            work_sources=stores.work_source_records,
+            credentials=stores.credential_records,
+            forges=stores.forge_records,
+            authorizations=live.authorizations,
+            budgets=forge_budgets,
+            probes=build_readiness_probes(),
+            event_log=event_log,
+            clock=clock,
+            monotonic=SystemMonotonicClock(),
+        ),
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,

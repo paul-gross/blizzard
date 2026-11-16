@@ -114,6 +114,33 @@ def test_an_authorization_carries_its_variant_and_what_that_leaves_offered(
     assert (authorization.binding, authorization.authority) == ("github.token", "secret/gh")
 
 
+@pytest.mark.parametrize(
+    ("declared", "token", "contradicted"),
+    [
+        ("fine-grained", _CLASSIC, True),
+        ("fine-grained", _LEGACY, True),
+        ("classic", _FINE, True),
+        ("fine-grained", _FINE, False),
+        ("classic", _CLASSIC, False),
+        ("classic", _LEGACY, False),
+        ("classic", _OTHER, False),
+        ("fine-grained", _OTHER, False),
+        (None, _FINE, False),
+        (None, _CLASSIC, False),
+    ],
+)
+def test_a_declared_variant_the_tokens_form_disagrees_with_is_contradicted(
+    declared: str | None, token: str, contradicted: bool
+) -> None:
+    authorizations = _authorizations(_Reader({"gh": token}))
+
+    authorization = authorizations.authorization(_credential(variant=declared), ForgeScope.CHECK)
+
+    assert authorization.variant_contradicted is contradicted
+    assert authorization.granted_permissions is None
+    assert token not in repr(authorization)
+
+
 def test_a_record_naming_no_credential_is_authorized_by_its_secret_alone() -> None:
     authorizations = _authorizations(_Reader({"gh": _CLASSIC}))
 

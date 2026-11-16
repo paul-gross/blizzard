@@ -298,6 +298,46 @@ def test_each_scope_is_minted_with_its_permissions(world: _World) -> None:
     assert work_source == dict(APP_REQUIRED_PERMISSIONS[ForgeScope.WORK_SOURCE])
 
 
+@pytest.mark.parametrize(
+    ("withdrawn", "optional"),
+    [
+        ((), {"checks": "read", "statuses": "read", "issues": "read"}),
+        (("issues",), {"checks": "read", "statuses": "read"}),
+        (("checks",), {"statuses": "read", "issues": "read"}),
+        (("checks", "statuses", "issues"), {}),
+    ],
+)
+def test_a_check_token_is_minted_read_only_with_each_optional_read_the_installation_grants(
+    world: _World, withdrawn: tuple[str, ...], optional: dict[str, str]
+) -> None:
+    world.github.grant({k: v for k, v in FULL_GRANT.items() if k not in withdrawn})
+
+    world.get(world.authorization(scope=ForgeScope.CHECK))
+
+    assert world.github.mints[-1]["permissions"] == {
+        "metadata": "read",
+        "contents": "read",
+        "pull_requests": "read",
+        **optional,
+    }
+
+
+def test_a_check_authorization_carries_the_grant_and_withholds_what_it_lacks(world: _World) -> None:
+    grant = {k: v for k, v in FULL_GRANT.items() if k not in ("checks", "statuses", "issues")}
+    world.github.grant(grant)
+
+    authorization = world.authorization(scope=ForgeScope.CHECK)
+
+    assert authorization.granted_permissions == grant
+    assert authorization.offered == _KIND - {Capability.CHECKS_READ}
+    assert authorization.variant_contradicted is False
+
+
+def test_a_landing_authorization_carries_the_grant_it_read(world: _World) -> None:
+    assert world.authorization().granted_permissions == dict(FULL_GRANT)
+    assert world.authorization(scope=ForgeScope.WORK_SOURCE).granted_permissions is None
+
+
 # --- what an installation offers ------------------------------------------------------------------------------------
 
 

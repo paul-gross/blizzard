@@ -105,21 +105,27 @@ work source naming the credential shares the installation's one rate budget, and
 
 ### App permissions
 
-The hub mints each token with the permissions of what it is for: a `deliver` step's landing, or a work source's reads
-and label writes. An installation without a required permission is refused at the mint. One without an optional
-permission keeps working without what that permission serves:
+The hub mints each token with the permissions of what it is for: a `deliver` step's landing, a work source's reads and
+label writes, or a credential's read-only check. An installation without a required permission is refused at the mint.
+One without an optional permission keeps working without what that permission serves:
 
-| Scope         | Permission      | Access  | Needed for     |
-| ------------- | --------------- | ------- | -------------- |
-| `landing`     | `metadata`      | `read`  | required       |
-| `landing`     | `contents`      | `write` | required       |
-| `landing`     | `pull_requests` | `write` | required       |
-| `landing`     | `checks`        | `read`  | `checks.read`  |
-| `landing`     | `statuses`      | `read`  | `checks.read`  |
-| `landing`     | `actions`       | `write` | `checks.rerun` |
-| `work-source` | `metadata`      | `read`  | required       |
-| `work-source` | `issues`        | `write` | required       |
-| `work-source` | `pull_requests` | `read`  | required       |
+| Scope         | Permission      | Access  | Needed for            |
+| ------------- | --------------- | ------- | --------------------- |
+| `landing`     | `metadata`      | `read`  | required              |
+| `landing`     | `contents`      | `write` | required              |
+| `landing`     | `pull_requests` | `write` | required              |
+| `landing`     | `checks`        | `read`  | `checks.read`         |
+| `landing`     | `statuses`      | `read`  | `checks.read`         |
+| `landing`     | `actions`       | `write` | `checks.rerun`        |
+| `work-source` | `metadata`      | `read`  | required              |
+| `work-source` | `issues`        | `write` | required              |
+| `work-source` | `pull_requests` | `read`  | required              |
+| `check`       | `metadata`      | `read`  | required              |
+| `check`       | `contents`      | `read`  | required              |
+| `check`       | `pull_requests` | `read`  | required              |
+| `check`       | `checks`        | `read`  | `checks.read`         |
+| `check`       | `statuses`      | `read`  | `checks.read`         |
+| `check`       | `issues`        | `read`  | a work source's check |
 
 GitHub names these Metadata, Contents, Pull requests, Checks, Commit statuses, Actions, and Issues. An installation
 without Checks read or Commit statuses read offers no `checks.read`, so a repository on it behind a landing policy that

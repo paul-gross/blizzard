@@ -414,6 +414,21 @@ class ResolvedCredential:
     retired: bool = False
 
 
+def resolved_credential(credential: ConfiguredCredential) -> ResolvedCredential:
+    """The authority ``credential`` acts with, retired or not."""
+    return ResolvedCredential(
+        credential_id=credential.credential_id,
+        forge_id=credential.fields.forge_id,
+        binding=credential.fields.binding,
+        secret_name=credential.fields.secret_name,
+        settings=credential.fields.settings,
+        revision=credential.revision,
+        authority=credential.authority,
+        slug=credential.slug,
+        retired=credential.retired,
+    )
+
+
 def resolve_credential(
     record: ConfiguredRepository | ConfiguredWorkSource, credentials: IReadCredentialRepository
 ) -> ResolvedCredential | None:
@@ -424,17 +439,7 @@ def resolve_credential(
         credential = credentials.get(record.fields.credential_id)
         if credential is None:
             raise CredentialUnavailable(f"credential {record.fields.credential_id}", retired=False)
-        return ResolvedCredential(
-            credential_id=credential.credential_id,
-            forge_id=credential.fields.forge_id,
-            binding=credential.fields.binding,
-            secret_name=credential.fields.secret_name,
-            settings=credential.fields.settings,
-            revision=credential.revision,
-            authority=credential.authority,
-            slug=credential.slug,
-            retired=credential.retired,
-        )
+        return resolved_credential(credential)
     secret_name = record.fields.secret_name if isinstance(record, ConfiguredRepository) else record.fields.secret
     if secret_name is None:
         return None

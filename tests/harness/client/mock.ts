@@ -38,6 +38,31 @@ export interface MockInstallationRegistration {
   permissions: Record<string, 'read' | 'write' | 'admin'>;
 }
 
+/** `POST /_levers/sso_required`: `/repos/…` requests answer 403 behind SAML enforcement, with `X-GitHub-SSO`. */
+export interface MockSsoRequired {
+  /** The repository (`owner/name`) it holds for; every repository when absent. */
+  repo?: string;
+}
+
+/** `POST /_levers/latency`: each matching request waits `seconds` before it is answered. */
+export interface MockLatency {
+  seconds: number;
+  /** The repository (`owner/name`) it holds for; every request when absent. */
+  repo?: string;
+}
+
+/** One answered request in the mock forge's request journal. */
+export interface MockJournalEntry {
+  method: string;
+  path: string;
+  status: number;
+}
+
+/** The mock forge's request journal, `GET /_journal`; `DELETE /_journal` clears it. */
+export interface MockJournal {
+  entries: MockJournalEntry[];
+}
+
 /** The mock forge's lever listing, `GET /_levers`. */
 export interface MockLeverListing {
   state_levers: string[];

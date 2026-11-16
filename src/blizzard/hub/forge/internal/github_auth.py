@@ -88,12 +88,22 @@ class GitHubTokenAuth(httpx2.Auth):
         yield request
 
 
+def variant_contradicted(declared: object, token: str) -> bool:
+    """Whether ``declared`` disagrees with the form of ``token``: a classic-form token declared fine-grained, or a
+    fine-grained one declared classic."""
+    classic_form = token.startswith(_CLASSIC_PREFIX) or bool(_LEGACY_CLASSIC.fullmatch(token))
+    if declared == TokenVariant.FINE_GRAINED:
+        return classic_form
+    return declared == TokenVariant.CLASSIC and token.startswith(_FINE_GRAINED_PREFIX)
+
+
 def github_token_authorization(
     credential: ResolvedCredential, token: SecretValue, kind: frozenset[Capability]
 ) -> ForgeAuthorization:
     """``credential``'s authorization over its revealed ``token``, on a forge whose kind offers ``kind`` — every
     scope's is the same token."""
-    variant = effective_variant(credential.settings.get("variant"), token.expose())
+    declared = credential.settings.get("variant")
+    variant = effective_variant(declared, token.expose())
     return ForgeAuthorization(
         credential_id=credential.credential_id,
         credential_slug=credential.slug,
@@ -102,6 +112,7 @@ def github_token_authorization(
         authority=credential.authority,
         offered=kind,
         auth=GitHubTokenAuth(token),
+        variant_contradicted=variant_contradicted(declared, token.expose()),
     )
 
 
@@ -120,15 +131,22 @@ APP_CALL_TIMEOUT_SECONDS = 30.0
 APP_REQUIRED_PERMISSIONS: Mapping[ForgeScope, Mapping[str, str]] = {
     ForgeScope.LANDING: {"metadata": "read", "contents": "write", "pull_requests": "write"},
     ForgeScope.WORK_SOURCE: {"metadata": "read", "issues": "write", "pull_requests": "read"},
+    ForgeScope.CHECK: {"metadata": "read", "contents": "read", "pull_requests": "read"},
 }
-#: Each scope's permissions minted only when granted, and the capability withheld when not (checks need both reads).
-APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, Capability]]] = {
+#: Each scope's permissions minted only when granted, and the capability withheld when not (checks need both reads);
+#: ``None`` withholds no capability — a check's issue read, which a landing-only installation is never granted.
+APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, Capability | None]]] = {
     ForgeScope.LANDING: {
         "checks": ("read", Capability.CHECKS_READ),
         "statuses": ("read", Capability.CHECKS_READ),
         "actions": ("write", Capability.CHECKS_RERUN),
     },
     ForgeScope.WORK_SOURCE: {},
+    ForgeScope.CHECK: {
+        "checks": ("read", Capability.CHECKS_READ),
+        "statuses": ("read", Capability.CHECKS_READ),
+        "issues": ("read", None),
+    },
 }
 
 #: GitHub's permission levels, weakest first; a grant covers every level up to its own.
@@ -160,7 +178,7 @@ def app_offers(scope: ForgeScope, granted: Mapping[str, str], kind: frozenset[Ca
     withheld = {
         capability
         for permission, (level, capability) in APP_OPTIONAL_PERMISSIONS[scope].items()
-        if not covers(granted.get(permission), level)
+        if capability is not None and not covers(granted.get(permission), level)
     }
     return kind - withheld
 
@@ -519,7 +537,7 @@ def github_app_authorization(
     key = InstallationKey(
         str(credential.forge_id), api_base, credential.authority, scope, credential.secret_name, revealed.revision
     )
-    offered, outdated = kind, _never
+    offered, outdated, granted = kind, _never, None
     if APP_OPTIONAL_PERMISSIONS[scope]:
         try:
             installation = tokens.installation(key, app)
@@ -527,6 +545,7 @@ def github_app_authorization(
             raise ForgeAccessUnavailable(f"the installation could not be read: {type(exc).__name__}") from exc
         offered = app_offers(scope, installation.permissions, kind)
         outdated = partial(_regranted, tokens, key, installation)
+        granted = installation.permissions
     return ForgeAuthorization(
         credential_id=credential.credential_id,
         credential_slug=credential.slug,
@@ -537,6 +556,7 @@ def github_app_authorization(
         auth=InstallationAuth(tokens, key, app),
         grant_scoped=True,
         outdated=outdated,
+        granted_permissions=granted,
     )
 
 
