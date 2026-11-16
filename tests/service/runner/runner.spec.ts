@@ -556,7 +556,8 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
   const host = await runnerHosts.create({
     runnerLoop: 'timed',
     runnerOtlp: 'hung',
-    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '120' },
+    // The export may start before the chunk reaches done; keep its timeout beyond the whole test, including shutdown.
+    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '86400' },
     runnerConfig: { tick_seconds: 0.5, tracing: { sweep_seconds: 1n, settle_seconds: 0n } },
   });
   // A chunk run to done on the timed loop, then the pass clock watched across several passes.
@@ -565,18 +566,21 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
   // A closed lease is what the sweep tells: one chunk run to done.
   const chunkId = await seed(mockHub);
   await expect.poll(() => chunkStatus(mockHub, host, chunkId), { timeout: 120_000 }).toBe('done');
-  await expect.poll(() => host.otlp!.openConnections(), { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect.poll(() => host.otlp!.openTraceRequests().length, { timeout: 15_000 }).toBeGreaterThan(0);
+  const traceRequest = host.otlp!.openTraceRequests()[0]!;
 
   // With the export hung, passes keep ending: the pass clock advances three times over.
   const tickAt = async () => (await runner.status()).body.last_tick_at;
   let previous = await tickAt();
   for (let advance = 0; advance < 3; advance++) {
     await expect.poll(tickAt, { timeout: 10_000 }).not.toBe(previous);
+    expect(host.otlp!.openTraceRequests()).toContain(traceRequest);
     previous = await tickAt();
   }
 
   // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   const started = Date.now();
+  expect(host.otlp!.openTraceRequests()).toContain(traceRequest);
   const exit = await host.stop();
   // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   expect(Date.now() - started).toBeLessThan(20_000);

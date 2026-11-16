@@ -127,9 +127,11 @@ test.describe('a hung OTLP sink', () => {
       request.end();
     });
     await expect.poll(() => sink.openConnections()).toBe(1);
+    await expect.poll(() => sink.openTraceRequests()).toHaveLength(1);
     // The request was read in full and still has no answer; closing the sink is what ends it, with no status.
     await sink.close();
     await expect(answered).rejects.toThrow(/socket hang up|ECONNRESET/);
+    await expect.poll(() => sink.openTraceRequests()).toEqual([]);
     expect(sink.spans()).toEqual([]);
   });
 });
