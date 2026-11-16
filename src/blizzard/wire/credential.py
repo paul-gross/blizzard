@@ -6,6 +6,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.credential_check import CredentialCheckOutcome
 from blizzard.foundation.credential_setting_kind import SettingKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -124,9 +125,6 @@ class CredentialCheckRequest(BaseModel):
 
     repositories: list[str] | None = None
     work_sources: list[str] | None = None
-
-
-type CredentialCheckOutcome = Literal["proven", "granted", "unproven", "refused", "unsupported"]
 
 
 class ForgeDiagnosticView(WireModel):

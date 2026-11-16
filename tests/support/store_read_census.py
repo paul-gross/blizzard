@@ -195,6 +195,7 @@ from blizzard.hub.domain.urgency.ports import (
 )
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
+from blizzard.hub.forge.readiness import IReadinessProbe
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.model import IReadHubSettings, IReadHubSettingsAdmin
 from blizzard.hub.store import schema as s
@@ -3372,4 +3373,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
 }
 
 #: Hub ``IRead*`` methods with no SQL behind them at all, each reasoned below.
-HUB_EXEMPTIONS: dict[tuple[type, str], str] = {}
+HUB_EXEMPTIONS: dict[tuple[type, str], str] = {
+    (IReadinessProbe, "check"): "a forge probe, not a store read: its name only begins with IRead, and it reads the "
+    "forge over HTTP, never the hub store",
+}

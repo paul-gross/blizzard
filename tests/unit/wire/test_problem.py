@@ -171,6 +171,7 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "CREDENTIAL_AUTHORITY_TAKEN": "urn:blizzard:problem:credential-authority-taken",
         "CREDENTIAL_CAPABILITY_MISSING": "urn:blizzard:problem:credential-capability-missing",
         "CREDENTIAL_IN_USE": "urn:blizzard:problem:credential-in-use",
+        "CREDENTIAL_NOT_USED_BY": "urn:blizzard:problem:credential-not-used-by",
         "CREDENTIAL_NOT_FOUND": "urn:blizzard:problem:credential-not-found",
         "CREDENTIAL_SLUG_TAKEN": "urn:blizzard:problem:credential-slug-taken",
         "CURRENT_NODE_NOT_ON_GRAPH": "urn:blizzard:problem:current-node-not-on-graph",
