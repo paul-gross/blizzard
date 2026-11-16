@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
-from blizzard.hub.store.internal.egress_store import (  # pyright: ignore[reportPrivateUsage] — exercise the authority query directly
+from blizzard.hub.store.internal.egress_store import (
     EgressStore,
-    _current,
+    _current,  # pyright: ignore[reportPrivateUsage] — exercise the authority query directly
 )
 
 

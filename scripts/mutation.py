@@ -134,9 +134,15 @@ GLOBAL_EXCLUSIONS = (*PYPROJECT_DO_NOT_MUTATE, STANDALONE_SCRIPT_EXCLUSION)
 # The tier [tool.mutmut].pytest_add_cli_args selects; a test file with nothing in this tier
 # would only be deselected, so selection leaves it out of the fingerprint mutmut keys on.
 MUTATION_TIER_MARKER = "unit"
-# These repository guards inspect application source, which mutmut rewrites.
+# These guards inspect rewritten source or run nested pytest incompatible with mutmut.
 SOURCE_INSPECTION_GUARDS = frozenset(
-    {"tests/guards/test_handler_applicability.py", "tests/guards/test_producer_delegation.py"}
+    {
+        "tests/guards/test_aggregate_observation_enforcement.py",
+        "tests/guards/test_handler_applicability.py",
+        "tests/guards/test_producer_delegation.py",
+        "tests/guards/test_refusal_inventory_slices.py",
+        "tests/guards/test_runner_refusal_discovery.py",
+    }
 )
 TOOLS_PREFIX = "src/blizzard/tools/"
 
