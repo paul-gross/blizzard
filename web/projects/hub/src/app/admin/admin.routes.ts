@@ -15,6 +15,7 @@ export const ADMIN_ROUTES: Routes = [
       { path: '', redirectTo: 'members', pathMatch: 'full' },
       { path: 'members', loadComponent: () => import('./members/members-page').then((m) => m.MembersPage) },
       { path: 'users', redirectTo: 'members', pathMatch: 'full' },
+      { path: 'hub-settings', loadComponent: () => import('./hub-settings/hub-settings-page').then((m) => m.HubSettingsPage) },
       {
         path: 'projects',
         loadComponent: () => import('./projects/projects-page').then((m) => m.ProjectsPage),

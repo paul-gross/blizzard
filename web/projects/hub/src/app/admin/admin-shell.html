@@ -24,6 +24,9 @@
   <a fleetKitTab variant="sub" [count]="counts().changes" routerLink="changes" routerLinkActive="active" data-testid="admin-tab-changes"
     >Changes
   </a>
+  @if (canManageSettings()) {
+    <a fleetKitTab variant="sub" routerLink="hub-settings" routerLinkActive="active" data-testid="admin-tab-hub-settings">Hub settings</a>
+  }
 </nav>
 <div class="body">
   <router-outlet />
