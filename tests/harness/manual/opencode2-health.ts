@@ -14,6 +14,7 @@ if (!scratch || !path.isAbsolute(scratch) || !runtime || !port || !winterEnv) {
 if (!process.argv[2]) throw new Error('supply a command to run while the candidate runner is serving');
 const scenario = process.env.OPENCODE2_HEALTH_SCENARIO ?? 'NEVER_REGISTERED';
 if (scenario !== 'available' && scenario !== 'NEVER_REGISTERED') throw new Error('OPENCODE2_HEALTH_SCENARIO must be available or NEVER_REGISTERED');
+const gates = process.env.OPENCODE2_HEALTH_GATES?.split(',').map((gate) => gate.trim()).filter(Boolean);
 fs.mkdirSync(scratch, { recursive: true });
 const dir = fs.mkdtempSync(path.join(scratch, 'opencode2-health-'));
 fs.chmodSync(dir, 0o700);
@@ -87,6 +88,7 @@ try {
   fs.writeFileSync(path.join(host, 'data', 'worker-scratch-root'), workerScratch);
   for (const runner of config.runner as TomlTable[]) {
     runner.claude_code = { enabled: false };
+    if (gates) runner.gates = gates;
     runner.opencode = { ...(runner.opencode as TomlTable), enabled: true, binary, worker_config_path: path.join(dir, 'worker-config.json') };
     runner.transcripts_root = path.join(dir, 'transcripts');
     runner.worker_settings_path = path.join(dir, 'worker-settings.json');
