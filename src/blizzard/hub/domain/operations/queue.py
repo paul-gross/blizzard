@@ -7,9 +7,6 @@ differ: grouping needs only an unheld chunk, while reordering ranks the
 
 from __future__ import annotations
 
-# The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -31,7 +28,11 @@ from blizzard.hub.domain.chunk.model import (
     DependencyEdge,
     verb_legal_from,
 )
-from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    DEPENDENCIES_LOCK,
+    FoldTarget,
+    IWriteChunkDependenciesRepository,
+)
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.queue import (
     BACKLOG_RANKING_LOCK,
@@ -815,7 +816,6 @@ class GroupService:
         facts: IReadChunkFactsRepository,
         record: IReadChunkRecordRepository,
         clock: IClock,
-        cycle_lock: threading.Lock,
     ) -> None:
         self._work_refs = work_refs
         self._dependencies = dependencies
@@ -823,17 +823,14 @@ class GroupService:
         self._facts = facts
         self._record = record
         self._clock = clock
-        # The residual per-tenant lock DependencyService's own cycle check also shares —
-        # closes the race a row lock over this fold's own chunks alone cannot.
-        self._cycle_lock = cycle_lock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
         and each folded chunk's standing dependency edges. Refused before any
         write when a merge id belongs to another project (:class:`ChunksInDifferentProjects`)
         or the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
-        with self._cycle_lock, self._transactions.begin() as transaction:
-            locked = transaction.lock_chunks([survivor_id, *merge_ids])
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(chunks=[survivor_id, *merge_ids], keys=[DEPENDENCIES_LOCK])
             return self._group(locked, survivor_id, merge_ids)
 
     def _group(self, transaction: LockedTransaction, survivor_id: str, merge_ids: list[str]) -> GroupResult:

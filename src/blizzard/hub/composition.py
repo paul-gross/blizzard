@@ -642,7 +642,6 @@ class TenantStores:
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
     #: The tenant's cycle-check lock — dependencies never cross tenants.
-    cycle_lock: threading.Lock
     delete: DeleteService
     finding_store: FindingStore
     finding_exit: FindingExitService
@@ -707,14 +706,12 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     work_item_store = WorkItemStore(connections)
     transactions = tenant_transactions(connections)
     chunk_stores = build_chunk_stores(connections, clock)
-    cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
         clock=clock,
         facts=chunk_stores.facts,
         record=chunk_stores.record,
         dependencies=chunk_stores.dependencies,
-        cycle_lock=cycle_lock,
         transactions=transactions,
     )
     finding_store = FindingStore(connections)
@@ -732,7 +729,6 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         hosts=hosts,
         work_item_store=work_item_store,
         chunk_stores=chunk_stores,
-        cycle_lock=cycle_lock,
         delete=delete,
         finding_store=finding_store,
         finding_exit=finding_exit,
@@ -1464,7 +1460,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             lifecycle=chunk_lifecycle,
             transactions=stores.transactions,
             clock=clock,
-            cycle_lock=stores.cycle_lock,
         ),
         delete=stores.delete,
         facts=FactIngestService(
@@ -1509,7 +1504,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             record=chunk_record,
             clock=clock,
-            cycle_lock=stores.cycle_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,

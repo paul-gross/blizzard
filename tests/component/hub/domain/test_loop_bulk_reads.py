@@ -11,7 +11,6 @@ that stays flat as other chunks' edges and derived segments grow."""
 
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.execution.detach import DetachService
@@ -188,7 +188,7 @@ def _edged(tmp_path: Path, *, others: int) -> tuple[ChunkStores, Engine]:
     _mint(chunks, "ch_t", "ch_p", "ch_d", *[f"ch_o{i}" for i in range(others)], *[f"ch_q{i}" for i in range(others)])
     pairs = [("ch_t", "ch_p"), ("ch_d", "ch_t"), *[(f"ch_o{i}", f"ch_q{i}") for i in range(others)]]
     for dependent, prerequisite in pairs:
-        with chunk_unit(hub_store_connections(engine), [dependent, prerequisite]) as tx:
+        with chunk_unit(hub_store_connections(engine), [dependent, prerequisite], keys=[DEPENDENCIES_LOCK]) as tx:
             chunks.dependencies.declare(dependent, prerequisite, by="operator", at=_T0, transaction=tx)
     return chunks, engine
 
@@ -231,7 +231,6 @@ def test_delete_still_refuses_a_standing_prerequisite_read_through_the_touching_
         record=chunks.record,
         dependencies=chunks.dependencies,
         transactions=HubTransactions(hub_store_connections(engine)),
-        cycle_lock=threading.Lock(),
     )
     target = chunks.record.get("ch_t")
     assert target is not None

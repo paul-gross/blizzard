@@ -27,6 +27,7 @@ class _FakeUnit:
     ) -> LockedTransaction:
         self.owner.locked_chunks.append(list(chunks))
         self.owner.locked_keys.append(sorted(keys))
+        self.owner.locked_hub.append(list(hub))
         return cast(LockedTransaction, self)
 
     @property
@@ -41,6 +42,7 @@ class FakeTransactions:
 
     locked_chunks: list[list[str]] = field(default_factory=list[list[str]])
     locked_keys: list[list[LockKey]] = field(default_factory=list[list[LockKey]])
+    locked_hub: list[list[HubLock]] = field(default_factory=list[list[HubLock]])
 
     @contextmanager
     def begin(self) -> Generator[Transaction]:

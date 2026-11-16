@@ -89,7 +89,6 @@ def test_each_tenant_opens_its_own_stores_over_its_own_scope(tmp_path: Path) -> 
     assert mine.scope == StoreScope(first)
     assert theirs.scope == StoreScope(_SECOND)
     assert theirs.registry is not mine.registry
-    assert theirs.cycle_lock is not mine.cycle_lock
     assert theirs.chunk_stores.record is not mine.chunk_stores.record
 
 

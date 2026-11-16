@@ -8,10 +8,6 @@ runner-held one."""
 from __future__ import annotations
 
 import json
-
-# The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Protocol
@@ -21,7 +17,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts, ChunkVerb, DependencyEdge, WorkRef
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -117,7 +113,6 @@ class DeleteService:
         facts: IReadChunkFactsRepository,
         record: IWriteChunkRecordRepository,
         dependencies: IWriteChunkDependenciesRepository,
-        cycle_lock: threading.Lock,
         transactions: IHubTransactions,
     ) -> None:
         self._items = items
@@ -126,10 +121,6 @@ class DeleteService:
         self._record = record
         self._dependencies = dependencies
         self._transactions = transactions
-        # The residual per-tenant lock GroupService's own fold also shares: releasing this
-        # chunk's own outgoing edges races a concurrent fold rewriting the same edges onto a
-        # chunk neither one's row lock names — a row lock alone cannot close it.
-        self._cycle_lock = cycle_lock
 
     def delete(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.deleted`` and withdraw every open ``hub:``-source item
@@ -149,8 +140,8 @@ class DeleteService:
     def _delete(self, chunk: Chunk, pointers: frozenset[WorkRef], *, by: str) -> int | frozenset[WorkRef]:
         """One run of the delete's unit over ``pointers``: the deleted fact's id, or — writing nothing — the hub
         refs the re-read found outside the declared keys."""
-        keys = sorted(work_item_lock(p) for p in pointers)
-        with self._cycle_lock, self._transactions.begin() as transaction:
+        keys = sorted([DEPENDENCIES_LOCK, *(work_item_lock(p) for p in pointers)])
+        with self._transactions.begin() as transaction:
             locked = transaction.lock_set(chunks=[chunk.chunk_id], keys=keys)
             facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:

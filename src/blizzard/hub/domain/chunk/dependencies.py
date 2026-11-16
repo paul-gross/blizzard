@@ -1,17 +1,10 @@
 """Chunk dependency edges — declare and release.
 
-A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.dependencies``);
-:func:`decide_declare` owns what declaring decides, and release has no window. Declaring runs
-under the row lock (``bzh:store-exclusive-write``) plus a residual per-tenant
-``threading.Lock`` the cycle check alone still needs — pinned by
-``tests/component/hub/domain/chunk/test_dependencies_race.py`` and
-``tests/component/hub/domain/chunk/test_dependencies_service.py``."""
+A chunk names the chunks it depends on; :func:`decide_declare` owns declaration rules.
+"""
 
 from __future__ import annotations
 
-# The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
@@ -20,7 +13,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts, ChunkVerb, DependencyEdge
-from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, FoldMint, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
@@ -135,7 +128,6 @@ class DependencyService:
         lifecycle: IReadChunkLifecycleRepository,
         transactions: IHubTransactions,
         clock: IClock,
-        cycle_lock: threading.Lock,
     ) -> None:
         self._dependencies = dependencies
         self._facts = facts
@@ -143,10 +135,6 @@ class DependencyService:
         # ``bzh:store-exclusive-write`` — the unit that row-locks the two named chunks.
         self._transactions = transactions
         self._clock = clock
-        # The residual per-tenant lock: row locks alone cannot
-        # close a race between two declares closing a cycle through chunks neither one
-        # names, so the cycle check itself still needs one lock over the tenant's whole dependency graph.
-        self._cycle_lock = cycle_lock
 
     @property
     def dependencies(self) -> IWriteChunkDependenciesRepository:
@@ -158,8 +146,8 @@ class DependencyService:
         Reads the standing edges, the dependent's facts, and the prerequisite's ephemerality under
         the lock, and writes whatever :func:`decide_declare` decides."""
         prerequisite_id = prerequisite.chunk_id
-        with self._cycle_lock, self._transactions.begin() as unit:
-            transaction = unit.lock_chunks([dependent.chunk_id, prerequisite_id])
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_set(chunks=[dependent.chunk_id, prerequisite_id], keys=[DEPENDENCIES_LOCK])
             decision = decide_declare(
                 self._dependencies.list_standing_edges(transaction=transaction),
                 dependent=dependent,
@@ -183,9 +171,14 @@ class DependencyService:
         itself, so a pair released then freshly re-declared releases the new edge,
         silently, in ``edge``'s place. Admitted whenever some edge stands for the pair
         (no status window); refuses, writing nothing, when none does."""
-        with self._cycle_lock:
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_set(keys=[DEPENDENCIES_LOCK])
             released = self._dependencies.release(
-                edge.dependent_chunk_id, edge.prerequisite_chunk_id, by=by, at=self._clock.now()
+                edge.dependent_chunk_id,
+                edge.prerequisite_chunk_id,
+                by=by,
+                at=self._clock.now(),
+                transaction=transaction,
             )
             if released is None:
                 raise NoStandingDependencyToRelease(edge.dependent_chunk_id, edge.prerequisite_chunk_id)

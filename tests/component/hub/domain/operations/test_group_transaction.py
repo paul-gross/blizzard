@@ -1,6 +1,5 @@
 """Grouping shares one unit across its reads, pointer writes and fold."""
 
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,7 +34,6 @@ def test_group_returns_joined_survivor_and_rolls_back_on_fold_failure(
         record=chunks.record,
         facts=chunks.facts,
         clock=clock,
-        cycle_lock=threading.Lock(),
     )
     original = chunks.dependencies.record_fold
 

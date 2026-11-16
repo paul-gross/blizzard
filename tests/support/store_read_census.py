@@ -66,7 +66,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
-from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -2242,7 +2242,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_dependency_prerequisite, "1018", at=_ht(78))
     _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
     _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
-    with chunk_unit(store_connections, chunk_dependency_dependent, chunk_dependency_prerequisite) as unit:
+    with chunk_unit(
+        store_connections, chunk_dependency_dependent, chunk_dependency_prerequisite, keys=[DEPENDENCIES_LOCK]
+    ) as unit:
         write.dependencies.declare(
             chunk_dependency_dependent,
             chunk_dependency_prerequisite,
@@ -2250,7 +2252,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             at=_ht(81),
             transaction=unit,
         )
-    with chunk_unit(store_connections, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2") as unit:
+    with chunk_unit(
+        store_connections, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", keys=[DEPENDENCIES_LOCK]
+    ) as unit:
         write.dependencies.declare(
             "ch_hub_dep_dependent_2",
             "ch_hub_dep_prerequisite_2",
