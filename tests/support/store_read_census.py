@@ -25,6 +25,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.secrets.factories import secret_cipher
+from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -274,6 +275,7 @@ from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, Pi
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
+from blizzard.runner.settings.ports import IReadRunnerSettings
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import IReadPauseRepository
@@ -780,6 +782,10 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
     )
     stores.identity.record_runner_identity(RunnerIdentity(runner_id, "runner-local", _t(82)))
+    stores.settings.write(
+        Change("edit", sets={"agents": 2}), if_match=0, validate=lambda _: {}, door="cli", actor="test"
+    )
+
     stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
     stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
     workspace_id = "ws_1"
@@ -874,6 +880,10 @@ RunnerRecipe = Callable[[RunnerWorld], object]
 
 #: Every reflected runner ``(Protocol, method)``, mapped to a recipe run against :func:`build_runner_world`'s world.
 RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
+    (IReadRunnerSettings, "snapshot"): lambda w: w.read.settings.snapshot(),
+    (IReadRunnerSettings, "snapshot_with_provenance"): lambda w: w.read.settings.snapshot_with_provenance(),
+    (IReadRunnerSettings, "provenance"): lambda w: w.read.settings.provenance(),
+    (IReadRunnerSettings, "changes"): lambda w: w.read.settings.changes(limit=10),
     (IReadClosedLeaseRepository, "closed_lease_ids"): lambda w: w.read.lease_record.closed_lease_ids(
         {w.lease_1, w.lease_2, "unknown"}
     ),

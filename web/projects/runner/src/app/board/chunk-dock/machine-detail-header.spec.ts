@@ -11,6 +11,8 @@ const REF = Date.parse('2026-07-16T12:00:00.000Z');
 /** A closed lease: no live worker, ended at `closedAt`. */
 function endedLease(closedAt: string): runnerApi.LeaseView {
   return {
+    host_settings_revision: null,
+    runner_settings_revision: null,
     lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
     chunk_id: 'ch_01dockage00000000000000000',
     graph_id: 'gr_1',

@@ -441,6 +441,21 @@ def test_nested_and_literal_mappings_do_not_hide_reassigned_receivers() -> None:
     assert any("reasons.get" in item for item in unknown)
 
 
+def test_settings_mapping_annotations_require_unreassigned_receivers() -> None:
+    root = repo_root()
+    source = (root / "src/blizzard/runner/api/settings.py").read_text()
+    _, unknown = discover(source, root)
+    assert not any("snapshot.entries.get" in item or "provenance.get" in item for item in unknown)
+    changed = source.replace(
+        "    for key, lifetime in keys.items():", "    provenance = dynamic()\n    for key, lifetime in keys.items():"
+    )
+    _, unknown = discover(changed, root)
+    assert any("provenance.get" in item for item in unknown)
+    changed = source.replace("    snapshot: SettingsSnapshot", "    snapshot: object")
+    _, unknown = discover(changed, root)
+    assert any("snapshot.entries.get" in item for item in unknown)
+
+
 def test_harness_health_port_requires_its_imported_type() -> None:
     root = repo_root()
     source = (root / "src/blizzard/runner/api/harness_health.py").read_text()

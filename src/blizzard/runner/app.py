@@ -103,6 +103,7 @@ from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDecl
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
@@ -771,6 +772,22 @@ def _harnesses_for_lease(graph: RunnerProcess, lease_id: str) -> HarnessRegistry
     return (graph.harness_sets.worker_for_lease(lease_id) or graph.harness_sets.current).registry
 
 
+class _CurrentHarnessHealth:
+    """Read the health of the published harness set, not the boot-time set."""
+
+    def __init__(self, graph: RunnerProcess) -> None:
+        self._graph = graph
+
+    def get(self, harness_id: str) -> HarnessHealthResult | None:
+        return self._graph.health.get(harness_id)
+
+    def displayed_version(self, harness_id: str) -> str | None:
+        return self._graph.health.displayed_version(harness_id)
+
+    def admitted_range(self, harness_id: str) -> str | None:
+        return self._graph.health.admitted_range(harness_id)
+
+
 def _wire_runner(
     config: RunnerConfig, host: HostProcess, graph: RunnerProcess, startup: contextlib.ExitStack
 ) -> _WiredRunner:
@@ -941,7 +958,7 @@ def _wire_runner(
         requeue=requeue,
         attachments=attachments,
         git_commit_declarations=git_commit_declarations,
-        harness_health=harness_health,
+        harness_health=_CurrentHarnessHealth(graph),
         hub_proxy_client=hub_proxy_client,
         identity=graph.identity,
         stepper=stepper,

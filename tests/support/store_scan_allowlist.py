@@ -41,6 +41,7 @@ from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatu
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.settings.ports import IReadRunnerSettings
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
@@ -196,6 +197,21 @@ _RARE_OPERATOR_EVENT_REASON = (
 )
 
 RUNNER_ALLOWED_SCANS: list[Allowance] = [
+    # A settings snapshot reads the finite key vocabulary; provenance joins those keys to their changes.
+    *[
+        MethodScopedAllowance(
+            IReadRunnerSettings,
+            method,
+            "runner_setting_entries",
+            200,
+            "settings snapshots read the runner's finite set of authored keys",
+        )
+        for method in ("snapshot", "snapshot_with_provenance", "provenance")
+    ],
+    *[
+        MethodScopedAllowance(IReadRunnerSettings, method, "runner_setting_changes", 200, _RARE_OPERATOR_EVENT_REASON)
+        for method in ("snapshot_with_provenance", "provenance", "changes")
+    ],
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_facts", 50, _SCHEMA_520_REASON),

@@ -9,6 +9,8 @@ const OWNER = { runnerId: 'rn_1', name: 'r1', label: 'r1' };
 
 function lease(overrides: Partial<PanelLease> = {}): PanelLease {
   return {
+    host_settings_revision: null,
+    runner_settings_revision: null,
     lease_id: 'lease_1',
     chunk_id: 'ch_1',
     graph_id: 'gr_1',

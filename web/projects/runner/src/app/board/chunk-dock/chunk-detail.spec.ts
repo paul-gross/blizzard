@@ -43,6 +43,8 @@ const OLD_LEASE = 'lease_01KXKVVF1J3D6H6VYZ3XYNOLD1';
 
 /** A running newest attempt (epoch 2) — the chunk's freshest lease, read off runner `rn_1`. */
 const NEWEST = (overrides: Partial<PanelLease> = {}): PanelLease => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: NEW_LEASE,
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',

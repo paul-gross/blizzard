@@ -83,6 +83,10 @@ class HarnessSection(Protocol):
         """The section's own tables, emitted after the shared ones."""
         ...
 
+    def settings_values(self) -> dict[str, object]:
+        """Parsed values keyed by their runner settings record paths."""
+        ...
+
 
 class IHarnessSectionKind(Protocol):
     """How one binding's section is read, defaulted, and scaffolded."""

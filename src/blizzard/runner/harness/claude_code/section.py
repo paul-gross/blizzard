@@ -68,6 +68,15 @@ class ClaudeCodeSection:
     def autonomy_override(self) -> str | None:
         return "legacy harness_permission_mode" if self.permission_mode is not None else None
 
+    def settings_values(self) -> dict[str, object]:
+        return {
+            "claude_code.enabled": self.enabled,
+            "claude_code.binary": self.binary,
+            "models.supported": self.supported_models,
+            "models.aliases": dict(self.model_aliases),
+            "effort.aliases": dict(self.effort_aliases),
+        }
+
     def root_toml(self) -> str:
         settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
         return f"worker_settings_path = {settings}\n" + (

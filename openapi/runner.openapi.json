@@ -7369,7 +7369,8 @@
             "type": "string"
           },
           "lifetime": {
-            "$ref": "#/components/schemas/Lifetime"
+            "$ref": "#/components/schemas/Lifetime",
+            "x-blizzard-open": true
           },
           "revision": {
             "anyOf": [
@@ -7388,7 +7389,8 @@
               "default"
             ],
             "title": "Source",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           },
           "value": {
             "title": "Value"

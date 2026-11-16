@@ -16,6 +16,8 @@ const PROJECTS: PanelProject[] = [
 ];
 
 const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',

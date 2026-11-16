@@ -24,10 +24,11 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 ### Runner settings move to the store
 
 Before starting the new runner, stop the host and back up its store and host file together. Migrate the store with the
-new release's explicit `blizzard runner migrate` procedure; startup does not migrate it. On the first start, each
-identified runner seeds explicitly authored per-runner settings from its file. Omitted settings use defaults. Check the
-result with `blizzard runner settings get --runner <id>` after startup. Existing store entries and explicit unsets win:
-editing a previously seeded file value later does not change it. Make subsequent changes with the settings CLI or API
+new release's explicit `blizzard runner migrate` procedure; startup does not migrate it. On each start, each identified
+runner seeds explicitly authored per-runner settings from its file where no stored entry exists. A key newly authored in
+the file can therefore be seeded on a later start; omitted keys use defaults. Check the result with
+`blizzard runner settings get --runner <id>` after startup. Existing store entries and explicit unsets win: editing a
+previously seeded file value later does not change it. Change stored settings with the settings CLI or API
 ([runner settings](./deployment/runner-settings.md)).
 
 Host settings remain file-owned in this release. In particular, without explicit `[tools]`, the implicit host tools

@@ -1,9 +1,10 @@
 # Runner settings
 
-Each identified runner has its own settings record in the runner store. The host file supplies explicitly authored
-runner values on first seed; omitted values resolve to defaults. Existing entries, including an explicit unset, are not
-overwritten by later file edits or restarts. Use the settings API or CLI for subsequent changes. Host settings,
-including the hub address and authentication, remain file-owned and require a restart. Runner identity is immutable.
+Each identified runner has its own settings record in the runner store. On every start, explicitly authored runner
+values in the host file seed keys that have no stored entry. Thus a key newly added to the file can be seeded on a later
+start; omitted keys resolve to defaults. Existing entries, including an explicit unset, are not overwritten by later
+file edits or restarts. Use the settings API or CLI to change stored settings. Host settings, including the hub address
+and authentication, remain file-owned and require a restart. Runner identity is immutable.
 
 Without an explicit host `[tools]` table, the host's implicit tools profile is derived from the runners' **file** values
 on every boot, even when stored runner worker values differ. Set `[tools]` explicitly to avoid coupling host children to

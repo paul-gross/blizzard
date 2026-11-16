@@ -10,6 +10,8 @@ import { LocalPanelLayout } from './app-panel-layout';
 import type { BoardLayout } from './chunk-list/chunk-board';
 
 const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',

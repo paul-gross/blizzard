@@ -5,6 +5,8 @@ import type { runnerApi } from 'fleet';
 import { WorkerLine } from './worker-line';
 
 const LEASE: runnerApi.LeaseView = {
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_1', chunk_id: 'ch_1', graph_id: 'gr_1', node_id: 'nd_build', node_name: 'build',
   epoch: 1, session_id: 'sess_1', pid: 1234, environment_id: 'a-long-environment-name', workdir: '/ws/env',
   created_at: '2026-07-16T11:00:00.000Z', last_heartbeat_at: '2026-07-16T11:59:26.000Z',

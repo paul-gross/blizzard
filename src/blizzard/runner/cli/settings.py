@@ -9,6 +9,7 @@ import click
 from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import Response
+from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
@@ -42,7 +43,7 @@ def _echo(value: object) -> None:
     click.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 
-@click.group("settings")
+@click.group("settings", cls=GetGroup)
 def settings_group() -> None:
     """Read and edit a runner's live settings."""
 
@@ -65,13 +66,6 @@ def get_settings(
             _echo(row)
             return
     raise click.ClickException(f"settings get: unknown setting {key!r}")
-
-
-# Aliases share exactly the same options and behavior, but do not clutter help.
-for _alias in ("show", "read"):
-    settings_group.add_command(
-        click.Command(_alias, hidden=True, callback=get_settings.callback, params=get_settings.params)
-    )
 
 
 def _write(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, body: object) -> None:

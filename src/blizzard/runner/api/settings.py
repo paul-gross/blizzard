@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -12,18 +13,18 @@ from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
-from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.settings.policy import SettingRefusal, check_keys
-from blizzard.runner.settings.ports import IWriteRunnerSettings
+from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsChange, SettingsSnapshot
 from blizzard.runner.throttle.settings import DAY_NAMES, DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 def _reject_worker_credential(request: Request) -> None:
@@ -39,8 +40,8 @@ router = APIRouter(prefix="/api/settings", tags=["runner settings"], dependencie
 class SettingRow(WireModel):
     key: str
     value: object
-    source: Literal["entry", "default"]
-    lifetime: Lifetime
+    source: Annotated[Literal["entry", "default"] | Unrecognized, OPEN]
+    lifetime: Annotated[Lifetime | Unrecognized, OPEN]
     revision: int | None = None
     written_at: str | None = None
     written_by: str | None = None
@@ -131,6 +132,8 @@ def _view(wiring: RunnerWiring) -> SettingsView:
     service = wiring.settings_service()
     store = cast(IWriteRunnerSettings, service.store)
     stepper = wiring.stepper()
+    snapshot: SettingsSnapshot
+    provenance: Mapping[str, SettingsChange]
     (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(
         store.snapshot_with_provenance
     )
@@ -193,8 +196,6 @@ def _view(wiring: RunnerWiring) -> SettingsView:
 
 def _resolved_values(config: RunnerConfig) -> dict[str, object]:
     """Project parser-owned defaults in the record's wire vocabulary."""
-    claude = cast(ClaudeCodeSection, config.harness_sections.of("claude_code"))
-    opencode = cast(OpenCodeSection, config.harness_sections.of("opencode"))
     throttle = config.throttle
     pace = throttle.pace if throttle else None
     schedule = throttle.schedule if throttle else None
@@ -240,18 +241,7 @@ def _resolved_values(config: RunnerConfig) -> dict[str, object]:
         "throttle.on_usage_limit": throttle.on_usage_limit.value if throttle else "hold",
         "context.warn_tokens": config.context_warn_tokens,
         "context.sample_interval_seconds": config.context_sample_interval_seconds,
-        "claude_code.enabled": claude.enabled,
-        "claude_code.binary": claude.binary,
-        "models.supported": claude.supported_models,
-        "models.aliases": dict(claude.model_aliases),
-        "effort.aliases": dict(claude.effort_aliases),
-        "opencode.enabled": opencode.enabled,
-        "opencode.binary": opencode.binary,
-        "opencode.auth_path": opencode.auth_path,
-        "opencode.worker_config_path": opencode.worker_config_path,
-        "opencode.models.supported": opencode.supported_models,
-        "opencode.models.aliases": dict(opencode.model_aliases),
-        "opencode.effort.aliases": dict(opencode.effort_aliases),
+        **{key: value for section in config.harness_sections for key, value in section.settings_values().items()},
     }
 
 

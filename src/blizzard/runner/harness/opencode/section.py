@@ -63,6 +63,17 @@ class OpenCodeSection:
     def autonomy_override(self) -> str | None:
         return None
 
+    def settings_values(self) -> dict[str, object]:
+        return {
+            "opencode.enabled": self.enabled,
+            "opencode.binary": self.binary,
+            "opencode.auth_path": self.auth_path,
+            "opencode.worker_config_path": self.worker_config_path,
+            "opencode.models.supported": self.supported_models,
+            "opencode.models.aliases": dict(self.model_aliases),
+            "opencode.effort.aliases": dict(self.effort_aliases),
+        }
+
     def worker_config_at(self, root: Path) -> Path:
         """The worker config's path, defaulting to the one ``runner init`` scaffolds under ``root``."""
         return Path(self.worker_config_path) if self.worker_config_path else root / OPENCODE_WORKER_CONFIG_FILENAME

@@ -48,6 +48,8 @@ const RUNNER = 'a-long-runner-identity-that-wraps-under-a-narrow-column';
 
 /** The chunk's live worker, holding an environment with a long name. */
 const WORKER: runnerApi.LeaseView = {
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01dockwidth0000000000000000',
   graph_id: 'gr_1',

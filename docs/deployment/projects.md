@@ -212,10 +212,11 @@ agents = 1
 projects = [{ project = "default", workspace = "workspace-local" }]
 ```
 
-The runner sends the project list at every registration. After first seed, change `projects` and `agents` through
-[runner settings](./runner-settings.md), not by editing the host file. Live edits affect a later pass; existing work
-keeps its held binding. A `[[runner]]` with no `projects` key is halted, naming the key, and only `projects = []`
-declares that the runner serves nothing.
+The runner sends the effective project list at every registration. Change stored `projects` and `agents` through
+[runner settings](./runner-settings.md); file values seed absent entries on each start. Live edits affect a later pass;
+existing work keeps its held binding. A runner with no effective `projects` setting is halted, naming the key; a stored
+entry can satisfy this requirement even if the file omits it. Set `projects = []` to declare that the runner serves
+nothing.
 
 A runner may bind its projects to several workspaces. A free agent asks the hub for the next ready chunk of any project
 whose workspace has a free environment, and the hub's ready-queue order alone decides which project that is; a project
@@ -224,8 +225,8 @@ one pool, shared by every runner of the host that binds a project to it. Two ent
 leave the runner claiming nothing until one is removed; its status names both.
 
 A binding carries no `agents` of its own: every binding shares `[[runner]] agents`. A host file that sets `agents` on a
-binding halts that runner at load, its error naming `[[runner]] agents`, and a runner with bindings and no `agents`
-halts the same way.
+binding halts that runner at load, its error naming `[[runner]] agents`, and a runner with bindings and no effective
+`agents` setting halts the same way.
 
 `blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on its
 first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is added

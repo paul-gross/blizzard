@@ -27,7 +27,13 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
-from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, JudgeInvocation, WorkerInvocation
+from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyKey,
+    HarnessSet,
+    IInvocationHarnesses,
+    JudgeInvocation,
+    WorkerInvocation,
+)
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
@@ -414,6 +420,7 @@ class RunnerStepper:
         self._client: httpx2.Client | None = None
         self._ctx: LoopContext | None = None
         self._ctx_harness_set: HarnessSet | None = None
+        self._ctx_harness_key: HarnessAssemblyKey | None = None
         self._timeout = timeout
         self._client_timeout: float | None = None
         self._retired: list[httpx2.Client] = []
@@ -552,6 +559,16 @@ class RunnerStepper:
                     if reader is not None and self._graph.harness_key is not None
                     else None
                 )
+                # An in-place binary upgrade must be handled by the selected binding's launch guard, not silently
+                # reselect a binding before that guard can detect the service version change.
+                previous = self._ctx_harness_key
+                if (
+                    key is not None
+                    and previous is not None
+                    and key.values == previous.values
+                    and key.bundle_source_identity == previous.bundle_source_identity
+                ):
+                    key = previous
                 selected = (
                     self._graph.harness_sets.prepare(key) if key is not None else self._graph.harness_sets.current
                 )
@@ -600,6 +617,7 @@ class RunnerStepper:
             self._client_timeout = timeout
             self._ctx = ctx
             self._ctx_harness_set = selected
+            self._ctx_harness_key = key
             self._wiring = wiring
             self._revision = revision
             if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
