@@ -21,6 +21,8 @@ import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
+import { CredentialCheck } from '../credentials/credential-check';
+import { credentialCheckTarget } from '../credentials/credentials.model';
 import { repositoryFields, repositoryRecordVm } from './repositories.model';
 import { injectRepositoryQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { injectCredentialsQuery } from '../credentials/credentials.query';
@@ -35,7 +37,7 @@ import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 @Component({
   selector: 'app-repository-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel],
+  imports: [ConfigFormDialog, ConfigRecordPanel, CredentialCheck],
   templateUrl: './repository-detail.html',
 })
 export class RepositoryDetail {
@@ -91,6 +93,13 @@ export class RepositoryDetail {
 
   protected readonly actions = computed(() =>
     configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()),
+  );
+  /** The Check action's credential and scope — this record alone, shown to an editor when it names a credential. */
+  protected readonly check = computed(() =>
+    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()?.credential_id, {
+      field: 'repositories',
+      id: this.repositoryQuery.data()?.repository_id,
+    }),
   );
   protected readonly shown = computed(() => {
     const record = this.repositoryQuery.data();

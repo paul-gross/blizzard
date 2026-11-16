@@ -1,10 +1,12 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
 import {
-  createCredentialApiCredentialsPost, enableCredentialApiCredentialsCredentialEnablePost, hubConfigKey,
+  checkCredentialApiCredentialsCredentialChecksPost, createCredentialApiCredentialsPost, enableCredentialApiCredentialsCredentialEnablePost, hubConfigKey,
   patchCredentialApiCredentialsCredentialPatch, retireCredentialApiCredentialsCredentialRetirePost,
-  type CredentialCreateRequest, type CredentialPatchRequest,
+  type CredentialCheckView, type CredentialCreateRequest, type CredentialPatchRequest,
 } from 'fleet';
+
+import type { CredentialCheckTarget } from './credentials.model';
 
 export interface CredentialEditVars {
   readonly credentialId: string;
@@ -53,5 +55,19 @@ export function injectCredentialLifecycleMutation() {
       if (error) throw error;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: hubConfigKey }),
+  }));
+}
+
+/** Checks a credential read-only against the records acting with it; the answer is the mutation's data. The check
+ * stores nothing, so no cached read goes stale and none is invalidated. */
+export function injectCheckCredentialMutation() {
+  return injectMutation(() => ({
+    mutationFn: async (target: CredentialCheckTarget): Promise<CredentialCheckView> => {
+      const { data, error } = await checkCredentialApiCredentialsCredentialChecksPost({
+        path: { credential: target.credentialId }, body: target.scope, throwOnError: false,
+      });
+      if (error) throw error;
+      return data;
+    },
   }));
 }

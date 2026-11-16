@@ -13,8 +13,9 @@ import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
+import { CredentialCheck } from './credential-check';
 import { injectForgesQuery } from '../forges/forges.query';
-import { credentialFields, credentialPatch, credentialRecordVm, credentialShown } from './credentials.model';
+import { credentialCheckTarget, credentialFields, credentialPatch, credentialRecordVm, credentialShown } from './credentials.model';
 import { injectCredentialLifecycleMutation, injectEditCredentialMutation } from './credentials.mutations';
 import { injectCredentialQuery, injectCredentialsQuery } from './credentials.query';
 
@@ -26,7 +27,7 @@ import { injectCredentialQuery, injectCredentialsQuery } from './credentials.que
  */
 @Component({
   selector: 'app-credential-detail', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel], templateUrl: './credential-detail.html',
+  imports: [ConfigFormDialog, ConfigRecordPanel, CredentialCheck], templateUrl: './credential-detail.html',
 })
 export class CredentialDetail {
   private readonly route = inject(ActivatedRoute);
@@ -51,6 +52,10 @@ export class CredentialDetail {
   protected readonly revisionsState = computed<KitAsyncStateValue>(() => asyncState(this.historyQuery, this.revisions().length === 0));
   protected readonly cliCommand = computed(() => detailCliCommand(this.viewport.mode(), RecordKind.CREDENTIAL, this.credentialQuery.data()?.slug));
   protected readonly actions = computed(() => configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.credentialQuery.data()));
+  /** The Check action's target — the credential against every record acting with it, shown to an editor. */
+  protected readonly check = computed(() =>
+    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.credentialQuery.data()?.credential_id),
+  );
   protected readonly shown = computed(() => {
     const record = this.credentialQuery.data();
     return shownFormValues(this.fields(), record && credentialShown(record));

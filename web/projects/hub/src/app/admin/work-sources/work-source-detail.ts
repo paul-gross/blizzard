@@ -21,9 +21,10 @@ import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
+import { CredentialCheck } from '../credentials/credential-check';
 import { WORK_SOURCE_FIELDS, workSourceCliName, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
-import { credentialPickerFields } from '../credentials/credentials.model';
+import { credentialCheckTarget, credentialPickerFields } from '../credentials/credentials.model';
 import { injectCredentialsQuery } from '../credentials/credentials.query';
 import { forgePickerFields } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
@@ -37,7 +38,7 @@ import { injectForgesQuery } from '../forges/forges.query';
 @Component({
   selector: 'app-work-source-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel],
+  imports: [ConfigFormDialog, ConfigRecordPanel, CredentialCheck],
   templateUrl: './work-source-detail.html',
 })
 export class WorkSourceDetail {
@@ -83,6 +84,13 @@ export class WorkSourceDetail {
 
   protected readonly actions = computed(() =>
     configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()),
+  );
+  /** The Check action's credential and scope — this record alone, shown to an editor when it names a credential. */
+  protected readonly check = computed(() =>
+    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()?.credential_id, {
+      field: 'work_sources',
+      id: this.sourceQuery.data()?.work_source_id,
+    }),
   );
   protected readonly shown = computed(() => {
     const record = this.sourceQuery.data();

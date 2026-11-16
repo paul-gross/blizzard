@@ -2,9 +2,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { hubConfigKey } from 'fleet';
+import { type CredentialCheckView, hubConfigKey } from 'fleet';
 import { credentialSummary, type RequestClientStub, stubHubClient } from 'fleet/testing';
-import { injectCreateCredentialMutation, injectCredentialLifecycleMutation, injectEditCredentialMutation } from './credentials.mutations';
+import { injectCheckCredentialMutation, injectCreateCredentialMutation, injectCredentialLifecycleMutation, injectEditCredentialMutation } from './credentials.mutations';
+
+const CHECK: CredentialCheckView = {
+  credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', uses: [],
+};
 
 describe('credential mutations', () => {
   let stub: RequestClientStub;
@@ -16,6 +21,7 @@ describe('credential mutations', () => {
       'PATCH /api/credentials/{credential}': () => credentialSummary({ revision: 3 }),
       'POST /api/credentials/{credential}/retire': () => credentialSummary({ retired: true, revision: 4 }),
       'POST /api/credentials/{credential}/enable': () => credentialSummary({ revision: 5 }),
+      'POST /api/credentials/{credential}/checks': () => CHECK,
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)] });
@@ -40,5 +46,13 @@ describe('credential mutations', () => {
     expect(stub.forRoute('/api/credentials/cred_g', 'PATCH')[0]).toMatchObject({ body: { settings: { variant: 'classic' } }, headers: { 'if-match': '2' } });
     expect(stub.forRoute('/api/credentials/cred_g/retire', 'POST')[0].headers['if-match']).toBe('3');
     expect(stub.forRoute('/api/credentials/cred_g/enable', 'POST')[0].headers['if-match']).toBe('4');
+  });
+
+  it('posts a check, answers it as its data, and invalidates nothing', async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    const check = TestBed.runInInjectionContext(() => injectCheckCredentialMutation());
+    expect(await check.mutateAsync({ credentialId: 'cred_g', scope: { repositories: ['core'] } })).toEqual(CHECK);
+    expect(stub.forRoute('/api/credentials/cred_g/checks', 'POST')[0].body).toEqual({ repositories: ['core'] });
+    expect(spy).not.toHaveBeenCalled();
   });
 });

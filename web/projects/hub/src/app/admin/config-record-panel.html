@@ -70,6 +70,7 @@
           <fleet-kit-error-line [message]="failure" [testid]="testidPrefix() + '-action-error'" />
         }
       }
+      <ng-content />
       @if (record.links; as group) {
         <h3 class="section">{{ group.heading }}</h3>
         @if (group.links.length > 0) {

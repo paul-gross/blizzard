@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { CredentialDocument, MeResponse } from 'fleet';
+import type { CredentialCheckView, CredentialDocument, MeResponse } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
@@ -39,18 +39,25 @@ const HISTORY = configChangesPage({
 });
 const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
+const CHECK: CredentialCheckView = {
+  credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', uses: [],
+};
+
 describe('CredentialDetail', () => {
   let stub: RequestClientStub;
   let record: CredentialDocument = IN_USE;
+  let me: MeResponse = EDITOR;
   afterEach(() => {
     record = IN_USE;
+    me = EDITOR;
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
   async function open(url: string) {
     stub = stubHubClient({
-      'GET /api/me': () => EDITOR,
+      'GET /api/me': () => me,
       'GET /api/forges': () => ({ forges: [forgeDetail()] }),
       'GET /api/credentials': () => ({ credentials: [credentialSummary()], bindings: BINDINGS, forge_bindings: [{ forge_id: 'frg_g', bindings: ['github.token'] }] }),
       'GET /api/credentials/{credential}': () => record,
@@ -64,6 +71,7 @@ describe('CredentialDetail', () => {
           : credentialSummary({ retired: true, revision: 4 }),
       'POST /api/credentials/{credential}/enable': () => credentialSummary({ revision: 5 }),
       'GET /api/config/changes': () => HISTORY,
+      'POST /api/credentials/{credential}/checks': () => CHECK,
     });
     TestBed.configureTestingModule({
       providers: [
@@ -146,5 +154,20 @@ describe('CredentialDetail', () => {
     const reads = stub.forRoute('/api/config/changes', 'GET');
     expect(reads[0].search).toContain('record_kind=credential');
     expect(reads[0].search).toContain('record_key=cred_g');
+  });
+
+  it('checks the credential against every record acting with it', async () => {
+    const { harness, el } = await open('/admin/credentials/cred_g');
+    testid(el, 'credential-check-run')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials/cred_g/checks', 'POST').map((request) => request.body)).toEqual([{}]);
+    expect(testid(el, 'credential-check-not-evaluated')).not.toBeNull();
+  });
+
+  it('withholds the Check action from a viewer who cannot edit config', async () => {
+    me = OPERATOR_ME_RESPONSE;
+    const { el } = await open('/admin/credentials/cred_g');
+    expect(testid(el, 'admin-credential-detail')).not.toBeNull();
+    expect(testid(el, 'credential-check-run')).toBeNull();
   });
 });
