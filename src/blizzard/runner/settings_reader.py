@@ -59,16 +59,19 @@ class RunnerSettingsReader:
         return tuple(key for key in (*self.keys, *self.aliases) if key not in blocked)
 
     def snapshot(self) -> tuple[SettingsSnapshot, RunnerConfig]:
+        snapshot = self.snapshot_record()
+        return snapshot, self.resolve_for_read(snapshot.entries)
+
+    def snapshot_record(self) -> SettingsSnapshot:
+        """Acquire the revision before resolving entries, including any deferred seed."""
         seed = self._deferred_seed
         if seed is not None and self._identity_present is not None:
             if not self._identity_present():
-                snapshot = self.store.snapshot()
-                return snapshot, self._preview_entries(snapshot.entries)
+                return self.store.snapshot()
             assert self.entry.authored is not None
             seed.seed(self.entry.authored, (*self.keys, *self.aliases), validate=self.validate, aliases=self.aliases)
             self._deferred_seed = None
-        snapshot = self.store.snapshot()
-        return snapshot, self.resolve(snapshot.entries)
+        return self.store.snapshot()
 
     def preview_seed(self) -> RunnerConfig:
         """Resolve the entries a first seed would produce, without writing them."""

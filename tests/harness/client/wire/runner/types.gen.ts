@@ -4109,6 +4109,10 @@ export type SettingsView = {
      * Settings
      */
     settings: Array<SettingRow>;
+    /**
+     * Settings Error
+     */
+    settings_error: string | null;
 };
 
 /**

@@ -568,8 +568,9 @@ class RunnerStepper:
             new_client = False
             try:
                 if reader is not None:
-                    snapshot, config = reader.snapshot()
+                    snapshot = reader.snapshot_record()
                     revision = snapshot.revision
+                    config = reader.resolve_for_read(snapshot.entries)
                 else:
                     config = self._wiring.config
                 wiring = LoopWiring.of(config, broker=self._graph.host.events)

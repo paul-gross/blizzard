@@ -68,8 +68,20 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
         with runner_client(app) as client:
             before = client.get("/api/settings")
             assert before.status_code == 200, before.text
+            preview = before.json()
+            assert preview["settings_error"] is None
+            assert next(row for row in preview["settings"] if row["key"] == "agents")["value"] == 3
             assert RunnerIdentityStore(base.connections).runner_identity() is None
             assert runner.stores.settings.snapshot().entries == {}
+            dotenv = tmp_path / ".env"
+            dotenv.mkdir()
+            unavailable = client.get("/api/settings")
+            assert unavailable.status_code == 200, unavailable.text
+            assert unavailable.json()["revision"] == preview["revision"]
+            assert unavailable.json()["settings"] == []
+            assert unavailable.json()["settings_error"]
+            assert runner.stores.settings.snapshot().entries == {}
+            dotenv.rmdir()
             stepper.request()
             assert RunnerIdentityStore(base.connections).runner_identity() is not None
             assert runner.stores.settings.snapshot().entries == {}
@@ -188,6 +200,41 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
         stepper.request()
         recovered = client.get("/api/settings").json()["in_force"]
         assert recovered["revision"] == 6 and recovered["failed"] is None
+
+        response = client.patch("/api/settings", headers={"If-Match": "6"}, json={"set": {"agents": 2}})
+        assert response.status_code == 200
+        dotenv = tmp_path / ".env"
+        dotenv.mkdir()
+        stepper.request()
+        response = client.get("/api/settings")
+        assert response.status_code == 200, response.text
+        failed_view = response.json()
+        assert failed_view["revision"] == 7
+        assert failed_view["in_force"]["revision"] == 6
+        assert failed_view["in_force"]["failed"]["revision"] == 7
+        assert failed_view["in_force"]["failed"]["since"]
+        assert failed_view["settings"] == []
+        assert failed_view["settings_error"]
+        invalid = client.patch("/api/settings", headers={"If-Match": "7"}, json={"set": {"agents": -1}})
+        assert invalid.status_code == 422, invalid.text
+        assert invalid.json()["code"] == "settings_invalid"
+        invalid = client.patch(
+            "/api/settings", headers={"If-Match": "7"}, json={"set": {"subscription": "not-declared"}}
+        )
+        assert invalid.status_code == 422, invalid.text
+        assert invalid.json()["code"] == "settings_invalid"
+        assert client.get("/api/settings").json()["revision"] == 7
+        response = client.patch("/api/settings", headers={"If-Match": "7"}, json={"set": {"agents": 1}})
+        assert response.status_code == 200
+        assert response.json()["revision"] == 8
+        assert response.json()["settings_error"]
+        dotenv.rmdir()
+        stepper.request()
+        recovered_view = client.get("/api/settings").json()
+        assert recovered_view["in_force"]["revision"] == 8
+        assert recovered_view["in_force"]["failed"] is None
+        assert recovered_view["settings_error"] is None
+        assert next(r for r in recovered_view["settings"] if r["key"] == "agents")["value"] == 1
 
     stepper.close()
     graph.close()

@@ -87,6 +87,28 @@ def test_get_aliases_read_one_key(verb: str) -> None:
     assert json.loads(result.output)["value"] == 3
 
 
+def test_get_key_reports_settings_resolution_failure() -> None:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/api/host/runners":
+            return httpx2.Response(
+                200, json={"items": [{"name": "r", "runner_id": "rn_1", "state": "serving", "served": True}]}
+            )
+        assert request.url.path == "/runners/rn_1/api/settings"
+        return httpx2.Response(
+            200, json={"revision": 2, "in_force": None, "settings": [], "settings_error": "cannot read .env"}
+        )
+
+    result = CliRunner().invoke(
+        runner_group,
+        ["settings", "get", "agents", "--runner-url", "http://runner.test"],
+        obj=bind_transport(answer).collaborators,
+    )
+    assert result.exit_code != 0
+    assert "settings unavailable" in result.output
+    assert "cannot read .env" in result.output
+    assert "unknown setting" not in result.output
+
+
 def test_ambiguous_selection_does_not_read_settings() -> None:
     def answer(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/host/runners"

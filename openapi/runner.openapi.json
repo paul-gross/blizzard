@@ -7517,12 +7517,24 @@
             },
             "title": "Settings",
             "type": "array"
+          },
+          "settings_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Error"
           }
         },
         "required": [
           "revision",
           "in_force",
-          "settings"
+          "settings",
+          "settings_error"
         ],
         "title": "SettingsView",
         "type": "object"

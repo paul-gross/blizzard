@@ -63,6 +63,7 @@ class SettingsView(WireModel):
     revision: int
     in_force: InForce
     settings: list[SettingRow]
+    settings_error: str | None = None
 
 
 class EntryView(WireModel):
@@ -138,11 +139,21 @@ def _view(wiring: RunnerWiring) -> SettingsView:
     def read_settings() -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
         # Registration may have established identity during the last tick. Seed
         # before reading provenance, rather than waiting for another tick.
-        service.snapshot()
+        service.snapshot_record()
         return store.snapshot_with_provenance()
 
     (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(read_settings)
-    resolved = service.resolve_for_read(snapshot.entries)
+    in_force = InForce(
+        revision=in_force_revision,
+        since=in_force_since,
+        failed=FailureView(revision=failure[0], error=failure[1], since=failure[2]) if failure else None,
+    )
+    try:
+        resolved = service.resolve_for_read(snapshot.entries)
+    except Exception as exc:
+        return SettingsView(
+            revision=snapshot.revision, in_force=in_force, settings=[], settings_error=str(exc) or type(exc).__name__
+        )
     defaults = _resolved_values(resolved)
     rows: list[SettingRow] = []
     keys = dict(service.keys)
@@ -190,11 +201,7 @@ def _view(wiring: RunnerWiring) -> SettingsView:
         )
     return SettingsView(
         revision=snapshot.revision,
-        in_force=InForce(
-            revision=in_force_revision,
-            since=in_force_since,
-            failed=FailureView(revision=failure[0], error=failure[1], since=failure[2]) if failure else None,
-        ),
+        in_force=in_force,
         settings=rows,
     )
 
@@ -287,7 +294,7 @@ def patch_settings(
         )
     try:
         check_keys(HOST_REGISTRY, [*body.set, *body.unset])
-        service.snapshot()
+        service.snapshot_record()
         cast(IWriteRunnerSettings, service.store).write(
             Change("edit", sets=body.set, unsets=frozenset(body.unset)),
             if_match=revision,

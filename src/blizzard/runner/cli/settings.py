@@ -61,6 +61,8 @@ def get_settings(
     if key is None:
         _echo(view)
         return
+    if view.get("settings_error"):
+        raise click.ClickException(f"settings get: settings unavailable: {view['settings_error']}")
     for row in view["settings"]:
         if row["key"] == key:
             _echo(row)

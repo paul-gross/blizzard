@@ -129,6 +129,49 @@ def test_live_settings_rebuild_and_failed_prompt_retry(tmp_path: Path, monkeypat
         graph.close()
 
 
+def test_snapshot_resolution_failure_reports_revision_and_recovers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    host = load_host_config(tmp_path)
+    base = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
+    )
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        first = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        reader = runner.settings_reader
+        assert reader is not None
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"agents": 2}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        revision = settings.snapshot().revision
+        dotenv = tmp_path / ".env"
+        dotenv.mkdir()
+        assert stepper._context() is first  # pyright: ignore[reportPrivateUsage]
+        assert stepper.failed_revision == revision
+        assert stepper.settings_failure is not None
+        assert stepper.settings_failure[0] == revision
+        dotenv.rmdir()
+        assert stepper._context().config.agents == 2  # pyright: ignore[reportPrivateUsage]
+        assert stepper.settings_failure is None
+    finally:
+        stepper.close()
+        graph.close()
+
+
 def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

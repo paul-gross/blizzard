@@ -22,6 +22,8 @@ The settings view reports the record `revision`, each key's resolved `value`, `s
 `lifetime`, and available write provenance. `in_force.revision` and `since` identify the snapshot actually in use;
 `in_force.failed` identifies a failed revision, error and time. A newer stored revision does not by itself mean a pass
 has applied it. Older lease spawns can have no recorded launch revision.
+If the settings cannot be resolved, `settings` is empty and `settings_error` explains why; the record revision and
+`in_force` status remain available. No resolved values are substituted from an older revision.
 
 ## Operate
 
