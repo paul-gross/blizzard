@@ -522,7 +522,7 @@ def test_hosted_app_reads_health_from_its_initial_cache(tmp_path: Path, monkeypa
 
     try:
         result = Mock()
-        monkeypatch.setattr(hosted.harness_health, "get", lambda harness_id: result)
+        monkeypatch.setattr(hosted.harness_health, "get", Mock(return_value=result))
         assert runner_seams(hosted.app).harness_health.get(CLAUDE_CODE_HARNESS_ID) is result
     finally:
         hosted.close()
