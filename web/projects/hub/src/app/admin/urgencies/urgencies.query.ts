@@ -18,9 +18,6 @@ export function injectUrgencyQuery(key: () => string | null) {
 }
 
 import { getSettingsApiSettingsGet, type SettingsView } from 'fleet';
-import { readUrgencyIcon } from '../../core/urgency-icon.query';
-import { inject } from '@angular/core';
-import { TenantContext } from '../../core/auth/tenant-context';
 
 export function injectSettingsQuery() {
   return injectQuery(() => ({
@@ -32,25 +29,4 @@ export function injectSettingsQuery() {
       return data!;
     },
   }));
-}
-
-/** Authenticated image bytes for the form preview, never a raw API URL. */
-export function injectUrgencyIconData(key: () => string | null, digest: () => string | null) {
-  const tenant = inject(TenantContext);
-  return injectQuery(() => {
-    const id = key();
-    const hash = digest();
-    return {
-      queryKey: ['hub', 'urgency-form-icon', tenant.current(), id, hash],
-      enabled: tenant.current() !== null && id !== null && hash !== null,
-      staleTime: Infinity,
-      queryFn: async (): Promise<string> => {
-        const blob = await readUrgencyIcon(id!);
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let binary = '';
-        for (const byte of bytes) binary += String.fromCharCode(byte);
-        return `data:${blob.type};base64,${btoa(binary)}`;
-      },
-    };
-  });
 }

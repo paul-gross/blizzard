@@ -1,8 +1,6 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import type { UrgencyView } from 'fleet';
-import { TenantContext } from '../../core/auth/tenant-context';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { BoardColumn } from './board-column';
 
@@ -11,7 +9,7 @@ const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false
 
 describe('BoardColumn urgency', () => {
   it.each([false, true])('projects the banner above work in both drag modes (drag=%s)', async (drag) => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const fixture = TestBed.createComponent(BoardColumn);
     fixture.componentRef.setInput('column', { key: 'ready', label: 'READY', headerLabel: 'Ready' });
     fixture.componentRef.setInput('cards', [card]);
@@ -31,5 +29,16 @@ describe('BoardColumn urgency', () => {
     fixture.componentRef.setInput('urgencies', [{ ...urgent, default: true }]);
     await fixture.whenStable();
     expect(root.querySelector('fleet-chunk-urgency')).toBeNull();
+  });
+  it("shows the image mark of the card's (pending) urgency from the icon URL map", async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const imaged = { ...urgent, urgency_id: 'p', slug: 'pending', name: 'Pending', emoji: null, icon: { digest: 'd', media_type: 'image/png' } } as UrgencyView;
+    const fixture = TestBed.createComponent(BoardColumn);
+    fixture.componentRef.setInput('column', { key: 'ready', label: 'READY', headerLabel: 'Ready' });
+    fixture.componentRef.setInput('cards', [{ ...card, urgency: { urgency_id: 'p', slug: 'pending' } }]);
+    fixture.componentRef.setInput('urgencies', [urgent, imaged]);
+    fixture.componentRef.setInput('urgencyIconUrls', { p: 'blob:pending', u: 'blob:urgent' });
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('fleet-chunk-urgency img.mark')?.getAttribute('src')).toBe('blob:pending');
   });
 });

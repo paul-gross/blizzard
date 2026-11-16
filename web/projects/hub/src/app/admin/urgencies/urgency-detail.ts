@@ -11,7 +11,8 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { urgencyEdit, urgencyOptions } from './urgencies.model';
 import { injectEditUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';
 import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyFormValues, urgencyRecordVm } from './urgency-detail.model';
-import { injectUrgencyIconData, injectUrgencyQuery } from './urgencies.query';
+import { injectUrgencyQuery } from './urgencies.query';
+import { injectUrgencyIconDataUrl } from '../../core/urgency-icon.query';
 import { UrgencyDetailView } from './urgency-detail-view';
 
 @Component({ selector: 'app-urgency-detail', changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,7 +24,10 @@ export class UrgencyDetail {
   private readonly all = injectUrgenciesQuery();
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), { initialValue: null });
   private readonly query = injectUrgencyQuery(() => this.key());
-  private readonly image = injectUrgencyIconData(() => this.query.data()?.urgency_id ?? null, () => this.query.data()?.icon?.digest ?? null);
+  private readonly image = injectUrgencyIconDataUrl(() => {
+    const u = this.query.data();
+    return u?.icon ? { key: u.urgency_id, digest: u.icon.digest } : null;
+  });
   private readonly history = injectConfigHistoryQuery(RecordKind.URGENCY, () => this.query.data()?.urgency_id ?? null);
   protected readonly editMutation = injectEditUrgencyMutation();
   private readonly lifecycleMutation = injectUrgencyLifecycleMutation();
@@ -35,7 +39,7 @@ export class UrgencyDetail {
   protected readonly actionError = signal<string | null>(null);
   protected readonly destination = signal('');
   protected readonly vm = computed(() => urgencyRecordVm(this.query.data()));
-  protected readonly shown = computed(() => urgencyFormValues(this.query.data(), this.image.data()));
+  protected readonly shown = computed(() => urgencyFormValues(this.query.data(), this.image()));
   protected readonly actions = computed(() => urgencyActions(
     this.viewport.mode(), hasPermission(this.me.data(), 'config:edit'), hasPermission(this.me.data(), 'chunk:control'),
     this.query.data(), this.shown(),

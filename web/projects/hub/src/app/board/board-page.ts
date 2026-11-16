@@ -2,9 +2,9 @@ import { withPendingUrgencies } from './chunks/urgency.model';
 import { injectHubChunkControl } from './chunks/hub-chunk-control';
 import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../core/mutation-keys';
-import { CHUNK_URGENCY_ICON } from 'fleet';
-import { injectUrgencyIconUrl } from '../core/urgency-icon.query';
+import { injectUrgencyIconUrls } from '../core/urgency-icon.query';
 import { injectUrgenciesQuery } from '../core/urgencies.query';
+import { bannerUrgencyIcons } from '../core/urgencies.model';
 import { boardDonePolicy } from '../core/board-done-policy.model';
 import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -62,7 +62,6 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
  */
 @Component({
   selector: 'app-board-page',
-  providers: [{ provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'onEscape($event)' },
   imports: [BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
@@ -260,6 +259,9 @@ export class BoardPage {
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Every chunk's work items, read once the chunk list has answered. */
+  /** The image marks the board's banners show, read once per digest. */
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks(), this.urgenciesQuery.data()));
+
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
   /** Select a chunk — or clear the selection — by writing the URL. A different chunk drops the Tracks layout's

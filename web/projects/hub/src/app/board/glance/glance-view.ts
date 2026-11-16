@@ -94,6 +94,8 @@ export class GlanceView {
   }
 
   readonly urgencies = input<readonly UrgencyView[]>([]);
+  /** Each banner urgency's image-mark URL by urgency id, read by the page. */
+  readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   protected readonly urgencyPill = urgencyPill;
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
   readonly vitals = input.required<Vitals>();

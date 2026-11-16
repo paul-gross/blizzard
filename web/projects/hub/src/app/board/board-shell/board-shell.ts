@@ -48,6 +48,8 @@ export class BoardShell {
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
 
   readonly urgencies = input<readonly UrgencyView[]>([]);
+  /** Each banner urgency's image-mark URL by urgency id, read by the page. */
+  readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   readonly chunkControl = input<ChunkControl | null>(null);
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
