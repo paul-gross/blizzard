@@ -1,6 +1,5 @@
 """A live dataset edit retains the missing path-key diagnostic on every operator surface."""
 
-import threading
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -45,7 +44,6 @@ def test_live_missing_key_diagnostic(tmp_path: Path) -> None:
         clock=hub.clock,
         config=config,
         active=True,
-        pass_lock=threading.Lock(),
         exported_paths=source,
     )
     backfill = EgressBackfill(

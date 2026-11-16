@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261114_0900_app_credentials",
+  "head_revision": "20261116_0900_egress_order",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -2625,6 +2625,12 @@
     "egress_cursor": {
       "checks": [],
       "columns": {
+        "append_order": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "BigInteger"
+        },
         "chunk_id": {
           "deprecated": null,
           "nullable": true,

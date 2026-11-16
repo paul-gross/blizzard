@@ -47,5 +47,6 @@ class HubLock(StrEnum):
     """A lock on a concept no tenant owns. Taken in the order ``IDENTITY``, a tenant's own rows, ``TENANT_LIFECYCLE``
     (``bzh:store-exclusive-write``)."""
 
+    EGRESS_CURSOR = "egress_cursor"
     IDENTITY = "identity"
     TENANT_LIFECYCLE = "tenant_lifecycle"

@@ -3,7 +3,7 @@ instant, the moved window recorded, and the sweep's pass serialized with it."""
 
 from __future__ import annotations
 
-import threading
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import UsagePosition
-from blizzard.hub.domain.observability.egress.reset import EgressReset
+from blizzard.hub.domain.observability.egress.reset import plan_reset
 from tests.support.egress_world import (
     SETTLED,
     closed_step,
@@ -25,7 +25,7 @@ from tests.support.egress_world import (
     egress_store,
     egress_sweep,
 )
-from tests.support.hub_event_rows import hub_event_log_of, hub_event_rows
+from tests.support.hub_event_rows import hub_event_rows
 from tests.support.scaffolding import HubHarness, InMemoryEgressWriter
 from tests.support.worker_http import bind_stubs
 
@@ -87,43 +87,42 @@ def test_a_reset_forward_skips_the_window_and_a_steps_reset_moves_both_positions
     assert egress_rows(writer, "steps") == []
 
 
-def test_the_sweep_skips_its_tick_while_a_reset_holds_the_pass_lock(tmp_path: Path) -> None:
-    hub, graph = egress_hub(tmp_path, SETTLED)
-    writer = InMemoryEgressWriter()
-    lock = threading.Lock()
-    sweep = egress_sweep(hub, writer, pass_lock=lock)
-    sweep.sweep()
-    closed_step(hub, graph, 1)
-    cursors = egress_cursor_rows(hub)
+def test_stale_pass_cannot_overwrite_reset(tmp_path: Path) -> None:
+    from dataclasses import replace
 
-    with lock:
-        sweep.sweep()
-
-    assert writer.batches == []
-    assert egress_cursor_rows(hub) == cursors
-    sweep.sweep()
-    assert len(egress_rows(writer, "steps")) == 1
-
-
-def test_a_reset_waits_for_a_pass_in_flight(tmp_path: Path) -> None:
     hub, _ = egress_hub(tmp_path, SETTLED)
-    lock = threading.Lock()
-    reset = EgressReset(
-        egress=egress_store(hub),
-        events=hub_event_log_of(hub.engine),
-        clock=hub.clock,
-        config=SETTLED,
-        active=True,
-        pass_lock=lock,
-    )
+    store = egress_store(hub)
     egress_sweep(hub, InMemoryEgressWriter()).sweep()
-    done = threading.Event()
-    worker = threading.Thread(target=lambda: (reset.reset("invocations", hub.clock.now()), done.set()))
-    with lock:
-        worker.start()
-        assert not done.wait(0.2)
-    worker.join(timeout=5)
-    assert done.is_set()
+    before = store.newest_cursor("invocations")
+    assert before is not None
+    moved_to = hub.clock.now() - timedelta(hours=1)
+    result = _reset(hub, "invocations", moved_to)
+    assert result.status_code == 200
+    assert not store.append_cursor(replace(before, recorded_at=hub.clock.now()), after=before.cursor_id)
+    current = store.newest_cursor("invocations")
+    assert current is not None and current.position == moved_to
+
+
+def test_reset_reports_actual_append_predecessor_not_newest_timestamp(tmp_path: Path) -> None:
+    hub, _ = egress_hub(tmp_path, SETTLED)
+    store = egress_store(hub)
+    now = hub.clock.now()
+    older_authority = now - timedelta(hours=3)
+    predecessor = now - timedelta(hours=1)
+    target = now - timedelta(hours=2)
+    store.reset_cursor(plan_reset("invocations", older_authority, now=now))
+    store.reset_cursor(plan_reset("invocations", predecessor, now=now - timedelta(minutes=1)))
+
+    resp = _reset(hub, "invocations", target)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["from_at"] == iso_utc(predecessor)
+    assert resp.json()["direction"] == "repeated"
+    [event] = _events(hub)
+    detail = json.loads(event.detail)
+    assert detail["from"] == iso_utc(predecessor)
+    assert detail["to"] == iso_utc(target)
+    assert detail["direction"] == "repeated"
 
 
 def test_a_reset_with_the_export_off_is_409(tmp_path: Path) -> None:

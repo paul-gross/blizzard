@@ -5,7 +5,6 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
-import threading
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -80,7 +79,6 @@ def egress_sweep(
     config: EgressConfig = SETTLED,
     *,
     store: EgressStore | None = None,
-    pass_lock: threading.Lock | None = None,
     steps: IReadTraceSteps | None = None,
 ) -> EgressSweep:
     connections = hub_store_connections(hub.engine)
@@ -94,7 +92,6 @@ def egress_sweep(
         events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=config,
-        pass_lock=pass_lock or threading.Lock(),
     )
 
 

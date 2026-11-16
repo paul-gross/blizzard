@@ -106,7 +106,11 @@ class EgressStatusReader:
         if state == "rejected":
             return self._idle(config, "rejected", "egress.format", config.format)
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in config.datasets}
-        passes = [cursor for cursor in cursors.values() if cursor is not None]
+        passes = [
+            cursor
+            for dataset in config.datasets
+            if (cursor := self._egress.newest_recorded_cursor(dataset)) is not None
+        ]
         last_pass = max(passes, key=lambda cursor: cursor.recorded_at, default=None)
         written = self._egress.newest_cursor_with_files()
         failure = self._egress.newest_egress_failure()

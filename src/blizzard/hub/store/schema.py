@@ -8,6 +8,7 @@ stamped by application code from the injected clock (``bzh:injected-clock``), ne
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -2961,6 +2962,7 @@ egress_cursor = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("dataset", String, nullable=False),
+    Column("append_order", BigInteger, nullable=False, server_default="0"),
     Column(
         "position_at", UtcDateTime, nullable=True
     ),  # the last written step's closing-fact time, or the events source's time; null for invocations
@@ -2981,6 +2983,14 @@ egress_cursor = Table(
 )
 Index(
     "ix_egress_cursor_dataset_recorded_at_id", egress_cursor.c.dataset, egress_cursor.c.recorded_at, egress_cursor.c.id
+)
+
+Index(
+    "ix_egress_cursor_dataset_append_order_recorded_at_id",
+    egress_cursor.c.dataset,
+    egress_cursor.c.append_order,
+    egress_cursor.c.recorded_at,
+    egress_cursor.c.id,
 )
 
 # --- Transcript segments (epic:transcripts) ----------------------

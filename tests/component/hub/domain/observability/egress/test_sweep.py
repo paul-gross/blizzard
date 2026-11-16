@@ -33,6 +33,7 @@ from blizzard.hub.domain.observability.egress.ports import (
     PlacedFile,
 )
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
+from blizzard.hub.domain.observability.egress.reset import plan_reset
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.hub_events import HubEventKind
@@ -709,6 +710,113 @@ def test_turning_the_export_off_and_on_resumes_from_the_cursor(tmp_path: Path) -
     assert kinds(hub) == []
 
 
+@pytest.mark.parametrize("dataset", ["steps", "invocations", "events"])
+def test_reset_between_absent_read_and_anchor_survives_and_next_sweep_replays(tmp_path: Path, dataset: str) -> None:
+    hub, graph = egress_hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    start = hub.clock.now() - timedelta(hours=1)
+    closed_step(hub, graph, 1, usage=1)
+    if dataset == "events":
+        seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+        hub.clock.advance(timedelta(seconds=3))
+    config = EgressConfig(directory=tmp_path, settle_seconds=0, datasets=(dataset,))
+
+    class ResetBeforeAnchor(EgressStore):
+        def append_cursor(self, record: EgressCheckpoint, *, after: int | None) -> bool:
+            assert after is None
+            self.reset_cursor(plan_reset(dataset, start, now=hub.clock.now()))
+            return super().append_cursor(record, after=after)
+
+    racing = ResetBeforeAnchor(
+        hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+    )
+    egress_sweep(hub, writer, config, store=racing).sweep()
+    current = egress_store(hub).newest_cursor(dataset)
+    assert current is not None and current.position == start
+    egress_sweep(hub, writer, config).sweep()
+    assert egress_rows(writer, dataset)
+    assert kinds(hub) == []
+
+
+@pytest.mark.parametrize("dataset", ["steps", "invocations", "events"])
+def test_reset_after_manifest_keeps_reset_and_replays_to_immutable_files(tmp_path: Path, dataset: str) -> None:
+    directory = tmp_path / "out"
+    directory.mkdir()
+    config = EgressConfig(directory=directory, settle_seconds=0, min_free_bytes=0, datasets=(dataset,))
+    hub, graph = egress_hub(tmp_path)
+    store = egress_store(hub)
+    settings = EgressWriterSettings(max_rows_per_file=100, min_free_bytes=0)
+    start = hub.clock.now() - timedelta(hours=1)
+    _anchored(hub, NdjsonEgressWriter(directory, settings, "anchor"), config)
+    closed_step(hub, graph, 1)
+    if dataset == "events":
+        seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+        hub.clock.advance(timedelta(seconds=3))
+
+    class ResetAfterCommit(NdjsonEgressWriter):
+        def commit_pass(
+            self, egress_pass: EgressPass, placed: Sequence[PlacedFile]
+        ) -> ManifestCommitted | EgressFailure:
+            result = super().commit_pass(egress_pass, placed)
+            store.reset_cursor(plan_reset(dataset, start, now=hub.clock.now()))
+            return result
+
+    egress_sweep(hub, ResetAfterCommit(directory, settings, "aaaaaa"), config).sweep()
+    current = store.newest_cursor(dataset)
+    assert current is not None and current.position == start
+    original = {p.relative_to(directory): p.read_bytes() for p in directory.rglob("*") if p.is_file()}
+    assert list((directory / "_manifests").glob("*.json"))
+    egress_sweep(hub, NdjsonEgressWriter(directory, settings, "bbbbbb"), config).sweep()
+    assert all((directory / path).read_bytes() == contents for path, contents in original.items())
+    manifests = list((directory / "_manifests").glob("*.json"))
+    assert len(manifests) == 2
+    for manifest in manifests:
+        for entry in json.loads(manifest.read_text())["files"]:
+            assert len(_lines(directory / entry["path"])) == entry["rows"] > 0
+    assert kinds(hub) == []
+
+
+@pytest.mark.parametrize("dataset", ["steps", "invocations", "events"])
+def test_reset_before_empty_advance_wins(tmp_path: Path, dataset: str) -> None:
+    hub, graph = egress_hub(tmp_path)
+    writer = InMemoryEgressWriter()
+    config = EgressConfig(directory=tmp_path, settle_seconds=0, datasets=(dataset,))
+    _anchored(hub, writer, config)
+    start = hub.clock.now() - timedelta(hours=1)
+    if dataset == "steps":
+        chunk = ingest(hub, [{"source": "default", "ref": "1"}])
+        claim(hub, chunk, seq=next(_SEQ))
+        _push_usage(hub, chunk, graph_node_id(graph))
+    elif dataset == "invocations":
+        closed_step(hub, graph, 1)
+    else:
+        seed_open_tenant_chunk(hub, "ten_other", "ch_other", hub.clock.now())
+        hub.clock.advance(timedelta(seconds=3))
+
+    class MissingFacts(_SnapshotDepths):
+        def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
+            return {}
+
+    class ResetBeforeAdvance(EgressStore):
+        def append_cursor(self, record: EgressCheckpoint, *, after: int | None) -> bool:
+            assert after is not None and record.row_count == 0
+            self.reset_cursor(plan_reset(dataset, start, now=hub.clock.now()))
+            return super().append_cursor(record, after=after)
+
+    racing = ResetBeforeAdvance(
+        hub_store_connections(hub.engine),
+        hub_events=hub_events_of(hub.engine),
+        usage=build_hub_scoped_reads(hub_level_connections(hub.engine)).corpus,
+    )
+    egress_sweep(hub, writer, config, store=racing, steps=MissingFacts(trace_store(hub))).sweep()
+    current = egress_store(hub).newest_cursor(dataset)
+    assert current is not None and current.position == start
+    assert writer.batches == []
+    assert kinds(hub) == []
+
+
 def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_path: Path) -> None:
     hub, graph = egress_hub(tmp_path)
     directory = tmp_path / "out"
@@ -723,7 +831,7 @@ def test_a_crash_before_the_cursor_writes_the_same_rows_again_in_new_files(tmp_p
         pass
 
     class DiesBeforeCursor(EgressStore):
-        def append_cursor(self, record: EgressCheckpoint) -> None:
+        def append_cursor(self, record: EgressCheckpoint, *, after: int | None) -> bool:
             raise Killed
 
     with pytest.raises(Killed):
@@ -908,7 +1016,6 @@ def test_a_step_open_while_the_cursor_passed_is_written_once_when_it_closes(tmp_
 
 
 def test_live_settings_apply_on_next_sweep_without_reanchoring(tmp_path: Path) -> None:
-    import threading
 
     from blizzard.hub.domain.observability.egress.sweep import EgressSweep
     from tests.support.hub_event_rows import hub_event_log_of
@@ -926,7 +1033,6 @@ def test_live_settings_apply_on_next_sweep_without_reanchoring(tmp_path: Path) -
         events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=lambda: config,
-        pass_lock=threading.Lock(),
     )
     sweep.sweep()
     first = egress_store(hub).newest_cursor(STEPS_SCHEMA.name)

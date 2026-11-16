@@ -1931,7 +1931,6 @@ def build_services(
     )
     egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
     egress_event_reads = core.hub_scoped_reads.corpus
-    egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
     egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
@@ -1964,7 +1963,6 @@ def build_services(
             clock=clock,
             config=egress_source,
             writer_for=configured_writer.for_config if configured_writer is not None else None,
-            pass_lock=egress_pass_lock,
         )
         if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
         else None
@@ -1977,7 +1975,6 @@ def build_services(
         active=egress_export is not None,
         missing_path_key=egress_missing_path_key,
         exported_paths=egress_exported_source,
-        pass_lock=egress_pass_lock,
     )
     egress_backfill = EgressBackfill(
         steps=trace_store,

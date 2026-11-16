@@ -7,9 +7,6 @@ only after its files and manifest are placed, so a crash before the cursor row r
 
 from __future__ import annotations
 
-# The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import replace
@@ -88,7 +85,6 @@ class EgressSweep:
         clock: IClock,
         config: EgressConfig | Callable[[], EgressConfig],
         writer_for: Callable[[EgressConfig], IEgressWriter] | None = None,
-        pass_lock: threading.Lock,
     ) -> None:
         initial = config() if callable(config) else config
         if EVENTS_SCHEMA.name in initial.datasets and paths is None:
@@ -106,18 +102,9 @@ class EgressSweep:
         self._latch = OutageLatch(
             timedelta(seconds=initial.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
         )
-        self._pass_lock = pass_lock
 
     def sweep(self) -> None:
-        """One pass, or none: while an operator's reset holds the pass lock the tick is skipped, not queued."""
-        if not self._pass_lock.acquire(blocking=False):
-            return
-        try:
-            self._pass()
-        finally:
-            self._pass_lock.release()
-
-    def _pass(self) -> None:
+        """Run one pass."""
         config = self._config()
         self._latch.set_base(timedelta(seconds=config.sweep_seconds))
         now = self._clock.now()
@@ -133,7 +120,7 @@ class EgressSweep:
         anchors = anchor_records(cursors, now, self._settle)
         if anchors:
             for anchor in anchors:
-                self._egress.append_cursor(anchor)
+                self._egress.append_cursor(anchor, after=None)
             return
         egress_pass = EgressPass(started_at=now)
         until = now - self._settle
@@ -173,9 +160,9 @@ class EgressSweep:
             late = steps.step_facts_for(late_chunks(window, usage))
         plan = plan_steps_pass(cursor, window, usage, late, egress_pass.started_at)
         if plan.rows:
-            return self._write(STEPS_SCHEMA, plan.rows, egress_pass, plan.advanced)
+            return self._write(STEPS_SCHEMA, plan.rows, egress_pass, plan.advanced, cursor.cursor_id)
         if plan.moved:
-            self._egress.append_cursor(plan.advanced)
+            self._egress.append_cursor(plan.advanced, after=cursor.cursor_id)
         return False
 
     # --- invocations --------------------------------------------------------------------
@@ -191,8 +178,8 @@ class EgressSweep:
         for row in page.skipped:
             _log.warning("usage has no runner step; not exported", usage_id=row.usage_id, chunk_id=row.chunk_id)
         if page.rows:
-            return self._write(INVOCATIONS_SCHEMA, page.rows, egress_pass, advanced)
-        self._egress.append_cursor(advanced)
+            return self._write(INVOCATIONS_SCHEMA, page.rows, egress_pass, advanced, cursor.cursor_id)
+        self._egress.append_cursor(advanced, after=cursor.cursor_id)
         return False
 
     # --- events -------------------------------------------------------------------------
@@ -221,14 +208,20 @@ class EgressSweep:
             EVENTS_SCHEMA.name, None, cursor.usage, len(rows), (), egress_pass.started_at, position_of(items[-1])
         )
         if rows:
-            return self._write(EVENTS_SCHEMA, rows, replace(egress_pass, extractor_version=EXTRACTOR_VERSION), advanced)
-        self._egress.append_cursor(advanced)
+            return self._write(
+                EVENTS_SCHEMA,
+                rows,
+                replace(egress_pass, extractor_version=EXTRACTOR_VERSION),
+                advanced,
+                cursor.cursor_id,
+            )
+        self._egress.append_cursor(advanced, after=cursor.cursor_id)
         return False
 
     # --- placing ------------------------------------------------------------------------
 
     def _write(
-        self, schema: DatasetSchema, rows: _Rows, egress_pass: EgressPass, advanced: EgressCheckpoint
+        self, schema: DatasetSchema, rows: _Rows, egress_pass: EgressPass, advanced: EgressCheckpoint, after: int | None
     ) -> bool | EgressFailure:
         """Place ``rows`` per date partition, commit the manifest, then append ``advanced``."""
         by_partition: dict[date, list[EgressValues]] = defaultdict(list)
@@ -250,7 +243,10 @@ class EgressSweep:
             return committed
         _CP_EGRESS_AFTER_COMMIT_BEFORE_CURSOR.reached()
         files = (*(file.path for file in placed), committed.path)
-        self._egress.append_cursor(replace(advanced, row_count=len(rows), files=files, recorded_at=self._clock.now()))
+        if not self._egress.append_cursor(
+            replace(advanced, row_count=len(rows), files=files, recorded_at=self._clock.now()), after=after
+        ):
+            return False
         _log.info("egress pass completed", dataset=schema.name, rows=len(rows), files=len(placed))
         return True
 

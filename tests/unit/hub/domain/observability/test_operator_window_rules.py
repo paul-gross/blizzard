@@ -20,6 +20,7 @@ from blizzard.hub.domain.observability.egress.reset import (
     ResetUnavailable,
     plan_reset,
     require_resettable,
+    reset_result,
 )
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.replay import (
@@ -194,23 +195,25 @@ def _checkpoint(at: datetime) -> EgressCheckpoint:
 
 def test_a_reset_of_an_unanchored_dataset_measures_from_where_its_first_pass_would_anchor() -> None:
     settle = timedelta(minutes=5)
-    checkpoint, result = plan_reset("invocations", None, _NOW - timedelta(minutes=4), now=_NOW, settle=settle)
+    checkpoint = plan_reset("invocations", _NOW - timedelta(minutes=4), now=_NOW)
+    result = reset_result("invocations", None, _NOW - timedelta(minutes=4), now=_NOW, settle=settle)
     assert result.previous is None
     assert result.direction == "skipped"
     assert checkpoint == EgressCheckpoint("invocations", None, UsagePosition(_NOW - timedelta(minutes=4)), 0, (), _NOW)
-    _, back = plan_reset("invocations", None, _NOW - timedelta(minutes=6), now=_NOW, settle=settle)
+    back = reset_result("invocations", None, _NOW - timedelta(minutes=6), now=_NOW, settle=settle)
     assert back.direction == "repeated"
 
 
 def test_a_reset_to_the_standing_position_is_a_repeat() -> None:
     standing = _NOW - _HOUR
-    _, result = plan_reset("invocations", _checkpoint(standing), standing, now=_NOW, settle=timedelta(0))
+    result = reset_result("invocations", _checkpoint(standing), standing, now=_NOW, settle=timedelta(0))
     assert (result.previous, result.moved_to, result.direction) == (standing, standing, "repeated")
 
 
 def test_a_steps_reset_moves_both_positions() -> None:
     to = _NOW - _HOUR
-    checkpoint, result = plan_reset("steps", _checkpoint(_NOW - 2 * _HOUR), to, now=_NOW, settle=timedelta(0))
+    checkpoint = plan_reset("steps", to, now=_NOW)
+    result = reset_result("steps", _checkpoint(_NOW - 2 * _HOUR), to, now=_NOW, settle=timedelta(0))
     assert checkpoint.step == CursorKey.opening(to)
     assert checkpoint.usage == UsagePosition(to)
     assert result.direction == "skipped"
@@ -220,6 +223,7 @@ def test_an_events_reset_moves_its_events_position_and_measures_from_where_it_st
     standing = _NOW - 2 * _HOUR
     cursor = EgressCheckpoint("events", None, UsagePosition(_NOW - 3 * _HOUR), 0, (), _NOW, EventsPosition(standing))
     to = _NOW - _HOUR
-    checkpoint, result = plan_reset("events", cursor, to, now=_NOW, settle=timedelta(0))
+    checkpoint = plan_reset("events", to, now=_NOW)
+    result = reset_result("events", cursor, to, now=_NOW, settle=timedelta(0))
     assert checkpoint == EgressCheckpoint("events", None, UsagePosition(to), 0, (), _NOW, EventsPosition(to))
     assert (result.previous, result.direction) == (standing, "skipped")

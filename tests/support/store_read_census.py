@@ -2378,7 +2378,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- trace export cursor ----------------------------------------------------------
     _trace_store_of(store_connections, hub).append_cursor(TraceCheckpoint(CursorKey.opening(_ht(0)), 0, _ht(100)))
     _egress_store_of(store_connections, hub).append_cursor(
-        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
+        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100)), after=None
     )
 
     # --- the hub's own event log ------------------------------------------------------
@@ -3308,6 +3308,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_route_a]
     ),
     (IReadEnvTimelineFacts, "roster"): lambda w: EnvTimelineStore(w.store_connections).roster(),
+    (IReadEgress, "newest_recorded_cursor"): lambda w: _egress_store_of(
+        w.store_connections, w.hub
+    ).newest_recorded_cursor("steps"),
     (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_cursor("steps"),
     (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections, w.hub).usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
