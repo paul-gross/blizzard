@@ -5,6 +5,7 @@ import {
   type ChunkStatus,
   compactRef,
   harnessName,
+  GateBadgeGroup,
   KitAsyncState,
   KitBadge,
   KitButton,
@@ -15,7 +16,6 @@ import {
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { CapabilityBadgeGroup } from './capability-badge-group';
-import { GateBadgeGroup } from './gate-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
 import { decliningLabels, runnerSeenLabel, runnerSeenTag, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';

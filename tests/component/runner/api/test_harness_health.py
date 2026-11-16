@@ -21,7 +21,6 @@ from blizzard.runner.harness.claude_code.health import (
     ClaudeCodeHealthProbe,
 )
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
-from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
@@ -44,8 +43,11 @@ class _HealthyWithDegradationProbe:
     degradation — deterministic, with no dependency on this machine's own credential
     files or a real binary on ``PATH``."""
 
+    def __init__(self, *, binary_present: bool = True) -> None:
+        self._binary_present = binary_present
+
     def binary_present(self) -> bool:
-        return True
+        return self._binary_present
 
     def config_conflicts(self) -> tuple[str, ...]:
         return ()
@@ -66,7 +68,7 @@ class _HealthyWithDegradationProbe:
         return False
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
-        return (DeclaredDegradation(probe=CompatibilityProbe.USAGE_COST, summary="no cost figure on some turns"),)
+        return (DeclaredDegradation(key="binding_specific_row", summary="no cost figure on some turns"),)
 
 
 def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Path, spawn_executor: Executor) -> None:
@@ -248,3 +250,30 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
     assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ADMITTED_OPENCODE_RANGE_DISPLAY
     # Pinned literally: `str(SpecifierSet(...))` reorders clauses to `<2.0,>=1.18.25`.
     assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ">=1.18.25,<2.0"
+
+
+def test_unavailable_health_retains_declared_warning(tmp_path: Path, spawn_executor: Executor) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    process = LinuxProcessProbe()
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        binary=claude_code(config).binary,
+        process=process,
+        launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    )
+    harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
+    health = HarnessHealthCache(
+        corpus=CommittedCorpus(),
+        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        probes={CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe(binary_present=False)},
+        selftest_results=None,
+    )
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=adapter, observed_version=None)
+    client = runner_client(create_runner_app(config, harnesses=harnesses, harness_health=health))
+    response = client.get("/api/harness-health")
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["available"] is False
+    assert item["cause"] == "missing_binary"
+    assert item["degradations"] == ["no cost figure on some turns"]

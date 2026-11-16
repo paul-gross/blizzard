@@ -20,6 +20,7 @@ const ROW = (overrides: Partial<HostRunnerRow> = {}): HostRunnerRow => ({
     { harnessId: 'claude_code', name: 'claude code', version: '2.1.0', available: true, admitted: null, cause: null, degradations: [] },
   ],
   gates: [],
+  unenforceableGates: [],
   throttle: null,
   hub: { endpoint: 'http://hub', reachable: true, link: { label: 'CONNECTED', tone: 'done' }, lastContactAt: null, buffered: 2, refusal: null, hubVersion: null, window: null },
   problems: [],
@@ -70,6 +71,13 @@ describe('HostRunnerRowView', () => {
     expect(binding.querySelector('.ws')?.textContent?.trim()).toBe('ws');
     expect(binding.querySelector('.agents')?.textContent?.trim()).toBe('1 working');
     expect(text(el, 'host-runner-spends')).toContain('Claude Max');
+  });
+
+  it('shows gate warnings alongside ordinary gates', async () => {
+    const el = await render(ROW({ gates: ['build', 'deliver'], unenforceableGates: [{ node: 'deliver', reason: 'hub-executed' }] }));
+
+    expect(el.querySelector('[data-gate="build"]')?.hasAttribute('data-unenforceable')).toBe(false);
+    expect(el.querySelector('[data-gate="deliver"]')?.textContent).toContain('not enforceable: hub-executed');
   });
 
   it('links each held chunk to the board, opened on that chunk', async () => {

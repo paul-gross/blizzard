@@ -7,6 +7,10 @@ import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures'
 
 const STALL_PASSES = 600;
 const POOL = 'opencode2-pool';
+const DEGRADATIONS = [
+  "a subagent takes its agent's configured permissions until the driver applies the session's rules to it",
+  "a subagent's tools run without the lease's environment or identity, which the driver never applies to a child",
+];
 
 test.setTimeout(120_000);
 
@@ -92,8 +96,11 @@ async function seeded(mockHub: MockHub, host: RunnerHost, spec: MockChunkSpec) {
 
 test('test_opencode2_build_and_review_resume_one_service_session_to_done', async ({ mockHub, runnerHost }) => {
   const { runner, leases, landed } = await seeded(mockHub, runnerHost, buildAndReview);
+  await runnerHost.step();
   const health = (await runner.harnessHealth()).body.items.find((item) => item.harness_id === 'opencode');
-  expect(health?.available, JSON.stringify(health)).toBe(true);
+  expect([health?.available, health?.cause, health?.degradations], JSON.stringify(health)).toEqual([true, 'declared_degradation', DEGRADATIONS]);
+  const dashboardHealth = (await runner.dashboard()).body.harness_health.items.find((item) => item.harness_id === 'opencode');
+  expect([dashboardHealth?.available, dashboardHealth?.cause, dashboardHealth?.degradations]).toEqual([true, 'declared_degradation', DEGRADATIONS]);
 
   await landed();
 
@@ -161,7 +168,9 @@ test.describe('with a service that never registers', () => {
 
     // Health ran `opencode service start` and no service registered, so the runner offers no OpenCode capability.
     const health = (await runner.harnessHealth()).body.items.find((item) => item.harness_id === 'opencode');
-    expect([health?.available, health?.cause], JSON.stringify(health)).toEqual([false, 'config_conflict']);
+    expect([health?.available, health?.cause, health?.degradations], JSON.stringify(health)).toEqual([false, 'config_conflict', DEGRADATIONS]);
+    const dashboardHealth = (await runner.dashboard()).body.harness_health.items.find((item) => item.harness_id === 'opencode');
+    expect([dashboardHealth?.available, dashboardHealth?.cause, dashboardHealth?.degradations]).toEqual([false, 'config_conflict', DEGRADATIONS]);
     expect(await leases(), 'no lease was taken').toEqual([]);
     expect(host.logTail()).toContain('no OpenCode service answers');
   });

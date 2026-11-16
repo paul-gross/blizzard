@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.compatibility import CompatibilityClassification, CompatibilityProbe
+from blizzard.runner.harness.compatibility import CompatibilityClassification
 
 
 class HarnessHealthCause(StrEnum):
@@ -49,12 +49,14 @@ class DeclaredDegradation:
     """One known, non-blocking compatibility gap a harness binding declares about
     itself — reported diagnostics only (never a cause of unavailability on its own)."""
 
-    probe: CompatibilityProbe
+    key: str
     summary: str
 
     def __post_init__(self) -> None:
+        if not self.key.strip():
+            raise ValueError("declared degradation has no key")
         if not self.summary.strip():
-            raise ValueError(f"declared degradation for probe {self.probe.value!r} has no summary")
+            raise ValueError(f"declared degradation {self.key!r} has no summary")
 
 
 @domain_model

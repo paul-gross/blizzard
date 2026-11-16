@@ -427,6 +427,9 @@ capability unavailable as a config conflict naming the store, since nothing Open
 OpenCode 2; restart the runner on OpenCode 2 to carry on. `blizzard runner selftest opencode` tests whichever major
 version the runner holds.
 
+OpenCode 2's declared limits appear in the runner-local harness-health diagnostics and the runner panel's harness
+limits; their details come from the compatibility corpus ([OpenCode compatibility](./opencode-compatibility.md)).
+
 A turn runs on the service, not in the worker, so killing a driver never stops it. Wherever the runner kills a driver,
 or a driver exits without a result, it interrupts that session's running tree through the service, best effort and
 bounded — except for a forced takeover, whose session the operator is about to attend. Each start of the runner, before

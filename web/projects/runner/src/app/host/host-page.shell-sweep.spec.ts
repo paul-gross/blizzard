@@ -81,7 +81,7 @@ const ENVIRONMENTS = {
       workspace_id: 'blizzard-workspace-with-a-long-identifier',
       items: [
         hostEnvironmentView({
-          environment_id: 'r1',
+          environment_id: `env-${CHUNK_ID}`,
           held: true,
           chunk_id: CHUNK_ID,
           held_since: '2026-07-16T11:18:00.000Z',
@@ -134,14 +134,15 @@ const DASHBOARD = runnerDashboardView({
     }),
     hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421', last_contact_at: '2026-07-16T11:59:26.000Z' }),
     last_tick_at: '2026-07-16T11:59:26.000Z',
-    gates: ['review'],
+    gates: ['review', 'deliver'],
+    unenforceable_gates: [{ node: 'deliver', reason: 'hub-executed' }],
     served_projects: [
       servedProjectStatusView({ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', color: 'amber' }),
       servedProjectStatusView({ entry: 'blizzard-context', project_id: 'proj_c', slug: 'blizzard-context', name: 'Blizzard Context', color: 'teal' }),
     ],
   }),
   harness_health: {
-    items: [harnessHealthView({ harness_id: 'claude_code', version: '2.1.278', admitted_range: '>=2.1,<3.0' })],
+    items: [harnessHealthView({ harness_id: 'claude_code', version: '2.1.278', admitted_range: '>=2.1,<3.0', degradations: ['no images', 'no tools'] })],
   },
 });
 
@@ -234,6 +235,17 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
         } else {
           expect(held.top, `${label}: the held chunks do not stack under the facts`).toBeGreaterThanOrEqual(facts.bottom);
         }
+        const ordinaryGate = serving.querySelector<HTMLElement>('[data-gate="review"]')!;
+        const flaggedGate = serving.querySelector<HTMLElement>('[data-gate="deliver"]')!;
+        expect(ordinaryGate.hasAttribute('data-unenforceable')).toBe(false);
+        expect(flaggedGate.getAttribute('data-unenforceable')).toBe('hub-executed');
+        expect(flaggedGate.textContent).toContain('not enforceable: hub-executed');
+        const caveats = serving.querySelector<HTMLElement>('[data-testid="host-runner-harness-caveats"]')!;
+        expect(caveats.textContent).toContain('2 limits');
+        expect(caveats.title).toBe('no images\n\nno tools');
+        for (const fact of [ordinaryGate, flaggedGate, caveats]) {
+          expect(fact.getBoundingClientRect().right, `${label}: a gate or limitation spills past the viewport`).toBeLessThanOrEqual(vw);
+        }
         const chunk = serving.querySelector<HTMLElement>('[data-testid="host-runner-chunk"]')!;
         expect(chunk.getBoundingClientRect().right, `${label}: the held chunk link is past the viewport`).toBeLessThanOrEqual(vw);
         for (const binding of serving.querySelectorAll<HTMLElement>('[data-testid="host-runner-binding"]')) {
@@ -252,6 +264,7 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
           }
         }
         const heldEnv = root.querySelector<HTMLElement>('[data-testid="host-env-held"]')!;
+        expect(heldEnv.querySelector('.env-id')?.textContent?.trim()).toBe(`env-${CHUNK_ID}`);
         expect(heldEnv.querySelector('.holder')?.textContent?.trim()).toBe('r-claude');
         expect(heldEnv.querySelector('.project')?.textContent?.trim()).toBe('Blizzard Context');
       }

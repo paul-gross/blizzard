@@ -117,7 +117,7 @@ def test_selftest_failure_is_unavailable() -> None:
 def test_declared_degradation_is_informational_only() -> None:
     """A degradation never makes the result unavailable, including when it stems from
     the version classification itself reading `DEGRADED` rather than `SUPPORTED`."""
-    degradation = DeclaredDegradation(probe=CompatibilityProbe.ROOT_HOOK, summary="no portable hook signal")
+    degradation = DeclaredDegradation(key=CompatibilityProbe.ROOT_HOOK.value, summary="no portable hook signal")
     result = evaluate_harness_health(
         _evidence(version_classification=CompatibilityClassification.DEGRADED, degradations=(degradation,))
     )
@@ -206,7 +206,7 @@ def test_a_binding_declaring_no_version_range_has_no_version_cause() -> None:
             HarnessHealthCause.UNMAPPED_TIER,
         ),
         (
-            {"selftest_failed": True, "degradations": (DeclaredDegradation(CompatibilityProbe.USAGE_COST, "x"),)},
+            {"selftest_failed": True, "degradations": (DeclaredDegradation(CompatibilityProbe.USAGE_COST.value, "x"),)},
             HarnessHealthCause.SELFTEST_FAILURE,
         ),
     ],
@@ -234,3 +234,19 @@ def test_config_conflict_ranks_after_authentication_failure_and_before_unmapped_
 
     assert unauthenticated.cause is HarnessHealthCause.AUTHENTICATION_FAILURE
     assert unmapped.cause is HarnessHealthCause.CONFIG_CONFLICT
+
+
+@pytest.mark.parametrize("key", ["", " ", "\t\n"])
+def test_degradation_requires_nonblank_key(key: str) -> None:
+    with pytest.raises(ValueError, match="no key"):
+        DeclaredDegradation(key, "summary")
+
+
+@pytest.mark.parametrize("summary", ["", " ", "\t\n"])
+def test_degradation_requires_nonblank_summary(summary: str) -> None:
+    with pytest.raises(ValueError, match="no summary"):
+        DeclaredDegradation("custom_binding_key", summary)
+
+
+def test_degradation_accepts_binding_specific_key() -> None:
+    assert DeclaredDegradation("custom_binding_key", "summary").key == "custom_binding_key"

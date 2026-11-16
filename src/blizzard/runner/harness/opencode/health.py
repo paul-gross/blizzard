@@ -70,7 +70,7 @@ def _degradations_from_manifest(corpus: ICompatibilityCorpus, version: str) -> t
             probe = CompatibilityProbe(probe_value)
         except ValueError:
             continue
-        degradations.append(DeclaredDegradation(probe=probe, summary=summary))
+        degradations.append(DeclaredDegradation(key=probe.value, summary=summary))
     return tuple(degradations)
 
 
@@ -145,10 +145,10 @@ class OpenCodeHealthProbe:
         degradations, read from each such version's manifest — never a
         hardcoded tuple describing only one of them, and never one version's list picked
         arbitrarily, since this seam reports independent of any one observed version."""
-        seen: dict[CompatibilityProbe, DeclaredDegradation] = {}
+        seen: dict[str, DeclaredDegradation] = {}
         for version in admitted_corpus_versions(self._corpus, OPENCODE_HARNESS_ID, ADMITTED_OPENCODE_RANGE):
             for degradation in _degradations_from_manifest(self._corpus, version):
-                seen.setdefault(degradation.probe, degradation)
+                seen.setdefault(degradation.key, degradation)
         return tuple(seen.values())
 
 

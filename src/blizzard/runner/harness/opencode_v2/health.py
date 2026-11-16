@@ -22,6 +22,7 @@ from blizzard.runner.harness.offline_compatibility import (
 )
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.client import ModelReference
+from blizzard.runner.harness.opencode_v2.compatibility.rows import DECLARED_DEGRADATIONS
 from blizzard.runner.harness.opencode_v2.service import (
     DISABLED_DETAIL,
     UNREADABLE_DETAIL,
@@ -148,9 +149,7 @@ class OpenCodeTwoHealthProbe:
         return True
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
-        """None: OpenCode 2's corpora declare their degradations by proof row, which this seam's probe vocabulary
-        does not name."""
-        return ()
+        return tuple(DeclaredDegradation(key=item.row.value, summary=item.summary) for item in DECLARED_DEGRADATIONS)
 
 
 def _major(version: str) -> int | None:

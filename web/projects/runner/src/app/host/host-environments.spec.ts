@@ -74,14 +74,14 @@ describe('HostEnvironmentsView', () => {
     expect(router.url.split('?')[0]).toBe('/board');
   });
 
-  it('omits the generated env-ch duplicate but retains custom environment names and the full id tooltip', async () => {
+  it('renders generated and custom environment ids literally with the full id tooltip', async () => {
     const held = GROUPS[0].envs[0];
     const generated = `env-${held.chunkId}`;
     const el = await render([{ ...GROUPS[0], envs: [{ ...held, environmentId: generated }, held] }], 'ready');
     const rows = Array.from(el.querySelectorAll('[data-testid="host-env-held"]'));
-    expect(rows[0].querySelector('.env-id')?.textContent?.trim()).toBe('env');
+    expect(rows[0].querySelector('.env-id')?.textContent?.trim()).toBe(generated);
     expect(rows[0].querySelector('.env-id')?.getAttribute('title')).toBe(generated);
-    expect(rows[0].textContent).not.toContain(generated);
+    expect(rows[0].textContent).toContain(generated);
     expect(rows[1].querySelector('.env-id')?.textContent?.trim()).toBe('e1');
   });
 
