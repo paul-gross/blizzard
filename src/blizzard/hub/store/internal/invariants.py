@@ -745,8 +745,8 @@ class NoDuplicateStandingDependency(HubQueryCheck):
 class NoStandingDependencyOntoEphemeralChunk(HubQueryCheck):
     """A standing (unreleased) edge whose dependent or prerequisite is ephemeral (grouped away or deleted) — its FK
     still resolves, so the engine enforces nothing here. Design upholds this by construction now that
-    ``DeleteService`` and ``GroupService`` both hold their own row lock over the chunks they touch and share the
-    residual fleet-wide cycle lock; this check is the backstop that would catch a regression, not a guard against a
+    ``DeleteService`` and ``GroupService`` lock the chunks they touch and share the tenant's standing-dependencies
+    lock with declarations; this check is the backstop that would catch a regression, not a guard against a
     known-live gap."""
 
     def run(self) -> list[Violation]:

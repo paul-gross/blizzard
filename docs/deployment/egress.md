@@ -509,8 +509,12 @@ error and the free space. Run it first, and again after either verb below.
   writes those rows again when its cursor gets there. `--dry-run` counts and writes nothing, and works with the export
   off, which is a cheap way to size a window; without it, a hub with the export off refuses the backfill.
 - **Reset** moves one dataset's cursor: `blizzard hub egress reset --dataset <name> --to <t>`. Forward skips the window
-  and never exports it; back repeats it into new files. The move is recorded as an `egress-cursor-reset` event. When an
-  export is turned off and on again its cursor resumes where it stopped, so the directory holds no gap unless you reset.
+  for subsequent live export; back repeats it into new files. The response and `egress-cursor-reset` event report the
+  actual preceding cursor and whether the window was skipped or repeated, even when resets or a pass overlap. A pass
+  already in progress may still place files and a manifest after the reset; the reset does not cancel those writes. If
+  that pass read the earlier cursor, it cannot advance the reset cursor, so a later pass can replay rows into new files.
+  Loaders should continue to handle duplicate copies as described above. When an export is turned off and on again its
+  cursor resumes where it stopped, so the directory holds no gap unless you reset.
 
 The verbs' flags are in `--help`.
 

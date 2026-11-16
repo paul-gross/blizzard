@@ -33,7 +33,8 @@ named as a prerequisite: any chunk the hub holds is legal, on any graph, from an
 Release names the same ordered pair rather than a minted edge id. It has no status window: it is admitted whenever the
 edge stands, whatever status the dependent reads and whatever became of the prerequisite — including one since deleted.
 A release naming a pair with no standing edge is refused 409; a dependent the hub cannot resolve — never minted, or
-itself grouped away or deleted — is 404.
+itself grouped away or deleted — is 404. Release resolves the standing edge for the pair at the write: if an earlier
+edge was released and the pair declared again in the meantime, it releases the new edge.
 
 ## The blocked marking
 
