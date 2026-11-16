@@ -876,7 +876,7 @@ def test_a_forge_auth_detail_naming_a_credential_ends_with_its_check_and_the_chu
     lines = answer.escalation.detail.splitlines()
     assert lines[2].startswith("Credential deploy (github.token, classic).")
     assert lines[-1] == (
-        f"Then run: blizzard hub credential check deploy --repo {_WIDGET}; blizzard hub chunk requeue ch_1."
+        "Then run: blizzard hub credential check deploy --repo re_widget; blizzard hub chunk requeue ch_1."
     )
 
 

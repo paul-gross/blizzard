@@ -839,7 +839,7 @@ def test_a_forge_refusing_the_access_checked_for_what_it_offers_escalates_forge_
     assert "the App's installation is suspended" in detail and "Unsuspend the App's installation." in detail
     assert "Credential app (github.app-installation)." in detail
     assert detail.splitlines()[-1] == (
-        f"Then run: blizzard hub credential check app --repo {_REPO}; blizzard hub chunk requeue {chunk_id}."
+        f"Then run: blizzard hub credential check app --repo acme-widget; blizzard hub chunk requeue {chunk_id}."
     )
 
 
