@@ -185,7 +185,7 @@ describe('FleetLiveUpdates', () => {
   it('does not abort an active query refetch when a frame flushes', async () => {
     queryClient.setQueryData(['hub', 'queue'], 'cached');
     let resolveRead!: (value: string) => void;
-    const queryFn = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      const queryFn = vi.fn(({ signal }: { signal: AbortSignal }) => {
       signal.addEventListener('abort', aborted);
       return new Promise<string>((resolve) => { resolveRead = resolve; });
     });
@@ -206,12 +206,33 @@ describe('FleetLiveUpdates', () => {
       expect(aborted).not.toHaveBeenCalled();
       expect(queryFn).toHaveBeenCalledTimes(1);
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['hub', 'queue'] }, { cancelRefetch: false });
+      resolveRead('stale');
+      await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
       resolveRead('ready');
       await vi.waitFor(() => expect(observer.getCurrentResult().data).toBe('ready'));
       expect(aborted).not.toHaveBeenCalled();
     } finally {
       unsubscribe();
     }
+  });
+
+  it('refreshes an initial events read that overlaps a newly logged event', async () => {
+    let resolveRead!: (value: string[]) => void;
+    const queryFn = vi.fn(() => new Promise<string[]>((resolve) => { resolveRead = resolve; }));
+    const observer = new QueryObserver(queryClient, { queryKey: ['hub', 'events', null], queryFn });
+    const unsubscribe = observer.subscribe(vi.fn());
+    try {
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.emitNamed('event-logged', JSON.stringify({ kind: 'worker-lost' }));
+      vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      resolveRead(['old']);
+      await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+      resolveRead(['old', 'new']);
+      await vi.waitFor(() => expect(observer.getCurrentResult().data).toEqual(['old', 'new']));
+    } finally { unsubscribe(); }
   });
 
   it('preserves distinct keys from different frames in the same window (issue #310)', () => {
