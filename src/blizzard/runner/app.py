@@ -898,6 +898,9 @@ def _wire_runner(
         ),
         throttle=config.throttle,
         throttle_config=lambda: stepper.gate_config(initial_gate_config),
+        capacity_config=lambda: stepper.capacity_config(
+            (tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings or ()), config.agents)
+        ),
     )
     takeover = TakeoverService(
         clock,

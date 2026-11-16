@@ -164,6 +164,7 @@ def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebu
         Registration(ctx).run()
         if len(hub.registered) == 1:
             write({"agents": 1, "name": "renamed"})
+            assert stepper.capacity_config(((), 0))[1] == 3
         Registration(ctx).run()
 
     monkeypatch.setattr(loop_wiring, "tick", register_twice)
@@ -173,6 +174,7 @@ def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebu
         assert hub.registered[0][0] == hub.registered[1][0] == host.runners[0].name
         stepper.timed_tick()
         assert hub.registered_agents[-2:] == [1, 1]
+        assert stepper.capacity_config(((), 0))[1] == 1
         assert [name for name, _ in hub.registered[-2:]] == ["renamed", "renamed"]
 
         missing = tmp_path / "prompt.txt"
@@ -181,10 +183,12 @@ def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebu
         stepper.timed_tick()
         assert stepper.failed_revision == failed
         assert hub.registered_agents[-2:] == [1, 1]
+        assert stepper.capacity_config(((), 0))[1] == 1
         missing.write_text("ready")
         stepper.timed_tick()
         assert stepper.failed_revision is None
         assert hub.registered_agents[-2:] == [2, 2]
+        assert stepper.capacity_config(((), 0))[1] == 2
     finally:
         stepper.close()
         graph.close()

@@ -310,6 +310,7 @@ class RunnerStatusService:
         throttle_gate: ThrottleGate | None = None,
         throttle: ThrottleSettings | None = None,
         throttle_config: Callable[[], GateReadConfig] | None = None,
+        capacity_config: Callable[[], tuple[tuple[BindingDeclaration, ...], int]] | None = None,
     ) -> None:
         self._pause = pause
         self._daemon_liveness = daemon_liveness
@@ -338,6 +339,7 @@ class RunnerStatusService:
         self._throttle_gate = throttle_gate
         self._throttle = throttle
         self._throttle_config = throttle_config
+        self._capacity_config = capacity_config
 
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._pause.local_paused()
@@ -345,7 +347,10 @@ class RunnerStatusService:
         local_reason = self._pause.local_pause_reason() if local_paused else None
         identity = self._identity.current()
         answer = self._served_projects.served_projects_answer() if self._served_projects is not None else None
-        routing = routing_map(self._bindings, answer)
+        bindings, agents = (
+            self._capacity_config() if self._capacity_config is not None else (self._bindings, self._agents)
+        )
+        routing = routing_map(bindings, answer)
         gate = self._throttle_gate
         throttle = self._throttle
         if gate is not None and self._throttle_config is not None:
@@ -358,7 +363,7 @@ class RunnerStatusService:
             runner_name=identity.runner_name if identity is not None else self._runner_name,
             workspace_id=self._workspace_id,
             pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
-            capacities=Capacities.of(self._bindings, routing, self._environments.open_lease_holds(), self._agents),
+            capacities=Capacities.of(bindings, routing, self._environments.open_lease_holds(), agents),
             hub=HubConnectivity.of(
                 endpoint=self._hub_url,
                 contact_at=self._pause.hub_contact_at(),

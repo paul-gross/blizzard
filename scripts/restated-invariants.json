@@ -327,6 +327,8 @@
         "runner s admitted range currently",
         "admitted opencode version range currently",
         "range of opencode versions currently",
+        "runner s admitted opencode ranges currently",
+        "runner s admitted 1 x range currently",
         "opencode version inside either major version s admitted range",
         "proof for its major version opencode 1"
       ],
@@ -344,7 +346,7 @@
         },
         {
           "file": "../blizzard-context/verification/blizzard/gaps.md",
-          "symbol": "opencodes-compaction-tail-marker",
+          "symbol": "opencode-1s-compaction-tail-marker",
           "role": "allowed",
           "reason": "Restates the admitted range's current bounds while describing the compaction-tail-marker gap."
         },

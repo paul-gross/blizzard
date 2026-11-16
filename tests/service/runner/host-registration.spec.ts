@@ -1,4 +1,4 @@
-import { expect, runnerTest as test } from '../../harness/fixtures';
+import { expect, holdingChunk, runnerTest as test, seededLeaseWithWorker, stepUntilHeld } from '../../harness/fixtures';
 
 // What a live host's runner registers, read back from the mock hub: its `bindings` and the `subscription` it names
 // beside `workspace_id`, `env_capacity`, `projects` and its roster; and a runner naming no subscription registers an
@@ -8,11 +8,13 @@ import { expect, runnerTest as test } from '../../harness/fixtures';
 const RUNNER = 'runner-local';
 const WORKSPACE = 'workspace-local';
 
-test('live agents and name edits reach the next registration', async ({ mockHub, runnerHosts }) => {
+test('live agents and name edits reach the next registration and local capacity', async ({ mockHub, runnerHosts, workerCheckpoint }) => {
   const host = await runnerHosts.create();
   const runner = host.runners[RUNNER]!;
   const fleet = mockHub.fleetOf(host, RUNNER);
   await host.step();
+  const second = await mockHub.seed.chunk(holdingChunk(workerCheckpoint, 'second'));
+  await stepUntilHeld(host, second.body.chunk_id, workerCheckpoint, 'second');
   const editAgents = await host.cli(['settings', 'set', 'agents', '3', '--runner', runner.id]);
   expect(editAgents.code, editAgents.stderr).toBe(0);
   const editName = await host.cli(['settings', 'set', 'name', '"renamed-live"', '--runner', runner.id]);
@@ -22,6 +24,17 @@ test('live agents and name edits reach the next registration', async ({ mockHub,
   expect(view.status).toBe(200);
   expect(view.body.runner_name).toBe('renamed-live');
   expect(view.body.agents).toBe(3);
+  const local = (await host.api.runners()).body.items.find((item) => item.runner_id === runner.id)!;
+  const capacities = (await runner.dashboard()).body.runner.capacities;
+  expect(local.max_agents).toBe(3);
+  expect(capacities.agents).toBe(3);
+  expect(local.bindings.map((binding) => binding.agents)).toEqual(capacities.bindings.map((binding) => binding.agents));
+  expect(capacities.bindings.length).toBeGreaterThan(0);
+  expect(capacities.bindings.every((binding) => binding.agents === 3)).toBe(true);
+  expect((view.body.bindings as { agents: number }[]).every((binding) => binding.agents === 3)).toBe(true);
+  // The first held worker remains in place while the newly available slot admits another.
+  await seededLeaseWithWorker(mockHub, host, workerCheckpoint);
+  expect((await runner.status()).body.capacities.used).toBe(2);
 });
 
 /** A runner with two agents binding `default` and `web` in the home workspace, which holds four environments. */

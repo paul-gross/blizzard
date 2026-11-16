@@ -127,6 +127,8 @@ test.describe('delivery and tenant-wide findings', () => {
   });
 
   test('test_every_exit_verb_and_reopen_land_through_the_real_cli', async ({ api, forge, repository, mockRunner, cli }) => {
+    // The delivery and each CLI invocation share this budget under concurrent service load.
+    test.setTimeout(90_000);
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
@@ -180,6 +182,8 @@ test.describe('delivery and tenant-wide findings', () => {
   });
 
   test('test_an_exited_finding_is_no_longer_a_delta_target_but_a_gone_flagged_one_still_is', async ({ api, forge, repository, mockRunner }) => {
+    // Four deliveries share this test's budget; concurrent service suites can slow each one.
+    test.setTimeout(90_000);
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);

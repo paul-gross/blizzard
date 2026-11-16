@@ -547,6 +547,16 @@ class RunnerStepper:
             config = self._ctx.config
             return GateReadConfig(config.subscription, config.throttle, config.host_zone)
 
+    def capacity_config(
+        self, fallback: tuple[tuple[BindingDeclaration, ...], int]
+    ) -> tuple[tuple[BindingDeclaration, ...], int]:
+        """Project the same successfully built snapshot used by the tick."""
+        with self._build:
+            if self._ctx is None:
+                return fallback
+            config = self._ctx.config
+            return config.bindings or (), config.agents
+
     def _context(self) -> LoopContext:
         with self._build:
             if self._closed:
