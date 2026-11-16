@@ -30,7 +30,7 @@ from tests.rehearsal.comparison import (
     row_losses,
     view_mismatches,
 )
-from tests.rehearsal.installation import Host, Hub, Leg, baseline_daemon_port, shape_host_file
+from tests.rehearsal.installation import Host, Hub, Leg, baseline_daemon_port, point_mock_harness, shape_host_file
 from tests.rehearsal.stores import (
     baseline_contract,
     baseline_openapi,
@@ -371,6 +371,7 @@ class Rehearsal:
         self.work.stop()
         for host in (self.work, self.seed):
             self.migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
+        point_mock_harness(self.work, self.forge_bin)
         self.work.start(self.candidate, self.hub.url)
         client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
         self._await_landed(client, self.ingest(client, "the candidate runner"), step)
@@ -392,6 +393,7 @@ class Rehearsal:
         if losses:
             raise self._fail(step, "seeded rows lost on the walk back:\n" + "\n".join(losses))
         client = self._client(self.hub.start(self.baseline))
+        point_mock_harness(self.work, self.mock_bin)
         self.work.start(self.baseline, self.hub.url)
         self._hold_views(client, step)
         for chunk_id in self.landed:
@@ -414,6 +416,7 @@ class Rehearsal:
         for host in (self.work, self.seed):
             self.migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
         self.hub.start(self.candidate).close()
+        point_mock_harness(self.work, self.forge_bin)
         self.work.start(self.candidate, self.hub.url)
 
     # ------------------------------------------------------------------ helpers
