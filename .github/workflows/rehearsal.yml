@@ -7,8 +7,9 @@
 # backend. What a leg asserts is owned by the tier itself, `tests/rehearsal/`.
 #
 # A leg checks the mock out twice. The baseline's own mock seeds the release and drives its
-# worker; the mock forge comes from the run's own mock, as every other tier's does, because it
-# stands in for GitHub and the candidate hub reads GitHub's current API from it.
+# runner's worker; the mock forge comes from the run's own mock, as every other tier's does, because
+# it stands in for GitHub and the candidate hub reads GitHub's current API from it. The run's own
+# mock also drives the candidate runner's worker, whose harness CLI the baseline's mock may not speak.
 #
 # A supported release is rehearsed only once it has a published GitHub Release: a tag whose
 # release run went red never published a wheel. The matrix is never empty: with no supported

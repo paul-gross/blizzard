@@ -225,10 +225,11 @@ built from the pull request's head. A leading `releases` job lists the supported
 Release — a candidate whose release run went red has no wheel to upgrade from — and each release runs as two legs,
 SQLite and Postgres, against a `postgres:16` service. With no supported release, one leg reports that there is nothing
 to rehearse and passes. Each leg checks the mock out at the release's own tag where the mock carries one, else at
-`master`, through `resolve-mock-ref`'s `baseline` input, to seed the release and drive its worker. The mock forge runs
-from a second checkout, the run's own mock that every other tier uses: it stands in for GitHub, whose API the candidate
-hub reads as it is today, not as it was at the release (`BLIZZARD_REHEARSAL_FORGE_BIN`). A failed leg uploads its
-daemons' logs as `rehearsal-logs-<release>-<backend>`.
+`master`, through `resolve-mock-ref`'s `baseline` input, to seed the release and drive its runner's worker. The mock
+forge runs from a second checkout, the run's own mock that every other tier uses: it stands in for GitHub, whose API the
+candidate hub reads as it is today, not as it was at the release (`BLIZZARD_REHEARSAL_FORGE_BIN`). The same checkout
+drives the candidate runner's worker, which asks the harness CLI for what the release's mock may not answer. A failed
+leg uploads its daemons' logs as `rehearsal-logs-<release>-<backend>`.
 
 A release cut is a pull request with a commit carrying a `Release-Cut:` trailer, which
 [`scripts/release-cut-in-range.sh`](../scripts/release-cut-in-range.sh) reads with the same

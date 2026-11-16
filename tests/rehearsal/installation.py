@@ -29,6 +29,8 @@ from tests.support.scaffolding import (
 #: The mock harness's fence variable, which a worker reaches only through the runner's passthrough list.
 FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 _HUB_DB_VAR = "BZ_HUB_DB_URL"
+#: The mock harness binaries a shaped host file names, Claude Code's then OpenCode's.
+_MOCK_HARNESSES = ("mock-claude-code", "mock-opencode")
 
 
 def baseline_daemon_port() -> int:
@@ -214,10 +216,24 @@ def shape_host_file(host: Host, *, name: str, hub_url: str, project: str, worksp
         (r'project = "default"', f'project = "{project}"'),
         (r'^transcripts_root = ""$', f'transcripts_root = "{workspace / ".blizzard-mock-harness" / "transcripts"}"'),
         (r'^(worker_settings_path = ".*")$', rf'\1\nclaude_code_credentials_path = "{claude}"'),
-        (r'^binary = "claude"$', f'binary = "{mock_bin / "mock-claude-code"}"'),
-        (r'^binary = "opencode"$', f'binary = "{mock_bin / "mock-opencode"}"\nauth_path = "{opencode}"'),
+        (r'^binary = "claude"$', f'binary = "{mock_bin / _MOCK_HARNESSES[0]}"'),
+        (r'^binary = "opencode"$', f'binary = "{mock_bin / _MOCK_HARNESSES[1]}"\nauth_path = "{opencode}"'),
         (r"^env_passthrough = \[\]$", f'env_passthrough = ["{FENCE_VAR}"]'),
     ):
         text, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+        assert count == 1, f"{path} has no line matching {pattern!r}"
+    path.write_text(text)
+
+
+def point_mock_harness(host: Host, mock_bin: Path) -> None:
+    """Repoint a shaped host file's mock harness binaries at ``mock_bin``'s.
+
+    A runner speaks its own day's harness CLI, which the baseline's mock may not answer — a worker of a newer
+    runner asks for an output format an older mock refuses — so each runner drives the mock of its own day."""
+    path = host.dir / "blizzard-host.toml"
+    text = path.read_text()
+    for name in _MOCK_HARNESSES:
+        pattern = rf'^binary = ".*/{re.escape(name)}"$'
+        text, count = re.subn(pattern, f'binary = "{mock_bin / name}"', text, count=1, flags=re.MULTILINE)
         assert count == 1, f"{path} has no line matching {pattern!r}"
     path.write_text(text)

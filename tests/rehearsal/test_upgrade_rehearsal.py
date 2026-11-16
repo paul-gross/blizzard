@@ -95,7 +95,8 @@ def test_a_supported_release_upgrades_to_the_candidate_and_walks_back(
     if mock_bin is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
     # The forge stands in for GitHub, which never rolls back to the baseline's day, so the candidate hub
-    # reads its current API; the baseline's own mock still seeds the release and drives its worker.
+    # reads its current API; the baseline's own mock still seeds the release and drives its runner's worker,
+    # and the forge's, the run's own, drives the candidate runner's.
     named_forge = os.environ.get(_FORGE_BIN)
     forge_bin = Path(named_forge) if named_forge else mock_bin
     root = work_root / f"{baseline_tag}-{backend}"
