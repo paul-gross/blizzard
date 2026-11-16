@@ -1,33 +1,5 @@
-@if (allowed()) {
-  <h1>Hub settings</h1>
-  <h2>Keys</h2>
-  @if (settings.isPending()) { <p>Loading settings…</p> }
-  @if (settings.isError()) { <p role="alert">Failed to load settings.</p> }
-  @for (row of settings.data()?.settings ?? []; track row.key) {
-    <article>
-      <app-config-record-panel [vm]="record(row)" state="ready" emptyText="No setting" testidPrefix="hub-setting" />
-      @if (row.lifetime === 'pass') { <fleet-kit-button (click)="edit(row)">Edit {{ row.key }}</fleet-kit-button> }
-    </article>
-  }
-  @if (editing(); as current) {
-    <section>
-      <h2>Edit {{ current.row.key }}</h2>
-      <span>Value</span><fleet-kit-text-input ariaLabel="Value" [value]="value()" (valueChange)="value.set($event)" />
-      @if (failure(); as error) { <p role="alert">{{ error }}</p> }
-      <fleet-kit-button [disabled]="mutation.isPending()" (click)="save()">Save</fleet-kit-button>
-      <fleet-kit-button [disabled]="mutation.isPending()" (click)="save(true)">Reset to default</fleet-kit-button>
-      <fleet-kit-button (click)="editing.set(null)">Cancel</fleet-kit-button>
-    </section>
-  }
-  <h2>History</h2>
-  <app-config-revisions [rows]="revisions()" [state]="historyState()" testidPrefix="hub-settings" />
-  @for (change of changes(); track change.id) {
-    <article><h3>Revision {{ change.revision }} · {{ change.op }}</h3>
-      <p>{{ change.recorded_at }} · {{ change.actor }} via {{ change.door }}</p>
-      <app-config-field-diff [diff]="diff(change)" />
-    </article>
-  }
-  @if (history.hasNextPage()) { <fleet-kit-button [disabled]="history.isFetchingNextPage()" (click)="history.fetchNextPage()">Load more</fleet-kit-button> }
-} @else if (!me.isPending()) {
-  <p>Hub settings are not available.</p>
-}
+<app-hub-settings-view [allowed]="allowed()" [identityPending]="me.isPending()" [state]="state()"
+  [rows]="settings.data()?.settings ?? []" [editing]="editing()" [value]="value()" [failure]="failure()" [busy]="busy()"
+  [revisions]="revisions()" [historyState]="historyState()" [changes]="changes()"
+  [hasNext]="history.hasNextPage()" [loadingNext]="history.isFetchingNextPage()"
+  (edit)="edit($event)" (valueChange)="value.set($event)" (save)="save($event)" (cancelled)="cancel()" (loadMore)="history.fetchNextPage()" />
