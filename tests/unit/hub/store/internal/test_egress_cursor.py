@@ -6,7 +6,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
-from blizzard.hub.store.internal.egress_store import EgressStore, _current
+from blizzard.hub.store.internal.egress_store import (  # pyright: ignore[reportPrivateUsage] — exercise the authority query directly
+    EgressStore,
+    _current,
+)
 
 
 def test_append_requires_exact_predecessor_and_advances_order() -> None:
