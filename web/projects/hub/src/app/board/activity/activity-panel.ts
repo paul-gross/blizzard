@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type KitAsyncStateValue, FleetLiveUpdates, type LoggedEvent, injectRunnerHostNames } from 'fleet';
+import { type KitAsyncStateValue, injectRunnerHostNames } from 'fleet';
 import { ACTIVITY_LIMIT, injectHubActivityQuery } from './activity.query';
 import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';
+import { HubLiveUpdates, type LoggedEvent } from '../../core/live/hub-live-updates';
 
 /** The rendered-row cap for the merged backfill + live feed — the backfill read's own limit. */
 const RENDER_LIMIT = ACTIVITY_LIMIT;
@@ -21,7 +22,7 @@ const RENDER_LIMIT = ACTIVITY_LIMIT;
   styleUrl: './activity-panel.css',
 })
 export class ActivityPanel {
-  private readonly live = inject(FleetLiveUpdates);
+  private readonly live = inject(HubLiveUpdates);
   private readonly runnerHosts = injectRunnerHostNames();
   protected readonly activityQuery = injectHubActivityQuery();
 

@@ -7,7 +7,8 @@ import {
 } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { type MeResponse, type MeTenant, hubMeKey } from 'fleet/shell';
+import { type MeResponse, type MeTenant } from 'fleet/shell';
+import { hubMeKey } from '../query-keys';
 
 /** The request header that names the tenant a hub call acts in. */
 export const TENANT_HEADER = 'X-Blizzard-Tenant';

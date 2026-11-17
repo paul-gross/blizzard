@@ -1,15 +1,11 @@
 import type { hubApi } from 'fleet';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  listChunksApiChunksGet,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-  hubBoardChunksKey,
-  injectProjectFilter,
-  lensedKey,
-} from 'fleet/shell';
+import { listChunksApiChunksGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from './paginated-read';
 import type { BoardChunksRead } from './chunks.model';
+import { hubBoardChunksKey, lensedKey } from './query-keys';
+import { injectProjectFilter } from './project-filter';
 
 /**
  * The board's chunk list as one query, for the project `project` names (`null` for the whole tenant): `GET
@@ -48,7 +44,7 @@ export function injectHubBoardChunksQuery() {
   return injectQuery(() => ({
     ...boardChunksQueryOptions(projectFilter()),
     // Covered by chunk-changed, question-asked/-answered, and decision-opened/-resolved
-    // (EVENT_INVALIDATION_REGISTRY, sse/fleet-live.ts) — this is the backstop, not the
+    // (EVENT_INVALIDATION_REGISTRY, core/live/hub-live-updates.ts) — this is the backstop, not the
     // primary freshness path. See LIVE_COVERED_POLL_BACKSTOP_MS.
     refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
   }));

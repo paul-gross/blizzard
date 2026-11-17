@@ -1,6 +1,17 @@
-import { type ActivityView, asyncState, type AsyncStateQuery, compactRef, formatClockTime, hubApi, type KitAsyncStateValue, type LoggedEvent, type RunnerChangeKind, runnerDisplayName } from 'fleet';
+import {
+  type ActivityView,
+  asyncState,
+  type AsyncStateQuery,
+  compactRef,
+  formatClockTime,
+  hubApi,
+  type KitAsyncStateValue,
+  type RunnerChangeKind,
+  runnerDisplayName,
+} from 'fleet';
 import { type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
+import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 const { ActivityChunkChangeCause, HubEventType, RunnerChangeKind: Kind } = hubApi;
 

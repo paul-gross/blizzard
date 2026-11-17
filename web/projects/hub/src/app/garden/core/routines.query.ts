@@ -1,7 +1,26 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
-import { listProjectRoutinesApiProjectsProjectRoutinesGet, listRoutinesApiRoutinesGet, listRoutineScopesApiRoutinesRoutineIdScopesGet, routineProposalCountsApiRoutinesProposalCountsGet, routineSweepsApiRoutinesRoutineIdSweepsGet, routineTrendApiRoutinesTrendGet, type GardenProposalCountsView, type GardenSweepsView, type RoutineView, type TrendView, hubRoutineProposalCountsKey, hubRoutineScopesKey, hubRoutineSweepsKey, hubRoutineTrendKey, hubRoutinesKey } from 'fleet';
+import {
+  listProjectRoutinesApiProjectsProjectRoutinesGet,
+  listRoutinesApiRoutinesGet,
+  listRoutineScopesApiRoutinesRoutineIdScopesGet,
+  routineProposalCountsApiRoutinesProposalCountsGet,
+  routineSweepsApiRoutinesRoutineIdSweepsGet,
+  routineTrendApiRoutinesTrendGet,
+  type GardenProposalCountsView,
+  type GardenSweepsView,
+  type RoutineView,
+  type TrendView,
+} from 'fleet';
+import { injectProjectFilter } from '../../core/project-filter';
+import {
+  lensedKey,
+  hubRoutineProposalCountsKey,
+  hubRoutineScopesKey,
+  hubRoutineSweepsKey,
+  hubRoutineTrendKey,
+  hubRoutinesKey,
+} from '../../core/query-keys';
 
 /**
  * The routine list — every routine, newest first, including a retired one marked as such. Under a project lens it is

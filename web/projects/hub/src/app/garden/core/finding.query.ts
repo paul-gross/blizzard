@@ -1,7 +1,18 @@
 import { injectInfiniteQuery, injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getFindingApiFindingsFindingIdGet, listFindingClassesApiFindingsClassesGet, listFindingsApiFindingsGet, listProjectFindingClassesApiProjectsProjectFindingsClassesGet, listProjectFindingsApiProjectsProjectFindingsGet, type FindingDetailView, type FindingView, type FindingsPageView, hubApi, hubFindingKey, hubFindingClassesKey, hubFindingsBucketKey, hubFindingsKey } from 'fleet';
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
+import {
+  getFindingApiFindingsFindingIdGet,
+  listFindingClassesApiFindingsClassesGet,
+  listFindingsApiFindingsGet,
+  listProjectFindingClassesApiProjectsProjectFindingsClassesGet,
+  listProjectFindingsApiProjectsProjectFindingsGet,
+  type FindingDetailView,
+  type FindingView,
+  type FindingsPageView,
+  hubApi,
+} from 'fleet';
+import { hubFindingKey, hubFindingClassesKey, hubFindingsBucketKey, hubFindingsKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 const FINDINGS_PAGE = 50;
 

@@ -7,8 +7,6 @@ import {
 import {
   enrollHostApiHostsHostIdEnrollmentsPost,
   hubApi,
-  hubHostsKey,
-  hubRunnersKey,
   problemType,
   retireHostApiHostsHostIdRetirePost,
   revokeHostTokenApiHostsHostIdTokenRevocationsPost,
@@ -18,6 +16,7 @@ import {
   hostRetireMutationKey,
   hostRevokeTokenMutationKey,
 } from '../core/mutation-keys';
+import { hubHostsKey, hubRunnersKey } from '../core/query-keys';
 
 /** The `type` of the hub's refusal of an unforced retire whose runners hold chunks. */
 const HOST_HOLDS_ROUTES: hubApi.HostHoldsRoutesProblem['type'] =

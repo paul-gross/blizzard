@@ -1,10 +1,11 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { editProjectScopeApiProjectsProjectScopesSlugPatch, hubScopesKey } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { editProjectScopeApiProjectsProjectScopesSlugPatch } from 'fleet';
 import { editScopeMutationKey } from '../../core/mutation-keys';
 import { gardenProject } from '../core/garden-project';
+import { hubScopesKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /** Change a scope's stored description in place — never touches its slug. */
 export interface ScopeEditVars {

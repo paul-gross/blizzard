@@ -2,12 +2,12 @@ import { computed } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type KitAsyncStateValue, injectNowSignal, asyncStateOf, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
 import { boardChunksQueryOptions } from '../core/chunks.query';
 import { foldRunnerRows, lensRunners, type RunnerRow } from './runner-rows.model';
 import { foldHostCards, type HostCard } from './host-rows.model';
 import { injectHubHostsQuery } from '../core/hosts.query';
 import { injectHubRunnersQuery } from '../core/runners.query';
+import { injectProjectFilter } from '../core/project-filter';
 
 /**
  * Folds the runners, hosts and chunks reads into {@link RunnerRow}s — each runner's claims,

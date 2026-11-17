@@ -1,9 +1,10 @@
 import { inject } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type MeResponse, meApiMeGet, hubMeKey } from 'fleet/shell';
+import { type MeResponse, meApiMeGet } from 'fleet/shell';
 
 import { TenantContext, inSelectedTenant } from './tenant-context';
+import { hubMeKey } from '../query-keys';
 
 /**
  * `GET /api/me` — the resolved identity + its server-expanded permission set.

@@ -15,7 +15,6 @@ import { filter, map } from 'rxjs';
 import {
   AppShell,
   BoardHeader,
-  FleetLiveUpdates,
   FlagStore,
   KitButton,
   ViewportService,
@@ -55,6 +54,7 @@ import {
   shellUrl,
   shellView,
 } from './app.model';
+import { HubLiveUpdates } from '../core/live/hub-live-updates';
 
 /**
  * The hub app shell — the titlebar, the top nav (or their mobile shell
@@ -71,7 +71,7 @@ import {
  * app root. Slot ordering is owned by the shared
  * {@link AppShell} (`fleet`).
  *
- * The {@link FleetLiveUpdates} spine and the TanStack `QueryClient` are scoped to
+ * The {@link HubLiveUpdates} spine and the TanStack `QueryClient` are scoped to
  * this root component, never to a routed page.
  *
  * The public pages — sign-in with its refusals, and an invitation's landing
@@ -101,7 +101,7 @@ import {
  *
  * The SSE spine, and the header's own tenant-scoped reads, only start once the
  * board has entered the selected tenant (a call before it would name no tenant,
- * or the wrong one), and the SSE spine's {@link FleetLiveUpdates.authFailed}
+ * or the wrong one), and the SSE spine's {@link HubLiveUpdates.authFailed}
  * channel — a session that expired mid-stream — routes back to `/login` the same way
  * the interceptor does, within the one reconnect cycle that surfaces it.
  */
@@ -128,7 +128,7 @@ import {
 })
 export class App {
   private readonly health = injectHubHealthQuery();
-  private readonly live = inject(FleetLiveUpdates);
+  private readonly live = inject(HubLiveUpdates);
   private readonly viewport = inject(ViewportService);
   private readonly router = inject(Router);
   private readonly meQuery = injectMeQuery();
@@ -276,8 +276,8 @@ export class App {
     // least one permission — `start()` is idempotent, so a flip back to `ready`
     // (e.g. after a role change, #94) resumes it. `afterRenderEffect` (not a plain
     // `effect`) so this runs post-render rather than mid-change-detection; either way
-    // `FleetLiveUpdates.start()` is itself safe to call from a reactive context — it
-    // wraps its own internal `effect()` call in `untracked` (fleet-live.ts).
+    // `HubLiveUpdates.start()` is itself safe to call from a reactive context — it
+    // wraps its own internal `effect()` call in `untracked` (hub-live-updates.ts).
     afterRenderEffect(() => {
       if (this.ready()) this.live.start();
     });

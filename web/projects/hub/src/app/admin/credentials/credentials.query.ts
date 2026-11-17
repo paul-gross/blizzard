@@ -3,16 +3,15 @@ import {
   type CredentialDocument,
   type CredentialsListView,
   getCredentialApiCredentialsCredentialGet,
-  hubConfigListKey,
-  hubConfigRecordKey,
   listCredentialsApiCredentialsGet,
 } from 'fleet';
+import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 
 const NOUN = 'credentials';
 
 /** `GET /api/credentials` — every credential, retired ones too while `includeRetired()` holds, with each
  * one's referrer count and the bindings a credential may name. Freshness: `hubConfigKey`
- * (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+ * (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectCredentialsQuery(includeRetired: () => boolean) {
   return injectQuery(() => {
     const retired = includeRetired();

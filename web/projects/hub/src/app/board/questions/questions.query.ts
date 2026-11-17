@@ -1,13 +1,8 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type QuestionView,
-  listOpenQuestionsApiQuestionsGet,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-  hubQuestionsKey,
-  injectProjectFilter,
-  lensedKey,
-} from 'fleet/shell';
+import { type QuestionView, listOpenQuestionsApiQuestionsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { hubQuestionsKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * Hub `GET /api/questions` read — every open (unanswered) question across the
@@ -18,7 +13,7 @@ import {
  * Under a project lens the read carries `?project=`, so the hub narrows the list to the lensed project's questions
  * whatever the board's chunk list holds. The key carries the lens.
  *
- * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 export function injectHubQuestionsQuery() {
   const projectFilter = injectProjectFilter();

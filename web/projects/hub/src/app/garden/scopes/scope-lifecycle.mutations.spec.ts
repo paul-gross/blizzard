@@ -3,9 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { gardenScopeView, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectScopeLifecycleMutation } from './scope-lifecycle.mutations';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 describe('injectScopeLifecycleMutation', () => {
   let stub: RequestClientStub;

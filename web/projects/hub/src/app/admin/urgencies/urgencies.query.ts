@@ -1,5 +1,5 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { getUrgencyApiUrgenciesKeyGet, hubConfigRecordKey, type UrgencyView } from 'fleet';
+import { getUrgencyApiUrgenciesKeyGet, type UrgencyView } from 'fleet';
 import { URGENCIES_POLL_MS } from '../../core/urgencies.query';
 
 export function injectUrgencyQuery(key: () => string | null) {
@@ -18,6 +18,7 @@ export function injectUrgencyQuery(key: () => string | null) {
 }
 
 import { getSettingsApiSettingsGet, type SettingsView } from 'fleet';
+import { hubConfigRecordKey } from '../../core/query-keys';
 
 export function injectSettingsQuery() {
   return injectQuery(() => ({

@@ -1,10 +1,17 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
 import {
-  createUrgencyApiUrgenciesPost, patchUrgencyApiUrgenciesKeyPatch, enableUrgencyApiUrgenciesKeyEnablePost,
-  retireUrgencyApiUrgenciesKeyRetirePost, positionUrgencyApiUrgenciesOrderPositionPost, patchSettingsApiSettingsPatch,
-  hubConfigKey, type UrgencyCreateRequest, type UrgencyPatchRequest, type UrgencyPositionRequest,
+  createUrgencyApiUrgenciesPost,
+  patchUrgencyApiUrgenciesKeyPatch,
+  enableUrgencyApiUrgenciesKeyEnablePost,
+  retireUrgencyApiUrgenciesKeyRetirePost,
+  positionUrgencyApiUrgenciesOrderPositionPost,
+  patchSettingsApiSettingsPatch,
+  type UrgencyCreateRequest,
+  type UrgencyPatchRequest,
+  type UrgencyPositionRequest,
 } from 'fleet';
+import { hubConfigKey } from '../../core/query-keys';
 
 export const urgencyPositionMutationKey = ['hub', 'urgencies', 'position'] as const;
 export const urgencyDefaultMutationKey = ['hub', 'urgencies', 'default'] as const;

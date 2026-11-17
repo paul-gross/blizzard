@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { client as hubClient } from '../api/hub/client.gen';
 import { client as runnerClient } from '../api/runner/client.gen';
 import type { DaemonTarget } from '../core/daemon-target/daemon-target';
-import { hubChunkKey } from '../core/query-keys';
+import { chunkDetailKey } from '../core/query-keys';
 import { settle } from '../testing/settle';
 import {
   type RequestClientStub,
@@ -168,7 +168,7 @@ describe('injectChunkTranscriptSegmentQuery — hub plane', () => {
     await settle(open);
     await settle(closed);
 
-    await queryClient.invalidateQueries({ queryKey: hubChunkKey('ch_1') });
+    await queryClient.invalidateQueries({ queryKey: chunkDetailKey('hub', 'ch_1') });
     await settle(open);
     await settle(closed);
 

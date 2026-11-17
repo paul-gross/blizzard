@@ -31,7 +31,7 @@ import { KitBeacon, KitMenu } from '../../kit';
 })
 export class MobileTitlebar {
   /** Whether the consumer's own live signal is currently connected — the hub's
-   * `FleetLiveUpdates` stream state, the runner's hub-reachability read. */
+   * `HubLiveUpdates` stream state, the runner's hub-reachability read. */
   readonly live = input.required<boolean>();
 
   /** The overflow menu's panel — the `<ng-template>` holding a

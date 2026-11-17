@@ -7,12 +7,12 @@ import {
   type CadenceView,
   createProjectCadenceApiProjectsProjectCadencesPost,
   editCadenceApiCadencesCadenceIdPatch,
-  hubRoutinesKey,
 } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
 import { createCadenceMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
 import { gardenProject } from '../core/garden-project';
+import { hubRoutinesKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /** An edit of one cadence, sent against the revision it was read at. A chore add, edit, or remove is an edit whose body
  * carries the whole `chores` list. */

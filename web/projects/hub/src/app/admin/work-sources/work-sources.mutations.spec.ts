@@ -3,13 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubConfigKey } from 'fleet';
 import { type RequestClientStub, stubHubClient, workSourceSummary } from 'fleet/testing';
 import {
   injectCreateWorkSourceMutation,
   injectEditWorkSourceMutation,
   injectWorkSourceLifecycleMutation,
 } from './work-sources.mutations';
+import { hubConfigKey } from '../../core/query-keys';
 
 describe('work source mutations', () => {
   let stub: RequestClientStub;

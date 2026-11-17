@@ -8,7 +8,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 
-import { type MeResponse, hubHostsKey, hubRunnersKey } from 'fleet';
+import { type MeResponse } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
@@ -19,6 +19,7 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 import { FleetPage } from './fleet-page';
+import { hubHostsKey, hubRunnersKey } from '../core/query-keys';
 
 /** The operator's identity with `runner:retire` — the permission the host verbs need. */
 const RETIRE_ME: MeResponse = {

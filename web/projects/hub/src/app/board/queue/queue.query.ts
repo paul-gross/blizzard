@@ -1,8 +1,15 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type BacklogPeekEntry, type QueuePeekEntry, getBacklogApiBacklogGet, getQueueApiQueueGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubBacklogKey, hubQueueKey, lensedKey } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import {
+  type BacklogPeekEntry,
+  type QueuePeekEntry,
+  getBacklogApiBacklogGet,
+  getQueueApiQueueGet,
+  LIVE_COVERED_POLL_BACKSTOP_MS,
+} from 'fleet';
 import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
+import { hubBacklogKey, hubQueueKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * Hub `GET /api/queue` read — the ready queue in the hub's explicit reorder +
@@ -12,7 +19,7 @@ import { DRAIN_LIMIT, drainPages } from '../../core/paginated-read';
  * on the hub; {@link drainPages} follows `next_cursor` to exhaustion,
  * so each entry's `position` still reads as its absolute index in the whole order. Under a project lens the read sends
  * `?project=` and keys on it: the hub keeps the lensed project's entries, each still at its whole-order position.
- * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 export function injectHubQueueQuery() {
   const projectFilter = injectProjectFilter();
@@ -41,7 +48,7 @@ export function injectHubQueueQuery() {
  * Each entry carries its `position`, `graph_id`, and work refs so the board can
  * render and reshape the backlog. The read is keyset-paginated on the hub;
  * {@link drainPages} follows `next_cursor` to exhaustion, the same
- * as {@link injectHubQueueQuery}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * as {@link injectHubQueueQuery}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 export function injectHubBacklogQuery(canReorder: () => boolean) {
   const projectFilter = injectProjectFilter();

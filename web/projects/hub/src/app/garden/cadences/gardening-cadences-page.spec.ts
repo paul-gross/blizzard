@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { type CadenceView, ViewportService } from 'fleet';
-import { HUB_PROJECT_FILTER, provideFlags } from 'fleet/shell';
+import { provideFlags } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
   gardenCadenceView,
@@ -17,6 +17,7 @@ import {
 import { hubFlagsRead } from '../../core/flags.query';
 import { GardeningCadencesPage } from './gardening-cadences-page';
 import { CADENCES_FLAG_OFF_LINE } from './gardening-cadences-page.model';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 /** Stands in for `GardeningCadenceDetail`, whose own behavior is `gardening-cadence-detail.spec.ts`'s. */
 @Component({

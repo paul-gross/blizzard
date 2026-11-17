@@ -5,10 +5,9 @@ import {
   listProjectScopesApiProjectsProjectScopesGet,
   listScopesApiScopesGet,
   type ScopeView,
-  hubScopeRoutinesKey,
-  hubScopesKey,
 } from 'fleet';
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
+import { hubScopeRoutinesKey, hubScopesKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * The scope list — every scope, newest first, each marked retired or not. Under a project lens it is that project's

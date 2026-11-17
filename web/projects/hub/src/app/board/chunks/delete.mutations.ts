@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { deleteChunkApiChunksChunkIdDelete, hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
+import { deleteChunkApiChunksChunkIdDelete } from 'fleet';
 import { chunkDeleteMutationKey } from '../../core/mutation-keys';
+import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 
 /** Delete an unacquired chunk — the board's counterpart of
  * `blizzard hub chunk delete`. Withdraws the chunk's hub item(s); there is no undo.

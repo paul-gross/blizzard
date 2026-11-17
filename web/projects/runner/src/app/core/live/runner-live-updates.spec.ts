@@ -16,7 +16,7 @@ import { SessionRecovery } from '../identity/session-recovery';
 
 /** EventSource stand-in with named-listener and auth-failure support — jsdom ships
  * none, and reconnect plus the stream's `401` channel must be driven deterministically.
- * Mirrors `fleet`'s own `sse.service.spec.ts`/`fleet-live.spec.ts` fakes. */
+ * Mirrors `fleet`'s own `sse.service.spec.ts` and the hub's `hub-live-updates.spec.ts` fakes. */
 class FakeEventSource {
   static readonly instances: FakeEventSource[] = [];
   readyState = 0;

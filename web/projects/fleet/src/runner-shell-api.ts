@@ -7,9 +7,7 @@
  */
 
 export { type StatCell } from './lib/shell/board-header/board-header';
-export { SseService, backoffDelay, type SseStatus } from './lib/sse/sse.service';
-export { INVALIDATION_COALESCE_WINDOW_MS } from './lib/sse/fleet-live';
-export { LiveInvalidationSpine } from './lib/sse/live-invalidation-spine';
+export { backoffDelay } from './lib/sse/sse.service';
 export {
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
@@ -22,9 +20,8 @@ export { KitGlyph } from './lib/kit/kit-glyph';
 export { type SlotBarSlot } from './lib/kit/kit-slot-bar';
 export { type Tone } from './lib/kit/tone';
 export { compactRef } from './lib/core/compact-ref';
-export { openLookup, unlisted } from './lib/core/open-lookup';
+export { unlisted } from './lib/core/open-lookup';
 export { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling/polling';
-export { chunkDetailKey, runnerFlagsKey } from './lib/core/query-keys';
 
 export * as runnerApi from './lib/api/runner';
 export { client as runnerClient } from './lib/api/runner/client.gen';

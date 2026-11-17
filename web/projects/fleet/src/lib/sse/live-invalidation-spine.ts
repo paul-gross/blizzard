@@ -4,6 +4,14 @@ import type { Subscription } from 'rxjs';
 
 import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
+/**
+ * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
+ * flushing them as one pass. The first frame starts a fixed one-second window;
+ * later frames join that pass without postponing it, so even a steady stream
+ * invalidates each key at most once per second.
+ */
+export const INVALIDATION_COALESCE_WINDOW_MS = 1000;
+
 /** {@link LiveInvalidationSpine}'s construction parameters: the stream to open, the
  * event kinds it carries, and the registry mapping each kind to the query keys it
  * stales — a lookup (`openLookup`) that stales nothing for a kind it does not list.

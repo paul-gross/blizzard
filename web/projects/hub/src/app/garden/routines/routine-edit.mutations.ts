@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { editRoutineApiRoutinesRoutineIdPatch, hubRoutinesKey } from 'fleet';
+import { editRoutineApiRoutinesRoutineIdPatch } from 'fleet';
 import { editRoutineMutationKey } from '../../core/mutation-keys';
+import { hubRoutinesKey } from '../../core/query-keys';
 
 /** Change a routine’s graph or default urgency without touching its other fields. */
 export interface RoutineEditVars {

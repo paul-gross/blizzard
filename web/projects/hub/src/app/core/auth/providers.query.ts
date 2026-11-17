@@ -1,10 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type ProviderSummary,
-  listProvidersApiAuthProvidersGet,
-  hubAuthProvidersKey,
-} from 'fleet/shell';
+import { type ProviderSummary, listProvidersApiAuthProvidersGet } from 'fleet/shell';
+import { hubAuthProvidersKey } from '../query-keys';
 
 /**
  * `GET /api/auth/providers` — the configured login-provider list the login page

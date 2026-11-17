@@ -1,9 +1,10 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableCadenceApiCadencesCadenceIdEnablePost, hubRoutinesKey, retireCadenceApiCadencesCadenceIdRetirePost } from 'fleet';
+import { enableCadenceApiCadencesCadenceIdEnablePost, retireCadenceApiCadencesCadenceIdRetirePost } from 'fleet';
 import { cadenceLifecycleMutationKey } from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
+import { hubRoutinesKey } from '../../core/query-keys';
 
 /** Retire or re-enable a cadence — a reversible brake: a retired cadence mints nothing, and its errands all stop. */
 export interface CadenceLifecycleVars {

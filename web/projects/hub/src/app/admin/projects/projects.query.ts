@@ -5,12 +5,7 @@ import {
   chunkCountsApiChunkCountsGet,
   type ChunkCountsView,
   getProjectApiProjectsProjectGet,
-  hubChunkCountsKey,
-  hubProjectsKey,
-  hubProjectKey,
-  hubProjectLinksKey,
   listRepositoryLinksApiProjectsProjectRepositoryLinksGet,
-  lensedKey,
   listSourceLinksApiProjectsProjectSourceLinksGet,
   type ProjectView,
   type RepositoryLinkView,
@@ -18,6 +13,7 @@ import {
 } from 'fleet';
 
 import type { ProjectFigures } from './projects.model';
+import { hubChunkCountsKey, hubProjectsKey, hubProjectKey, hubProjectLinksKey, lensedKey } from '../../core/query-keys';
 
 /** `GET /api/projects/{project}` — one project by id, current slug or former slug, at rest
  * while `project()` is `null`. Keyed under `hubProjectsKey`, so a project write refreshes it. */

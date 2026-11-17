@@ -1,14 +1,11 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import {
-  enableProjectScopeApiProjectsProjectScopesSlugEnablePost,
-  retireProjectScopeApiProjectsProjectScopesSlugRetirePost,
-  hubScopesKey,
-} from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { enableProjectScopeApiProjectsProjectScopesSlugEnablePost, retireProjectScopeApiProjectsProjectScopesSlugRetirePost } from 'fleet';
 import { scopeLifecycleMutationKey } from '../../core/mutation-keys';
 import { gardenProject } from '../core/garden-project';
+import { hubScopesKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /** Retire or re-enable a scope's reversible brake: a retired scope is
  * excluded from every picker, but its findings stay live, queryable, and attributable

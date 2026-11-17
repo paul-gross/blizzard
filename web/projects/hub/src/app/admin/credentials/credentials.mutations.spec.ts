@@ -2,9 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { type CredentialCheckView, hubConfigKey } from 'fleet';
+import { type CredentialCheckView } from 'fleet';
 import { credentialSummary, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectCheckCredentialMutation, injectCreateCredentialMutation, injectCredentialLifecycleMutation, injectEditCredentialMutation } from './credentials.mutations';
+import { hubConfigKey } from '../../core/query-keys';
 
 const CHECK: CredentialCheckView = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,

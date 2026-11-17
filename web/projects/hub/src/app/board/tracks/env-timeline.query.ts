@@ -1,8 +1,8 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectQuery, keepPreviousData } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, envTimelineApiEnvTimelineGet, hubEnvTimelineKey, hubEnvTimelineLiveKey } from 'fleet';
-import { LIVE_COVERED_POLL_BACKSTOP_MS, injectProjectFilter, lensedKey } from 'fleet/shell';
+import { FLEET_CLOCK, envTimelineApiEnvTimelineGet } from 'fleet';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 
 import {
   type EnvTimelineView,
@@ -14,6 +14,8 @@ import {
   mergeWindow,
 } from './env-timeline.model';
 import { LOOKBACK_MS, type TimelineRange } from './tracks-window.model';
+import { hubEnvTimelineKey, hubEnvTimelineLiveKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /** How far past its span a live window reads back, so a short pan or the minutes since still land in its data. */
 const LIVE_SLACK_MS = 60 * 60_000;

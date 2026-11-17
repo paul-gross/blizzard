@@ -1,21 +1,14 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  getRepositoryApiRepositoriesRepositoryGet,
-  hubApi,
-  hubConfigKey,
-  hubConfigListKey,
-  hubConfigRecordKey,
-  listRepositoriesApiRepositoriesGet,
-  type RepositorySummary,
-} from 'fleet';
+import { getRepositoryApiRepositoriesRepositoryGet, hubApi, listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet';
+import { hubConfigKey, hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 
 type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
 
 const NOUN = 'repositories';
 
 /** `GET /api/repositories` — every repository, retired ones too while
- * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+ * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectRepositoriesQuery(includeRetired: () => boolean) {
   return injectQuery(() => {
     const retired = includeRetired();
@@ -53,7 +46,7 @@ export function injectRepositoryQuery(key: () => string | null) {
 }
 
 /** `GET /api/config/landing-policies` — every landing policy with the forge capabilities it requires and
- * uses, in the hub's order. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+ * uses, in the hub's order. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectLandingPoliciesQuery() {
   return injectQuery(() => ({
     queryKey: [...hubConfigKey, 'landing-policies'],

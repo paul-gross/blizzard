@@ -1,10 +1,11 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubUrgencyIconKey, type UrgencyView } from 'fleet';
+import { type UrgencyView } from 'fleet';
 import { vi } from 'vitest';
 import { TenantContext } from './auth/tenant-context';
 import { UrgencyPill } from './urgency-pill';
+import { hubUrgencyIconKey } from './query-keys';
 
 const urgency = { urgency_id: 'u', name: 'Urgent', color: 'red', emoji: null, icon: { digest: 'one', media_type: 'image/png' } } as UrgencyView;
 

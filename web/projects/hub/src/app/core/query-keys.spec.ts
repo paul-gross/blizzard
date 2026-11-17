@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { chunkDetailKey, chunkTranscriptSegmentKey, chunkTranscriptsKey, chunkWorkItemsKey } from 'fleet';
 import {
   hubActivityKey,
   hubAuthProvidersKey,
@@ -33,10 +34,6 @@ import {
   hubRunnersKey,
   hubScopesKey,
   hubUrgenciesKey,
-  chunkDetailKey,
-  chunkTranscriptSegmentKey,
-  chunkTranscriptsKey,
-  chunkWorkItemsKey,
   hubBoardChunkWorkItemsKey,
   hubChunkKey,
   hubChunkWorkItemsKey,
@@ -64,7 +61,6 @@ import {
   hubWorkItemsBatchKey,
   hubWorkItemsKey,
   lensedKey,
-  runnerFlagsKey,
 } from './query-keys';
 
 /** Pins the literal array every query key returns, so a key's identity — what an SSE registry prefix reaches and what
@@ -103,7 +99,6 @@ describe('query key identity', () => {
   ['hubRunnersKey', hubRunnersKey, ['hub', 'runners']],
   ['hubScopesKey', hubScopesKey, ['hub', 'scopes']],
   ['hubUrgenciesKey', hubUrgenciesKey, ['hub', 'config', 'urgencies']],
-    ['runnerFlagsKey', runnerFlagsKey, ['host', 'flags']],
   ])('%s is a fixed literal', (_name, actual, expected) => {
     expect(actual).toEqual(expected);
   });

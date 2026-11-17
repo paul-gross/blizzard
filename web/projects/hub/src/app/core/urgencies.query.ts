@@ -1,5 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { hubUrgenciesKey, listUrgenciesApiUrgenciesGet, type UrgencyView } from 'fleet';
+import { listUrgenciesApiUrgenciesGet, type UrgencyView } from 'fleet';
+import { hubUrgenciesKey } from './query-keys';
 
 export const URGENCIES_POLL_MS = 15_000;
 export async function readUrgencies(): Promise<readonly UrgencyView[]> {

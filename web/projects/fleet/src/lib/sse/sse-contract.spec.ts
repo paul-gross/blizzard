@@ -14,7 +14,7 @@ import {
   type KeyedEvent,
   type QuestionEvent,
   type RunnerEvent,
-} from './fleet-live';
+} from './hub-events';
 import {
   ASK_CHANGE_CAUSES,
   ENVIRONMENT_CHANGE_CAUSES,

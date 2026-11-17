@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { completeChunkApiChunksChunkIdCompletePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
+import { completeChunkApiChunksChunkIdCompletePost } from 'fleet';
 import { chunkCompleteMutationKey } from '../../core/mutation-keys';
+import { hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 
 /** The chunk to complete by hand. */
 export interface CompleteVars {

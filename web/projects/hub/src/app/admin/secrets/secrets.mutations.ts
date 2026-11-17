@@ -5,7 +5,6 @@ import {
   createSecretApiSecretsPost,
   type SecretCreateRequestWritable,
   enableSecretApiSecretsNameEnablePost,
-  hubConfigKey,
   replaceSecretApiSecretsNameValuePut,
   retireSecretApiSecretsNameRetirePost,
 } from 'fleet';
@@ -14,6 +13,7 @@ import {
   replaceSecretMutationKey,
   secretLifecycleMutationKey,
 } from '../../core/mutation-keys';
+import { hubConfigKey } from '../../core/query-keys';
 
 /** A secret's new value, against the shown `revision`. */
 export interface SecretReplaceVars {

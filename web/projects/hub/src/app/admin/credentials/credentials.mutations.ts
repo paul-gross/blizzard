@@ -1,12 +1,18 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
 import {
-  checkCredentialApiCredentialsCredentialChecksPost, createCredentialApiCredentialsPost, enableCredentialApiCredentialsCredentialEnablePost, hubConfigKey,
-  patchCredentialApiCredentialsCredentialPatch, retireCredentialApiCredentialsCredentialRetirePost,
-  type CredentialCheckView, type CredentialCreateRequest, type CredentialPatchRequest,
+  checkCredentialApiCredentialsCredentialChecksPost,
+  createCredentialApiCredentialsPost,
+  enableCredentialApiCredentialsCredentialEnablePost,
+  patchCredentialApiCredentialsCredentialPatch,
+  retireCredentialApiCredentialsCredentialRetirePost,
+  type CredentialCheckView,
+  type CredentialCreateRequest,
+  type CredentialPatchRequest,
 } from 'fleet';
 
 import type { CredentialCheckTarget } from './credentials.model';
+import { hubConfigKey } from '../../core/query-keys';
 
 export interface CredentialEditVars {
   readonly credentialId: string;

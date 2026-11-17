@@ -3,9 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { gardenCadenceView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectCreateCadenceMutation, injectEditCadenceMutation } from './cadence-edit.mutations';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 describe('cadence edit mutations', () => {
   let stub: RequestClientStub;

@@ -1,7 +1,8 @@
-import { type ActivityView, type AsyncStateQuery, hubApi, type LoggedEvent } from 'fleet';
+import { type ActivityView, type AsyncStateQuery, hubApi } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { activityPanelState, activityRows, backfillEvents, mergeActivityFeeds } from './activity-panel.model';
+import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 /** No runner's host known — every runner keeps its compact-id name. */
 const NO_HOSTS: ReadonlyMap<string, string> = new Map();

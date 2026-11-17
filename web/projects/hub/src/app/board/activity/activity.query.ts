@@ -1,7 +1,8 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, listActivityApiActivityGet, hubActivityKey, lensedKey } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { type ActivityView, listActivityApiActivityGet } from 'fleet';
+import { hubActivityKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * The backfill row cap for `GET /api/activity` — reconciled with
@@ -22,7 +23,7 @@ export const ACTIVITY_LIMIT = 200;
  * (`activity-panel.ts`) stay the same number in one place.
  *
  * No `refetchInterval`: this is a one-shot backfill, not a poll — the live SSE tee
- * ({@link FleetLiveUpdates}) is what keeps the feed current after the initial read.
+ * ({@link HubLiveUpdates}) is what keeps the feed current after the initial read.
  */
 export function injectHubActivityQuery() {
   const projectFilter = injectProjectFilter();

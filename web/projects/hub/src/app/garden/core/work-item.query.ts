@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getWorkItemApiWorkSourcesSourceItemsRefGet, type WorkItemView, hubWorkItemKey, hubWorkItemsKey } from 'fleet';
+import { getWorkItemApiWorkSourcesSourceItemsRefGet, type WorkItemView } from 'fleet';
+import { hubWorkItemKey, hubWorkItemsKey } from '../../core/query-keys';
 
 /**
  * Hub `GET /api/work-sources/{source}/items/{ref}` read — an accepted proposal's

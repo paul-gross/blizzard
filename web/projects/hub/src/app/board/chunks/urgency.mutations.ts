@@ -1,7 +1,8 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
-import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey, patchChunkApiChunksChunkIdPatch } from 'fleet';
+import { patchChunkApiChunksChunkIdPatch } from 'fleet';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
+import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 
 export interface ChunkUrgencyVars { readonly chunkId: string; readonly urgencyId: string }
 

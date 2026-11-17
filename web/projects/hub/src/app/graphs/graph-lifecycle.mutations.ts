@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost, hubGraphKey, hubGraphsKey } from 'fleet';
+import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetirePost } from 'fleet';
 import { graphLifecycleMutationKey } from '../core/mutation-keys';
+import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
 
 /** Retire or re-enable a graph's reversible lifecycle brake. */
 export interface GraphLifecycleVars {

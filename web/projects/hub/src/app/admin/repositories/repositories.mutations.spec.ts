@@ -3,13 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubConfigKey } from 'fleet';
 import { type RequestClientStub, repositorySummary, stubHubClient } from 'fleet/testing';
 import {
   injectCreateRepositoryMutation,
   injectEditRepositoryMutation,
   injectRepositoryLifecycleMutation,
 } from './repositories.mutations';
+import { hubConfigKey } from '../../core/query-keys';
 
 describe('repository mutations', () => {
   let stub: RequestClientStub;

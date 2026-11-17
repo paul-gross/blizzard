@@ -2,9 +2,10 @@ import { type WritableSignal, provideZonelessChangeDetection, signal } from '@an
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, FleetLiveUpdates, type LoggedEvent, type SseStatus } from 'fleet';
+import { type ActivityView, type SseStatus } from 'fleet';
 import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ActivityPanel } from './activity-panel';
+import { HubLiveUpdates, type LoggedEvent } from '../../core/live/hub-live-updates';
 
 const activityView = (overrides: Partial<ActivityView>): ActivityView => ({
   type: 'chunk-changed',
@@ -41,14 +42,14 @@ describe('ActivityPanel', () => {
       log: () => log(),
       status: () => status(),
       authFailed: () => authFailed(),
-    } as unknown as FleetLiveUpdates;
+    } as unknown as HubLiveUpdates;
     stub = stubHubClient({ 'GET /api/activity': () => ({ activity: [...activity] }) });
     await TestBed.configureTestingModule({
       imports: [ActivityPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        { provide: FleetLiveUpdates, useValue: fakeLive },
+        { provide: HubLiveUpdates, useValue: fakeLive },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ActivityPanel);
@@ -70,14 +71,14 @@ describe('ActivityPanel', () => {
       log: () => [] as readonly LoggedEvent[],
       status: () => 'open' as SseStatus,
       authFailed: () => false,
-    } as unknown as FleetLiveUpdates;
+    } as unknown as HubLiveUpdates;
     stub = stubHubClient({ 'GET /api/activity': () => ({ activity: [] }) });
     await TestBed.configureTestingModule({
       imports: [ActivityPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        { provide: FleetLiveUpdates, useValue: fakeLive },
+        { provide: HubLiveUpdates, useValue: fakeLive },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ActivityPanel);

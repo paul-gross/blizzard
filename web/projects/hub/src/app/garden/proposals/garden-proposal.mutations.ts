@@ -1,8 +1,14 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { acceptGardenProposalApiGardenProposalsProposalIdAcceptPost, passGardenProposalApiGardenProposalsProposalIdPassPost, type GardenProposalAcceptResponse, type GardenProposalView, hubGardenProposalKey, hubGardenProposalsKey, hubRoutineProposalCountsPrefixKey } from 'fleet';
+import {
+  acceptGardenProposalApiGardenProposalsProposalIdAcceptPost,
+  passGardenProposalApiGardenProposalsProposalIdPassPost,
+  type GardenProposalAcceptResponse,
+  type GardenProposalView,
+} from 'fleet';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../../core/mutation-keys';
+import { hubGardenProposalKey, hubGardenProposalsKey, hubRoutineProposalCountsPrefixKey } from '../../core/query-keys';
 
 /** `POST /api/garden-proposals/{proposal_id}/pass` with `{ reason }` —
  * `blizzard hub garden-proposal pass <id> --reason <text>`'s own body. */

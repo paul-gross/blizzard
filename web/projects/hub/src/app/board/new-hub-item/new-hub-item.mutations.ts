@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { createWorkItemApiWorkSourcesSourceItemsPost, hubBacklogKey, hubChunksKey } from 'fleet';
+import { createWorkItemApiWorkSourcesSourceItemsPost } from 'fleet';
 import { createHubItemMutationKey } from '../../core/mutation-keys';
+import { hubBacklogKey, hubChunksKey } from '../../core/query-keys';
 
 /**
  * `POST /api/work-sources/hub/items` — creates a hub item in a project at an urgency, through the generated client

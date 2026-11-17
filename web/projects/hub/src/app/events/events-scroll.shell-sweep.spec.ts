@@ -3,12 +3,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { eventView, settle, stubHubClient } from 'fleet/testing';
-import { APP_SCOPE, HUB_PROJECT_FILTER, type InAppLink } from 'fleet/shell';
+import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import { page } from 'vitest/browser';
 
 import { EventsPage } from './events-page';
 import { EventDetailPage } from './event-detail-page';
 import { eventFingerprint, findEvent } from './event-detail.model';
+import { HUB_PROJECT_FILTER } from '../core/project-filter';
 
 /**
  * The Events page's feed scrolls inside its panel: with more events than the

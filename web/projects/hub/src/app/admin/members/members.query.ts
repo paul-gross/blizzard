@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type MemberView, listMembersApiMembersGet, hubMembersKey } from 'fleet';
+import { type MemberView, listMembersApiMembersGet } from 'fleet';
+import { hubMembersKey } from '../../core/query-keys';
 
 /**
  * `GET /api/members` — the members of the tenant the board acts in, each with the role changes and the revocation the

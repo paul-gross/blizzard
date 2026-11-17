@@ -1,14 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import {
-  type MemberView,
-  type hubApi,
-  grantMembershipApiMembersUserIdPut,
-  hubMembersKey,
-  revokeMembershipApiMembersUserIdDelete,
-} from 'fleet';
+import { type MemberView, type hubApi, grantMembershipApiMembersUserIdPut, revokeMembershipApiMembersUserIdDelete } from 'fleet';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
+import { hubMembersKey } from '../../core/query-keys';
 
 /** A role change's variables: the member and the membership role they are given. */
 export interface MemberRoleVars {

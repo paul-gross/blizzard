@@ -2,9 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { hubConfigKey } from 'fleet';
 import { forgeDetail, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectCreateForgeMutation, injectEditForgeMutation, injectForgeLifecycleMutation } from './forges.mutations';
+import { hubConfigKey } from '../../core/query-keys';
 
 describe('forge mutations', () => {
   let stub: RequestClientStub;

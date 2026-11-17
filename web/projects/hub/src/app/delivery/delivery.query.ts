@@ -2,7 +2,8 @@ import type { Signal } from '@angular/core';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
-import { type FlowFactView, getFlowRecordApiFlowsFlowIdRecordGet, hubFlowsKey } from 'fleet';
+import { type FlowFactView, getFlowRecordApiFlowsFlowIdRecordGet } from 'fleet';
+import { hubFlowsKey } from '../core/query-keys';
 
 /** How many of each flow's newest facts the page reads for its landing times and stages. */
 const HEAD_LIMIT = 200;

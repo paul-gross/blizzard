@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { healthApiHealthGet, hubHealthKey } from 'fleet/shell';
+import { healthApiHealthGet } from 'fleet/shell';
+import { hubHealthKey } from '../../core/query-keys';
 
 /**
  * Hub `/api/health` read, through TanStack Query and the generated hub client.

@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubEnvTimelineKey } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubHubClient, turnSegmentView } from 'fleet/testing';
 import { type LeaseTranscriptRef, injectLeaseTranscriptQuery } from './lease-transcript.query';
+import { hubEnvTimelineKey } from '../../core/query-keys';
 
 @Component({
   selector: 'app-test-lease-transcript-host',

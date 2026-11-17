@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type RunnerRegistryView, pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost, hubRunnersKey } from 'fleet';
+import { type RunnerRegistryView, pauseRunnerApiRunnersRunnerIdPausePost, resumeRunnerApiRunnersRunnerIdResumePost } from 'fleet';
 import { runnerPauseMutationKey } from '../core/mutation-keys';
+import { hubRunnersKey } from '../core/query-keys';
 
 /** Toggle a runner's operator brake: pause stops new leases, resume clears it. */
 export interface RunnerPauseVars {

@@ -6,20 +6,13 @@ import {
 } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
-import {
-  FLEET_CLOCK,
-  getBulkWorkItemsApiWorkItemsGet,
-  hubBoardChunkWorkItemsKey,
-  hubChunkWorkItemsKey,
-  hubWorkItemsBatchKey,
-  type ChunkWorkItemsView,
-  type WorkItemsView,
-} from 'fleet';
+import { FLEET_CLOCK, getBulkWorkItemsApiWorkItemsGet, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
 import {
   mergeWorkItemBatches,
   withinHold,
   workItemBatches,
 } from './board-work-items.model';
+import { hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey, hubWorkItemsBatchKey } from '../query-keys';
 
 /** How long the board reuses a chunk's work items: titles rarely move, and each read can reach
  * an external forge. */

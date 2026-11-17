@@ -1,8 +1,17 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type AnswerResult, type DecisionResolutionConflict, type DecisionResolutionResponse, answerQuestionApiQuestionsQuestionIdAnswersPost, resolveDecisionApiDecisionsDecisionIdResolutionsPost, errorMessage, formatWhen, hubChunkKey, hubChunksKey, hubDecisionsKey } from 'fleet';
+import {
+  type AnswerResult,
+  type DecisionResolutionConflict,
+  type DecisionResolutionResponse,
+  answerQuestionApiQuestionsQuestionIdAnswersPost,
+  resolveDecisionApiDecisionsDecisionIdResolutionsPost,
+  errorMessage,
+  formatWhen,
+} from 'fleet';
 import { answerQuestionMutationKey, resolveDecisionMutationKey } from '../../core/mutation-keys';
+import { hubChunkKey, hubChunksKey, hubDecisionsKey } from '../../core/query-keys';
 
 /** Answer a chunk's open question. */
 export interface AnswerVars {

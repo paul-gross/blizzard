@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import type { ProjectView } from 'fleet';
-import { HUB_PROJECT_FILTER, type InAppLink } from 'fleet/shell';
+import { type InAppLink } from 'fleet/shell';
 import {
   configChangesPage,
   OPERATOR_ME_RESPONSE,
@@ -20,6 +20,7 @@ import { ProjectLens, lensLink } from '../../core/project-lens';
 import { ChangesPage } from '../changes/changes-page';
 import { RepositoriesPage } from '../repositories/repositories-page';
 import { WorkSourcesPage } from '../work-sources/work-sources-page';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 const WINTER: ProjectView = {
   project_id: 'proj_w',

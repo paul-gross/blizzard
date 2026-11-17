@@ -338,7 +338,7 @@ def test_a_replayed_delivery_keeps_the_first_delivered_at(tmp_path: Path) -> Non
 
 def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path: Path) -> None:
     """AC 2 — the delivered trail refreshes off the existing ``chunk-changed`` frame, with
-    no event type of its own. See ``fleet-live.spec.ts`` for the client half."""
+    no event type of its own. See ``hub-live-updates.spec.ts`` for the client half."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)

@@ -3,14 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import {
-  type DecisionResolutionConflict,
-  type DecisionResolutionResponse,
-  formatWhen,
-  hubDecisionsKey,
-} from 'fleet';
+import { type DecisionResolutionConflict, type DecisionResolutionResponse, formatWhen } from 'fleet';
 import { type RequestClientStub, type StubHttpError, stubError, stubHubClient } from 'fleet/testing';
 import { injectResolveDecisionMutation, readDecisionFailure } from './human.mutations';
+import { hubDecisionsKey } from '../../core/query-keys';
 
 describe('injectResolveDecisionMutation', () => {
   let stub: RequestClientStub;

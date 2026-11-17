@@ -4,10 +4,10 @@ import {
   type ProjectNotFoundProblem,
   type ProjectView,
   getProjectApiProjectsProjectGet,
-  hubProjectsKey,
   listProjectsApiProjectsGet,
   problemType,
 } from 'fleet/shell';
+import { hubProjectsKey } from './query-keys';
 
 /** The `type` of the hub's refusal when the tenant holds no such project. */
 const PROJECT_NOT_FOUND: ProjectNotFoundProblem['type'] =

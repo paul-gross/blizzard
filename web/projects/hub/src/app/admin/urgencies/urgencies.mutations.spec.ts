@@ -1,10 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubConfigKey, type UrgencyView } from 'fleet';
+import { type UrgencyView } from 'fleet';
 import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { vi } from 'vitest';
 import { injectCreateUrgencyMutation, injectDefaultUrgencyMutation, injectEditUrgencyMutation, injectPositionUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';
+import { hubConfigKey } from '../../core/query-keys';
 
 const urgency: UrgencyView = { urgency_id: 'u', slug: 'soon', name: 'Soon', color: 'red', emoji: null, icon: null, retired: false, default: false, revision: 1, open_chunks: 0, place: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'u' };
 

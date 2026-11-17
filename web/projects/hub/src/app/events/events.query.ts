@@ -1,7 +1,8 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type EventView, hubApi, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS, hubEventsKey, lensedKey } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { type EventView, hubApi, listEventsApiEventsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { hubEventsKey, lensedKey } from '../core/query-keys';
+import { injectProjectFilter } from '../core/project-filter';
 
 /** `value` narrowed to the generated severity vocabulary (`GET /api/events`'s own query
  * param), or `null` outside the closed set — so a filter value crossing from a generic UI
@@ -27,7 +28,7 @@ export interface HubEventsFilters {
  * from the shell rather than the caller: under a lens the read sends `?project=` (the hub keeps the events of the
  * project's chunks and of the runners that serve it) and keys on it.
  *
- * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({})) {
   const projectFilter = injectProjectFilter();

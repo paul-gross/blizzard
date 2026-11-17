@@ -88,7 +88,7 @@ const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
 };
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream
- * (`App`'s constructor calls `FleetLiveUpdates.start()` unconditionally). */
+ * (`App`'s constructor calls `HubLiveUpdates.start()` unconditionally). */
 class FakeEventSource {
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;

@@ -4,7 +4,6 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import {
   createWorkSourceApiWorkSourcesPost,
   enableWorkSourceApiWorkSourcesSourceEnablePost,
-  hubConfigKey,
   patchWorkSourceApiWorkSourcesSourcePatch,
   retireWorkSourceApiWorkSourcesSourceRetirePost,
   type WorkSourceCreateRequest,
@@ -15,6 +14,7 @@ import {
   editWorkSourceMutationKey,
   workSourceLifecycleMutationKey,
 } from '../../core/mutation-keys';
+import { hubConfigKey } from '../../core/query-keys';
 
 /** A work source edit — the sparse patch against the shown `revision`. */
 export interface WorkSourceEditVars {

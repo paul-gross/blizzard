@@ -3,8 +3,6 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 
 import {
   createProjectApiProjectsPost,
-  hubConfigKey,
-  hubProjectLinksKey,
   linkRepositoryApiProjectsProjectRepositoryLinksRepositoryPut,
   linkSourceApiProjectsProjectSourceLinksSourcePut,
   patchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatch,
@@ -25,6 +23,7 @@ import {
   repositoryBranchMutationKey,
 } from '../../core/mutation-keys';
 import type { LandingPositionVars } from './project-landing-order.model';
+import { hubConfigKey, hubProjectLinksKey } from '../../core/query-keys';
 
 /** A project edit — the sparse patch against the shown `revision`. */
 export interface ProjectEditVars {

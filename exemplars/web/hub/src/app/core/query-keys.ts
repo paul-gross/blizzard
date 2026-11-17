@@ -1,4 +1,4 @@
-// exemplar: stand-in for the permit keys production adds to `query-keys.ts`; the exemplar overlay appends these lines.
+// exemplar: stand-in for the permit keys production adds to the hub's `core/query-keys.ts`; the exemplar overlay appends these lines.
 
 /** The permit listing — `GET /api/permits`. */
 export const hubPermitsKey = ['hub', 'permits'] as const;

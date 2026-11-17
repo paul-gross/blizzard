@@ -10,13 +10,7 @@ import {
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
 
-import {
-  FLEET_CLOCK,
-  hubBoardChunkWorkItemsKey,
-  hubChunkWorkItemsKey,
-  type ChunkWorkItemsView,
-  type WorkItemsView,
-} from 'fleet';
+import { FLEET_CLOCK, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
 import {
   type RequestClientStub,
   settle,
@@ -26,6 +20,7 @@ import {
 } from 'fleet/testing';
 import { WORK_ITEMS_BATCH_SIZE } from './board-work-items.model';
 import { injectBoardWorkItemsQuery } from './board-work-items.query';
+import { hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey } from '../query-keys';
 
 @Component({
   selector: 'app-test-board-work-items-host',
