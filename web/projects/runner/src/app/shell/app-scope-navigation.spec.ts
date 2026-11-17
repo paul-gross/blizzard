@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, type runnerApi, ViewportService } from 'fleet';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerClient, type runnerApi, ViewportService } from 'fleet';
 import {
   chunkDetail,
   chunkNeighborView,
@@ -142,7 +142,14 @@ describe('runner app scope across the board and the chunk page', () => {
     harness = await RouterTestingHarness.create();
   });
 
-  afterEach(() => stub.restore());
+  // `appConfig.providers` registers a real session-recovery interceptor on the module-level `runnerClient`, which
+  // `stub.restore()` leaves in place; specs share one worker's client, so a stale one would classify a later file's
+  // 401 first and set the sessionStorage mark under it.
+  afterEach(() => {
+    stub.restore();
+    runnerClient.interceptors.response.clear();
+    sessionStorage.clear();
+  });
 
   const el = (): HTMLElement => harness.fixture.nativeElement as HTMLElement;
 
