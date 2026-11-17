@@ -1,4 +1,4 @@
-import { assertSkeleton, expect, isFleet, migratedChunk, roleOf, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
+import { assertSkeleton, controlledHubWait, expect, isFleet, migratedChunk, roleOf, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
 
 test.describe('cross-graph migration', () => {
   test.use({ isolation: 'fresh-tenant' });
@@ -20,17 +20,19 @@ test.describe('cross-graph migration', () => {
   });
 });
 
-traced('test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph', async ({ api, issue, repository, runnerHosts, traceSink }) => {
-  test.setTimeout(120000);
-  const state = await migratedChunk({ api, issue, repository, runnerHosts });
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph', async ({ api, clock, flushTraces, issue, repository, runnerHosts, traceSink }) => {
+    test.setTimeout(120000);
+    const state = await migratedChunk({ api, issue, repository, runnerHosts, wait: controlledHubWait(api, clock) });
+    expect(state.status).toBe('done');
+    await flushTraces(state.host);
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-    return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
-  }, { timeout: 30000 }).toEqual([3, 4]);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertSkeleton(tracesOf(spans), [
-    { name: 'step build', outcome: 'migrated', toNode: 'graph:triage-delivery', children: ['queue wait', 'claim'], attributes: { 'blizzard.graph.name': 'default-delivery' } },
-    { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'], link: 'migration', attributes: { 'blizzard.graph.name': 'triage-delivery' } },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
-  ] satisfies StepExpect[]);
+    expect([spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([3, 4]);
+    assertSkeleton(tracesOf(spans), [
+      { name: 'step build', outcome: 'migrated', toNode: 'graph:triage-delivery', children: ['queue wait', 'claim'], attributes: { 'blizzard.graph.name': 'default-delivery' } },
+      { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'], link: 'migration', attributes: { 'blizzard.graph.name': 'triage-delivery' } },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
+    ] satisfies StepExpect[]);
+  });
 });

@@ -1,4 +1,4 @@
-import { assertChunkTrace, assertConforms, assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
+import { type ChunkWait, assertChunkTrace, assertConforms, assertInvocations, assertRunnerNesting, assertSkeleton, controlledHubWait, expect, isFleet, roleOf, type RunnerHost, stepChunkVia, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 const harnesses = [
@@ -28,13 +28,15 @@ function graph(host: RunnerHost, repo: string, harness: typeof harnesses[number]
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
-async function cycle({ api, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
+/** `wait` drives the hub on a controlled stack; `beforePromote` runs between the chunk's mint and its promotion. */
+async function cycle({ api, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number], wait?: ChunkWait, beforePromote?: () => Promise<unknown>) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name, harness) } })).status).toBe(201);
   const { chunk } = await issue('review cycle', { repository: repo });
+  await beforePromote?.();
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value));
+  const status = await stepChunkVia(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value), wait);
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   return { host, repo, chunk, status, detail, pulls };
@@ -59,30 +61,34 @@ for (const harness of harnesses) {
   });
 }
 
-traced('test_review_cycle_fails_once_then_delivers', async ({ api, forge, issue, repository, runnerHosts, traceSink }) => {
-  test.setTimeout(150000);
-  const state = await cycle({ api, forge, issue, repository, runnerHosts }, harnesses[0]!);
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_review_cycle_fails_once_then_delivers', async ({ api, clock, flushTraces, forge, issue, repository, runnerHosts, traceSink }) => {
+    test.setTimeout(150000);
+    // The backlog wait runs from the mint to the promotion; a moved clock gives it a length distinct from zero to assert.
+    const state = await cycle({ api, forge, issue, repository, runnerHosts }, harnesses[0]!, controlledHubWait(api, clock), () => clock.advance(5));
+    expect(state.status).toBe('done');
+    await flushTraces(state.host);
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-    return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
-  }, { timeout: 30000 }).toEqual([5, 8]);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertConforms(spans);
-  const traces = tracesOf(spans);
-  assertSkeleton(traces, [
-    { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim'] },
-    { name: 'step review', outcome: 'transitioned', toNode: 'build', link: 'next' },
-    { name: 'step build', outcome: 'transitioned', toNode: 'review', link: 'next' },
-    { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
-  ] satisfies StepExpect[]);
-  expect(traces.map((trace) => trace.root.attributes['blizzard.step.visit'])).toEqual([1, 1, 2, 2, 1]);
-  expect(traces.slice(0, 2).map((trace) => trace.root.attributes['blizzard.step.choice'])).toEqual(['pass', 'fail']);
-  const life = assertChunkTrace(spans, state.chunk.chunk_id, { outcome: 'done', steps: 5 }).lifetime;
-  const backlog = spans.filter((span) => span.name === 'backlog wait' && span.parentSpanId === life.spanId);
-  expect(backlog).toHaveLength(1);
-  expect(backlog[0]!.startTimeUnixNano).toBe(life.startTimeUnixNano);
-  expect(BigInt(backlog[0]!.endTimeUnixNano)).toBeLessThanOrEqual(BigInt(traces[0]!.root.startTimeUnixNano));
-  expect(Math.round(Number(BigInt(backlog[0]!.endTimeUnixNano) - BigInt(backlog[0]!.startTimeUnixNano)) / 1_000_000)).toBe(life.attributes['blizzard.chunk.backlog_ms']);
-  assertInvocations(assertRunnerNesting(spans, 4), { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model }, review: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
+    expect([spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([5, 8]);
+    assertConforms(spans);
+    const traces = tracesOf(spans);
+    assertSkeleton(traces, [
+      { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim'] },
+      { name: 'step review', outcome: 'transitioned', toNode: 'build', link: 'next' },
+      { name: 'step build', outcome: 'transitioned', toNode: 'review', link: 'next' },
+      { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
+    ] satisfies StepExpect[]);
+    expect(traces.map((trace) => trace.root.attributes['blizzard.step.visit'])).toEqual([1, 1, 2, 2, 1]);
+    expect(traces.slice(0, 2).map((trace) => trace.root.attributes['blizzard.step.choice'])).toEqual(['pass', 'fail']);
+    const life = assertChunkTrace(spans, state.chunk.chunk_id, { outcome: 'done', steps: 5 }).lifetime;
+    const backlog = spans.filter((span) => span.name === 'backlog wait' && span.parentSpanId === life.spanId);
+    expect(backlog).toHaveLength(1);
+    expect(life.attributes['blizzard.chunk.backlog_ms']).toBeGreaterThan(0);
+    expect(backlog[0]!.startTimeUnixNano).toBe(life.startTimeUnixNano);
+    expect(BigInt(backlog[0]!.endTimeUnixNano)).toBeLessThanOrEqual(BigInt(traces[0]!.root.startTimeUnixNano));
+    expect(Math.round(Number(BigInt(backlog[0]!.endTimeUnixNano) - BigInt(backlog[0]!.startTimeUnixNano)) / 1_000_000)).toBe(life.attributes['blizzard.chunk.backlog_ms']);
+    assertInvocations(assertRunnerNesting(spans, 4), { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model }, review: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
+  });
 });

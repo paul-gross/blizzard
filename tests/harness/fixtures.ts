@@ -457,7 +457,7 @@ export type { MockHub } from './mock-world';
 export type { Bounce, Delivered, Federation } from './federation';
 export type { RunnerHosts } from './runner-world';
 export type { OpencodeRelease, RunnerHost, RunnerHostOptions } from './runner-host';
-export { chunkProgress, holdingChunk, leaseProgress, runningLeaseWithWorker, SPAWN_HOLD, seededLeaseWithWorker, stepChunkUntil, stepUntil, stepUntilHeld } from './runner-steps';
+export { type ChunkWait, chunkProgress, controlledHubWait, holdingChunk, leaseProgress, runningLeaseWithWorker, SPAWN_HOLD, seededLeaseWithWorker, stepChunkUntil, stepChunkVia, stepUntil, stepUntilHeld } from './runner-steps';
 export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-worker';
 export type { VendorUsage } from './vendor-usage';
 export type { Clock } from './clock-stack';
