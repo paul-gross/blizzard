@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
@@ -156,6 +157,22 @@ class SourceLink(_Link):
         require_configurable(work_source_id)
         link = cls(project_id=project.project_id, work_source_id=work_source_id, revision=1)
         return link, link._change(ctx, ChangeOp.CREATE, _CREATED, at)
+
+
+@domain_model
+@dataclass(frozen=True, kw_only=True)
+class BuiltInSourceLink:
+    """The built-in hub source's link, standing on every project with no stored record: it has no revision and cannot
+    be unlinked."""
+
+    project_id: ProjectId
+    work_source_id: str = RESERVED_HUB_SOURCE_NAME
+    linked: bool = True
+
+
+def built_in_source_link(project: Project) -> BuiltInSourceLink:
+    """The link ``project`` always holds to the built-in hub source."""
+    return BuiltInSourceLink(project_id=project.project_id)
 
 
 @domain_model

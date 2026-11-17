@@ -30,9 +30,8 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.config.landing_policies import landing_sort_key
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, is_built_in
-from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
+from blizzard.hub.domain.projects.links import BuiltInSourceLink, RepositoryLink, SourceLink, built_in_source_link
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict, RepositoryNotLinked
 from blizzard.wire.project import (
@@ -80,12 +79,12 @@ def _source_view(link: SourceLink, source: ConfiguredWorkSource | None) -> Sourc
     )
 
 
-def _built_in_view(project: Project) -> SourceLinkView:
+def _built_in_view(link: BuiltInSourceLink) -> SourceLinkView:
     return SourceLinkView(
-        project_id=project.project_id,
-        name=RESERVED_HUB_SOURCE_NAME,
-        slug=RESERVED_HUB_SOURCE_NAME,
-        linked=True,
+        project_id=link.project_id,
+        name=link.work_source_id,
+        slug=link.work_source_id,
+        linked=link.linked,
         built_in=True,
     )
 
@@ -201,7 +200,7 @@ def list_source_links(project: PathProject, services: Services) -> SourceLinksVi
     links = services.project_links.sources_of(project.project_id)
     held = services.work_source_records.get_many([link.work_source_id for link in links])
     views = [_source_view(link, held.get(link.work_source_id)) for link in links]
-    views.append(_built_in_view(project))
+    views.append(_built_in_view(built_in_source_link(project)))
     return SourceLinksView(source_links=sorted(views, key=lambda view: view.slug or view.name))
 
 
@@ -218,7 +217,7 @@ def link_source(
     a first link, or a relink of one it unlinked; a standing link, and the built-in ``hub`` source, are left as they
     are. 404 for an unknown project or source; 409 for a stale `If-Match` on a stored link."""
     if is_built_in(source):
-        return _built_in_view(project)
+        return _built_in_view(built_in_source_link(project))
     record = resolved_work_source(source, services)
     try:
         link = services.project_authoring.link_source(

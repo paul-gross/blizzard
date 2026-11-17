@@ -267,6 +267,7 @@ def test_an_unlinked_source_leaves_the_listing(hub: HubHarness) -> None:
 def test_unlinking_the_hub_source_answers_409_and_linking_it_changes_nothing(hub: HubHarness) -> None:
     project_id = _create(hub.client, "widgets")["project_id"]
     before = _changes(hub.client)
+    revision = _ok(hub.client.get("/api/projects/widgets"))["revision"]
 
     linked = _ok(hub.client.put("/api/projects/widgets/source-links/hub"))
     refused = hub.client.post("/api/projects/widgets/source-links/hub/retire")
@@ -282,6 +283,7 @@ def test_unlinking_the_hub_source_answers_409_and_linking_it_changes_nothing(hub
     assert refused.status_code == 409, refused.text
     assert "built in" in refused.json()["detail"]
     assert _changes(hub.client) == before
+    assert _ok(hub.client.get("/api/projects/widgets"))["revision"] == revision
 
 
 def test_a_link_to_an_unknown_record_or_never_linked_answers_404(hub: HubHarness) -> None:
