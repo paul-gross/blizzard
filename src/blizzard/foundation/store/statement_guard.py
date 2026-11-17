@@ -404,5 +404,5 @@ def _key_leaf(side: ClauseElement, leaves: Iterable[FromClause], column: str) ->
 def _is_value(side: object) -> bool:
     """Whether ``side`` is a bound value — a parameter or a literal, possibly grouped or cast — naming no column."""
     while isinstance(side, Grouping | Cast | TypeCoerce):
-        side = side.clause if isinstance(side, Cast | TypeCoerce) else cast("object", side.element)  # pyright: ignore[reportUnknownMemberType]  # SQLAlchemy types Grouping.element with an unparameterized ColumnElement
+        side = side.clause if isinstance(side, Cast | TypeCoerce) else cast("object", side.element)
     return isinstance(side, BindParameter)

@@ -90,10 +90,6 @@ run = "uv run ruff format ."
 description = "Type-check with pyright"
 run = "uv run pyright"
 
-[tasks.unused-ignores]
-description = "Pyright's unnecessary-suppression check over the tests and both store-migration test trees — every type-ignore comment that suppresses nothing, or over the paths passed"
-run = "scripts/unused-ignores.sh"
-
 [tasks.export-openapi]
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"
