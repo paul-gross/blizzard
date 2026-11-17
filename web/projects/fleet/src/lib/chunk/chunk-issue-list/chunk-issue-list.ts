@@ -5,7 +5,7 @@ import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
 import type { Tone } from '../../kit';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
-import { LensLink } from '../../core/lens-link';
+import { AppLink } from '../../core/app-scope';
 import { openLookup } from '../../core/open-lookup';
 
 /** A stated priority's badge tone — advice for the triaging human, never
@@ -44,7 +44,7 @@ const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal
 @Component({
   selector: 'fleet-chunk-issue-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead, RouterLink, LensLink],
+  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead, RouterLink, AppLink],
   templateUrl: './chunk-issue-list.html',
   styleUrl: './chunk-issue-list.css',
 })

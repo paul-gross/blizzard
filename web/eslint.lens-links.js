@@ -1,12 +1,13 @@
 // @ts-check
 const { builtinRules } = require("eslint/use-at-your-own-risk");
 
-// Every in-app link in the hub app and the fleet library keeps the project lens: a
-// template link goes through the `lensLink` pipe, and a navigation to an absolute path
-// passes its commands through `ProjectLens.link`. `scripts/lens-links.mjs` performs that
-// rewrite; this ban keeps a new literal absolute link from bypassing it. The public
-// pages (`/login`, `/invite…`) and a path already under a lens (`/p/…`) are never
-// lensed, so they are exempt. The runner app has no lens and does not load this config.
+// Every in-app link in the hub app and the fleet library keeps the app's scope (the
+// hub's project lens): a template link goes through the `appLink` pipe, or the
+// `appPath` pipe for an anchor that keeps the current query, and a navigation to an
+// absolute path passes its commands through `AppScope` (or the hub's `ProjectLens.link`).
+// This ban keeps a new literal absolute link from bypassing them. The public pages
+// (`/login`, `/invite…`) and a path already under a lens (`/p/…`) are never lensed, so
+// they are exempt. The runner app does not load this config.
 //
 // The ban is `no-restricted-syntax` registered under its own name, so its selectors
 // never replace the root config's `no-restricted-syntax` options for the same files.
@@ -16,7 +17,7 @@ const { builtinRules } = require("eslint/use-at-your-own-risk");
 const ABSOLUTE_LINK_ALLOWED = [];
 
 const MESSAGE =
-  "An in-app link keeps the project lens: pipe a template link through `lensLink`, and pass a navigation's commands through `ProjectLens.link`.";
+  "An in-app link keeps the app's scope: pipe a template link through `appLink` (or `appPath`), and pass a navigation's commands through `AppScope` or `ProjectLens.link`.";
 
 // esquery regexes cannot hold a `/`, so the leading slash is written `[\x2F]`.
 const ABSOLUTE = "/^[\\x2F]/";
@@ -24,7 +25,7 @@ const LENSABLE = "/^[\\x2F](?!(login|invite|p)\\b)/";
 
 const TEMPLATE_SELECTORS = [
   `TextAttribute[name='routerLink'][value=${LENSABLE}]`,
-  "BoundAttribute[name='routerLink'][value.ast.name!='lensLink']",
+  "BoundAttribute[name='routerLink'][value.ast.name!=/^app(Link|Path)$/]",
 ];
 
 const CLASS_SELECTORS = [

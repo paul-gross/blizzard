@@ -4,7 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
 import { KitBackBar } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { injectActiveFlowsQuery } from '../core/flows.query';
 import { injectLaneRepositoriesQuery } from '../core/repositories.query';
 import { DeliveryDrawer } from './delivery-drawer';
@@ -16,7 +16,7 @@ import { DeliveryDrawer } from './delivery-drawer';
 @Component({
   selector: 'app-delivery-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DeliveryDrawer, KitBackBar, LensLink, RouterLink],
+  imports: [DeliveryDrawer, KitBackBar, AppLink, RouterLink],
   templateUrl: './delivery-chunk-page.html',
   styleUrl: './delivery-chunk-page.css',
 })

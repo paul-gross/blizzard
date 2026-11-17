@@ -7,7 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, chunkNeighborhoodView, chunkNeighborView, chunkUsageTotalView } from 'fleet/testing';
 import { ChunkFacts } from './chunk-facts';
-import { IN_APP_LINK, type InAppLink } from '../../core/lens-link';
+import { APP_SCOPE, type InAppLink } from '../../core/app-scope';
 
 @Component({
   imports: [ChunkFacts],
@@ -135,9 +135,9 @@ describe('ChunkFacts', () => {
     const links = fixture.debugElement.queryAll(By.directive(RouterLink)).map((el) => el.injector.get(RouterLink));
     expect(links[0].queryParamsHandling).toBe('merge');
     expect(links[0].queryParams).toEqual({ chunk: 'ch_on', step: null, at: null });
-    expect(links[1].queryParamsHandling).toBe('replace');
-    expect(links[1].queryParams).toBeNull();
-    expect(links[1].urlTree?.toString()).toContain('/board/chunk/ch_off');
+    expect(links[1].queryParamsHandling).toBeUndefined();
+    expect(links[1].queryParams).toBeUndefined();
+    expect(links[1].urlTree?.toString()).toBe('/board/chunk/ch_off');
   });
 });
 
@@ -152,7 +152,7 @@ describe('ChunkFacts navigation', () => {
         { path: 'p/example/board', component: BoardFactsRoute },
         { path: 'p/example/board/chunk/:id', component: StandaloneRoute },
       ]),
-      { provide: IN_APP_LINK, useValue: rewrite },
+      { provide: APP_SCOPE, useValue: { path: rewrite, query: () => ({}) } },
     ] });
     const harness = await RouterTestingHarness.create('/p/example/board?layout=list&chunk=old&step=build&at=12&filter=ready');
     const router = TestBed.inject(Router);

@@ -2,12 +2,15 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
+import { AppScope } from 'fleet/shell';
+
 import {
   ProjectLens,
   lensLink,
   lensSegmentOf,
   lensSource,
   lensedUrl,
+  provideProjectLens,
   unlensedUrl,
   viewOf,
 } from './project-lens';
@@ -219,5 +222,48 @@ describe('ProjectLens', () => {
     await Promise.resolve();
     expect(released).toBe(true);
     await expect(lens.whenReady()).resolves.toBeUndefined();
+  });
+});
+
+describe("the hub's app scope", () => {
+  const setup = async (url: string) => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([
+          { path: 'p/:projectSlug', children: [{ path: '**', component: TestLensView }] },
+          { path: '**', component: TestLensView },
+        ]),
+        provideProjectLens(),
+      ],
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(url);
+    const scope = TestBed.inject(AppScope);
+    return (target: string | readonly unknown[], query?: Record<string, unknown>) =>
+      router.serializeUrl(scope.link(target, query));
+  };
+
+  it('keeps a link under the lens, once, and adds no scope query', async () => {
+    const link = await setup('/p/blizzard/events?severity=critical');
+
+    expect(link('/board')).toBe('/p/blizzard/board');
+    expect(link(['/board', 'chunk', 'chk_1'], { tab: 'general' })).toBe('/p/blizzard/board/chunk/chk_1?tab=general');
+    expect(link('/board?layout=list&chunk=c')).toBe('/p/blizzard/board?layout=list&chunk=c');
+    expect(link('/board/chunk/c#top')).toBe('/p/blizzard/board/chunk/c#top');
+    expect(link('/p/other/board')).toBe('/p/other/board');
+    expect(link(['/p', 'other', 'board'])).toBe('/p/other/board');
+  });
+
+  it('leaves public and relative links alone, and every link while the lens is on All', async () => {
+    const lensed = await setup('/p/blizzard/events');
+
+    expect(lensed('/login')).toBe('/login');
+    expect(lensed(['/invite', 'tok'])).toBe('/invite/tok');
+    expect(lensed(['board'])).toBe('/board');
+    expect(TestBed.inject(AppScope).path(['chk_1'])).toEqual(['chk_1']);
+
+    await TestBed.inject(Router).navigateByUrl('/events');
+    expect(lensed('/board?layout=list')).toBe('/board?layout=list');
   });
 });

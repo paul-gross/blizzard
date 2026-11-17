@@ -17,8 +17,7 @@
       <div class="rows" data-testid="events-rows">
         @for (ev of events(); track ev.id) {
           <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
-            <a class="hit" [routerLink]="['/events', ev.id] | lensLink"
-              [queryParams]="{ severity: severity(), runner: runner(), chunk: chunk(), at: ev.recorded_at, kind: ev.kind, eventChunk: ev.chunk_id, fingerprint: fingerprint(ev) }"
+            <a class="hit" [routerLink]="['/events', ev.id] | appLink: { severity: severity(), runner: runner(), chunk: chunk(), at: ev.recorded_at, kind: ev.kind, eventChunk: ev.chunk_id, fingerprint: fingerprint(ev) }"
               [attr.aria-label]="'Open event ' + ev.kind + ', ' + ev.severity" data-testid="events-open"></a>
             <div class="card-main">
               <span class="card-layout">
@@ -38,13 +37,12 @@
             </div>
             <div class="meta">
               @if (ev.runner_id; as runnerId) {
-                <a data-testid="events-runner" [routerLink]="['/fleet', fleetId(runnerId)] | lensLink" [title]="runnerTitle(runnerId, ev.runner_name)" (click)="$event.stopPropagation()">{{ runnerName(runnerId, ev.runner_name) }}</a>
+                <a data-testid="events-runner" [routerLink]="['/fleet', fleetId(runnerId)] | appLink" [title]="runnerTitle(runnerId, ev.runner_name)" (click)="$event.stopPropagation()">{{ runnerName(runnerId, ev.runner_name) }}</a>
               }
               @if (ev.runner_id && ev.chunk_id) { <span aria-hidden="true"> · </span> }
               @if (ev.chunk_id; as chunkId) {
                 <a class="chunk" data-testid="events-chunk" [attr.aria-label]="'Open chunk ' + shortId(chunkId)"
-                  [routerLink]="(mobile() ? ['/board', 'chunk', chunkId] : ['/board']) | lensLink"
-                  [queryParams]="mobile() ? null : { chunk: chunkId }" (click)="$event.stopPropagation()">{{ shortId(chunkId) }}</a>
+                  [routerLink]="(mobile() ? ['/board', 'chunk', chunkId] : ['/board']) | appLink: (mobile() ? null : { chunk: chunkId })" (click)="$event.stopPropagation()">{{ shortId(chunkId) }}</a>
               }
             </div>
           </div>

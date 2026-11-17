@@ -3,10 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, formatWhen, ViewportService, type hubApi } from 'fleet';
+import { ChunkPage, ChunkPageRoute, formatWhen, ViewportService, type hubApi } from 'fleet';
+import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import {
   assetArtifactView,
   chunkDetail,
+  chunkNeighborView,
+  chunkNeighborhoodView,
   chunkSummary,
   commitArtifactView,
   decisionView,
@@ -713,5 +716,74 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-artifact-back"]')?.getAttribute('href')).toBe(
       `/board/chunk/${CHUNK_ID}`,
     );
+  });
+});
+
+/**
+ * A hop between chunks under the project lens (`/p/<slug>/…`), through the hub's own chunk-page route host
+ * ({@link ChunkPageRoute}): the dependency edge keeps the lens and drops the page's drill-down, and the visit's
+ * per-chunk state — an action notice raised on the first chunk — does not follow it to the second.
+ */
+describe('Chunk page neighbor hop under the project lens', () => {
+  const SLUG = 'blizzard';
+  const NEIGHBOR_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYNR2R2';
+  const QUESTION = questionView({ question_id: 'qn_9', chunk_id: CHUNK_ID, question: 'Which API style?', options: [], answered: false });
+  let stub: RequestClientStub;
+
+  /** The lens's link policy, as the hub's `lensScope` applies it: an absolute path kept under `/p/<slug>`. */
+  const lensPath = (link: InAppLink): InAppLink =>
+    typeof link === 'string' ? `/p/${SLUG}${link}` : [`/p/${SLUG}${String(link[0])}`, ...link.slice(1)];
+
+  beforeEach(() => {
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+        chunk_id === CHUNK_ID
+          ? {
+              ...DETAIL,
+              status: 'waiting_on_human',
+              questions: [QUESTION],
+              neighborhood: chunkNeighborhoodView({ dependents: [chunkNeighborView({ chunk_id: NEIGHBOR_ID, status: 'running' })] }),
+            }
+          : chunkDetail({ chunk_id: NEIGHBOR_ID }),
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'POST /api/questions/{question_id}/answers': () => stubError(404, { detail: 'unknown question qn_9' }),
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([
+          { path: 'p/:slug/board', component: BoardStub },
+          { path: 'p/:slug/board/chunk/:chunkId', component: ChunkPageRoute, providers: HUB_CHUNK_PAGE_PROVIDERS },
+        ]),
+        { provide: APP_SCOPE, useValue: { path: lensPath, query: () => ({}) } },
+      ],
+    });
+    TestBed.inject(ViewportService).setOverride('desktop');
+  });
+
+  afterEach(() => stub.restore());
+
+  it('keeps the lens, clears the drill-down, and leaves the first chunk\'s action error behind', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/p/${SLUG}/board/chunk/${CHUNK_ID}?tab=general&artifact=a.1&step=s1&segment=seg&sidechain=side&from=sess-1`);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    input.value = 'graphql';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settle(harness.fixture);
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown question');
+
+    el.querySelector<HTMLAnchorElement>('[data-testid="blocks-neighbor"]')!.click();
+    await settle(harness.fixture);
+
+    expect(TestBed.inject(Router).url).toBe(`/p/${SLUG}/board/chunk/${NEIGHBOR_ID}`);
+    expect(el.querySelector('[data-testid="board-chunk-detail"]')?.textContent).toContain(NEIGHBOR_ID);
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent?.trim() ?? '').toBe('');
   });
 });

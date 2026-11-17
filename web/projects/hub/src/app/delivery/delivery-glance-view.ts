@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import { RouterLink } from '@angular/router';
 
 import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, type KitCountCell, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { cardStageColor, cardStageLabel, deliveredRecently, type DeliveryList, type DeliveryRow } from './delivery.model';
 
 /** The phone list's two groups. */
@@ -17,7 +17,7 @@ type DeliveryFilter = 'delivering' | 'recent';
 @Component({
   selector: 'app-delivery-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon, LensLink, NgTemplateOutlet, RouterLink],
+  imports: [KitAsyncState, KitCountStrip, KitCountStripSkeleton, KitSkeleton, LaneIcon, AppLink, NgTemplateOutlet, RouterLink],
   templateUrl: './delivery-glance-view.html',
   styleUrl: './delivery-glance-view.css',
 })

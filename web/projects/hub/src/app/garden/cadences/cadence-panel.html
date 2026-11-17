@@ -105,7 +105,7 @@
             <div class="cp-chore-head">
               <code class="cp-chore-key">{{ chore.key }}</code>
               <span class="cp-dim">runs</span>
-              <a class="cp-link" [routerLink]="['/gardening', 'routines', chore.routine] | lensLink">{{ chore.routine }}</a>
+              <a class="cp-link" [routerLink]="['/gardening', 'routines', chore.routine] | appLink">{{ chore.routine }}</a>
               <span class="cp-dim">over {{ chore.scopes }}, {{ chore.mode }}{{ chore.promote ? ', promoting' : '' }}</span>
               <span class="cp-grow"></span>
               @if (canEdit()) {
@@ -178,7 +178,7 @@
                               @if (errand.lastRunChunkId; as chunkId) {
                                 <a
                                   class="cp-link"
-                                  [routerLink]="['/gardening', 'runs', chunkId] | lensLink"
+                                  [routerLink]="['/gardening', 'runs', chunkId] | appLink"
                                   data-testid="gardening-cadence-errand-run"
                                   ><fleet-when [iso]="at" [relative]="true"
                                 /></a>

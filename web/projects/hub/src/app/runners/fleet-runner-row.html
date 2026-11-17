@@ -49,7 +49,7 @@
         <ul class="claims" data-testid="fleet-runner-claims">
           @for (claim of row().claims; track claim.chunkId) {
             <li class="claim">
-              <a class="claim-link" data-testid="fleet-runner-claim-link" [routerLink]="['/board', 'chunk', claim.chunkId] | lensLink">
+              <a class="claim-link" data-testid="fleet-runner-claim-link" [routerLink]="['/board', 'chunk', claim.chunkId] | appLink">
                 <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
                 <span class="node" [title]="claim.node">{{ claim.node }}</span>
                 <span class="sep">·</span>

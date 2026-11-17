@@ -1,5 +1,6 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, type Provider, computed, inject, signal } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
+import { APP_SCOPE, type AppScopePolicy } from 'fleet/shell';
 
 /** The query param naming the runner the panel is narrowed to, by its name on the host. */
 export const RUNNER_PARAM = 'runner';
@@ -50,4 +51,28 @@ export class PanelFilters {
     if (value === current) return Promise.resolve(false);
     return this.router.navigate([], { queryParams: { [param]: value }, queryParamsHandling: 'merge' });
   }
+}
+
+/**
+ * The runner app's {@link APP_SCOPE} policy: no path rewrite, and the panel's `?runner=` and `?project=` filters — each
+ * only when set — as the scope query, so a shared cross-page link keeps the display context it was opened under.
+ */
+export function providePanelScope(): Provider {
+  return {
+    provide: APP_SCOPE,
+    useFactory: (): AppScopePolicy => {
+      const filters = inject(PanelFilters);
+      return {
+        path: (link) => link,
+        query: () => {
+          const runner = filters.runner();
+          const project = filters.project();
+          return {
+            ...(runner === null ? {} : { [RUNNER_PARAM]: runner }),
+            ...(project === null ? {} : { [PROJECT_PARAM]: project }),
+          };
+        },
+      };
+    },
+  };
 }

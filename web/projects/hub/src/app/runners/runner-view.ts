@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, RunnerConnection, SubscriptionBlocks, KitErrorLine } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
 import { localPauseHint, runnerSeenLabel, runnerSeenTag, runnerToggleHint, type RunnerRow } from './runner-rows.model';
@@ -21,7 +21,7 @@ import { StatusLight } from './status-light';
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, KitAsyncState, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks, KitErrorLine],
+  imports: [NgTemplateOutlet, KitAsyncState, KitButton, KitGlyph, KitPanel, KitSkeleton, KitSlotBar, AppLink, RouterLink, StatusLight, SubscriptionBlocks, KitErrorLine],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

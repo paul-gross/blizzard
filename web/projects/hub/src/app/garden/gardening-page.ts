@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { FLEET_CLOCK, KitTab, KitTabStrip } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { gardenPathOf } from './garden-lens.guard';
 import { injectHubCadencesQuery } from './core/cadences.query';
@@ -34,7 +34,7 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
   imports: [
     KitTab,
     KitTabStrip,
-    LensLink,
+    AppLink,
     RouterLink,
     RouterOutlet,
   ],

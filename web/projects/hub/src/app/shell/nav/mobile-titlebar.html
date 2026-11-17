@@ -1,5 +1,5 @@
 <fleet-mobile-titlebar [live]="live()" [menu]="shellMenu">
-  <a fleetMobileTitle class="lens" data-testid="mobile-titlebar-lens" [routerLink]="pickerLink | lensLink" [queryParams]="{ from: fromView() }" [attr.title]="lensName()">
+  <a fleetMobileTitle class="lens" data-testid="mobile-titlebar-lens" [routerLink]="pickerLink | appLink: { from: fromView() }" [attr.title]="lensName()">
     <span class="sep" aria-hidden="true">·</span>
     @if (lensed()?.color; as color) {
       <fleet-kit-swatch class="swatch" [color]="color" />

@@ -16,7 +16,7 @@ import {
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 import { hasDelivery } from '../chunk-detail/has-delivery';
-import { LensLink } from '../../core/lens-link';
+import { AppLink } from '../../core/app-scope';
 
 /**
  * The chunk detail page's General tab.
@@ -39,7 +39,7 @@ import { LensLink } from '../../core/lens-link';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, AppLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })

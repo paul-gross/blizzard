@@ -20,7 +20,7 @@ import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
 import { boardBackParams, chunkProjectColor, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
-import { IN_APP_LINK, LensLink } from '../../core/lens-link';
+import { AppLink, AppScope } from '../../core/app-scope';
 
 /**
  * The chunk detail page (`/board/chunk/:chunkId`), written once for both daemons,
@@ -59,7 +59,7 @@ import { IN_APP_LINK, LensLink } from '../../core/lens-link';
     KitAsyncState,
     KitBackBar,
     KitTabs,
-    RouterLink, LensLink,
+    RouterLink, AppLink,
     KitErrorLine,
   ],
   templateUrl: './chunk-page.html',
@@ -70,7 +70,7 @@ export class ChunkPage {
   private readonly viewport = inject(ViewportService);
   private readonly element = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
-  private readonly inAppLink = inject(IN_APP_LINK);
+  private readonly appScope = inject(AppScope);
 
   /** The daemon this page reads from — its `target` is exposed to the
    * template for {@link ChunkTranscriptsContainer}'s own seam. */
@@ -239,7 +239,7 @@ export class ChunkPage {
   protected readonly control = this.actions?.control ?? null;
 
   /** A deleted chunk has no page left to show — back to the board, with nothing selected. */
-  protected readonly backToBoard = (): void => void this.router.navigate(this.inAppLink(this.boardLinkBase()) as unknown[]);
+  protected readonly backToBoard = (): void => void this.router.navigateByUrl(this.appScope.link(this.boardLinkBase()));
 
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.actions?.answer(event);

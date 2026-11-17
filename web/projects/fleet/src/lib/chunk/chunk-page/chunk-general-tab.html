@@ -28,7 +28,7 @@
       <span fleetKitPanelHeader class="graph-slot">
         <span class="graph-sep" aria-hidden="true">·</span>
         @if (graphLinkBase(); as base) {
-          <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | lensLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
+          <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | appLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
         } @else {
           <span class="graph-link" data-testid="node-history-graph" [title]="detail().graph_id">{{ graphLabel() }}</span>
         }
@@ -55,7 +55,7 @@
      node history when General shows it, on a line of its own otherwise. -->
 <ng-template #eventsLink>
   @if (eventsLinkBase(); as base) {
-    <a class="events-link" data-testid="chunk-events-link" [routerLink]="base | lensLink" [queryParams]="{ chunk: detail().chunk_id }"
+    <a class="events-link" data-testid="chunk-events-link" [routerLink]="base | appLink: { chunk: detail().chunk_id }"
       >events →</a
     >
   }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { ChunkPage, KitAsyncState, provideChunkPageDaemon } from 'fleet';
+import { ChunkPageRoute, KitAsyncState, provideChunkPageDaemon } from 'fleet';
 
 import { ChunkOwner } from './chunk-owner';
 
@@ -14,7 +14,7 @@ import { ChunkOwner } from './chunk-owner';
 @Component({
   selector: 'app-runner-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkPage, KitAsyncState],
+  imports: [ChunkPageRoute, KitAsyncState],
   providers: [
     ChunkOwner,
     provideChunkPageDaemon(() => {

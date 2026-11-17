@@ -9,12 +9,11 @@
         <div><strong>Recorded at</strong> {{ ev.recorded_at }}</div>
         @if (ev.runner_id; as id) {
           <div><strong>Runner</strong> <a class="runner-link" data-testid="event-detail-runner"
-            [routerLink]="['/fleet', runnerFleetIds().get(id) ?? id] | lensLink">{{ runnerName(id, ev.runner_name) }} ({{ id }})</a></div>
+            [routerLink]="['/fleet', runnerFleetIds().get(id) ?? id] | appLink">{{ runnerName(id, ev.runner_name) }} ({{ id }})</a></div>
         }
         @if (ev.chunk_id; as id) {
           <div><strong>Chunk</strong> <a class="chunk-link" data-testid="event-detail-chunk"
-            [routerLink]="(mobile() ? ['/board', 'chunk', id] : ['/board']) | lensLink"
-            [queryParams]="mobile() ? null : { chunk: id }">{{ id }}</a></div>
+            [routerLink]="(mobile() ? ['/board', 'chunk', id] : ['/board']) | appLink: (mobile() ? null : { chunk: id })">{{ id }}</a></div>
         }
         @if (ev.lease_id; as id) { <div><strong>Lease</strong> {{ id }}</div> }
         @if (ev.node_name; as node) { <div><strong>Node</strong> {{ node }}</div> }

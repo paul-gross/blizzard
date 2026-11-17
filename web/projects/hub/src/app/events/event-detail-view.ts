@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { type EventView, type KitAsyncStateValue, KitAsyncState, KitPanel, KitSkeleton, runnerDisplayName } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 @Component({
   selector: 'app-event-detail-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitSkeleton, LensLink, RouterLink],
+  imports: [KitAsyncState, KitPanel, KitSkeleton, AppLink, RouterLink],
   templateUrl: './event-detail-view.html',
   styleUrl: './event-detail-view.css',
 })

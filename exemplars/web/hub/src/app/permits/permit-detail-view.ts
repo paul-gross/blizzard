@@ -4,14 +4,14 @@ import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, 
 import { RouterLink } from '@angular/router';
 
 import { type KitAsyncStateValue, type KitFact, type PermitView, FleetWhen, KitAsyncState, KitFactList, KitPanel } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 import { permitProjectLabel } from './permits-page.model';
 
 /** A panel of one permit's facts, linking back to the listing. */
 @Component({
   selector: 'app-permit-detail-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitFactList, KitPanel, LensLink, RouterLink],
+  imports: [FleetWhen, KitAsyncState, KitFactList, KitPanel, AppLink, RouterLink],
   templateUrl: './permit-detail-view.html',
 })
 export class PermitDetailView {

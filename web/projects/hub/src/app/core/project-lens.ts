@@ -6,9 +6,14 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { NavigationEnd, Router, type UrlTree } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 
-import { HUB_PROJECT_FILTER, IN_APP_LINK, type InAppLink } from 'fleet/shell';
+import {
+  APP_SCOPE,
+  type AppScopePolicy,
+  HUB_PROJECT_FILTER,
+  type InAppLink,
+} from 'fleet/shell';
 
 /** The URL segment a lensed board URL opens with: `/p/{project}/{view}/…`. */
 export const LENS_SEGMENT = 'p';
@@ -172,12 +177,6 @@ export class ProjectLens {
     return lensLink(link, this.slug());
   }
 
-  /** `link`, an absolute in-app URL, under the lens the board is on, as a router URL tree — so a query and a fragment
-   * in it survive a `routerLink`. */
-  linkTree(link: string): UrlTree {
-    return this.router.parseUrl(this.link(link));
-  }
-
   /** The URL of the view `from` names (default: the board's current location), under the lens of `slug` (`null` for
    * All), keeping the board's layout but not its drawer state — see {@link lensSource} and {@link viewOf}. */
   private viewUnder(slug: string | null, from?: string | null): string {
@@ -228,16 +227,16 @@ export class ProjectLens {
   }
 }
 
-/** The lens's providers for the hub app: the reads' project filter and the links' rewrite, both from {@link ProjectLens}. */
+/** The hub's app-scope policy: a link's path kept under the lens the board is on ({@link lensLink}), and no scope
+ * query — the lens lives in the path. */
+export function lensScope(lens: ProjectLens): AppScopePolicy {
+  return { path: (link: InAppLink) => lens.link(link), query: () => ({}) };
+}
+
+/** The lens's providers for the hub app: the reads' project filter and the links' scope, both from {@link ProjectLens}. */
 export function provideProjectLens(): Provider[] {
   return [
     { provide: HUB_PROJECT_FILTER, useFactory: () => inject(ProjectLens).slug },
-    {
-      provide: IN_APP_LINK,
-      useFactory: () => {
-        const lens = inject(ProjectLens);
-        return (link: InAppLink) => lens.link(link);
-      },
-    },
+    { provide: APP_SCOPE, useFactory: () => lensScope(inject(ProjectLens)) },
   ];
 }

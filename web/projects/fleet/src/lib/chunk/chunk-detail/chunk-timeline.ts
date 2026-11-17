@@ -20,7 +20,7 @@ import {
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
 import { chunkGraphLabel } from './graph-label';
-import { LensLink } from '../../core/lens-link';
+import { AppLink } from '../../core/app-scope';
 import { toneColor } from '../../kit/kit-badge';
 import { verdictTone } from './verdict-tone';
 import { deriveActiveGraphHeader, deriveGraphHeaders } from './chunk-timeline-graphs.model';
@@ -49,7 +49,7 @@ import { deriveActiveGraphHeader, deriveGraphHeaders } from './chunk-timeline-gr
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSectionHead, NgTemplateOutlet, SessionEfficiency, RouterLink, LensLink],
+  imports: [KitAsyncState, KitSectionHead, NgTemplateOutlet, SessionEfficiency, RouterLink, AppLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })

@@ -18,7 +18,7 @@ import {
   KitSelect,
   type UrgencyView,
 } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { urgencyOptions } from '../../core/urgency-options.model';
@@ -168,7 +168,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, KitSelect, LensLink, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, KitSelect, AppLink, RouterLink],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })

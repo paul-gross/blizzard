@@ -7,7 +7,7 @@
       class="id"
       data-testid="detail-id"
       [attr.title]="detail().chunk_id"
-      [routerLink]="[...linkBase(), detail().chunk_id] | lensLink"
+      [routerLink]="[...linkBase(), detail().chunk_id] | appLink"
       >{{ detail().chunk_id }}</a
     >
     <span class="d-sub">

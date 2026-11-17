@@ -12,7 +12,7 @@
     (togglePause)="toggle($event)"
   />
 } @else {
-  <a class="back-row" [routerLink]="['/fleet'] | lensLink" data-testid="mobile-fleet-back">
+  <a class="back-row" [routerLink]="['/fleet'] | appLink" data-testid="mobile-fleet-back">
     <fleet-kit-back-bar label="Fleet" />
   </a>
   <div class="detail" data-testid="mobile-fleet-detail">

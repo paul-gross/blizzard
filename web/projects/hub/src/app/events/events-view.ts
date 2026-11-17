@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, resource } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { LensLink } from 'fleet/shell';
+import { AppLink } from 'fleet/shell';
 
 import { type EventView, hubApi, compactRef, formatSeenTag, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
 import { eventFingerprints } from './event-detail.model';
@@ -44,7 +44,7 @@ const SEVERITY_ICON = openLookup<EventView['severity'], string>(
 @Component({
   selector: 'app-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSelect, KitSkeleton, LensLink, RouterLink],
+  imports: [KitAsyncState, KitSelect, KitSkeleton, AppLink, RouterLink],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })

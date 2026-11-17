@@ -12,7 +12,7 @@ import {
   stubError,
   stubHubClient,
 } from '../../testing/stub-request-client';
-import { IN_APP_LINK } from '../lens-link';
+import { APP_SCOPE, type InAppLink } from '../app-scope';
 import { flagGuard } from './flag-guard';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
 
@@ -57,7 +57,7 @@ describe('flagGuard', () => {
         ]),
         ...(lens === null
           ? []
-          : [{ provide: IN_APP_LINK, useValue: (link: string) => `/p/${lens}${link === '/' ? '' : link}` }]),
+          : [{ provide: APP_SCOPE, useValue: { path: (link: InAppLink) => `/p/${lens}${link === '/' ? '' : String(link)}`, query: () => ({ ignored: 'x' }) } }]),
       ],
     });
     return TestBed.inject(Router);

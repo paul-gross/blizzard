@@ -2,6 +2,7 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessC
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideFlags } from 'fleet/shell';
+import { providePanelScope } from '../core/panel-filters';
 import { runnerFlagsRead } from '../core/flags.query';
 import { provideSessionRecovery } from '../core/identity/session-recovery.provider';
 
@@ -22,5 +23,6 @@ export const appConfig: ApplicationConfig = {
     provideSessionRecovery(),
     // Features read the host's flags through the shared store: one read at start.
     provideFlags(runnerFlagsRead),
+    providePanelScope(),
   ],
 };

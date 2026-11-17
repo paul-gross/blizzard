@@ -13,7 +13,7 @@ export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filt
 export { RUNNER_HOST_NAMES, RUNNER_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';
-export { IN_APP_LINK, LensLink, type InAppLink } from './lib/core/lens-link';
+export { APP_SCOPE, AppLink, AppPath, AppScope, type AppScopePolicy, type InAppLink, type TargetQuery } from './lib/core/app-scope';
 
 export { ViewportService } from './lib/core/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/core/viewport/matches-mobile-viewport';
