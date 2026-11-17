@@ -87,4 +87,45 @@ describe('KitProseBlock', () => {
 
     expect((el.querySelector('.tx') as HTMLElement).textContent).toBe('line one\nline two');
   });
+
+  it('reads its text as plain prose by default', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.tx')).toBeTruthy();
+    expect(el.querySelector('fleet-kit-markdown')).toBeNull();
+  });
+});
+
+@Component({
+  selector: 'fleet-test-markdown-host',
+  imports: [KitProseBlock],
+  template: `<fleet-kit-prose-block format="markdown" label="Summary" [text]="text" testid="prose-md" />`,
+})
+class MarkdownHost {
+  readonly text = '## Heading\n\nA paragraph.\n\n- one\n- two';
+}
+
+describe('KitProseBlock markdown format', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [MarkdownHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+  });
+
+  it('renders the body through fleet-kit-markdown in place of the plain text element', async () => {
+    const fixture = TestBed.createComponent(MarkdownHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const body = el.querySelector('[data-testid="prose-md"] .body')!;
+    expect(body.querySelector('fleet-kit-markdown')).toBeTruthy();
+    expect(el.querySelector('.tx')).toBeNull();
+    expect(body.querySelector('h2')?.textContent?.trim()).toBe('Heading');
+    expect(body.querySelectorAll('li')).toHaveLength(2);
+    expect(el.querySelector('.who')?.textContent).toBe('Summary');
+    expect(el.querySelector('.rail .tick')).toBeTruthy();
+  });
 });

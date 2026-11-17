@@ -10,10 +10,14 @@ const meta: Meta<KitProseBlock> = {
     label: 'Worker',
     text: 'Implemented the slot gauge and added unit coverage for the overflow case.',
     testid: null,
+    format: 'plain',
+  },
+  argTypes: {
+    format: { control: 'inline-radio', options: ['plain', 'markdown'] },
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-prose-block [kind]="kind" [label]="label" [text]="text" [testid]="testid" />`,
+    template: `<fleet-kit-prose-block [kind]="kind" [label]="label" [text]="text" [testid]="testid" [format]="format" />`,
   }),
 };
 export default meta;
@@ -38,5 +42,12 @@ export const LongText: Story = {
 export const MultilineText: Story = {
   args: {
     text: 'First line of output.\nSecond line, after a newline.\n\nA paragraph after a blank line.',
+  },
+};
+export const Markdown: Story = {
+  args: {
+    format: 'markdown',
+    label: 'Summary',
+    text: '## Slot gauge\n\nThe runner registry now paces each rate-limit window against its own **reset clock**.\n\nA second paragraph names `src/runner/gauge.ts` and the follow-ups:\n\n- flag a runner running ahead of its elapsed share\n- leave a lagging runner alone',
   },
 };

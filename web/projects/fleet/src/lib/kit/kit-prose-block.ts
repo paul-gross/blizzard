@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import { KitMarkdown } from './kit-markdown';
+
 /**
  * A block of prose a coding agent reads or writes — a graph node's prompt, a
  * sweep measurement, a proposal's rationale — set apart from the surrounding UI
@@ -8,14 +10,18 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * Lifted from `transcripts/transcript-viewer.css`'s `.turn` shape into the kit,
  * so an agent's words look the same here as they do in a transcript.
  *
- * `text` is an input, not `<ng-content>`, deliberately: the body renders
- * `white-space: pre-wrap` so the prose's own line breaks are preserved, and
- * projected content would carry the consumer template's own indentation into
- * that output.
+ * `text` is an input, not `<ng-content>`, deliberately: in `plain` format the
+ * body renders `white-space: pre-wrap` so the prose's own line breaks are
+ * preserved, and projected content would carry the consumer template's own
+ * indentation into that output. In `markdown` format the body is a
+ * `fleet-kit-markdown` in place of that plain element — never nested in it — so
+ * it inherits neither `pre-wrap` nor the monospace face; the rail and label stay
+ * the same in both.
  */
 @Component({
   selector: 'fleet-kit-prose-block',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitMarkdown],
   templateUrl: './kit-prose-block.html',
   styleUrl: './kit-prose-block.css',
 })
@@ -34,5 +40,12 @@ export class KitProseBlock {
   /** A short heading above the prose — the step's name, the scope's slug. Omitted when null. */
   readonly label = input<string | null>(null);
   readonly text = input.required<string>();
+
+  /**
+   * How `text` is read: `plain` keeps the prose verbatim, its own line breaks
+   * and indentation intact, in the monospace face; `markdown` renders it through
+   * `fleet-kit-markdown` for prose authored as Markdown (a finding's summary).
+   */
+  readonly format = input<'plain' | 'markdown'>('plain');
   readonly testid = input<string | null>(null);
 }
