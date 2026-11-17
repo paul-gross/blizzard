@@ -11,7 +11,7 @@ const op = (operation: string, outcome: OperationResultView['outcome'], detail: 
 });
 const CHECK: CredentialCheckView = {
   credential: 'gh-main', binding: 'github.token', variant: 'fine-grained', variant_contradicted: false,
-  granted_permissions: null, mint: null, not_evaluated: NOT_EVALUATED,
+  granted_permissions: null, mint: null, not_evaluated: NOT_EVALUATED, unreached_reason: null,
   uses: [
     {
       kind: 'repository', id: 'repo_c', slug: 'core', reached: true,
@@ -61,6 +61,12 @@ describe('CredentialCheckTable', () => {
     expect(uses.map((use) => use.textContent)).toEqual([expect.stringContaining('repository core'), expect.stringContaining('work source issues')]);
     expect(uses[0].querySelector('[data-testid="credential-check-unreached"]')).toBeNull();
     expect(uses[1].querySelector('[data-testid="credential-check-unreached"]')).not.toBeNull();
+  });
+
+  it('says why no use was reached, and says nothing when one was', () => {
+    const el = render({ ...CHECK, unreached_reason: 'the installation could not be read: ReadTimeout' });
+    expect(all(el, 'credential-check-unreached-reason')[0].textContent).toContain('No use was reached: the installation could not be read: ReadTimeout');
+    expect(all(render(CHECK), 'credential-check-unreached-reason')).toHaveLength(0);
   });
 
   it('shows a refused mint above the uses', () => {

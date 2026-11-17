@@ -11,6 +11,7 @@ import {
   type ForgeBindingsView,
   type ForgeSummary,
   type OperationResultView,
+  type UseResultView,
   type Tone,
   errorMessage,
   unlisted,
@@ -228,6 +229,8 @@ export interface CredentialCheckVm {
   /** The warning shown when the declared variant disagrees with the token itself, else `null`. */
   readonly variantWarning: string | null;
   readonly uses: readonly CheckUseVm[];
+  /** Why the check reached no use, when the forge gave no answer to building the credential's authorization. */
+  readonly unreachedReason: string | null;
   readonly emptyText: string;
   readonly notEvaluated: string;
 }
@@ -252,6 +255,19 @@ export function checkOutcomeTone(outcome: OperationResultView['outcome']): Tone 
   }
 }
 
+/** What a check heads a use with: its kind, as an operator reads it; a kind this build does not know, as sent. */
+function checkUseNoun(kind: UseResultView['kind']): string {
+  switch (kind) {
+    case 'repository':
+      return 'repository';
+    case 'work_source':
+      return 'work source';
+    default:
+      unlisted(kind);
+      return kind;
+  }
+}
+
 function checkOperationVm(result: OperationResultView): CheckOperationVm {
   const diagnostic = result.diagnostic;
   return {
@@ -271,10 +287,11 @@ export function credentialCheckVm(check: CredentialCheckView): CredentialCheckVm
     variantWarning: check.variant_contradicted ? 'The declared variant disagrees with the token itself.' : null,
     uses: check.uses.map((use) => ({
       key: `${use.kind}:${use.id}`,
-      heading: `${use.kind.replace('_', ' ')} ${use.slug}`,
+      heading: `${checkUseNoun(use.kind)} ${use.slug}`,
       reached: use.reached,
       operations: use.operations.map(checkOperationVm),
     })),
+    unreachedReason: check.unreached_reason,
     emptyText: 'No enabled repository or work source uses this credential.',
     notEvaluated: check.not_evaluated,
   };

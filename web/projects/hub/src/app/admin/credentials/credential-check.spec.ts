@@ -8,7 +8,7 @@ import { CredentialCheck } from './credential-check';
 
 const ANSWER: CredentialCheckView = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
-  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.',
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null,
   uses: [{ kind: 'repository', id: 'repo_c', slug: 'core', reached: true, operations: [{ operation: 'access', outcome: 'proven', detail: null, diagnostic: null }] }],
 };
 

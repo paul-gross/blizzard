@@ -156,6 +156,7 @@ describe('credential picker', () => {
       credential: 'gh-main', binding: 'github.app-installation', variant: null, variant_contradicted: false, granted_permissions: { contents: 'write' },
       mint: { operation: 'mint', outcome: 'refused', detail: 'The installation is suspended.', diagnostic: null },
       not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.',
+      unreached_reason: null,
       uses: [{
         kind: 'work_source', id: 'wsrc_i', slug: 'issues', reached: false,
         operations: [{
@@ -178,6 +179,14 @@ describe('credential picker', () => {
         operations: [{ operation: 'issues.read', outcome: 'refused', tone: 'needs', detail: null, diagnostic: '404 GET /repos/{owner}/{repo}/issues: Not Found' }],
       }]);
       expect(vm.notEvaluated).toBe(check.not_evaluated);
+      expect(vm.unreachedReason).toBeNull();
+    });
+
+    it('says why no use was reached, and heads a use of a kind this build does not know as sent', () => {
+      const odd = { ...check.uses[0], kind: 'mailing_list' } as unknown as CredentialCheckView['uses'][number];
+      const vm = credentialCheckVm({ ...check, unreached_reason: 'the installation could not be read: ReadTimeout', uses: [odd] });
+      expect(vm.unreachedReason).toBe('the installation could not be read: ReadTimeout');
+      expect(vm.uses[0].heading).toBe('mailing_list issues');
     });
 
     it('names the variant and warns when the token contradicts it', () => {

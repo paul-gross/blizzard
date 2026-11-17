@@ -8,7 +8,7 @@ import { injectCheckCredentialMutation, injectCreateCredentialMutation, injectCr
 
 const CHECK: CredentialCheckView = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
-  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', uses: [],
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
 };
 
 describe('credential mutations', () => {

@@ -16,7 +16,7 @@ const repo = (slug: string, operations: OperationResultView[], reached = true): 
 
 const check = (overrides: Partial<CredentialCheckView> = {}): CredentialCheckView => ({
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false,
-  granted_permissions: null, mint: null, not_evaluated: NOT_EVALUATED,
+  granted_permissions: null, mint: null, not_evaluated: NOT_EVALUATED, unreached_reason: null,
   uses: [
     repo('core', [
       op('access', 'proven'),
@@ -76,6 +76,15 @@ export const UnreachedUse: Story = {
   args: {
     vm: credentialCheckVm(check({
       uses: [repo('core', [op('access', 'proven'), op('refs.read', 'proven')]), repo('docs', [], false)],
+    })),
+  },
+};
+export const NoUseReached: Story = {
+  args: {
+    vm: credentialCheckVm(check({
+      binding: 'github.app-installation', variant: null,
+      unreached_reason: 'the installation could not be read: ReadTimeout',
+      uses: [repo('core', [], false), repo('docs', [], false)],
     })),
   },
 };
