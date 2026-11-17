@@ -1,6 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { runnerApi, runnerClient } from 'fleet';
-import { type RequestClientStub, stubError, stubRunnerClient } from 'fleet/testing';
+import {
+  type RequestClientStub,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { vi } from 'vitest';
 
@@ -15,27 +19,30 @@ import { appConfig } from './app.config';
  * (`bzh:gating-tier-pins-production-paths`), so this is the one `web:unit-test`
  * asserting against `appConfig.providers` itself rather than a hand-assembled list.
  */
+/** One macrotask turn: every microtask-chained recovery a sibling left in flight settles within it. */
+function drainLeakedRecovery(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('runner appConfig wires session recovery', () => {
   let stub: RequestClientStub;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // This project's specs share one jsdom/module registry under
     // single-worker scheduling (Angular's unit-test builder defaults Vitest to
     // `isolate: false`), so a sibling spec's leaked renewal mark could otherwise
-    // become this test's starting state. Seed the exact dirty state a leak
-    // leaves — the key `session-recovery.ts` sets (hardcoded, not imported: it
-    // is a private module constant) — so the hook below is proven to establish
-    // a clean precondition rather than merely inherit whatever came before it.
-    sessionStorage.setItem('blizzard.runner.session-renewal-attempted', '1');
-  });
-
-  beforeEach(() => {
+    // become this test's starting state. A sibling's 401 it never awaited can land
+    // its `setMark()` a turn after that spec's own teardown, so give the event loop
+    // a macrotask to land it before clearing — clearing first would let it arrive
+    // against this test's clean slate and turn its bounce into `already-recovering`.
+    await drainLeakedRecovery();
     sessionStorage.clear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     stub.restore();
     runnerClient.interceptors.response.clear();
+    await drainLeakedRecovery();
     sessionStorage.clear();
   });
 
@@ -51,10 +58,14 @@ describe('runner appConfig wires session recovery', () => {
 
     stub = stubRunnerClient({
       'GET /api/auth/session': () => ({ auth_enabled: true, username: null }),
-      'GET /runners/{runner_id}/api/leases': () => stubError(401, { detail: 'not authenticated' }),
+      'GET /runners/{runner_id}/api/leases': () =>
+        stubError(401, { detail: 'not authenticated' }),
     });
 
-    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
+    await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({
+      path: { runner_id: 'rn_1' },
+      throwOnError: false,
+    });
 
     expect(navigateSpy).toHaveBeenCalledTimes(1);
   });
