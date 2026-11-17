@@ -12,7 +12,9 @@ from pathlib import Path
 
 import click
 from click.core import ParameterSource
+from pydantic import TypeAdapter
 
+from blizzard.cli.answer import decode_answer, peer_address
 from blizzard.cli.collaborators import CliCollaborators, ClientFactory, HTTPError
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.operator_trace import OperatorTrace
@@ -177,7 +179,7 @@ def _check_running(ctx: click.Context, hub_url: str | None, directory: str | Non
 
 
 def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) -> list[Violation]:
-    where = f"hub at {hub_url}"
+    where = f"hub at {peer_address(hub_url)}"
     session: IReadSessionStore = HubCliCollaborators.of(ctx).sessions
     cli = CliContext.of(hub_url, session, OperatorTrace.source(ctx), client_factory)
     try:
@@ -187,11 +189,12 @@ def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) ->
         if resp.status_code == HTTPStatus.CONFLICT and refusal_of(resp).type in (None, INVARIANTS_IN_PROGRESS):
             raise click.ClickException(_RUNNING)
         cli.check(resp, "check-invariants")
-        return _violations(resp.json())
     except click.ClickException as exc:
         raise click.ClickException(f"{where}: {exc.message}") from exc
-    except ValueError as exc:
-        raise click.ClickException(f"{where}: unreadable answer ({exc})") from exc
+    _, parsed = decode_answer(
+        resp, TypeAdapter(InvariantsResponse), verb="check-invariants", peer="the hub", where=hub_url
+    )
+    return _violations(parsed)
 
 
 def _ask_host(ctx: click.Context, directory: str | None, runner_url: str | None) -> list[Violation]:
@@ -201,8 +204,10 @@ def _ask_host(ctx: click.Context, directory: str | None, runner_url: str | None)
     except click.UsageError:
         raise
     except click.ClickException as exc:
-        raise click.ClickException(f"runner host at {directory}: {exc.message}") from exc
-    where = f"runner host at {daemon.where}"
+        raise click.ClickException(
+            f"runner host at {peer_address(runner_url or directory or '')}: {exc.message}"
+        ) from exc
+    where = f"runner host at {peer_address(daemon.where)}"
     try:
         with daemon.client:
             # The raw status is read: a 409 is the check already running, not a failed request.
@@ -210,15 +215,20 @@ def _ask_host(ctx: click.Context, directory: str | None, runner_url: str | None)
         if resp.status_code == HTTPStatus.CONFLICT:
             raise click.ClickException(_RUNNING)
         resp.raise_for_status()
-        return _violations(resp.json())
     except HTTPError as exc:
         raise click.ClickException(f"{where}: could not be reached or refused ({exc})") from exc
     except click.ClickException as exc:
         raise click.ClickException(f"{where}: {exc.message}") from exc
-    except ValueError as exc:
-        raise click.ClickException(f"{where}: unreadable answer ({exc})") from exc
+    _, parsed = decode_answer(
+        resp,
+        TypeAdapter(InvariantsResponse),
+        verb="check-invariants",
+        peer="the runner host",
+        where=daemon.where,
+        remedy="restart it on this build",
+    )
+    return _violations(parsed)
 
 
-def _violations(body: object) -> list[Violation]:
-    parsed = InvariantsResponse.model_validate(body)
+def _violations(parsed: InvariantsResponse) -> list[Violation]:
     return [Violation(invariant=v.invariant, detail=v.detail) for v in parsed.violations]

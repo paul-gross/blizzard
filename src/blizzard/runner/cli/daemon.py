@@ -16,7 +16,7 @@ from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.param_rank import ParamSource
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import collaborator
-from blizzard.runner.cli.response import decode_answer
+from blizzard.runner.cli.answer import decode_answer
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.wire.flags import FLAG_OFF

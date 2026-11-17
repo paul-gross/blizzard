@@ -1813,6 +1813,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "Print the view as one JSON object, or on failure one error object, instead of text; the exit code is the same.",
+          "hidden": false,
+          "kind": "option",
+          "name": "as_json",
+          "opts": [
+            "--json"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
         }
       ],
       "path": "runner status",

@@ -50,6 +50,9 @@ diagnostic names the verb and the door it reached, without printing the response
 build as the CLI, then try again. For a write, check its effect before retrying: the host may have performed it even
 though the CLI could not read its answer. This is distinct from a connection error against a stale socket.
 
+`blizzard runner status --json` prints the same view as one JSON object. When the command fails, it prints one
+`{"error": {"message": …}}` object instead and exits with the same code as the text form.
+
 The board's copyable wrapped takeover command supplies only `--dir` — not the service account, the venv binary path, or
 the host: `--dir` names a path on the runner's host while the board serves from the hub, so on a split deployment a
 pasted command can land on the wrong machine entirely.

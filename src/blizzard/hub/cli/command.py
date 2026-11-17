@@ -7,6 +7,7 @@ from typing import Any
 import click
 
 from blizzard.cli.collaborators import ClientFactory
+from blizzard.cli.json_output import json_option
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.hub.cli.collaborators import HubCliCollaborators
@@ -30,9 +31,7 @@ class HubCommand(click.Command):
 
     @property
     def json_option(self) -> click.Option:
-        return click.Option(
-            ["--json", "as_json"], is_flag=True, default=False, help="Print the raw response body as JSON."
-        )
+        return json_option()
 
     @property
     def tenant_option(self) -> click.Option:

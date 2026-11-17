@@ -14,7 +14,7 @@ from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
 from blizzard.foundation.unrecognized import Unrecognized
-from blizzard.runner.cli.response import decode_answer
+from blizzard.runner.cli.answer import decode_answer
 from blizzard.runner.cli.worker_call import WorkerCall
 from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
 from blizzard.wire.attachments import AttachmentResponse, StagedAttachment

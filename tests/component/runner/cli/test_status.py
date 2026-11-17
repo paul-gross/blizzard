@@ -7,12 +7,14 @@ would assert nothing about."""
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
+import click
 import httpx2
 import pytest
 import uvicorn
@@ -764,3 +766,278 @@ def test_status_omits_ended_lease_even_when_state_is_not_closed(tmp_path: Path) 
     assert result.exit_code == 0, result.output
     assert "leases (0):" in result.output
     assert "lease_ended" not in result.output
+
+
+# The whole prose of `status`, pinned in two worlds — every section populated with both optional reads answering, and
+# both answering non-2xx — so the rendering can be restructured with nothing drifting.
+_DECISIONS_BODY = {
+    "decisions": [
+        {
+            "decision_id": "dc_1",
+            "chunk_id": "ch_1",
+            "node_id": "nd_gate",
+            "node_name": "gate",
+            "epoch": 1,
+            "submitted_at": "2026-07-16T12:00:00Z",
+        }
+    ]
+}
+
+
+def _seed_full_world(root: Path) -> None:
+    store = registered_store(root)
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
+        )
+    )
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=["main", "dev"],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    _seed_escalation(store, reason="no-acceptable-harness-mint")
+    store.record_binding(chunk_id="ch_3", environment_id="e3", workdir="/ws/e3", bound_at=_NOW)
+    record_takeover_in_unit(
+        store,
+        takeover_id="tko_1",
+        chunk_id="ch_3",
+        lease_id=None,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-c"),
+        workdir="/ws/e3",
+        fence_epoch=None,
+        opened_at=_NOW + timedelta(minutes=2),
+    )
+
+
+def _answer_gate_decisions(monkeypatch: pytest.MonkeyPatch, status_code: int) -> None:
+    original = RunnerDaemon.send
+
+    def send(self: RunnerDaemon, method: str, path: str, *, json_body: object | None = None) -> httpx2.Response:
+        if path == "/api/gate-decisions":
+            return httpx2.Response(status_code, json=_DECISIONS_BODY if status_code == 200 else {})
+        return original(self, method, path, json_body=json_body)
+
+    monkeypatch.setattr(RunnerDaemon, "send", send)
+
+
+def _normalized(output: str, root: Path) -> str:
+    return "\n".join(_screen(output)).replace(str(root), "<root>")
+
+
+def test_status_prose_with_every_section_populated_and_both_optional_reads_answering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _seed_full_world(root)
+    _answer_gate_decisions(monkeypatch, 200)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    assert _normalized(result.output, root) == _FULL_PROSE
+
+
+def test_status_prose_with_both_optional_reads_answering_non_2xx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _seed_full_world(root)
+    _answer_gate_decisions(monkeypatch, 503)
+    with serve_local_api(root, trace_status=False):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    assert _normalized(result.output, root) == _UNAVAILABLE_PROSE
+
+
+def test_status_json_with_every_section_populated_and_both_optional_reads_answering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _seed_full_world(root)
+    _answer_gate_decisions(monkeypatch, 200)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert body["harness_health"]["state"] == "ok"
+    assert {item["harness_id"] for item in body["harness_health"]["answer"]} == {"claude_code", "opencode"}
+    assert body["gate_decisions"]["state"] == "ok"
+    assert [d["chunk_id"] for d in body["gate_decisions"]["answer"]] == ["ch_1"]
+    assert body["traces"]["state"] == "ok"
+    assert [e["environment_id"] for e in body["held_environments"]] == ["e1", "e3"]
+    assert [a["question_id"] for a in body["open_asks"]] == ["qn_1"]
+    assert [t["takeover_id"] for t in body["open_takeovers"]] == ["tko_1"]
+    assert body["leases"] == []
+    assert len(body["escalations"]) == 1 and len(body["subscriptions"]) == 1
+    assert len(body["unmatched_bindings"]) == 2
+    assert body["runner"]["runner_id"] == "rn_init1"
+
+
+def test_status_json_reads_the_optional_sections_unavailable_with_the_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _answer_gate_decisions(monkeypatch, 503)
+    with serve_local_api(root, trace_status=False):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert body["traces"] == {"state": "unavailable", "status": 503}
+    assert body["gate_decisions"] == {"state": "unavailable", "status": 503}
+    assert body["harness_health"] == {"state": "not-requested"}
+    for section in ("leases", "held_environments", "unmatched_bindings", "open_asks", "escalations", "open_takeovers"):
+        assert body[section] == []
+
+
+def test_status_json_fails_with_one_error_object_and_the_prose_exit_code(tmp_path: Path) -> None:
+    root = init_runner_home(tmp_path)
+    prose = _no_hub().runner.invoke(runner_group, ["status", "--dir", str(root)])
+    result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == prose.exit_code == 1
+    assert json.loads(result.stdout) == {"error": {"message": prose.stderr.removeprefix("Error: ").strip()}}
+
+
+def test_status_json_fails_on_a_late_unreadable_answer_with_one_error_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    original = RunnerDaemon.get_from_host
+
+    def malformed(self: RunnerDaemon, path: str) -> httpx2.Response:
+        if path == "/api/host/subscriptions":
+            return httpx2.Response(200, json={"items": [{"slug": "secret"}]})
+        return original(self, path)
+
+    monkeypatch.setattr(RunnerDaemon, "get_from_host", malformed)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 1
+    assert list(json.loads(result.stdout)) == ["error"]
+    assert "unreadable answer" in json.loads(result.stdout)["error"]["message"]
+    assert "secret" not in result.stdout
+
+
+def test_status_json_fails_on_a_required_read_answering_non_2xx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    original = RunnerDaemon.get
+
+    def refusing(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx2.Response:
+        if path == "/api/leases":
+            raise click.ClickException("status: the runner refused /api/leases (503)")
+        return original(self, path, params=params)
+
+    monkeypatch.setattr(RunnerDaemon, "get", refusing)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {"error": {"message": "status: the runner refused /api/leases (503)"}}
+
+
+_FULL_PROSE = """runner runner-local (rn_init1)  workspace=workspace-local
+  identity: unchecked — waiting for the hub to answer which runner the token belongs to
+  running
+  throttle: admitting (declining: none)
+    floor (anthropic): admit — open
+    on_decline: hold; on_usage_limit: hold
+  capacity: 1/1 used
+    default (unresolved) -> workspace-local: 1 working
+  hub: unreachable (last contact never), 2 fact(s) buffered
+  last tick: never
+  gates: none
+  serves: not yet answered: "default"
+
+leases (0):
+
+held environments (2):
+  e1  chunk=ch_1  held since 2026-07-16T12:00:00+00:00
+  e3  chunk=ch_3  held since 2026-07-16T12:00:00+00:00
+
+held bindings matching no workspace (2):
+  e1  chunk=ch_1  workdir=/ws/e1  held since 2026-07-16T12:00:00+00:00
+  e3  chunk=ch_3  workdir=/ws/e3  held since 2026-07-16T12:00:00+00:00
+
+open asks (1):
+  qn_1  (chunk ch_1): which branch?  [main|dev]
+
+gate decisions (1):
+  chunk=ch_1  node=gate  parked at 2026-07-16T12:00:00Z
+
+escalations (1):
+  chunk ch_9  node=nd_build  since 2026-07-16T12:00:00+00:00
+    resume: 
+    cause: no-acceptable-harness
+    harness claude_code: available, cause=none
+    harness opencode: available, cause=none
+
+open takeovers (1):
+  chunk ch_3  takeover=tko_1  held since 2026-07-16T12:02:00+00:00
+
+subscriptions (1):
+  anthropic (anthropic): never sampled
+
+harness telemetry: off"""
+
+_UNAVAILABLE_PROSE = """runner runner-local (rn_init1)  workspace=workspace-local
+  identity: unchecked — waiting for the hub to answer which runner the token belongs to
+  running
+  throttle: admitting (declining: none)
+    floor (anthropic): admit — open
+    on_decline: hold; on_usage_limit: hold
+  capacity: 1/1 used
+    default (unresolved) -> workspace-local: 1 working
+  hub: unreachable (last contact never), 2 fact(s) buffered
+  last tick: never
+  gates: none
+  serves: not yet answered: "default"
+
+leases (0):
+
+held environments (2):
+  e1  chunk=ch_1  held since 2026-07-16T12:00:00+00:00
+  e3  chunk=ch_3  held since 2026-07-16T12:00:00+00:00
+
+held bindings matching no workspace (2):
+  e1  chunk=ch_1  workdir=/ws/e1  held since 2026-07-16T12:00:00+00:00
+  e3  chunk=ch_3  workdir=/ws/e3  held since 2026-07-16T12:00:00+00:00
+
+open asks (1):
+  qn_1  (chunk ch_1): which branch?  [main|dev]
+
+gate decisions: hub unreachable
+
+escalations (1):
+  chunk ch_9  node=nd_build  since 2026-07-16T12:00:00+00:00
+    resume: 
+    cause: no-acceptable-harness
+    harness claude_code: available, cause=none
+    harness opencode: available, cause=none
+
+open takeovers (1):
+  chunk ch_3  takeover=tko_1  held since 2026-07-16T12:02:00+00:00
+
+subscriptions (1):
+  anthropic (anthropic): never sampled"""

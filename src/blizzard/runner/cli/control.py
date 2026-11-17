@@ -11,10 +11,10 @@ import click
 from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.json_output import emit_json, json_errors
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.foundation.leases import LeaseLiveness
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
@@ -22,6 +22,13 @@ from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.cli.status_view import (
+    Ok,
+    RunnerStatus,
+    assemble_status,
+    harness_health_items,
+    needs_harness_health,
+)
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.process.child_env import ChildEnv
@@ -39,7 +46,6 @@ from blizzard.wire.runner_status import (
     EscalationListResponse,
     EscalationView,
     HarnessHealthListResponse,
-    HarnessHealthView,
     IdentityVerdictView,
     OpenTakeoverListResponse,
     RunnerStatusView,
@@ -49,6 +55,10 @@ from blizzard.wire.runner_status import (
 from blizzard.wire.runner_traces import RunnerTraceStatusResponse
 from blizzard.wire.takeover import TakeoverOpenResponse
 
+#: What ``status --json`` does, as the option's help.
+STATUS_JSON_HELP = (
+    "Print the view as one JSON object, or on failure one error object, instead of text; the exit code is the same."
+)
 # The operator's TCP address for the local API, overriding the socket.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 # Each `selftest` poll is a machine-local read of already-computed state, so a short interval is free.
@@ -196,11 +206,22 @@ class SessionLabel:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 @runner_option
+@click.option("--json", "as_json", is_flag=True, default=False, help=STATUS_JSON_HELP)
 @click.pass_context
-def status(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
+def status(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, as_json: bool) -> None:
     """The machine-local view: capacities, held environments, open asks, escalations, open takeovers.
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
+    with json_errors(as_json):
+        view = _read_status(ctx, directory, runner_url, runner)
+    if as_json:
+        emit_json(view)
+    else:
+        _render_status(view)
+
+
+def _read_status(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> RunnerStatus:
+    """Every read ``status`` makes, decoded and assembled; nothing is printed before they have all answered."""
     with RunnerDaemon.reach("status", directory, runner_url, Door.of(ctx), runner) as daemon:
         runner_id = daemon.runner_id()
         view_resp = daemon.get("/api/runner")
@@ -211,39 +232,46 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         takeovers_resp = daemon.get("/api/takeovers")
         subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
         _, escalations_answer = daemon.decode_answer(escalations_resp, TypeAdapter(EscalationListResponse))
-        escalations = escalations_answer.items
-        harness_health: list[HarnessHealthView] = []
-        if any(esc.cause == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations):
-            _, health_answer = daemon.decode_answer(
+        harness_health: HarnessHealthListResponse | None = None
+        if needs_harness_health(escalations_answer):
+            _, harness_health = daemon.decode_answer(
                 daemon.get("/api/harness-health"), TypeAdapter(HarnessHealthListResponse)
             )
-            harness_health = health_answer.items
         # Not raised on: a runner that cannot serve its trace status still renders every other section.
         traces_resp = daemon.send("get", "/api/traces/status")
         # Not raised on: the decisions live on the hub, so a hub that cannot answer costs only this section.
         decisions_resp = daemon.send("get", "/api/gate-decisions")
 
-    _, typed_view = daemon.decode_answer(view_resp, TypeAdapter(RunnerStatusView))
-    _, typed_leases = daemon.decode_answer(leases_resp, TypeAdapter(LeaseListResponse))
-    _, envs_answer = daemon.decode_answer(envs_resp, TypeAdapter(HostEnvironmentListResponse))
-    _, asks_answer = daemon.decode_answer(asks_resp, TypeAdapter(AskListResponse))
-    _, takeovers_answer = daemon.decode_answer(takeovers_resp, TypeAdapter(OpenTakeoverListResponse))
-    _, subscriptions_answer = daemon.decode_answer(subscriptions_resp, TypeAdapter(HostSubscriptionListResponse))
-    traces = (
-        daemon.decode_answer(traces_resp, TypeAdapter(RunnerTraceStatusResponse))[1] if traces_resp.is_success else None
-    )
-    decisions_data = (
-        daemon.decode_answer(decisions_resp, TypeAdapter(OpenDecisionsResponse))[1]
-        if decisions_resp.is_success
-        else None
+    return assemble_status(
+        runner_id=runner_id,
+        view=daemon.decode_answer(view_resp, TypeAdapter(RunnerStatusView))[1],
+        leases=daemon.decode_answer(leases_resp, TypeAdapter(LeaseListResponse))[1],
+        environments=daemon.decode_answer(envs_resp, TypeAdapter(HostEnvironmentListResponse))[1],
+        asks=daemon.decode_answer(asks_resp, TypeAdapter(AskListResponse))[1],
+        escalations=escalations_answer,
+        takeovers=daemon.decode_answer(takeovers_resp, TypeAdapter(OpenTakeoverListResponse))[1],
+        subscriptions=daemon.decode_answer(subscriptions_resp, TypeAdapter(HostSubscriptionListResponse))[1],
+        harness_health=harness_health,
+        traces=(
+            daemon.decode_answer(traces_resp, TypeAdapter(RunnerTraceStatusResponse))[1]
+            if traces_resp.is_success
+            else traces_resp.status_code
+        ),
+        decisions=(
+            daemon.decode_answer(decisions_resp, TypeAdapter(OpenDecisionsResponse))[1]
+            if decisions_resp.is_success
+            else decisions_resp.status_code
+        ),
     )
 
-    view = typed_view
+
+def _render_status(status: RunnerStatus) -> None:
+    view = status.runner
     click.echo(
         f"runner {view.runner_name} ({view.runner_id or 'not registered'}){_tenant_part(view)}"
         f"  workspace={view.workspace_id}"
     )
-    identity = typed_view.identity
+    identity = view.identity
     if identity is not None:
         echo_identity(identity)
     pause = view.pause
@@ -274,24 +302,17 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     if served is not None:
         click.echo(served)
 
-    leases = [lease for lease in typed_leases.items if lease.liveness != LeaseLiveness.ENDED]
+    leases = status.leases
     click.echo(f"\nleases ({len(leases)}):")
     for lease in leases:
         click.echo(f"  {lease.lease_id}  {lease.state!s:<12} chunk={lease.chunk_id} node={lease.node_name}")
 
-    # `GET /api/host/environments` carries every workspace's whole pool; this section
-    # is this runner's *held*-environments view, so it keeps the slots this runner holds.
-    envs = [
-        env
-        for workspace in envs_answer.workspaces
-        for env in workspace.items
-        if env.held and env.runner_id == runner_id
-    ]
+    envs = status.held_environments
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
         click.echo(f"  {env.environment_id}  chunk={env.chunk_id}  held since {env.held_since}")
     # Absent from a runner that predates the field; each one still holds its lease and agent slot.
-    unmatched = view.unmatched_bindings
+    unmatched = status.unmatched_bindings
     if unmatched:
         click.echo(f"\nheld bindings matching no workspace ({len(unmatched)}):")
         for binding in unmatched:
@@ -300,15 +321,16 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
                 f"  held since {binding.held_since}"
             )
 
-    asks = asks_answer.items
+    asks = status.open_asks
     click.echo(f"\nopen asks ({len(asks)}):")
     for ask in asks:
         opts = f"  [{'|'.join(ask.options or [])}]" if ask.options else ""
         click.echo(f"  {ask.question_id}  (chunk {ask.chunk_id}): {ask.question}{opts}")
 
-    for line in gate_decision_lines(decisions_data.decisions if decisions_data else None):
+    for line in gate_decision_lines(status.gate_decisions.answer if isinstance(status.gate_decisions, Ok) else None):
         click.echo(line)
 
+    escalations = status.escalations
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:
         click.echo(f"  chunk {esc.chunk_id}  node={esc.node_id}  since {esc.closed_at}{SessionLabel(esc).text}")
@@ -318,16 +340,16 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         if esc.cause:
             click.echo(f"    cause: {esc.cause}")
         if esc.cause == EscalationCause.NO_ACCEPTABLE_HARNESS:
-            for health in harness_health:
+            for health in harness_health_items(status):
                 availability = "available" if health.available else "unavailable"
                 click.echo(f"    harness {health.harness_id}: {availability}, cause={health.cause or 'none'}")
 
-    takeovers = takeovers_answer.items
+    takeovers = status.open_takeovers
     click.echo(f"\nopen takeovers ({len(takeovers)}):")
     for tko in takeovers:
         click.echo(f"  chunk {tko.chunk_id}  takeover={tko.takeover_id}  held since {tko.held_since}")
 
-    subscriptions = [sub for sub in subscriptions_answer.items if runner_id in sub.spenders]
+    subscriptions = status.subscriptions
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
         if sub.sampled_at is None:
@@ -342,7 +364,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         if renewal is not None:
             click.echo(f"    renewal: {renewal}")
 
-    harness = traces.harness_telemetry if traces is not None else None
+    harness = status.traces.answer.harness_telemetry if isinstance(status.traces, Ok) else None
     harness_lines = harness_telemetry_lines(harness)
     if harness_lines:
         click.echo()
