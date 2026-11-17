@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 import httpx2
 
@@ -28,6 +28,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
 from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyInputs,
     HarnessAssemblyKey,
     HarnessSet,
     IInvocationHarnesses,
@@ -276,7 +277,14 @@ class LoopWiring:
 
         ``process`` runs the tick over a caller-owned graph, which this call neither builds nor closes;
         without one, the tick builds and closes its own."""
-        self.with_context(tick, process=process)
+        graph = process or build_runner_process(self.config, events=self.events, bundle=self.bundle)
+        stepper = RunnerStepper(self.config, process_graph=graph)
+        try:
+            stepper.tick_once()
+        finally:
+            stepper.close()
+            if process is None:
+                graph.close()
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,
@@ -316,6 +324,8 @@ class UsageRegistryLookup:
             return self.fallback
         key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
         owner = self.owners.find(key)
+        if owner is None and judge:
+            owner = self.owners.find(WorkerInvocation(lease_id, generation))
         return owner.registry if owner is not None else self.owners.current.registry
 
 
@@ -399,6 +409,9 @@ class ResumeMarking:
         ).run()
 
 
+_RECOVERY_RETRY_SECONDS = 30.0
+
+
 class RunnerStepper:
     """Own the timeout-keyed loop context and retire clients only when both passes are idle.
 
@@ -433,6 +446,7 @@ class RunnerStepper:
         self.settings_failure: tuple[int, str, str] | None = None
         self._logged_failure: int | None = None
         self._trace_interval = config.tracing.sweep_seconds
+        self._next_recovery_retry = 0.0
 
     @property
     def wiring(self) -> LoopWiring:
@@ -440,6 +454,12 @@ class RunnerStepper:
 
     def traces(self) -> bool:
         return self._graph.trace_sweep is not None
+
+    def tick_once(self) -> None:
+        """Run a synchronous tick without a trace sweep, propagating failures."""
+        with self._tick_lock.hold():
+            self._ensure_open()
+            self._tick()
 
     def request(self) -> PassResult:
         try:
@@ -579,8 +599,6 @@ class RunnerStepper:
                     if reader is not None and self._graph.harness_key is not None
                     else None
                 )
-                # An in-place binary upgrade must be handled by the selected binding's launch guard, not silently
-                # reselect a binding before that guard can detect the service version change.
                 previous = self._ctx_harness_key
                 if (
                     key is not None
@@ -588,10 +606,32 @@ class RunnerStepper:
                     and key.values == previous.values
                     and key.bundle_source_identity == previous.bundle_source_identity
                 ):
-                    key = previous
+                    inputs = cast(HarnessAssemblyInputs, key.values[0])
+                    enabled = {section.harness_id for section in inputs.sections if section.enabled}
+                    old_identities = dict(cast(tuple[tuple[str, object], ...], previous.binary_identities))
+                    identities = tuple(
+                        (harness_id, old_identities.get(harness_id, identity) if harness_id in enabled else identity)
+                        for harness_id, identity in cast(tuple[tuple[str, object], ...], key.binary_identities)
+                    )
+                    key = replace(key, binary_identities=identities, preserve_selection=True)
                 selected = (
                     self._graph.harness_sets.prepare(key) if key is not None else self._graph.harness_sets.current
                 )
+                now = self._graph.host.monotonic_clock.monotonic()
+                if (
+                    key is not None
+                    and selected is self._ctx_harness_set
+                    and selected.pending_recovery
+                    and now >= self._next_recovery_retry
+                ):
+                    self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
+                    active_ids = {
+                        lease.harness_id
+                        for lease in self._graph.stores.lease_record.list_active_leases()
+                        if lease.session_id is not None
+                    }
+                    if not selected.pending_recovery.isdisjoint(active_ids):
+                        selected = self._graph.harness_sets.retry_recovery(key)
                 if (
                     self._ctx is not None
                     and self._client_timeout == timeout
@@ -601,6 +641,12 @@ class RunnerStepper:
                     self.failed_revision = None
                     self.settings_failure = None
                     return self._ctx
+                leases = [
+                    lease
+                    for lease in self._graph.stores.lease_record.list_active_leases()
+                    if lease.session_id is not None and lease.harness_id is not None
+                ]
+                generations = self._graph.stores.liveness.lease_generations([lease.lease_id for lease in leases])
                 if self._client is not None and self._client_timeout == timeout:
                     client = self._client
                 else:
@@ -631,6 +677,11 @@ class RunnerStepper:
                 return self._ctx
             if key is not None:
                 self._graph.harness_sets.publish(key, selected)
+            for lease in leases:
+                assert lease.harness_id is not None
+                self._graph.harness_sets.recover(
+                    WorkerInvocation(lease.lease_id, generations.get(lease.lease_id, 0)), lease.harness_id, selected
+                )
             if self._client is not None and self._client is not client:
                 self._retired.append(self._client)
             self._client = client
@@ -638,6 +689,7 @@ class RunnerStepper:
             self._ctx = ctx
             self._ctx_harness_set = selected
             self._ctx_harness_key = key
+            self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
             self._wiring = wiring
             self._revision = revision
             if self.settings_in_force_revision != revision or self.settings_in_force_since is None:

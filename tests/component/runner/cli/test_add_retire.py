@@ -6,29 +6,49 @@ runner as one the host reports for."""
 from __future__ import annotations
 
 import tomllib
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
+import sqlalchemy as sa
 
+import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.cli.runtime import named_runners
-from blizzard.runner.composition import RunnerProcess
+from blizzard.runner.cli.runtime import named_runners, seed_runners
+from blizzard.runner.composition import RunnerProcess, build_host_process
+from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
+from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_file import remove_runner
 from blizzard.runner.host_layout import HostLayout, HostLock
-from blizzard.runner.hub.client import HostRunnerRetireRefused
+from blizzard.runner.hub.client import ClaimRequest, HostRunnerRetireRefused, QueueEntry, RouteClaimOutcome
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
-from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.runner.store.schema import runner_setting_changes
+from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop_wiring import LoopWiring, RunnerStepper
+from blizzard.runner.store.schema import lease_spawns, runner_setting_changes
+from tests.support.child_launch import wait_for_exit
 from tests.support.config_inputs import load_host_config
 from tests.support.runner_add_retire import (
     _HUB,  # pyright: ignore[reportPrivateUsage]
     _registered,  # pyright: ignore[reportPrivateUsage]
     _run,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.support.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    claimed_outcome,
+    make_context,
+    make_envelope,
+    make_store,
 )
 from tests.support.runner_init_fakes import FakeInitHub
 
@@ -309,6 +329,217 @@ def test_tick_on_a_registered_host_drives_its_runner_as_one_the_host_reports(
 
     assert result.exit_code == 0, result.output
     assert seen == [True]
+
+
+def test_standalone_tick_uses_the_stored_runner_settings_revision(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    host = load_host_config(root)
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    try:
+        runner = graph.runners[0]
+        reader = runner.settings_reader
+        assert reader is not None
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"agents": 2}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        revision = settings.snapshot().revision
+    finally:
+        graph.close()
+    seen: list[tuple[int | None, int]] = []
+
+    def capture(ctx: LoopContext) -> None:
+        seen.append((ctx.config.runner_settings_revision, ctx.config.agents))
+
+    monkeypatch.setattr(loop_wiring, "tick", capture)
+
+    result = _run(fake_init_hub, "tick", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert seen == [(revision, 2)]
+
+
+def _worker_binary(tmp_path: Path) -> Path:
+    binary = tmp_path / "claude"
+    binary.write_text(
+        "#!/usr/bin/python3\n"
+        "import pathlib, sys, time\n"
+        "if '--version' in sys.argv:\n"
+        "    print('2.1.0')\n"
+        "    sys.exit(0)\n"
+        f"pathlib.Path({str(tmp_path / 'launched')!r}).touch()\n"
+        f"while not pathlib.Path({str(tmp_path / 'release')!r}).exists():\n"
+        "    time.sleep(0.01)\n"
+    )
+    binary.chmod(0o755)
+    return binary
+
+
+def _bind_spawn_seams(
+    monkeypatch: pytest.MonkeyPatch, store: SqlAlchemyRunnerStore, runner_id: str, tmp_path: Path
+) -> None:
+    class Hub(FakeHub):
+        def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
+            self.claim_outcome = claimed_outcome(
+                claim.chunk_id,
+                make_envelope(claim.chunk_id, "build", node_id="nd_build", choices=[("pass", "ok")]),
+                runner_id=runner_id,
+            )
+            return super().claim_route(claim)
+
+    hub = Hub(default_runner_id=runner_id)
+    hub.envelopes["ch_new"] = make_envelope("ch_new", "build", node_id="nd_build", choices=[("pass", "ok")])
+    hub.queue = [QueueEntry(chunk_id="ch_new", graph_id="gr_1", position=0, project_id="default")]
+    provider = FakeProvider({"e1": str(tmp_path)})
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="session", pid=123, process_start_time="start", pgid=123), verdict=None
+    )
+    original = LoopWiring.context
+
+    def context(wiring: LoopWiring, *args: Any, **kwargs: Any) -> LoopContext:
+        production = original(wiring, *args, **kwargs)
+        fake = make_context(
+            store,
+            hub=hub,
+            provider=provider,
+            harness=harness,
+            probe=FakeProbe(),
+            config=production.config,
+            workspaces=WorkspaceRegistry([WorkspaceEntry("workspace-local", provider, spawn_root=str(tmp_path))]),
+        )
+        return replace(
+            production,
+            hub=fake.hub,
+            token_identity=fake.token_identity,
+            identity_verdict=fake.identity_verdict,
+            hub_token=fake.hub_token,
+            workspaces=fake.workspaces,
+            process=fake.process,
+            worktree_git=fake.worktree_git,
+            env_release=fake.env_release,
+        )
+
+    monkeypatch.setattr(LoopWiring, "context", context)
+
+
+def test_standalone_tick_spawn_records_stored_settings_revision(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    binary = _worker_binary(tmp_path)
+    host = load_host_config(root)
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    try:
+        runner = graph.runners[0]
+        reader = runner.settings_reader
+        assert reader is not None
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"agents": 1, "claude_code.binary": str(binary)}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        revision = settings.snapshot().revision
+        runner_id = runner.runner_id
+    finally:
+        graph.close()
+
+    store = make_store(host.db_url, runner_id)
+    _bind_spawn_seams(monkeypatch, store, runner_id, tmp_path)
+    pid: int | None = None
+    try:
+        result = _run(fake_init_hub, "tick", "--dir", str(root))
+        assert result.exit_code == 0, result.output
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(
+                    lease_spawns.c.runner_settings_revision, lease_spawns.c.host_settings_revision, lease_spawns.c.pid
+                ).where(lease_spawns.c.runner_id == runner_id)
+            ).all()
+        assert len(rows) == 1
+        pid = rows[0].pid
+        assert rows[0][:2] == (revision, None)
+        assert pid is not None
+    finally:
+        (tmp_path / "release").touch()
+        if pid is not None:
+            wait_for_exit(pid)
+    assert (tmp_path / "launched").exists()
+
+
+def test_spawn_after_failed_settings_rebuild_records_last_applied_revision(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    binary = _worker_binary(tmp_path)
+    host = load_host_config(root)
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    store = make_store(host.db_url, runner.runner_id)
+    _bind_spawn_seams(monkeypatch, store, runner.runner_id, tmp_path)
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    pid: int | None = None
+    try:
+        reader = runner.settings_reader
+        assert reader is not None
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"agents": 1, "claude_code.binary": str(binary)}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        applied = settings.snapshot().revision
+        first = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert first.config.runner_settings_revision == applied
+        settings.write(
+            Change("edit", sets={"agents": 2}),
+            if_match=applied,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        failed = settings.snapshot().revision
+        assert failed > applied
+        (root / ".env").unlink()
+        (root / ".env").mkdir()
+
+        stepper.tick_once()
+
+        assert stepper.failed_revision == failed
+        assert stepper.settings_failure is not None and stepper.settings_failure[0] == failed
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                sa.select(
+                    lease_spawns.c.runner_settings_revision, lease_spawns.c.host_settings_revision, lease_spawns.c.pid
+                ).where(lease_spawns.c.runner_id == runner.runner_id)
+            ).all()
+        assert len(rows) == 1
+        pid = rows[0].pid
+        assert rows[0][:2] == (applied, None)
+        assert pid is not None
+    finally:
+        (tmp_path / "release").touch()
+        if pid is not None:
+            wait_for_exit(pid)
+        stepper.close()
+        graph.close()
+    assert (tmp_path / "launched").exists()
 
 
 def test_add_gives_the_new_runner_the_hosts_tool_profile_so_the_host_still_loads(

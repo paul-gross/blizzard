@@ -16,8 +16,9 @@ two profiles.
 
 A pass holds one coherent snapshot: a change made during a tick applies on a later tick, not halfway through the current
 one. New invocations use their launch settings; already running work retains its own settings and harness set. Changing
-a setting that selects a harness configuration bundle can rebuild the set, but editing the bundle's contents itself
-requires a restart. A failed live rebuild leaves the last good context in use and is retried.
+a setting that selects a harness configuration bundle can rebuild the set. For a published bundle, its source is
+fingerprinted each pass, so an in-place content change can also trigger a rebuild without a restart. A failed live
+rebuild leaves the last good context in use and is retried.
 
 The settings view reports the record `revision`, each key's resolved `value`, `source` (`entry` or `default`),
 `lifetime`, and available write provenance. `in_force.revision` and `since` identify the snapshot actually in use;

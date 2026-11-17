@@ -84,6 +84,7 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
+from blizzard.runner.api.settings import install_settings_problem_schema
 from blizzard.runner.api.settings import router as settings_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.ticks import host_router as host_ticks_router
@@ -596,6 +597,7 @@ def create_app(
     install_schema_components(app, RUNNER_SCHEMA_COMPONENTS.models, RUNNER_SCHEMA_COMPONENTS.enums)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
+    install_settings_problem_schema(app)
     return app
 
 
@@ -972,6 +974,13 @@ def _wire_runner(
         stepper=stepper,
     )
     served.seams.settings_reader = graph.settings_reader
+    if graph.settings_reader is not None:
+        from blizzard.runner.config_keys import HOST_REGISTRY
+        from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
+
+        served.seams.settings_authoring = RunnerSettingsAuthoring(
+            graph.settings_reader, graph.stores.settings, HOST_REGISTRY
+        )
     return _WiredRunner(served, stepper, harness_health, (archived_transcript_client, hub_proxy_client))
 
 

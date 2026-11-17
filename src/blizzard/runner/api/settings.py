@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Annotated, Literal, cast
+from collections.abc import Callable, Mapping
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from pydantic.json_schema import models_json_schema
 
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
-from blizzard.foundation.settings_record.vocabulary import Change, Entry
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.web import SchemaComponentCollision
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
-from blizzard.runner.settings.policy import SettingRefusal, check_keys
-from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsChange, SettingsSnapshot
+from blizzard.runner.settings.policy import SettingRefusal
+from blizzard.runner.settings.ports import SettingsChange, SettingsSnapshot
 from blizzard.runner.throttle.settings import DAY_NAMES, DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
@@ -114,35 +116,55 @@ class SettingsProblem(WireModel):
     errors: list[SettingError] | None = None
 
 
+def install_settings_problem_schema(app: FastAPI) -> None:
+    """Register the problem model referenced by the settings response declarations."""
+    original: Callable[[], dict[str, Any]] = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        spec = original()
+        _, definitions = models_json_schema(
+            [(SettingsProblem, "serialization")], ref_template="#/components/schemas/{model}"
+        )
+        schemas = spec.setdefault("components", {}).setdefault("schemas", {})
+        for name, schema in definitions.get("$defs", {}).items():
+            if name in schemas and schemas[name] != schema:
+                raise SchemaComponentCollision(f"component {name!r} collides with a different route schema")
+            schemas[name] = schema
+        return spec
+
+    app.openapi = openapi
+
+
+_SETTINGS_PROBLEM = {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}
+_VALIDATION_ERROR = {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}
+
+
 def _problem(status: int, code: str, message: str, **members: object) -> JSONResponse:
     return JSONResponse(
         status_code=status,
-        content={
-            "type": f"urn:blizzard:problem:{code.replace('_', '-')}",
-            "title": code.replace("_", " "),
-            "status": status,
-            "detail": message,
-            "code": code,
-            **members,
-        },
+        content=SettingsProblem.model_validate(
+            {
+                "type": f"urn:blizzard:problem:{code.replace('_', '-')}",
+                "title": code.replace("_", " "),
+                "status": status,
+                "detail": message,
+                "code": code,
+                **members,
+            }
+        ).model_dump(mode="json"),
         media_type="application/problem+json",
     )
 
 
 def _view(wiring: RunnerWiring) -> SettingsView:
     service = wiring.settings_service()
-    store = cast(IWriteRunnerSettings, service.store)
     stepper = wiring.stepper()
     snapshot: SettingsSnapshot
     provenance: Mapping[str, SettingsChange]
 
-    def read_settings() -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
-        # Registration may have established identity during the last tick. Seed
-        # before reading provenance, rather than waiting for another tick.
-        service.snapshot_record()
-        return store.snapshot_with_provenance()
-
-    (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(read_settings)
+    (snapshot, provenance), in_force_revision, in_force_since, failure = stepper.settings_status(
+        service.snapshot_with_provenance
+    )
     in_force = InForce(
         revision=in_force_revision,
         since=in_force_since,
@@ -266,9 +288,15 @@ def get_settings(request: Request) -> SettingsView:
     "",
     response_model=SettingsView,
     responses={
-        403: {"model": SettingsProblem, "description": "Superuser required"},
-        409: {"model": SettingsProblem, "description": "Settings revision conflict"},
-        422: {"model": SettingsProblem, "description": "Invalid settings edit"},
+        403: {"description": "Superuser required"},
+        409: {
+            "description": "Settings revision conflict",
+            "content": {"application/problem+json": _SETTINGS_PROBLEM},
+        },
+        422: {
+            "description": "Invalid settings edit or request",
+            "content": {"application/problem+json": _SETTINGS_PROBLEM, "application/json": _VALIDATION_ERROR},
+        },
     },
 )
 def patch_settings(
@@ -279,28 +307,13 @@ def patch_settings(
 ) -> SettingsView | JSONResponse:
     wiring = RunnerWiring.of(request)
     wiring.require_bound()
-    service = wiring.settings_service()
     try:
         revision = int(if_match) if if_match is not None else None
     except ValueError:
         revision = None
-    both = body.set.keys() & set(body.unset)
-    if both:
-        return _problem(
-            422,
-            "settings_invalid",
-            "a key cannot be both set and unset",
-            errors=[{"key": key, "message": "cannot both set and unset"} for key in sorted(both)],
-        )
     try:
-        check_keys(HOST_REGISTRY, [*body.set, *body.unset])
-        service.snapshot_record()
-        cast(IWriteRunnerSettings, service.store).write(
-            Change("edit", sets=body.set, unsets=frozenset(body.unset)),
-            if_match=revision,
-            validate=service.validate,
-            door="api",
-            actor=session.username,
+        wiring.settings_authoring().edit(
+            body.set, frozenset(body.unset), if_match=revision, door="api", actor=session.username
         )
     except SettingRefusal as exc:
         return _problem(422, exc.code, str(exc), key=exc.key)
@@ -324,8 +337,8 @@ def _entry(value: Entry | None) -> EntryView | None:
 def settings_changes(
     request: Request, limit: Annotated[int, Query(ge=1, le=100)] = 50, before: Annotated[int | None, Query(ge=1)] = None
 ) -> ChangesPage:
-    store = cast(IWriteRunnerSettings, RunnerWiring.of(request).settings_service().store)
-    changes = store.changes(limit=limit + 1, before=before)
+    reader = RunnerWiring.of(request).settings_service()
+    changes = reader.changes(limit=limit + 1, before=before)
     page = changes[:limit]
     return ChangesPage(
         changes=[

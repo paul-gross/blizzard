@@ -761,7 +761,9 @@ def test_disagreeing_runners_with_no_tools_table_are_refused_naming_tools(tmp_pa
 def test_stored_runner_profiles_do_not_change_the_file_derived_host_profile(tmp_path: Path) -> None:
     host = load_host_config(_write(tmp_path / "host", _two_runners(_XPS_WORKER, _XPS_WORKER)))
 
-    class SnapshotSource:
+    from tests.support.runner_settings import SnapshotSettingsStore
+
+    class SnapshotSource(SnapshotSettingsStore):
         def __init__(self, path: str) -> None:
             self.path = path
 

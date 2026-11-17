@@ -7,12 +7,18 @@ from pathlib import Path
 import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
+from blizzard.runner.harness.adapter import HarnessVersionChangedError
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets, WorkerInvocation
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
+from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
@@ -21,7 +27,8 @@ from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
-from tests.support.runner_fakes import FakeHub, make_store
+from tests.support.runner_fakes import FakeHub, make_store, migrated_store_at
+from tests.support.runner_mint import new_mint
 
 
 @pytest.mark.parametrize(
@@ -167,6 +174,269 @@ def test_snapshot_resolution_failure_reports_revision_and_recovers(
         dotenv.rmdir()
         assert stepper._context().config.agents == 2  # pyright: ignore[reportPrivateUsage]
         assert stepper.settings_failure is None
+    finally:
+        stepper.close()
+        graph.close()
+
+
+@pytest.mark.parametrize("method", ["list_active_leases", "lease_generations"])
+def test_recovery_read_failure_keeps_context_and_set_atomic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    host = load_host_config(tmp_path)
+    base = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
+    )
+    ready, _ = seed_runners(host, list(host.runners))
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        first = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        old_set = runner.harness_sets.current
+        old_client = stepper._client  # pyright: ignore[reportPrivateUsage]
+        reader = runner.settings_reader
+        assert reader is not None
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"claude_code.binary": "/different/claude"}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        store = runner.stores.lease_record if method == "list_active_leases" else runner.stores.liveness
+        original = getattr(type(store), method)
+        prepared = False
+        original_prepare = HarnessSets.prepare
+
+        def prepare(sets: HarnessSets, key: HarnessAssemblyKey) -> HarnessSet:
+            nonlocal prepared
+            result = original_prepare(sets, key)
+            prepared = True
+            return result
+
+        def failing(*args: object, **kwargs: object) -> object:
+            if prepared:
+                raise RuntimeError("recovery read failed")
+            return original(*args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(HarnessSets, "prepare", prepare)
+            patch.setattr(type(store), method, failing)
+            assert stepper._context() is first  # pyright: ignore[reportPrivateUsage]
+        assert runner.harness_sets.current is old_set
+        assert stepper._client is old_client  # pyright: ignore[reportPrivateUsage]
+        assert old_client is not None and not old_client.is_closed
+        assert stepper.failed_revision == settings.snapshot().revision
+        assert stepper._context() is not first  # pyright: ignore[reportPrivateUsage]
+        assert runner.harness_sets.current is not old_set
+    finally:
+        stepper.close()
+        graph.close()
+
+
+@pytest.mark.parametrize("initial", [None, "99.0.0"])
+def test_disabled_session_recovers_when_binary_becomes_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str | None
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    binary = tmp_path / "opencode"
+    if initial is not None:
+        binary.write_text(f"#!/bin/sh\necho {initial}\n")
+        binary.chmod(0o755)
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(
+        tmp_path,
+        top=f'db_url = "{url}"',
+        runner=f'[runner.opencode]\nenabled = false\nbinary = "{binary}"\n',
+    )
+    host = load_host_config(tmp_path)
+    migrated_store_at(url)
+    base = make_store(url, TEST_RUNNER_ID)
+    now = datetime.now(UTC)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, now)
+    )
+    lease = NewLease("lease_a", "ch_a", "gr_a", "nd_a", "build", 1, 2, now)
+    base.record_mint(new_mint(lease, harness_id="opencode"))
+    base.record_spawn(
+        "lease_a",
+        pid=123,
+        process_start_time="start",
+        spawned_at=now,
+        session=SessionReference("opencode", "session-a"),
+    )
+    other = NewLease("lease_b", "ch_b", "gr_a", "nd_b", "build", 1, 2, now)
+    base.record_mint(new_mint(other))
+    base.record_spawn(
+        "lease_b",
+        pid=124,
+        process_start_time="start-b",
+        spawned_at=now,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-b"),
+    )
+    ready, _ = seed_runners(host, list(host.runners))
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        first = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert runner.harness_sets.find(WorkerInvocation("lease_a", 1)) is None
+        held = runner.harness_sets.lookup(WorkerInvocation("lease_b", 1))
+        binary.write_text("#!/bin/sh\necho 2.1.0\n")
+        binary.chmod(0o755)
+        second = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert second is not first
+        recovered = runner.harness_sets.lookup(WorkerInvocation("lease_a", 1))
+        assert "opencode_v2" in type(recovered.selection.of("opencode")).__module__
+        assert second.harnesses_for_lease("lease_a").lifecycle("opencode") is not None
+        assert runner.harness_sets.lookup(WorkerInvocation("lease_b", 1)) is held
+        assert "opencode" not in runner.harness_sets.current.registry.known_harnesses
+    finally:
+        stepper.close()
+        graph.close()
+
+
+def test_recovery_retry_preserves_enabled_opencode_version_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    opencode = tmp_path / "opencode"
+    opencode.write_text("#!/bin/sh\necho 2.1.0\n")
+    opencode.chmod(0o755)
+    claude = tmp_path / "claude"
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(
+        tmp_path,
+        top=f'db_url = "{url}"',
+        runner=f'[runner.claude_code]\nenabled = false\nbinary = "{claude}"\n'
+        f'[runner.opencode]\nenabled = true\nbinary = "{opencode}"\n',
+    )
+    host = load_host_config(tmp_path)
+    migrated_store_at(url)
+    base = make_store(url, TEST_RUNNER_ID)
+    now = datetime.now(UTC)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, now)
+    )
+    lease = NewLease("lease_a", "ch_a", "gr_a", "nd_a", "build", 1, 2, now)
+    base.record_mint(new_mint(lease))
+    base.record_spawn(
+        "lease_a",
+        pid=123,
+        process_start_time="start",
+        spawned_at=now,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-a"),
+    )
+    ready, _ = seed_runners(host, list(host.runners))
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        first = runner.harness_sets.current
+        adapter = first.registry.lifecycle("opencode")
+        assert isinstance(adapter, OpenCodeTwoAdapter)
+        keeper = adapter._keeper  # pyright: ignore[reportPrivateUsage]
+        identity = ServiceIdentity("service", 17, "3.0.0")
+        monkeypatch.setattr(keeper, "answering", lambda: identity)
+        monkeypatch.setattr(keeper, "ensure", lambda: identity)
+        assert adapter.observe_version() == "3.0.0"
+        identity = ServiceIdentity("service", 17, "2.1.0")
+        assert adapter.observe_version() == "2.1.0"
+        with pytest.raises(HarnessVersionChangedError):
+            adapter.resume_with_message(
+                str(tmp_path), "session", "continue", session_settings=adapter.launch_settings()
+            )
+
+        claude.write_text("#!/bin/sh\necho 1.0.0\n")
+        claude.chmod(0o755)
+        stepper._context()  # pyright: ignore[reportPrivateUsage]
+        current = runner.harness_sets.current
+        assert current.registry is first.registry
+        assert current.health is first.health and current.versions is first.versions
+        assert current.probes is first.probes and current.telemetry is first.telemetry
+        assert current.registry.lifecycle("opencode") is adapter
+        assert runner.harness_sets.find(WorkerInvocation("lease_a", 1)) is not None
+        with pytest.raises(HarnessVersionChangedError, match=r"3\.0\.0"):
+            adapter.resume_with_message(
+                str(tmp_path), "session", "continue", session_settings=adapter.launch_settings()
+            )
+    finally:
+        stepper.close()
+        graph.close()
+
+
+@pytest.mark.parametrize("initial", ["", "99.0.0"])
+@pytest.mark.parametrize("persistent", [False, True])
+def test_recovery_retries_unchanged_binary_version_after_transient_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, initial: str, persistent: bool
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    binary, answer, calls = tmp_path / "opencode", tmp_path / "version", tmp_path / "calls"
+    answer.write_text(initial)
+    binary.write_text(f"#!/bin/sh\necho x >> '{calls}'\ncat '{answer}'\n")
+    binary.chmod(0o755)
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(
+        tmp_path,
+        top=f'db_url = "{url}"',
+        runner=f'[runner.opencode]\nenabled = false\nbinary = "{binary}"\n',
+    )
+    host = load_host_config(tmp_path)
+    migrated_store_at(url)
+    base = make_store(url, TEST_RUNNER_ID)
+    now = datetime.now(UTC)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, now)
+    )
+    lease = NewLease("lease_a", "ch_a", "gr_a", "nd_a", "build", 1, 2, now)
+    base.record_mint(new_mint(lease, harness_id="opencode"))
+    base.record_spawn(
+        "lease_a",
+        pid=123,
+        process_start_time="start",
+        spawned_at=now,
+        session=SessionReference("opencode", "session-a"),
+    )
+    ready, _ = seed_runners(host, list(host.runners))
+    clock = ManualMonotonicClock()
+    graph = build_host_process(host, ready, monotonic_clock=clock)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        first = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        selected = runner.harness_sets.current
+        assert selected.pending_recovery == frozenset({"opencode"})
+        assert runner.harness_sets.find(WorkerInvocation("lease_a", 1)) is None
+        before = calls.read_text().splitlines()
+        assert before == ["x"]
+        for _ in range(3):
+            assert stepper._context() is first  # pyright: ignore[reportPrivateUsage]
+        assert calls.read_text().splitlines() == before
+
+        if persistent:
+            clock.advance(31)
+            assert stepper._context() is first  # pyright: ignore[reportPrivateUsage]
+            assert len(calls.read_text().splitlines()) == len(before) + 1
+            assert runner.harness_sets.current is selected
+            assert runner.harness_sets.find(WorkerInvocation("lease_a", 1)) is None
+
+        answer.write_text("2.1.0")
+        clock.advance(31)
+        second = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert second is not first
+        assert runner.harness_sets.current.registry is selected.registry
+        assert runner.harness_sets.current.health is selected.health
+        assert not runner.harness_sets.current.pending_recovery
+        recovered = runner.harness_sets.lookup(WorkerInvocation("lease_a", 1))
+        assert "opencode_v2" in type(recovered.selection.of("opencode")).__module__
+        assert "opencode" not in runner.harness_sets.current.registry.known_harnesses
     finally:
         stepper.close()
         graph.close()

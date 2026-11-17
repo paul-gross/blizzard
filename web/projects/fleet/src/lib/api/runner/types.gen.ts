@@ -8278,15 +8278,15 @@ export type PatchSettingsRunnersRunnerIdApiSettingsPatchErrors = {
     /**
      * Superuser required
      */
-    403: SettingsProblem;
+    403: unknown;
     /**
      * Settings revision conflict
      */
     409: SettingsProblem;
     /**
-     * Invalid settings edit
+     * Invalid settings edit or request
      */
-    422: SettingsProblem;
+    422: HttpValidationError | SettingsProblem;
 };
 
 export type PatchSettingsRunnersRunnerIdApiSettingsPatchError = PatchSettingsRunnersRunnerIdApiSettingsPatchErrors[keyof PatchSettingsRunnersRunnerIdApiSettingsPatchErrors];

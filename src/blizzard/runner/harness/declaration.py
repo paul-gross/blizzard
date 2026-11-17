@@ -62,7 +62,7 @@ class HarnessSection(Protocol):
 
     @property
     def enabled(self) -> bool:
-        """False leaves the binding unbound, unprobed, and unadvertised."""
+        """False excludes the binding from new work and advertisement; active sessions may require recovery."""
         ...
 
     @property

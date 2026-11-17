@@ -38,7 +38,7 @@ class OpenCodeSection:
 
     #: OpenCode's own binary path, independent of Claude Code's.
     binary: str = DEFAULT_OPENCODE_BINARY
-    #: `[opencode].enabled` — false leaves OpenCode unbound, unprobed, and unadvertised.
+    #: `[opencode].enabled` — false excludes OpenCode from new work and advertisement.
     enabled: bool = True
     #: `[opencode.models].supported` — `provider/model` names or glob patterns this binding accepts; `None` takes
     #: the adapter's built-in vocabulary, an explicit empty tuple means no native names.

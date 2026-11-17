@@ -21,9 +21,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import _harnesses_for_lease  # pyright: ignore[reportPrivateUsage]
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyInputs,
     HarnessAssemblyKey,
     HarnessSet,
     HarnessSets,
@@ -496,9 +497,8 @@ def test_judge_after_restart_anchors_current_session_location_across_relaunch(
     assert sets.lookup(JudgeInvocation("lease_a", 1)) is first
 
 
-@pytest.mark.parametrize("binding", [None, HarnessBinding()])
 def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
-    tmp_path: Path, binding: HarnessBinding | None, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
@@ -518,7 +518,7 @@ def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
     monkeypatch.setattr(old_harness, "judge", judge_call)
     ctx, _, _ = _judgement_ctx(store, harness_a=old_harness, harness_b=old_harness, probe=FakeProbe())
     old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
-    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: binding} if binding is not None else {})
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding()})
     new = Mock(spec=HarnessSet, registry=registry, versions=None)
     fresh_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=current_harness)})
     ready = Mock(spec=HarnessSet, registry=fresh_registry, versions=None)
@@ -545,6 +545,116 @@ def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
     assert settings.binary == "new-binary"
     assert settings.model_aliases == fresh.model_aliases
     assert settings.environment == fresh.environment
+    Advance(ctx).run()
+    completion = next(item for item in store.pending_outbound() if item.kind == "completion.submitted")
+    assert json.loads(completion.payload)["submission"]["choice"] == "pass"
+
+
+def test_disabled_harness_finishes_retained_worker_and_relaunches_judge(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
+    handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
+    harness = FakeHarness(handle=handle, verdict="pass", judge_output_usable=False)
+    ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), versions=None)
+    sets = HarnessSets(Mock(side_effect=[old, disabled]))
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.retain(WorkerInvocation("lease_a", 1))
+    sets.select(HarnessAssemblyKey((2,)))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+
+    assert CLAUDE_CODE_HARNESS_ID not in sets.current.registry.known_harnesses
+    Advance(ctx).run()
+    assert len(harness.judged) == 1
+    assert sets.lookup(JudgeInvocation("lease_a", 1)) is old
+    Advance(ctx).run()
+    assert len(harness.judged) == 2
+    harness.judge_output_usable = True
+    Advance(ctx).run()
+    completion = next(item for item in store.pending_outbound() if item.kind == "completion.submitted")
+    assert json.loads(completion.payload)["submission"]["choice"] == "pass"
+
+
+def test_disabled_harness_without_retained_worker_defers_judgement(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
+    handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
+    harness = FakeHarness(handle=handle, verdict="pass")
+    ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
+    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), versions=None)
+    sets = HarnessSets(Mock(return_value=disabled))
+    sets.select(HarnessAssemblyKey((1,)))
+    ctx = replace(ctx, harness_sets=sets)
+
+    Advance(ctx).run()
+    assert harness.judged == []
+    assert store.in_flight_elicitation("lease_a", 1) is None
+
+
+@pytest.mark.parametrize("judge_already_running", [False, True])
+def test_restart_recovers_disabled_session_for_judgement(tmp_path: Path, judge_already_running: bool) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
+    handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
+    harness = FakeHarness(handle=handle, verdict="pass")
+    ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
+    if judge_already_running:
+        Advance(ctx).run()
+        assert len(harness.judged) == 1
+    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    sets = HarnessSets(Mock(return_value=disabled))
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, disabled)
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+    Advance(ctx).run()
+    if not judge_already_running:
+        assert len(harness.judged) == 1
+        Advance(ctx).run()
+    completion = next(item for item in store.pending_outbound() if item.kind == "completion.submitted")
+    assert json.loads(completion.payload)["submission"]["choice"] == "pass"
+
+
+def test_exited_judge_waits_for_disabled_owner_then_collects_even_after_staleness(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
+    handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
+    harness = FakeHarness(handle=handle, verdict="pass")
+    ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
+    Advance(ctx).run()
+    assert store.in_flight_elicitation("lease_a", 1) is not None
+
+    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None, recovery_only=True)
+    missing = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=None, versions=None)
+    available = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    inputs = Mock(spec=HarnessAssemblyInputs, sections=(ClaudeCodeSection(enabled=False),))
+    sets = HarnessSets(Mock(side_effect=[missing, available]))
+    sets.select(HarnessAssemblyKey((inputs,), ("missing",)))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+    Advance(ctx).run()
+    assert store.in_flight_elicitation("lease_a", 1) is not None
+    assert store.active_lease("lease_a") is not None
+    assert not any(item.kind == "completion.submitted" for item in store.pending_outbound())
+
+    assert isinstance(ctx.clock, FixedClock)
+    ctx.clock.advance(timedelta(days=1))
+    Advance(ctx).run()
+    assert store.in_flight_elicitation("lease_a", 1) is not None
+    sets.select(HarnessAssemblyKey((inputs,), ("available",)))
+    sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, available)
     Advance(ctx).run()
     completion = next(item for item in store.pending_outbound() if item.kind == "completion.submitted")
     assert json.loads(completion.payload)["submission"]["choice"] == "pass"
@@ -651,6 +761,37 @@ def test_failed_resume_drain_does_not_block_resume(
     assert sets.find(previous) is None
     assert sets.lookup(WorkerInvocation("lease_a", 2)) is new
     assert len(new_harness.resumed) == 1
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_unmet_produces_resumes_retained_disabled_harness(tmp_path: Path, restart: bool) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, lease_id="lease_a", chunk_id="ch_a", harness_id=CLAUDE_CODE_HARNESS_ID, pid=100)
+    handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
+    harness = FakeHarness(handle=handle, verdict=None)
+    ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
+    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=old, versions=None)
+    sets = HarnessSets(Mock(side_effect=[old, disabled]))
+    sets.select(HarnessAssemblyKey((1,)))
+    if not restart:
+        sets.retain(WorkerInvocation("lease_a", 1))
+    sets.select(HarnessAssemblyKey((2,)))
+    if restart:
+        sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, disabled)
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+    lease = store.active_lease("lease_a")
+    assert lease is not None
+
+    DormantSession(ctx, lease).resume_on_unmet_produces("continue", store.bindings_for_chunk("ch_a"))
+
+    assert len(harness.resumed) == 1
+    assert sets.lookup(WorkerInvocation("lease_a", 2)) is old
+    assert CLAUDE_CODE_HARNESS_ID not in sets.current.registry.known_harnesses
 
 
 def test_restart_continues_after_failed_drain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

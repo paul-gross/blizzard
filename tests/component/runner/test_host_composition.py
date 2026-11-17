@@ -18,12 +18,20 @@ from sqlalchemy import func, select
 
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, RunnerProcess, add_runner, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.harness_set import HarnessAssemblyInputs, HarnessAssemblyKey, HarnessSet, HarnessSets
+from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyInputs,
+    HarnessAssemblyKey,
+    HarnessSet,
+    HarnessSets,
+    WorkerInvocation,
+)
 from blizzard.runner.harness.health import HarnessHealthCause
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import first_bindings
@@ -32,9 +40,11 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, RunnerIdentityHolder
+from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop_wiring import PeriodicDriver
+from blizzard.runner.node_steps.envelope import EnvelopeNode
 from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
@@ -43,6 +53,7 @@ from tests.support.harness_bundle import bundle as harness_bundle
 from tests.support.harness_bundle import runtime as harness_runtime
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import FakeSubscriptionSampler, migrated_store_at
+from tests.support.runner_mint import new_mint
 
 _RUNNER_OWNED = (
     RunnerStores,
@@ -65,6 +76,57 @@ def _host(config: RunnerConfig, *runner_ids: str, halted: tuple[HaltedRunner, ..
     """The host the config's file declares, with one built runner for each of ``runner_ids``."""
     built = [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid), ResolvedToken()) for rid in runner_ids]
     return build_host_process(host_config_of(config), built, halted=halted)
+
+
+@pytest.mark.parametrize("version, recover", [("2.1.0", True), ("99.0.0", False), (None, False)])
+def test_restart_recovers_disabled_session_without_advertising_it(
+    tmp_path: Path, version: str | None, recover: bool
+) -> None:
+    binary = tmp_path / "opencode"
+    if version is not None:
+        binary.write_text(f"#!/bin/sh\necho '{version}'\n")
+        binary.chmod(0o755)
+    config = _config(tmp_path)
+    host = _host(config, "rn_a")
+    now = datetime.now(UTC)
+    try:
+        stores = host.runners[0].stores
+        lease = NewLease("lease_a", "ch_a", "gr_a", "nd_a", "build", 1, 2, now)
+        stores.lease_record.record_mint(new_mint(lease, harness_id="opencode"))
+        stores.liveness.record_spawn(
+            "lease_a",
+            pid=123,
+            process_start_time="start",
+            spawned_at=now,
+            session=SessionReference("opencode", "session-a"),
+            transcripts_root="/old-transcripts",
+        )
+    finally:
+        host.close()
+
+    section = OpenCodeSection(binary=str(binary), enabled=False)
+    config = dataclasses.replace(config, harness_sections=config.harness_sections.replaced(section))
+    host = _host(config, "rn_a")
+    stepper = loop_wiring.RunnerStepper(
+        config, process_graph=dataclasses.replace(host.runners[0], settings_reader=None)
+    )
+    try:
+        ctx = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        sets = host.runners[0].harness_sets
+        assert "opencode" not in sets.current.registry.known_harnesses
+        node = EnvelopeNode(
+            "n", "build", Executor.RUNNER, SessionMode.FRESH, JudgedBy.WORKER, session_harnesses=["opencode"]
+        )
+        assert ctx.harness_selector.select(node).harness_id is None
+        owner = sets.find(WorkerInvocation("lease_a", 1))
+        assert (owner is not None) is recover
+        if owner is not None:
+            assert "opencode_v2" in type(owner.selection.of("opencode")).__module__
+            assert ctx.harnesses_for_lease("lease_a").lifecycle("opencode") is not None
+            assert ctx.invocation_transcript_source(SessionReference("opencode", "session-a"), "lease_a", 1)
+    finally:
+        stepper.close()
+        host.close()
 
 
 def test_production_set_reuses_last_key_and_rebuilds_for_changed_inputs(

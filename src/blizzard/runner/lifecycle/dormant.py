@@ -186,7 +186,7 @@ class DormantSession:
         """Resume a session that exited with required ``produces:`` unattached, instead of
         judging it — no retry consumed, no epoch bumped. Owner resolution is
         checked **before** the generation's spend is recorded (the same "resolve before any
-        mutation" shape :meth:`_restart` uses), so an unresolvable owner escalates in place
+        mutation" shape :meth:`_restart` uses), so an unresolvable owner defers or escalates
         rather than recording a spend for a wake that never happens."""
         lease = self.lease
         harness = self._resolve_harness(via="unmet-produces-resume")
@@ -642,8 +642,6 @@ class DormantSession:
         if lease.session is not None:
             harness = self._resolve_harness(via="restart-resume")
             if harness is None:
-                # `_resolve_harness` already escalated and killed any survivor as part of that
-                # closure — no other runner can resume this exact session to re-attach here.
                 return
         now = self.ctx.clock.now()
         # Kill-first — never two processes on one session — via the shared, liveness-checked
@@ -678,9 +676,9 @@ class DormantSession:
         )
 
     def _resolve_harness(self, *, via: str) -> IHarnessWorkerLifecycle | None:
-        """Resolve the dormant session's recorded owner; escalate the chunk in place via
-        :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
-        when it is unknown or unavailable. :meth:`park_on_ask` uses
+        """Resolve the recorded owner, deferring recovery or escalating an unresolvable owner.
+
+        :meth:`park_on_ask` uses
         :meth:`_resolve_harness_for_usage_only` instead, since parking needs no harness at all."""
         lease = self.lease
         session = lease.session
@@ -688,10 +686,26 @@ class DormantSession:
         try:
             owners = getattr(self.ctx, "harness_sets", None)
             registry = owners.current.registry if owners is not None else self.ctx.harnesses
-            return registry.lifecycle(session.harness_id)
+            try:
+                return registry.lifecycle(session.harness_id)
+            except UnknownHarnessError:
+                retained = owners.worker_for_lease(lease.lease_id) if owners is not None else None
+                if retained is None:
+                    raise
+                return retained.registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            if self.awaiting_recovery():
+                return None
             Attempt(self.ctx, lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return None
+
+    def awaiting_recovery(self) -> bool:
+        owners = getattr(self.ctx, "harness_sets", None)
+        session = self.lease.session
+        if owners is None or session is None:
+            return False
+        generation = self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
+        return owners.awaiting_recovery(WorkerInvocation(self.lease.lease_id, generation), session.harness_id)
 
     def _resolve_harness_for_usage_only(self, *, via: str) -> IHarnessWorkerLifecycle | None:
         """Resolve the dormant session's recorded owner, logging and returning ``None`` —
@@ -774,8 +788,12 @@ class DormantSession:
         # a hung or failing probe must never run after the worker is already live and unrecorded.
         spawn_cwd = SpawnCwd.of_session(self.ctx.workspaces.spawn_root(bindings[0].workspace_id), bindings[0].workdir)
         invocation = WorkerInvocation(lease.lease_id, generation)
+        selected = None
         if owners is not None:
-            selected = owners.retain(invocation)
+            if session.harness_id not in owners.current.registry.known_harnesses and origin_owner is not None:
+                selected = owners.retain_for(invocation, WorkerInvocation(lease.lease_id, generation - 1))
+            else:
+                selected = owners.retain(invocation)
             try:
                 harness = selected.registry.lifecycle(session.harness_id)
             except BaseException:
@@ -805,6 +823,7 @@ class DormantSession:
                     chunk_id=lease.chunk_id,
                     session_settings=settings,
                 ),
+                selected=selected,
             )
         except BaseException:
             if owners is not None:

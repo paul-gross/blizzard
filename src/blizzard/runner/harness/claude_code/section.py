@@ -41,7 +41,7 @@ class ClaudeCodeSection:
 
     #: `harness_binary` or `[claude_code].binary` — mock-claude-code in tests, `claude` in prod.
     binary: str = DEFAULT_HARNESS_BINARY
-    #: `[claude_code].enabled` — false leaves Claude Code unbound, unprobed, and unadvertised.
+    #: `[claude_code].enabled` — false excludes Claude Code from new work and advertisement.
     enabled: bool = True
     #: Legacy `--permission-mode` override: `None` lets autonomy map, empty passes no flag.
     permission_mode: str | None = None

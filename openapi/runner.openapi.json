@@ -7445,6 +7445,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Current"
           },
           "detail": {
@@ -7463,6 +7464,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Errors"
           },
           "key": {
@@ -7474,6 +7476,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Key"
           },
           "status": {
@@ -14204,18 +14207,11 @@
             "description": "Successful Response"
           },
           "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SettingsProblem"
-                }
-              }
-            },
             "description": "Superuser required"
           },
           "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/SettingsProblem"
                 }
@@ -14227,11 +14223,16 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
                   "$ref": "#/components/schemas/SettingsProblem"
                 }
               }
             },
-            "description": "Invalid settings edit"
+            "description": "Invalid settings edit or request"
           }
         },
         "summary": "Patch Settings",

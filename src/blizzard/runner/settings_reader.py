@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.settings_record.vocabulary import Entry
@@ -14,11 +14,7 @@ from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, RunnerEntry, parse_runner_entry
 from blizzard.runner.settings.keys import runner_keys
-from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsSnapshot
-
-
-class SettingsSnapshotSource(Protocol):
-    def snapshot(self) -> SettingsSnapshot: ...
+from blizzard.runner.settings.ports import IReadRunnerSettings, IWriteRunnerSettings, SettingsChange, SettingsSnapshot
 
 
 class RunnerSettingsReader:
@@ -28,7 +24,7 @@ class RunnerSettingsReader:
         self,
         host: HostConfig,
         entry: RunnerEntry,
-        store: SettingsSnapshotSource,
+        store: IReadRunnerSettings,
         *,
         deferred_seed: IWriteRunnerSettings | None = None,
         identity_present: Callable[[], bool] | None = None,
@@ -72,6 +68,13 @@ class RunnerSettingsReader:
             seed.seed(self.entry.authored, (*self.keys, *self.aliases), validate=self.validate, aliases=self.aliases)
             self._deferred_seed = None
         return self.store.snapshot()
+
+    def snapshot_with_provenance(self) -> tuple[SettingsSnapshot, Mapping[str, SettingsChange]]:
+        self.snapshot_record()
+        return self.store.snapshot_with_provenance()
+
+    def changes(self, *, limit: int, before: int | None = None) -> tuple[SettingsChange, ...]:
+        return self.store.changes(limit=limit, before=before)
 
     def preview_seed(self) -> RunnerConfig:
         """Resolve the entries a first seed would produce, without writing them."""

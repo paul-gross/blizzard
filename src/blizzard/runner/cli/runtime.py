@@ -1478,6 +1478,17 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
                 token=runner_built.token,
                 host_token=config.host_token.value,
             )
+        identity_store = graph.stores.identity
+        graph = replace(
+            graph,
+            settings_reader=RunnerSettingsReader(
+                config,
+                entry,
+                graph.stores.settings,
+                deferred_seed=graph.stores.settings if identity_store.runner_identity() is None else None,
+                identity_present=lambda: identity_store.runner_identity() is not None,
+            ),
+        )
         try:
             if snapshot := graph.harness_sets.current.bundle:
                 click.echo(snapshot.summary())

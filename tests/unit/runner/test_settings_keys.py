@@ -5,6 +5,7 @@ from pathlib import Path
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.settings.keys import runner_keys
+from tests.support.runner_settings import SnapshotSettingsStore
 
 
 def test_runner_keys_preserve_whole_arrays_and_exclude_boot_and_aliases() -> None:
@@ -44,7 +45,7 @@ def test_reader_resolves_stored_entries_and_defaults(tmp_path: Path) -> None:
     keys = runner_keys(HOST_REGISTRY)
     entries = {key: Entry(entry.authored.value(key)) for key in keys if entry.authored.states(key)}
 
-    class Store:
+    class Store(SnapshotSettingsStore):
         def snapshot(self) -> SettingsSnapshot:
             return SettingsSnapshot(1, entries)
 
@@ -69,7 +70,7 @@ def test_unset_last_nested_setting_removes_its_empty_container(tmp_path: Path) -
     write_minimal_host(tmp_path, runner="[runner.throttle.budget]\nusd = 5\n")
     host = load_host_config(tmp_path)
 
-    class Store:
+    class Store(SnapshotSettingsStore):
         def snapshot(self) -> SettingsSnapshot:
             return SettingsSnapshot(1, {"projects": Entry([]), "throttle.budget.usd": Entry(None, at_default=True)})
 
@@ -88,7 +89,7 @@ def test_validation_attributes_parser_errors_to_whole_setting_paths(tmp_path: Pa
     write_minimal_host(tmp_path)
     host = load_host_config(tmp_path)
 
-    class Store:
+    class Store(SnapshotSettingsStore):
         def snapshot(self) -> SettingsSnapshot:
             return SettingsSnapshot(0, {})
 

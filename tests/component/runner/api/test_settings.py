@@ -4,19 +4,23 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx2
 import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.tokens import TokenHash
+from blizzard.runner.api.settings import SettingsProblem
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import RunnerStepper
+from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
@@ -117,6 +121,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     )
     seams = runner_seams(app)
     seams.settings_reader = reader
+    seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
     ready, halted = seed_runners(host, list(host.runners))
     assert not halted
     graph = build_host_process(host, ready)
@@ -143,8 +148,36 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
         stepper.request()
         running = client.get("/api/settings").json()["in_force"]
         assert running["revision"] == 2 and running["since"]
+        spec = app.openapi()
+        responses = spec["paths"]["/runners/{runner_id}/api/settings"]["patch"]["responses"]
+        problem_schema = {"$ref": "#/components/schemas/SettingsProblem"}
+        assert responses["409"]["content"] == {"application/problem+json": {"schema": problem_schema}}
+        assert responses["422"]["content"] == {
+            "application/problem+json": {"schema": problem_schema},
+            "application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}},
+        }
+        required = set(spec["components"]["schemas"]["SettingsProblem"]["required"])
+
+        def assert_problem(response: httpx2.Response) -> None:
+            # All problem fields, including nulls, are part of the wire schema.
+            assert response.headers["content-type"] == "application/problem+json"
+            body = response.json()
+            assert required <= body.keys()
+            SettingsProblem.model_validate(body)
+
+        malformed = client.patch("/api/settings", content="{", headers={"content-type": "application/json"})
+        assert malformed.status_code == 422
+        assert malformed.headers["content-type"] == "application/json"
+        assert malformed.json()["detail"][0]["type"] == "json_invalid"
+        wrong_body = client.patch("/api/settings", json={"unset": "agents"})
+        assert wrong_body.status_code == 422
+        assert wrong_body.headers["content-type"] == "application/json"
+        assert wrong_body.json()["detail"][0]["loc"] == ["body", "unset"]
         missing = client.patch("/api/settings", json={"set": {"agents": 2}})
         assert missing.status_code == 409
+        assert_problem(missing)
+        assert missing.json()["key"] is None
+        assert missing.json()["errors"] is None
         assert missing.json()["code"] == "revision_conflict"
         assert missing.json()["current"] == 2
         response = client.patch("/api/settings", headers={"If-Match": "2"}, json={"set": {"agents": 2}})
@@ -153,6 +186,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
         assert response.json()["in_force"] == running
         stale = client.patch("/api/settings", headers={"If-Match": "2"}, json={"unset": ["agents"]})
         assert stale.status_code == 409
+        assert_problem(stale)
         assert stale.json()["code"] == "revision_conflict"
         assert stale.json()["current"] == 3
         for key, code in [
@@ -162,15 +196,18 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
         ]:
             response = client.patch("/api/settings", headers={"If-Match": "3"}, json={"set": {key: 1}})
             assert response.status_code == 422, response.text
+            assert_problem(response)
             assert response.json()["code"] == code
         response = client.patch(
             "/api/settings", headers={"If-Match": "3"}, json={"set": {"agents": 1}, "unset": ["agents"]}
         )
         assert response.status_code == 422
+        assert_problem(response)
         assert response.json()["code"] == "settings_invalid"
         assert response.json()["errors"][0]["key"] == "agents"
         invalid = client.patch("/api/settings", headers={"If-Match": "3"}, json={"set": {"agents": -1}})
         assert invalid.status_code == 422, invalid.text
+        assert_problem(invalid)
         assert invalid.json()["code"] == "settings_invalid"
         assert [error["key"] for error in invalid.json()["errors"]] == ["agents"]
         unchanged = client.get("/api/settings").json()
@@ -279,6 +316,7 @@ def test_settings_human_roles_and_worker_credential(
     )
     seams = runner_seams(app)
     seams.settings_reader = reader
+    seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
     ready, halted = seed_runners(host, list(host.runners))
     assert not halted
     graph = build_host_process(host, ready)
@@ -359,6 +397,7 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
     runner_seams(app).settings_reader = reader
+    runner_seams(app).settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
     runner_seams(app).stepper = stepper
     with runner_client(app) as client:
         view = client.get("/api/settings").json()

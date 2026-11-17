@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import tzinfo
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -63,6 +63,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.binding_selection import BindingSelection, CachedVersionProbe
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import BinaryVersionCache, HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.declaration import IVersionSelectedDeclaration
 from blizzard.runner.harness.harness_set import HarnessAssemblyInputs, HarnessAssemblyKey, HarnessSet, HarnessSets
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -79,6 +80,7 @@ from blizzard.runner.harness.wiring import (
     combined_telemetry_plan,
     configured_tiers,
     declared_telemetry_names,
+    harness_families,
     publish_harness_bundle,
     select_harness_bindings,
 )
@@ -991,7 +993,7 @@ def harness_assembly_key(inputs: HarnessAssemblyInputs) -> HarnessAssemblyKey:
     return HarnessAssemblyKey(
         values=(inputs,),
         binary_identities=tuple(
-            (section.harness_id, identities.identify(section.binary)) for section in inputs.sections if section.enabled
+            (section.harness_id, identities.identify(section.binary)) for section in inputs.sections
         ),
         bundle_source_identity=(
             bundle_source_identity(
@@ -1058,7 +1060,7 @@ def _build_runner(
         version_env = assembly_inputs.worker_env.tool()
         binary_versions = BinaryVersionCache(ToolBinaryIdentity(version_env))
 
-        def assemble(key: HarnessAssemblyKey) -> HarnessSet:
+        def assemble(key: HarnessAssemblyKey, *, recovering: bool = False) -> HarnessSet:
             nonlocal version_env, binary_versions
             inputs = cast(HarnessAssemblyInputs, key.values[0])
             sections = HarnessSections(inputs.sections)
@@ -1076,9 +1078,58 @@ def _build_runner(
                 version_env = tool_env
                 binary_versions = binary_versions.with_identities(ToolBinaryIdentity(tool_env))
             versions = CachedVersionProbe(VersionProbe(host.children, tool_env), binary_versions)
-            chosen = selection or select_harness_bindings(
-                sections, worker_env=inputs.worker_env, children=host.children, versions=versions
+            held_selection = harness_sets.current.selection if key.preserve_selection and not recovering else None
+            chosen = (
+                held_selection
+                or (None if recovering else selection)
+                or select_harness_bindings(
+                    sections, worker_env=inputs.worker_env, children=host.children, versions=versions
+                )
             )
+            recovery_sections: tuple[Any, ...] = ()
+            pending_recovery: set[str] = set()
+            if not recovering and ready:
+                active_ids = {
+                    lease.harness_id
+                    for lease in stores.lease_record.list_active_leases()
+                    if lease.session_id is not None and lease.harness_id is not None
+                }
+                recovery_ids: set[str] = set()
+                families = harness_families()
+                for section in sections:
+                    if (
+                        section.enabled
+                        or section.harness_id not in active_ids
+                        or not versions.binary_present(section.binary)
+                    ):
+                        continue
+                    family = families[section.harness_id]
+                    if len(family) > 1:
+                        raw = versions.observe_version(section.binary)
+                        if not any(cast(IVersionSelectedDeclaration[Any], item).admits_version(raw) for item in family):
+                            pending_recovery.add(section.harness_id)
+                            binary_versions.forget(section.binary)
+                            continue
+                    recovery_ids.add(section.harness_id)
+                if recovery_ids:
+                    recovery_sections = tuple(
+                        replace(cast(Any, section), enabled=True) if section.harness_id in recovery_ids else section
+                        for section in sections
+                    )
+                    recovery_selection = select_harness_bindings(
+                        HarnessSections(recovery_sections),
+                        worker_env=inputs.worker_env,
+                        children=host.children,
+                        versions=versions,
+                    )
+                    chosen = BindingSelection(
+                        {
+                            harness_id: recovery_selection.of(harness_id) if harness_id in recovery_ids else declaration
+                            for harness_id, declaration in chosen.chosen.items()
+                        }
+                    )
+            if key.retry_unresolved and frozenset(pending_recovery) == harness_sets.current.pending_recovery:
+                return harness_sets.current
             snapshot = inputs.bundle
             if inputs.publish and inputs.config_dir is not None and snapshot is None:
                 snapshot = publish_harness_bundle(
@@ -1132,7 +1183,23 @@ def _build_runner(
                     if section.enabled and chosen.of(section.harness_id).service_version
                 ),
             )
-            return HarnessSet(chosen, snapshot, harnesses, probes, health, plan, capability_versions)
+            selected_set = HarnessSet(
+                chosen,
+                snapshot,
+                harnesses,
+                probes,
+                health,
+                plan,
+                capability_versions,
+                recovery_only=recovering,
+                pending_recovery=frozenset(pending_recovery),
+            )
+            if recovery_sections:
+                recovery_key = replace(
+                    key, values=(replace(inputs, sections=recovery_sections, publish=False, bundle=snapshot),)
+                )
+                selected_set = replace(selected_set, recovery=assemble(recovery_key, recovering=True))
+            return selected_set
 
         harness_sets = HarnessSets(assemble)
         harness_sets.select(harness_assembly_key(assembly_inputs))
