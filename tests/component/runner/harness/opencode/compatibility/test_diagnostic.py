@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import stat
 import sys
 import time
@@ -549,28 +550,72 @@ def test_model_tool_wrapper_cannot_read_disposable_auth(tmp_path: Path) -> None:
     assert not outside.exists()
 
 
+_DESCENDANT_BOUND = 5.0
+
+# A descendant that records its PID once it is running, then outlives any cleanup that misses it.
+_READY_DESCENDANT = (
+    "import os, pathlib, sys, time; {prelude}pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(60)"
+)
+
+
+def _await_descendant_pid(ready: Path) -> int:
+    """The PID a running descendant recorded; a descendant that never signals readiness fails."""
+    deadline = time.monotonic() + _DESCENDANT_BOUND
+    while time.monotonic() < deadline:
+        text = ready.read_text() if ready.exists() else ""
+        if text:
+            return int(text)
+        time.sleep(0.005)
+    pytest.fail("the descendant never signalled readiness")
+
+
+def _is_running(pid: int) -> bool:
+    """Whether ``pid`` is still doing work: a gone process, or a zombie awaiting reaping, is not."""
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return stat_text.rsplit(")", 1)[1].split()[0] not in {"Z", "X"}
+
+
+def _await_exit(pid: int) -> None:
+    deadline = time.monotonic() + _DESCENDANT_BOUND
+    while time.monotonic() < deadline:
+        if not _is_running(pid):
+            return
+        time.sleep(0.005)
+    pytest.fail(f"descendant {pid} survived cleanup")
+
+
+def _kill_if_running(pid: int | None) -> None:
+    if pid is not None and _is_running(pid):
+        os.kill(pid, signal.SIGKILL)
+
+
 @requires_landlock
 def test_timeout_kills_and_reaps_an_opencode_descendant(tmp_path: Path) -> None:
-    marker = tmp_path / "descendant-ran"
+    ready = tmp_path / "descendant-pid"
     launcher = tmp_path / "launcher.py"
     launcher.write_text(
         "import subprocess, sys, time\n"
-        "subprocess.Popen([sys.executable, '-c', "
-        "'import pathlib, sys, time; time.sleep(0.5); pathlib.Path(sys.argv[1]).write_text(\"touched\")', "
-        "sys.argv[1]])\n"
-        "time.sleep(30)\n"
+        f"subprocess.Popen([sys.executable, '-c', {_READY_DESCENDANT.format(prelude='')!r}, sys.argv[1]])\n"
+        "time.sleep(60)\n"
     )
 
-    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
-        [sys.executable, str(launcher), str(marker)],
-        cwd=tmp_path,
-        env={},
-        timeout=0.1,
+    pid: int | None = None
+    started = SubprocessOpenCodeProcess(children=CHILDREN).start_capture(
+        [sys.executable, str(launcher), str(ready)], cwd=tmp_path, env={}
     )
+    try:
+        pid = _await_descendant_pid(ready)
+        result = started.result(0.1)
 
-    assert result.timed_out is True
-    time.sleep(0.7)
-    assert not marker.exists()
+        assert result.timed_out is True
+        _await_exit(pid)
+    finally:
+        _kill_if_running(pid)
+        started.terminate()
+        started.close_streams()
 
 
 @requires_landlock
@@ -590,25 +635,24 @@ def test_process_drains_both_pipes_without_unbounded_capture(tmp_path: Path) -> 
 
 @requires_landlock
 def test_successful_run_rejects_and_reaps_a_pipe_closing_descendant(tmp_path: Path) -> None:
-    marker = tmp_path / "descendant-ran"
+    ready = tmp_path / "descendant-pid"
     launcher = tmp_path / "launcher.py"
+    descendant = _READY_DESCENDANT.format(prelude="os.close(1); os.close(2); ")
     launcher.write_text(
-        "import os, subprocess, sys, time\n"
-        "subprocess.Popen([sys.executable, '-c', "
-        "'import os, pathlib, sys, time; os.close(1); os.close(2); time.sleep(0.5); "
-        'pathlib.Path(sys.argv[1]).write_text("touched")\', '
-        "sys.argv[1]])\n"
-        "time.sleep(0.05)\n"
+        "import pathlib, subprocess, sys, time\n"
+        f"subprocess.Popen([sys.executable, '-c', {descendant!r}, sys.argv[1]])\n"
+        "ready = pathlib.Path(sys.argv[1])\n"
+        "deadline = time.monotonic() + 5\n"
+        "while time.monotonic() < deadline and not (ready.exists() and ready.read_text()):\n"
+        "    time.sleep(0.005)\n"
     )
 
-    result = SubprocessOpenCodeProcess(children=CHILDREN).run(
-        [sys.executable, str(launcher), str(marker)],
-        cwd=tmp_path,
-        env={},
-        timeout=5.0,
-    )
-
-    assert result.returncode != 0
-    assert result.process_group_reaped is True
-    time.sleep(0.7)
-    assert not marker.exists()
+    process = SubprocessOpenCodeProcess(children=CHILDREN)
+    result = process.run([sys.executable, str(launcher), str(ready)], cwd=tmp_path, env={}, timeout=10.0)
+    pid = _await_descendant_pid(ready)
+    try:
+        assert result.returncode != 0
+        assert result.process_group_reaped is True
+        _await_exit(pid)
+    finally:
+        _kill_if_running(pid)
