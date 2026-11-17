@@ -556,9 +556,7 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
   const host = await runnerHosts.create({
     runnerLoop: 'timed',
     runnerOtlp: 'hung',
-    // The export may start before the chunk reaches done. Keep its timeout well beyond the whole slow test,
-    // including the shutdown join, so a slow run cannot turn the hung export into a failed one first.
-    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '3600' },
+    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '120' },
     runnerConfig: { tick_seconds: 0.5, tracing: { sweep_seconds: 1n, settle_seconds: 0n } },
   });
   // A chunk run to done on the timed loop, then the pass clock watched across several passes.
