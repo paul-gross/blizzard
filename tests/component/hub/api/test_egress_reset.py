@@ -212,6 +212,16 @@ def test_reset_cli_sends_the_requested_instant_to_the_api(tmp_path: Path, value:
     assert datetime.fromisoformat(json.loads(result.output)["to_at"]) == expected
 
 
+def test_reset_cli_help_distinguishes_local_and_zoned_times() -> None:
+    result = bind_stubs().runner.invoke(hub_group, ["egress", "reset", "--help"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    help_text = " ".join(result.output.split())
+    assert "a bare time is read in the caller's own local time" in help_text
+    assert "a time with Z or an offset is that instant" in help_text
+    assert "Not in the future" in help_text
+
+
 @pytest.mark.parametrize("value", ["yesterday", "2026-13-01", "2026-07-12T03:00:00+25:00"])
 def test_reset_cli_rejects_bad_times(value: str) -> None:
     result = bind_stubs().runner.invoke(hub_group, ["egress", "reset", "--dataset", "events", "--to", value], env=_ENV)

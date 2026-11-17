@@ -73,7 +73,8 @@ def egress_status(cli: CliContext) -> None:
     "to",
     type=InstantTime(),
     required=True,
-    help="The instant the cursor moves to, read in the caller's own local time; not in the future.",
+    help="The instant the cursor moves to: a bare time is read in the caller's own local time; "
+    "a time with Z or an offset is that instant. Not in the future.",
 )
 def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
     """Move one dataset's cursor to --to. Forward skips the window for subsequent live export, but a pass already
