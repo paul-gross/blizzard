@@ -144,16 +144,13 @@ jobs:
           BLIZZARD_TEST_SHARD_BY: file
         run: uv run pytest -n auto
 
-  python-tests-result:
-    name: pytest (unit + component)
-    needs: [python-tests]
-    if: ${{ !cancelled() && !inputs.lint_only }}
+  # The census runs its own dynamic observations and consumes no shard output, so it starts with the
+  # shards instead of after the slowest one; `python-tests-result` joins it.
+  refusal-census:
+    name: runner refusal aggregate coverage census
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
-      - name: every shard passed
-        env:
-          RESULT: ${{ needs.python-tests.result }}
-        run: test "$RESULT" = success || { echo "::error::a pytest shard finished '$RESULT'"; exit 1; }
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -164,6 +161,20 @@ jobs:
       - run: uv sync
       - name: runner refusal aggregate coverage census
         run: uv run python -m tests.support.aggregate_census
+
+  python-tests-result:
+    name: pytest (unit + component)
+    needs: [python-tests, refusal-census]
+    if: ${{ !cancelled() && !inputs.lint_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: every shard and the census passed
+        env:
+          SHARDS: ${{ needs.python-tests.result }}
+          CENSUS: ${{ needs.refusal-census.result }}
+        run: |
+          test "$SHARDS" = success || { echo "::error::a pytest shard finished '$SHARDS'"; exit 1; }
+          test "$CENSUS" = success || { echo "::error::the refusal census finished '$CENSUS'"; exit 1; }
 
   # Playwright runs TypeScript without checking its types, so the gate does: tsc, eslint (with the bans a service
   # spec keeps), and a regenerate-and-diff of the committed wire types (bzh:generated-client). Starts no daemon and

@@ -39,9 +39,15 @@ test module whose repo-relative path hashes to another shard, so a shard pays to
 tier splits by `file`, across its many modules; the service tier's Python half splits by `test`, since a few of its
 modules hold most of its tests. A test that carries no tier marker fails collection in whichever shard collects it. A
 `*-result` job reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
-`upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
-With `BLIZZARD_TEST_SHARD` unset the whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or `file` is a
-usage error; the local commands below run unsharded.
+`upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count. The
+runner refusal aggregate coverage census (`tests.support.aggregate_census`) runs its own dynamic observations and
+consumes no shard output, so it is a `refusal-census` job that starts with the shards; the `*-result` job joins the
+shards and the census and succeeds only when every input reports `success`, so a failed, cancelled, or skipped input
+fails the required check. Before the split the census ran inside the result job after the slowest shard: on push run
+43753786351 its command took 251s and the result job 276s. After it, the census overlaps the shards, and the result job
+only joins. The census adds one runner to the gate's concurrent jobs, which can queue the full gate when runners are
+scarce. With `BLIZZARD_TEST_SHARD` unset the whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or
+`file` is a usage error; the local commands below run unsharded.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
