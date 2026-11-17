@@ -30,3 +30,14 @@ def test_it_runs_the_proof_against_the_postgres_service_the_rehearsal_uses() -> 
 def test_it_fetches_every_tag_so_the_floors_store_contract_can_be_read() -> None:
     checkout = next(s for s in _JOB["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
     assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_it_records_its_timings_and_keeps_only_that_file_on_success() -> None:
+    steps = _JOB["steps"]
+    proof = next(s for s in steps if "store_baseline" in s.get("run", ""))
+    assert proof["env"]["BLIZZARD_TEST_TIMINGS"] == "timings-store-baseline.json"
+    [upload] = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+    assert upload["if"] == "${{ success() }}"
+    assert upload["with"]["name"] == "timings-store-baseline"
+    assert upload["with"]["path"] == "timings-store-baseline.json"
+    assert upload["with"]["retention-days"] <= 14

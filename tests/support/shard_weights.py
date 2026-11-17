@@ -532,7 +532,7 @@ def _download_run(run_id: str, into: Path) -> None:
     (into / "jobs.json").write_text(jobs.stdout)
     subprocess.run(["gh", "run", "download", run_id, "--pattern", "timings-*", "--dir", str(into)], check=False)
     for path in into.glob("timings-*/*.json"):
-        path.rename(into / f"{path.parent.name}.json")
+        path.rename(into / path.name)
 
 
 def _plan_playwright_cli(suite_id: str, shard: str, listing: Path) -> int:
