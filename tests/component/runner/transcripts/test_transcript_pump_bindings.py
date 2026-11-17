@@ -181,7 +181,7 @@ def test_a_segment_without_a_frozen_cwd_reads_in_the_directory_its_newest_bindin
     cwds = {session: cwd for session, cwd, _ in source.turns_since_calls}
     assert cwds["sess-held"] == "/ws/1"
     assert cwds["sess-released"] == "/ws/2"  # a released newest binding still names the workdir it was saved with
-    assert cwds["sess-unbound"] != "/ws/3"
+    assert cwds["sess-unbound"] is None
     assert len(cwds) == 3
 
 
