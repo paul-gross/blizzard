@@ -28,7 +28,7 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent, close_skipped_events
+from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
 from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import EscalationWrite, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -465,7 +465,6 @@ class FactIngestService:
                     at=now,
                     transaction=transaction,
                 ),
-                committed=lambda written: self._publish_close_skipped(chunk_id, written),
             )
         # question.asked — the runner authors the question_id so it can poll the answer back.
         return _LockedLanding(
@@ -499,14 +498,6 @@ class FactIngestService:
         return self._route.record_lease_minted(
             chunk_id, epoch=epoch, claimant=claimant, at=now, transaction=transaction
         )
-
-    def _publish_close_skipped(self, chunk_id: str, written: _Written) -> None:
-        """Publish the ``work-item-close-skipped`` frames an escalation's committed unit wrote."""
-        if not isinstance(written, EscalationWrite) or not written.close_skipped:
-            return
-        chunk = self._chunks.get(chunk_id)
-        if chunk is not None:
-            self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
 
     def _event_landing(
         self, runner_id: str, fact: Payload, *, chunks: Mapping[str, Chunk], runner_name: str | None, now: datetime
