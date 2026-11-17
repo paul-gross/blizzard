@@ -36,9 +36,15 @@ def release(root: Path) -> tuple[str, Path]:
             check=True,
         )
         tags = [item.tag for item in parse_releases(item["tag"] for item in json.loads(listed.stdout)["releases"])]
+    # An anonymous API call shares one rate limit per runner address, so a busy CI day answers 403; the job's own
+    # token lifts that. It rides the API call only, never the asset downloads that follow to other hosts.
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    api_headers = {"Authorization": f"Bearer {token}"} if token else {}
     with httpx2.Client(follow_redirects=True, timeout=120) as client:
         for tag in tags:
-            response = client.get(f"https://api.github.com/repos/paul-gross/blizzard/releases/tags/{tag}")
+            response = client.get(
+                f"https://api.github.com/repos/paul-gross/blizzard/releases/tags/{tag}", headers=api_headers
+            )
             if response.status_code == 404:
                 continue
             response.raise_for_status()
