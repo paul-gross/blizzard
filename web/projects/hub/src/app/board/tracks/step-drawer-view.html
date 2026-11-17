@@ -156,6 +156,8 @@
           <fleet-kit-section-head label="Transcript" [count]="transcript()?.turns?.length || null">
             @if (s.executor === null) {
               <span class="dim">executor unknown</span>
+            } @else if (unlistedExecutor(s.executor); as raw) {
+              <span class="dim" data-testid="step-drawer-executor-unlisted">executor {{ raw }}</span>
             }
           </fleet-kit-section-head>
           @if (s.executor === Executor.HUB) {

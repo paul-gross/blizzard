@@ -243,3 +243,4 @@ export const hostEnrollMutationKey = [
 export const laneMoveScopeId = 'hub-lane-move';
 
 export const chunkUrgencyMutationKey = ['hub', 'mutation', 'chunk-urgency'] as const;
+export const createHubItemMutationKey = ['hub', 'mutation', 'create-hub-item'] as const;

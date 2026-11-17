@@ -10,7 +10,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, s
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { BoardShell, boardLayoutOf, type BoardLayout } from './board-shell/board-shell';
+import { boardLayoutOf, type BoardLayout } from '../core/board-layout.model';
+import { BoardShell } from './board-shell/board-shell';
 import { TracksPanel } from './tracks/tracks-panel';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
 import { type ChunkSummary, asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';

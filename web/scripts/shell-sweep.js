@@ -334,6 +334,10 @@
  *     garden page: a bare gardening path lands on Proposals, the gardening strip wears
  *     the kit's desktop sub-strip, the Proposals count is amber while any wait, and at
  *     phone widths the tabs wrap within the page with 44px targets.
+ *   - projects/hub/src/app/board/tracks/step-drawer-view.shell-sweep.spec.ts — the
+ *     step drawer's Transcript section head labels an executor the client does not
+ *     list by its raw value, inside the head with no horizontal overflow, at
+ *     1280/1024px — the drawer is desktop-only.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -374,6 +378,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/admin/projects/project-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/core/kit-swatch.shell-sweep.spec.ts' },
@@ -415,6 +420,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/tracks/step-drawer-view.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

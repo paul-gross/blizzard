@@ -56,9 +56,8 @@
   font-style: italic;
 }
 /* Matches `fleet-kit-prose-block`'s own `.who` label style (`kit-prose-block.css`)
- * so "Timeline" reads like the "Summary"/"Note" labels beside it, rather than the
- * browser's UA-default `<h4>`. */
-.fp-content h4,
+ * so "Timeline" reads like the prose blocks' "Summary"/"Note" labels above it,
+ * rather than the browser's UA-default `<h4>`. */
 .fp-timeline h4 {
   margin: 0 0 4px;
   font-size: var(--fs-label);

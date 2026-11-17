@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitMarkdown, FleetWhen, type Tone } from 'fleet';
+import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingSeverityTone, findingStateTone, isFindingExited } from '../core/finding-state';
 import type { FindingTriageVerb } from '../core/finding-list';
@@ -67,7 +67,7 @@ export interface FindingPanelVm {
     KitBadge,
     KitButton,
     KitFactList,
-    KitMarkdown,
+    KitProseBlock,
     FleetFindingFactTimeline,
     FleetWhen,
     RouterLink, AppLink,

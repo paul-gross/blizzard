@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary, WorkItemsView } from 'fleet';
 import { workItemEntry, workRefView, chunkSummary } from 'fleet/testing';
-import { BoardShell, boardLayoutOf } from './board-shell';
+import { BoardShell } from './board-shell';
 
 @Component({
   selector: 'app-test-tracks-host',
@@ -115,13 +115,5 @@ describe('BoardShell layouts', () => {
     expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
     expect(el.querySelector('[data-testid="board-loading"]')).toBeNull();
     expect(el.querySelector('[data-testid="board-error"]')).toBeNull();
-  });
-
-  it('maps list and tracks through and anything else to the board', () => {
-    expect(boardLayoutOf('list')).toBe('list');
-    expect(boardLayoutOf('tracks')).toBe('tracks');
-    expect(boardLayoutOf('board')).toBe('board');
-    expect(boardLayoutOf('grid')).toBe('board');
-    expect(boardLayoutOf(null)).toBe('board');
   });
 });

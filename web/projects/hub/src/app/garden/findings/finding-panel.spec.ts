@@ -77,10 +77,18 @@ describe('FleetFindingPanel', () => {
     const fixture = await mount({ vm: { ...LIVE_VM, summary: text, note: text } });
     const el = fixture.nativeElement as HTMLElement;
 
-    for (const testid of ['fp-summary', 'fp-note']) {
+    for (const [testid, label] of [
+      ['fp-summary', 'Summary'],
+      ['fp-note', 'Note'],
+    ]) {
       const section = el.querySelector(`[data-testid="${testid}"]`)!;
-      expect(section.querySelector('fleet-kit-markdown')).not.toBeNull();
-      expect(section.querySelector('fleet-kit-prose-block')).toBeNull();
+      // Each section is a labelled prose block wrapping the Markdown body —
+      // the rail and label shared with every other agent prose, the body not `.tx`.
+      expect(section.closest('fleet-kit-prose-block')).not.toBeNull();
+      expect(section.querySelector('.who')?.textContent).toBe(label);
+      expect(section.querySelector('.rail .tick')).not.toBeNull();
+      expect(section.querySelector('.body > fleet-kit-markdown')).not.toBeNull();
+      expect(section.querySelector('.tx')).toBeNull();
       expect(section.querySelector('h2')?.textContent?.trim()).toBe('Context');
       expect(section.querySelector('strong')?.textContent).toBe('Read');
       expect(section.querySelector('code')?.textContent).toBe('src/a.py');

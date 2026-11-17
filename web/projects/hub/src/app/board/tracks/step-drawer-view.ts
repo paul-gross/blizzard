@@ -39,6 +39,7 @@ import {
   stepFacts,
   stepIdentity,
   stepModel,
+  unlistedExecutor,
 } from './step-drawer.model';
 
 /** The transcript's placeholder: a few turns as the stacked transcript lays them out — each a stamp, a kind, and its
@@ -136,6 +137,7 @@ export class StepDrawerView {
   protected readonly host = hostLabel;
   protected readonly stepOf = stepRefOf;
   protected readonly identity = stepIdentity;
+  protected readonly unlistedExecutor = unlistedExecutor;
 
   protected when(iso: string): string {
     return localStamp(iso, new Date(this.nowMs()));

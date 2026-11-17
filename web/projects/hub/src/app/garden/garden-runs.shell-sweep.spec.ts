@@ -263,7 +263,8 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
         const body = proposalRoot.querySelector<HTMLElement>('.pp-body')!;
         const markdown = body.querySelector<HTMLElement>('fleet-kit-markdown')!;
         const note = findingRoot.querySelector<HTMLElement>('[data-testid="fp-note"]')!;
-        const noteParent = note.parentElement!;
+        // The prose block host carries the cap, so the available width is its container's.
+        const noteParent = note.closest('fleet-kit-prose-block')!.parentElement!;
         expect(markdown.textContent).toContain('Paragraph 19');
         expect(note.textContent).toContain('Paragraph 19');
         const bodyStyle = getComputedStyle(body);

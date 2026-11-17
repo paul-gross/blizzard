@@ -1,4 +1,4 @@
-import { type ChunkDetail, type ProjectView, formatWhenParts, hubApi } from 'fleet';
+import { type ChunkDetail, type ProjectView, formatWhenParts, hubApi, unlisted } from 'fleet';
 import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
@@ -164,6 +164,19 @@ export function transcriptRefOf(segment: EnvTimelineSegment | undefined): LeaseT
   return segment !== undefined && segment.executor !== hubApi.Executor.HUB && segment.epoch !== null
     ? { chunkId: segment.chunk_id, nodeId: segment.node_id, epoch: segment.epoch, live: segment.ended_at === null }
     : null;
+}
+
+/** The raw executor a step names that the client's `Executor` vocabulary does not list — a newer hub's — or `null` for a
+ * listed one or none (`bzh:frontend-open-vocabulary`). */
+export function unlistedExecutor(executor: hubApi.Executor | null): string | null {
+  switch (executor) {
+    case hubApi.Executor.RUNNER:
+    case hubApi.Executor.HUB:
+    case null:
+      return null;
+    default:
+      return unlisted(executor);
+  }
 }
 
 /** How the drawer's header names a step: its session in full, else its node — with why it names no session. */

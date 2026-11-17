@@ -15,6 +15,8 @@ import {
   type InAppLink,
 } from 'fleet/shell';
 
+import { isBoardLayout } from './board-layout.model';
+
 /** The URL segment a lensed board URL opens with: `/p/{project}/{view}/…`. */
 export const LENS_SEGMENT = 'p';
 
@@ -185,7 +187,7 @@ export class ProjectLens {
     const target = this.router.parseUrl(lensedUrl(view, slug));
     if (view === '/board') {
       const layout = this.router.parseUrl(source).queryParamMap.get('layout');
-      if (layout === 'board' || layout === 'list' || layout === 'tracks')
+      if (isBoardLayout(layout))
         target.queryParams['layout'] = layout;
     }
     return this.router.serializeUrl(target);

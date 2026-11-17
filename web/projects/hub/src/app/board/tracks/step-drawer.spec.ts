@@ -75,6 +75,27 @@ describe('StepDrawer', () => {
 
   const reads = () => stub.forRoute('/api/env-timeline/step', 'GET');
 
+  describe('an executor the client does not list', () => {
+    const transcriptReads = () => stub.forRoute('/api/env-timeline/step/transcript', 'GET');
+    const unlistedStep = (epoch: number | null): EnvTimelineStepView => {
+      const step = { ...BUILD, segment: { ...BUILD.segment, executor: 'cloud' as hubApi.Executor, epoch } };
+      return { ...VIEW, journey: [step], step };
+    };
+
+    it('reads its transcript when it carries an epoch', async () => {
+      await mount('/board?chunk=ch_01&step=lease_01', () => unlistedStep(3));
+
+      expect(transcriptReads()).toHaveLength(1);
+      expect(transcriptReads()[0].search).toContain('epoch=3');
+    });
+
+    it('reads no transcript without an epoch', async () => {
+      await mount('/board?chunk=ch_01&step=lease_01', () => unlistedStep(null));
+
+      expect(transcriptReads()).toHaveLength(0);
+    });
+  });
+
   it('is closed and reads nothing while no chunk is named', async () => {
     const { el } = await mount('/board');
 

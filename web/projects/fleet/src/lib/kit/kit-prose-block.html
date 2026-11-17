@@ -4,6 +4,10 @@
     @if (label(); as label) {
       <div class="who">{{ label }}</div>
     }
-    <div class="tx">{{ text() }}</div>
+    @if (format() === 'markdown') {
+      <fleet-kit-markdown [text]="text()" />
+    } @else {
+      <div class="tx">{{ text() }}</div>
+    }
   </div>
 </div>
