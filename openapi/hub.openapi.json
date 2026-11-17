@@ -1638,7 +1638,7 @@
         "type": "object"
       },
       "BounceEnvelope": {
-        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout.",
+        "description": "Why delivery did not complete: the ``cause``, the repositories not yet landed, and the ``action`` whose pass\nanswered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout.\n\n``diagnostic`` is the hub's own account of a bounce no action answered: ``null`` is known \u2014 there is none \u2014 and a\nbody that omits the key is unknown, as every body written before it existed. ``detail`` carries the same text\n(``\"\"`` when ``diagnostic`` is ``null``) for readers that predate ``diagnostic``; a body written before it also\ncarries a sentence the hub generated from the other fields there.",
         "properties": {
           "action": {
             "anyOf": [
@@ -1659,6 +1659,18 @@
             "title": "Detail",
             "type": "string"
           },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Diagnostic"
+          },
           "unlanded": {
             "items": {
               "$ref": "#/components/schemas/BounceUnlandedRepo"
@@ -1671,7 +1683,8 @@
           "cause",
           "detail",
           "unlanded",
-          "action"
+          "action",
+          "diagnostic"
         ],
         "title": "BounceEnvelope",
         "type": "object"

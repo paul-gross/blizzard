@@ -64,4 +64,12 @@ describe('bounceReason', () => {
     expect(bounceReason('{"x":1}')).toBe('bounced');
     expect(bounceReason('garbled')).toBe('garbled');
   });
+
+  it('reports diagnostic by the key: absent is undefined, null and a string are as written, anything else fails', () => {
+    const body = { cause: 'c', detail: '' };
+    expect(parseBounceEnvelope(JSON.stringify(body))?.diagnostic).toBeUndefined();
+    expect(parseBounceEnvelope(JSON.stringify({ ...body, diagnostic: null }))?.diagnostic).toBeNull();
+    expect(parseBounceEnvelope(JSON.stringify({ ...body, diagnostic: 'why' }))?.diagnostic).toBe('why');
+    expect(parseBounceEnvelope(JSON.stringify({ ...body, diagnostic: { a: 1 } }))).toBeNull();
+  });
 });

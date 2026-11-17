@@ -37,6 +37,9 @@ test.describe('conflicted delivery', () => {
     expect(state.detail.bounces).toHaveLength(1);
     expect(state.detail.bounces[0].cause).toBe('conflict');
     expect((state.detail.artifacts as { name: string }[]).filter((item) => item.name === 'bounce-envelope')).toHaveLength(1);
+    const bounced = JSON.parse((state.detail.bounces[0] as { envelope: string }).envelope) as { detail: string; diagnostic: string | null };
+    expect(bounced.diagnostic).toBeNull();
+    expect(bounced.detail).not.toContain('did not land');
     expect(state.detail.landed).toBe(false);
     expect(state.pulls.length).toBeGreaterThan(0);
     expect(state.pulls.some((pull) => pull.merged)).toBe(false);

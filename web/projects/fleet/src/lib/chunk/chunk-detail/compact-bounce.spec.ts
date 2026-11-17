@@ -67,4 +67,48 @@ describe('compactBounce', () => {
   it.each(['not json {', 'unknown `diagnostic` with details', '{"action":42', '{"error":"permission denied","code":403}', '{"x":1}', '["failure"]'])('preserves unrecognized raw errors: %s', (raw) => {
     expect(compactBounce(raw)).toEqual({ identity: null, reason: raw, full: raw });
   });
+
+  describe('a record carrying diagnostic', () => {
+    const fact = (over: object) => JSON.stringify({ cause: 'failure', detail: '', unlanded: [repo], action, diagnostic: null, ...over });
+
+    it('derives identity, reason and explanation from the facts', () => {
+      expect(compactBounce(fact({}))).toEqual({
+        identity: 'org/repo · PR #42', reason: 'Pre-push: failure', full: 'PR #42 in org/repo did not land: Pre-push answered failure',
+      });
+    });
+
+    it('never runs the wrapper match: a wrapper-shaped detail beside a known diagnostic is not unwrapped', () => {
+      const detail = 'PR #42 in org/repo did not land: `pre-push` answered failure';
+      expect(compactBounce(fact({ detail, diagnostic: detail })).reason).toBe('PR #42 in org/repo did not land: pre-push answered failure');
+    });
+
+    it('leads with a differing cause over the action choice', () => {
+      expect(compactBounce(fact({ cause: 'repository permission denied' })).reason).toBe('repository permission denied');
+    });
+
+    it('shows a genuine diagnostic as the reason and joins it into the explanation', () => {
+      const out = compactBounce(fact({ action: null, cause: 'poll-timeout', detail: 'hub node `deliver` timed out', diagnostic: 'hub node `deliver` timed out', unlanded: [] }));
+      expect(out.reason).toBe('hub node deliver timed out');
+      expect(out.full).toBe('delivery did not land. hub node `deliver` timed out');
+    });
+
+    it('names several repositories, with and without a pull request, and an action with no log', () => {
+      const other = { repo: 'org/two', branch: 'work', commit: 'def', pr: null };
+      const out = compactBounce(fact({ unlanded: [repo, other], action: { ...action, log_artifact: null } }));
+      expect(out.identity).toBe('org/repo · PR #42; org/two');
+      expect(out.full).toBe('PR #42 in org/repo, org/two did not land: Pre-push answered failure');
+    });
+
+    it('falls back to the cause, then the recorded cause, then bounced when there is no action', () => {
+      expect(compactBounce(fact({ action: null, cause: 'conflict' })).reason).toBe('conflict');
+      expect(compactBounce(fact({ action: null, cause: '' }), 'poll-timeout').reason).toBe('poll-timeout');
+      expect(compactBounce(fact({ action: null, cause: '' })).reason).toBe('bounced');
+    });
+
+    it('treats a malformed diagnostic as an unknown record', () => {
+      const raw = fact({ detail: 'PR #42 in org/repo did not land: pre-push answered failure', diagnostic: 42 });
+      expect(compactBounce(raw).reason).toBe('Pre-push: failure');
+      expect(compactBounce(raw).full).toBe('PR #42 in org/repo did not land: pre-push answered failure');
+    });
+  });
 });

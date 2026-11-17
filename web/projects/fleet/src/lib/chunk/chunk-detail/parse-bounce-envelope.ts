@@ -1,5 +1,9 @@
 import type { BounceAction, BounceEnvelope, BounceUnlandedRepo } from '../../api/hub';
 
+/** The generated `BounceEnvelope`, its `diagnostic` widened to admit `undefined`: the key was absent from the body, so
+ * whether the hub had a diagnostic is unknown — distinct from `null`, known to have none. */
+export type ParsedBounceEnvelope = Omit<BounceEnvelope, 'diagnostic'> & { readonly diagnostic: BounceEnvelope['diagnostic'] | undefined };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -27,9 +31,10 @@ function parseUnlandedRepo(value: unknown): BounceUnlandedRepo | null {
  * generated `BounceEnvelope`. `null` when `raw` is not JSON, not an object, or any field fails its check — the
  * caller falls back to the artifact's own text. An unknown key is ignored — a `step` on an envelope stored before
  * the hub named the `action` among them. `unlanded` defaults to `[]`, and `action` to `null`, when absent, so an
- * envelope that names only a `cause` and a `detail` still reads structurally.
+ * envelope that names only a `cause` and a `detail` still reads structurally. `diagnostic` is read from the key's
+ * presence: a string or `null` as written, `undefined` when absent, and a parse failure for any other value.
  */
-export function parseBounceEnvelope(raw: string): BounceEnvelope | null {
+export function parseBounceEnvelope(raw: string): ParsedBounceEnvelope | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -52,7 +57,9 @@ export function parseBounceEnvelope(raw: string): BounceEnvelope | null {
 
   const action = parseAction(parsed['action']);
   if (action === undefined) return null;
-  return { cause, detail, unlanded, action };
+  const diagnostic = parsed['diagnostic'];
+  if (diagnostic !== undefined && diagnostic !== null && typeof diagnostic !== 'string') return null;
+  return { cause, detail, unlanded, action, diagnostic };
 }
 
 /** The envelope as one readable line: its `detail` with markdown code ticks dropped, else
