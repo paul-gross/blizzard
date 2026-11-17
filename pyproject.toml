@@ -313,6 +313,7 @@ extraPaths = ["src", "exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
+reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.ruff]
 line-length = 120

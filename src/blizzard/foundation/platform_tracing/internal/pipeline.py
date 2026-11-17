@@ -14,10 +14,10 @@ from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.httpx import HTTPX2ClientInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import (  # pyright: ignore[reportMissingTypeStubs]  # ships no py.typed
+from opentelemetry.instrumentation.sqlalchemy import (
     __version__ as sqlalchemy_instrumentation_version,
 )
-from opentelemetry.instrumentation.sqlalchemy.engine import (  # pyright: ignore[reportMissingTypeStubs]  # ships no py.typed
+from opentelemetry.instrumentation.sqlalchemy.engine import (
     EngineTracer,
 )
 from opentelemetry.instrumentation.utils import suppress_instrumentation

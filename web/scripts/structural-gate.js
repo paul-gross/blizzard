@@ -884,7 +884,8 @@ function assertNoCacheWriteDetectorWorks() {
 // belongs to the longest key prefixing its path; a key with child keys (`garden` beside
 // `garden/core`) owns only the files directly inside it. Something two features need moves down
 // into `core`; nothing imports `shell`. There is no exemption list: a new edge is a table change.
-// The rule's tables own each graph and these mirror them, so an edge changes both together.
+// The rule's tables own the fleet and runner graphs and `FLEET_LAYERS` and `RUNNER_LAYERS` mirror them, so an edge
+// changes both together; `HUB_LAYERS` is the hub's one roster.
 
 const FLEET_LAYERS = {
   api: [],
@@ -898,8 +899,8 @@ const FLEET_LAYERS = {
   testing: ['api'],
 };
 
-/** The executable copy of the hub layer table in blizzard-context's
- * `architecture/frontend-structure/placement.md` — the two must match row for row. */
+/** The authoritative hub roster under `bzh:frontend-package-layers` in blizzard-context's
+ * `architecture/frontend-structure/placement.md`, which carries no hub table. */
 const HUB_LAYERS = {
   core: [],
   admin: [],
