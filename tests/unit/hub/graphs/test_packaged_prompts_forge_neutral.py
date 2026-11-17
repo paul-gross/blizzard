@@ -4,7 +4,7 @@
 forge tools. Two claims: no packaged node prompt surface names a GitHub CLI invocation, and
 the CI-retry recovery prompts — collected by their flake vocabulary and wait-then-retry instruction — are exactly the
 three known sites, each still carrying every recovery obligation and its outcome. Sibling to
-``test_packaged_prompts_no_hub_verb.py``."""
+``tests/unit/hub/graphs/test_packaged_prompts_no_hub_verb.py``."""
 
 from __future__ import annotations
 
