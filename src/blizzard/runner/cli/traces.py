@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from http import HTTPStatus
-from typing import Any
+from typing import Annotated, Any
 
 import click
-from pydantic import TypeAdapter
+from pydantic import Field, TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators, HTTPError
 from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since, since_option, until_option
@@ -28,6 +28,10 @@ _ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 _REPLAY_TIMEOUT = 600.0
 
 _COLLECTOR_HINT = "point the runner at an OpenTelemetry Collector that receives OTLP over HTTP, and fan out from there"
+
+
+class _ReplayStatus(RunnerTraceStatusResponse):
+    replay_max_window_seconds: Annotated[int, Field(gt=0)] | None = None
 
 
 def _daemon_options(command: Any) -> Any:
@@ -156,7 +160,7 @@ def traces_replay(
     with RunnerDaemon.reach("traces replay", directory, runner_url, Door.of(ctx), runner) as daemon:
         _, status = daemon.decode_answer(
             daemon.get("/api/traces/status"),
-            TypeAdapter(RunnerTraceStatusResponse),
+            TypeAdapter(_ReplayStatus),
         )
         windows = replay_windows(since, until, status.replay_max_window_seconds)
         for number, (start, stop) in enumerate(windows, 1):
