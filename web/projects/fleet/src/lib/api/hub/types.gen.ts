@@ -11824,11 +11824,47 @@ export type NextClaimPassedEntry = {
  * NextClaimResponse
  *
  * ``GET /api/runners/{runner_id}/next-claim`` — the hub's best account of what one runner reaches for next, walked
- * from what the hub holds of it: ``next`` under pass-over with the chunks ``passed`` before it (at most twenty,
- * ``passed_total`` counting all), ``if_holding`` under a per-project hold with the head each served project's hold
- * stops at (``held_at``), and ``unserved``, the chunks ahead of ``next`` of projects the runner does not reach.
+ * from what the hub holds of it, assuming it prepares at the repository targets a peek names: ``next`` under
+ * pass-over with the chunks ``passed`` before it (at most twenty, ``passed_total`` counting all), ``if_holding``
+ * under a per-project hold with the head each served project's hold stops at (``held_at``), and ``unserved``, the
+ * chunks ahead of ``next`` of projects the runner does not reach. ``without_repository_targets`` is the same account
+ * for a runner that prepares at no targets, never offered a chunk targeting a project link's own branch; ``None``
+ * where the hub does not report it.
  */
 export type NextClaimResponse = {
+    /**
+     * Held At
+     */
+    held_at: Array<NextClaimPassedEntry>;
+    if_holding: NextClaimEntry | null;
+    next: NextClaimEntry | null;
+    /**
+     * Passed
+     */
+    passed: Array<NextClaimPassedEntry>;
+    /**
+     * Passed Total
+     */
+    passed_total: number;
+    /**
+     * Unserved
+     */
+    unserved: number;
+    without_repository_targets: NextClaimScenario | null;
+};
+
+/**
+ * NextClaimScenario
+ *
+ * One runner's next claim walked under one assumption about the targets it prepares at: the same fields the
+ * next-claim response carries for its own account, plus ``excluded``, the chunks ahead of ``next`` the runner is
+ * never offered under that assumption.
+ */
+export type NextClaimScenario = {
+    /**
+     * Excluded
+     */
+    excluded: number;
     /**
      * Held At
      */

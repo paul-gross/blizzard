@@ -50,11 +50,12 @@ from blizzard.hub.domain.operations.queue import (
     RankedOrder,
     SelfAnchoredMove,
     entries_of,
+    matched_candidates,
     queue_match_policy,
     select_matched_entry,
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.projects.targets import TargetChunk, names_override, with_records
+from blizzard.hub.domain.projects.targets import TargetChunk, Targets, unoffered_without_targets, with_records
 from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.chunk import WorkRefModel
@@ -69,6 +70,7 @@ from blizzard.wire.queue import (
     NextClaimEntry,
     NextClaimPassedEntry,
     NextClaimResponse,
+    NextClaimScenario,
     QueuePageView,
     QueuePeekEntry,
     QueuePeekRequest,
@@ -285,25 +287,20 @@ class MatchedPeek:
         served: Collection[str],
     ) -> MatchedPeek:
         ordered = services.queue.claim_ordered_ready(statuses=statuses)
-        positions = {chunk.chunk_id: position for position, chunk in enumerate(ordered)}
         policy = queue_match_policy(request.policy)
-        chunks = ordered if request.repository_targets else _without_overrides(services, ordered, served)
-        served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
+        excluded: frozenset[str] = (
+            frozenset()
+            if request.repository_targets
+            else unoffered_without_targets(_served_targets(services, ordered, served))
+        )
         per_project = request.projects is not None
-        if policy is not QueueMatchPolicy.HOLD:
-            candidates = served_chunks
-        elif per_project:
-            # Under a per-project hold only each project's head can be offered, so the first served chunk per project
-            # bounds the bulk reads by the projects named.
-            heads: dict[str | None, Chunk] = {}
-            for chunk in served_chunks:
-                heads.setdefault(chunk.project_id, chunk)
-            candidates = list(heads.values())
-        else:
-            candidates = served_chunks[:1]
-        reads = WalkReads.of(services, statuses, candidates)
+        reads = WalkReads.of(
+            services,
+            statuses,
+            matched_candidates(ordered, served=served, excluded=excluded, policy=policy, hold_per_project=per_project),
+        )
         entry = select_matched_entry(
-            chunks,
+            ordered,
             served=served,
             graphs=reads.graphs,
             facts=reads.facts,
@@ -311,12 +308,13 @@ class MatchedPeek:
             blocked=reads.markings,
             policy=policy,
             hold_per_project=per_project,
+            excluded=excluded,
         )
         if entry is None:
             return cls(None, None, {}, [])
         chunk = entry.chunk
         return cls(
-            MatchedEntry(chunk=chunk, position=positions[chunk.chunk_id]),
+            entry,
             services.projects.get(chunk.project_id) if chunk.project_id is not None else None,
             services.urgency_reading.by_id(),
             _repository_targets(services, chunk),
@@ -345,14 +343,14 @@ class MatchedPeek:
         )
 
 
-def _without_overrides(services: TenantServices, chunks: Sequence[Chunk], served: Collection[str]) -> list[Chunk]:
-    """``chunks`` less every served one whose targets include a project link's own branch — what a runner that does
-    not prepare at the peek's targets is never offered, since it would start that work on its workspace's branch.
-    The targets are read over every served chunk at once (``bzh:bulk-reconstitution``)."""
-    targets = services.chunk_targets.effective_for(
+def _served_targets(
+    services: TenantServices, chunks: Sequence[Chunk], served: Collection[str]
+) -> Mapping[str, Targets]:
+    """Each served chunk's effective targets, read once over every one of them (``bzh:bulk-reconstitution``) and
+    never captured."""
+    return services.chunk_targets.effective_for(
         [TargetChunk(chunk.chunk_id, chunk.project_id) for chunk in chunks if chunk.project_id in served]
     )
-    return [chunk for chunk in chunks if not names_override(targets.get(chunk.chunk_id, {}))]
 
 
 def _repository_targets(services: TenantServices, chunk: Chunk) -> list[RepositoryTarget]:
@@ -406,10 +404,13 @@ def _next_claim_passed(
 @dataclass(frozen=True)
 class NextClaim:
     """One runner's next claim, explained (:func:`explain_next_claim`) over every served ready chunk — the candidates a
-    pass-over peek reads, and a superset of a hold peek's — so one read feeds every walk. ``served`` and
-    ``capabilities`` are what the hub holds of the runner; no claim bar is applied."""
+    pass-over peek reads, and a superset of a hold peek's — so one read feeds every walk. ``explanation`` assumes the
+    runner prepares at the repository targets a peek names; ``without_targets`` is the same walk for a runner that
+    prepares at none, skipping the chunks it is never offered, over the same reads and one read of the served chunks'
+    targets. ``served`` and ``capabilities`` are what the hub holds of the runner; no claim bar is applied."""
 
     explanation: ClaimExplanation
+    without_targets: ClaimExplanation
     projects: dict[ProjectId, Project]
     urgencies: dict[UrgencyId, Urgency]
 
@@ -423,8 +424,19 @@ class NextClaim:
         capabilities: Sequence[RunnerCapability],
     ) -> NextClaim:
         chunks = services.queue.claim_ordered_ready(statuses=statuses)
-        reads = WalkReads.of(services, statuses, [chunk for chunk in chunks if chunk.project_id in served])
-        explanation = explain_next_claim(
+        reads = WalkReads.of(
+            services,
+            statuses,
+            matched_candidates(
+                chunks,
+                served=served,
+                excluded=frozenset(),
+                policy=QueueMatchPolicy.PASS_OVER,
+                hold_per_project=False,
+            ),
+        )
+        explain = partial(
+            explain_next_claim,
             chunks,
             served=served,
             graphs=reads.graphs,
@@ -432,29 +444,45 @@ class NextClaim:
             capabilities=capabilities,
             blocked=reads.markings,
         )
+        explanation = explain()
+        without_targets = explain(excluded=unoffered_without_targets(_served_targets(services, chunks, served)))
         shown = [
             entry.chunk
-            for entry in (explanation.next, explanation.if_holding, *explanation.passed, *explanation.held_at)
+            for explained in (explanation, without_targets)
+            for entry in (explained.next, explained.if_holding, *explained.passed, *explained.held_at)
             if entry is not None
         ]
         project_ids = sorted({chunk.project_id for chunk in shown if chunk.project_id is not None})
-        return cls(explanation, services.projects.get_many(project_ids), services.urgency_reading.by_id())
+        return cls(
+            explanation, without_targets, services.projects.get_many(project_ids), services.urgency_reading.by_id()
+        )
 
     @property
-    def view(self) -> NextClaimResponse:  # ast-grep-ignore: bzh:property-delegates
-        explained, projects, urgencies = self.explanation, self.projects, self.urgencies
+    def view(self) -> NextClaimResponse:
+        projects, urgencies = self.projects, self.urgencies
         return NextClaimResponse(
-            next=None
-            if explained.next is None
-            else _next_claim_entry(explained.next.chunk, explained.next.position, projects, urgencies),
-            passed=[_next_claim_passed(entry, projects, urgencies) for entry in explained.passed],
-            passed_total=explained.passed_total,
-            unserved=explained.unserved,
-            if_holding=None
-            if explained.if_holding is None
-            else _next_claim_entry(explained.if_holding.chunk, explained.if_holding.position, projects, urgencies),
-            held_at=[_next_claim_passed(entry, projects, urgencies) for entry in explained.held_at],
+            **_next_claim_scenario(self.explanation, projects, urgencies).model_dump(exclude={"excluded"}),
+            without_repository_targets=_next_claim_scenario(self.without_targets, projects, urgencies),
         )
+
+
+def _next_claim_scenario(
+    explained: ClaimExplanation, projects: Mapping[ProjectId, Project], urgencies: Mapping[UrgencyId, Urgency]
+) -> NextClaimScenario:
+    """One explanation as the wire's scenario — the fields the response carries for its own, plus ``excluded``."""
+    return NextClaimScenario(
+        next=None
+        if explained.next is None
+        else _next_claim_entry(explained.next.chunk, explained.next.position, projects, urgencies),
+        passed=[_next_claim_passed(entry, projects, urgencies) for entry in explained.passed],
+        passed_total=explained.passed_total,
+        unserved=explained.unserved,
+        if_holding=None
+        if explained.if_holding is None
+        else _next_claim_entry(explained.if_holding.chunk, explained.if_holding.position, projects, urgencies),
+        held_at=[_next_claim_passed(entry, projects, urgencies) for entry in explained.held_at],
+        excluded=explained.excluded,
+    )
 
 
 def _page_view(

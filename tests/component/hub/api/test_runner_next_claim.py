@@ -55,6 +55,11 @@ def test_a_paused_or_retired_runner_still_has_its_next_claim_explained(tmp_path:
     assert body["passed_total"] == 1
     assert body["if_holding"] is None
     assert [e["chunk_id"] for e in body["held_at"]] == [dependent]
+    alternative = body["without_repository_targets"]
+    assert {k: v for k, v in alternative.items() if k != "excluded"} == {
+        k: v for k, v in body.items() if k != "without_repository_targets"
+    }, "with no link naming its own branch, both scenarios walk alike"
+    assert alternative["excluded"] == 0
 
 
 def test_an_unknown_runner_is_404(tmp_path: Path) -> None:

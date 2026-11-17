@@ -8,17 +8,20 @@ from pathlib import Path
 from typing import Any
 
 from tests.support.hub_request_auth import bearer, enroll_runner, register_runner
-from tests.support.scaffolding import HubHarness, build_hub, default_project
+from tests.support.scaffolding import HubHarness, build_hub, default_project, ingest, link_project, seed_project
 
 _REPOSITORY = "acme-widget"
 _CAPABILITY = [{"harness_id": "claude", "default": True}]
 
 
-def _token(hub: HubHarness) -> str:
-    """A registered runner's token, its registration reporting the capabilities every default chunk needs."""
+def _token(hub: HubHarness, projects: list[str] | None = None) -> str:
+    """A registered runner's token, its registration reporting the capabilities every default chunk needs and serving
+    ``projects`` when named."""
     register_runner(hub, runner_id="runner-a", workspace_id="ws-a")
     token = enroll_runner(hub, "runner-a")
-    body = {"runner_id": "runner-a", "workspace_id": "ws-a", "capabilities": _CAPABILITY}
+    body: dict[str, Any] = {"runner_id": "runner-a", "workspace_id": "ws-a", "capabilities": _CAPABILITY}
+    if projects is not None:
+        body["projects"] = projects
     resp = hub.client.post("/api/fleet/runners", json=body, headers=bearer(token))
     assert resp.status_code in (200, 201), resp.text
     return token
@@ -33,8 +36,8 @@ def _ingest(hub: HubHarness, ref: str) -> str:
     return chunk_id
 
 
-def _link_branch(hub: HubHarness, base_branch: str | None) -> None:
-    project = default_project(hub.engine)
+def _link_branch(hub: HubHarness, base_branch: str | None, project: str | None = None) -> None:
+    project = project if project is not None else default_project(hub.engine)
     resp = hub.client.patch(
         f"/api/projects/{project}/repository-links/{_REPOSITORY}", json={"base_branch": base_branch}
     )
@@ -137,3 +140,54 @@ def test_a_claim_naming_no_targets_is_refused_only_while_a_link_names_its_own_br
     assert refused.status_code == 409, refused.text
     assert refused.json()["reason"] == "targets"
     assert admitted.status_code == 201, admitted.text
+
+
+def _hold_peek(hub: HubHarness, token: str, projects: list[str], *, opt_in: bool) -> list[dict[str, Any]]:
+    body: dict[str, Any] = {
+        "capabilities": _CAPABILITY,
+        "repository_targets": opt_in,
+        "policy": "hold",
+        "projects": projects,
+    }
+    resp = hub.client.post("/api/fleet/queue/peek", json=body, headers=bearer(token))
+    assert resp.status_code == 200, resp.text
+    return resp.json()["entries"]
+
+
+def _at(entries: list[dict[str, Any]]) -> tuple[str, int] | None:
+    return (entries[0]["chunk_id"], entries[0]["position"]) if entries else None
+
+
+def _scenario_at(entry: dict[str, Any] | None) -> tuple[str, int] | None:
+    return (entry["chunk_id"], entry["position"]) if entry else None
+
+
+def test_next_claims_two_scenarios_are_the_peeks_answers_in_each_target_mode(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    default = default_project(hub.engine)
+    beta = seed_project(hub.engine, "beta")
+    link_project(hub.engine, project=beta, source="default", repository=_REPOSITORY)
+    token = _token(hub, [default, beta])
+    blocked = ingest(hub, [{"source": "default", "ref": "1"}], project=default)
+    overridden = ingest(hub, [{"source": "default", "ref": "2"}], project=default)
+    inherited = ingest(hub, [{"source": "default", "ref": "3"}], project=beta)
+    declared = hub.client.post(f"/api/chunks/{blocked}/dependencies", json={"prerequisite_chunk_id": inherited})
+    assert declared.status_code == 202, declared.text
+    _link_branch(hub, "rust-rewrite", default)
+
+    resp = hub.client.get("/api/runners/runner-a/next-claim")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    alternative = body["without_repository_targets"]
+    projects = [default, beta]
+
+    assert _scenario_at(body["next"]) == _at(_peek(hub, token, opt_in=True)) == (overridden, 1)
+    assert _scenario_at(alternative["next"]) == _at(_peek(hub, token, opt_in=False)) == (inherited, 2)
+    assert _scenario_at(body["if_holding"]) == _at(_hold_peek(hub, token, projects, opt_in=True))
+    assert _scenario_at(alternative["if_holding"]) == _at(_hold_peek(hub, token, projects, opt_in=False))
+    assert _scenario_at(alternative["if_holding"]) == (inherited, 2), "an excluded head never stops a hold"
+    assert [e["chunk_id"] for e in body["passed"]] == [blocked]
+    assert (alternative["passed"], alternative["held_at"], alternative["excluded"]) == ([], [], 2)
+    assert "excluded" not in body
+    detail = hub.client.get(f"/api/chunks/{overridden}").json()
+    assert [t["captured_at"] for t in detail["repository_targets"]] == [None], "neither route captures a target"

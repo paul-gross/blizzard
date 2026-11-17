@@ -18631,8 +18631,85 @@
         "type": "object"
       },
       "NextClaimResponse": {
-        "description": "``GET /api/runners/{runner_id}/next-claim`` \u2014 the hub's best account of what one runner reaches for next, walked\nfrom what the hub holds of it: ``next`` under pass-over with the chunks ``passed`` before it (at most twenty,\n``passed_total`` counting all), ``if_holding`` under a per-project hold with the head each served project's hold\nstops at (``held_at``), and ``unserved``, the chunks ahead of ``next`` of projects the runner does not reach.",
+        "description": "``GET /api/runners/{runner_id}/next-claim`` \u2014 the hub's best account of what one runner reaches for next, walked\nfrom what the hub holds of it, assuming it prepares at the repository targets a peek names: ``next`` under\npass-over with the chunks ``passed`` before it (at most twenty, ``passed_total`` counting all), ``if_holding``\nunder a per-project hold with the head each served project's hold stops at (``held_at``), and ``unserved``, the\nchunks ahead of ``next`` of projects the runner does not reach. ``without_repository_targets`` is the same account\nfor a runner that prepares at no targets, never offered a chunk targeting a project link's own branch; ``None``\nwhere the hub does not report it.",
         "properties": {
+          "held_at": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NextClaimPassedEntry"
+            },
+            "title": "Held At",
+            "type": "array"
+          },
+          "if_holding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextClaimEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextClaimEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "passed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NextClaimPassedEntry"
+            },
+            "title": "Passed",
+            "type": "array"
+          },
+          "passed_total": {
+            "default": 0,
+            "title": "Passed Total",
+            "type": "integer"
+          },
+          "unserved": {
+            "default": 0,
+            "title": "Unserved",
+            "type": "integer"
+          },
+          "without_repository_targets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextClaimScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "next",
+          "passed",
+          "passed_total",
+          "unserved",
+          "if_holding",
+          "held_at",
+          "without_repository_targets"
+        ],
+        "title": "NextClaimResponse",
+        "type": "object"
+      },
+      "NextClaimScenario": {
+        "description": "One runner's next claim walked under one assumption about the targets it prepares at: the same fields the\nnext-claim response carries for its own account, plus ``excluded``, the chunks ahead of ``next`` the runner is\nnever offered under that assumption.",
+        "properties": {
+          "excluded": {
+            "default": 0,
+            "title": "Excluded",
+            "type": "integer"
+          },
           "held_at": {
             "default": [],
             "items": {
@@ -18686,9 +18763,10 @@
           "passed_total",
           "unserved",
           "if_holding",
-          "held_at"
+          "held_at",
+          "excluded"
         ],
-        "title": "NextClaimResponse",
+        "title": "NextClaimScenario",
         "type": "object"
       },
       "NoAnsweredProposalProblem": {

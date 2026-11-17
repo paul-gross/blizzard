@@ -31,6 +31,7 @@ from blizzard.hub.domain.projects.targets import (
     live_targets,
     names_override,
     prepared_at,
+    unoffered_without_targets,
     with_records,
 )
 
@@ -109,6 +110,22 @@ def test_a_runner_naming_no_targets_stands_at_them_only_while_none_is_an_overrid
     assert prepared_at(_INHERITED, None)
     assert prepared_at({}, None)
     assert not prepared_at(_OVERRIDDEN, None)
+
+
+def test_a_runner_naming_no_targets_is_not_offered_a_chunk_whose_effective_targets_name_an_override() -> None:
+    captured_override = {_REPOSITORY: BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False, captured_at=_AT)}
+    live_inherited = {_REPOSITORY: BranchTarget(_REPOSITORY, "master", inherited=True)}
+    same_text = {_REPOSITORY: BranchTarget(_REPOSITORY, "master", inherited=False)}
+
+    assert unoffered_without_targets(
+        {
+            "inherited": _INHERITED,
+            "overridden": _OVERRIDDEN,
+            "captured-first": effective_targets(captured_override, live_inherited),
+            "same-text-override": same_text,
+            "untargeted": {},
+        }
+    ) == {"overridden", "captured-first", "same-text-override"}
 
 
 class _LinksEditedBetweenReads:

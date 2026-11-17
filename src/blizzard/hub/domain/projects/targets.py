@@ -76,6 +76,13 @@ def prepared_at(targets: Targets, prepared: Mapping[str, str] | None) -> bool:
     return branches(targets) == dict(prepared)
 
 
+def unoffered_without_targets(targets: Mapping[str, Targets]) -> frozenset[str]:
+    """The ids of the chunks, among ``targets``'s effective targets by chunk id, a runner that names no targets is
+    never offered: those its environments would not stand at (:func:`prepared_at` with ``None``), since it would start
+    the work on its workspace's own branch."""
+    return frozenset(chunk_id for chunk_id, chunk_targets in targets.items() if not prepared_at(chunk_targets, None))
+
+
 def branches(targets: Targets) -> dict[str, str]:
     """``targets`` as the branch of each repository id, the shape delivery's resolution reads."""
     return {repository_id: target.base_branch for repository_id, target in targets.items()}
