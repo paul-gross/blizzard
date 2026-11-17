@@ -18,7 +18,11 @@ import {
   stepIdentity,
   stepModel,
   transcriptRefOf,
+  unlistedExecutor,
 } from './step-drawer.model';
+
+/** An executor a newer hub sends that this client's vocabulary does not list. */
+const UNLISTED = 'cloud' as EnvTimelineSegment['executor'];
 
 const at = (hhmm: string): string => `2026-07-01T${hhmm}:00Z`;
 
@@ -317,6 +321,28 @@ describe('transcriptRefOf', () => {
     expect(transcriptRefOf(undefined)).toBeNull();
     expect(transcriptRefOf(seg('10:00', null, { executor: 'hub', lease_id: null, epoch: 4 }))).toBeNull();
     expect(transcriptRefOf(seg('10:00', null, { epoch: null }))).toBeNull();
+  });
+
+  it.each([
+    ['runner', 'runner', true],
+    ['null', null, true],
+    ['unlisted', UNLISTED, true],
+    ['hub', 'hub', false],
+  ] as const)('reads a %s step only with an epoch', (_, executor, reads) => {
+    expect(transcriptRefOf(seg('10:00', null, { executor, epoch: 5 }))?.epoch ?? null).toBe(reads ? 5 : null);
+    expect(transcriptRefOf(seg('10:00', null, { executor, epoch: null }))).toBeNull();
+  });
+});
+
+describe('unlistedExecutor', () => {
+  it('is the raw value of an executor the client does not list', () => {
+    expect(unlistedExecutor(UNLISTED)).toBe('cloud');
+  });
+
+  it('is null for a listed executor or none', () => {
+    expect(unlistedExecutor('runner')).toBeNull();
+    expect(unlistedExecutor('hub')).toBeNull();
+    expect(unlistedExecutor(null)).toBeNull();
   });
 });
 

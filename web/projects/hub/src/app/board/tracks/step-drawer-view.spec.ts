@@ -375,6 +375,27 @@ describe('StepDrawerView', () => {
       const { el } = await render({ transcriptState: 'ready', transcript: TRANSCRIPT([]) });
 
       expect(section(el)).not.toContain('executor unknown');
+      expect(q(el, 'step-drawer-executor-unlisted')).toBeNull();
+    });
+
+    it('labels an executor the client does not list by its raw value and still reads its transcript', async () => {
+      const unlisted = placed({ executor: 'cloud' as hubApi.Executor, epoch: 2 });
+      const turns = [turnSegmentView({ index: 0 })];
+      const { el } = await render({ view: stepView(unlisted, { journey: [unlisted] }), transcriptState: 'ready', transcript: TRANSCRIPT(turns) });
+
+      expect(q(el, 'step-drawer-executor-unlisted')?.textContent?.trim()).toBe('executor cloud');
+      expect(q(el, 'step-drawer-executor-unlisted')?.closest('fleet-kit-section-head')).not.toBeNull();
+      expect(section(el)).not.toContain('executor unknown');
+      expect(el.querySelector('fleet-transcript-viewer')).not.toBeNull();
+    });
+
+    it('labels neither a hub nor a null executor as unlisted', async () => {
+      const hub = placed({ executor: 'hub', lease_id: null, epoch: 4 });
+      const unknown = placed({ executor: null, epoch: 2 });
+      for (const step of [hub, unknown]) {
+        const { el } = await render({ view: stepView(step, { journey: [step] }), transcriptState: 'ready', transcript: TRANSCRIPT([]) });
+        expect(q(el, 'step-drawer-executor-unlisted')).toBeNull();
+      }
     });
 
     it('draws the loading, empty and error states through the kit, with the loading testid on the projected skeleton', async () => {
