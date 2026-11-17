@@ -35,12 +35,13 @@ it does not belong, select `broken`.
 ### 4. Flaky or intermittent CI check
 
 A red check conclusion never clears on its own, so a failure you judge a flake is never answered `resolved` with no
-change — investigate it. Read the failing job's log and check whether the same test fails elsewhere: the base branch's
-recent runs, other PRs. To confirm, wait for the workflow run to conclude — `gh run watch <run-id>`, or poll
-`gh run view <run-id>` until its status is `completed`; the forge refuses a re-run while it is in progress — then
-`gh run rerun <run-id> --failed`. A re-run that passes means a flaky test or harness, a defect in the suite: name the
-test, the failure, and its likely cause in the `resolve-report` and select `broken`, so build fixes the flake at its
-root before the change delivers again. A re-run that fails the same way is the change's own defect — case 2.
+change — investigate it. Read the failing job's or check's logs; compare with recent base-branch runs and other changes.
+To confirm, wait via the configured forge tools for the run or pipeline to complete, then retry the failed jobs or
+checks once, where supported and authorized. A retry that passes means a flaky test or harness, a defect in the suite:
+name the test, failure, and likely cause in the `resolve-report` and select `broken`, so build fixes the flake at its
+root. A retry that fails the same way is the change's own defect — case 2. If logs, waiting or retry are unavailable,
+report that gap and the investigation done; never claim a retry or diagnosis that did not happen, nor bypass
+authorization.
 
 ### 5. Self-clearing state
 
