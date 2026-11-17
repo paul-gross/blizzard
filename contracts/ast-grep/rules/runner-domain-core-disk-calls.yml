@@ -22,6 +22,7 @@ files:
   - src/blizzard/runner/process/**
   - src/blizzard/runner/route_paths.py
   - src/blizzard/runner/selftest/**
+  - src/blizzard/runner/settings/**
   - src/blizzard/runner/status/**
   - src/blizzard/runner/stores.py
   - src/blizzard/runner/subscriptions/**
