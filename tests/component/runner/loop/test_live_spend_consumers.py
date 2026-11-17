@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.app import build_hosted_app
@@ -20,7 +21,6 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.throttle.gate import ThrottleGate
-from blizzard.runner.throttle.levers import LeverName
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, PausePark
 from blizzard.runner.throttle.release import releases_between_steps, releases_usage_limited
 from tests.support.config_inputs import load_host_config
@@ -338,5 +338,5 @@ def test_live_throttle_levers_and_release_policies_change_at_pass_boundary(
     assert observations == [
         ((), False, False),
         ((), False, False),
-        (((LeverName.PACE, False), (LeverName.UTILIZATION, False)), True, True),
+        (((DeclaredLever.PACE, False), (DeclaredLever.UTILIZATION, False)), True, True),
     ]

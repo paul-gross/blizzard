@@ -125,9 +125,9 @@ an answer, is never let go this way.
 
 A runner can also be told when it may start work. Four throttles, each optional, are set in the runner's
 `[runner.throttle]` table in `blizzard-host.toml`; a lever whose sub-table is absent does not exist, and a runner with
-no `[runner.throttle]` is held back by its subscription's floor alone, as before. File values seed the runner's
-settings; subsequent edits use the settings API or CLI and take effect on a later tick
-([runner settings](./runner-settings.md)).
+no effective throttles is held back by its subscription's floor alone, as before. A throttle absent from the file can
+still exist in stored settings. File values seed the runner's settings; subsequent edits use the settings API or CLI and
+take effect on a later tick ([runner settings](./runner-settings.md)).
 
 ```toml
 [runner.throttle]
