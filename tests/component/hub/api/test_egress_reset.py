@@ -33,6 +33,15 @@ from tests.support.worker_http import bind_stubs
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 
 
+def test_reset_help_describes_a_forward_skip_during_an_overlapping_pass() -> None:
+    result = bind_stubs().runner.invoke(hub_group, ["egress", "reset", "--help"], env=_ENV)
+
+    assert result.exit_code == 0
+    help_text = " ".join(result.output.split())
+    assert "Forward skips the window for subsequent live export" in help_text
+    assert "a pass already in progress may still write files for it" in help_text
+
+
 def _reset(hub: HubHarness, dataset: str, to: datetime) -> httpx2.Response:
     return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})
 

@@ -76,8 +76,9 @@ def egress_status(cli: CliContext) -> None:
     help="The instant the cursor moves to, read in the caller's own local time; not in the future.",
 )
 def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
-    """Move one dataset's cursor to --to. Forward skips the window between and never exports it; back repeats it,
-    writing its rows again to new files. The move is recorded as an egress-cursor-reset event."""
+    """Move one dataset's cursor to --to. Forward skips the window for subsequent live export, but a pass already
+    in progress may still write files for it; back repeats it into new files. The move is recorded as an
+    egress-cursor-reset event."""
     body = {"dataset": dataset, "to": iso_utc(to.astimezone(UTC))}
     resp = cli.send("post", "/api/egress/reset", json_body=body)
     cli.check(resp, "POST /egress/reset")

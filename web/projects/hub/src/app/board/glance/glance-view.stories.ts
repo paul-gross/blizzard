@@ -48,6 +48,8 @@ const blockedList = glanceListGroups([
 export const Blocked: Story = { args: { list: blockedList, vitals: glanceVitals([], blockedList) } };
 const longBlockerList = { ...empty, ready: [{ ...blockedList.ready[0], blocked: { label: 'a-very-long-blocker-reference-that-exceeds-a-phone-width', title: 'a-very-long-blocker-reference-that-exceeds-a-phone-width' } }] };
 export const LongBlocker: Story = { args: { list: longBlockerList, vitals: glanceVitals([], longBlockerList) } };
+const emptyBlockerList = { ...empty, ready: [{ ...blockedList.ready[0], blocked: { label: '', title: '' } }] };
+export const EmptyBlocker: Story = { args: { list: emptyBlockerList, vitals: glanceVitals([], emptyBlockerList) } };
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
 const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1 } as UrgencyView;

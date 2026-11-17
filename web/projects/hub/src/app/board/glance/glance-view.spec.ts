@@ -76,6 +76,11 @@ describe('GlanceView', () => {
     expect(rendered[1].querySelector('[data-testid="glance-blocked"]')).toBeNull();
   });
 
+  it('shows blocked without a separator when the blocker label is empty', async () => {
+    const [card] = await cards({ ready: [row({ blocked: { label: '', title: '' } })] });
+    expect(text(card.querySelector('[data-testid="glance-blocked"]'))).toBe('blocked');
+  });
+
   it('allows a long blocker to shrink with an ellipsis while retaining its full title', async () => {
     const label = 'a-very-long-blocker-reference-that-exceeds-a-phone-width';
     const [card] = await cards({ ready: [row({ blocked: { label, title: label } })] });

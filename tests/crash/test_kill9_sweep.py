@@ -3875,6 +3875,7 @@ def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         *data, manifest = files
         listed = json.loads((directory / manifest).read_text())["files"]
         assert [entry["path"] for entry in listed] == data
+        assert all((directory / name).is_file() for name in data)
         assert sum(entry["rows"] for entry in listed) == count
         assert {entry["dataset"] for entry in listed} == {dataset}
         named.update(data)

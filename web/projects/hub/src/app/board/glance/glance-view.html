@@ -60,7 +60,7 @@
             <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
           }
           @if (row.blocked; as blocked) {
-            <span class="blocked" data-testid="glance-blocked" [title]="blocked.title">blocked · {{ blocked.label }}</span>
+            <span class="blocked" data-testid="glance-blocked" [title]="blocked.title">blocked@if (blocked.label) { · {{ blocked.label }}}</span>
           }
           @if (row.statusWord; as word) {
             <span class="st" data-testid="glance-row-status">{{ word }}</span>

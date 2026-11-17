@@ -4760,7 +4760,7 @@
           "short_help": "Write the rows of [since, until) again, as the live export would have, without moving a cursor."
         },
         "reset": {
-          "help": "Move one dataset's cursor to --to. Forward skips the window between and never exports it; back repeats it,\nwriting its rows again to new files. The move is recorded as an egress-cursor-reset event.",
+          "help": "Move one dataset's cursor to --to. Forward skips the window for subsequent live export, but a pass already\nin progress may still write files for it; back repeats it into new files. The move is recorded as an\negress-cursor-reset event.",
           "params": [
             {
               "help": "The dataset whose cursor moves: steps, invocations or events.",
