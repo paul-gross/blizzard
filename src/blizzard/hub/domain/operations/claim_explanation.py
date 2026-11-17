@@ -29,7 +29,8 @@ class ClaimExplanation:
     ``next`` is the pass-over choice and ``passed`` the chunks it passed first, in claim order, at most
     :data:`PASSED_CAP`, with ``passed_total`` the full count. ``unserved`` counts the chunks ahead of ``next`` the walk
     never examined, their project outside the served set. ``if_holding`` is the per-project hold walk's choice, and
-    ``held_at`` the unusable head each served project's hold stops at, in claim order."""
+    ``held_at`` the unusable head each served project's hold stops at, in claim order. ``excluded`` counts the chunks
+    ahead of ``next`` the walk skipped as never offered to the runner."""
 
     next: MatchedEntry | None
     passed: tuple[PassedEntry, ...]
@@ -37,6 +38,7 @@ class ClaimExplanation:
     unserved: int
     if_holding: MatchedEntry | None
     held_at: tuple[PassedEntry, ...]
+    excluded: int
 
 
 def explain_next_claim(
@@ -47,8 +49,10 @@ def explain_next_claim(
     facts: Mapping[str, ChunkFacts],
     capabilities: Sequence[RunnerCapability],
     blocked: Mapping[str, list[str]],
+    excluded: Collection[str] = frozenset(),
 ) -> ClaimExplanation:
-    """The explanation over ``chunks`` in claim order, judged by the walk the matched peek takes."""
+    """The explanation over ``chunks`` in claim order, judged by the walk the matched peek takes, every walk skipping
+    the ``excluded`` chunks the runner is never offered."""
 
     def walk(policy: QueueMatchPolicy, projects: Collection[str], *, per_project: bool = False) -> MatchedWalk:
         return walk_matched_entries(
@@ -60,6 +64,7 @@ def explain_next_claim(
             blocked=blocked,
             policy=policy,
             hold_per_project=per_project,
+            excluded=excluded,
         )
 
     pass_over = walk(QueueMatchPolicy.PASS_OVER, served)
@@ -78,4 +83,5 @@ def explain_next_claim(
         unserved=pass_over.unserved,
         if_holding=holding.choice,
         held_at=held_at,
+        excluded=pass_over.excluded,
     )

@@ -7,7 +7,9 @@ import { RunnerNextClaimView } from './runner-next-claim-view';
 
 const entry: hubApi.NextClaimEntry = { chunk_id: 'ch_next', graph_id: 'gr_1', position: 3, project_id: 'p', project_name: 'Example', project_slug: 'example', urgency: { urgency_id: 'u', slug: 'urgent' } };
 const blocked: hubApi.NextClaimPassedEntry = { ...entry, chunk_id: 'ch_passed', reason: 'blocked', prerequisite: 'ch_prereq', prerequisite_count: 3 };
-const data: hubApi.NextClaimResponse = { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 };
+const data: hubApi.NextClaimResponse = { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2, without_repository_targets: null };
+
+const olderHub = (body: hubApi.NextClaimResponse) => Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'without_repository_targets'));
 
 describe('RunnerNextClaimView', () => {
   beforeEach(() => TestBed.configureTestingModule({
@@ -48,6 +50,33 @@ describe('RunnerNextClaimView', () => {
     expect(el.querySelectorAll('fleet-kit-urgency-pill').length).toBe(2);
     expect(el.textContent).toContain('Standard');
     expect(el.textContent).toContain('unknown');
+  });
+  it('labels both scenarios, shows the excluded count and resolves the alternative through the same markup', async () => {
+    const fixture = TestBed.createComponent(RunnerNextClaimView);
+    const alternative: hubApi.NextClaimScenario = { next: { ...entry, chunk_id: 'ch_alt', position: 9 }, passed: [], passed_total: 0, unserved: 0, if_holding: null, held_at: [blocked], excluded: 2 };
+    fixture.componentRef.setInput('runnerId', 'rn_1');
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('data', { ...data, without_repository_targets: alternative });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="runner-next-scenario-target"]')?.textContent).toContain('Preparing at repository targets');
+    expect(el.querySelector('[data-testid="runner-next-scenario-untargeted"]')?.textContent).toContain('Not preparing at repository targets');
+    expect(el.querySelector('[data-testid="runner-next-alt-link"]')?.getAttribute('href')).toBe('/p/example/board/chunk/ch_alt');
+    expect(el.querySelector('[data-testid="runner-next-excluded"]')?.textContent).toContain('2 ahead');
+    expect(el.querySelector('[data-testid="runner-next-link"]')?.getAttribute('href')).toBe('/p/example/board/chunk/ch_next');
+  });
+  it('says the alternative is not reported, keeping the primary account, when the hub omits it', async () => {
+    for (const absent of [undefined, null]) {
+      const fixture = TestBed.createComponent(RunnerNextClaimView);
+      fixture.componentRef.setInput('runnerId', 'rn_1');
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('data', absent === undefined ? olderHub(data) : { ...data, without_repository_targets: absent });
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="runner-next-alt-unreported"]')?.textContent).toContain('not reported by this hub');
+      expect(el.querySelector('[data-testid="runner-next-alt-none"]')).toBeNull();
+      expect(el.querySelector('[data-testid="runner-next-link"]')).not.toBeNull();
+    }
   });
   it('does not claim emptiness while loading or on error', async () => {
     const fixture = TestBed.createComponent(RunnerNextClaimView);

@@ -127,11 +127,13 @@ class PassedEntry:
 @dataclass(frozen=True)
 class MatchedWalk:
     """What the matched walk did: its ``choice``, the chunks it ``passed`` (judged unusable, in claim order), and how
-    many chunks it never looked at because their project is outside ``served`` (``unserved``)."""
+    many chunks it never looked at because their project is outside ``served`` (``unserved``) or the caller is never
+    offered them (``excluded``)."""
 
     choice: MatchedEntry | None
     passed: tuple[PassedEntry, ...]
     unserved: int
+    excluded: int
 
 
 def walk_matched_entries(
@@ -144,6 +146,7 @@ def walk_matched_entries(
     blocked: Mapping[str, list[str]],
     policy: QueueMatchPolicy,
     hold_per_project: bool = False,
+    excluded: Collection[str] = frozenset(),
 ) -> MatchedWalk:
     """The matched peek's own walk over ``chunks`` in claim order (:func:`claim_order`): the first chunk of a project in
     ``served`` the caller can both work (capability-eligible) and claim (not dependency-blocked) is the choice. A chunk
@@ -151,13 +154,19 @@ def walk_matched_entries(
     an empty ``served`` chooses nothing. Under :attr:`QueueMatchPolicy.HOLD` only the served head is examined;
     :attr:`PASS_OVER` walks the whole order. With ``hold_per_project`` the hold is scoped to a project: an unusable
     chunk stops only its own project, whose later chunks are skipped, neither judged nor traced, while the walk goes
-    on to the others. Nothing here reads a rank or raises a prerequisite."""
+    on to the others. A served chunk whose id is in ``excluded`` is skipped as an unserved one is — never examined,
+    traced, or a hold's stop — and counted apart. Every position is the chunk's index in ``chunks``. Nothing here reads
+    a rank or raises a prerequisite."""
     stopped: set[str | None] = set()
     passed: list[PassedEntry] = []
     unserved = 0
+    skipped = 0
     for position, chunk in enumerate(chunks):
         if chunk.project_id not in served:
             unserved += 1
+            continue
+        if chunk.chunk_id in excluded:
+            skipped += 1
             continue
         if chunk.project_id in stopped:
             continue
@@ -168,7 +177,7 @@ def walk_matched_entries(
         elif graph is None or _capability_ineligible(chunk, graph, facts.get(chunk.chunk_id), capabilities):
             reason = PassedReason.INELIGIBLE
         else:
-            return MatchedWalk(MatchedEntry(chunk=chunk, position=position), tuple(passed), unserved)
+            return MatchedWalk(MatchedEntry(chunk=chunk, position=position), tuple(passed), unserved, skipped)
         passed.append(
             PassedEntry(
                 chunk=chunk,
@@ -182,7 +191,7 @@ def walk_matched_entries(
             if not hold_per_project:
                 break
             stopped.add(chunk.project_id)
-    return MatchedWalk(None, tuple(passed), unserved)
+    return MatchedWalk(None, tuple(passed), unserved, skipped)
 
 
 def select_matched_entry(
@@ -195,6 +204,7 @@ def select_matched_entry(
     blocked: Mapping[str, list[str]],
     policy: QueueMatchPolicy,
     hold_per_project: bool = False,
+    excluded: Collection[str] = frozenset(),
 ) -> MatchedEntry | None:
     """The choice of :func:`walk_matched_entries` — the one walk, without its trace."""
     return walk_matched_entries(
@@ -206,7 +216,30 @@ def select_matched_entry(
         blocked=blocked,
         policy=policy,
         hold_per_project=hold_per_project,
+        excluded=excluded,
     ).choice
+
+
+def matched_candidates(
+    chunks: Sequence[Chunk],
+    *,
+    served: Collection[str],
+    excluded: Collection[str],
+    policy: QueueMatchPolicy,
+    hold_per_project: bool,
+) -> list[Chunk]:
+    """The chunks of ``chunks`` :func:`walk_matched_entries` can examine under the same inputs — the ones whose facts a
+    walk needs read. Every served chunk not ``excluded`` under :attr:`QueueMatchPolicy.PASS_OVER`; under a hold only the
+    first of those, or the first per project with ``hold_per_project``, since a hold examines nothing past its head."""
+    reachable = [chunk for chunk in chunks if chunk.project_id in served and chunk.chunk_id not in excluded]
+    if policy is not QueueMatchPolicy.HOLD:
+        return reachable
+    if not hold_per_project:
+        return reachable[:1]
+    heads: dict[str | None, Chunk] = {}
+    for chunk in reachable:
+        heads.setdefault(chunk.project_id, chunk)
+    return list(heads.values())
 
 
 class ChunkNotGroupable(ValueError):

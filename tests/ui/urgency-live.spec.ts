@@ -123,8 +123,8 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', urgent, { timeout: 10000 });
   // eslint-disable-next-line no-restricted-syntax -- The real polling interval must not have elapsed.
   expect(Date.now() - start).toBeLessThan(45000);
-  await expect(nextLine.locator('fleet-kit-urgency-pill')).toContainText('🔥');
-  await expect(nextLine.locator('fleet-kit-urgency-pill [aria-label="Expedite"]')).toBeVisible();
+  await expect(nextLine.locator('fleet-kit-urgency-pill').first()).toContainText('🔥');
+  await expect(nextLine.locator('fleet-kit-urgency-pill [aria-label="Expedite"]').first()).toBeVisible();
 
   // Retiring through admin transfers the still-ready work to the default urgency.
   await page.goto(`/admin/urgencies/${created.urgency_id}`);

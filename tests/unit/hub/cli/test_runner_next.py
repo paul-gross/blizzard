@@ -48,11 +48,36 @@ def test_prints_the_next_chunk_then_each_passed_one_with_its_urgency_and_reason(
     output, urls = _invoke(_BODY)
 
     assert urls == [f"{HUB_URL}/api/runners/{_RUNNER}/next-claim"]
-    assert output.splitlines() == [
+    assert output.splitlines()[:5] == [
+        "preparing at repository targets:",
         "next  3  ch_next  urgency=standard",
         "  passed  0  ch_dep  urgency=urgent  blocked by ch_pre (+2 more)",
         "  passed  1  ch_gpu  urgency=-  ineligible",
         "  ... and 3 more passed",
+    ]
+
+
+def test_an_older_hub_body_without_the_alternative_says_it_is_not_reported() -> None:
+    output, _ = _invoke(_BODY)
+
+    assert output.splitlines()[-2:] == ["not preparing at repository targets:", "  not reported by this hub"]
+
+
+def test_the_alternative_prints_its_excluded_count_next_and_passed_lines() -> None:
+    alternative = {
+        "next": _entry("ch_alt", 7, "standard"),
+        "passed": [_entry("ch_gpu", 6, "standard", reason="ineligible")],
+        "passed_total": 1,
+        "excluded": 2,
+    }
+
+    output, _ = _invoke({**_BODY, "without_repository_targets": alternative})
+
+    assert output.splitlines()[5:] == [
+        "not preparing at repository targets:",
+        "  2 ahead never offered at repository targets",
+        "  next  7  ch_alt  urgency=standard",
+        "    passed  6  ch_gpu  urgency=standard  ineligible",
     ]
 
 
@@ -65,7 +90,7 @@ def test_a_blocked_entry_with_one_prerequisite_names_only_it() -> None:
 
     output, _ = _invoke(body)
 
-    assert output.splitlines()[1:] == ["  passed  0  ch_dep  urgency=urgent  blocked by ch_pre"]
+    assert output.splitlines()[2:3] == ["  passed  0  ch_dep  urgency=urgent  blocked by ch_pre"]
 
 
 def test_an_absent_next_says_nothing_is_usable() -> None:
@@ -73,7 +98,8 @@ def test_an_absent_next_says_nothing_is_usable() -> None:
 
     output, _ = _invoke(body)
 
-    assert output.splitlines() == [
+    assert output.splitlines()[:3] == [
+        "preparing at repository targets:",
         "next  - (nothing in claim order this runner can use)",
         "  passed  0  ch_gpu  urgency=standard  ineligible",
     ]
