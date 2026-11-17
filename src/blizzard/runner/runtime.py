@@ -168,17 +168,6 @@ def single_file(database: Path) -> None:
         conn.execute("PRAGMA journal_mode=DELETE")
 
 
-def backup_sqlite(database: Path, copy: Path) -> None:
-    """Copy the SQLite store ``database`` into ``copy`` through SQLite's backup API, read over a read-only connection:
-    the copy holds every committed transaction, its write-ahead log's among them, and neither the database nor its log
-    is written — a read-only connection runs no checkpoint."""
-    with (
-        contextlib.closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as source,
-        contextlib.closing(sqlite3.connect(copy)) as destination,
-    ):
-        source.backup(destination)
-
-
 @domain_model
 @dataclass(frozen=True)
 class RunnerArchive:
@@ -484,7 +473,6 @@ __all__ = [
     "Runtime",
     "SetAsideStore",
     "StoreResetRefused",
-    "backup_sqlite",
     "ensure_current_revision",
     "init_environment",
     "migrate",

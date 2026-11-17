@@ -17,10 +17,11 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.composition import HostFiles, build_host_stores
+from blizzard.runner.composition import build_host_stores
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.tools.invariants import runner_invariants
 from tests.support.config_inputs import load_host_config
 from tests.support.runner_fakes import FakeProbe
@@ -165,13 +166,13 @@ def invariant_violations(engine: sa.Engine) -> list[object]:
     return list(runner_invariants(engine, process=FakeProbe()).run())
 
 
-@dataclass
+@dataclass(frozen=True)
 class RecordingHostFiles:
-    """The real host file operations, each recorded in ``journal`` by name — a context manager's entry and exit as
-    ``name`` and ``name:exit`` — beside the crash points a test appends to the same list."""
+    """The host file operations of ``real``, each recorded in ``journal`` by name — a context manager's entry and exit
+    as ``name`` and ``name:exit`` — beside the crash points a test appends to the same list."""
 
+    real: IHostFiles
     journal: list[str] = field(default_factory=list[str])
-    _real: HostFiles = field(default_factory=HostFiles)
 
     @contextmanager
     def _recorded(self, name: str, inner: AbstractContextManager[Any]) -> Generator[Any, None, None]:
@@ -183,27 +184,33 @@ class RecordingHostFiles:
             self.journal.append(f"{name}:exit")
 
     def store_file(self, db_url: str) -> Path:
-        return self._real.store_file(db_url)
+        return self.real.store_file(db_url)
 
     def store_url(self, database: Path) -> str:
-        return self._real.store_url(database)
+        return self.real.store_url(database)
+
+    def resolved(self, path: Path) -> Path:
+        return self.real.resolved(path)
+
+    def exists(self, path: Path) -> bool:
+        return self.real.exists(path)
 
     def copy_of(self, store: Path, beside: Path) -> AbstractContextManager[Path]:
-        return self._recorded("copy_of", self._real.copy_of(store, beside))
+        return self._recorded("copy_of", self.real.copy_of(store, beside))
 
-    def copy_tree(self, src: Path, dst: Path) -> None:
-        self.journal.append("copy_tree")
-        self._real.copy_tree(src, dst)
+    def copy_path(self, src: Path, dst: Path) -> None:
+        self.journal.append("copy_path")
+        self.real.copy_path(src, dst)
 
-    def copy_file(self, src: Path, dst: Path) -> None:
-        self.journal.append("copy_file")
-        self._real.copy_file(src, dst)
+    def make_directory(self, path: Path) -> None:
+        self.journal.append("make_directory")
+        self.real.make_directory(path)
 
     def set_aside(self, store: Path, *, now: datetime) -> tuple[Path, ...]:
         self.journal.append("set_aside")
-        return self._real.set_aside(store, now=now)
+        return self.real.set_aside(store, now=now)
 
     def hold(
         self, root: Path, probe: Callable[[Path], str | None], refusal: Callable[[str], Exception]
     ) -> AbstractContextManager[None]:
-        return self._recorded("hold", self._real.hold(root, probe, refusal))
+        return self._recorded("hold", self.real.hold(root, probe, refusal))

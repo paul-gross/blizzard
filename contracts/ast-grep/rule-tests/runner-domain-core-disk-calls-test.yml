@@ -1,0 +1,62 @@
+id: bzh:runner-domain-core-disk-calls
+valid:
+  # An argument-taking same-name method: a port's existence query owns no disk access.
+  - |
+    def stored(files: IHostFiles, path: Path) -> bool:
+        return files.exists(path)
+  # A resolver's `resolve(override, configured)` is not `Path.resolve()`.
+  - |
+    def effective(override: str | None, configured: str) -> str:
+        return EffectiveWorkspacePrompt.resolve(override, configured)
+  # `is_dir`/`is_file`/`iterdir` taking an argument are port calls too.
+  - |
+    def kind(files: IHostFiles, path: Path) -> str:
+        if files.is_dir(path):
+            return "dir"
+        return "file" if files.is_file(path) else str(list(files.iterdir(path)))
+  # Pure path arithmetic touches no disk.
+  - |
+    def located(root: Path, name: str) -> Path:
+        return (root / name).with_suffix(".toml").parent / Path(name).name
+  # A matched method referenced, not called — a stored bound method is the rule's honest boundary.
+  - |
+    def reader(path: Path) -> Callable[[], str]:
+        return path.read_text
+  # A pathlib method the rule does not name.
+  - |
+    def opened(path: Path) -> IO[str]:
+        return path.open()
+invalid:
+  - |
+    def stored(path: Path) -> bool:
+        return path.exists()
+  - |
+    def kind(path: Path) -> bool:
+        return path.is_dir()
+  - |
+    def kind(path: Path) -> bool:
+        return path.is_file()
+  - |
+    def absolute(path: Path) -> Path:
+        return path.resolve()
+  - |
+    def children(path: Path) -> list[Path]:
+        return list(path.iterdir())
+  - |
+    def make(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+  - |
+    def read(path: Path) -> str:
+        return path.read_text()
+  - |
+    def write(path: Path, text: str) -> None:
+        path.write_text(text)
+  - |
+    def toml(root: Path) -> list[Path]:
+        return sorted(root.glob("*.toml"))
+  - |
+    def remove(path: Path) -> None:
+        path.unlink(missing_ok=True)
+  # Any receiver, chained or constructed, is matched.
+  - |
+    HERE = Path(__file__).resolve().parent

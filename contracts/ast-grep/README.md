@@ -34,6 +34,23 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/execution/claim.py`), reasoned at the site
     with `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
+- **`bzh:runner-domain-core-disk-calls`** (`rules/runner-domain-core-disk-calls.yml`) — the runner's domain core makes
+  none of a named set of direct pathlib disk calls. The rule's prose home is `bzh:domain-core` in
+  `blizzard-context:/architecture/clean-architecture.md`; this file states none of that prose, only what the rule
+  mechanically checks.
+  - Scoped to the runner's domain core: `files:` is one glob per top-level runner layer node, as
+    `bzh:domain-takes-objects` derives it, and `ignores:` is `**/internal/**` plus one glob per harness binding package.
+    `tests/guards/test_layering.py` holds the globs equal to the layer table's nodes, the files they reach equal to the
+    domain-core modules bar the binding packages (on the real tree and a planted one), and the binding ignores equal to
+    the harness catalog.
+  - Matches a call of `exists`, `is_dir`, `is_file`, `resolve` or `iterdir` with no argument, and of `mkdir`,
+    `read_text`, `write_text`, `glob` or `unlink` with any arguments, on any receiver — the call's shape only, with no
+    typing. An argument-taking `exists`/`resolve`/… passes; a zero-argument call of a named method on a non-Path
+    receiver is matched.
+  - Six exemptions stand, the reads of prose shipped inside the package in `src/blizzard/runner/harness/preamble.py` and
+    `src/blizzard/runner/harness/workspace_prompts.py`, each reasoned at the site with
+    `# ast-grep-ignore: bzh:runner-domain-core-disk-calls` immediately above the call.
+
 - **`bzh:shared-kernel`** (`rules/shared-kernel.yml`) — a vocabulary a wire model carries is defined once, in
   `src/blizzard/foundation/`, never under `wire/`. The rule's prose home is `bzh:shared-kernel` in
   `blizzard-context:/architecture/clean-architecture.md`; this file states none of that prose, only what the rule

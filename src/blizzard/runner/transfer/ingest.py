@@ -198,7 +198,7 @@ class RunnerIngest:
         """Ingest the runner ``request`` names, or complete an ingest of it interrupted part-way. Raises an
         :class:`IngestRefused` naming why it cannot."""
         kind = self.sources.kind(request.source)
-        path = request.source.resolve()
+        path = self.files.resolved(request.source)
         if path == self.host.root:
             raise SourceUnsupported(f"{path} is this host; name another host directory or an archive store")
         with (
@@ -239,7 +239,7 @@ class RunnerIngest:
         ``data/runner.db``, its runner's id is the one that store records, and its token is under the variable its
         file names. Once its store is moved aside it carries nothing but its path, which an ingest record names."""
         store, token_env = self.sources.legacy_store(path)
-        if not store.exists():
+        if not self.files.exists(store):
             return SourceHost(SourceKind.UNGRADUATED, path, store, None, token_env=token_env)
         with self._copy_of(store) as copy:
             named_runners = self.stores.named_runners(copy.url)
@@ -294,7 +294,7 @@ class RunnerIngest:
             runner_name=entry.name,
             runner_id=runner_id,
         )
-        if not source.store.exists():
+        if not self.files.exists(source.store):
             if resuming:
                 return IngestOutcome(runner_id, entry.name, resumed=True)
             raise SourceUnsupported(f"the source holds no store at {source.store}")
@@ -528,11 +528,8 @@ class RunnerIngest:
             self.host_file.append_subscription(root, plan.subscription)
         if plan.runner_table is not None:
             for located, copied in plan.files:
-                if located.is_dir():
-                    self.files.copy_tree(located, copied)
-                elif located.exists():
-                    self.files.copy_file(located, copied)
-            (self.host.runners_dir / entry.name).mkdir(parents=True, exist_ok=True)
+                self.files.copy_path(located, copied)
+            self.files.make_directory(self.host.runners_dir / entry.name)
             if entry.name not in self.host_file.declared(root, "runner", "name"):
                 self.host_file.append_runner(root, plan.runner_table)
         variable = hub_token_variable(entry.name)
@@ -543,7 +540,7 @@ class RunnerIngest:
 
     def _set_aside_emptied(self, source: SourceHost) -> tuple[Path, ...]:
         """The source store moved aside whole when no runner is left in it."""
-        if not source.store.exists() or self.stores.named_runners(self.files.store_url(source.store)):
+        if not self.files.exists(source.store) or self.stores.named_runners(self.files.store_url(source.store)):
             return ()
         return self.files.set_aside(source.store, now=self.clock.now())
 

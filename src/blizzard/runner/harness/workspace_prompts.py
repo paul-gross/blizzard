@@ -34,6 +34,8 @@ class PackagedWorkspacePrompts:
 
         The filename is the membership test, so a directory carrying no sample is skipped by
         construction rather than by a blocklist that would need maintaining."""
+        # Lists the sample set shipped inside the package, not host state.
+        # ast-grep-ignore: bzh:runner-domain-core-disk-calls
         return sorted(path.parent.name for path in self.root.glob(f"*/{WORKSPACE_PROMPT_FILENAME}"))
 
     def path(self, name: str) -> Path:
@@ -43,11 +45,17 @@ class PackagedWorkspacePrompts:
     def text(self, name: str) -> str:
         """The named sample's prose, raising :class:`UnknownWorkspacePromptSample` when absent."""
         path = self.path(name)
+        # Probes the sample set shipped inside the package, not host state.
+        # ast-grep-ignore: bzh:runner-domain-core-disk-calls
         if not path.exists():
             raise UnknownWorkspacePromptSample(name)
+        # Reads a sample shipped inside the package, not host state.
+        # ast-grep-ignore: bzh:runner-domain-core-disk-calls
         return path.read_text()
 
 
+# Locates the sample set shipped beside this module.
+# ast-grep-ignore: bzh:runner-domain-core-disk-calls
 PACKAGED = PackagedWorkspacePrompts(Path(__file__).resolve().parent / "prompts" / "samples")
 
 
