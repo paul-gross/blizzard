@@ -248,7 +248,7 @@ def pytest_durations(path: Path) -> dict[str, float]:
 class ReportTest:
     """One test of a Playwright JSON report (a run's or a ``--list``'s), in one project.
 
-    ``identity`` is ``<project> > <spec file relative to tests/> > <title path>`` joined by :data:`SEP`, an ordinal
+    ``identity`` is ``<project> > <spec file relative to the tests folder> > <title path>`` joined by :data:`SEP`, an ordinal
     suffix only where one file repeats a title path. ``spec`` is the spec file and ``location`` the file declaring the
     test (a shared helper such as ``harness/fixtures.ts`` for a traced test), both relative to the config's rootDir as
     ``--test-list`` reads them; ``titles`` is the title path below the file.
