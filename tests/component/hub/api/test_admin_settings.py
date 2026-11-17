@@ -9,9 +9,8 @@ from pathlib import Path
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.flags import FlagRegistry
-from blizzard.foundation.toml_emit import json_literal
 from blizzard.hub.composition import build_hub_settings
-from blizzard.hub.config import AUTH_MODE_OAUTH
+from blizzard.hub.config import AUTH_MODE_OAUTH, json_literal
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import HubSettingsFooting

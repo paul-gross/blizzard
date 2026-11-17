@@ -13,7 +13,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, overload
+from typing import Literal, cast, overload
 from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
@@ -29,7 +29,7 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.toml_emit import default_line, json_literal
+from blizzard.foundation.toml_emit import default_line
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.auth.throttle import DEFAULT_CAPACITY, DEFAULT_REFILL_SECONDS
@@ -531,6 +531,11 @@ def _positive_seconds(raw: ConfigView, key: str, default: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ConfigError(f"{key} must be a positive integer number of seconds, got {value!r}")
     return value
+
+
+def json_literal(value: object) -> str:
+    """``value`` as a TOML-valid literal: JSON-encoded, a tuple as an array."""
+    return json.dumps(list(cast("tuple[object, ...]", value)) if isinstance(value, tuple) else value)
 
 
 def render_egress_toml(egress: EgressConfig) -> list[str]:
