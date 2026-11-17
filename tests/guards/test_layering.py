@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import fnmatch
 import functools
 import importlib.util
 import json
@@ -3278,6 +3279,107 @@ def test_the_runner_domain_core_globs_follow_the_layer_table(tmp_path: Path) -> 
         "hub/**",
         "harness/**",
     }
+
+
+_DISK_CALLS_RULE = _REPO_ROOT / "contracts" / "ast-grep" / "rules" / "runner-domain-core-disk-calls.yml"
+
+
+def _glob_matches(pattern: str, rel: str) -> bool:
+    """Whether an ast-grep ``files:``/``ignores:`` glob matches the posix path ``rel``: ``**`` spans any number of
+    segments, every other segment matches one segment by ``fnmatch``."""
+    regex = "".join(
+        "(?:[^/]+/)*" if part == "**" else fnmatch.translate(part).removeprefix("(?s:").removesuffix(")\\z") + "/"
+        for part in pattern.split("/")
+    )
+    return re.fullmatch(regex, f"{rel}/") is not None
+
+
+def _glob_reach(runner_dir: Path, files: Iterable[str], ignores: Iterable[str]) -> set[Path]:
+    """The production modules under ``runner_dir`` a rule reaches: matched by a ``files:`` glob and by no
+    ``ignores:`` glob, each glob relative to ``runner_dir``."""
+    files, ignores = list(files), list(ignores)
+    return {
+        path
+        for path in _production_files(runner_dir)
+        for rel in [path.relative_to(runner_dir).as_posix()]
+        if any(_glob_matches(glob, rel) for glob in files) and not any(_glob_matches(glob, rel) for glob in ignores)
+    }
+
+
+def _disk_call_ignores() -> set[str]:
+    """The ignores ``bzh:runner-domain-core-disk-calls`` owes, relative to the runner: every ``internal/`` package
+    and every harness binding node — the adapters ``bzh:domain-core`` exempts from the driver check."""
+    return {"**/internal/**", *(f"{node}/**" for node in _HARNESS_BINDING_NODES)}
+
+
+def _disk_call_core_files(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> set[Path]:
+    """The runner domain core the disk-call rule must reach: its modules bar the harness binding nodes."""
+    return {path for path in _runner_domain_core_files(runner_dir, layers) if not _is_binding_module(path, runner_dir)}
+
+
+def _runner_rule_list(text: str, key: str) -> set[str]:
+    """A rule's ``key:`` entries under the runner, relative to it."""
+    shown = _RUNNER_DIR.relative_to(_REPO_ROOT).as_posix()
+    return {glob.removeprefix(f"{shown}/") for glob in _rule_list(text, key) if glob.startswith(f"{shown}/")}
+
+
+def test_the_disk_call_rule_scopes_the_runner_domain_core() -> None:
+    """``bzh:runner-domain-core-disk-calls`` scopes by the same key as ``bzh:domain-core``: its ``files:`` are the
+    derived domain-core globs, its ``ignores:`` the ``internal/`` packages and the binding nodes, and the modules
+    that leaves are exactly the domain core the driver check holds to every driver."""
+    text = _DISK_CALLS_RULE.read_text()
+    files, ignores = _rule_list(text, "files"), _runner_rule_list(text, "ignores")
+    shown = _RUNNER_DIR.relative_to(_REPO_ROOT).as_posix()
+    assert files == {f"{shown}/{glob}" for glob in _runner_domain_core_globs(_RUNNER_DIR, _RUNNER_PACKAGE_LAYERS)}
+    assert ignores == _disk_call_ignores()
+    assert _glob_reach(_RUNNER_DIR, _runner_rule_list(text, "files"), ignores) == _disk_call_core_files(
+        _RUNNER_DIR, _RUNNER_PACKAGE_LAYERS
+    )
+
+
+def test_the_disk_call_scope_reaches_exactly_the_planted_domain_core(tmp_path: Path) -> None:
+    runner = _plant_runner(
+        tmp_path,
+        {
+            "runtime.py": "R = 1\n",
+            "cli/__init__.py": "",
+            "cli/main.py": "M = 1\n",
+            "leases/internal/__init__.py": "",
+            "leases/internal/disk.py": "D = 1\n",
+        },
+    )
+    files = _runner_domain_core_globs(runner, _PLANTED_RUNNER_LAYERS)
+    reach = _glob_reach(runner, files, _disk_call_ignores())
+    assert reach == _disk_call_core_files(runner, _PLANTED_RUNNER_LAYERS)
+    rels = {path.relative_to(runner).as_posix() for path in reach}
+    assert {"config_table.py", "leases/record.py", "hub/client.py", "harness/wiring.py"} <= rels
+    assert not rels & {
+        "config.py",
+        "runtime.py",
+        "cli/main.py",
+        "leases/internal/disk.py",
+        "harness/claude_code/section.py",
+    }
+    assert _glob_reach(runner, files, {"**/internal/**"}) != reach
+
+
+def _disk_call_binding_ignores(text: str) -> set[str]:
+    """The harness binding packages the disk-call rule names in its ``ignores:``."""
+    return set(re.findall(r"^  - src/blizzard/runner/harness/(\w+)/\*\*$", text, re.MULTILINE))
+
+
+def test_the_disk_call_rule_ignores_exactly_the_catalog_bindings() -> None:
+    """A YAML rule cannot read the harness catalog, so a binding added there fails here until the disk-call rule
+    ignores it."""
+    assert _disk_call_binding_ignores(_DISK_CALLS_RULE.read_text()) == set(_ADAPTER_PACKAGES)
+
+
+def test_the_disk_call_binding_pin_fails_a_missing_or_extra_binding() -> None:
+    text = _DISK_CALLS_RULE.read_text()
+    dropped = text.replace("  - src/blizzard/runner/harness/opencode_v2/**\n", "")
+    added = text + "  - src/blizzard/runner/harness/codex/**\n"
+    assert _disk_call_binding_ignores(dropped) != set(_ADAPTER_PACKAGES)
+    assert _disk_call_binding_ignores(added) != set(_ADAPTER_PACKAGES)
 
 
 def _loop_reach_files(runner_dir: Path, layers: Mapping[str, frozenset[str]]) -> list[Path]:

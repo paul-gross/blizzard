@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:runner-domain-core-disk-calls
+language: Python
+severity: error
+message: >-
+  The runner's domain core touches no disk directly
+  (blizzard-context:/architecture/clean-architecture.md#domain-core-bzhdomain-core) — put
+  its `$METHOD` call behind a port whose adapter lives in an `internal/` package.
+files:
+  - src/blizzard/runner/auth/**
+  - src/blizzard/runner/config_table.py
+  - src/blizzard/runner/environments/**
+  - src/blizzard/runner/events/**
+  - src/blizzard/runner/harness/**
+  - src/blizzard/runner/hub/**
+  - src/blizzard/runner/leases/**
+  - src/blizzard/runner/lifecycle/**
+  - src/blizzard/runner/loop/**
+  - src/blizzard/runner/node_steps/**
+  - src/blizzard/runner/operator/**
+  - src/blizzard/runner/process/**
+  - src/blizzard/runner/route_paths.py
+  - src/blizzard/runner/selftest/**
+  - src/blizzard/runner/status/**
+  - src/blizzard/runner/stores.py
+  - src/blizzard/runner/subscriptions/**
+  - src/blizzard/runner/throttle/**
+  - src/blizzard/runner/tracing/**
+  - src/blizzard/runner/transcripts/**
+  - src/blizzard/runner/transfer/**
+  - src/blizzard/runner/usage/**
+# The `internal/` adapters, and the harness binding nodes — adapters outside the domain core's driver check too.
+ignores:
+  - src/blizzard/runner/**/internal/**
+  - src/blizzard/runner/harness/claude_code/**
+  - src/blizzard/runner/harness/opencode/**
+  - src/blizzard/runner/harness/opencode_v2/**
+rule:
+  kind: call
+  any:
+    # Zero-argument calls only, so an argument-taking same-name method — a port's
+    # `exists(path)`, a resolver's `resolve(override, configured)` — passes.
+    - all:
+        - pattern: $RECV.$METHOD()
+        - has:
+            field: function
+            has:
+              field: attribute
+              regex: ^(exists|is_dir|is_file|resolve|iterdir)$
+    - all:
+        - pattern: $RECV.$METHOD($$$ARGS)
+        - has:
+            field: function
+            has:
+              field: attribute
+              regex: ^(mkdir|read_text|write_text|glob|unlink)$

@@ -232,6 +232,7 @@ also_copy = [
     ".github/workflows/postgres-uow-concurrency.yml",
     ".github/actions/resolve-mock-ref",
     "contracts/ast-grep/rules/domain-takes-objects.yml",
+    "contracts/ast-grep/rules/runner-domain-core-disk-calls.yml",
     "contracts/ast-grep/rules/seam-answers-binding-facts.yml",
     "contracts/ast-grep/rules/strict-types.yml",
     "contracts/cli",

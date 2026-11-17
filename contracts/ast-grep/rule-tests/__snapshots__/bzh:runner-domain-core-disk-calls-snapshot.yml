@@ -1,0 +1,177 @@
+id: bzh:runner-domain-core-disk-calls
+snapshots:
+  ? |
+    HERE = Path(__file__).resolve().parent
+  : labels:
+    - source: Path(__file__).resolve()
+      style: primary
+      start: 7
+      end: 31
+    - source: resolve
+      style: secondary
+      start: 22
+      end: 29
+    - source: resolve
+      style: secondary
+      start: 22
+      end: 29
+  ? |
+    def absolute(path: Path) -> Path:
+        return path.resolve()
+  : labels:
+    - source: path.resolve()
+      style: primary
+      start: 45
+      end: 59
+    - source: resolve
+      style: secondary
+      start: 50
+      end: 57
+    - source: resolve
+      style: secondary
+      start: 50
+      end: 57
+  ? |
+    def children(path: Path) -> list[Path]:
+        return list(path.iterdir())
+  : labels:
+    - source: path.iterdir()
+      style: primary
+      start: 56
+      end: 70
+    - source: iterdir
+      style: secondary
+      start: 61
+      end: 68
+    - source: iterdir
+      style: secondary
+      start: 61
+      end: 68
+  ? |
+    def kind(path: Path) -> bool:
+        return path.is_dir()
+  : labels:
+    - source: path.is_dir()
+      style: primary
+      start: 41
+      end: 54
+    - source: is_dir
+      style: secondary
+      start: 46
+      end: 52
+    - source: is_dir
+      style: secondary
+      start: 46
+      end: 52
+  ? |
+    def kind(path: Path) -> bool:
+        return path.is_file()
+  : labels:
+    - source: path.is_file()
+      style: primary
+      start: 41
+      end: 55
+    - source: is_file
+      style: secondary
+      start: 46
+      end: 53
+    - source: is_file
+      style: secondary
+      start: 46
+      end: 53
+  ? |
+    def make(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+  : labels:
+    - source: path.mkdir(parents=True, exist_ok=True)
+      style: primary
+      start: 34
+      end: 73
+    - source: mkdir
+      style: secondary
+      start: 39
+      end: 44
+    - source: mkdir
+      style: secondary
+      start: 39
+      end: 44
+  ? |
+    def read(path: Path) -> str:
+        return path.read_text()
+  : labels:
+    - source: path.read_text()
+      style: primary
+      start: 40
+      end: 56
+    - source: read_text
+      style: secondary
+      start: 45
+      end: 54
+    - source: read_text
+      style: secondary
+      start: 45
+      end: 54
+  ? |
+    def remove(path: Path) -> None:
+        path.unlink(missing_ok=True)
+  : labels:
+    - source: path.unlink(missing_ok=True)
+      style: primary
+      start: 36
+      end: 64
+    - source: unlink
+      style: secondary
+      start: 41
+      end: 47
+    - source: unlink
+      style: secondary
+      start: 41
+      end: 47
+  ? |
+    def stored(path: Path) -> bool:
+        return path.exists()
+  : labels:
+    - source: path.exists()
+      style: primary
+      start: 43
+      end: 56
+    - source: exists
+      style: secondary
+      start: 48
+      end: 54
+    - source: exists
+      style: secondary
+      start: 48
+      end: 54
+  ? |
+    def toml(root: Path) -> list[Path]:
+        return sorted(root.glob("*.toml"))
+  : labels:
+    - source: root.glob("*.toml")
+      style: primary
+      start: 54
+      end: 73
+    - source: glob
+      style: secondary
+      start: 59
+      end: 63
+    - source: glob
+      style: secondary
+      start: 59
+      end: 63
+  ? |
+    def write(path: Path, text: str) -> None:
+        path.write_text(text)
+  : labels:
+    - source: path.write_text(text)
+      style: primary
+      start: 46
+      end: 67
+    - source: write_text
+      style: secondary
+      start: 51
+      end: 61
+    - source: write_text
+      style: secondary
+      start: 51
+      end: 61

@@ -26,9 +26,13 @@ class Prompts:
     directory: Path
 
     def text(self, name: str) -> str:
+        # Reads prose shipped inside the package, not host state.
+        # ast-grep-ignore: bzh:runner-domain-core-disk-calls
         return (self.directory / name).read_text().rstrip("\n")
 
 
+# Locates the prompt directory shipped beside this module.
+# ast-grep-ignore: bzh:runner-domain-core-disk-calls
 PROMPTS = Prompts(Path(__file__).resolve().parent / "prompts")
 
 #: Layer 1's text — the fallback when a configured ``runner_prompt`` is unset.
