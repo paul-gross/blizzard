@@ -531,7 +531,7 @@ def test_a_host_of_one_create_app_hands_the_injected_monotonic_clock_to_the_runn
 
     def recording(*args: object, **kwargs: object) -> object:
         seen.update(kwargs)
-        return real(*args, **kwargs)  # type: ignore[arg-type]
+        return real(*args, **kwargs)  # pyright: ignore[reportArgumentType]  # a pass-through wrapper forwards the seam's own arguments untouched
 
     monkeypatch.setattr(runner_app, "runner_seams", recording)
     clock = ManualMonotonicClock()
