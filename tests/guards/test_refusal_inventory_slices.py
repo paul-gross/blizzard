@@ -354,6 +354,7 @@ _RAISED_FACTORIES = {
             "credential_capability_missing_problem",
             "credential_in_use_problem",
             "credential_not_found_problem",
+            "credential_not_used_by_problem",
             "credential_slug_taken_problem",
             "default_graph_retired_problem",
             "forge_in_use_problem",

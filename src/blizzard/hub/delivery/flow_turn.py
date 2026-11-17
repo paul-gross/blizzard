@@ -571,7 +571,7 @@ class TurnRunner:
         it would refuse a call the pass made."""
         repo = resolution.qualified[resolution.targets.index(target)]
         escalation = forge_auth_escalation(
-            cause, repo=repo, forge_label=resolution.forge_of(target).label, record=target
+            cause, repo=repo, forge_label=resolution.forge_of(target).label, record=target, chunk_id=at.chunk.chunk_id
         )
         assert escalation.auth is not None
         self._router.escalate_forge_auth(at.chunk, at.node, escalation, escalation.auth, epoch=at.epoch, ending=ending)

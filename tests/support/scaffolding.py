@@ -156,6 +156,7 @@ from blizzard.hub.domain.work_items.editing import mint_item
 from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
@@ -1724,6 +1725,7 @@ def build_hub(
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     forges: ForgeRegistryFactory = default_forge_registry,
+    credential_probes: Mapping[str, ICredentialProbe] | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -1731,7 +1733,7 @@ def build_hub(
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
-    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged."""
+    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged; ``credential_probes`` replaces every forge kind's credential check."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1818,6 +1820,7 @@ def build_hub(
         action_pass_seconds=action_pass_seconds,
         action_pass_grace=action_pass_grace,
         forges=forges,
+        credential_probes=credential_probes,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
         announce_minted=announce_minted,
     )

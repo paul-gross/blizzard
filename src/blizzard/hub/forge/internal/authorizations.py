@@ -31,7 +31,8 @@ from blizzard.hub.forge.internal.github_auth import (
 @dataclass(frozen=True)
 class _Build:
     """One authorization asked for: the credential, its revealed secret, what its forge's kind offers, the scope, and
-    where a binding that calls its forge to build reads the forge's address and its tenant's tokens."""
+    where a binding that calls its forge to build reads the forge's address and its tenant's tokens, and what bounds
+    each such call."""
 
     credential: ResolvedCredential
     revealed: RevealedSecret
@@ -39,6 +40,7 @@ class _Build:
     scope: ForgeScope
     forges: IReadForgeRepository
     tokens: InstallationTokens
+    call_timeout: Callable[[], float] | None
 
     def api_base(self) -> str:
         forge = self.forges.get(self.credential.forge_id)
@@ -55,6 +57,7 @@ def _app_installation(build: _Build) -> ForgeAuthorization:
         scope=build.scope,
         api_base=build.api_base(),
         tokens=build.tokens,
+        call_timeout=build.call_timeout,
     )
 
 
@@ -84,7 +87,9 @@ class ForgeAuthorizations:
         self._bindings = bindings
         self._capabilities = capabilities
 
-    def authorization(self, credential: ResolvedCredential, scope: ForgeScope) -> ForgeAuthorization:
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
         if credential.retired:
             raise CredentialUnavailable(f"credential {credential.slug}", retired=True)
         try:
@@ -95,7 +100,15 @@ class ForgeAuthorizations:
             raise CredentialUnavailable(f"secret {credential.secret_name}", retired=True) from exc
         kind = self._capabilities[self._bindings[credential.binding].forge_kind]
         return _BUILDERS[credential.binding](
-            _Build(credential, revealed, kind, scope, forges=self._forges, tokens=self._tokens)
+            _Build(
+                credential,
+                revealed,
+                kind,
+                scope,
+                forges=self._forges,
+                tokens=self._tokens,
+                call_timeout=call_timeout,
+            )
         )
 
 

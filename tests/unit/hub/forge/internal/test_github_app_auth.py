@@ -30,6 +30,7 @@ from blizzard.hub.domain.kernel.forge_refusals import (
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
 from blizzard.hub.forge.internal.github_auth import (
+    APP_CALL_TIMEOUT_SECONDS,
     APP_OPTIONAL_PERMISSIONS,
     APP_REQUIRED_PERMISSIONS,
     RENEW_BEFORE,
@@ -296,6 +297,107 @@ def test_each_scope_is_minted_with_its_permissions(world: _World) -> None:
         "actions": "write",
     }
     assert work_source == dict(APP_REQUIRED_PERMISSIONS[ForgeScope.WORK_SOURCE])
+
+
+@pytest.mark.parametrize(
+    ("withdrawn", "optional"),
+    [
+        ((), {"contents": "read", "checks": "read", "statuses": "read", "issues": "read"}),
+        (("issues",), {"contents": "read", "checks": "read", "statuses": "read"}),
+        (("checks",), {"contents": "read", "statuses": "read", "issues": "read"}),
+        (("contents",), {"checks": "read", "statuses": "read", "issues": "read"}),
+        (("contents", "checks", "statuses", "issues"), {}),
+    ],
+)
+def test_a_check_token_is_minted_read_only_with_each_optional_read_the_installation_grants(
+    world: _World, withdrawn: tuple[str, ...], optional: dict[str, str]
+) -> None:
+    world.github.grant({k: v for k, v in FULL_GRANT.items() if k not in withdrawn})
+
+    world.get(world.authorization(scope=ForgeScope.CHECK))
+
+    assert world.github.mints[-1]["permissions"] == {"metadata": "read", "pull_requests": "read", **optional}
+
+
+def test_a_check_mints_on_an_installation_set_up_for_a_work_source_alone(world: _World) -> None:
+    world.github.grant({"metadata": "read", "issues": "write", "pull_requests": "read"})
+
+    authorization = world.authorization(scope=ForgeScope.CHECK)
+    world.get(authorization)
+
+    assert world.github.mints[-1]["permissions"] == {"metadata": "read", "pull_requests": "read", "issues": "read"}
+    withheld = {Capability.REFS_READ, Capability.COMPARE, Capability.COMMITS_READ, Capability.CHECKS_READ}
+    assert authorization.offered == _KIND - withheld
+
+
+def test_a_check_authorization_carries_the_grant_and_withholds_what_it_lacks(world: _World) -> None:
+    grant = {k: v for k, v in FULL_GRANT.items() if k not in ("checks", "statuses", "issues")}
+    world.github.grant(grant)
+
+    authorization = world.authorization(scope=ForgeScope.CHECK)
+
+    assert authorization.granted_permissions == grant
+    assert authorization.offered == _KIND - {Capability.CHECKS_READ}
+    assert authorization.variant_contradicted is False
+
+
+class _SlowApp:
+    """The fake GitHub behind a transport taking ``delay`` seconds over each App call, recording each App call's read
+    timeout: a call whose timeout is shorter times out."""
+
+    def __init__(self, github: AppGitHub, delay: float) -> None:
+        self.github = github
+        self.delay = delay
+        self.timeouts: list[tuple[str, float]] = []
+
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
+        if request.url.path.startswith("/app/"):
+            timeout = request.extensions["timeout"]["read"]
+            self.timeouts.append((request.method, timeout))
+            if timeout < self.delay:
+                raise httpx2.ReadTimeout("the forge did not answer in time", request=request)
+        return self.github.transport.handle_request(request)
+
+
+def test_a_check_bounds_its_installation_read_and_mint_by_the_time_it_has_left() -> None:
+    clock = ControlledClock(_NOW)
+    github = AppGitHub(clock=clock)
+    slow = _SlowApp(github, delay=10.0)
+    tokens = InstallationTokens(clock=clock, transport=httpx2.MockTransport(slow.handle))
+    authorizations = ForgeAuthorizations(
+        secrets=AppKeyReader(github.private_pem), forges=Forges(), tokens=tokens, bindings=WITH_APP
+    )
+    left = [25.0]
+
+    authorization = authorizations.authorization(app_credential(), ForgeScope.CHECK, call_timeout=lambda: left[0])
+    left[0] = 4.0
+    client = httpx2.Client(base_url=API_BASE, auth=authorization.auth, transport=github.transport)
+    with client, pytest.raises(httpx2.ReadTimeout):
+        client.get("/repos/acme/widget")
+
+    assert slow.timeouts == [("GET", 25.0), ("POST", 4.0)]
+    assert github.mints == []
+
+
+def test_an_authorization_with_no_bound_calls_the_app_within_the_fixed_timeout() -> None:
+    clock = ControlledClock(_NOW)
+    github = AppGitHub(clock=clock)
+    slow = _SlowApp(github, delay=0.0)
+    tokens = InstallationTokens(clock=clock, transport=httpx2.MockTransport(slow.handle))
+    authorizations = ForgeAuthorizations(
+        secrets=AppKeyReader(github.private_pem), forges=Forges(), tokens=tokens, bindings=WITH_APP
+    )
+
+    authorization = authorizations.authorization(app_credential(), ForgeScope.LANDING)
+    with httpx2.Client(base_url=API_BASE, auth=authorization.auth, transport=github.transport) as client:
+        assert client.get("/repos/acme/widget").status_code == 200
+
+    assert slow.timeouts == [("GET", APP_CALL_TIMEOUT_SECONDS), ("POST", APP_CALL_TIMEOUT_SECONDS)]
+
+
+def test_a_landing_authorization_carries_the_grant_it_read(world: _World) -> None:
+    assert world.authorization().granted_permissions == dict(FULL_GRANT)
+    assert world.authorization(scope=ForgeScope.WORK_SOURCE).granted_permissions is None
 
 
 # --- what an installation offers ------------------------------------------------------------------------------------

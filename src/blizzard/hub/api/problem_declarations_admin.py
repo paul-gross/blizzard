@@ -111,6 +111,7 @@ _FIELD_INVALID_OPERATIONS = (
     ("POST", "/api/credentials"),
     ("PATCH", "/api/credentials/{credential}"),
     ("POST", "/api/credentials/{credential}/enable"),
+    ("POST", "/api/credentials/{credential}/checks"),
     ("POST", "/api/repositories"),
     ("PATCH", "/api/repositories/{repository}"),
     ("POST", "/api/repositories/{repository}/enable"),
@@ -226,6 +227,7 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
             ("PATCH", "/api/credentials/{credential}"),
             ("POST", "/api/credentials/{credential}/retire"),
             ("POST", "/api/credentials/{credential}/enable"),
+            ("POST", "/api/credentials/{credential}/checks"),
         )
     ),
     *(
@@ -241,6 +243,7 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     ProblemDeclaration(
         "PATCH", "/api/credentials/{credential}", 422, credential_wire.CredentialCapabilityMissingProblem
     ),
+    ProblemDeclaration("POST", "/api/credentials/{credential}/checks", 422, credential_wire.CredentialNotUsedByProblem),
     *(
         ProblemDeclaration(method, path, 404, urgency_wire.UrgencyNotFoundProblem)
         for method, path in _URGENCY_KEY_OPERATIONS

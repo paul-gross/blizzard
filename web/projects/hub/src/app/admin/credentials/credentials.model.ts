@@ -1,5 +1,7 @@
 import {
   type CredentialBindingView,
+  type CredentialCheckRequest,
+  type CredentialCheckView,
   type CredentialSettingView,
   type CredentialCreateRequest,
   type CredentialDocument,
@@ -8,6 +10,10 @@ import {
   type CredentialSummary,
   type ForgeBindingsView,
   type ForgeSummary,
+  type OperationResultView,
+  type UseResultView,
+  type Tone,
+  errorMessage,
   unlisted,
 } from 'fleet';
 
@@ -195,4 +201,131 @@ export function credentialOptions(credentials: readonly CredentialSummary[]): re
 /** `fields` with its `credential` select's choices filled in. */
 export function credentialPickerFields<K extends string>(fields: readonly ConfigFieldDef<K>[], credentials: readonly CredentialSummary[]): readonly ConfigFieldDef<K>[] {
   return fields.map((field) => (field.key === 'credential' ? { ...field, options: credentialOptions(credentials) } : field));
+}
+
+/** One operation of a credential check, as the check table shows it. */
+export interface CheckOperationVm {
+  readonly operation: string;
+  readonly outcome: string;
+  readonly tone: Tone;
+  readonly detail: string | null;
+  /** The forge's sanitized refusing answer — its status, call, and words — or `null`. */
+  readonly diagnostic: string | null;
+}
+
+/** One repository or work source a check answered. */
+export interface CheckUseVm {
+  readonly key: string;
+  readonly heading: string;
+  /** `false` when the check ended before this use was wholly answered. */
+  readonly reached: boolean;
+  readonly operations: readonly CheckOperationVm[];
+}
+
+/** A credential check's answer, as the check table shows it. */
+export interface CredentialCheckVm {
+  readonly mint: CheckOperationVm | null;
+  readonly identity: string;
+  /** The warning shown when the declared variant disagrees with the token itself, else `null`. */
+  readonly variantWarning: string | null;
+  readonly uses: readonly CheckUseVm[];
+  /** Why the check reached no use, when the forge gave no answer to building the credential's authorization. */
+  readonly unreachedReason: string | null;
+  readonly emptyText: string;
+  readonly notEvaluated: string;
+}
+
+/** The tone each check outcome shows in: a refusal needs a person, an unsupported capability waits on a credential
+ * change, and an unproven write is neither shown nor refused. */
+export function checkOutcomeTone(outcome: OperationResultView['outcome']): Tone {
+  switch (outcome) {
+    case 'proven':
+      return 'done';
+    case 'granted':
+      return 'spawning';
+    case 'unproven':
+      return 'idle';
+    case 'refused':
+      return 'needs';
+    case 'unsupported':
+      return 'waiting';
+    default:
+      unlisted(outcome);
+      return 'idle';
+  }
+}
+
+/** What a check heads a use with: its kind, as an operator reads it; a kind this build does not know, as sent. */
+function checkUseNoun(kind: UseResultView['kind']): string {
+  switch (kind) {
+    case 'repository':
+      return 'repository';
+    case 'work_source':
+      return 'work source';
+    default:
+      unlisted(kind);
+      return kind;
+  }
+}
+
+function checkOperationVm(result: OperationResultView): CheckOperationVm {
+  const diagnostic = result.diagnostic;
+  return {
+    operation: result.operation,
+    outcome: result.outcome,
+    tone: checkOutcomeTone(result.outcome),
+    detail: result.detail,
+    diagnostic: diagnostic && `${diagnostic.status} ${diagnostic.endpoint}: ${diagnostic.message}`,
+  };
+}
+
+/** The check table's view of `POST /api/credentials/{credential}/checks`'s answer. */
+export function credentialCheckVm(check: CredentialCheckView): CredentialCheckVm {
+  return {
+    mint: check.mint && checkOperationVm(check.mint),
+    identity: check.variant ? `${check.binding} · ${check.variant}` : check.binding,
+    variantWarning: check.variant_contradicted ? 'The declared variant disagrees with the token itself.' : null,
+    uses: check.uses.map((use) => ({
+      key: `${use.kind}:${use.id}`,
+      heading: `${checkUseNoun(use.kind)} ${use.slug}`,
+      reached: use.reached,
+      operations: use.operations.map(checkOperationVm),
+    })),
+    unreachedReason: check.unreached_reason,
+    emptyText: 'No enabled repository or work source uses this credential.',
+    notEvaluated: check.not_evaluated,
+  };
+}
+
+/** What a record's Check action checks: the credential, and the uses to check it against. */
+export interface CredentialCheckTarget {
+  readonly credentialId: string;
+  readonly scope: CredentialCheckRequest;
+}
+
+/** The Check action a record offers — `null` unless the viewer may edit config and the record names a credential.
+ * With no `use` the credential is checked against every record acting with it; with one, against that record alone. */
+export function credentialCheckTarget(
+  canEdit: boolean,
+  credentialId: string | null | undefined,
+  use?: { readonly field: 'repositories' | 'work_sources'; readonly id: string | null | undefined },
+): CredentialCheckTarget | null {
+  if (!canEdit || !credentialId) return null;
+  if (!use) return { credentialId, scope: {} };
+  return use.id ? { credentialId, scope: { [use.field]: [use.id] } } : null;
+}
+
+/** Whether a check's variables are for `target` — an answer or failure for another credential or scope is not shown. */
+export function isCheckFor(vars: CredentialCheckTarget | undefined, target: CredentialCheckTarget): boolean {
+  return vars !== undefined && vars.credentialId === target.credentialId && JSON.stringify(vars.scope) === JSON.stringify(target.scope);
+}
+
+/** The check table's view of an answer, when it is for the target shown. */
+export function shownCheckVm(answer: CredentialCheckView | undefined, current: boolean): CredentialCheckVm | null {
+  return answer && current ? credentialCheckVm(answer) : null;
+}
+
+/** The failure line of a check call, when it failed for the target shown. */
+export function checkFailure(failed: boolean, error: unknown, current: boolean): string | null {
+  return failed && current ? errorMessage(error, 'Check failed.') : null;
 }

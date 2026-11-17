@@ -13,7 +13,7 @@ import random
 # and the tenant cache's lock, which guards this process's memory, not a store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -23,7 +23,7 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.flags import (
     Flags,
     resolve_flags,
@@ -234,11 +234,13 @@ from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.internal.factory import (
+    build_credential_probes,
     build_forge_authorizations,
     build_forge_registry,
     build_installation_tokens,
 )
 from blizzard.hub.forge.rates import rate_dialect
+from blizzard.hub.forge.readiness import CredentialReadiness, ICredentialProbe
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
@@ -384,6 +386,8 @@ class TenantServices:
     forges: ForgeRegistry
     #: Each forge key's rate budget, shared by every caller of that forge and credential.
     forge_budgets: ForgeBudgets
+    #: Checks a credential read-only against the records acting with it.
+    credential_readiness: CredentialReadiness
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
@@ -1113,6 +1117,8 @@ class TenantServiceParts:
     graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
     forges: ForgeRegistryFactory
+    #: Each forge kind's read-only credential check, by kind.
+    credential_probes: Mapping[str, ICredentialProbe]
     system_artifacts: PackagedSystemArtifacts
     action_loop: ActionLoop
     public_url: str | None
@@ -1320,6 +1326,17 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
+        credential_readiness=CredentialReadiness(
+            repositories=stores.repository_records,
+            work_sources=stores.work_source_records,
+            forges=stores.forge_records,
+            authorizations=live.authorizations,
+            budgets=forge_budgets,
+            probes=parts.credential_probes,
+            event_log=event_log,
+            clock=clock,
+            monotonic=SystemMonotonicClock(),
+        ),
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1752,6 +1769,7 @@ def build_services(
     *,
     work_sources: WorkSourceRegistryFactory,
     forges: ForgeRegistryFactory = default_forge_registry,
+    credential_probes: Mapping[str, ICredentialProbe] | None = None,
     secret_keys: IKeyProvider,
     brokers: TenantBrokers | None = None,
     public_url: str | None = None,
@@ -1786,7 +1804,8 @@ def build_services(
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
     are one pass per hub, each acting on a row through the services of the row's tenant, opened from
     the cache. ``work_sources`` builds a tenant's
-    work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
+    work-source registry, ``forges`` its forge registry, ``credential_probes`` each forge kind's credential check —
+    every kind's own when ``None``; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
     may name, ``extractors`` the turn-event extractors the derivation runs, and a pass is bounded by
     ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
@@ -1814,6 +1833,7 @@ def build_services(
         graph_yaml=YAML_CODEC,
         work_sources=work_sources,
         forges=forges,
+        credential_probes=credential_probes if credential_probes is not None else build_credential_probes(),
         system_artifacts=system_artifacts,
         action_loop=action_loop,
         public_url=public_url,

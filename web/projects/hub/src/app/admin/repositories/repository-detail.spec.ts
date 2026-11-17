@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, type RepositorySummary } from 'fleet';
+import { type CredentialCheckView, type MeResponse, type RepositorySummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
@@ -65,6 +65,11 @@ const CREDENTIALS = [
 ];
 const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
+const CHECK: CredentialCheckView = {
+  credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
+};
+
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
   let record: RepositorySummary = CORE;
@@ -80,6 +85,7 @@ describe('RepositoryDetail', () => {
       'GET /api/repositories/{repository}': () => record,
       'PATCH /api/repositories/{repository}': () => ({ ...record, slug: 'core-2', revision: 4 }),
       'GET /api/config/changes': () => HISTORY,
+      'POST /api/credentials/{credential}/checks': () => CHECK,
       'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_lab', slug: 'lab', name: 'Lab' })] }),
       'GET /api/forges/{forge}': (_request, { forge }) => forgeDetail({ forge_id: forge }),
       'GET /api/credentials': () => ({ credentials: CREDENTIALS, bindings: [], forge_bindings: [] }),
@@ -196,5 +202,19 @@ describe('RepositoryDetail', () => {
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ forge: 'frg_lab', credential: 'cred_l' });
+  });
+
+  it('checks the repository\'s credential against this repository alone', async () => {
+    const { harness } = await open('/admin/repositories/repo_c');
+    testid(harness.routeNativeElement as HTMLElement, 'credential-check-run')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials/cred_g/checks', 'POST').map((request) => request.body)).toEqual([{ repositories: ['repo_c'] }]);
+  });
+
+  it('offers no Check action for a repository naming no credential', async () => {
+    record = { ...CORE, credential_id: null, credential_slug: null, credential_name: null };
+    const { harness } = await open('/admin/repositories/repo_c');
+    expect(testid(harness.routeNativeElement as HTMLElement, 'admin-repository-detail')).not.toBeNull();
+    expect(testid(harness.routeNativeElement as HTMLElement, 'credential-check-run')).toBeNull();
   });
 });

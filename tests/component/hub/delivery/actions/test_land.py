@@ -868,6 +868,18 @@ def test_a_forge_auth_detail_leaves_out_a_request_id_the_forge_did_not_send() ->
     assert "None" not in answer.escalation.detail
 
 
+def test_a_forge_auth_detail_naming_a_credential_ends_with_its_check_and_the_chunk_s_requeue() -> None:
+    diagnostic = replace(_CHECKS_DIAGNOSTIC, credential="deploy", binding="github.token", variant="classic")
+    refused = ForgeAuthRefused(ClassifiedRefusal(AuthRefusal.CREDENTIAL_INVALID, diagnostic))
+    answer, _ = _land(_forge(replies={"checks": [refused]}))
+    assert answer.escalation is not None
+    lines = answer.escalation.detail.splitlines()
+    assert lines[2].startswith("Credential deploy (github.token, classic).")
+    assert lines[-1] == (
+        "Then run: blizzard hub credential check deploy --repo re_widget; blizzard hub chunk requeue ch_1."
+    )
+
+
 @pytest.mark.parametrize("checks", [(), None], ids=["empty", "unreadable"])
 def test_an_empty_or_unreadable_check_list_waits_and_never_merges(checks: tuple[Check, ...] | None) -> None:
     double = _forge(checks={_SUBMITTED: checks})

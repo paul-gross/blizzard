@@ -127,6 +127,29 @@ moving on, generation for a worker, launch instant for a judge — never a separ
 overload on a lease falls through to today's ordinary path: a worker generation is judged as usual, a verdict-less judge
 elicitation fails the attempt as usual, spending a retry only there.
 
+## Recovering a forge-auth escalation
+
+A chunk escalated `forge-auth` stopped at its `deliver` step because GitHub refused the credential a call carried
+([credentials.md](./credentials.md#what-is-refused)). Nothing it did is undone: an open change stays open, its branch
+stays on the forge, and every repository that already landed stays landed. Recover it in three steps:
+
+1. **Read the detail.** `blizzard hub chunk show <chunk>` shows the escalation's detail: the repository and the refused
+   call, the refusal, GitHub's own words, the credential, and the remedy for that refusal, such as granting a permission
+   to the App installation, replacing the token, or authorizing it for the organization's SSO. Its last line is the two
+   commands below, with the credential, repository and chunk filled in. A call that carried only a secret has no such
+   line.
+2. **Fix the credential, then check it.** Apply the remedy, then run
+   `blizzard hub credential check <credential> --repo <repository>`. It reads the forge as the credential and sends no
+   write ([credentials.md](./credentials.md#checking-a-credential)); it exits 0 once it reaches the repository and
+   nothing is `refused` or `unsupported`. A check that reached no use exits 1 and says why, such as an installation the
+   forge did not answer for: check again before requeuing.
+3. **Requeue.** `blizzard hub chunk requeue <chunk>` sends the chunk back to its `deliver` step. The `land` action reads
+   the forge before it acts: it reuses the open change rather than opening another, and skips every repository already
+   landed, so each repository's landing is recorded once.
+
+A check that passes does not prove a write will succeed, and does not read branch protection. If the requeued step is
+refused again, its new escalation names what is still missing.
+
 ## How the contract is exercised
 
 The recovery contract is exercised end-to-end by the whole-process cases of the kill-9 crash sweep — cases signalling a

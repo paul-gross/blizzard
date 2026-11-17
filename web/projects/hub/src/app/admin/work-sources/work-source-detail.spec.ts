@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, type WorkSourceSummary } from 'fleet';
+import { type CredentialCheckView, type MeResponse, type WorkSourceSummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
@@ -60,9 +60,16 @@ const HISTORY = configChangesPage({
 });
 const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
+const CHECK: CredentialCheckView = {
+  credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
+};
+
 describe('WorkSourceDetail', () => {
   let stub: RequestClientStub;
+  let current: WorkSourceSummary = JIRA;
   afterEach(() => {
+    current = JIRA;
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
@@ -71,9 +78,10 @@ describe('WorkSourceDetail', () => {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/work-sources/{source}': (_request, { source }) =>
-        source === 'hub' ? HUB : ['wsrc_j', 'jira', 'tracker'].includes(source) ? JIRA : stubError(404, { detail: 'no such work source' }),
+        source === 'hub' ? HUB : ['wsrc_j', 'jira', 'tracker'].includes(source) ? current : stubError(404, { detail: 'no such work source' }),
       'PATCH /api/work-sources/{source}': () => ({ ...JIRA, slug: 'jira-2', revision: 4 }),
       'GET /api/config/changes': () => HISTORY,
+      'POST /api/credentials/{credential}/checks': () => CHECK,
       'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_ghe', slug: 'ghe', name: 'Enterprise' })] }),
       'GET /api/credentials': () => ({
         credentials: [
@@ -169,5 +177,19 @@ describe('WorkSourceDetail', () => {
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/work-sources/wsrc_j', 'PATCH')[0].body).toEqual({ forge: 'frg_ghe', credential: 'cred_e' });
+  });
+
+  it('checks the source\'s credential against this source alone', async () => {
+    current = { ...JIRA, credential_id: 'cred_g', credential_slug: 'gh-main', credential_name: 'gh-main' };
+    const { harness } = await open('/admin/work-sources/wsrc_j');
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="credential-check-run"]')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials/cred_g/checks', 'POST').map((request) => request.body)).toEqual([{ work_sources: ['wsrc_j'] }]);
+  });
+
+  it('offers no Check action for a source naming no credential', async () => {
+    const { harness } = await open('/admin/work-sources/wsrc_j');
+    expect((harness.routeNativeElement as HTMLElement).querySelector('[data-testid="admin-work-source-detail"]')).not.toBeNull();
+    expect((harness.routeNativeElement as HTMLElement).querySelector('[data-testid="credential-check-run"]')).toBeNull();
   });
 });

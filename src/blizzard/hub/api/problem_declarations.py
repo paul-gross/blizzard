@@ -375,6 +375,7 @@ _OPERATOR_TENANT_OPERATIONS = (
     ("POST", "/api/credentials"),
     ("GET", "/api/credentials/{credential}"),
     ("PATCH", "/api/credentials/{credential}"),
+    ("POST", "/api/credentials/{credential}/checks"),
     ("POST", "/api/credentials/{credential}/enable"),
     ("POST", "/api/credentials/{credential}/retire"),
     ("GET", "/api/decisions"),

@@ -67,6 +67,12 @@ the call carried. Its refusal is `credential-invalid`, `permission-missing`, `ss
 call the token's variant cannot make, such as a fine-grained token's check read on a private repository. It never
 carries the token. The remedy is in the escalation's detail and the work item's `error`, not the event.
 
+`credential-check` (info): a credential was checked read-only
+([credentials.md](./credentials.md#checking-a-credential)). Recorded once per check, naming no chunk. Its detail carries
+the `credential_id` and `counts`, how many operations, the mint among them, ended in each of `proven`, `granted`,
+`unproven`, `refused` and `unsupported`; its message says the same, and how many uses the check did not reach. Nothing
+the check found is kept anywhere else.
+
 `forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
 before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of
 that forge and token authority waits until the refusal lifts. Each is recorded at most once per budget per reset window,

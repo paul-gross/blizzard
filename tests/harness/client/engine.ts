@@ -22,6 +22,8 @@ export interface CallOptions {
   headers?: Record<string, string>;
   /** Redirects followed before the answer comes back; 0 hands back the redirect itself. */
   maxRedirects?: number;
+  /** Milliseconds the call may take before it fails; the request context's default (30 s) when absent. */
+  timeout?: number;
 }
 
 export type Verb = <T = Json>(route: string, options?: CallOptions) => Promise<ApiResponse<T>>;
@@ -68,6 +70,7 @@ export async function send(engine: Engine, method: string, route: string, option
         data: options.data,
         headers: { ...engine.headers, ...options.headers },
         maxRedirects: options.maxRedirects,
+        timeout: options.timeout,
         failOnStatusCode: false,
         // A keep-alive socket the daemon closed while the test waited on another process resets; only a read is safe to resend.
         maxRetries: method === 'GET' ? 3 : 0,

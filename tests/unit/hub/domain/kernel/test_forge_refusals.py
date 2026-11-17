@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from blizzard.hub.domain.kernel.forge_refusals import (
@@ -73,7 +73,9 @@ def _leftover_authorization_value(text: str) -> str | None:
 
 
 # No example database: a test reads no undeclared repo file (tests/support/repo_files.py).
-@settings(database=None, max_examples=300)
+# The composed text strategy draws many nested pieces, so under the gate's saturated parallel workers its first
+# draws can exceed the generation-time health check; the property itself is unaffected, so only that check is off.
+@settings(database=None, max_examples=300, suppress_health_check=[HealthCheck.too_slow])
 @given(_TEXT)
 def test_sanitized_text_carries_no_secret_and_stays_within_its_bound(text: str) -> None:
     sanitized = sanitize_forge_text(text)

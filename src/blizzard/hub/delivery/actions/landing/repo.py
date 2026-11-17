@@ -154,7 +154,13 @@ class RepoLanding:
             return await call
         except ForgeAuthRefused as exc:
             raise ForgeEscalation(
-                forge_auth_escalation(exc, repo=self.repo, forge_label=self.forge_label, record=self.record)
+                forge_auth_escalation(
+                    exc,
+                    repo=self.repo,
+                    forge_label=self.forge_label,
+                    record=self.record,
+                    chunk_id=self.run.visit.chunk.chunk_id,
+                )
             ) from exc
         except ForgeRejected as exc:
             if exc.reason != ForgeRejected.AUTH:

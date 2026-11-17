@@ -7018,6 +7018,141 @@
         "title": "CredentialCapabilityMissingProblem",
         "type": "object"
       },
+      "CredentialCheckOutcome": {
+        "description": "What one operation of a credential's read-only check ended in.",
+        "enum": [
+          "proven",
+          "granted",
+          "unproven",
+          "refused",
+          "unsupported"
+        ],
+        "title": "CredentialCheckOutcome",
+        "type": "string"
+      },
+      "CredentialCheckRequest": {
+        "additionalProperties": false,
+        "description": "The ``POST /api/credentials/{credential}/checks`` body: the repositories and work sources to check, each by id\nor slug; with neither, every enabled record acting with the credential.",
+        "properties": {
+          "repositories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repositories"
+          },
+          "work_sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Sources"
+          }
+        },
+        "title": "CredentialCheckRequest",
+        "type": "object"
+      },
+      "CredentialCheckView": {
+        "description": "A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the\npermissions its grant exposes, each use's operations, why no use was reached when the forge gave no answer to\nbuilding the credential's authorization, and what the check did not judge. Nothing is stored.",
+        "properties": {
+          "binding": {
+            "title": "Binding",
+            "type": "string"
+          },
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "granted_permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted Permissions"
+          },
+          "mint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationResultView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "not_evaluated": {
+            "title": "Not Evaluated",
+            "type": "string"
+          },
+          "unreached_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unreached Reason"
+          },
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/UseResultView"
+            },
+            "title": "Uses",
+            "type": "array"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          },
+          "variant_contradicted": {
+            "title": "Variant Contradicted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "credential",
+          "binding",
+          "variant",
+          "variant_contradicted",
+          "mint",
+          "granted_permissions",
+          "uses",
+          "unreached_reason",
+          "not_evaluated"
+        ],
+        "title": "CredentialCheckView",
+        "type": "object"
+      },
       "CredentialCreateRequest": {
         "additionalProperties": false,
         "description": "The ``POST /api/credentials`` body: ``forge`` names the credential's forge by id or slug, ``binding`` how it\nauthenticates, ``secret`` the secret it reads, and ``settings`` the binding's own fields.",
@@ -7395,6 +7530,59 @@
         "title": "CredentialNotFoundProblem",
         "type": "object"
       },
+      "CredentialNotUsedByProblem": {
+        "additionalProperties": true,
+        "description": "A check named repositories or work sources that do not act with the credential; ``uses`` lists each, the\nunknown ones by the value named. Its ``code`` is ``credential_not_used_by``.",
+        "properties": {
+          "code": {
+            "const": "credential_not_used_by",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:credential-not-used-by",
+            "title": "Type",
+            "type": "string"
+          },
+          "uses": {
+            "items": {
+              "$ref": "#/components/schemas/RecordReferrer"
+            },
+            "title": "Uses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "code",
+          "uses"
+        ],
+        "title": "CredentialNotUsedByProblem",
+        "type": "object"
+      },
       "CredentialPatchRequest": {
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused. A\ncredential's ``forge`` and ``binding`` never change; a patch naming either is refused.",
@@ -7665,6 +7853,15 @@
         ],
         "title": "CredentialSummary",
         "type": "object"
+      },
+      "CredentialUseKind": {
+        "description": "The kind of record a credential check checks the credential against.",
+        "enum": [
+          "repository",
+          "work_source"
+        ],
+        "title": "CredentialUseKind",
+        "type": "string"
       },
       "CredentialsListView": {
         "description": "Every stored credential by slug \u2014 ``GET /api/credentials`` \u2014 every binding a credential may name, and the\nbindings each enabled forge allows.",
@@ -12562,6 +12759,119 @@
           "budgets"
         ],
         "title": "ForgeDetail",
+        "type": "object"
+      },
+      "ForgeDiagnosticView": {
+        "description": "The forge's refusing answer, sanitized: its status, the call (``endpoint`` a method and route template), the\nforge's own words, and the credential it carried; each field the answer did not carry is ``null``.",
+        "properties": {
+          "accepted_permissions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Permissions"
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "documentation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentation Url"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "status",
+          "operation",
+          "endpoint",
+          "repository",
+          "message",
+          "documentation_url",
+          "request_id",
+          "accepted_permissions",
+          "credential",
+          "binding",
+          "variant"
+        ],
+        "title": "ForgeDiagnosticView",
         "type": "object"
       },
       "ForgeEntry": {
@@ -19093,6 +19403,48 @@
           "decisions"
         ],
         "title": "OpenDecisionsResponse",
+        "type": "object"
+      },
+      "OperationResultView": {
+        "description": "One operation's outcome: ``operation`` is ``access``, ``mint``, or a capability a use asks of its forge.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForgeDiagnosticView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/CredentialCheckOutcome",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "operation",
+          "outcome",
+          "detail",
+          "diagnostic"
+        ],
+        "title": "OperationResultView",
         "type": "object"
       },
       "PauseView": {
@@ -30217,6 +30569,43 @@
           "judge"
         ],
         "type": "string"
+      },
+      "UseResultView": {
+        "description": "One repository or work source checked; ``reached`` is ``false`` when the check ended before it was wholly\nanswered.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CredentialUseKind",
+            "x-blizzard-open": true
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/OperationResultView"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "reached": {
+            "title": "Reached",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "slug",
+          "operations",
+          "reached"
+        ],
+        "title": "UseResultView",
+        "type": "object"
       },
       "UserIdentityView": {
         "description": "One linked provider identity.",
@@ -43525,6 +43914,138 @@
           }
         },
         "summary": "Patch Credential",
+        "tags": [
+          "credentials"
+        ]
+      }
+    },
+    "/api/credentials/{credential}/checks": {
+      "post": {
+        "description": "Check a credential read-only against the repositories and work sources named by id or slug, else against every\nenabled record acting with it: each read landing and ingestion make, and each write judged from the grant the\ncredential exposes, never exercised. Stops at 60 seconds, answering the uses not reached, with\n`unreached_reason` when the forge gave no answer to building the credential's authorization; stores nothing but one\n`credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the\ncredential, and `secret_unavailable` for a retired credential or an unknown or retired secret.",
+        "operationId": "check_credential_api_credentials__credential__checks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "title": "Credential",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialCheckView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialNotUsedByProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Check Credential",
         "tags": [
           "credentials"
         ]

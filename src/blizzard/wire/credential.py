@@ -6,6 +6,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.credential_check import CheckOutcome, UseKind
 from blizzard.foundation.credential_setting_kind import SettingKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -116,6 +117,69 @@ class CredentialsListView(WireModel):
     forge_bindings: list[ForgeBindingsView]
 
 
+class CredentialCheckRequest(BaseModel):
+    """The ``POST /api/credentials/{credential}/checks`` body: the repositories and work sources to check, each by id
+    or slug; with neither, every enabled record acting with the credential."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repositories: list[str] | None = None
+    work_sources: list[str] | None = None
+
+
+class ForgeDiagnosticView(WireModel):
+    """The forge's refusing answer, sanitized: its status, the call (``endpoint`` a method and route template), the
+    forge's own words, and the credential it carried; each field the answer did not carry is ``null``."""
+
+    status: int
+    operation: str
+    endpoint: str
+    repository: str | None
+    message: str
+    documentation_url: str | None
+    request_id: str | None
+    accepted_permissions: str | None
+    credential: str | None
+    binding: str | None
+    variant: str | None
+
+
+class OperationResultView(WireModel):
+    """One operation's outcome: ``operation`` is ``access``, ``mint``, or a capability a use asks of its forge."""
+
+    operation: str
+    outcome: Annotated[CheckOutcome | Unrecognized, OPEN]
+    detail: str | None
+    diagnostic: ForgeDiagnosticView | None
+
+
+class UseResultView(WireModel):
+    """One repository or work source checked; ``reached`` is ``false`` when the check ended before it was wholly
+    answered."""
+
+    kind: Annotated[UseKind | Unrecognized, OPEN]
+    id: str
+    slug: str
+    operations: list[OperationResultView]
+    reached: bool
+
+
+class CredentialCheckView(WireModel):
+    """A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the
+    permissions its grant exposes, each use's operations, why no use was reached when the forge gave no answer to
+    building the credential's authorization, and what the check did not judge. Nothing is stored."""
+
+    credential: str
+    binding: str
+    variant: str | None
+    variant_contradicted: bool
+    mint: OperationResultView | None
+    granted_permissions: dict[str, str] | None
+    uses: list[UseResultView]
+    unreached_reason: str | None
+    not_evaluated: str
+
+
 CREDENTIAL_NOT_FOUND: Final = "urn:blizzard:problem:credential-not-found"
 
 
@@ -129,6 +193,9 @@ CREDENTIAL_AUTHORITY_TAKEN: Final = "urn:blizzard:problem:credential-authority-t
 
 
 CREDENTIAL_CAPABILITY_MISSING: Final = "urn:blizzard:problem:credential-capability-missing"
+
+
+CREDENTIAL_NOT_USED_BY: Final = "urn:blizzard:problem:credential-not-used-by"
 
 
 class CredentialNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:credential-not-found"]]):
@@ -162,6 +229,14 @@ class CredentialCapabilityMissingProblem(ProblemDetails[Literal["urn:blizzard:pr
     missing: list[str]
 
 
+class CredentialNotUsedByProblem(ProblemDetails[Literal["urn:blizzard:problem:credential-not-used-by"]]):
+    """A check named repositories or work sources that do not act with the credential; ``uses`` lists each, the
+    unknown ones by the value named. Its ``code`` is ``credential_not_used_by``."""
+
+    code: Literal["credential_not_used_by"]
+    uses: list[RecordReferrer]
+
+
 CREDENTIAL_PROBLEM_TYPES: frozenset[str] = frozenset(
     {
         CREDENTIAL_NOT_FOUND,
@@ -169,5 +244,6 @@ CREDENTIAL_PROBLEM_TYPES: frozenset[str] = frozenset(
         CREDENTIAL_SLUG_TAKEN,
         CREDENTIAL_AUTHORITY_TAKEN,
         CREDENTIAL_CAPABILITY_MISSING,
+        CREDENTIAL_NOT_USED_BY,
     }
 )

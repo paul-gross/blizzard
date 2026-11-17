@@ -10,6 +10,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard import __version__
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogSeverity, narrow_event_log_kind
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub import app as hub_app
@@ -190,3 +191,8 @@ def test_a_downgrade_below_the_hub_log_records_nothing_and_exits_cleanly(tmp_pat
     migrate_hub(tmp_path, down="base")
 
     assert hub_runtime.migration_runner(config).current_revision() is None
+
+
+def test_a_credential_check_is_a_tenant_event_kind_recorded_at_info() -> None:
+    assert narrow_event_log_kind("credential-check") == "credential-check"
+    assert EVENT_LOG_SEVERITY["credential-check"] is EventLogSeverity.INFO

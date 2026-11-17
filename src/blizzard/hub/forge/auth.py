@@ -6,7 +6,7 @@ with, and authenticate their clients through its ``auth``; neither reveals a sec
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -19,10 +19,12 @@ from blizzard.hub.domain.config.credentials import ResolvedCredential
 
 
 class ForgeScope(StrEnum):
-    """What an authorization is asked for: landing a change, or reading and writing a work source's items."""
+    """What an authorization is asked for: landing a change, reading and writing a work source's items, or checking
+    read-only what the credential can do."""
 
     LANDING = "landing"
     WORK_SOURCE = "work-source"
+    CHECK = "check"
 
 
 @dataclass(frozen=True)
@@ -43,13 +45,20 @@ class ForgeAuthorization:
     grant_scoped: bool = False
     #: Whether the forge has since narrowed what it offers, so its holder builds it again.
     outdated: Callable[[], bool] = lambda: False
+    #: The permissions an installation grants, as the build read them; ``None`` where the build read none.
+    granted_permissions: Mapping[str, str] | None = None
+    #: Whether a declared variant disagrees with the form of the token it was declared for.
+    variant_contradicted: bool = False
 
 
 class IForgeAuthorizations(Protocol):
     """Builds a credential's authorization, revealing its secret — the only forge code that does."""
 
-    def authorization(self, credential: ResolvedCredential, scope: ForgeScope) -> ForgeAuthorization:
-        """``credential``'s authorization for ``scope``; :class:`~blizzard.hub.domain.config.credentials.
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
+        """``credential``'s authorization for ``scope``, each call building or minting it bounded by ``call_timeout``'s
+        seconds when given; :class:`~blizzard.hub.domain.config.credentials.
         CredentialUnavailable` when the credential is retired or its secret is unknown or retired."""
         ...
 

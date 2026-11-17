@@ -477,7 +477,7 @@ export type { RunnerDeclining };
 export type { MockRunner };
 export type { Barrier, BarrierSubscription, Frame, Subscription } from './events';
 export type { MockHubClient } from './client/mock-hub';
-export type { MockChunkSpec } from './client/mock';
+export type { MockChunkSpec, MockJournal } from './client/mock';
 export type { HostRoutes, RunnerClient, RunnerHostClient, TickPass } from './client/runner';
 
 /** A real previous-release runner on a store migrated from that release to the candidate hub. */

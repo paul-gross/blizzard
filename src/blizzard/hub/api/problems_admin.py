@@ -468,6 +468,20 @@ def credential_capability_missing_problem(
     )
 
 
+def credential_not_used_by_problem(
+    message: str, uses: list[record_referrer_wire.RecordReferrer], *, instance: str
+) -> credential_wire.CredentialNotUsedByProblem:
+    return credential_wire.CredentialNotUsedByProblem(
+        type=credential_wire.CREDENTIAL_NOT_USED_BY,
+        title="Credential not used by",
+        detail=message,
+        instance=instance,
+        status=422,
+        code="credential_not_used_by",
+        uses=uses,
+    )
+
+
 def secret_in_use_problem(
     message: str, referrers: list[record_referrer_wire.RecordReferrer], *, instance: str
 ) -> secret_wire.SecretInUseProblem:

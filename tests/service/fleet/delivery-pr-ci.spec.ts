@@ -365,7 +365,8 @@ test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ reposi
   expect(detail).toContain('Bad credentials');
   expect(detail).toMatch(/request [^\s)]+\)/);
   expect(detail).toContain('Credential ');
-  expect(detail).not.toContain('Then run:');
+  expect(detail).toMatch(/Then run: blizzard hub credential check \S+ --repo \S+; blizzard hub chunk requeue /);
+  expect(detail).toContain(`blizzard hub chunk requeue ${chunk.chunk_id}.`);
   expect(escalated.landed).toBe(false);
   expect(escalated.current_node_name).toBe('deliver');
   const events = await api.get<{ events: { kind: string; chunk_id: string | null }[] }>(`/api/events?chunk_id=${chunk.chunk_id}&limit=200`);

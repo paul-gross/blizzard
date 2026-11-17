@@ -16,22 +16,27 @@ def credential_kind(binding: str, variant: str | None) -> str:
 
 
 def forge_auth_escalation(
-    exc: ForgeAuthRefused, *, repo: str, forge_label: str, record: ResolvedRepository
+    exc: ForgeAuthRefused, *, repo: str, forge_label: str, record: ResolvedRepository, chunk_id: str
 ) -> ActionEscalation:
     """The ``forge-auth`` escalation of a credential the forge refused for ``repo``, acting as ``record`` on the forge
     labelled ``forge_label``: what was refused and why, the forge's own sanitized words, the credential or secret the
-    call carried, and what to do about it."""
+    call carried, and what to do about it — then, for a call carrying a credential, the commands that check it for the
+    repository record, by its slug, and requeue chunk ``chunk_id`` once it is fixed."""
     diagnostic = exc.diagnostic
     needed = OPERATION_CAPABILITY.get(diagnostic.operation)
     capability = str(needed) if needed is not None else None
-    detail = "\n".join(
-        (
-            f"{repo} on forge {forge_label}: {_operation_sentence(diagnostic)} was refused: "
-            f"{refusal_sentence(exc.refusal)}.",
-            f"GitHub said: {_forge_said(diagnostic)}.",
-            f"{_carried(diagnostic, record)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
+    lines = [
+        f"{repo} on forge {forge_label}: {_operation_sentence(diagnostic)} was refused: "
+        f"{refusal_sentence(exc.refusal)}.",
+        f"GitHub said: {_forge_said(diagnostic)}.",
+        f"{_carried(diagnostic, record)}. {refusal_remedy(exc.refusal, diagnostic, capability=capability)}",
+    ]
+    if diagnostic.credential is not None:
+        lines.append(
+            f"Then run: blizzard hub credential check {diagnostic.credential} --repo {record.slug or record.record}; "
+            f"blizzard hub chunk requeue {chunk_id}."
         )
-    )
+    detail = "\n".join(lines)
     reason = ForgeAuthReason(
         refusal=exc.refusal,
         diagnostic=diagnostic,

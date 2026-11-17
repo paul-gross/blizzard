@@ -1,4 +1,4 @@
-import type { CredentialBindingView, ForgeBindingsView, ForgeSummary } from 'fleet';
+import type { CredentialBindingView, CredentialCheckView, ForgeBindingsView, ForgeSummary } from 'fleet';
 import { credentialDocument, credentialSummary } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -6,6 +6,12 @@ import { lifecycleTone } from '../../core/lifecycle-tone';
 import { configEdit, createBody, formValuesOf, shownFields } from '../config-edit.model';
 import {
   bindingOptions,
+  checkFailure,
+  checkOutcomeTone,
+  credentialCheckTarget,
+  isCheckFor,
+  shownCheckVm,
+  credentialCheckVm,
   credentialCreate,
   credentialFields,
   credentialOptions,
@@ -143,5 +149,75 @@ describe('credential picker', () => {
     ]);
     expect(credentialPickerFields([{ key: 'credential', label: 'Credential', kind: 'select', filterBy: 'forge' }], [credentialSummary()])[0].options)
       .toEqual([{ value: 'cred_g', label: 'gh-main · github.token', kind: 'frg_g' }]);
+  });
+
+  describe('credentialCheckVm', () => {
+    const check: CredentialCheckView = {
+      credential: 'gh-main', binding: 'github.app-installation', variant: null, variant_contradicted: false, granted_permissions: { contents: 'write' },
+      mint: { operation: 'mint', outcome: 'refused', detail: 'The installation is suspended.', diagnostic: null },
+      not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.',
+      unreached_reason: null,
+      uses: [{
+        kind: 'work_source', id: 'wsrc_i', slug: 'issues', reached: false,
+        operations: [{
+          operation: 'issues.read', outcome: 'refused', detail: null,
+          diagnostic: {
+            status: 404, endpoint: 'GET /repos/{owner}/{repo}/issues', message: 'Not Found', accepted_permissions: null, binding: null,
+            credential: null, documentation_url: null, operation: 'issues.read', repository: 'acme/core', request_id: null, variant: null,
+          },
+        }],
+      }],
+    };
+
+    it('maps the mint, each use, and a diagnostic to its status, call, and words', () => {
+      const vm = credentialCheckVm(check);
+      expect(vm.identity).toBe('github.app-installation');
+      expect(vm.variantWarning).toBeNull();
+      expect(vm.mint).toEqual({ operation: 'mint', outcome: 'refused', tone: 'needs', detail: 'The installation is suspended.', diagnostic: null });
+      expect(vm.uses).toEqual([{
+        key: 'work_source:wsrc_i', heading: 'work source issues', reached: false,
+        operations: [{ operation: 'issues.read', outcome: 'refused', tone: 'needs', detail: null, diagnostic: '404 GET /repos/{owner}/{repo}/issues: Not Found' }],
+      }]);
+      expect(vm.notEvaluated).toBe(check.not_evaluated);
+      expect(vm.unreachedReason).toBeNull();
+    });
+
+    it('says why no use was reached, and heads a use of a kind this build does not know as sent', () => {
+      const odd = { ...check.uses[0], kind: 'mailing_list' } as unknown as CredentialCheckView['uses'][number];
+      const vm = credentialCheckVm({ ...check, unreached_reason: 'the installation could not be read: ReadTimeout', uses: [odd] });
+      expect(vm.unreachedReason).toBe('the installation could not be read: ReadTimeout');
+      expect(vm.uses[0].heading).toBe('mailing_list issues');
+    });
+
+    it('names the variant and warns when the token contradicts it', () => {
+      const vm = credentialCheckVm({ ...check, binding: 'github.token', variant: 'classic', variant_contradicted: true });
+      expect(vm.identity).toBe('github.token · classic');
+      expect(vm.variantWarning).toContain('disagrees');
+    });
+
+    it('gives each outcome its own tone', () => {
+      expect((['proven', 'granted', 'unproven', 'refused', 'unsupported'] as const).map(checkOutcomeTone)).toEqual(['done', 'spawning', 'idle', 'needs', 'waiting']);
+    });
+  });
+
+  describe('credential check target', () => {
+    it('is offered only to an editor, for a record naming a credential', () => {
+      expect(credentialCheckTarget(true, 'cred_g')).toEqual({ credentialId: 'cred_g', scope: {} });
+      expect(credentialCheckTarget(true, 'cred_g', { field: 'repositories', id: 'repo_c' })).toEqual({ credentialId: 'cred_g', scope: { repositories: ['repo_c'] } });
+      expect(credentialCheckTarget(true, 'cred_g', { field: 'work_sources', id: 'wsrc_j' })).toEqual({ credentialId: 'cred_g', scope: { work_sources: ['wsrc_j'] } });
+      expect(credentialCheckTarget(false, 'cred_g')).toBeNull();
+      expect(credentialCheckTarget(true, null, { field: 'repositories', id: 'repo_c' })).toBeNull();
+      expect(credentialCheckTarget(true, 'cred_g', { field: 'work_sources', id: null })).toBeNull();
+    });
+
+    it('shows an answer or failure only for the target it was posted for', () => {
+      const target = { credentialId: 'cred_g', scope: { repositories: ['repo_c'] } };
+      expect(isCheckFor({ credentialId: 'cred_g', scope: { repositories: ['repo_c'] } }, target)).toBe(true);
+      expect(isCheckFor({ credentialId: 'cred_g', scope: {} }, target)).toBe(false);
+      expect(isCheckFor(undefined, target)).toBe(false);
+      expect(shownCheckVm(undefined, true)).toBeNull();
+      expect(checkFailure(true, { detail: 'credential gh-main is not used by docs' }, true)).toBe('credential gh-main is not used by docs');
+      expect(checkFailure(true, new Error('x'), false)).toBeNull();
+    });
   });
 });

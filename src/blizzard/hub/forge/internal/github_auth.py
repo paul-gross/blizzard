@@ -12,7 +12,7 @@ import re
 # Guards this process's own token map and serializes its mints, never a store write.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import AsyncGenerator, Generator, Mapping
+from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -88,12 +88,22 @@ class GitHubTokenAuth(httpx2.Auth):
         yield request
 
 
+def variant_contradicted(declared: object, token: str) -> bool:
+    """Whether ``declared`` disagrees with the form of ``token``: a classic-form token declared fine-grained, or a
+    fine-grained one declared classic."""
+    classic_form = token.startswith(_CLASSIC_PREFIX) or bool(_LEGACY_CLASSIC.fullmatch(token))
+    if declared == TokenVariant.FINE_GRAINED:
+        return classic_form
+    return declared == TokenVariant.CLASSIC and token.startswith(_FINE_GRAINED_PREFIX)
+
+
 def github_token_authorization(
     credential: ResolvedCredential, token: SecretValue, kind: frozenset[Capability]
 ) -> ForgeAuthorization:
     """``credential``'s authorization over its revealed ``token``, on a forge whose kind offers ``kind`` — every
     scope's is the same token."""
-    variant = effective_variant(credential.settings.get("variant"), token.expose())
+    declared = credential.settings.get("variant")
+    variant = effective_variant(declared, token.expose())
     return ForgeAuthorization(
         credential_id=credential.credential_id,
         credential_slug=credential.slug,
@@ -102,6 +112,7 @@ def github_token_authorization(
         authority=credential.authority,
         offered=kind,
         auth=GitHubTokenAuth(token),
+        variant_contradicted=variant_contradicted(declared, token.expose()),
     )
 
 
@@ -120,15 +131,25 @@ APP_CALL_TIMEOUT_SECONDS = 30.0
 APP_REQUIRED_PERMISSIONS: Mapping[ForgeScope, Mapping[str, str]] = {
     ForgeScope.LANDING: {"metadata": "read", "contents": "write", "pull_requests": "write"},
     ForgeScope.WORK_SOURCE: {"metadata": "read", "issues": "write", "pull_requests": "read"},
+    ForgeScope.CHECK: {"metadata": "read", "pull_requests": "read"},
 }
-#: Each scope's permissions minted only when granted, and the capability withheld when not (checks need both reads).
-APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, Capability]]] = {
+#: Each scope's permissions minted only when granted, and the capabilities withheld when not (checks need both reads).
+#: A check's ``contents`` read is optional, as its ``issues`` read is, so a check mints on an installation set up for
+#: landing or for a work source alone; ``issues`` withholds no capability — the check judges a work source's issue
+#: read from the grant itself.
+APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, frozenset[Capability]]]] = {
     ForgeScope.LANDING: {
-        "checks": ("read", Capability.CHECKS_READ),
-        "statuses": ("read", Capability.CHECKS_READ),
-        "actions": ("write", Capability.CHECKS_RERUN),
+        "checks": ("read", frozenset({Capability.CHECKS_READ})),
+        "statuses": ("read", frozenset({Capability.CHECKS_READ})),
+        "actions": ("write", frozenset({Capability.CHECKS_RERUN})),
     },
     ForgeScope.WORK_SOURCE: {},
+    ForgeScope.CHECK: {
+        "contents": ("read", frozenset({Capability.REFS_READ, Capability.COMPARE, Capability.COMMITS_READ})),
+        "checks": ("read", frozenset({Capability.CHECKS_READ})),
+        "statuses": ("read", frozenset({Capability.CHECKS_READ})),
+        "issues": ("read", frozenset()),
+    },
 }
 
 #: GitHub's permission levels, weakest first; a grant covers every level up to its own.
@@ -148,7 +169,7 @@ def app_permissions(scope: ForgeScope, granted: Mapping[str, str]) -> dict[str, 
     permissions, and each optional one the installation grants."""
     optional = {
         permission: level
-        for permission, (level, _capability) in APP_OPTIONAL_PERMISSIONS[scope].items()
+        for permission, (level, _capabilities) in APP_OPTIONAL_PERMISSIONS[scope].items()
         if covers(granted.get(permission), level)
     }
     return {**APP_REQUIRED_PERMISSIONS[scope], **optional}
@@ -159,8 +180,9 @@ def app_offers(scope: ForgeScope, granted: Mapping[str, str], kind: frozenset[Ca
     ``kind``: the kind's set less each capability whose optional permission is not granted."""
     withheld = {
         capability
-        for permission, (level, capability) in APP_OPTIONAL_PERMISSIONS[scope].items()
+        for permission, (level, capabilities) in APP_OPTIONAL_PERMISSIONS[scope].items()
         if not covers(granted.get(permission), level)
+        for capability in capabilities
     }
     return kind - withheld
 
@@ -215,13 +237,15 @@ class MintedToken:
 @dataclass(frozen=True)
 class AppInstallation:
     """What a mint is signed and addressed with: the forge's API base, the App and its installation, the App's private
-    key, and the credential a refusal names."""
+    key, the credential a refusal names, and what bounds each call."""
 
     api_base: str
     app_id: int
     installation_id: int
     private_key: SecretValue
     credential: CallCredential
+    #: The seconds the next App-authenticated call may take.
+    timeout: Callable[[], float] = lambda: APP_CALL_TIMEOUT_SECONDS
 
 
 @adapter_model
@@ -399,7 +423,7 @@ class InstallationTokens:
                 )
             ) from None
         with httpx2.Client(
-            base_url=app.api_base.rstrip("/"), transport=self._transport, timeout=APP_CALL_TIMEOUT_SECONDS
+            base_url=app.api_base.rstrip("/"), transport=self._transport, timeout=app.timeout()
         ) as client:
             return client.request(
                 method,
@@ -505,21 +529,25 @@ def github_app_authorization(
     scope: ForgeScope,
     api_base: str,
     tokens: InstallationTokens,
+    call_timeout: Callable[[], float] | None = None,
 ) -> ForgeAuthorization:
-    """``credential``'s authorization for ``scope`` over the App key ``revealed``. A scope with optional permissions
-    reads the installation now, narrowing its offer to the grant: :class:`ForgeMintRefused` when GitHub refuses it,
-    :class:`ForgeAccessUnavailable` when GitHub does not answer. Any other scope reads nothing until its first mint."""
+    """``credential``'s authorization for ``scope`` over the App key ``revealed``, its installation read and each
+    mint bounded by ``call_timeout``'s seconds when given, else by :data:`APP_CALL_TIMEOUT_SECONDS`. A scope with
+    optional permissions reads the installation now, narrowing its offer to the grant: :class:`ForgeMintRefused` when
+    GitHub refuses it, :class:`ForgeAccessUnavailable` when GitHub does not answer. Any other scope reads nothing until
+    its first mint."""
     app = AppInstallation(
         api_base=api_base,
         app_id=cast(int, credential.settings["app_id"]),
         installation_id=cast(int, credential.settings["installation_id"]),
         private_key=revealed.value,
         credential=CallCredential(credential.slug, credential.binding, None),
+        timeout=call_timeout or (lambda: APP_CALL_TIMEOUT_SECONDS),
     )
     key = InstallationKey(
         str(credential.forge_id), api_base, credential.authority, scope, credential.secret_name, revealed.revision
     )
-    offered, outdated = kind, _never
+    offered, outdated, granted = kind, _never, None
     if APP_OPTIONAL_PERMISSIONS[scope]:
         try:
             installation = tokens.installation(key, app)
@@ -527,6 +555,7 @@ def github_app_authorization(
             raise ForgeAccessUnavailable(f"the installation could not be read: {type(exc).__name__}") from exc
         offered = app_offers(scope, installation.permissions, kind)
         outdated = partial(_regranted, tokens, key, installation)
+        granted = installation.permissions
     return ForgeAuthorization(
         credential_id=credential.credential_id,
         credential_slug=credential.slug,
@@ -537,6 +566,7 @@ def github_app_authorization(
         auth=InstallationAuth(tokens, key, app),
         grant_scoped=True,
         outdated=outdated,
+        granted_permissions=granted,
     )
 
 

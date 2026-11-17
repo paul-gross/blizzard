@@ -12,7 +12,11 @@
   (lifecycle)="onLifecycle($event)"
   emptyText="Pick a repository."
   testidPrefix="admin-repository"
-/>
+>
+  @if (check(); as target) {
+    <app-credential-check [target]="target" />
+  }
+</app-config-record-panel>
 @if (editOpen() && shown(); as initial) {
   <app-config-form-dialog
     heading="Edit repository"

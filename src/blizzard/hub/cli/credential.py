@@ -175,6 +175,72 @@ def credential_enable(cli: CliContext, credential: str, if_match: int | None) ->
     _lifecycle(cli, credential, "enable", if_match)
 
 
+#: Above the hub's 60-second cap on a check, so the hub answers the uses it did not reach before the client gives up.
+_CHECK_TIMEOUT = 75.0
+
+#: An outcome that fails the check's exit status.
+_FAILING = frozenset({"refused", "unsupported"})
+
+
+@credential_group.command("check", cls=FleetCommand)
+@click.argument("credential")
+@click.option("--repo", "repositories", multiple=True, help="Check only this repository, by id or slug; repeatable.")
+@click.option("--source", "work_sources", multiple=True, help="Check only this work source, by id or slug; repeatable.")
+def credential_check(
+    cli: CliContext, credential: str, repositories: tuple[str, ...], work_sources: tuple[str, ...]
+) -> None:
+    """Check CREDENTIAL read-only against the repositories and work sources it acts for — those given by --repo and
+    --source, else every enabled one naming it — reporting each operation proven, granted, unproven, refused or
+    unsupported. Nothing is written to the forge or stored.
+
+    Exits 1 when any operation is refused or unsupported, or when the check reached none of its uses, else 0. Refused
+    when a --repo or --source does not act with CREDENTIAL, or when its secret is missing or retired."""
+    body: dict[str, list[str]] = {}
+    if repositories:
+        body["repositories"] = list(repositories)
+    if work_sources:
+        body["work_sources"] = list(work_sources)
+    check = cli.post(
+        f"/api/credentials/{credential}/checks",
+        "POST /credentials/{credential}/checks",
+        json_body=body,
+        timeout=_CHECK_TIMEOUT,
+    ).json()
+    cli.show_lines(check, *_check_lines(check))
+    if _failed(check):
+        raise SystemExit(1)
+
+
+def _check_lines(check: dict[str, Any]) -> list[str]:
+    lines = [
+        f"credential {check['credential']}  {check['binding']}" + (f"  {check['variant']}" if check["variant"] else "")
+    ]
+    if check["variant_contradicted"]:
+        lines.append("warning: the declared variant contradicts the token the secret holds")
+    if check["mint"] is not None:
+        lines.append(_operation_line(check["mint"]))
+    for use in check["uses"]:
+        reached = "" if use["reached"] else "  (not reached)"
+        lines.append(f"{use['kind']} {use['slug']}  {use['id']}{reached}")
+        lines.extend(f"  {_operation_line(operation)}" for operation in use["operations"])
+    if check["unreached_reason"] is not None:
+        lines.append(f"no use reached: {check['unreached_reason']}")
+    lines.append(check["not_evaluated"])
+    return lines
+
+
+def _operation_line(operation: dict[str, Any]) -> str:
+    line = f"{operation['operation']}  {operation['outcome']}"
+    return f"{line}  {operation['detail']}" if operation["detail"] else line
+
+
+def _failed(check: dict[str, Any]) -> bool:
+    mint = [check["mint"]] if check["mint"] is not None else []
+    operations = [*mint, *(operation for use in check["uses"] for operation in use["operations"])]
+    unreached = bool(check["uses"]) and not any(use["reached"] for use in check["uses"])
+    return unreached or any(operation["outcome"] in _FAILING for operation in operations)
+
+
 def _settings(variant: str | None, app_id: int | None, installation_id: int | None) -> dict[str, object]:
     given = {"variant": variant, "app_id": app_id, "installation_id": installation_id}
     return {key: value for key, value in given.items() if value is not None}
