@@ -1,18 +1,22 @@
 import type { HubApi } from './client/clients';
 import type { FiledIssue, Repository } from './factories';
 import type { RunnerHosts } from './runner-world';
-import { stepChunkUntil } from './runner-steps';
+import { type ChunkWait, stepChunkVia } from './runner-steps';
 
 const branch = 'feature/scripted-build';
 
-/** The same real-hub, real-runner migration world used by the fleet trace and the served-board assertion. */
+/**
+ * The same real-hub, real-runner migration world used by the fleet trace and the served-board assertion. `wait` is the
+ * hub-driving seam a controlled stack passes; absent, the chunk is stepped on the system clock.
+ */
 export async function migratedChunk(world: {
   api: HubApi;
   issue: (title: string, options?: { repository?: Repository }) => Promise<FiledIssue>;
   repository: (name?: string) => Promise<Repository>;
   runnerHosts: RunnerHosts;
+  wait?: ChunkWait;
 }) {
-  const { api, issue, repository, runnerHosts } = world;
+  const { api, issue, repository, runnerHosts, wait } = world;
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const cli = JSON.stringify(host.cliBinary);
@@ -29,6 +33,6 @@ export async function migratedChunk(world: {
   const { chunk } = await issue('migration', { repository: repo });
   const promoted = await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
   if (promoted.status !== 202) throw new Error(`promotion answered ${promoted.status}`);
-  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value));
+  const status = await stepChunkVia(host, api, chunk.chunk_id, (value) => ['done', 'needs_human', 'stopped'].includes(value), wait);
   return { repo, host, chunk, status, targetGraphId: target.body.graph_id as string, sourceGraphId: source.body.graph_id as string };
 }

@@ -1,4 +1,4 @@
-import { assertIdentity, assertSkeleton, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
+import { type ChunkWait, assertIdentity, assertSkeleton, controlledHubWait, expect, isFleet, roleOf, type RunnerHost, stepChunkVia, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 
@@ -13,18 +13,20 @@ function graph(host: RunnerHost, repo: string): string {
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'cli' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
-async function gated({ api, cli, forge, issue, repository, runnerHosts }: World) {
+/** `wait` drives the hub on a controlled stack; `beforeResolve` runs just before the operator's resolve. */
+async function gated({ api, cli, forge, issue, repository, runnerHosts }: World, wait?: ChunkWait, beforeResolve?: () => Promise<unknown>) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
   const { chunk } = await issue('gate', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const parked = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
+  const parked = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status), wait);
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const decision = detail.decision as { decision_id: string; node_name: string; choices: { name: string }[] };
   const listed = await cli(['hub', 'decision', 'list']);
+  await beforeResolve?.();
   const resolved = await cli(['hub', 'decision', 'resolve', decision.decision_id, 'approve', '--by', 'alice', '--json']);
-  const landed = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status));
+  const landed = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status), wait);
   const open = (await api.get('/api/decisions')).body.decisions as { decision_id: string }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   return { repo, host, chunk, parked, detail, decision, listed, resolved, landed, open, pulls };
@@ -50,20 +52,27 @@ test.describe('human gate', () => {
   });
 });
 
-traced('test_graph_gate_parks_a_decision_then_decide_delivers', async ({ api, cli, forge, issue, repository, runnerHosts, traceSink }) => {
-  test.setTimeout(120000);
-  const state = await gated({ api, cli, forge, issue, repository, runnerHosts });
-  await expect.poll(() => traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span) && ['step', 'gate'].includes(roleOf(span))).length, { timeout: 30000 }).toBe(3);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  const traces = tracesOf(spans);
-  assertIdentity(traces, { decisionIds: [state.decision.decision_id] });
-  assertSkeleton(traces, [
-    { name: 'step build', outcome: 'transitioned', toNode: 'approve-gate', children: ['queue wait', 'claim'] },
-    { name: 'gate approve-gate', outcome: 'decided', toNode: 'deliver', children: ['decision pickup'], link: 'next' },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
-  ] satisfies StepExpect[]);
-  const resolvedAt = JSON.parse(state.resolved.stdout).resolved_at as string;
-  const timestamp = /^(.+?)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$/.exec(resolvedAt);
-  expect(timestamp, resolvedAt).not.toBeNull();
-  expect(traces[1]!.root.endTimeUnixNano).toBe((BigInt(Date.parse(`${timestamp![1]}${timestamp![3]}`)) * 1_000_000n + BigInt((timestamp![2] ?? '').padEnd(9, '0'))).toString());
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_graph_gate_parks_a_decision_then_decide_delivers', async ({ api, cli, clock, flushTraces, forge, issue, repository, runnerHosts, traceSink }) => {
+    test.setTimeout(120000);
+    // The resolve instant must stand apart from every earlier record for the gate's end to prove it came from `resolved_at`.
+    const state = await gated({ api, cli, forge, issue, repository, runnerHosts }, controlledHubWait(api, clock), () => clock.advance(30));
+    expect(state.landed).toBe('done');
+    await flushTraces(state.host);
+    const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
+    expect(spans.filter((span) => ['step', 'gate'].includes(roleOf(span)))).toHaveLength(3);
+    const traces = tracesOf(spans);
+    assertIdentity(traces, { decisionIds: [state.decision.decision_id] });
+    assertSkeleton(traces, [
+      { name: 'step build', outcome: 'transitioned', toNode: 'approve-gate', children: ['queue wait', 'claim'] },
+      { name: 'gate approve-gate', outcome: 'decided', toNode: 'deliver', children: ['decision pickup'], link: 'next' },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
+    ] satisfies StepExpect[]);
+    const resolvedAt = JSON.parse(state.resolved.stdout).resolved_at as string;
+    const timestamp = /^(.+?)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$/.exec(resolvedAt);
+    expect(timestamp, resolvedAt).not.toBeNull();
+    expect(traces[1]!.root.endTimeUnixNano).toBe((BigInt(Date.parse(`${timestamp![1]}${timestamp![3]}`)) * 1_000_000n + BigInt((timestamp![2] ?? '').padEnd(9, '0'))).toString());
+    expect(BigInt(traces[1]!.root.endTimeUnixNano)).toBeGreaterThan(BigInt(traces[0]!.root.endTimeUnixNano));
+  });
 });

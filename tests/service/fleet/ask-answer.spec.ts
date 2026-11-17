@@ -1,4 +1,4 @@
-import { assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
+import { type ChunkWait, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, controlledHubWait, expect, isFleet, roleOf, stepChunkVia, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const questionText = 'Which API style should the endpoint use?';
 const branch = 'feature/scripted-build';
@@ -30,13 +30,13 @@ function answer(repo: string, cli: string): string {
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'cli' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
-async function scenario({ api, cli, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
+async function scenario({ api, cli, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number], wait?: ChunkWait) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness, host.cliBinary) } })).status).toBe(201);
   const { chunk } = await issue('ask/answer', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const parked = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status));
+  const parked = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['waiting_on_human', 'done', 'needs_human'].includes(status), wait);
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const question = (detail.questions as { question_id: string; session_id: string; options: string[] }[])[0]!;
   const before = (await host.mockSessions()).find((record) => record.session_id === question.session_id);
@@ -45,7 +45,7 @@ async function scenario({ api, cli, forge, issue, repository, runnerHosts }: Wor
   const still = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const open = (await api.get('/api/questions')).body as { question_id: string }[];
   const result = await cli(['hub', 'question', 'answer', question.question_id, answer(repo.name, host.cliBinary), '--by', 'alice']);
-  const landed = await stepChunkUntil(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status));
+  const landed = await stepChunkVia(host, api, chunk.chunk_id, (status) => ['done', 'needs_human', 'stopped'].includes(status), wait);
   const closed = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.questions as { question_id: string; answered: boolean; delivered: boolean }[];
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   const session = (await host.mockSessions()).find((record) => record.session_id === question.session_id);
@@ -76,35 +76,35 @@ for (const harness of harnesses) {
   });
 }
 
-traced('test_ask_parks_then_answer_resumes_session_to_done', async ({ api, cli, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
-  test.setTimeout(150000);
-  const state = await scenario({ api, cli, forge, issue, repository, runnerHosts }, harnesses[0]!);
-  const sink = traceSink;
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_ask_parks_then_answer_resumes_session_to_done', async ({ api, cli, clock, flushTraces, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
+    test.setTimeout(150000);
+    const state = await scenario({ api, cli, forge, issue, repository, runnerHosts }, harnesses[0]!, controlledHubWait(api, clock));
+    expect(state.landed).toBe('done');
+    await flushTraces(state.host);
+    const sink = traceSink;
     const spans = sink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-    return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
-  }, { timeout: 30000 }).toEqual([3, 5]);
-  const spans = sink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertSkeleton(tracesOf(spans), [
-    { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim', 'ask'], childAttributes: [{ name: 'ask', key: 'blizzard.ask.answered', value: true }] },
-    { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
-  ] satisfies StepExpect[]);
-  const runners = assertRunnerNesting(spans, 2);
-  expect(runners.some((span) => span.name === 'parked on ask')).toBe(true);
-  assertInvocations(runners, { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model }, review: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
-  await expect.poll(() => {
+    expect([spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([3, 5]);
+    assertSkeleton(tracesOf(spans), [
+      { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim', 'ask'], childAttributes: [{ name: 'ask', key: 'blizzard.ask.answered', value: true }] },
+      { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
+    ] satisfies StepExpect[]);
+    const runners = assertRunnerNesting(spans, 2);
+    expect(runners.some((span) => span.name === 'parked on ask')).toBe(true);
+    assertInvocations(runners, { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model }, review: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
     const traceId = tracesOf(spans)[0]!.root.traceId;
+    const tokens = (await state.host.mockSessions()).flatMap((session) => {
+      const credential = session.spawn_credential as { lease_token?: string } | undefined;
+      return credential?.lease_token ? [credential.lease_token] : [];
+    });
+    // Platform and worker-command spans ride a batch processor that only a shutdown flushes: the host, then the hub.
+    await state.host.stop();
+    await freshHub.stop();
     const exported = sink.spans().filter((span) => span.traceId === traceId);
-    try { assertPlatformNesting(exported.filter(isFleet), exported.filter((span) => !isFleet(span))); return true; }
-    catch { return false; }
-  }, { timeout: 30000 }).toBe(true);
-  const tokens = (await state.host.mockSessions()).flatMap((session) => {
-    const credential = session.spawn_credential as { lease_token?: string } | undefined;
-    return credential?.lease_token ? [credential.lease_token] : [];
+    assertPlatformNesting(exported.filter(isFleet), exported.filter((span) => !isFleet(span)), undefined, { bounded: false });
+    expect(sink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
+    assertNoLeaks(sink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!], 'ask text': [questionText] });
   });
-  await state.host.stop();
-  await freshHub.stop();
-  expect(sink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
-  assertNoLeaks(sink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!], 'ask text': [questionText] });
 });

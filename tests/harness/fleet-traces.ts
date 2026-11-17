@@ -235,7 +235,14 @@ export function assertInvocations(spans: readonly ReceivedSpan[], expected: Read
   }
 }
 
-export function assertPlatformNesting(fleet: readonly ReceivedSpan[], platform: readonly ReceivedSpan[], chained = 'runner work-items'): void {
+/**
+ * Asserts every worker command nests under a step root, and that the `chained` command reaches a hub query. By default
+ * only commands that start before their trace's last root closes are judged, which a system-clock stack's later
+ * commands (a worker command after the roots have closed) need excluded. A caller that has quiesced a controlled stack
+ * itself passes `bounded: false` to judge every command: platform spans carry machine time and fleet spans the
+ * stack's clock, so the two are never comparable there.
+ */
+export function assertPlatformNesting(fleet: readonly ReceivedSpan[], platform: readonly ReceivedSpan[], chained = 'runner work-items', { bounded = true }: { bounded?: boolean } = {}): void {
   const byId = new Map([...fleet, ...platform].map((span) => [identity(span), span]));
   const roots = new Set(fleet.filter((span) => roleOf(span) === 'step').map(identity));
   const until = new Map<string, bigint>();
@@ -245,7 +252,7 @@ export function assertPlatformNesting(fleet: readonly ReceivedSpan[], platform: 
   }
   const children = (span: ReceivedSpan, scope?: string, service?: string): ReceivedSpan[] => platform.filter((item) => parent(item) === identity(span) && (scope === undefined || item.scope.name === scope) && (service === undefined || item.resource['service.name'] === service));
   const descendants = (span: ReceivedSpan): ReceivedSpan[] => children(span).flatMap((child) => [child, ...descendants(child)]);
-  const commands = platform.filter((span) => span.scope.name === 'blizzard.cli' && time(span, 'startTimeUnixNano') < (until.get(span.traceId) ?? time(span, 'startTimeUnixNano') + 1n));
+  const commands = platform.filter((span) => span.scope.name === 'blizzard.cli' && (!bounded || time(span, 'startTimeUnixNano') < (until.get(span.traceId) ?? time(span, 'startTimeUnixNano') + 1n)));
   assert.ok(commands.length, 'no worker command span');
   let chains = 0;
   for (const command of commands) {

@@ -1,4 +1,4 @@
-import { assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepChunkUntil, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
+import { type ChunkWait, assertInvocations, assertRunnerNesting, assertSkeleton, controlledHubWait, expect, isFleet, roleOf, stepChunkVia, type StepExpect, test, traced, tracesOf } from '../../harness/fixtures';
 
 const harnesses = [
   { name: 'claude-code', id: 'claude_code', model: 'claude-opus-4-8', sessionFlag: '--resume' },
@@ -19,13 +19,13 @@ function graph(harness: typeof harnesses[number]): string {
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'issue' | 'repository' | 'runnerHosts'>;
-async function escalated({ api, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
+async function escalated({ api, issue, repository, runnerHosts }: World, harness: typeof harnesses[number], wait?: ChunkWait) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness) } })).status).toBe(201);
   const { chunk } = await issue('escalation', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['needs_human', 'done', 'stopped'].includes(value));
+  const status = await stepChunkVia(host, api, chunk.chunk_id, (value) => ['needs_human', 'done', 'stopped'].includes(value), wait);
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   return { host, chunk, status, detail };
 }
@@ -59,17 +59,20 @@ for (const harness of harnesses) {
   });
 }
 
-traced('test_retries_exhausted_escalates_and_takeover_resumes_session', async ({ api, issue, repository, runnerHosts, traceSink }) => {
-  test.setTimeout(120000);
-  const state = await escalated({ api, issue, repository, runnerHosts }, harnesses[0]!);
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_retries_exhausted_escalates_and_takeover_resumes_session', async ({ api, clock, flushTraces, issue, repository, runnerHosts, traceSink }) => {
+    test.setTimeout(120000);
+    // A controlled clock moves only when a turn moves it: the runner's trace cursor opens at its first pass's instant,
+    // and a lease closing on that very instant can be passed over, so each read of the wait moves the clock on.
+    const state = await escalated({ api, issue, repository, runnerHosts }, harnesses[0]!, controlledHubWait(api, clock));
+    await flushTraces(state.host);
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-    return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
-  }, { timeout: 30000 }).toEqual([2, 4]);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertSkeleton(tracesOf(spans), [
-    { name: 'step build', outcome: 'superseded', children: ['queue wait', 'claim'] },
-    { name: 'step build', outcome: 'escalated', status: 2, link: 'retry' },
-  ] satisfies StepExpect[]);
-  assertInvocations(assertRunnerNesting(spans, 2), { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
+    expect([spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([2, 4]);
+    assertSkeleton(tracesOf(spans), [
+      { name: 'step build', outcome: 'superseded', children: ['queue wait', 'claim'] },
+      { name: 'step build', outcome: 'escalated', status: 2, link: 'retry' },
+    ] satisfies StepExpect[]);
+    assertInvocations(assertRunnerNesting(spans, 2), { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
+  });
 });

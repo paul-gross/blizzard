@@ -1,4 +1,4 @@
-import { assertInvocations, assertRunnerNesting, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, stepUntil, test, traced, type WorkerCheckpoint } from '../../harness/fixtures';
+import { type ChunkWait, assertInvocations, assertRunnerNesting, controlledHubWait, expect, isFleet, roleOf, type RunnerHost, stepChunkVia, stepUntil, test, traced, type WorkerCheckpoint } from '../../harness/fixtures';
 
 const branch = 'feature/mixed-lineage';
 const buildFile = 'LANDED-MIXED-BUILD.md';
@@ -21,7 +21,7 @@ function graph(host: RunnerHost, repo: string, checkpoint: WorkerCheckpoint): st
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'issue' | 'repository' | 'runnerHosts' | 'runnerConfig' | 'workerCheckpoint'>;
-async function traverse({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint }: World) {
+async function traverse({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint }: World, wait?: ChunkWait) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, runnerConfig: { ...runnerConfig, transcripts: { ship: true }, runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } });
   const minted = await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name, workerCheckpoint) } });
@@ -48,7 +48,7 @@ async function traverse({ api, issue, repository, runnerHosts, runnerConfig, wor
   await host.stop();
   await host.restart();
   workerCheckpoint.release('after-declare');
-  const status = await stepChunkUntil(host, api, chunk.chunk_id, (value) => ['done', 'stopped', 'needs_human'].includes(value));
+  const status = await stepChunkVia(host, api, chunk.chunk_id, (value) => ['done', 'stopped', 'needs_human'].includes(value), wait);
   return { repo, host, chunk, runner, leases: await leases(), mid, midHead, firstPid, secondPid, thirdPid: host.pid, status, nodeIds };
 }
 
@@ -99,16 +99,18 @@ test.describe('mixed harness', () => {
   });
 });
 
-traced('test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_restarts', async ({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint, traceSink }) => {
-  test.setTimeout(150000);
-  const state = await traverse({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint });
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_restarts', async ({ api, clock, flushTraces, issue, repository, runnerHosts, runnerConfig, workerCheckpoint, traceSink }) => {
+    test.setTimeout(150000);
+    const state = await traverse({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint }, controlledHubWait(api, clock));
+    expect(state.status).toBe('done');
+    await flushTraces(state.host);
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-    return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
-  }, { timeout: 30000 }).toEqual([3, 5]);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertInvocations(assertRunnerNesting(spans, 2), {
-    build: { harnessId: 'claude_code', responseModel: 'claude-opus-4-8', requestModel: buildModel },
-    'opencode-review': { harnessId: 'opencode', responseModel: reviewModel, requestModel: reviewModel },
+    expect([spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([3, 5]);
+    assertInvocations(assertRunnerNesting(spans, 2), {
+      build: { harnessId: 'claude_code', responseModel: 'claude-opus-4-8', requestModel: buildModel },
+      'opencode-review': { harnessId: 'opencode', responseModel: reviewModel, requestModel: reviewModel },
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, collectorTest, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, stepUntil, test, traced, tracesOf } from '../../harness/fixtures';
+import { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, collectorTest, controlledHubWait, expect, isFleet, roleOf, type RunnerHost, stepChunkUntil, type StepExpect, stepUntil, test, traced, tracesOf } from '../../harness/fixtures';
 
 type Harness = { name: string; id: string; responseModel: string; requestModel?: string };
 const harnesses: Harness[] = [
@@ -146,48 +146,47 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole-chunk', wait: 
   });
 }
 
-traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, repository, runnerHosts, traceSink, freshHub }) => {
-  test.setTimeout(120000);
-  const harness = harnesses[0]!;
-  const repo = await repository();
-  const runnerHost = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
-  expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harness, repo.name, { probed: true }) } })).status).toBe(201);
-  const { chunk } = await issue('trace acceptance', { repository: repo });
-  await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  await stepChunkUntil(runnerHost, api, chunk.chunk_id, (status) => status === 'done');
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, clock, flushTraces, issue, repository, runnerHosts, traceSink, freshHub }) => {
+    test.setTimeout(120000);
+    const harness = harnesses[0]!;
+    const repo = await repository();
+    const runnerHost = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+    expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harness, repo.name, { probed: true }) } })).status).toBe(201);
+    const { chunk } = await issue('trace acceptance', { repository: repo });
+    // The chunk waits in the backlog from its mint to its promotion; a moved clock gives that wait a length to assert.
+    await clock.advance(5);
+    await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
+    await controlledHubWait(api, clock)(runnerHost, chunk.chunk_id, (detail) => detail.status === 'done');
+    await flushTraces(runnerHost);
     const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
-    return [spans.filter(isFleet).filter((span) => roleOf(span) === 'step').length, spans.filter(isFleet).filter((span) => roleOf(span) === 'runner/invocation').length, spans.some((span) => span.scope.name === 'blizzard.cli')];
-  }, { timeout: 30000 }).toEqual([3, 4, true]);
-  const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
-  const fleet = spans.filter(isFleet);
-  const traces = tracesOf(fleet);
-  assertConforms(fleet);
-  assertIdentity(traces);
-  assertSkeleton(traces, [
-    { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim'] },
-    { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
-  ] satisfies StepExpect[]);
-  const roots = assertChunkTrace(fleet, chunk.chunk_id, { outcome: 'done', steps: 3 });
-  expect(roots.work.attributes['blizzard.chunk.bounces']).toBe(0);
-  expect(roots.lifetime.attributes['blizzard.chunk.bounces']).toBe(0);
-  const runners = assertRunnerNesting(fleet, 2);
-  assertInvocations(runners, { build: { harnessId: harness.id, responseModel: harness.responseModel }, review: { harnessId: harness.id, responseModel: harness.responseModel } });
-  let platformError: unknown;
-  await expect.poll(() => {
-    const exported = traceSink.spans().filter((span) => span.traceId === roots.work.traceId);
-    try { assertPlatformNesting(exported.filter(isFleet), exported.filter((span) => !isFleet(span))); return true; }
-    catch (error) { platformError = error; return false; }
-  }, { timeout: 30000 }).toBe(true).catch(() => { throw platformError; });
-  const complete = traceSink.spans().filter((span) => span.traceId === roots.work.traceId);
-  assertPlatformNesting(complete.filter(isFleet), complete.filter((span) => !isFleet(span)));
-  const tokens = (await runnerHost.mockSessions()).flatMap((session) => {
-    const credential = session.spawn_credential as { lease_token?: string } | undefined;
-    return credential?.lease_token ? [credential.lease_token] : [];
+    const fleet = spans.filter(isFleet);
+    expect([fleet.filter((span) => roleOf(span) === 'step').length, fleet.filter((span) => roleOf(span) === 'runner/invocation').length]).toEqual([3, 4]);
+    const traces = tracesOf(fleet);
+    assertConforms(fleet);
+    assertIdentity(traces);
+    assertSkeleton(traces, [
+      { name: 'step build', outcome: 'transitioned', toNode: 'review', children: ['queue wait', 'claim'] },
+      { name: 'step review', outcome: 'transitioned', toNode: 'deliver', link: 'next' },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'done', children: ['hub exec'], link: 'next' },
+    ] satisfies StepExpect[]);
+    const roots = assertChunkTrace(fleet, chunk.chunk_id, { outcome: 'done', steps: 3 });
+    expect(roots.work.attributes['blizzard.chunk.bounces']).toBe(0);
+    expect(roots.lifetime.attributes['blizzard.chunk.bounces']).toBe(0);
+    const runners = assertRunnerNesting(fleet, 2);
+    assertInvocations(runners, { build: { harnessId: harness.id, responseModel: harness.responseModel }, review: { harnessId: harness.id, responseModel: harness.responseModel } });
+    const tokens = (await runnerHost.mockSessions()).flatMap((session) => {
+      const credential = session.spawn_credential as { lease_token?: string } | undefined;
+      return credential?.lease_token ? [credential.lease_token] : [];
+    });
+    // Platform and worker-command spans ride a batch processor that only a shutdown flushes: the host, then the hub.
+    await runnerHost.stop();
+    await freshHub.stop();
+    const complete = traceSink.spans().filter((span) => span.traceId === roots.work.traceId);
+    assertPlatformNesting(complete.filter(isFleet), complete.filter((span) => !isFleet(span)), undefined, { bounded: false });
+    expect(traceSink.spans().some((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id && span.scope.name === 'blizzard.cli')).toBe(true);
+    expect(traceSink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
+    assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [runnerHost.hubTokens().runners['runner-local']!], 'artifact body': [artifactBody] });
   });
-  await runnerHost.stop();
-  await freshHub.stop();
-  expect(traceSink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
-  assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [runnerHost.hubTokens().runners['runner-local']!], 'artifact body': [artifactBody] });
 });

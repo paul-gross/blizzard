@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
+import type { HubApi } from './client/clients';
 import type { Verbs } from './client/engine';
+import type { Clock } from './clock-stack';
 import type { MockChunkSpec } from './client/mock';
 import type { ChunkDetail, ChunkFlowPlaceView, ChunkStatus, FlowPlaceState } from './client/wire/hub/types.gen';
 import type { MockHub } from './mock-world';
@@ -10,6 +12,8 @@ import type { WorkerCheckpoint } from './worker-checkpoint';
 
 const STALL_PASSES = 40;
 const RUNNER = 'runner-local';
+/** How far a controlled hub turn moves the clock when no deadline is due, so its records do not share an instant with the last turn's. */
+const TURN_TICK_MS = 1000;
 /** The checkpoint a `holdingChunk` worker's spawn turn waits at. */
 export const SPAWN_HOLD = 'spawn';
 
@@ -80,6 +84,37 @@ export function chunkProgress(detail: ChunkProgressSource) {
 export async function stepChunkUntil(host: RunnerHost, api: Pick<Verbs, 'get'>, chunkId: string, reached: (status: ChunkStatus) => boolean, wait: Omit<StepWait<ChunkProgressSource>, 'progress'> = {}): Promise<ChunkStatus> {
   const read = async () => (await api.get<ChunkDetail>(`/api/chunks/${chunkId}`)).body;
   return (await stepUntil(host, read, (detail) => reached(detail.status), { ...wait, progress: chunkProgress })).status;
+}
+
+/**
+ * A wait on a chunk's detail, stepping the host as `stepUntil` does: the seam a scenario helper takes to run on a
+ * controlled hub, which runs no flow-driver timer. Absent, a helper waits with `stepChunkUntil` on the system clock.
+ */
+export type ChunkWait = (host: RunnerHost, chunkId: string, reached: (detail: ChunkDetail) => boolean, wait?: Omit<StepWait<ChunkProgressSource>, 'progress'>) => Promise<ChunkDetail>;
+
+/**
+ * The controlled-stack counterpart of `stepChunkUntil`. Each read is one hub flow turn: when the chunk's pending visit
+ * has a `next_poll_at` ahead of the stack's clock, the clock is set to it, and otherwise it moves on by `TURN_TICK_MS`
+ * so the records a turn writes stand at an instant of their own, which a trace's step placement reads; then
+ * `api.flowStep()` runs, and the chunk is read. A wait that crosses a hub-executed node, a poll or a retry deadline, or the hub's move back to `running` after a
+ * bounce is stepped here, never awaited, and the clock never overshoots the deadline it advances to. A runner-executed
+ * transition needs only host steps, which `stepUntil` supplies.
+ */
+export function controlledHubWait(api: Pick<HubApi, 'get' | 'flowStep'>, clock: Pick<Clock, 'now' | 'set'>): ChunkWait {
+  const read = async (chunkId: string) => (await api.get<ChunkDetail>(`/api/chunks/${chunkId}`)).body;
+  const turn = async (chunkId: string) => {
+    const { pending } = await read(chunkId);
+    const due = pending?.next_poll_at ? Date.parse(pending.next_poll_at) : NaN;
+    await clock.set(new Date(Math.max(clock.now().getTime() + TURN_TICK_MS, Number.isFinite(due) ? due : 0)));
+    await api.flowStep();
+    return read(chunkId);
+  };
+  return (host, chunkId, reached, wait = {}) => stepUntil(host, () => turn(chunkId), reached, { stallPasses: 80, ...wait, progress: chunkProgress });
+}
+
+/** `stepChunkUntil` on the system clock, or, given the controlled-stack `wait` seam, the same wait through it. */
+export async function stepChunkVia(host: RunnerHost, api: Pick<Verbs, 'get'>, chunkId: string, reached: (status: ChunkStatus) => boolean, wait?: ChunkWait): Promise<ChunkStatus> {
+  return wait ? (await wait(host, chunkId, (detail) => reached(detail.status))).status : stepChunkUntil(host, api, chunkId, reached);
 }
 
 /** The fields of a lease `leaseProgress` reads. */

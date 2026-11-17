@@ -1,4 +1,4 @@
-import { assertNoLeaks, assertPlatformNesting, assertSkeleton, chunkProgress, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
+import { type ChunkWait, assertNoLeaks, assertPlatformNesting, assertSkeleton, chunkProgress, controlledHubWait, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type RunnerHost, type StepExpect } from '../../harness/fixtures';
 
 const branch = 'feature/scripted-build';
 
@@ -12,7 +12,7 @@ function graph(host: RunnerHost, repo: string): string {
 }
 
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
-async function firstBounce({ api, forge, issue, repository, runnerHosts }: World) {
+async function firstBounce({ api, forge, issue, repository, runnerHosts }: World, wait?: ChunkWait) {
   const repo = await repository();
   const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const main = await host.originHead(repo.name, 'main');
@@ -20,8 +20,15 @@ async function firstBounce({ api, forge, issue, repository, runnerHosts }: World
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
   const { chunk } = await issue('armed conflict', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-  await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.bounces.length > 0 || ['done', 'stopped', 'needs_human'].includes(state.status), { progress: chunkProgress });
-  await expect.poll(async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, { timeout: 30000 }).toBe('running');
+  const bounced = (state: { bounces: unknown[]; status: string }) => state.bounces.length > 0 || ['done', 'stopped', 'needs_human'].includes(state.status);
+  if (wait) {
+    // The hub's move back to `running` after a bounce is a flow turn of its own, stepped here rather than polled for.
+    await wait(host, chunk.chunk_id, bounced);
+    await wait(host, chunk.chunk_id, (state) => state.status === 'running');
+  } else {
+    await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, bounced, { progress: chunkProgress });
+    await expect.poll(async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, { timeout: 30000 }).toBe('running');
+  }
   const detail = (await api.get(`/api/chunks/${chunk.chunk_id}`)).body;
   const pulls = (await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`)).body as { merged: boolean }[];
   return { api, repo, host, chunk, detail, pulls, main };
@@ -47,38 +54,38 @@ test.describe('conflicted delivery', () => {
   });
 });
 
-traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build', async ({ api, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
-  test.setTimeout(150000);
-  const state = await firstBounce({ api, forge, issue, repository, runnerHosts });
-  await stepUntil(state.host, async () => (await api.get(`/api/chunks/${state.chunk.chunk_id}`)).body.history as { choice_name: string }[], (history) => history.filter((item) => item.choice_name === 'pass').length >= 2);
-  await expect.poll(() => traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span) && roleOf(span) === 'step').length, { timeout: 30000 }).toBeGreaterThanOrEqual(3);
-  const fleet = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  const traces = tracesOf(fleet).slice(0, 3);
-  assertSkeleton(traces, [
-    { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'] },
-    { name: 'step deliver', outcome: 'transitioned', toNode: 'build', children: ['hub exec'], events: ['bounce'], link: 'next', attributes: { 'blizzard.bounce.cause': 'conflict' } },
-    { name: 'step build', outcome: 'transitioned', toNode: 'deliver', link: 'bounce' },
-  ] satisfies StepExpect[]);
-  expect(traces[1]!.root.events.find((event) => event.name === 'bounce')?.attributes['blizzard.bounce.cause']).toBe('conflict');
-  const traceId = traces[0]!.root.traceId;
-  await expect.poll(() => {
+test.describe('trace companion', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build', async ({ api, clock, flushTraces, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
+    test.setTimeout(150000);
+    const state = await firstBounce({ api, forge, issue, repository, runnerHosts }, controlledHubWait(api, clock));
+    // Runner steps only from here: no flow turn runs, so no second `deliver` pass starts and every `hub action pass`
+    // in the trace is the first delivery's.
+    await stepUntil(state.host, async () => (await api.get(`/api/chunks/${state.chunk.chunk_id}`)).body.history as { choice_name: string }[], (history) => history.filter((item) => item.choice_name === 'pass').length >= 2);
+    await flushTraces(state.host);
+    const fleet = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
+    expect(fleet.filter((span) => roleOf(span) === 'step').length).toBeGreaterThanOrEqual(3);
+    const traces = tracesOf(fleet).slice(0, 3);
+    assertSkeleton(traces, [
+      { name: 'step build', outcome: 'transitioned', toNode: 'deliver', children: ['queue wait', 'claim'] },
+      { name: 'step deliver', outcome: 'transitioned', toNode: 'build', children: ['hub exec'], events: ['bounce'], link: 'next', attributes: { 'blizzard.bounce.cause': 'conflict' } },
+      { name: 'step build', outcome: 'transitioned', toNode: 'deliver', link: 'bounce' },
+    ] satisfies StepExpect[]);
+    expect(traces[1]!.root.events.find((event) => event.name === 'bounce')?.attributes['blizzard.bounce.cause']).toBe('conflict');
+    const traceId = traces[0]!.root.traceId;
+    const tokens = (await state.host.mockSessions()).flatMap((session) => {
+      const credential = session.spawn_credential as { lease_token?: string } | undefined;
+      return credential?.lease_token ? [credential.lease_token] : [];
+    });
+    // Platform and worker-command spans ride a batch processor that only a shutdown flushes: the host, then the hub.
+    await state.host.stop();
+    await freshHub.stop();
     const all = traceSink.spans().filter((span) => span.traceId === traceId);
-    try { assertPlatformNesting(all.filter(isFleet), all.filter((span) => !isFleet(span))); return true; }
-    catch { return false; }
-  }, { timeout: 30000 }).toBe(true);
-  const cutoff = BigInt(traces[2]!.root.endTimeUnixNano);
-  const passesBeforeCutoff = (): ReturnType<typeof traceSink.spans> =>
-    traceSink.spans().filter((span) => span.traceId === traceId && span.name === 'hub action pass' && BigInt(span.startTimeUnixNano) < cutoff);
-  // The hub exports its spans in batches, so the pass span arrives after the nesting spans may already have.
-  await expect.poll(() => passesBeforeCutoff().length, { timeout: 30000 }).toBeGreaterThan(0);
-  const passes = passesBeforeCutoff();
-  const hubExecs = new Set(traces.flatMap((trace) => trace.children.filter((child) => child.name === 'hub exec').map((span) => span.spanId)));
-  expect(passes.every((span) => span.parentSpanId !== null && hubExecs.has(span.parentSpanId) && span.attributes['blizzard.hub.action.name'] === 'land')).toBe(true);
-  const tokens = (await state.host.mockSessions()).flatMap((session) => {
-    const credential = session.spawn_credential as { lease_token?: string } | undefined;
-    return credential?.lease_token ? [credential.lease_token] : [];
+    assertPlatformNesting(all.filter(isFleet), all.filter((span) => !isFleet(span)), undefined, { bounded: false });
+    const passes = all.filter((span) => span.name === 'hub action pass');
+    expect(passes.length).toBeGreaterThan(0);
+    const hubExecs = new Set(traces.flatMap((trace) => trace.children.filter((child) => child.name === 'hub exec').map((span) => span.spanId)));
+    expect(passes.every((span) => span.parentSpanId !== null && hubExecs.has(span.parentSpanId) && span.attributes['blizzard.hub.action.name'] === 'land')).toBe(true);
+    assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!] });
   });
-  await state.host.stop();
-  await freshHub.stop();
-  assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!] });
 });
