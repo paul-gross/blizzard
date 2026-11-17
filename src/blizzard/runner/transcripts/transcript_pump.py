@@ -337,7 +337,7 @@ class TranscriptPump:
             binding = held[0] if held else bindings_by_chunk.newest.get(segment.chunk_id)
             spawn_cwd = SpawnCwd(
                 self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
-                held[0].workdir if held else None,
+                binding.workdir if binding else None,
             ).path
         try:
             source = self.ctx.invocation_transcript_source(segment.session, segment.lease_id, segment.generation)

@@ -172,7 +172,7 @@ def test_run_rows_read_from_bindings_are_flat_as_unrelated_held_bindings_grow() 
     assert measured[0] == measured[1]
 
 
-def test_a_segment_without_a_frozen_cwd_reads_in_the_directory_its_binding_names() -> None:
+def test_a_segment_without_a_frozen_cwd_reads_in_the_directory_its_newest_binding_names() -> None:
     ctx, source, _store = _ctx(["sess-held", "sess-released", "sess-unbound"])
     _open_segment(ctx, "ch_1", "sess-held", held=True)
     _open_segment(ctx, "ch_2", "sess-released", held=False)
@@ -180,7 +180,8 @@ def test_a_segment_without_a_frozen_cwd_reads_in_the_directory_its_binding_names
     TranscriptPump(ctx).run()
     cwds = {session: cwd for session, cwd, _ in source.turns_since_calls}
     assert cwds["sess-held"] == "/ws/1"
-    assert cwds["sess-released"] != "/ws/2"  # a released chunk never reads in its released workdir
+    assert cwds["sess-released"] == "/ws/2"  # a released newest binding still names the workdir it was saved with
+    assert cwds["sess-unbound"] is None
     assert len(cwds) == 3
 
 

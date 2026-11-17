@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.runner.api.control import throttle_view
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageSample
@@ -20,7 +21,7 @@ from blizzard.runner.loop.steps import Fill
 from blizzard.runner.status.view import ThrottleStatus
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
-from blizzard.runner.throttle.levers import LeverAnswer, LeverName
+from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.report import declining_report
 from blizzard.runner.throttle.settings import (
@@ -134,11 +135,15 @@ def test_the_verdict_holds_the_configured_levers_in_gate_order_and_declines_in_t
 
     verdict = ThrottleGate(ctx).verdict()
 
-    assert [lever.lever for lever in verdict.levers] == [LeverName.PACE, LeverName.UTILIZATION, LeverName.SCHEDULE]
+    assert [lever.lever for lever in verdict.levers] == [
+        DeclaredLever.PACE,
+        DeclaredLever.UTILIZATION,
+        DeclaredLever.SCHEDULE,
+    ]
     assert [answer.lever for answer in verdict.declining if isinstance(answer, LeverAnswer)] == [
-        LeverName.PACE,
-        LeverName.UTILIZATION,
-        LeverName.SCHEDULE,
+        DeclaredLever.PACE,
+        DeclaredLever.UTILIZATION,
+        DeclaredLever.SCHEDULE,
     ]
     assert not verdict.admits_claim and not verdict.admits_step
 
@@ -240,7 +245,11 @@ def test_the_budget_is_asked_after_utilization_and_before_the_schedule_over_the_
 
     verdict = ThrottleGate(ctx).verdict()
 
-    assert [lever.lever for lever in verdict.levers] == [LeverName.UTILIZATION, LeverName.BUDGET, LeverName.SCHEDULE]
+    assert [lever.lever for lever in verdict.levers] == [
+        DeclaredLever.UTILIZATION,
+        DeclaredLever.BUDGET,
+        DeclaredLever.SCHEDULE,
+    ]
     assert verdict.levers[1].reading == "$12.00 of $10.00 over the trailing 6h"
     assert not verdict.levers[1].admits and verdict.levers[1].until is None
 

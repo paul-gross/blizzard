@@ -376,6 +376,7 @@ def create_app(
     clock: IClock | None = None,
     process: LinuxProcessProbe | None = None,
     children: IChildProcesses | None = None,
+    monotonic_clock: IMonotonicClock | None = None,
     platform_tracing: IPlatformTracing | None = None,
     identity: ICurrentRunnerIdentity | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
@@ -402,15 +403,15 @@ def create_app(
     log = get_logger("blizzard.runner")
     clock = clock or SystemClock()
     process = process or LinuxProcessProbe()
-    # Real OS processes are waited on here, so real time — never `hub_retry_clock`, which tests make a manual clock.
-    process_clock = SystemMonotonicClock()
-    children = children or SubprocessChildProcesses(process_clock)
     if runners is None:
+        # Real OS processes are waited on here, so real time — never `hub_retry_clock`, which tests make a manual clock.
+        monotonic_clock = monotonic_clock or SystemMonotonicClock()
+        children = children or SubprocessChildProcesses(monotonic_clock)
         runners = (
             runner_seams(
                 config,
                 clock=clock,
-                monotonic_clock=process_clock,
+                monotonic_clock=monotonic_clock,
                 process=process,
                 children=children,
                 events=RunnerEventPublisher.over(events, config.served_id()),

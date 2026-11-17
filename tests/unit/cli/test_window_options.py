@@ -12,7 +12,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from blizzard.cli.window import refuse_bad_window, since_option, until_option
+from blizzard.cli.window import refuse_bad_window, replay_windows, since_option, until_option
 
 _OPTIONS = [
     pytest.param(since_option, "since", id="since"),
@@ -168,3 +168,10 @@ def test_the_window_is_judged_as_instants_in_any_offset() -> None:
 
     assert _refusal(_NOW.astimezone(plus_five) - timedelta(hours=1), just_past) == "until must not be in the future"
     assert _refusal(_NOW.astimezone(plus_five) - timedelta(hours=1), _NOW.astimezone(plus_five)) is None
+
+
+@pytest.mark.parametrize("width", [0, -1])
+def test_replay_windows_refuses_a_width_that_cannot_advance(width: int) -> None:
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(click.ClickException, match="at least 1s"):
+        replay_windows(start, start + timedelta(hours=1), width)

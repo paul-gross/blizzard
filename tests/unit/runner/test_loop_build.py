@@ -22,7 +22,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 import blizzard.runner.app as runner_app
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
 from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.trace_export.exporter import ITraceExporter
@@ -519,6 +519,26 @@ def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_a
     hosted = build_hosted_app(load_runner_config(tmp_path))
 
     assert runner_seams(hosted.app).harness_health is hosted.harness_health
+
+
+def test_a_host_of_one_create_app_hands_the_injected_monotonic_clock_to_the_runner_seams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host-of-one default builds its seams over the caller's process clock, not a private system one."""
+    write_minimal_host(tmp_path)
+    seen: dict[str, object] = {}
+    real = runner_app.runner_seams
+
+    def recording(*args: object, **kwargs: object) -> object:
+        seen.update(kwargs)
+        return real(*args, **kwargs)  # pyright: ignore[reportArgumentType]  # a pass-through wrapper forwards the seam's own arguments untouched
+
+    monkeypatch.setattr(runner_app, "runner_seams", recording)
+    clock = ManualMonotonicClock()
+
+    create_runner_app(load_runner_config(tmp_path), monotonic_clock=clock)
+
+    assert seen["monotonic_clock"] is clock
 
 
 def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(

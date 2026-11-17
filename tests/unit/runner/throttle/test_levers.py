@@ -10,8 +10,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
-from blizzard.runner.throttle.levers import LeverName, budget_answer, pace_answer, schedule_answer, utilization_answer
+from blizzard.runner.throttle.levers import budget_answer, pace_answer, schedule_answer, utilization_answer
 from blizzard.runner.throttle.settings import (
     BudgetSettings,
     PaceSettings,
@@ -60,7 +61,7 @@ def test_pacing_five_days_into_seven_at_86_declines_under_lead_5_until_the_week_
     answer = _pace(PaceSettings(window="7d", lead_pct=5.0), _sample(_week(86.0)))
 
     assert not answer.admits
-    assert answer.lever is LeverName.PACE
+    assert answer.lever is DeclaredLever.PACE
     assert answer.reading == "7d: 86% spent, 71% elapsed"
     assert answer.in_force == "lead 5"
     started = _NOW + timedelta(days=2) - timedelta(seconds=_WEEK)
@@ -360,7 +361,7 @@ def test_budget_admits_under_the_line_and_declines_at_and_over_it() -> None:
     over = budget_answer(settings, spend=_spend(41.2))
 
     assert [a.admits for a in (under, at, over)] == [True, False, False]
-    assert over.lever is LeverName.BUDGET
+    assert over.lever is DeclaredLever.BUDGET
     assert over.reading == "$41.20 of $40.00 over the trailing 24h"
     assert over.setting == "$40.00 over 24h"
 
