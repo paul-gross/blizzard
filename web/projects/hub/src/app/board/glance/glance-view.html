@@ -84,10 +84,13 @@
   <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state
       [state]="spendState()"
+      placement="inline"
       loadingText="—"
       loadingTestid="glance-spend-loading"
       errorText="FAILED TO LOAD"
       errorTestid="glance-spend-error"
+      emptyText="—"
+      emptyTestid="glance-spend-empty"
     >
       @if (spend(); as s) {
         <app-fleet-spend data-testid="glance-spend-row" [today]="s" [yesterday]="spendYesterday()" />

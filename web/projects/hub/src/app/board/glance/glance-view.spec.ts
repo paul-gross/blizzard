@@ -76,6 +76,16 @@ describe('GlanceView', () => {
     expect(rendered[1].querySelector('[data-testid="glance-blocked"]')).toBeNull();
   });
 
+  it('allows a long blocker to shrink with an ellipsis while retaining its full title', async () => {
+    const label = 'a-very-long-blocker-reference-that-exceeds-a-phone-width';
+    const [card] = await cards({ ready: [row({ blocked: { label, title: label } })] });
+    const marking = card.querySelector<HTMLElement>('[data-testid="glance-blocked"]')!;
+    const style = getComputedStyle(marking);
+    expect(marking.title).toBe(label);
+    expect(style.textOverflow).toBe('ellipsis');
+    expect(style.minWidth).toBe('0px');
+  });
+
   it('shows non-default urgency only on unfinished cards without changing row order', async () => {
     const urgent = { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView;
     const normal = { ...urgent, urgency_id: 'n', name: 'Normal', default: true } as UrgencyView;
@@ -151,11 +161,18 @@ describe('GlanceView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="glance-spend-loading"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="glance-spend-loading"]')?.classList.contains('inline')).toBe(true);
     expect(el.querySelector('[data-testid="glance-spend-row"]')).toBeNull();
 
     fixture.componentRef.setInput('spendState', 'error');
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="glance-spend-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="glance-spend-error"]')?.classList.contains('inline')).toBe(true);
+
+    fixture.componentRef.setInput('spendState', 'empty');
+    await fixture.whenStable();
+    expect(text(el.querySelector('[data-testid="glance-spend-empty"]'))).toBe('—');
+    expect(el.querySelector('[data-testid="glance-spend-empty"]')?.classList.contains('inline')).toBe(true);
   });
 
   it('renders live, then READY, the divider, BACKLOG, the divider, then done, as one list', async () => {

@@ -9,7 +9,7 @@ from typing import Any, cast
 import click
 
 from blizzard.cli.refusal import refusal_of
-from blizzard.cli.window import since_option, until_option, utc_query_value
+from blizzard.cli.window import InstantTime, since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
@@ -71,7 +71,7 @@ def egress_status(cli: CliContext) -> None:
 @click.option(
     "--to",
     "to",
-    type=click.DateTime(),
+    type=InstantTime(),
     required=True,
     help="The instant the cursor moves to, read in the caller's own local time; not in the future.",
 )

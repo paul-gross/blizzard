@@ -4,11 +4,12 @@ instant, the moved window recorded, and the sweep's pass serialized with it."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx2
+import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.utc import iso_utc
@@ -172,3 +173,39 @@ def test_the_cli_moves_the_cursor_and_renders_a_refusal(tmp_path: Path) -> None:
     )
     assert refused.exit_code != 0
     assert "not configured" in refused.output
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-07-12T03:00:00Z", datetime(2026, 7, 12, 3, tzinfo=UTC)),
+        ("2026-07-12T05:00:00+02:00", datetime(2026, 7, 12, 3, tzinfo=UTC)),
+        ("2026-07-11T21:30:00-05:30", datetime(2026, 7, 12, 3, tzinfo=UTC)),
+        ("2026-07-12", datetime(2026, 7, 12).astimezone(UTC)),
+        ("2026-07-12T03:00:00", datetime(2026, 7, 12, 3).astimezone(UTC)),
+        ("2026-07-12 03:00:00", datetime(2026, 7, 12, 3).astimezone(UTC)),
+    ],
+)
+def test_reset_cli_sends_the_requested_instant_to_the_api(tmp_path: Path, value: str, expected: datetime) -> None:
+    hub, _ = egress_hub(tmp_path, SETTLED)
+    bodies: list[object] = []
+
+    def post(url: str, *, json: object = None, timeout: object, **_: object) -> httpx2.Response:
+        bodies.append(json)
+        return hub.client.post(url, json=json)
+
+    result = bind_stubs(post=post).runner.invoke(
+        hub_group, ["egress", "reset", "--dataset", "invocations", "--to", value, "--json"], env=_ENV
+    )
+
+    assert result.exit_code == 0, result.output
+    assert bodies == [{"dataset": "invocations", "to": iso_utc(expected)}]
+    assert datetime.fromisoformat(json.loads(result.output)["to_at"]) == expected
+
+
+@pytest.mark.parametrize("value", ["yesterday", "2026-13-01", "2026-07-12T03:00:00+25:00"])
+def test_reset_cli_rejects_bad_times(value: str) -> None:
+    result = bind_stubs().runner.invoke(hub_group, ["egress", "reset", "--dataset", "events", "--to", value], env=_ENV)
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--to'" in result.output

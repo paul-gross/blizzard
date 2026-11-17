@@ -16,18 +16,26 @@ from blizzard.foundation.store.utc import iso_utc
 _ZONED = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})")
 
 
-class WindowTime(click.DateTime):
-    """The click ``datetime`` type, which also takes an RFC 3339 instant with ``Z`` or a ``±hh:mm`` offset, as an
-    export writes its times. A zoned value becomes the naive local wall clock of that instant, so every consumer
-    reads it as it reads a bare one."""
+class InstantTime(click.DateTime):
+    """Click's datetime forms and zoned RFC 3339 instants."""
 
     def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
         if isinstance(value, str) and _ZONED.fullmatch(value):
             try:
-                return datetime.fromisoformat(value).astimezone().replace(tzinfo=None)
+                return datetime.fromisoformat(value)
             except ValueError:
                 self.fail(f"{value!r} is not a valid RFC 3339 time.", param, ctx)
         return super().convert(value, param, ctx)
+
+
+class WindowTime(InstantTime):
+    """A zoned instant becomes a naive local wall clock for window consumers."""
+
+    def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+        result = super().convert(value, param, ctx)
+        if isinstance(value, str) and _ZONED.fullmatch(value):
+            return result.astimezone().replace(tzinfo=None)
+        return result
 
 
 @overload
