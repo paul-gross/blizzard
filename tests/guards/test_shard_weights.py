@@ -155,6 +155,11 @@ def _evidence(tmp_path: Path) -> Path:
     evidence.mkdir()
     (evidence / "timings-gate-pytest-1.json").write_text(json.dumps({"tests/a.py::t": 0.4, "tests/a.py::u": 4.0}))
     (evidence / "timings-gate-pytest-2.json").write_text(json.dumps({"tests/b.py::t": 7.0}))
+    for shard in range(3, 7):
+        (evidence / f"timings-gate-pytest-{shard}.json").write_text("{}")
+    empty: dict[str, object] = {"config": {"rootDir": str(tmp_path / "tests" / "service" / "hub")}, "suites": []}
+    for shard in (1, 2, 4, 5, 6):
+        (evidence / f"report-service-playwright-{shard}.json").write_text(json.dumps(empty))
     (evidence / "report-service-playwright-3.json").write_text(json.dumps(_playwright_report(tmp_path / "tests")))
     (evidence / "units.json").write_text(json.dumps({"web-test-hub": 41.0}))
     jobs = [
@@ -196,6 +201,16 @@ def test_refresh_weighs_each_evidence_form_under_stable_identities(tmp_path: Pat
     assert result.inventory["web-test-fleet"].missing is not None
     assert "compose-smoke" in result.unmeasured
     assert "gate-pytest" not in result.unmeasured
+
+
+def test_refresh_keeps_a_sharded_suite_whose_evidence_lacks_a_shard(tmp_path: Path) -> None:
+    evidence = _evidence(tmp_path)
+    (evidence / "timings-gate-pytest-3.json").unlink()
+    previous = {"gate-pytest": SuiteWeights(1, {"tests/c.py::t": Measured(3.0, 3)})}
+    result = refresh(evidence, previous, tmp_path / "tests")
+    assert result.incomplete == {"gate-pytest": [3]}
+    assert result.inventory["gate-pytest"] == previous["gate-pytest"]
+    assert "gate-pytest" not in result.stale
 
 
 def test_refresh_is_reproducible(tmp_path: Path) -> None:

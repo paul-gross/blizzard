@@ -142,7 +142,8 @@ and rebuilds from them. The evidence file names are:
 - `jobs*.json` — `gh run view --json jobs`, which weighs a unit suite whose CI job runs only that suite
 
 A suite the evidence does not measure keeps its previous inventory and is reported unmeasured; an entry the new
-measurement no longer holds is reported stale and dropped. Commit the regenerated file.
+measurement no longer holds is reported stale and dropped. A sharded suite whose evidence lacks a shard's file (a failed
+shard uploads none) is reported incomplete and keeps its previous entries. Commit the regenerated file.
 
 **CI evidence.** The gate pytest shards, the service pytest shards, the service Playwright shards and the store baseline
 upload their timing file as a `timings-*` artifact on success only; a failed or cancelled job's timings are never kept.

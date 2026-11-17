@@ -333,6 +333,9 @@ class Refreshed:
     inventory: Inventory
     unmeasured: list[str]
     stale: dict[str, list[str]]
+    #: Sharded case suites whose evidence lacked some shards' files, mapped to the shard numbers missing; each keeps
+    #: its previous inventory, since a partial measurement would drop the absent shards' entries as stale.
+    incomplete: dict[str, list[int]] = field(default_factory=lambda: dict[str, list[int]]())
 
 
 def refresh(evidence: Path, previous: Inventory, tests_dir: Path = TESTS_DIR) -> Refreshed:
@@ -354,6 +357,7 @@ def refresh(evidence: Path, previous: Inventory, tests_dir: Path = TESTS_DIR) ->
     inventory: Inventory = {}
     unmeasured: list[str] = []
     stale: dict[str, list[str]] = {}
+    incomplete: dict[str, list[int]] = {}
     for entry in SUITES:
         durations: dict[str, float] | None = None
         if entry.kind == "unit":
@@ -369,6 +373,10 @@ def refresh(evidence: Path, previous: Inventory, tests_dir: Path = TESTS_DIR) ->
                 if entry.evidence == "pytest"
                 else _evidence_files(evidence, entry.id, "report")
             )
+            if files and (absent := _absent_shards(entry, files)):
+                incomplete[entry.id] = absent
+                inventory[entry.id] = previous.get(entry.id) or SuiteWeights(missing=_missing_reason(entry))
+                continue
             if files:
                 durations = {}
                 for path in files:
@@ -383,7 +391,20 @@ def refresh(evidence: Path, previous: Inventory, tests_dir: Path = TESTS_DIR) ->
         dropped = sorted(set(previous.get(entry.id, SuiteWeights()).entries) - set(durations))
         if dropped:
             stale[entry.id] = dropped
-    return Refreshed(inventory, unmeasured, stale)
+    return Refreshed(inventory, unmeasured, stale, incomplete)
+
+
+def _absent_shards(entry: Suite, files: Sequence[Path]) -> list[int]:
+    """The shard numbers of a sharded suite that no evidence file covers; empty when whole or not sharded."""
+    if entry.shards <= 1:
+        return []
+    present: set[int] = set()
+    for path in files:
+        tail = path.name.removesuffix(".json").rsplit("-", 1)[-1]
+        if not tail.isdigit():
+            return []  # one unnumbered file holds the whole suite
+        present.add(int(tail))
+    return [n for n in range(1, entry.shards + 1) if n not in present]
 
 
 def _missing_reason(entry: Suite) -> str:
@@ -593,6 +614,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     INVENTORY_PATH.write_text(dump_inventory(result.inventory))
     for suite_id in result.unmeasured:
         print(f"unmeasured: {suite_id} ({result.inventory[suite_id].missing or 'kept its previous measurement'})")
+    for suite_id, absent in result.incomplete.items():
+        print(
+            f"incomplete: {suite_id} kept its previous inventory; no evidence for shard(s) {', '.join(map(str, absent))}"
+        )
     for suite_id, entries in result.stale.items():
         print(f"stale: {suite_id}: {len(entries)} entries dropped — {', '.join(entries[:5])}")
     return 0
