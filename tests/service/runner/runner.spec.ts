@@ -577,6 +577,8 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
     expect(host.otlp!.openTraceRequests()).toContain(traceRequest);
     previous = await tickAt();
   }
+  // The runner may already have abandoned its bounded wait, but the transport itself must still be hung.
+  expect(host.otlp!.unansweredTraceRequests()).toBeGreaterThan(0);
 
   // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   const started = Date.now();

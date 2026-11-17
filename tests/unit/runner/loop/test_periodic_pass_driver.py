@@ -7,6 +7,8 @@ from __future__ import annotations
 import threading
 import time
 
+from structlog.testing import capture_logs
+
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 
@@ -50,8 +52,10 @@ def test_the_driver_passes_after_its_jitter_and_survives_a_raising_pass() -> Non
 
 def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
     release = threading.Event()
+    entered = threading.Event()
 
     def _hung() -> None:
+        entered.set()
         release.wait(10)
 
     driver = PeriodicPassDriver(
@@ -63,12 +67,20 @@ def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
         jitter_seconds=0,
         stop_timeout_seconds=0.2,
     )
-    driver.start()
-    time.sleep(0.05)
-    started = time.monotonic()
-    driver.stop()
-    assert time.monotonic() - started < 2
-    release.set()
+    with capture_logs() as logs:
+        driver.start()
+        try:
+            assert entered.wait(5)
+            started = time.monotonic()
+            driver.stop()
+            assert time.monotonic() - started < 2
+            assert any(
+                entry["event"] == "test pass still running at shutdown; abandoned" and entry["waited"] == 0.2
+                for entry in logs
+            )
+        finally:
+            release.set()
+            driver.thread.join(5)
 
 
 def test_the_driver_never_passes_before_its_jitter() -> None:

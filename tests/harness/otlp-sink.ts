@@ -274,6 +274,8 @@ export interface OtlpSink {
   openConnections(): number;
   /** IDs of unanswered trace requests whose sockets are still open. */
   openTraceRequests(): number[];
+  /** Fully received trace POSTs still awaiting a response on a live connection. */
+  unansweredTraceRequests(): number;
   close(): Promise<void>;
 }
 
@@ -300,12 +302,18 @@ export async function startOtlpSink(options: { hang?: boolean } = {}): Promise<O
   let open = 0;
   let nextTraceRequest = 0;
   const openTraceRequests = new Set<number>();
+  let unansweredTraces = 0;
   const server = http.createServer((request, response) => {
     if (options.hang === true) {
       if (request.method === 'POST' && (request.url ?? '').split('?')[0] === TRACES_PATH) {
         const id = nextTraceRequest++;
         openTraceRequests.add(id);
         request.socket.once('close', () => openTraceRequests.delete(id));
+        request.once('end', () => {
+          if (response.destroyed) return;
+          unansweredTraces++;
+          response.once('close', () => unansweredTraces--);
+        });
       }
       request.resume();
       return;
@@ -348,6 +356,7 @@ export async function startOtlpSink(options: { hang?: boolean } = {}): Promise<O
     logRecords: () => [...records],
     openConnections: () => open,
     openTraceRequests: () => [...openTraceRequests],
+    unansweredTraceRequests: () => unansweredTraces,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
