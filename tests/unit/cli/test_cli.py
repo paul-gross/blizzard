@@ -11,7 +11,6 @@ import os
 import shutil
 import socket
 import threading
-import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,7 +29,7 @@ from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
-from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, Door, daemon_holding
+from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HostLayout, HostLock
@@ -404,12 +403,28 @@ def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> 
     assert "no runner daemon is serving" in result.output
 
 
-def _serve_on(sock_path: Path, reply: bytes | None) -> socket.socket:
+class _Listener:
+    """A running test listener: ``close`` releases a held connection, closes the socket, and joins the thread."""
+
+    def __init__(self, server: socket.socket, release: threading.Event, thread: threading.Thread) -> None:
+        self._server = server
+        self._release = release
+        self._thread = thread
+
+    def close(self) -> None:
+        self._release.set()
+        self._server.close()
+        self._thread.join(timeout=5)
+        assert not self._thread.is_alive()
+
+
+def _serve_on(sock_path: Path, reply: bytes | None) -> _Listener:
     """A minimal UDS listener the liveness probe can reach. ``reply is None`` accepts the
-    connection and never answers — the wedged-daemon case."""
+    connection and never answers until released — the wedged-daemon case."""
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(sock_path))
     server.listen(1)
+    release = threading.Event()
 
     def _answer() -> None:
         conn, _ = server.accept()
@@ -418,10 +433,11 @@ def _serve_on(sock_path: Path, reply: bytes | None) -> socket.socket:
             if reply is not None:
                 conn.sendall(reply)
             else:
-                time.sleep(LOCAL_CLIENT_TIMEOUT * 3)
+                release.wait()
 
-    threading.Thread(target=_answer, daemon=True).start()
-    return server
+    thread = threading.Thread(target=_answer, daemon=True)
+    thread.start()
+    return _Listener(server, release, thread)
 
 
 _OK = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}"
@@ -460,7 +476,7 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
     server = _serve_on(HostLayout(root).legacy_socket_path, reply)
 
     try:
-        holding = daemon_holding(HostLayout(root).legacy_socket_path, _DOOR)
+        holding = daemon_holding(HostLayout(root).legacy_socket_path, _DOOR, timeout=0.25)
     finally:
         server.close()
 

@@ -38,10 +38,10 @@ class Door:
     def of(cls, ctx: click.Context) -> Door:
         return cls(OperatorTrace.source(ctx), CliCollaborators.of(ctx).client_factory)
 
-    def uds_client(self, sock: Path) -> Client:
+    def uds_client(self, sock: Path, *, timeout: float = LOCAL_CLIENT_TIMEOUT) -> Client:
         """A client reaching the runner over ``sock``; the base_url host is a placeholder."""
         return self.client_factory(
-            base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT, headers=self.trace.headers(), uds=str(sock)
+            base_url="http://runner", timeout=timeout, headers=self.trace.headers(), uds=str(sock)
         )
 
 
@@ -226,14 +226,14 @@ def _named(items: list[HostRunnerView]) -> str:
     return ", ".join(f"{item.name} ({item.runner_id or 'no id'}, {item.state})" for item in items) or "none"
 
 
-def daemon_holding(sock: Path, door: Door) -> str | None:
+def daemon_holding(sock: Path, door: Door, *, timeout: float = LOCAL_CLIENT_TIMEOUT) -> str | None:
     """What is holding the socket ``sock``, or ``None`` when nothing is — the single-owner guard's
     probe for a verb that writes or moves the store. Fail-closed: a socket that does not answer
     its health probe cleanly is still held."""
     if not sock.exists():
         return None
     try:
-        with door.uds_client(sock) as client:
+        with door.uds_client(sock, timeout=timeout) as client:
             response = client.get("/api/health")
     except ConnectError:
         return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
