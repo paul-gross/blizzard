@@ -165,15 +165,24 @@ The board refreshes this explanation on chunk, queue and runner changes, with a 
 configuration is polled every 15 seconds as described [above](#on-the-board). Each field of the API answers one
 question:
 
-| Field          | Answers                                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `next`         | Which chunk the runner reaches for next under pass-over; absent when it can use none.                                        |
-| `passed`       | Which chunks of its projects it steps past before `next`, at most twenty, each with its `reason`.                            |
-| `reason`       | Why a chunk was passed: `blocked`, naming its first unfinished `prerequisite` and the `prerequisite_count`, or `ineligible`. |
-| `passed_total` | How many chunks it passes in all, listed or not.                                                                             |
-| `unserved`     | How many chunks ahead of `next` belong to projects the runner does not serve.                                                |
-| `if_holding`   | Which chunk it would reach for under a per-project hold.                                                                     |
-| `held_at`      | Where each served project's hold stops, at a chunk it cannot use, with its project and `reason`.                             |
+| Field                        | Answers                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `next`                       | Which chunk the runner reaches for next under pass-over; absent when it can use none.                                        |
+| `passed`                     | Which chunks of its projects it steps past before `next`, at most twenty, each with its `reason`.                            |
+| `reason`                     | Why a chunk was passed: `blocked`, naming its first unfinished `prerequisite` and the `prerequisite_count`, or `ineligible`. |
+| `passed_total`               | How many chunks it passes in all, listed or not.                                                                             |
+| `unserved`                   | How many chunks ahead of `next` belong to projects the runner does not serve.                                                |
+| `if_holding`                 | Which chunk it would reach for under a per-project hold.                                                                     |
+| `held_at`                    | Where each served project's hold stops, at a chunk it cannot use, with its project and `reason`.                             |
+| `without_repository_targets` | The same account for a runner that prepares at no repository targets; absent from a hub that does not report it.             |
+| `excluded`                   | In that account only: how many chunks ahead of its `next` the runner is never offered.                                       |
+
+The fields above assume a runner that prepares at the repository targets a peek names. A runner that does not is never
+offered a chunk whose target is a project link's own branch override, so `without_repository_targets` repeats the
+account (`next`, `passed`, `passed_total`, `unserved`, `if_holding`, `held_at`) with those chunks skipped; `excluded`
+counts them, and they appear in neither `passed` nor `held_at`. Both accounts are counterfactuals over the same queue,
+not predictions of which one the runner will claim under. The board labels each, and shows "not reported by this hub"
+when the key is absent.
 
 Each entry names its chunk, graph, project, urgency, and `position` in the whole tenant's claim order. In the worked
 example, C appears in `passed` as `blocked` with D as its prerequisite, and `next` is the first chunk after C that the
@@ -211,13 +220,21 @@ Error: urgency urgent carries 2 open chunks; name where they go:
 
 `runner next` prints the runner's next chunk, then each passed chunk with its position, urgency, and reason, a blocked
 one naming its prerequisite and how many more it has. When the hub passed more chunks than it lists, a last line gives
-how many more. With no usable chunk, the `next` line says so:
+how many more, first under `preparing at repository targets:` and then under `not preparing at repository targets:`,
+with the count of chunks never offered. Against a hub that does not report the second account it prints
+`not reported by this
+hub`. With no usable chunk, a `next` line says so:
 
 ```console
 $ blizzard hub runner next rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6T
+preparing at repository targets:
 next  3  ch_next  urgency=standard
   passed  0  ch_dep  urgency=urgent  blocked by ch_pre (+2 more)
   passed  1  ch_gpu  urgency=-  ineligible
+not preparing at repository targets:
+  2 ahead never offered at repository targets
+  next  5  ch_main  urgency=standard
+    passed  1  ch_gpu  urgency=-  ineligible
 ```
 
 `settings` reads and writes a key as the configuration document spells it under `settings`; `default_urgency` is the

@@ -1,7 +1,7 @@
 import type { hubApi } from 'fleet';
 
 /** Presentation of the hub's bounded walk, without making a claimability judgment. */
-export function nextClaimSummary(next: hubApi.NextClaimResponse) {
+export function nextClaimSummary(next: hubApi.NextClaimResponse | hubApi.NextClaimScenario) {
   return {
     next: next.next,
     passed: next.passed,
@@ -12,8 +12,13 @@ export function nextClaimSummary(next: hubApi.NextClaimResponse) {
   };
 }
 
+/** Every scenario the hub reports: the response's own account, then the no-target alternative when present. */
+function scenarios(next: hubApi.NextClaimResponse | undefined): (hubApi.NextClaimResponse | hubApi.NextClaimScenario)[] {
+  return next ? [next, ...(next.without_repository_targets ? [next.without_repository_targets] : [])] : [];
+}
+
 export function prerequisiteIds(next: hubApi.NextClaimResponse | undefined): string[] {
-  return [...new Set([...(next?.passed ?? []), ...(next?.held_at ?? [])]
+  return [...new Set(scenarios(next).flatMap((scenario) => [...scenario.passed, ...scenario.held_at])
     .map((entry) => entry.prerequisite).filter((id): id is string => id !== null))];
 }
 
@@ -22,7 +27,7 @@ export function prerequisiteStatuses(results: readonly { data?: hubApi.ChunkDeta
 }
 
 export function claimUrgencyIcons(next: hubApi.NextClaimResponse | undefined, urgencies: readonly hubApi.UrgencyView[] | undefined): { key: string; digest: string }[] {
-  const ids = new Set([next?.next, next?.if_holding, ...(next?.passed ?? []), ...(next?.held_at ?? [])].map((entry) => entry?.urgency?.urgency_id));
+  const ids = new Set(scenarios(next).flatMap((scenario) => [scenario.next, scenario.if_holding, ...scenario.passed, ...scenario.held_at]).map((entry) => entry?.urgency?.urgency_id));
   return (urgencies ?? []).filter((item) => ids.has(item.urgency_id) && !item.default && !item.emoji && item.icon)
     .map((item) => ({ key: item.urgency_id, digest: item.icon!.digest }));
 }

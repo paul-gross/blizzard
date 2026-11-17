@@ -68,17 +68,34 @@ class NextClaimDetail:
     body: dict[str, Any]
 
     def lines(self) -> Iterator[str]:
-        upcoming = self.body.get("next")
-        if upcoming:
-            yield f"next  {_claim_entry(upcoming)}"
-        else:
-            yield "next  - (nothing in claim order this runner can use)"
-        passed = self.body.get("passed", [])
-        for entry in passed:
-            yield f"  passed  {_claim_entry(entry)}  {_pass_reason(entry)}"
-        remainder = self.body.get("passed_total", 0) - len(passed)
-        if remainder > 0:
-            yield f"  ... and {remainder} more passed"
+        yield "preparing at repository targets:"
+        yield from _scenario_lines(self.body)
+        yield "not preparing at repository targets:"
+        alternative = self.body.get("without_repository_targets")
+        if alternative is None:
+            yield "  not reported by this hub"
+            return
+        excluded = alternative.get("excluded", 0)
+        if excluded > 0:
+            yield f"  {excluded} ahead never offered at repository targets"
+        for line in _scenario_lines(alternative):
+            yield f"  {line}"
+
+
+def _scenario_lines(scenario: dict[str, Any]) -> Iterator[str]:
+    """One scenario's account: the chunk it reaches for, each chunk passed on the way, and how many more were passed
+    than are listed."""
+    upcoming = scenario.get("next")
+    if upcoming:
+        yield f"next  {_claim_entry(upcoming)}"
+    else:
+        yield "next  - (nothing in claim order this runner can use)"
+    passed = scenario.get("passed", [])
+    for entry in passed:
+        yield f"  passed  {_claim_entry(entry)}  {_pass_reason(entry)}"
+    remainder = scenario.get("passed_total", 0) - len(passed)
+    if remainder > 0:
+        yield f"  ... and {remainder} more passed"
 
 
 def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
