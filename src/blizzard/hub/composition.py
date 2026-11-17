@@ -199,7 +199,7 @@ from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.projects.order import IReadProjectPositions
-from blizzard.hub.domain.projects.targets import ChunkTargets
+from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
@@ -444,7 +444,7 @@ class TenantServices:
     projects: IReadProjectRepository
     #: Each project's links to the tenant's work sources and repositories (the read half).
     project_links: IReadProjectLinks
-    #: Each chunk's effective repository targets, and their capture.
+    #: Each chunk's effective repository targets.
     chunk_targets: ChunkTargets
     #: Each project's landing order over the repositories it links (the read half).
     project_positions: IReadProjectPositions
@@ -1270,6 +1270,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_targets = ChunkTargets(
         targets=stores.chunk_targets, links=stores.project_links, records=stores.repository_records
     )
+    chunk_target_capture = ChunkTargetCapture(reads=chunk_targets, targets=stores.chunk_targets)
     hub_router = HubNodeRouter(
         artifacts=chunk_artifacts,
         hub_exec=chunk_hub_exec,
@@ -1386,7 +1387,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             records=chunk_record,
             facts=chunk_facts,
             dependencies=chunk_dependencies,
-            targets=chunk_targets,
+            targets=chunk_target_capture,
             clock=clock,
             label=work_ref_label,
         ),
@@ -1579,6 +1580,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             projects=stores.projects,
             links=stores.project_links,
             targets=chunk_targets,
+            capture=chunk_target_capture,
             catalogue=parts.actions.catalogue,
             refusals=hub_router,
             transactions=stores.transactions,

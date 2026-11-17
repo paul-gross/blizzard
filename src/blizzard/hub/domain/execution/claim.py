@@ -36,7 +36,7 @@ from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
-from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk
+from blizzard.hub.domain.projects.targets import ChunkTargetCapture, TargetChunk
 from blizzard.hub.domain.runners.bindings import WorkEligibility
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -339,7 +339,7 @@ class ClaimService:
         records: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
         dependencies: IReadChunkDependenciesRepository,
-        targets: ChunkTargets,
+        targets: ChunkTargetCapture,
         clock: IClock,
         label: WorkRefLabel,
     ) -> None:

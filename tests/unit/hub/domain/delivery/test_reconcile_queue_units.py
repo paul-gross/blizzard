@@ -121,6 +121,7 @@ def _reconciler(world: _World) -> FlowLineReconciler:
         projects=seam,
         links=seam,
         targets=seam,
+        capture=seam,
         catalogue=seam,
         refusals=seam,
         transactions=seam,
