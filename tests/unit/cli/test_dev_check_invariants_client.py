@@ -230,3 +230,46 @@ def test_a_commandline_runner_url_outranks_an_environment_dir(monkeypatch: pytes
     )
     assert result.exit_code == 0, result.output
     assert "invariants hold" in result.output
+
+
+_SECRET_URL = "http://user:sekret@{host}.example:8431/base?token=sekret"
+_MALFORMED = [
+    httpx2.Response(200, content=b'{"sekret":'),
+    httpx2.Response(200, json={"violations": [{"invariant": 1, "detail": "sekret"}]}),
+]
+
+
+@pytest.mark.parametrize("answer", _MALFORMED)
+@pytest.mark.parametrize(
+    ("flag", "host", "name"), [("--hub-url", "hub", "hub"), ("--runner-url", "host", "runner host")]
+)
+def test_an_unreadable_answer_exits_one_without_exposing_the_answer_or_credentials(
+    answer: httpx2.Response, flag: str, host: str, name: str
+) -> None:
+    def route(request: httpx2.Request) -> httpx2.Response:
+        return answer
+
+    url = _SECRET_URL.format(host=host)
+    result = bind_transport(route).runner.invoke(blizzard, ["dev", "check-invariants", flag, url])
+    assert result.exit_code == 1
+    assert f"{name}" in result.output
+    assert f"http://{host}.example:8431" in result.output
+    for leaked in ("sekret", "user:", "/base", "token"):
+        assert leaked not in result.output
+    assert "invariants hold" not in result.output
+
+
+def test_the_hub_message_offers_no_restart_remedy() -> None:
+    result = bind_transport(_daemons(hub=lambda: _MALFORMED[0])).runner.invoke(
+        blizzard, ["dev", "check-invariants", "--hub-url", HUB]
+    )
+    assert "unreadable answer from the hub" in result.output
+    assert "restart" not in result.output
+
+
+def test_the_host_message_offers_the_restart_remedy() -> None:
+    result = bind_transport(_daemons(host=lambda: _MALFORMED[0])).runner.invoke(
+        blizzard, ["dev", "check-invariants", "--runner-url", HOST]
+    )
+    assert "unreadable answer from the runner host" in result.output
+    assert "restart it on this build" in result.output
