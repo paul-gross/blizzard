@@ -34,12 +34,27 @@ def test_the_per_commit_wire_check_is_retired() -> None:
     assert [name for name in _jobs() if "compat" in name] == ["compat"]
 
 
-def test_refusal_census_runs_unsharded_in_the_required_pytest_result_and_local_gate() -> None:
-    job = _jobs()["python-tests-result"]
-    assert job["needs"] == ["python-tests"]
+def test_refusal_census_runs_once_beside_the_shards_with_no_dependency_on_them() -> None:
+    job = _jobs()["refusal-census"]
+    assert "needs" not in job
+    assert job["if"] == "${{ !inputs.lint_only }}"
     command = "uv run python -m tests.support.aggregate_census"
     steps = [step for step in job["steps"] if step.get("run") == command]
     assert len(steps) == 1
     assert "if" not in steps[0] and "continue-on-error" not in steps[0]
     assert "BLIZZARD_TEST_SHARD" not in steps[0].get("env", {})
+    checkouts = [step for step in job["steps"] if str(step.get("uses", "")).startswith("actions/checkout")]
+    assert [step["with"]["persist-credentials"] for step in checkouts] == [False]
+    assert "aggregate_census" not in str(_jobs()["python-tests-result"])
     assert command in (repo_root() / "scripts/ci-gate.sh").read_text()
+
+
+def test_the_required_pytest_check_joins_every_shard_and_the_census_on_success_only() -> None:
+    job = _jobs()["python-tests-result"]
+    assert job["name"] == "pytest (unit + component)"
+    assert job["needs"] == ["python-tests", "refusal-census"]
+    assert job["if"] == "${{ !cancelled() && !inputs.lint_only }}"
+    (step,) = job["steps"]
+    assert set(step["env"].values()) == {"${{ needs.python-tests.result }}", "${{ needs.refusal-census.result }}"}
+    for variable in step["env"]:
+        assert f'test "${variable}" = success' in step["run"]
