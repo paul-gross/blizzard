@@ -538,8 +538,9 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       const mock = requireBinary(mockBinDir(), 'blizzard-mock-fixture');
       const scratch = path.join(root, 'world');
       let started = Date.now();
-      await run(mock, ['mint', '--env', 'w', '--scratch-root', scratch], home);
-      const workspace = (await run(mock, ['path', '--env', 'w', '--scratch-root', scratch], home)).stdout.trim();
+      // `mint` prints the workspace path as its last line, after any fixture log lines on the same stream.
+      const minted = (await run(mock, ['mint', '--env', 'w', '--scratch-root', scratch], home)).stdout.trim().split('\n');
+      const workspace = (minted[minted.length - 1] as string).trim();
       const origins = (await run(mock, ['path', '--env', 'w', '--scratch-root', scratch, '--part', 'origins'], home)).stdout.trim();
       fs.writeFileSync(path.join(workspace, FENCE_FILE), '');
       timings.mintMs = Date.now() - started;
