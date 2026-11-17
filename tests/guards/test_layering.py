@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import fnmatch
 import functools
 import importlib.util
 import json
@@ -3284,13 +3283,17 @@ def test_the_runner_domain_core_globs_follow_the_layer_table(tmp_path: Path) -> 
 _DISK_CALLS_RULE = _REPO_ROOT / "contracts" / "ast-grep" / "rules" / "runner-domain-core-disk-calls.yml"
 
 
+def _segment_regex(segment: str) -> str:
+    """A single path segment's glob as a regex — ``*`` any run, ``?`` one character, the rest literal — written out
+    by hand so it does not depend on the wrapper ``fnmatch.translate`` puts around its pattern, which differs by
+    Python version."""
+    return "".join("[^/]*" if char == "*" else "[^/]" if char == "?" else re.escape(char) for char in segment)
+
+
 def _glob_matches(pattern: str, rel: str) -> bool:
     """Whether an ast-grep ``files:``/``ignores:`` glob matches the posix path ``rel``: ``**`` spans any number of
-    segments, every other segment matches one segment by ``fnmatch``."""
-    regex = "".join(
-        "(?:[^/]+/)*" if part == "**" else fnmatch.translate(part).removeprefix("(?s:").removesuffix(")\\z") + "/"
-        for part in pattern.split("/")
-    )
+    segments, every other segment matches one segment, ``*`` and ``?`` as wildcards."""
+    regex = "".join("(?:[^/]+/)*" if part == "**" else _segment_regex(part) + "/" for part in pattern.split("/"))
     return re.fullmatch(regex, f"{rel}/") is not None
 
 
