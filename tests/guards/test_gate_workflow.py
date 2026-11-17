@@ -58,3 +58,14 @@ def test_the_required_pytest_check_joins_every_shard_and_the_census_on_success_o
     assert set(step["env"].values()) == {"${{ needs.python-tests.result }}", "${{ needs.refusal-census.result }}"}
     for variable in step["env"]:
         assert f'test "${variable}" = success' in step["run"]
+
+
+def test_each_pytest_shard_records_its_timings_and_keeps_only_that_file_on_success() -> None:
+    steps = _jobs()["python-tests"]["steps"]
+    timings = "timings-gate-pytest-${{ matrix.shard }}"
+    assert next(s for s in steps if s.get("name") == "pytest")["env"]["BLIZZARD_TEST_TIMINGS"] == f"{timings}.json"
+    [upload] = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+    assert upload["if"] == "${{ success() }}"
+    assert upload["with"]["name"] == timings
+    assert upload["with"]["path"] == f"{timings}.json"
+    assert upload["with"]["retention-days"] <= 14

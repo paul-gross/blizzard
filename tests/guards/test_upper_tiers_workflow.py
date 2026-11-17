@@ -65,7 +65,7 @@ def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening
     python = next(step for step in steps if step.get("name") == "Python for uv bootstrap")
     mise = next(step for step in steps if step.get("name") == "Node from mise.toml")
     execution = next(
-        step for step in steps if step.get("name") == "service tier — the Playwright half, `mise run playwright`"
+        step for step in steps if step.get("name") == "service tier — the Playwright half, `mise run playwright-shard`"
     )
     assert (
         steps.index(python) < steps.index(primary) < steps.index(fallback) < steps.index(mise) < steps.index(execution)
@@ -79,7 +79,10 @@ def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening
     assert not fallback.get("continue-on-error", False)
     assert mise["with"]["install_args"] == "node"
     assert not execution.get("continue-on-error", False)
-    assert "--shard=${{ matrix.shard }}/${{ matrix.shards }}" in execution["run"]
+    assert execution["run"] == (
+        "cd blizzard && mise run playwright-shard -- --project='service-*' --project=harness --project=harness-auth"
+        " --project=harness-runner --project=harness-actions --shard=${{ matrix.shard }}/${{ matrix.shards }}"
+    )
 
 
 def test_playwright_checkout_includes_release_tags() -> None:
@@ -87,3 +90,34 @@ def test_playwright_checkout_includes_release_tags() -> None:
     assert checkout["uses"] == "actions/checkout@v4"
     assert checkout["with"]["fetch-depth"] == 0
     assert checkout["with"].get("fetch-tags", True) is not False
+
+
+_CRASH_SUITE = "crash-sweep-${{ inputs.crash_sweep_ci == '1' && 'bounded' || 'full' }}"
+_SHARD = "-${{ matrix.shard }}"
+
+
+@pytest.mark.parametrize(
+    ("job", "artifact", "path"),
+    (
+        ("service-tier", f"timings-service-pytest{_SHARD}", f"blizzard/timings-service-pytest{_SHARD}.json"),
+        ("service-playwright", f"timings-service-playwright{_SHARD}", f"report-service-playwright{_SHARD}.json"),
+        ("crash-sweep", f"timings-{_CRASH_SUITE}", f"blizzard/timings-{_CRASH_SUITE}.json"),
+        ("ui", "timings-ui", "report-ui.json"),
+        ("journey", "timings-journey", "report-journey.json"),
+    ),
+)
+def test_a_tier_keeps_only_its_timing_file_and_only_on_success(job: str, artifact: str, path: str) -> None:
+    """The timing upload never carries ``test-results/``, daemon logs, or ``.run/`` — a failure's evidence is the
+    separate failure-only upload."""
+    steps = _JOBS[job]["steps"]
+    [upload] = [s for s in steps if s.get("with", {}).get("name") == artifact]
+    assert upload["if"] == "${{ success() }}"
+    assert upload["with"]["path"] == path
+    assert upload["with"]["retention-days"] <= 14
+    if path.startswith("report-"):
+        [copy] = [s for s in steps if s.get("run", "").startswith("cp ") and path in s["run"]]
+        assert copy["if"] == "${{ success() }}"
+        assert copy["run"] == f"cp blizzard/tests/test-results/report.json {path}"
+    else:
+        [test] = [s for s in steps if "BLIZZARD_TEST_TIMINGS" in s.get("env", {})]
+        assert f"blizzard/{test['env']['BLIZZARD_TEST_TIMINGS']}" == path

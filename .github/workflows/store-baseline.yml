@@ -49,4 +49,13 @@ jobs:
           BLIZZARD_STORE_BASELINE_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          BLIZZARD_TEST_TIMINGS: timings-store-baseline.json
         run: uv run --extra postgres pytest -m store_baseline tests/store_baseline/test_store_baseline.py -v
+      - name: keep the timing evidence (success only, the timing file alone)
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: timings-store-baseline
+          path: timings-store-baseline.json
+          retention-days: 14
+          if-no-files-found: ignore

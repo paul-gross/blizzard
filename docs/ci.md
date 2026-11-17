@@ -33,21 +33,24 @@ on `master`.
 
 The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
 shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the suite,
-so the shards together run every test exactly once. `BLIZZARD_TEST_SHARD_BY` names what the slice is cut by: `test`, the
-default, collects every module and keeps the tests whose nodeid hashes to the shard; `file` skips, before import, every
-test module whose repo-relative path hashes to another shard, so a shard pays to import only its own modules. The pytest
-tier splits by `file`, across its many modules; the service tier's Python half splits by `test`, since a few of its
-modules hold most of its tests. A test that carries no tier marker fails collection in whichever shard collects it. A
-`*-result` job reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
-`upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count. The
-runner refusal aggregate coverage census (`tests.support.aggregate_census`) runs its own dynamic observations and
-consumes no shard output, so it is a `refusal-census` job that starts with the shards; the `*-result` job joins the
-shards and the census and succeeds only when every input reports `success`, so a failed, cancelled, or skipped input
-fails the required check. Before the split the census ran inside the result job after the slowest shard: on push run
-43753786351 its command took 251s and the result job 276s. After it, the census overlaps the shards, and the result job
-only joins. The census adds one runner to the gate's concurrent jobs, which can queue the full gate when runners are
-scarce. With `BLIZZARD_TEST_SHARD` unset the whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or
-`file` is a usage error; the local commands below run unsharded.
+so the shards together run every test exactly once. Each slice is the greedy placement of the suite's units by their
+measured weight, §Shard weights below. `BLIZZARD_TEST_SHARD_BY` names the unit: `test`, the default, collects every
+module and places each test; `file` places the test modules a walk of the run's collection roots finds, then skips,
+before import, every module another shard owns, so a shard pays to import only its own modules. A module the walk does
+not find keeps a stable-hash owner. The pytest tier splits by `file`, across its many modules; the service tier's Python
+half splits by `test`, since a few of its modules hold most of its tests. The Playwright pool's unit is the (project,
+spec file) pair, run through `mise run playwright-shard`, never Playwright's own `--shard`. A test that carries no tier
+marker fails collection in whichever shard collects it. A `*-result` job reports each sharded tier under its single
+check name — `gate / pytest (unit + component)`, `upper-tiers / service tier (blizzard:service-test)` — so a
+required-check list names the tier, not its shard count. The runner refusal aggregate coverage census
+(`tests.support.aggregate_census`) runs its own dynamic observations and consumes no shard output, so it is a
+`refusal-census` job that starts with the shards; the `*-result` job joins the shards and the census and succeeds only
+when every input reports `success`, so a failed, cancelled, or skipped input fails the required check. Before the split
+the census ran inside the result job after the slowest shard: on push run 43753786351 its command took 251s and the
+result job 276s. After it, the census overlaps the shards, and the result job only joins. The census adds one runner to
+the gate's concurrent jobs, which can queue the full gate when runners are scarce. With `BLIZZARD_TEST_SHARD` unset the
+whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or `file` is a usage error; the local commands below
+run unsharded.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
@@ -103,6 +106,100 @@ and `flip-without-note` (`pr` mode only) fails a flag turned from `off` to `on` 
 `changes/unreleased/` note at HEAD names it. `mise run flag-lifecycle` runs `pr` mode with `--base origin/master`; pass
 `cut` or `tag` to apply the stricter due-flag policy when checking a release cut or tag.
 
+## Shard weights
+
+`tests/shard-weights.json` is the inventory the shard placement reads. `mise run shard-weights-refresh` generates it
+(`tests/support/shard_weights.py`); never edit it by hand. It holds every suite CI runs, as the module's suite registry
+declares them. A suite has either a measured duration and weight per entry or a `missing` reason. A completeness guard
+fails when a workflow job runs a suite the registry does not name.
+
+**Identities.** A pytest case is its nodeid. A Playwright case is
+`<project> › <spec file relative to tests/> › <title path>`, with an ordinal suffix only where one file repeats a title
+path. A unit suite — a smoke, the census, a web test run — is one entry under its suite id.
+
+**Fibonacci rounding.** Each measured duration in seconds rounds to the nearest Fibonacci number (1, 2, 3, 5, 8, …); a
+tie rounds up and anything under 1 weighs 1. Rounding keeps run-to-run noise from reshuffling the placement.
+
+**Placement.** A unit's weight is the sum of its cases' weights. Units are placed heaviest first, each onto the lightest
+shard, ties broken by identity and lowest shard index, so every process computing the placement agrees. The placement
+covers the cases the run discovers, never the inventory's keys, so a stale entry can neither add nor suppress a test.
+
+**Fallback.** A case the inventory does not hold weighs its suite's fallback: the rounded median of the suite's measured
+durations, never zero. Each shard reports the units that weighed the fallback — pytest in a
+`shard placement: <n> unmeasured unit(s) weighed the fallback` terminal section, Playwright as
+`plan-playwright: <n> unit(s) hold unmeasured tests` in the job log — so a stale inventory shows. A Playwright test
+whose last result is not `passed`, such as a `test.fail` expected failure, is never measured and always weighs the
+fallback.
+
+**Refreshing.** `mise run shard-weights-refresh -- --evidence <dir>` rebuilds the inventory from a local evidence
+directory; `mise run shard-weights-refresh -- --run <id>` fetches a CI run's job records and timing artifacts with `gh`
+and rebuilds from them. The evidence file names are:
+
+- `timings-<suite>[-<n>].json` — the pytest recorder's `{nodeid: seconds}`, written when `BLIZZARD_TEST_TIMINGS` names
+  the file
+- `report-<suite>[-<n>].json` — a Playwright JSON report
+- `units.json` — `{suite id: wall seconds}` for locally measured unit suites
+- `jobs*.json` — `gh run view --json jobs`, which weighs a unit suite whose CI job runs only that suite
+
+A suite the evidence does not measure keeps its previous inventory and is reported unmeasured; an entry the new
+measurement no longer holds is reported stale and dropped. A sharded suite whose evidence lacks a shard's file (a failed
+shard uploads none) is reported incomplete and keeps its previous entries. Commit the regenerated file.
+
+**CI evidence.** The gate pytest shards, the service pytest shards, the service Playwright shards and the store baseline
+upload their timing file as a `timings-*` artifact on success only; a failed or cancelled job's timings are never kept.
+The service Playwright step's local command is `mise run playwright-shard -- <project flags> --shard=<index>/<count>`
+(`scripts/playwright-shard.sh`): it lists the suite, plans that shard's units by the inventory, and runs them with
+`--test-list`. A shard the plan leaves empty exits 0 without starting Playwright. Each shard still runs the
+setup/teardown dependency projects its units need.
+
+### Measurement record
+
+The committed inventory was seeded from local evidence. The CI-sourced refresh,
+`mise run shard-weights-refresh -- --run <id>`, happens after merge. The isolation cross-check legs and the rehearsal
+legs stay `missing` until then.
+
+Local figures were taken on a 20-core machine shared with other feature environments, under varying load. **Local
+seconds are not comparable to CI seconds**: compare the spread within one side, not absolute values across sides. CI
+figures are GitHub `ubuntu-latest` job seconds, which include checkout, setup and install; local figures are
+test-command wall time only.
+
+Test counts, local unsharded run against the sum of the local after-shards:
+
+| Pool                       | Before (unsharded)        | After (summed shards)     |
+| -------------------------- | ------------------------- | ------------------------- |
+| gate pytest                | 22717 (22472 + 245 skips) | 22717 (22472 + 245 skips) |
+| service pytest             | 115                       | 115                       |
+| service Playwright (tests) | 727                       | 727                       |
+
+The shards' sets are disjoint and their union equals the unsharded set. Service Playwright's raw totals differ, 737
+unsharded against 759 summed, only because each shard re-runs the setup/teardown projects it needs.
+
+Predicted per-shard weight from the seeded inventory, new placement against the stable hash of the same units:
+
+| Pool                  | New placement                | Stable hash                        | Max new | Max hash |
+| --------------------- | ---------------------------- | ---------------------------------- | ------: | -------: |
+| gate pytest (6, file) | 5242 ×6                      | 5162, 5055, 5184, 5477, 5044, 5530 |    5242 |     5530 |
+| service pytest (3)    | 226 ×3                       | 237, 185, 256                      |     226 |      256 |
+| service Playwright    | 892, 892, 892, 892, 891, 891 | 440, 1403, 273, 1780, 756, 698     |     892 |     1780 |
+
+The service Playwright hash column is a stand-in: before this placement the pool used Playwright's own `--shard`, not a
+hash of (project, spec file) units.
+
+Per-shard seconds, CI before (run 43753786351) and local after (the new placement, every shard run sequentially):
+
+| Pool               | Configuration                                  | Per-shard seconds (1..n)     | Slowest shard |
+| ------------------ | ---------------------------------------------- | ---------------------------- | ------------: |
+| gate pytest        | CI before, `-n auto` (4 workers)               | 476, 677, 404, 510, 385, 660 |    677 (2) CI |
+| gate pytest        | local after, `-n 4`                            | 429, 573, 486, 416, 549, 538 | 573 (2) local |
+| service pytest     | CI before, `-n auto`                           | 117, 128, 160                |    160 (3) CI |
+| service pytest     | local after, `-n 4`                            | 134, 98, 76                  | 134 (1) local |
+| service Playwright | CI before, `CI=1` (2 workers), `--shard`       | 313, 915, 913, 305, 312, 178 |    915 (2) CI |
+| service Playwright | local after, `CI=1` (2 workers), `--test-list` | 420, 381, 328, 361, 410, 460 | 460 (6) local |
+
+Slowest-to-fastest spread: gate pytest 1.76 CI before, 1.38 local after; service Playwright 5.14 CI before, 1.40 local
+after; service pytest 1.37 CI before, 1.78 local after. Service pytest's predicted weights are equal, yet its local
+shard 1 ran 134s against 76–98s; with 115 coarsely weighted tests, rounding and host noise dominate at that scale.
+
 ## The upper tiers
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
@@ -152,15 +249,16 @@ enclosing winter workspace, and never in CI.
 
 ### Fleet-port timing
 
-The implemented Playwright service job runs six shards, each with a 30-minute step timeout; the Python half retains
-three shards. The former prospective estimate was 1263s serial for fleet default, plus 243s for trace companions, and
-about 971s for a pessimistic ordinary service shard. Those estimates covered more than the six newly ported specs and
-are not comparable directly to the following local subset. The eight traced fleet scenario ports run in
-`service-fleet/`, with migration's browser half in `ui/`. An earlier three-shard local CI-shaped run (`CI=1`, two
-workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes; the full service project passed in 17.2
-minutes and UI in 3.3 minutes. The current four-shard measurements are below. These are local durations; CI runs when a
-PR is open at delivery, and its timings are the authoritative ones. The merge gate's slowest pytest shard was about 20
-minutes at preflight, and every measured service shard remains below it and the timeout.
+Each Playwright service shard has a 30-minute step timeout; the shard counts and their placement are owned by §The merge
+gate and §Shard weights, and the measurements below predate the weighted placement. The former prospective estimate was
+1263s serial for fleet default, plus 243s for trace companions, and about 971s for a pessimistic ordinary service shard.
+Those estimates covered more than the six newly ported specs and are not comparable directly to the following local
+subset. The eight traced fleet scenario ports run in `service-fleet/`, with migration's browser half in `ui/`. An
+earlier three-shard local CI-shaped run (`CI=1`, two workers, service and harness projects) passed in 9.3, 7.7, and 3.5
+minutes; the full service project passed in 17.2 minutes and UI in 3.3 minutes. A later four-shard local run is recorded
+below. These are local durations; CI runs when a PR is open at delivery, and its timings are the authoritative ones. The
+merge gate's slowest pytest shard was about 20 minutes at preflight, and every measured service shard remains below it
+and the timeout.
 
 Final runner-tier measurement, with the Python original of every runner-tier test ported and `tests/service/` holding
 only the pytest half. A full `mise run playwright -- --project='service-*'` run, 10 workers on a 20-thread local machine
@@ -198,11 +296,11 @@ Each landed board port records its spec's time below. The measured time is the s
 On 2026-10-30,
 `mise run playwright -- --project=service-fleet basic-workspace.spec.ts checks-gate.spec.ts delivery-pr-ci.spec.ts post-merge-node.spec.ts runner-serves-default.spec.ts spike-terminal.spec.ts`
 completed in 89.28s wall time locally: 22 cases plus setup and teardown, with 10 workers. Other verification was running
-concurrently. With `CI=1`, two workers and the workflow's project selection, the four complete local shards took 438.49s
-(125 tests), 687.78s (121 tests), 282.76s (123 tests), and 176.51s (117 tests), respectively. Shard 3 had one fresh-hub
-connection drop on its first run; that traced case passed alone and the full shard passed on rerun. These are local
-measurements, not CI job timings. The slowest local shard remains below the former 971s pessimistic estimate and the
-30-minute CI step limit; CI timings remain the measure of actual gate balance.
+concurrently. With `CI=1`, two workers and the workflow's project selection, the four complete local shards of the then
+four-shard split took 438.49s (125 tests), 687.78s (121 tests), 282.76s (123 tests), and 176.51s (117 tests),
+respectively. Shard 3 had one fresh-hub connection drop on its first run; that traced case passed alone and the full
+shard passed on rerun. These are local measurements, not CI job timings. The slowest local shard remains below the
+former 971s pessimistic estimate and the 30-minute CI step limit; CI timings remain the measure of actual gate balance.
 
 The same local `CI=1` shard-2 run reported the elapsed case times for each ported file, excluding shared setup and
 teardown. These per-file sums measure runner time rather than shard wall time because two workers overlap cases:
@@ -216,8 +314,8 @@ teardown. These per-file sums measure runner time rather than shard wall time be
 | `spike-terminal.spec.ts`        | 1                       | 12.4s             |
 | `delivery-pr-ci.spec.ts`        | 16                      | 266.1s            |
 
-Each file's observed cost fits the four-shard plan; the complete shard-2 wall time was 687.78s against the prospective
-971s budget. GitHub Actions timing remains to be measured on an actual CI run.
+Each file's observed cost fitted that four-shard split; the complete shard-2 wall time was 687.78s against the
+prospective 971s budget. GitHub Actions timing remains to be measured on an actual CI run.
 
 ## The upgrade rehearsal
 

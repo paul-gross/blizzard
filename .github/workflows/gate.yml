@@ -142,7 +142,16 @@ jobs:
         env:
           BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
           BLIZZARD_TEST_SHARD_BY: file
+          BLIZZARD_TEST_TIMINGS: timings-gate-pytest-${{ matrix.shard }}.json
         run: uv run pytest -n auto
+      - name: keep the timing evidence (success only, the timing file alone)
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: timings-gate-pytest-${{ matrix.shard }}
+          path: timings-gate-pytest-${{ matrix.shard }}.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   # The census runs its own dynamic observations and consumes no shard output, so it starts with the
   # shards instead of after the slowest one; `python-tests-result` joins it.

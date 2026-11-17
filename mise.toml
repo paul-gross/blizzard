@@ -40,11 +40,20 @@ run = "BLIZZARD_WINTER_BINDING=1 uv run pytest -m winter_binding tests/winter/"
 description = "Run the service tier's pytest half — the cases whose subject is Python itself; the Playwright half is `mise run playwright`. A running daemon's HTTP API exercised from outside with the counterpart mocked. The runner's own mock-hub scenarios (unreachable→buffered, dropped-ack→idempotent, stale-envelope) and the hub against the mock runner + mock forge run in the Playwright half. sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"
 
+[tasks.shard-weights-refresh]
+description = "Rebuild tests/shard-weights.json — each CI suite's measured durations and Fibonacci weights — from timing evidence: `-- --evidence <dir>` (a local evidence directory) or `-- --run <id>` (a CI run, fetched with gh); reports unmeasured suites and stale entries"
+run = "uv run python -m tests.support.shard_weights refresh"
+
 [tasks.playwright]
 description = "Run the Playwright package (tests/), including service, UI and harness projects; arguments after -- pass to playwright test. Installs the pinned collector for service trace tests."
 tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = 'otelcol-contrib_*_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz' } }
 dir = "tests"
 run = "npx playwright test"
+
+[tasks.playwright-shard]
+description = "Run one shard of the weighted service-Playwright pool: `--shard=<index>/<count>` plus the `playwright test` project flags; lists the suite, plans the shard's (project, spec file) units by tests/shard-weights.json, and runs them with --test-list (never --shard)"
+tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = 'otelcol-contrib_*_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz' } }
+run = "scripts/playwright-shard.sh"
 
 [tasks.ui]
 description = "Run the UI tier (blizzard:ui) — the Playwright package's `ui*` projects, a Chromium page against the board each test's hub serves; needs the sibling blizzard-mock worktree provisioned and Chromium (cd tests && npx playwright install chromium)"
