@@ -11,8 +11,8 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 
-from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.api.ingest_broadcast import pushed_facts
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
