@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from typing import Annotated, Any, Literal
+from collections.abc import Mapping
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from pydantic.json_schema import models_json_schema
 
 from blizzard.foundation.config_keys import Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.unrecognized import Unrecognized
-from blizzard.foundation.web import SchemaComponentCollision
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
@@ -114,25 +112,6 @@ class SettingsProblem(WireModel):
     key: str | None = None
     current: int | None = None
     errors: list[SettingError] | None = None
-
-
-def install_settings_problem_schema(app: FastAPI) -> None:
-    """Register the problem model referenced by the settings response declarations."""
-    original: Callable[[], dict[str, Any]] = app.openapi
-
-    def openapi() -> dict[str, Any]:
-        spec = original()
-        _, definitions = models_json_schema(
-            [(SettingsProblem, "serialization")], ref_template="#/components/schemas/{model}"
-        )
-        schemas = spec.setdefault("components", {}).setdefault("schemas", {})
-        for name, schema in definitions.get("$defs", {}).items():
-            if name in schemas and schemas[name] != schema:
-                raise SchemaComponentCollision(f"component {name!r} collides with a different route schema")
-            schemas[name] = schema
-        return spec
-
-    app.openapi = openapi
 
 
 _SETTINGS_PROBLEM = {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}

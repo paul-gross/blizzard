@@ -84,7 +84,7 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
-from blizzard.runner.api.settings import install_settings_problem_schema
+from blizzard.runner.api.settings import SettingsProblem
 from blizzard.runner.api.settings import router as settings_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.ticks import host_router as host_ticks_router
@@ -594,10 +594,9 @@ def create_app(
     # The host-served web app: the human web lane the middleware above gates
     # — the only browser-facing surface this daemon serves.
     Frontend.embedded("runner", app_name="blizzard-runner", is_api_path=is_api_path).mount(app)
-    install_schema_components(app, RUNNER_SCHEMA_COMPONENTS.models, RUNNER_SCHEMA_COMPONENTS.enums)
+    install_schema_components(app, (*RUNNER_SCHEMA_COMPONENTS.models, SettingsProblem), RUNNER_SCHEMA_COMPONENTS.enums)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
-    install_settings_problem_schema(app)
     return app
 
 

@@ -16,8 +16,10 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import RunnerStepper
+from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
@@ -45,6 +47,7 @@ def test_cli_and_real_settings_routes_round_trip(tmp_path: Path, monkeypatch: py
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]))
     )
     runner_seams(app).settings_reader = reader
+    runner_seams(app).settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
     ready, halted = seed_runners(host, list(host.runners))
     assert not halted
     graph = build_host_process(host, ready)
