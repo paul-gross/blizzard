@@ -189,6 +189,16 @@ describe('ProjectLens', () => {
     expect(router.url).toBe('/gardening/findings');
   });
 
+  it('drops an unknown layout when switching the lens from the board it is on', async () => {
+    const lens = TestBed.inject(ProjectLens);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/board/chunk/c1?layout=grid#details');
+    await lens.switchTo('a');
+    expect(router.url).toBe('/p/a/board');
+    await lens.switchTo(null);
+    expect(router.url).toBe('/board');
+  });
+
   it('tracks the unlensed location the board is on as its source', async () => {
     const lens = TestBed.inject(ProjectLens);
     await TestBed.inject(Router).navigateByUrl('/p/a/board/chunk/c1?layout=list#x');

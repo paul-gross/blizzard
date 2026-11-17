@@ -5,18 +5,11 @@ import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
 import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
+import { boardLayoutOf, type BoardLayout } from '../../core/board-layout.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
-
-/** How the board lays out its chunks: the lane grid, one list of full-width rows, or each environment's node steps over time. */
-export type BoardLayout = 'board' | 'list' | 'tracks';
-
-/** A layout named by a tab or the URL, falling back to the lane grid for anything else. */
-export function boardLayoutOf(value: string | null): BoardLayout {
-  return value === 'list' || value === 'tracks' ? value : 'board';
-}
 
 const LAYOUT_TABS: readonly KitTabOption[] = [
   { value: 'board', label: 'Board', testid: 'board-layout-board' },
