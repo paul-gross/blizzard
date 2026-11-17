@@ -13,7 +13,6 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.auth_core import Role
-from blizzard.hub import composition
 from blizzard.hub.forge.internal.github_readiness import GitHubReadinessProbe
 from blizzard.hub.store import schema as s
 from blizzard.wire.credential import (
@@ -315,11 +314,10 @@ def _forge_answer(request: httpx2.Request) -> httpx2.Response:
 
 
 @pytest.fixture
-def checking_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubHarness:
+def checking_hub(tmp_path: Path) -> HubHarness:
     """A hub whose credential checks reach a forge answering every read."""
     probe = GitHubReadinessProbe(transport=httpx2.MockTransport(_forge_answer))
-    monkeypatch.setattr(composition, "build_readiness_probes", lambda: {"github": probe})
-    harness = build_hub(tmp_path, repositories=(), link=False)
+    harness = build_hub(tmp_path, repositories=(), link=False, credential_probes={"github": probe})
     ensure_fixture_secret(harness.client)
     assert harness.client.post("/api/secrets", json={"name": _SPARE, "value": "v"}).status_code == 201
     for slug, api_base in (("ghe", "https://ghe.example/api/v3"), ("other", "https://other.example")):

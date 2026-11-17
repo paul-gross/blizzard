@@ -4110,6 +4110,11 @@ export type CredentialCapabilityMissingProblem = {
     [key: string]: unknown;
 };
 
+/**
+ * CredentialCheckOutcome
+ *
+ * What one operation of a credential's read-only check ended in.
+ */
 export type CredentialCheckOutcome = 'proven' | 'granted' | 'unproven' | 'refused' | 'unsupported';
 
 /**
@@ -4133,7 +4138,8 @@ export type CredentialCheckRequest = {
  * CredentialCheckView
  *
  * A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the
- * permissions its grant exposes, each use's operations, and what the check did not judge. Nothing is stored.
+ * permissions its grant exposes, each use's operations, why no use was reached when the forge gave no answer to
+ * building the credential's authorization, and what the check did not judge. Nothing is stored.
  */
 export type CredentialCheckView = {
     /**
@@ -4155,6 +4161,10 @@ export type CredentialCheckView = {
      * Not Evaluated
      */
     not_evaluated: string;
+    /**
+     * Unreached Reason
+     */
+    unreached_reason: string | null;
     /**
      * Uses
      */
@@ -4671,6 +4681,13 @@ export type CredentialSummary = {
      */
     slug: string;
 };
+
+/**
+ * CredentialUseKind
+ *
+ * The kind of record a credential check checks the credential against.
+ */
+export type CredentialUseKind = 'repository' | 'work_source';
 
 /**
  * CredentialsListView
@@ -18713,10 +18730,7 @@ export type UseResultView = {
      * Id
      */
     id: string;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: CredentialUseKind;
     /**
      * Operations
      */

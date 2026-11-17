@@ -186,7 +186,13 @@ def _operation(operation: str, outcome: str, detail: str | None = None) -> dict[
     return {"operation": operation, "outcome": outcome, "detail": detail, "diagnostic": None}
 
 
-def _check(*, mint: dict[str, Any] | None = None, outcome: str = "proven", reached: bool = True) -> dict[str, Any]:
+def _check(
+    *,
+    mint: dict[str, Any] | None = None,
+    outcome: str = "proven",
+    reached: bool = True,
+    unreached_reason: str | None = None,
+) -> dict[str, Any]:
     return {
         "credential": "gh",
         "binding": "github.token",
@@ -203,6 +209,7 @@ def _check(*, mint: dict[str, Any] | None = None, outcome: str = "proven", reach
                 "reached": reached,
             }
         ],
+        "unreached_reason": unreached_reason,
         "not_evaluated": "Branch protection, required reviews, and rulesets are not evaluated.",
     }
 
@@ -267,3 +274,13 @@ def test_check_posts_its_repositories_and_sources_and_marks_an_unreached_use() -
     assert hub.sent[0][1] == {"repositories": ["widget", "gadget"], "work_sources": ["issues"]}
     assert "repository widget  repo-1  (not reached)" in result.output.splitlines()
     assert json.loads(_cred(["check", "gh", "--json"]).stdout) == _check(reached=False)
+
+
+def test_check_exits_1_and_says_why_when_it_reached_no_use() -> None:
+    reason = "the installation could not be read: ReadTimeout"
+    _CheckHub(_check(reached=False, unreached_reason=reason))
+
+    result = _cred(["check", "gh"])
+
+    assert result.exit_code == 1
+    assert f"no use reached: {reason}" in result.output.splitlines()

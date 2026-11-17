@@ -12,6 +12,7 @@ import httpx2
 import pytest
 
 from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
+from blizzard.foundation.credential_check import CheckOutcome, UseKind
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config.capabilities import Capability
@@ -34,7 +35,6 @@ from blizzard.hub.forge.readiness import (
     CheckBudget,
     CheckDeadline,
     CheckedUse,
-    CheckOutcome,
     OperationResult,
     ProbeAnswer,
     UseResult,
@@ -115,7 +115,7 @@ def _repository(
     policy: LandingPolicy = LandingPolicy.MERGE_ON_CHECKS, *, slug: str = "widget", locator: str = "acme/widget"
 ) -> CheckedUse:
     return CheckedUse(
-        kind="repository",
+        kind=UseKind.REPOSITORY,
         id=f"repo_{slug}",
         slug=slug,
         locator=locator,
@@ -126,7 +126,7 @@ def _repository(
 
 def _work_source() -> CheckedUse:
     return CheckedUse(
-        kind="work_source",
+        kind=UseKind.WORK_SOURCE,
         id="ws_issues",
         slug="issues",
         locator="acme/widget",
@@ -164,36 +164,27 @@ def _operation(use: UseResult, name: str) -> OperationResult:
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
-def test_the_read_only_transport_refuses_every_write_to_a_repository(method: str) -> None:
+@pytest.mark.parametrize("path", ["/repos/acme/widget/pulls", "/app/installations/34/access_tokens"])
+def test_the_read_only_transport_refuses_every_write(method: str, path: str) -> None:
     sent: list[httpx2.Request] = []
     transport = ReadOnlyTransport(httpx2.MockTransport(lambda request: sent.append(request) or _answer(200)))
 
     with httpx2.Client(base_url=_API, transport=transport) as client, pytest.raises(ForgeWriteRefused):
-        client.request(method, "/repos/acme/widget/pulls")
+        client.request(method, path)
 
     assert sent == []
 
 
-def test_the_read_only_transport_refuses_a_mint_shaped_path_under_a_repository() -> None:
-    transport = ReadOnlyTransport(httpx2.MockTransport(lambda _request: _answer(200)))
-
-    with httpx2.Client(base_url=_API, transport=transport) as client, pytest.raises(ForgeWriteRefused):
-        client.post("/repos/acme/app/installations/34/access_tokens")
-
-
-@pytest.mark.parametrize(
-    ("method", "path"), [("GET", "/repos/acme/widget"), ("POST", "/app/installations/34/access_tokens")]
-)
-def test_the_read_only_transport_sends_a_read_and_the_installation_mint(method: str, path: str) -> None:
+def test_the_read_only_transport_sends_a_read() -> None:
     sent: list[str] = []
     transport = ReadOnlyTransport(
         httpx2.MockTransport(lambda r: sent.append(f"{r.method} {r.url.path}") or _answer(200))
     )
 
     with httpx2.Client(base_url=_API, transport=transport) as client:
-        assert client.request(method, path).status_code == 200
+        assert client.get("/repos/acme/widget").status_code == 200
 
-    assert sent == [f"{method} {path}"]
+    assert sent == ["GET /repos/acme/widget"]
 
 
 # --- each operation's call ------------------------------------------------------------------------------------------
@@ -315,6 +306,28 @@ def test_a_capability_the_authorization_does_not_offer_is_unsupported_with_no_ca
 
     assert _outcomes(answer.uses[0])["checks.read"] is CheckOutcome.UNSUPPORTED
     assert not any("check-runs" in call for call in forge.calls)
+
+
+def test_an_installation_set_up_for_a_work_source_alone_answers_its_contents_reads_unsupported() -> None:
+    forge = _Recorder(_forge(None))
+    contents = {Capability.REFS_READ, Capability.COMPARE, Capability.COMMITS_READ}
+    repository_use = _repository()
+    granted = {"metadata": "read", "issues": "write", "pull_requests": "read"}
+    authorization = _authorization(
+        offered=_KIND - contents - {Capability.CHECKS_READ}, grant_scoped=True, variant=None, granted=granted
+    )
+
+    answer = _check(forge, repository_use, _work_source(), authorization=authorization)
+
+    repository, source = (_outcomes(use) for use in answer.uses)
+    assert {repository[capability] for capability in contents & repository_use.capabilities} == {
+        CheckOutcome.UNSUPPORTED
+    }
+    assert repository["changes.read"] is CheckOutcome.PROVEN
+    assert repository["changes.merge.merge"] is CheckOutcome.UNPROVEN
+    assert source["issues.read"] is CheckOutcome.PROVEN
+    assert source["issues.label"] is CheckOutcome.GRANTED
+    assert not any("/git/" in call or "/compare/" in call or "/commits/" in call for call in forge.calls)
 
 
 def test_an_installation_not_granted_issues_answers_their_read_unsupported_with_no_call() -> None:

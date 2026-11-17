@@ -54,8 +54,11 @@ class ForgeAuthorization:
 class IForgeAuthorizations(Protocol):
     """Builds a credential's authorization, revealing its secret — the only forge code that does."""
 
-    def authorization(self, credential: ResolvedCredential, scope: ForgeScope) -> ForgeAuthorization:
-        """``credential``'s authorization for ``scope``; :class:`~blizzard.hub.domain.config.credentials.
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
+        """``credential``'s authorization for ``scope``, each call building or minting it bounded by ``call_timeout``'s
+        seconds when given; :class:`~blizzard.hub.domain.config.credentials.
         CredentialUnavailable` when the credential is retired or its secret is unknown or retired."""
         ...
 

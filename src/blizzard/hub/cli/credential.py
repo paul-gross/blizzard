@@ -193,8 +193,8 @@ def credential_check(
     --source, else every enabled one naming it — reporting each operation proven, granted, unproven, refused or
     unsupported. Nothing is written to the forge or stored.
 
-    Exits 1 when any operation is refused or unsupported, else 0. Refused when a --repo or --source does not act with
-    CREDENTIAL, or when its secret is missing or retired."""
+    Exits 1 when any operation is refused or unsupported, or when the check reached none of its uses, else 0. Refused
+    when a --repo or --source does not act with CREDENTIAL, or when its secret is missing or retired."""
     body: dict[str, list[str]] = {}
     if repositories:
         body["repositories"] = list(repositories)
@@ -223,6 +223,8 @@ def _check_lines(check: dict[str, Any]) -> list[str]:
         reached = "" if use["reached"] else "  (not reached)"
         lines.append(f"{use['kind']} {use['slug']}  {use['id']}{reached}")
         lines.extend(f"  {_operation_line(operation)}" for operation in use["operations"])
+    if check["unreached_reason"] is not None:
+        lines.append(f"no use reached: {check['unreached_reason']}")
     lines.append(check["not_evaluated"])
     return lines
 
@@ -235,7 +237,8 @@ def _operation_line(operation: dict[str, Any]) -> str:
 def _failed(check: dict[str, Any]) -> bool:
     mint = [check["mint"]] if check["mint"] is not None else []
     operations = [*mint, *(operation for use in check["uses"] for operation in use["operations"])]
-    return any(operation["outcome"] in _FAILING for operation in operations)
+    unreached = bool(check["uses"]) and not any(use["reached"] for use in check["uses"])
+    return unreached or any(operation["outcome"] in _FAILING for operation in operations)
 
 
 def _settings(variant: str | None, app_id: int | None, installation_id: int | None) -> dict[str, object]:

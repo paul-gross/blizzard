@@ -947,7 +947,8 @@ export const patchCredentialApiCredentialsCredentialPatch = <ThrowOnError extend
  *
  * Check a credential read-only against the repositories and work sources named by id or slug, else against every
  * enabled record acting with it: each read landing and ingestion make, and each write judged from the grant the
- * credential exposes, never exercised. Stops at 60 seconds, answering the uses not reached; stores nothing but one
+ * credential exposes, never exercised. Stops at 60 seconds, answering the uses not reached, with
+ * `unreached_reason` when the forge gave no answer to building the credential's authorization; stores nothing but one
  * `credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the
  * credential, and `secret_unavailable` for a retired credential or an unknown or retired secret.
  */

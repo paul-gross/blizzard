@@ -1,10 +1,12 @@
 """A tenant's credential check (component tier), over a migrated store, its live authorization boundary, and the
 GitHub probe on a recording transport: which uses a check takes by default and by name, the refusal of a use acting
-with another credential, a mint refused before any use, the one ``credential-check`` event, and nothing else written."""
+with another credential, a mint refused before any use, an installation the forge does not answer for, the deadline
+bounding the authorization's build, the one ``credential-check`` event, and nothing else written."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,13 +15,19 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
+from blizzard.foundation.credential_check import CheckOutcome
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core, build_live_config
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.credential_resolution import CredentialChoice
-from blizzard.hub.domain.config.credentials import ConfiguredCredential, CredentialDraft, ResolvedCredential
+from blizzard.hub.domain.config.credentials import (
+    ConfiguredCredential,
+    CredentialDraft,
+    CredentialNotUsedBy,
+    ResolvedCredential,
+)
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryDraft
 from blizzard.hub.domain.config.secrets import SecretName
@@ -27,15 +35,16 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSo
 from blizzard.hub.domain.kernel.forge_refusals import (
     AuthRefusal,
     ClassifiedRefusal,
+    ForgeAccessUnavailable,
     ForgeDiagnostic,
     ForgeMintRefused,
 )
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope
+from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope, IForgeAuthorizations
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.github_readiness import GitHubReadinessProbe
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.readiness import CheckOutcome, CredentialNotUsedBy, CredentialReadiness
+from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
@@ -58,8 +67,10 @@ def _answer(request: httpx2.Request) -> httpx2.Response:
 class _RefusingMint:
     """An authorization boundary whose every build is refused at the installation's mint."""
 
-    def authorization(self, credential: ResolvedCredential, scope: ForgeScope) -> ForgeAuthorization:
-        del credential, scope
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
+        del credential, scope, call_timeout
         diagnostic = ForgeDiagnostic(
             status=404,
             operation="read_installation",
@@ -71,6 +82,36 @@ class _RefusingMint:
             accepted_permissions=None,
         )
         raise ForgeMintRefused(ClassifiedRefusal(AuthRefusal.INSTALLATION_MISSING, diagnostic))
+
+
+class _Unanswered:
+    """An authorization boundary whose every build finds the forge not answering for the installation."""
+
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
+        del credential, scope, call_timeout
+        raise ForgeAccessUnavailable("the installation could not be read: ReadTimeout")
+
+
+class _SlowBuild:
+    """The live boundary behind a build taking ``seconds`` of the check's clock, recording the bound each build was
+    handed, read when the build ends."""
+
+    def __init__(self, inner: IForgeAuthorizations, clock: ManualMonotonicClock, seconds: float) -> None:
+        self.inner = inner
+        self.clock = clock
+        self.seconds = seconds
+        self.bounds: list[float] = []
+
+    def authorization(
+        self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
+    ) -> ForgeAuthorization:
+        assert call_timeout is not None
+        self.bounds.append(call_timeout())
+        self.clock.advance(self.seconds)
+        self.bounds.append(call_timeout())
+        return self.inner.authorization(credential, scope, call_timeout=call_timeout)
 
 
 class _World:
@@ -123,18 +164,19 @@ class _World:
         self.requests.append(f"{request.method} {request.url.path}")
         return _answer(request)
 
-    def readiness(self, *, refuse_mint: bool = False) -> CredentialReadiness:
+    def readiness(
+        self, *, authorizations: IForgeAuthorizations | None = None, monotonic: ManualMonotonicClock | None = None
+    ) -> CredentialReadiness:
         return CredentialReadiness(
             repositories=self.stores.repository_records,
             work_sources=self.stores.work_source_records,
-            credentials=self.stores.credential_records,
             forges=self.stores.forge_records,
-            authorizations=_RefusingMint() if refuse_mint else self.live.authorizations,
+            authorizations=authorizations or self.live.authorizations,
             budgets=ForgeBudgets(clock=FixedClock(_NOW), dialects=rate_dialect),
             probes={"github": GitHubReadinessProbe(transport=httpx2.MockTransport(self._forge))},
             event_log=self.event_log,
             clock=FixedClock(_NOW),
-            monotonic=ManualMonotonicClock(),
+            monotonic=monotonic or ManualMonotonicClock(),
         )
 
     def events(self) -> list[sa.Row[tuple[str, str, str, object]]]:
@@ -195,11 +237,33 @@ def test_a_named_use_acting_with_another_credential_is_refused_naming_it(world: 
 
 
 def test_a_mint_refused_at_build_answers_every_use_reached_with_no_operations(world: _World) -> None:
-    check = world.readiness(refuse_mint=True).check(world.deploy)
+    check = world.readiness(authorizations=_RefusingMint()).check(world.deploy)
 
     assert check.mint is not None and check.mint.outcome is CheckOutcome.REFUSED
     assert [(use.reached, use.operations) for use in check.uses] == [(True, ())] * 3
     assert world.requests == []
+
+
+def test_an_installation_the_forge_does_not_answer_for_reaches_no_use_and_says_why(world: _World) -> None:
+    check = world.readiness(authorizations=_Unanswered()).check(world.deploy)
+
+    assert [use.reached for use in check.uses] == [False] * 3
+    assert all(use.operations == () for use in check.uses)
+    assert check.mint is None
+    assert check.unreached_reason == "the installation could not be read: ReadTimeout"
+    [(_kind, _severity, message, _detail)] = world.events()
+    assert message.endswith("; 3 of 3 uses not reached (the installation could not be read: ReadTimeout)")
+    assert world.requests == []
+
+
+def test_the_authorization_s_build_is_bounded_by_what_the_check_has_left(world: _World) -> None:
+    clock = ManualMonotonicClock()
+    slow = _SlowBuild(world.live.authorizations, clock, seconds=45.0)
+
+    check = world.readiness(authorizations=slow, monotonic=clock).check(world.deploy, repositories=["widget"])
+
+    assert slow.bounds == [30.0, 15.0]
+    assert check.uses[0].reached
 
 
 def test_each_check_records_one_credential_check_event_with_its_counts(world: _World) -> None:

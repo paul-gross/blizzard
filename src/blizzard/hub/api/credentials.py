@@ -30,13 +30,14 @@ from blizzard.hub.domain.config.credentials import (
     CredentialDraft,
     CredentialEdit,
     CredentialInUse,
+    CredentialNotUsedBy,
     CredentialSlugTaken,
     CredentialUnavailable,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.domain.kernel.forge_refusals import ForgeDiagnostic
-from blizzard.hub.forge.readiness import CredentialCheck, CredentialNotUsedBy, OperationResult
+from blizzard.hub.forge.readiness import CredentialCheck, OperationResult
 from blizzard.wire.credential import (
     CredentialBindingView,
     CredentialCheckRequest,
@@ -293,7 +294,8 @@ def check_credential(
 ) -> CredentialCheckView:
     """Check a credential read-only against the repositories and work sources named by id or slug, else against every
     enabled record acting with it: each read landing and ingestion make, and each write judged from the grant the
-    credential exposes, never exercised. Stops at 60 seconds, answering the uses not reached; stores nothing but one
+    credential exposes, never exercised. Stops at 60 seconds, answering the uses not reached, with
+    `unreached_reason` when the forge gave no answer to building the credential's authorization; stores nothing but one
     `credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the
     credential, and `secret_unavailable` for a retired credential or an unknown or retired secret."""
     try:
@@ -318,6 +320,7 @@ def _check_view(check: CredentialCheck) -> CredentialCheckView:
         variant_contradicted=check.variant_contradicted,
         mint=_operation_view(check.mint) if check.mint is not None else None,
         granted_permissions=dict(check.granted_permissions) if check.granted_permissions is not None else None,
+        unreached_reason=check.unreached_reason,
         uses=[
             UseResultView(
                 kind=use.kind,
@@ -335,7 +338,7 @@ def _check_view(check: CredentialCheck) -> CredentialCheckView:
 def _operation_view(operation: OperationResult) -> OperationResultView:
     return OperationResultView(
         operation=operation.operation,
-        outcome=operation.outcome.value,
+        outcome=operation.outcome,
         detail=operation.detail,
         diagnostic=_diagnostic_view(operation.diagnostic) if operation.diagnostic is not None else None,
     )

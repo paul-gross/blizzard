@@ -22,7 +22,7 @@ from blizzard.hub.forge.internal.github_auth import InstallationTokens
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.internal.github_readiness import GitHubReadinessProbe
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.readiness import IReadinessProbe
+from blizzard.hub.forge.readiness import ICredentialProbe
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.live_config import ConfigObjectCache
 
@@ -38,7 +38,7 @@ def build_forge_adapter(
     return kinds[binding.kind](binding, clock=clock, instrument=instrument)
 
 
-def build_readiness_probes() -> Mapping[str, IReadinessProbe]:
+def build_credential_probes() -> Mapping[str, ICredentialProbe]:
     """Each forge kind's read-only credential check, by kind."""
     return {"github": GitHubReadinessProbe()}
 

@@ -1,7 +1,7 @@
 """The GitHub App permissions the operator docs list are the ones the hub mints with (unit tier).
 
 ``docs/deployment/credentials.md``'s "App permissions" table names, per scope, each permission an installation token is
-minted with, its access, and what it is needed for: ``required``, or the capability withheld without it. It must equal
+minted with, its access, and what it is needed for: ``required``, or the capabilities withheld without it. It must equal
 ``APP_REQUIRED_PERMISSIONS`` and ``APP_OPTIONAL_PERMISSIONS``, so an operator granting what the page says grants what
 the hub asks for."""
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.forge.internal.github_auth import APP_OPTIONAL_PERMISSIONS, APP_REQUIRED_PERMISSIONS
 from tests.support.repo_files import repo_root
 
@@ -40,6 +41,15 @@ def _documented() -> set[tuple[str, str, str, str]]:
     return rows
 
 
+def _needed_for(capabilities: frozenset[Capability]) -> str:
+    """An optional permission's "Needed for" cell: its one capability bare, several each in backticks."""
+    if not capabilities:
+        return _NO_CAPABILITY
+    if len(capabilities) == 1:
+        return str(next(iter(capabilities)))
+    return ", ".join(f"`{capability}`" for capability in sorted(capabilities))
+
+
 def _minted() -> set[tuple[str, str, str, str]]:
     rows = {
         (str(scope), permission, access, "required")
@@ -47,9 +57,9 @@ def _minted() -> set[tuple[str, str, str, str]]:
         for permission, access in permissions.items()
     }
     rows |= {
-        (str(scope), permission, access, str(capability) if capability is not None else _NO_CAPABILITY)
+        (str(scope), permission, access, _needed_for(capabilities))
         for scope, permissions in APP_OPTIONAL_PERMISSIONS.items()
-        for permission, (access, capability) in permissions.items()
+        for permission, (access, capabilities) in permissions.items()
     }
     return rows
 

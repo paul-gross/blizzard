@@ -6,7 +6,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from blizzard.foundation.credential_check import CredentialCheckOutcome
+from blizzard.foundation.credential_check import CheckOutcome, UseKind
 from blizzard.foundation.credential_setting_kind import SettingKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -148,7 +148,7 @@ class OperationResultView(WireModel):
     """One operation's outcome: ``operation`` is ``access``, ``mint``, or a capability a use asks of its forge."""
 
     operation: str
-    outcome: Annotated[CredentialCheckOutcome | Unrecognized, OPEN]
+    outcome: Annotated[CheckOutcome | Unrecognized, OPEN]
     detail: str | None
     diagnostic: ForgeDiagnosticView | None
 
@@ -157,7 +157,7 @@ class UseResultView(WireModel):
     """One repository or work source checked; ``reached`` is ``false`` when the check ended before it was wholly
     answered."""
 
-    kind: str
+    kind: Annotated[UseKind | Unrecognized, OPEN]
     id: str
     slug: str
     operations: list[OperationResultView]
@@ -166,7 +166,8 @@ class UseResultView(WireModel):
 
 class CredentialCheckView(WireModel):
     """A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the
-    permissions its grant exposes, each use's operations, and what the check did not judge. Nothing is stored."""
+    permissions its grant exposes, each use's operations, why no use was reached when the forge gave no answer to
+    building the credential's authorization, and what the check did not judge. Nothing is stored."""
 
     credential: str
     binding: str
@@ -175,6 +176,7 @@ class CredentialCheckView(WireModel):
     mint: OperationResultView | None
     granted_permissions: dict[str, str] | None
     uses: list[UseResultView]
+    unreached_reason: str | None
     not_evaluated: str
 
 

@@ -1,6 +1,7 @@
 """GitHub's read-only credential check: the reads landing and ingestion make, each answered as a check outcome, and
 every write judged from the grant the credential exposes — a classic token's ``repo`` scope or an installation's
-permission — never sent. Its client's transport refuses any write but an installation's token mint."""
+permission — never sent. Its client's transport refuses every write; an installation's token is minted through the
+tenant's installation tokens, never this client."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from urllib.parse import quote
 
 import httpx2
 
+from blizzard.foundation.credential_check import CheckOutcome, UseKind
 from blizzard.foundation.untyped import as_table
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.kernel.forge_refusals import ForgeMintRefused
@@ -24,8 +26,7 @@ from blizzard.hub.forge.readiness import (
     MINT,
     CheckDeadline,
     CheckedUse,
-    CheckOutcome,
-    IReadinessProbe,
+    ICredentialProbe,
     OperationResult,
     ProbeAnswer,
     UseResult,
@@ -226,7 +227,7 @@ class GitHubReadinessProbe:
         return ProbeAnswer(mint, granted, tuple(results))
 
     def _use(self, run: _Run, use: CheckedUse) -> tuple[OperationResult, ...]:
-        if use.kind == "repository":
+        if use.kind == UseKind.REPOSITORY:
             self._repository(run, use)
         else:
             self._work_source(run, use)
@@ -276,7 +277,7 @@ class GitHubReadinessProbe:
                         use.locator,
                         params={"state": "open", "base": base, "per_page": 1},
                     )
-                case _:
+                case Capability.CHECKS_READ:
                     run.read(
                         capability,
                         f"{repo}/commits/{quote(ref)}/check-runs",
@@ -285,6 +286,8 @@ class GitHubReadinessProbe:
                         params={"per_page": 1},
                         proven=partial(_check_runs, base=base, tip=tip),
                     )
+                case _:
+                    raise AssertionError(f"no read is made for {capability}")
         for capability in sorted(c for c in use.capabilities if c not in _READS):
             if capability not in run.authorization.offered:
                 run.unsupported(capability, "the credential's authorization does not offer it; no call made")
@@ -339,4 +342,4 @@ def _documentation(response: httpx2.Response) -> str | None:
     return str(url) if url else None
 
 
-_conforms: type[IReadinessProbe] = GitHubReadinessProbe
+_conforms: type[ICredentialProbe] = GitHubReadinessProbe

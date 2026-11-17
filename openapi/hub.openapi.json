@@ -7019,6 +7019,7 @@
         "type": "object"
       },
       "CredentialCheckOutcome": {
+        "description": "What one operation of a credential's read-only check ended in.",
         "enum": [
           "proven",
           "granted",
@@ -7026,6 +7027,7 @@
           "refused",
           "unsupported"
         ],
+        "title": "CredentialCheckOutcome",
         "type": "string"
       },
       "CredentialCheckRequest": {
@@ -7065,7 +7067,7 @@
         "type": "object"
       },
       "CredentialCheckView": {
-        "description": "A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the\npermissions its grant exposes, each use's operations, and what the check did not judge. Nothing is stored.",
+        "description": "A credential's read-only check: its binding and variant, ``mint`` for a credential minting its token, the\npermissions its grant exposes, each use's operations, why no use was reached when the forge gave no answer to\nbuilding the credential's authorization, and what the check did not judge. Nothing is stored.",
         "properties": {
           "binding": {
             "title": "Binding",
@@ -7103,6 +7105,17 @@
             "title": "Not Evaluated",
             "type": "string"
           },
+          "unreached_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unreached Reason"
+          },
           "uses": {
             "items": {
               "$ref": "#/components/schemas/UseResultView"
@@ -7134,6 +7147,7 @@
           "mint",
           "granted_permissions",
           "uses",
+          "unreached_reason",
           "not_evaluated"
         ],
         "title": "CredentialCheckView",
@@ -7839,6 +7853,15 @@
         ],
         "title": "CredentialSummary",
         "type": "object"
+      },
+      "CredentialUseKind": {
+        "description": "The kind of record a credential check checks the credential against.",
+        "enum": [
+          "repository",
+          "work_source"
+        ],
+        "title": "CredentialUseKind",
+        "type": "string"
       },
       "CredentialsListView": {
         "description": "Every stored credential by slug \u2014 ``GET /api/credentials`` \u2014 every binding a credential may name, and the\nbindings each enabled forge allows.",
@@ -30555,8 +30578,8 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/CredentialUseKind",
+            "x-blizzard-open": true
           },
           "operations": {
             "items": {
@@ -43898,7 +43921,7 @@
     },
     "/api/credentials/{credential}/checks": {
       "post": {
-        "description": "Check a credential read-only against the repositories and work sources named by id or slug, else against every\nenabled record acting with it: each read landing and ingestion make, and each write judged from the grant the\ncredential exposes, never exercised. Stops at 60 seconds, answering the uses not reached; stores nothing but one\n`credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the\ncredential, and `secret_unavailable` for a retired credential or an unknown or retired secret.",
+        "description": "Check a credential read-only against the repositories and work sources named by id or slug, else against every\nenabled record acting with it: each read landing and ingestion make, and each write judged from the grant the\ncredential exposes, never exercised. Stops at 60 seconds, answering the uses not reached, with\n`unreached_reason` when the forge gave no answer to building the credential's authorization; stores nothing but one\n`credential-check` event. 404 unknown; 422 `credential_not_used_by` naming each named record not acting with the\ncredential, and `secret_unavailable` for a retired credential or an unknown or retired secret.",
         "operationId": "check_credential_api_credentials__credential__checks_post",
         "parameters": [
           {

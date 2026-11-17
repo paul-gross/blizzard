@@ -140,8 +140,9 @@ stays on the forge, and every repository that already landed stays landed. Recov
    line.
 2. **Fix the credential, then check it.** Apply the remedy, then run
    `blizzard hub credential check <credential> --repo <repository>`. It reads the forge as the credential and sends no
-   write ([credentials.md](./credentials.md#checking-a-credential)); it exits 0 once nothing is `refused` or
-   `unsupported`.
+   write ([credentials.md](./credentials.md#checking-a-credential)); it exits 0 once it reaches the repository and
+   nothing is `refused` or `unsupported`. A check that reached no use exits 1 and says why, such as an installation the
+   forge did not answer for: check again before requeuing.
 3. **Requeue.** `blizzard hub chunk requeue <chunk>` sends the chunk back to its `deliver` step. The `land` action reads
    the forge before it acts: it reuses the open change rather than opening another, and skips every repository already
    landed, so each repository's landing is recorded once.

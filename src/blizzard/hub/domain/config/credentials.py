@@ -7,7 +7,7 @@ create and edit, never taken from a caller; two credentials of a tenant never sh
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
@@ -70,6 +70,17 @@ class CredentialInUse(Exception):
         super().__init__(f"credential {slug} is named by {', '.join(str(r) for r in referrers)}")
         self.slug = slug
         self.referrers = referrers
+
+
+class CredentialNotUsedBy(Exception):
+    """A check named a repository or work source that does not act with the credential; ``uses`` names each."""
+
+    code = "credential_not_used_by"
+
+    def __init__(self, credential: str, uses: tuple[RecordRef, ...]) -> None:
+        super().__init__(f"credential {credential} is not used by {', '.join(str(use) for use in uses)}")
+        self.credential = credential
+        self.uses = uses
 
 
 class CredentialBindingUnknown(ConfigFieldError):
@@ -453,6 +464,47 @@ def resolve_credential(
         revision=None,
         authority=binding.authority(secret_name, {}),
     )
+
+
+def enabled_uses(
+    repositories: Sequence[ConfiguredRepository], work_sources: Sequence[ConfiguredWorkSource]
+) -> tuple[tuple[ConfiguredRepository, ...], tuple[ConfiguredWorkSource, ...]]:
+    """The records a credential check with no named record checks, of the ``repositories`` and ``work_sources``
+    naming the credential: each enabled one."""
+    return (
+        tuple(record for record in repositories if not record.retired),
+        tuple(record for record in work_sources if not record.retired),
+    )
+
+
+def named_uses(
+    credential: ConfiguredCredential,
+    repositories: Mapping[str, ConfiguredRepository | None],
+    work_sources: Mapping[str, ConfiguredWorkSource | None],
+) -> tuple[tuple[ConfiguredRepository, ...], tuple[ConfiguredWorkSource, ...]]:
+    """The records a credential check naming them checks, each named value mapped to the record it resolves to, or
+    ``None``. :class:`CredentialNotUsedBy` naming each value that resolves to no record or to one acting with another
+    credential."""
+    refused: list[RecordRef] = []
+    checked_repositories: list[ConfiguredRepository] = []
+    checked_sources: list[ConfiguredWorkSource] = []
+    for value, repository in repositories.items():
+        if repository is None:
+            refused.append(RecordRef(RecordKind.REPOSITORY, value))
+        elif repository.fields.credential_id != credential.credential_id:
+            refused.append(RecordRef(RecordKind.REPOSITORY, repository.repository_id, repository.slug))
+        else:
+            checked_repositories.append(repository)
+    for value, source in work_sources.items():
+        if source is None:
+            refused.append(RecordRef(RecordKind.WORK_SOURCE, value))
+        elif source.fields.credential_id != credential.credential_id:
+            refused.append(RecordRef(RecordKind.WORK_SOURCE, source.work_source_id, source.slug))
+        else:
+            checked_sources.append(source)
+    if refused:
+        raise CredentialNotUsedBy(credential.slug, tuple(refused))
+    return tuple(checked_repositories), tuple(checked_sources)
 
 
 def require_declarable_credential(

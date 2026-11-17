@@ -109,28 +109,30 @@ The hub mints each token with the permissions of what it is for: a `deliver` ste
 label writes, or a credential's read-only check. An installation without a required permission is refused at the mint.
 One without an optional permission keeps working without what that permission serves:
 
-| Scope         | Permission      | Access  | Needed for            |
-| ------------- | --------------- | ------- | --------------------- |
-| `landing`     | `metadata`      | `read`  | required              |
-| `landing`     | `contents`      | `write` | required              |
-| `landing`     | `pull_requests` | `write` | required              |
-| `landing`     | `checks`        | `read`  | `checks.read`         |
-| `landing`     | `statuses`      | `read`  | `checks.read`         |
-| `landing`     | `actions`       | `write` | `checks.rerun`        |
-| `work-source` | `metadata`      | `read`  | required              |
-| `work-source` | `issues`        | `write` | required              |
-| `work-source` | `pull_requests` | `read`  | required              |
-| `check`       | `metadata`      | `read`  | required              |
-| `check`       | `contents`      | `read`  | required              |
-| `check`       | `pull_requests` | `read`  | required              |
-| `check`       | `checks`        | `read`  | `checks.read`         |
-| `check`       | `statuses`      | `read`  | `checks.read`         |
-| `check`       | `issues`        | `read`  | a work source's check |
+| Scope         | Permission      | Access  | Needed for                             |
+| ------------- | --------------- | ------- | -------------------------------------- |
+| `landing`     | `metadata`      | `read`  | required                               |
+| `landing`     | `contents`      | `write` | required                               |
+| `landing`     | `pull_requests` | `write` | required                               |
+| `landing`     | `checks`        | `read`  | `checks.read`                          |
+| `landing`     | `statuses`      | `read`  | `checks.read`                          |
+| `landing`     | `actions`       | `write` | `checks.rerun`                         |
+| `work-source` | `metadata`      | `read`  | required                               |
+| `work-source` | `issues`        | `write` | required                               |
+| `work-source` | `pull_requests` | `read`  | required                               |
+| `check`       | `metadata`      | `read`  | required                               |
+| `check`       | `pull_requests` | `read`  | required                               |
+| `check`       | `contents`      | `read`  | `commits.read`, `compare`, `refs.read` |
+| `check`       | `checks`        | `read`  | `checks.read`                          |
+| `check`       | `statuses`      | `read`  | `checks.read`                          |
+| `check`       | `issues`        | `read`  | a work source's check                  |
 
 GitHub names these Metadata, Contents, Pull requests, Checks, Commit statuses, Actions, and Issues. An installation
 without Checks read or Commit statuses read offers no `checks.read`, so a repository on it behind a landing policy that
 reads checks escalates `forge-capability-missing` at the start of each `deliver` pass
-([forges.md](./forges.md#a-missing-capability)). Without Actions write, an inherited failure is never re-run.
+([forges.md](./forges.md#a-missing-capability)). Without Actions write, an inherited failure is never re-run. A check of
+an installation set up for a work source alone, without Contents read, reports each repository's reference, compare and
+commit reads `unsupported`, making no call.
 
 ### Registering the credential
 
@@ -241,15 +243,17 @@ An App credential's check first mints a token for the installation; its line is 
 ends the check there, the refusal and its remedy in the detail. A credential whose declared `variant` contradicts the
 token in its secret is flagged with a warning. Branch protection, required reviews, and rulesets are not evaluated.
 
-A check takes at most 60 seconds, and each of its calls at most 30. A use the check did not reach in that time, or one
-the forge left unanswered, with a rate refusal, a server error or no answer at all, is marked not reached, and its
-operations so far are kept. The check spends the forge's [rate budget](./forges.md#the-rate-budget) after every chunk's
+A check takes at most 60 seconds, and each of its calls, an App credential's installation read and mint among them, at
+most 30 or what is left of the 60 when less. A use the check did not reach in that time, or one the forge left
+unanswered, with a rate refusal, a server error or no answer at all, is marked not reached, and its operations so far
+are kept. When the forge does not answer for an App credential's installation, no use is reached, and the answer's
+`unreached_reason` says why. The check spends the forge's [rate budget](./forges.md#the-rate-budget) after every chunk's
 calls: when the budget is low, the uses it turns away are not reached.
 
-The command exits 1 when any outcome, the mint included, is `refused` or `unsupported`, and 0 otherwise. A check stores
-nothing and gates nothing; it records one `credential-check` event counting its outcomes
-([observability.md](./observability.md#the-operational-event-log)). Recovering a chunk escalated `forge-auth` by fixing,
-checking and requeuing is in [recovery.md](./recovery.md#recovering-a-forge-auth-escalation).
+The command exits 1 when any outcome, the mint included, is `refused` or `unsupported`, or when the check reached none
+of its uses, and 0 otherwise. A check stores nothing and gates nothing; it records one `credential-check` event counting
+its outcomes ([observability.md](./observability.md#the-operational-event-log)). Recovering a chunk escalated
+`forge-auth` by fixing, checking and requeuing is in [recovery.md](./recovery.md#recovering-a-forge-auth-escalation).
 
 ## What is refused
 

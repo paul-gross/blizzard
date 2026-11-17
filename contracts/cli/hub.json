@@ -3926,7 +3926,7 @@
       ],
       "commands": {
         "check": {
-          "help": "Check CREDENTIAL read-only against the repositories and work sources it acts for \u2014 those given by --repo and\n--source, else every enabled one naming it \u2014 reporting each operation proven, granted, unproven, refused or\nunsupported. Nothing is written to the forge or stored.\n\nExits 1 when any operation is refused or unsupported, else 0. Refused when a --repo or --source does not act with\nCREDENTIAL, or when its secret is missing or retired.",
+          "help": "Check CREDENTIAL read-only against the repositories and work sources it acts for \u2014 those given by --repo and\n--source, else every enabled one naming it \u2014 reporting each operation proven, granted, unproven, refused or\nunsupported. Nothing is written to the forge or stored.\n\nExits 1 when any operation is refused or unsupported, or when the check reached none of its uses, else 0. Refused\nwhen a --repo or --source does not act with CREDENTIAL, or when its secret is missing or retired.",
           "params": [
             {
               "hidden": false,

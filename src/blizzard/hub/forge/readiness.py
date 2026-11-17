@@ -2,25 +2,25 @@
 
 A check builds the credential's authorization for :attr:`ForgeScope.CHECK`, makes only the reads landing and ingestion
 make, and judges every write from the grant the credential exposes, never by exercising it. It stores nothing but the
-one ``credential-check`` event it records. The forge kind's :class:`IReadinessProbe` makes the calls; this module owns
-the outcomes and which uses are checked, and imports no HTTP library."""
+one ``credential-check`` event it records. The forge kind's :class:`ICredentialProbe` makes the calls; this module
+orchestrates the check, and imports no HTTP library."""
 
 from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
+from blizzard.foundation.credential_check import CheckOutcome, UseKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
-    IReadCredentialRepository,
+    enabled_uses,
+    named_uses,
     resolved_credential,
 )
 from blizzard.hub.domain.config.forges import IReadForgeRepository
@@ -42,27 +42,10 @@ from blizzard.hub.forge.budget import ForgeBudgets, SweepingGate
 NOT_EVALUATED = "Branch protection, required reviews, and rulesets are not evaluated."
 
 
-class CheckOutcome(StrEnum):
-    """What a check found of one operation."""
-
-    #: A read landing or ingestion makes answered 2xx.
-    PROVEN = "proven"
-    #: A write the credential holds a readable grant for; not exercised.
-    GRANTED = "granted"
-    #: A write no readable grant covers — a fine-grained token exposes none; not exercised.
-    UNPROVEN = "unproven"
-    #: The forge refused the call; its diagnostic says why.
-    REFUSED = "refused"
-    #: Outside what the credential's authorization offers; no call made.
-    UNSUPPORTED = "unsupported"
-
-
 #: The operation a repository use's reachability is read by.
 ACCESS = "access"
 #: The operation an App credential's installation token is minted by.
 MINT = "mint"
-
-type UseKind = Literal["repository", "work_source"]
 
 
 @domain_model
@@ -101,6 +84,8 @@ class CredentialCheck:
     mint: OperationResult | None
     granted_permissions: Mapping[str, str] | None
     uses: tuple[UseResult, ...]
+    #: Why no use was reached, when the forge gave no answer to building the credential's authorization.
+    unreached_reason: str | None = None
     not_evaluated: str = NOT_EVALUATED
 
     def counts(self) -> dict[str, int]:
@@ -175,7 +160,7 @@ class ProbeAnswer:
     uses: tuple[UseResult, ...]
 
 
-class IReadinessProbe(Protocol):
+class ICredentialProbe(Protocol):
     """One forge kind's read-only check of an authorization against the uses it serves."""
 
     def check(
@@ -210,17 +195,6 @@ def mint_refused_answer(
     return ProbeAnswer(refused_mint(classified), granted, tuple(use.answered(()) for use in uses))
 
 
-class CredentialNotUsedBy(Exception):
-    """A check named a repository or work source that does not act with the credential; ``uses`` names each."""
-
-    code = "credential_not_used_by"
-
-    def __init__(self, credential: str, uses: tuple[RecordRef, ...]) -> None:
-        super().__init__(f"credential {credential} is not used by {', '.join(str(use) for use in uses)}")
-        self.credential = credential
-        self.uses = uses
-
-
 class CredentialReadiness:
     """One tenant's credential check: resolves the credential and the uses it checks, builds its authorization for
     :attr:`ForgeScope.CHECK`, runs its forge kind's probe at the forge key's sweeping priority, and records one
@@ -231,11 +205,10 @@ class CredentialReadiness:
         *,
         repositories: IReadRepositoryRecordRepository,
         work_sources: IReadWorkSourceRepository,
-        credentials: IReadCredentialRepository,
         forges: IReadForgeRepository,
         authorizations: IForgeAuthorizations,
         budgets: ForgeBudgets,
-        probes: Mapping[str, IReadinessProbe],
+        probes: Mapping[str, ICredentialProbe],
         event_log: EventLogService,
         clock: IClock,
         monotonic: IMonotonicClock,
@@ -243,7 +216,6 @@ class CredentialReadiness:
     ) -> None:
         self._repositories = repositories
         self._work_sources = work_sources
-        self._credentials = credentials
         self._forges = forges
         self._authorizations = authorizations
         self._budgets = budgets
@@ -261,32 +233,32 @@ class CredentialReadiness:
         work_sources: Sequence[str] | None = None,
     ) -> CredentialCheck:
         """Check ``credential`` against the repositories and work sources named by id or slug, else against every
-        enabled record acting with it. :class:`CredentialNotUsedBy` when a named record does not act with it;
-        :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable` when it or its secret is retired or
-        its secret unknown."""
+        enabled record acting with it. :class:`~blizzard.hub.domain.config.credentials.CredentialNotUsedBy` when a
+        named record does not act with it; :class:`~blizzard.hub.domain.config.credentials.CredentialUnavailable`
+        when it or its secret is retired or its secret unknown."""
         uses = self._uses(credential, repositories, work_sources)
         resolved = resolved_credential(credential)
         forge = self._forges.get(credential.fields.forge_id)
         # A credential always names a forge, and a configured record is never deleted.
         assert forge is not None
         deadline = CheckDeadline(self._monotonic, self._budget)
-        unavailable: str | None = None
         try:
-            authorization = self._authorizations.authorization(resolved, ForgeScope.CHECK)
+            authorization = self._authorizations.authorization(
+                resolved, ForgeScope.CHECK, call_timeout=deadline.call_timeout
+            )
         except ForgeMintRefused as exc:
             answer = mint_refused_answer(exc.classified, uses, None)
             check = self._checked(credential, None, answer)
         except ForgeAccessUnavailable as exc:
-            unavailable = str(exc)
             answer = ProbeAnswer(None, None, tuple(use.unreached() for use in uses))
-            check = self._checked(credential, None, answer)
+            check = self._checked(credential, None, answer, unreached_reason=str(exc))
         else:
             gate = self._budgets.sweeping(forge.forge_id, authorization.authority, forge.kind)
             answer = self._probes[forge.kind].check(
                 authorization, uses, api_base=forge.fields.api_base, gate=gate, deadline=deadline
             )
             check = self._checked(credential, authorization, answer)
-        self._record(credential, check, unavailable)
+        self._record(credential, check)
         return check
 
     def _uses(
@@ -296,37 +268,27 @@ class CredentialReadiness:
         work_sources: Sequence[str] | None,
     ) -> tuple[CheckedUse, ...]:
         if not repositories and not work_sources:
-            enabled_repositories = self._repositories.naming_credential(credential.credential_id)
-            enabled_sources = self._work_sources.naming_credential(credential.credential_id)
-            return (
-                *(_repository_use(record) for record in enabled_repositories if not record.retired),
-                *(_work_source_use(record) for record in enabled_sources if not record.retired),
+            referring_repositories = self._repositories.naming_credential(credential.credential_id)
+            referring_sources = self._work_sources.naming_credential(credential.credential_id)
+            checked_repositories, checked_sources = enabled_uses(referring_repositories, referring_sources)
+        else:
+            checked_repositories, checked_sources = named_uses(
+                credential,
+                {value: self._repositories.resolve(value) for value in repositories or ()},
+                {value: self._work_sources.resolve(value) for value in work_sources or ()},
             )
-        refused: list[RecordRef] = []
-        uses: list[CheckedUse] = []
-        for value in repositories or ():
-            repository = self._repositories.resolve(value)
-            if repository is None:
-                refused.append(RecordRef(RecordKind.REPOSITORY, value))
-            elif repository.fields.credential_id != credential.credential_id:
-                refused.append(RecordRef(RecordKind.REPOSITORY, repository.repository_id, repository.slug))
-            else:
-                uses.append(_repository_use(repository))
-        for value in work_sources or ():
-            source = self._work_sources.resolve(value)
-            if source is None:
-                refused.append(RecordRef(RecordKind.WORK_SOURCE, value))
-            elif source.fields.credential_id != credential.credential_id:
-                refused.append(RecordRef(RecordKind.WORK_SOURCE, source.work_source_id, source.slug))
-            else:
-                uses.append(_work_source_use(source))
-        if refused:
-            raise CredentialNotUsedBy(credential.slug, tuple(refused))
-        return tuple(uses)
+        return (
+            *(_repository_use(record) for record in checked_repositories),
+            *(_work_source_use(record) for record in checked_sources),
+        )
 
     @staticmethod
     def _checked(
-        credential: ConfiguredCredential, authorization: ForgeAuthorization | None, answer: ProbeAnswer
+        credential: ConfiguredCredential,
+        authorization: ForgeAuthorization | None,
+        answer: ProbeAnswer,
+        *,
+        unreached_reason: str | None = None,
     ) -> CredentialCheck:
         return CredentialCheck(
             credential=credential.slug,
@@ -336,17 +298,18 @@ class CredentialReadiness:
             mint=answer.mint,
             granted_permissions=answer.granted_permissions,
             uses=answer.uses,
+            unreached_reason=unreached_reason,
         )
 
-    def _record(self, credential: ConfiguredCredential, check: CredentialCheck, unavailable: str | None) -> None:
+    def _record(self, credential: ConfiguredCredential, check: CredentialCheck) -> None:
         counts = check.counts()
         said = ", ".join(f"{count} {outcome}" for outcome, count in counts.items())
         unreached = sum(1 for use in check.uses if not use.reached)
         message = f"credential {credential.slug} checked: {said}"
         if unreached:
             message += f"; {unreached} of {len(check.uses)} uses not reached"
-        if unavailable is not None:
-            message += f" ({unavailable})"
+        if check.unreached_reason is not None:
+            message += f" ({check.unreached_reason})"
         self._event_log.record(
             kind="credential-check",
             runner_id=None,
@@ -362,7 +325,7 @@ class CredentialReadiness:
 
 def _repository_use(record: ConfiguredRepository) -> CheckedUse:
     return CheckedUse(
-        kind="repository",
+        kind=UseKind.REPOSITORY,
         id=record.repository_id,
         slug=record.slug,
         locator=f"{record.fields.owner}/{record.fields.repo}",
@@ -373,7 +336,7 @@ def _repository_use(record: ConfiguredRepository) -> CheckedUse:
 
 def _work_source_use(record: ConfiguredWorkSource) -> CheckedUse:
     return CheckedUse(
-        kind="work_source",
+        kind=UseKind.WORK_SOURCE,
         id=record.work_source_id,
         slug=record.slug,
         locator=record.fields.locator,
