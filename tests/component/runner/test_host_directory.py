@@ -23,7 +23,7 @@ from click.testing import CliRunner
 from blizzard.cli.collaborators import Client
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.runner.cli.daemon import Door
+from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, Door
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import migration_runner, runner_store_migrations, sqlite_url
@@ -236,8 +236,8 @@ def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_ser
     (live / "runner.sock").symlink_to(socket_path)
     uds_client = Door.uds_client
 
-    def reach_short_socket(door: Door, sock: Path) -> Client:
-        return uds_client(door, socket_path if sock == live / "runner.sock" else sock)
+    def reach_short_socket(door: Door, sock: Path, *, timeout: float = LOCAL_CLIENT_TIMEOUT) -> Client:
+        return uds_client(door, socket_path if sock == live / "runner.sock" else sock, timeout=timeout)
 
     monkeypatch.setattr(Door, "uds_client", reach_short_socket)
     try:
