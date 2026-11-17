@@ -11,12 +11,11 @@ from typing import Any, cast
 import click
 
 from blizzard.cli.get_group import GetGroup
-from blizzard.foundation.toml_emit import json_literal
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.config import ApplyListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.config import ConfigError, HubConfig, json_literal
 
 _PATH = "/api/admin/settings"
 

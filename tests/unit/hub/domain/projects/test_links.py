@@ -14,7 +14,13 @@ from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, WorkSourceId
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink, parse_base_branch
+from blizzard.hub.domain.projects.links import (
+    BuiltInSourceLink,
+    RepositoryLink,
+    SourceLink,
+    built_in_source_link,
+    parse_base_branch,
+)
 from blizzard.hub.domain.projects.model import Project
 
 _AT = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
@@ -44,6 +50,12 @@ def test_a_first_source_link_is_created_linked_and_keyed_by_the_source() -> None
 def test_the_built_in_hub_source_is_never_linked() -> None:
     with pytest.raises(BuiltInWorkSource):
         SourceLink.new(_PROJECT, WorkSourceId("hub"), _CTX, at=_AT)
+
+
+def test_every_project_holds_a_standing_link_to_the_built_in_hub_source() -> None:
+    assert built_in_source_link(_PROJECT) == BuiltInSourceLink(
+        project_id=_PROJECT.project_id, work_source_id="hub", linked=True
+    )
 
 
 def test_a_first_repository_link_is_created_linked_and_keyed_by_the_repository() -> None:

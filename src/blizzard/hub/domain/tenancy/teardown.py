@@ -13,7 +13,7 @@ wherever the tables stand — a hub killed mid-drain finishes the job after rest
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -80,6 +80,12 @@ class LastTenant(Exception):
     def __init__(self, tenant: str) -> None:
         super().__init__(f"tenant {tenant} is the hub's only open tenant")
         self.tenant = tenant
+
+
+def require_not_last(tenant: TenantId, open_tenants: Iterable[TenantId]) -> None:
+    """Refuse closing ``tenant`` when no other tenant is open."""
+    if all(each == tenant for each in open_tenants):
+        raise LastTenant(tenant)
 
 
 class TenantAlreadyDeleted(LookupError):
@@ -198,8 +204,7 @@ class TenantTeardown:
         try:
             with self._units(tenant).begin() as transaction:
                 locked = transaction.lock_set(hub=[HubLock.TENANT_LIFECYCLE])
-                if all(each == tenant for each in self._teardowns.open_tenants(locked, tenant)):
-                    raise LastTenant(tenant)
+                require_not_last(tenant, self._teardowns.open_tenants(locked, tenant))
                 self._teardowns.close(locked, tenant, by=by, at=at)
         except (TenantClosed, UnknownTenant):
             deletion = self._teardowns.deletion(tenant)
@@ -282,4 +287,5 @@ __all__ = [
     "TenantDeletion",
     "TenantTeardown",
     "TenantTeardownSweep",
+    "require_not_last",
 ]
