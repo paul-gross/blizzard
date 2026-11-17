@@ -15,10 +15,7 @@ from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import ClaimsAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
 
-__all__ = ["FLOOR_LEVER", "DecliningReason", "declining_report", "floor_reason", "lever_reason"]
-
-#: The lever name the subscription floor reports under.
-FLOOR_LEVER = DeclaredLever.FLOOR.value
+__all__ = ["DecliningReason", "declining_report", "floor_reason", "lever_reason"]
 
 
 @domain_model
@@ -61,5 +58,5 @@ def floor_reason(floor: FloorAnswer, *, now: datetime) -> DecliningReason:
     if hold is None:
         raise ValueError("an admitting floor gives no reason")
     if now < hold.expected_reset:
-        return DecliningReason(FLOOR_LEVER, "exhausted", floor.slug, hold.expected_reset)
-    return DecliningReason(FLOOR_LEVER, "exhausted, reset passed and no sample since", floor.slug)
+        return DecliningReason(DeclaredLever.FLOOR.value, "exhausted", floor.slug, hold.expected_reset)
+    return DecliningReason(DeclaredLever.FLOOR.value, "exhausted, reset passed and no sample since", floor.slug)

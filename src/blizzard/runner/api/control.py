@@ -10,13 +10,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService, ThrottleStatus
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
-from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
 from blizzard.wire.runner_control import RunnerControlView
 from blizzard.wire.runner_status import (
@@ -197,7 +197,7 @@ def throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
 
 
 def _declining_name(answer: FloorAnswer | LeverAnswer) -> str:
-    return answer.lever.value if isinstance(answer, LeverAnswer) else FLOOR_LEVER
+    return answer.lever.value if isinstance(answer, LeverAnswer) else DeclaredLever.FLOOR.value
 
 
 def _lever_view(lever: LeverAnswer) -> ThrottleLeverView:

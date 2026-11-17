@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, tzinfo
-from enum import StrEnum
+from typing import Literal
 
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import domain_model
@@ -28,7 +28,6 @@ from blizzard.runner.usage.repository import ExternalUsageSampleSummary, UsageTo
 __all__ = [
     "FRESH_SAMPLE_INTERVALS",
     "LeverAnswer",
-    "LeverName",
     "budget_answer",
     "pace_answer",
     "schedule_answer",
@@ -45,15 +44,6 @@ _SCHEDULE_LOOKAHEAD_DAYS = 8
 _DASH = "\N{EN DASH}"
 
 
-class LeverName(StrEnum):
-    """The levers, in the gate's order."""
-
-    PACE = DeclaredLever.PACE.value
-    UTILIZATION = DeclaredLever.UTILIZATION.value
-    BUDGET = DeclaredLever.BUDGET.value
-    SCHEDULE = DeclaredLever.SCHEDULE.value
-
-
 @domain_model
 @dataclass(frozen=True)
 class LeverAnswer:
@@ -61,7 +51,7 @@ class LeverAnswer:
     operator's words, the ``in_force`` part of the setting it judged by when that differs from the setting as
     configured, and ``until`` — the instant the same readings expect it to admit — when one can be known."""
 
-    lever: LeverName
+    lever: Literal[DeclaredLever.PACE, DeclaredLever.UTILIZATION, DeclaredLever.BUDGET, DeclaredLever.SCHEDULE]
     admits: bool
     reading: str
     setting: str
@@ -82,15 +72,15 @@ def pace_answer(
     setting = _pace_setting(settings)
     unread = _unread(sample, slug, sample_interval_seconds, now)
     if unread is not None:
-        return LeverAnswer(LeverName.PACE, False, unread, setting)
+        return LeverAnswer(DeclaredLever.PACE, False, unread, setting)
     assert sample is not None
     window = _paced_window(settings, sample)
     if window is None:
         if settings.window is not None and settings.window in sample.unlimited:
-            return LeverAnswer(LeverName.PACE, True, f"{settings.window}: no limit", setting)
-        return LeverAnswer(LeverName.PACE, False, _not_reported(settings.window), setting)
+            return LeverAnswer(DeclaredLever.PACE, True, f"{settings.window}: no limit", setting)
+        return LeverAnswer(DeclaredLever.PACE, False, _not_reported(settings.window), setting)
     if window.resets_at <= now:
-        return LeverAnswer(LeverName.PACE, False, _turned_over(window.window), setting)
+        return LeverAnswer(DeclaredLever.PACE, False, _turned_over(window.window), setting)
     spent = window.utilization_pct
     remaining = (window.resets_at - now).total_seconds() / window.window_seconds
     elapsed = min(100.0, max(0.0, 100.0 * (1.0 - remaining)))
@@ -104,10 +94,10 @@ def pace_answer(
         in_force += f" above {step.from_pct:g}%"
     reading = f"{window.window}: {spent:.0f}% spent, {elapsed:.0f}% elapsed"
     if spent <= elapsed + lead:
-        return LeverAnswer(LeverName.PACE, True, reading, setting, in_force)
+        return LeverAnswer(DeclaredLever.PACE, True, reading, setting, in_force)
     started = window.resets_at - timedelta(seconds=window.window_seconds)
     until = started + timedelta(seconds=window.window_seconds * min(100.0, spent - lead) / 100.0)
-    return LeverAnswer(LeverName.PACE, False, reading, setting, in_force, until)
+    return LeverAnswer(DeclaredLever.PACE, False, reading, setting, in_force, until)
 
 
 def utilization_answer(
@@ -124,13 +114,13 @@ def utilization_answer(
     in_force = f"line {settings.below_pct:g}%"
     unread = _unread(sample, slug, sample_interval_seconds, now)
     if unread is not None:
-        return LeverAnswer(LeverName.UTILIZATION, False, unread, setting)
+        return LeverAnswer(DeclaredLever.UTILIZATION, False, unread, setting)
     assert sample is not None
     judged: list[ExternalSubscriptionUsageWindow | str] = []
     if settings.windows is None:
         judged = list(sample.windows)
         if not judged:
-            return LeverAnswer(LeverName.UTILIZATION, False, "no window reported", setting)
+            return LeverAnswer(DeclaredLever.UTILIZATION, False, "no window reported", setting)
     else:
         for label in settings.windows:
             found = next((w for w in sample.windows if w.window == label), None)
@@ -139,17 +129,17 @@ def utilization_answer(
             elif label in sample.unlimited:
                 judged.append(label)
             else:
-                return LeverAnswer(LeverName.UTILIZATION, False, _not_reported(label), setting)
+                return LeverAnswer(DeclaredLever.UTILIZATION, False, _not_reported(label), setting)
     windows = [w for w in judged if isinstance(w, ExternalSubscriptionUsageWindow)]
     for window in windows:
         if window.resets_at <= now:
-            return LeverAnswer(LeverName.UTILIZATION, False, _turned_over(window.window), setting)
+            return LeverAnswer(DeclaredLever.UTILIZATION, False, _turned_over(window.window), setting)
     over = [w for w in windows if w.utilization_pct >= settings.below_pct]
     if not over:
         reading = ", ".join(_line_reading(w) for w in judged)
-        return LeverAnswer(LeverName.UTILIZATION, True, reading, setting, in_force)
+        return LeverAnswer(DeclaredLever.UTILIZATION, True, reading, setting, in_force)
     reading = ", ".join(_line_reading(w) for w in over)
-    return LeverAnswer(LeverName.UTILIZATION, False, reading, setting, in_force, min(w.resets_at for w in over))
+    return LeverAnswer(DeclaredLever.UTILIZATION, False, reading, setting, in_force, min(w.resets_at for w in over))
 
 
 def _line_reading(judged: ExternalSubscriptionUsageWindow | str) -> str:
@@ -164,7 +154,7 @@ def budget_answer(settings: BudgetSettings, *, spend: UsageTotals) -> LeverAnswe
     ``until``: when enough spend ages out depends on spend this lever does not read."""
     reading = f"{spend.figure.rendered()} of ${settings.usd:.2f} over the trailing {settings.window_hours:g}h"
     return LeverAnswer(
-        LeverName.BUDGET,
+        DeclaredLever.BUDGET,
         spend.spend_usd < settings.usd,
         reading,
         f"${settings.usd:.2f} over {settings.window_hours:g}h",
@@ -184,9 +174,9 @@ def schedule_answer(settings: ScheduleSettings, *, zone: tzinfo, now: datetime) 
         for span in settings.spans or (Span(0, MINUTES_PER_DAY),)
     ]
     if any(start <= now < end for start, end in runs):
-        return LeverAnswer(LeverName.SCHEDULE, True, "inside", setting)
+        return LeverAnswer(DeclaredLever.SCHEDULE, True, "inside", setting)
     upcoming = [start for start, _ in runs if start > now]
-    return LeverAnswer(LeverName.SCHEDULE, False, "outside", setting, None, min(upcoming, default=None))
+    return LeverAnswer(DeclaredLever.SCHEDULE, False, "outside", setting, None, min(upcoming, default=None))
 
 
 def _unread(sample: ExternalUsageSampleSummary | None, slug: str, interval_seconds: int, now: datetime) -> str | None:

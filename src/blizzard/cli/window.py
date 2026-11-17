@@ -75,6 +75,8 @@ def refuse_bad_window(since: datetime, until: datetime, clock: IClock) -> None:
 def replay_windows(since: datetime, until: datetime, width_seconds: int | None) -> list[tuple[datetime, datetime]]:
     """``[since, until)`` as consecutive UTC windows of at most ``width_seconds``; one window if no width is known."""
     start, stop = since.astimezone(UTC), until.astimezone(UTC)
+    if width_seconds is not None and width_seconds <= 0:
+        raise click.ClickException(f"the server reports a replay window of {width_seconds}s; it must be at least 1s")
     if width_seconds is None or stop <= start:
         return [(start, stop)]
     width = timedelta(seconds=width_seconds)

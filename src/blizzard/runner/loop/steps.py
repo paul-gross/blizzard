@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.lifecycle.advance import AdvanceSweep
@@ -29,7 +30,6 @@ from blizzard.runner.lifecycle.spend_ceiling import SpendCeilingCheck
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.levers import LeverAnswer
-from blizzard.runner.throttle.report import FLOOR_LEVER
 
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
@@ -147,7 +147,7 @@ class Fill(Step):
                 "declining — no new claims this tick",
                 runner_name=ctx.config.runner_name,
                 declining=[
-                    answer.lever.value if isinstance(answer, LeverAnswer) else FLOOR_LEVER
+                    answer.lever.value if isinstance(answer, LeverAnswer) else DeclaredLever.FLOOR.value
                     for answer in declining.declining
                 ],
                 subscription=declining.floor.slug,
