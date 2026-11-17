@@ -460,8 +460,14 @@ class NextClaim:
     @property
     def view(self) -> NextClaimResponse:
         projects, urgencies = self.projects, self.urgencies
+        own = _next_claim_scenario(self.explanation, projects, urgencies)
         return NextClaimResponse(
-            **_next_claim_scenario(self.explanation, projects, urgencies).model_dump(exclude={"excluded"}),
+            next=own.next,
+            passed=own.passed,
+            passed_total=own.passed_total,
+            unserved=own.unserved,
+            if_holding=own.if_holding,
+            held_at=own.held_at,
             without_repository_targets=_next_claim_scenario(self.without_targets, projects, urgencies),
         )
 
