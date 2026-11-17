@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { mockBinDir, requireBinary } from '../../env';
 import { isAlive } from '../../daemons/process';
 import { expect, runnerTest as test } from '../../fixtures';
 import { runnerHostBuilder } from '../../runner-host';
@@ -217,6 +218,33 @@ test('a setup that fails after the host process spawned leaves no process and no
   } finally {
     fs.rmSync(scratchRoot, { recursive: true, force: true });
     fs.rmSync(runtimeRoot, { recursive: true, force: true });
+  }
+});
+
+test('a host takes its workspace from the fixture mint output, with no workspace-only path lookup', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
+  const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-check-'));
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's-'));
+  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bzh-shim-'));
+  const calls = path.join(shimDir, 'calls');
+  const previous = process.env.BLIZZARD_MOCK_BIN_DIR;
+  try {
+    const real = requireBinary(mockBinDir(), 'blizzard-mock-fixture');
+    const shim = path.join(shimDir, 'blizzard-mock-fixture');
+    fs.writeFileSync(shim, `#!/bin/sh\necho "$*" >> '${calls}'\nexec '${real}' "$@"\n`, { mode: 0o755 });
+    process.env.BLIZZARD_MOCK_BIN_DIR = shimDir;
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot, runtimeRoot });
+    const host = await builder.create();
+    const verbs = fs.readFileSync(calls, 'utf8').trim().split('\n').map((line) => line.split(' ')[0]);
+    expect(verbs.filter((verb) => verb === 'mint')).toHaveLength(1);
+    const lookups = fs.readFileSync(calls, 'utf8').trim().split('\n').filter((line) => line.startsWith('path'));
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]).toContain('--part origins');
+    expect(fs.existsSync(host.workspace)).toBe(true);
+    await builder.disposeAll();
+  } finally {
+    if (previous === undefined) delete process.env.BLIZZARD_MOCK_BIN_DIR;
+    else process.env.BLIZZARD_MOCK_BIN_DIR = previous;
+    for (const dir of [scratchRoot, runtimeRoot, shimDir]) fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
