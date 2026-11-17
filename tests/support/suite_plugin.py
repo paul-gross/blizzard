@@ -28,6 +28,7 @@ from tests.support.revision_age import (
     colocated_versions,
     decide_colocated,
 )
+from tests.support.shard_weights import TIMINGS_ENV, TimingRecorder
 from tests.support.tier_layout import (
     declared_layout_marker,
     flat_test_module,
@@ -263,8 +264,24 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ.update(DAEMON_ENV["set"])
     os.environ["PATH"] = _without_opencode(os.environ.get("PATH", ""))
     engine_lifecycle.install(config)
+    if (timings := os.environ.get(TIMINGS_ENV)) and not hasattr(config, "workerinput"):
+        config.pluginmanager.register(_TimingPlugin(TimingRecorder(Path(timings))), "blizzard-timings")
     install_tenant_guard()
     install_runner_guard()
+
+
+class _TimingPlugin:
+    """Under ``BLIZZARD_TEST_TIMINGS``, the controller (never an xdist worker) records each run nodeid's summed
+    setup, call, and teardown seconds — xdist relays every worker's reports to it — and writes them at session end."""
+
+    def __init__(self, recorder: TimingRecorder) -> None:
+        self._recorder = recorder
+
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        self._recorder.record(report.nodeid, report.duration)
+
+    def pytest_sessionfinish(self) -> None:
+        self._recorder.write()
 
 
 @pytest.fixture(autouse=True)
