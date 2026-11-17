@@ -111,9 +111,10 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 #: How long a turn's visit build may run, on the turn's clock, before the turn is cut off.
 BUILD_BOUND_SECONDS = 60.0
 
-# Fires after marker and intents are durable in one transaction, before drain.
+# Fires after every landing writer return, including replay or refusal; an independent drain may already have run.
 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
-    "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
+    "close.after-enqueue.before-drain",
+    "the landing writer has returned, including on replay or refusal; an independent sweep may have drained intents",
 )
 _CP_FLOW_AFTER_POLL_BEFORE_TURN_END = crashpoint(
     "flow.after-poll.before-turn-end",

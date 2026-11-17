@@ -1,5 +1,6 @@
 """One hub action pass, driven from the caller's event loop: submitted to the :class:`ActionLoop`, its effects
-crossing back to the caller's loop and written there one at a time, each released back to the action once durable.
+crossing back to the caller's loop and written there one at a time, each released back to the action when its writer
+returns.
 
 The pass is bounded twice. Cancellation at its next ``await`` after ``bound`` is the pass's own bound; the caller's is
 a deadline ``grace`` later, so a pass stuck in synchronous work never holds the caller past it. An effect already being
@@ -25,10 +26,11 @@ from blizzard.hub.forge.landing import VisitForges
 # Crash points for the windows a pass's effects open (`bzh:crash-point-registry`).
 _CP_ACTION_AFTER_EFFECT_BEFORE_WRITE = crashpoint(
     "action.after-effect.before-write",
-    "the action's forge write is done; the effect recording it is not yet durable",
+    "the action has submitted an effect; its writer has not run",
 )
 _CP_ACTION_AFTER_WRITE_BEFORE_RESUME = crashpoint(
-    "action.after-write.before-resume", "an effect is durable; the action has not resumed"
+    "action.after-write.before-resume",
+    "the effect writer has returned, possibly refusing or fencing; the action has not resumed",
 )
 
 #: How long past ``action_pass_seconds`` the caller waits before letting a pass go.
