@@ -7,12 +7,14 @@ would assert nothing about."""
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
+import click
 import httpx2
 import pytest
 import uvicorn
@@ -833,10 +835,10 @@ def _seed_full_world(root: Path) -> None:
 def _answer_gate_decisions(monkeypatch: pytest.MonkeyPatch, status_code: int) -> None:
     original = RunnerDaemon.send
 
-    def send(self: RunnerDaemon, method: str, path: str, **kwargs: object) -> httpx2.Response:
+    def send(self: RunnerDaemon, method: str, path: str, *, json_body: object | None = None) -> httpx2.Response:
         if path == "/api/gate-decisions":
             return httpx2.Response(status_code, json=_DECISIONS_BODY if status_code == 200 else {})
-        return original(self, method, path, **kwargs)  # type: ignore[arg-type]
+        return original(self, method, path, json_body=json_body)
 
     monkeypatch.setattr(RunnerDaemon, "send", send)
 
@@ -867,6 +869,92 @@ def test_status_prose_with_both_optional_reads_answering_non_2xx(
         result = _no_hub().runner.invoke(runner_group, ["status", "--dir", str(root)])
     assert result.exit_code == 0, result.output
     assert _normalized(result.output, root) == _UNAVAILABLE_PROSE
+
+
+def test_status_json_with_every_section_populated_and_both_optional_reads_answering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _seed_full_world(root)
+    _answer_gate_decisions(monkeypatch, 200)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert body["harness_health"]["state"] == "ok"
+    assert {item["harness_id"] for item in body["harness_health"]["answer"]} == {"claude_code", "opencode"}
+    assert body["gate_decisions"]["state"] == "ok"
+    assert [d["chunk_id"] for d in body["gate_decisions"]["answer"]] == ["ch_1"]
+    assert body["traces"]["state"] == "ok"
+    assert [e["environment_id"] for e in body["held_environments"]] == ["e1", "e3"]
+    assert [a["question_id"] for a in body["open_asks"]] == ["qn_1"]
+    assert [t["takeover_id"] for t in body["open_takeovers"]] == ["tko_1"]
+    assert body["leases"] == []
+    assert len(body["escalations"]) == 1 and len(body["subscriptions"]) == 1
+    assert len(body["unmatched_bindings"]) == 2
+    assert body["runner"]["runner_id"] == "rn_init1"
+
+
+def test_status_json_reads_the_optional_sections_unavailable_with_the_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    _answer_gate_decisions(monkeypatch, 503)
+    with serve_local_api(root, trace_status=False):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert body["traces"] == {"state": "unavailable", "status": 503}
+    assert body["gate_decisions"] == {"state": "unavailable", "status": 503}
+    assert body["harness_health"] == {"state": "not-requested"}
+    for section in ("leases", "held_environments", "unmatched_bindings", "open_asks", "escalations", "open_takeovers"):
+        assert body[section] == []
+
+
+def test_status_json_fails_with_one_error_object_and_the_prose_exit_code(tmp_path: Path) -> None:
+    root = init_runner_home(tmp_path)
+    prose = _no_hub().runner.invoke(runner_group, ["status", "--dir", str(root)])
+    result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == prose.exit_code == 1
+    assert json.loads(result.stdout) == {"error": {"message": prose.stderr.removeprefix("Error: ").strip()}}
+
+
+def test_status_json_fails_on_a_late_unreadable_answer_with_one_error_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    original = RunnerDaemon.get_from_host
+
+    def malformed(self: RunnerDaemon, path: str) -> httpx2.Response:
+        if path == "/api/host/subscriptions":
+            return httpx2.Response(200, json={"items": [{"slug": "secret"}]})
+        return original(self, path)
+
+    monkeypatch.setattr(RunnerDaemon, "get_from_host", malformed)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 1
+    assert list(json.loads(result.stdout)) == ["error"]
+    assert "unreadable answer" in json.loads(result.stdout)["error"]["message"]
+    assert "secret" not in result.stdout
+
+
+def test_status_json_fails_on_a_required_read_answering_non_2xx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    original = RunnerDaemon.get
+
+    def refusing(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx2.Response:
+        if path == "/api/leases":
+            raise click.ClickException("status: the runner refused /api/leases (503)")
+        return original(self, path, params=params)
+
+    monkeypatch.setattr(RunnerDaemon, "get", refusing)
+    with serve_local_api(root):
+        result = _no_hub().runner.invoke(runner_group, ["status", "--json", "--dir", str(root)])
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {"error": {"message": "status: the runner refused /api/leases (503)"}}
 
 
 _FULL_PROSE = """runner runner-local (rn_init1)  workspace=workspace-local
