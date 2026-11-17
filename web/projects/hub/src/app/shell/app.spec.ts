@@ -148,6 +148,13 @@ describe('hub App', () => {
   let queryClient: QueryClient;
   let authStub: RequestClientStub;
 
+  // The first spec to navigate pays the one-time cost of loading each lazy route's module graph; on a loaded CI
+  // runner that cost lands inside the spec's own 5s timer. Loading the routes the specs reach here, under the hook's
+  // timeout, keeps the specs measuring behavior rather than cold module loads.
+  beforeAll(async () => {
+    await Promise.all([import('../board/board-page'), import('../board/glance/glance-board'), import('../graphs/graphs-page')]);
+  }, 60_000);
+
   beforeEach(async () => {
     const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
