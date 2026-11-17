@@ -22,6 +22,7 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.projects.targets import (
     BranchTarget,
+    ChunkTargetCapture,
     ChunkTargets,
     IWriteChunkTargets,
     TargetChunk,
@@ -125,29 +126,41 @@ class _Records:
         return {_REPOSITORY: _repository("master")}
 
 
-class _Captured:
+class _Held:
+    """The read side of a chunk's captured targets: what it holds, and the token each read was made in."""
+
     def __init__(self) -> None:
         self.held: dict[RepositoryId, BranchTarget] = {}
+        self.read_in: list[Transaction | None] = []
 
     def captured_for(
         self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
     ) -> dict[str, dict[RepositoryId, BranchTarget]]:
+        self.read_in.append(transaction)
         return {chunk_id: dict(self.held) for chunk_id in chunk_ids if self.held}
+
+
+class _Captured(_Held):
+    def __init__(self) -> None:
+        super().__init__()
+        self.written_in: list[LockedTransaction] = []
 
     def capture(
         self, chunk_id: str, targets: Sequence[BranchTarget], *, transaction: LockedTransaction
     ) -> dict[RepositoryId, BranchTarget]:
+        self.written_in.append(transaction)
         for target in targets:
             self.held.setdefault(target.repository_id, target)
         return dict(self.held)
 
 
-def _chunk_targets(store: _Captured, *branches: str) -> ChunkTargets:
-    return ChunkTargets(
-        targets=cast(IWriteChunkTargets, store),
+def _capture(store: _Captured, *branches: str) -> ChunkTargetCapture:
+    reads = ChunkTargets(
+        targets=store,
         links=cast(IReadProjectLinks, _LinksEditedBetweenReads(*branches)),
         records=cast(IReadRepositoryRecordRepository, _Records()),
     )
+    return ChunkTargetCapture(reads=reads, targets=cast(IWriteChunkTargets, store))
 
 
 def test_a_claim_captures_exactly_the_targets_it_checked_the_environments_against() -> None:
@@ -155,12 +168,14 @@ def test_a_claim_captures_exactly_the_targets_it_checked_the_environments_agains
     chunk = TargetChunk("chk_1", _PROJECT.project_id)
     transaction = cast(LockedTransaction, object())
 
-    captured = _chunk_targets(store, "rust-rewrite", "edited-later").capture_prepared(
+    captured = _capture(store, "rust-rewrite", "edited-later").capture_prepared(
         chunk, {_REPOSITORY: "rust-rewrite"}, at=_AT, transaction=transaction
     )
 
     assert branches(store.held) == {_REPOSITORY: "rust-rewrite"}
     assert captured == store.held
+    assert store.read_in == [transaction]
+    assert store.written_in == [transaction]
 
 
 def test_stale_environments_capture_nothing() -> None:
@@ -168,7 +183,7 @@ def test_stale_environments_capture_nothing() -> None:
     chunk = TargetChunk("chk_1", _PROJECT.project_id)
     transaction = cast(LockedTransaction, object())
 
-    captured = _chunk_targets(store, "rust-rewrite").capture_prepared(
+    captured = _capture(store, "rust-rewrite").capture_prepared(
         chunk, {_REPOSITORY: "master"}, at=_AT, transaction=transaction
     )
 

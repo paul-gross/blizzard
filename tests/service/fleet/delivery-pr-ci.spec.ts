@@ -369,9 +369,18 @@ test('test_pr_ci_escalates_a_rejected_credential_as_forge_auth', async ({ reposi
   expect(detail).toContain(`blizzard hub chunk requeue ${chunk.chunk_id}.`);
   expect(escalated.landed).toBe(false);
   expect(escalated.current_node_name).toBe('deliver');
-  const events = await api.get<{ events: { kind: string; chunk_id: string | null }[] }>(`/api/events?chunk_id=${chunk.chunk_id}&limit=200`);
-  const refused = events.body.events.filter((event) => event.kind === 'forge-auth-refused');
-  expect(refused.map((event) => event.chunk_id)).toEqual([chunk.chunk_id]);
+  type EventsBody = { events: { kind: string; chunk_id: string | null }[] };
+  const refusedIn = (body: EventsBody) => body.events.filter((event) => event.kind === 'forge-auth-refused');
+  let events = await api.get<EventsBody>(`/api/events?chunk_id=${chunk.chunk_id}&limit=200`);
+  await expect
+    .poll(
+      async () => {
+        events = await api.get<EventsBody>(`/api/events?chunk_id=${chunk.chunk_id}&limit=200`);
+        return refusedIn(events.body).map((event) => event.chunk_id);
+      },
+      { timeout: 30000 },
+    )
+    .toEqual([chunk.chunk_id]);
   expect(JSON.stringify(escalated.escalation)).not.toContain('fixture-token');
   expect(JSON.stringify(events.body)).not.toContain('fixture-token');
   expect(hubLog.lines().filter((line) => line.raw.includes('fixture-token'))).toEqual([]);

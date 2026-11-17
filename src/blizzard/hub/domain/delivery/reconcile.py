@@ -56,7 +56,7 @@ from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
-from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
+from blizzard.hub.domain.projects.targets import ChunkTargetCapture, ChunkTargets, TargetChunk, branches
 from blizzard.hub.tenancy import TenantClosed
 
 _EVENT_TURN_INTERRUPTED: EventLogKind = "turn-interrupted"
@@ -126,6 +126,7 @@ class FlowLineReconciler:
         projects: IReadProjectRepository,
         links: IReadProjectLinks,
         targets: ChunkTargets,
+        capture: ChunkTargetCapture,
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
         transactions: IHubTransactions,
@@ -144,6 +145,7 @@ class FlowLineReconciler:
         self._projects = projects
         self._links = links
         self._targets = targets
+        self._capture = capture
         self._catalogue = catalogue
         self._clock = clock
         self._lines = lines
@@ -414,7 +416,7 @@ class FlowLineReconciler:
                 for record in sorted(set(resolved.resolution.records))
                 if (target := effective.get(RepositoryId(record))) is not None
             ]
-            captured = self._targets.capture(chunk.chunk_id, used, at=self._clock.now(), transaction=locked)
+            captured = self._capture.capture(chunk.chunk_id, used, at=self._clock.now(), transaction=locked)
             if any(captured[target.repository_id].base_branch != target.base_branch for target in used):
                 return None
             return self._flows.submit(

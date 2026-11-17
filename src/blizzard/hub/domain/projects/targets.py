@@ -120,10 +120,10 @@ class IWriteChunkTargets(IReadChunkTargets, Protocol):
 
 
 class ChunkTargets:
-    """The one home of "a chunk's effective targets": the read every caller makes, and the capture."""
+    """The one home of "a chunk's effective targets": the read every caller makes."""
 
     def __init__(
-        self, *, targets: IWriteChunkTargets, links: IReadProjectLinks, records: IReadRepositoryRecordRepository
+        self, *, targets: IReadChunkTargets, links: IReadProjectLinks, records: IReadRepositoryRecordRepository
     ) -> None:
         self._targets = targets
         self._links = links
@@ -168,13 +168,22 @@ class ChunkTargets:
         live = self.live_for([chunk.project_id]).get(chunk.project_id, {}) if chunk.project_id else {}
         return effective_targets(captured, live)
 
+
+class ChunkTargetCapture:
+    """The capture of a chunk's targets: the write a claim or a delivery makes, over the read service's effective
+    targets."""
+
+    def __init__(self, *, reads: ChunkTargets, targets: IWriteChunkTargets) -> None:
+        self._reads = reads
+        self._targets = targets
+
     def capture_prepared(
         self, chunk: TargetChunk, prepared: Mapping[str, str] | None, *, at: datetime, transaction: LockedTransaction
     ) -> dict[RepositoryId, BranchTarget] | None:
         """A claim's capture: read the chunk's effective targets once in ``transaction``, which locks the chunk, and
         capture exactly those when environments ``prepared`` stand at them (:func:`prepared_at`). Answers the targets
         checked and captured; ``None``, capturing nothing, when the environments are stale."""
-        checked = self.effective(chunk, transaction=transaction)
+        checked = self._reads.effective(chunk, transaction=transaction)
         if not prepared_at(checked, prepared):
             return None
         fresh = [target.captured(at) for target in checked.values() if target.captured_at is None]
