@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import random
 
-# Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md —
-# and the tenant cache's lock, which guards this process's memory, not a store decision
+# The tenant cache's lock guards this process's memory, not a store decision.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Mapping, Sequence
@@ -641,7 +640,6 @@ class TenantStores:
     hosts: HostRegistryStore
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
-    #: The tenant's cycle-check lock — dependencies never cross tenants.
     delete: DeleteService
     finding_store: FindingStore
     finding_exit: FindingExitService
@@ -785,9 +783,8 @@ class TenantCache:
     A hit answers from memory and issues no statement: closing a tenant evicts it, and its write
     paths still refuse a closed tenant. A miss confirms the tenant exists and is open
     (``confirm_open`` raises :class:`UnknownTenant` or :class:`TenantClosed`) under the cache's one
-    lock before building, so two racing opens of a tenant never yield two entries — nor two of its
-    cycle-check locks — and a deletion's evict, which waits on that lock, drops an entry its close
-    raced."""
+    lock before building, so two racing opens of a tenant never yield two entries, and a deletion's
+    evict, which waits on that lock, drops an entry its close raced."""
 
     def __init__(
         self,

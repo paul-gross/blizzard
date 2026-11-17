@@ -14,8 +14,8 @@ valid:
   - |
     from multiprocessing import Lock
 invalid:
-  # The exact shape every current holder of the residual dependency-graph lock carries —
-  # suppressed at each real site with `# ast-grep-ignore: bzh:store-exclusive-write`.
+  # A bare threading import matches; legitimate in-process locks are suppressed at their sites
+  # with `# ast-grep-ignore: bzh:store-exclusive-write`.
   - |
     import threading
   - |

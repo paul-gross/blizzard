@@ -194,8 +194,13 @@
 }
 .where > .sep,
 .where > .gate,
+.where > .blocked,
 .where > .st {
   flex: none;
+}
+.blocked {
+  color: var(--amber);
+  white-space: nowrap;
 }
 .where > .runner {
   flex: 0 1 auto;

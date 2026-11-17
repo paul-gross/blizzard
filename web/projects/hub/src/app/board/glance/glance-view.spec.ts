@@ -68,6 +68,14 @@ describe('GlanceView', () => {
     return [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-testid="glance-card"]')];
   }
 
+  it('shows a blocked marking on a ready card and omits it on an unblocked card', async () => {
+    const rendered = await cards({ ready: [row({ lane: 'ready', status: 'ready', blocked: { label: 'C-NGDA', title: 'ch_prerequisite' } }), row({ lane: 'ready', status: 'ready' })] });
+    const marking = rendered[0].querySelector('[data-testid="glance-blocked"]');
+    expect(text(marking)).toBe('blocked · C-NGDA');
+    expect(marking?.getAttribute('title')).toBe('ch_prerequisite');
+    expect(rendered[1].querySelector('[data-testid="glance-blocked"]')).toBeNull();
+  });
+
   it('shows non-default urgency only on unfinished cards without changing row order', async () => {
     const urgent = { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView;
     const normal = { ...urgent, urgency_id: 'n', name: 'Normal', default: true } as UrgencyView;

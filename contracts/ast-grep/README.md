@@ -156,12 +156,8 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   `blizzard-context:/architecture/system-shape/exclusive-writes.md`; this file states none of that prose, only what the
   rule mechanically checks.
   - Scoped to `src/blizzard/hub/**` — the whole hub, not just its domain layer.
-  - Matches a bare `import threading` — an injected lock arrives constructed elsewhere, but every holder still imports
-    the module to type its own field, so the import is the one textual signal common to both shapes.
-  - Every current holder — `app.py`, `composition.py`, and the domain's `dependencies.py`, `queue.py`, and `delete.py`,
-    each for the one residual fleet-wide cycle-check lock a row lock cannot close — carries an `ast-grep-ignore` comment
-    at its import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, and `restart.py` migrated fully onto
-    the row lock and import `threading` no longer.
+  - Matches imports of `threading`, including aliases and `from`-imports; it does not determine what the lock protects.
+  - Legitimate in-process locks carry an `ast-grep-ignore` comment at the import, with the reason at the site.
 
 - **`bzh:hub-store-adapter-imports`** (`rules/hub-store-adapter-imports.yml`) — a store adapter does not import a
   sibling adapter to perform another repository's mutation. The prose home is `bzh:sibling-adapter-independence` in
