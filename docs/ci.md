@@ -48,8 +48,8 @@ pushing. The gate's exact individual commands:
 
 Pyright checks repository-owned Python in strict mode, including root scripts and colocated migration tests; dependency,
 cache, dot-directory and generated build output are excluded. The structural gate applies the suppression rule across
-the same owned scope. Pyright's configured check also rejects an inert `# type: ignore` or
-`# pyright: ignore` comment across that same scope.
+the same owned scope. Pyright's configured check also rejects an inert `# type: ignore` or `# pyright: ignore` comment
+across that same scope.
 
 ```bash
 uv sync
