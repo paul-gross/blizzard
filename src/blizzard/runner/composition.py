@@ -11,14 +11,12 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
-import shutil
 import socket
-import tempfile
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import datetime, tzinfo
+from datetime import tzinfo
 from pathlib import Path
 from typing import cast
 
@@ -132,7 +130,6 @@ from blizzard.runner.process.internal.linux_process_probe import LinuxProcessPro
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import (
     StoreResetRefused,
-    backup_sqlite,
     migration_runner,
     runner_store_migrations,
     set_aside_sqlite,
@@ -209,7 +206,7 @@ from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCoun
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
-from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
+from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
     DeclaredSubscription,
@@ -221,6 +218,7 @@ from blizzard.runner.transfer.hosts import (
     SourceHost,
 )
 from blizzard.runner.transfer.ingest import IIngestStores, ITokenFiles, RunnerIngest
+from blizzard.runner.transfer.internal.host_files import HostFiles
 from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
@@ -1419,57 +1417,6 @@ class DotenvTokenFiles:
 
 _token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
 
-_COPY_PREFIX = "ingest-copy-"
-
-
-@collaborator
-@dataclass(frozen=True)
-class HostFiles:
-    """An ingest's file operations on the host's disk."""
-
-    def store_file(self, db_url: str) -> Path:
-        try:
-            return sqlite_store_file(db_url)
-        except StoreResetRefused as exc:
-            raise NotAStoreFile(str(exc)) from exc
-
-    def store_url(self, database: Path) -> str:
-        return sqlite_url(database)
-
-    @contextlib.contextmanager
-    def copy_of(self, store: Path, beside: Path) -> Generator[Path, None, None]:
-        # The caller holds the host's lock, so a copy left here is one a killed run never removed.
-        for stale in beside.glob(f"{_COPY_PREFIX}*"):
-            shutil.rmtree(stale, ignore_errors=True)
-        directory = Path(tempfile.mkdtemp(prefix=_COPY_PREFIX, dir=beside))
-        try:
-            copy = directory / store.name
-            backup_sqlite(store, copy)
-            yield copy
-        finally:
-            shutil.rmtree(directory, ignore_errors=True)
-
-    def copy_tree(self, src: Path, dst: Path) -> None:
-        shutil.copytree(src, dst, dirs_exist_ok=True)
-
-    def copy_file(self, src: Path, dst: Path) -> None:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-
-    def set_aside(self, store: Path, *, now: datetime) -> tuple[Path, ...]:
-        return set_aside_sqlite(store, now=now).moved
-
-    @contextlib.contextmanager
-    def hold(
-        self, root: Path, probe: Callable[[Path], str | None], refusal: Callable[[str], Exception]
-    ) -> Generator[None, None, None]:
-        layout = HostLayout(root)
-        with hold_host(layout, (layout.socket_path, layout.legacy_socket_path), probe, lambda held: refusal(str(held))):
-            yield
-
-
-_host_files_conforms: type[IHostFiles] = HostFiles
-
 
 def declared_workspace(workspace: HostWorkspace, host_root: Path) -> DeclaredWorkspace:
     """``workspace`` as the transfer declaration of it, its root resolved against ``host_root``, the host that declared
@@ -1683,7 +1630,15 @@ def build_runner_ingest(
         tokens=DotenvTokenFiles(),
         hub=hub,
         holder=holder,
-        files=files or HostFiles(),
+        files=files
+        or HostFiles(
+            locate_store=sqlite_store_file,
+            not_a_store_file=StoreResetRefused,
+            url_of=sqlite_url,
+            set_aside_store=set_aside_sqlite,
+            layout_of=HostLayout,
+            hold_host=hold_host,
+        ),
         clock=resolved,
         migrations=migrations,
     )

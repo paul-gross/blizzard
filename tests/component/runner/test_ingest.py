@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 import tomllib
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -674,24 +675,25 @@ def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
     _refuse(fake_init_hub, hosts, "has run since", "--workspace-id", _NEW_WORKSPACE)
 
 
-def _recording(monkeypatch: pytest.MonkeyPatch) -> RecordingHostFiles:
+def _recording(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """The ingest CLI built over a recording of its host file operations, the ``ingest.`` crash points reached
-    journaled in the same order."""
-    recorder = RecordingHostFiles()
+    journaled in the same order; the journal."""
+    journal: list[str] = []
 
     def build(host: HostConfig, hub: IHostHubClient, **kwargs: Any) -> RunnerIngest:
-        return build_runner_ingest(host, hub, files=recorder, **kwargs)
+        ingest = build_runner_ingest(host, hub, **kwargs)
+        return replace(ingest, files=RecordingHostFiles(ingest.files, journal))
 
     monkeypatch.setattr(runners_cli, "build_runner_ingest", build)
     reached = CrashPoint.reached
 
     def record(self: CrashPoint) -> None:
         if self.name.startswith("ingest."):
-            recorder.journal.append(self.name)
+            journal.append(self.name)
         reached(self)
 
     monkeypatch.setattr(CrashPoint, "reached", record)
-    return recorder
+    return journal
 
 
 def test_the_copy_goes_before_the_first_crash_point_and_the_path_files_between_the_two(
@@ -706,18 +708,17 @@ def test_the_copy_goes_before_the_first_crash_point_and_the_path_files_between_t
         text = re.sub(rf'^{key} = ""$', f'{key} = "{value}"', text, count=0, flags=re.M)
     assert "standing.md" in text and 'transcripts_root = "transcripts"' in text, text
     theirs.write_text(text)
-    recorder = _recording(monkeypatch)
+    journal = _recording(monkeypatch)
 
     result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
 
     assert result.exit_code == 0, result.output
-    journal = recorder.journal
     after_copy, after_config = (
         journal.index("ingest.after-copy.before-config"),
         journal.index("ingest.after-config.before-removal"),
     )
     assert journal.index("copy_of:exit") < after_copy
-    copies = [i for i, op in enumerate(journal) if op in ("copy_file", "copy_tree")]
+    copies = [i for i, op in enumerate(journal) if op == "copy_path"]
     assert copies and all(after_copy < i < after_config for i in copies)
     assert "set_aside" not in journal, "the source keeps its own runner"
     assert journal[0] == "hold" and journal[-1] == "hold:exit"
@@ -730,12 +731,11 @@ def test_an_emptied_archive_is_set_aside_after_the_second_crash_point(
     assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code == 0
     ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
     [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
-    recorder = _recording(monkeypatch)
+    journal = _recording(monkeypatch)
 
     result = _ingest(fake_init_hub, hosts, source=archive)
 
     assert result.exit_code == 0, result.output
-    journal = recorder.journal
     assert journal.index("copy_of:exit") < journal.index("ingest.after-copy.before-config")
     assert journal.index("ingest.after-config.before-removal") < journal.index("set_aside")
 

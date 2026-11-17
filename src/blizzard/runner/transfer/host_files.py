@@ -1,5 +1,6 @@
-"""What an ingest does to files on the host: the copy of a source store, the copies of configured paths, the set-aside
-of an emptied store, and the hold on a host directory."""
+"""What an ingest does to files on the host: the resolution and existence of a path, the copy of a source store, the
+copies of configured paths and the directory they land in, the set-aside of an emptied store, and the hold on a host
+directory."""
 
 from __future__ import annotations
 
@@ -31,12 +32,22 @@ class IHostFiles(Protocol):
         ``store``; yields the copy's file. The directory is removed on leaving, an error included."""
         ...
 
-    def copy_tree(self, src: Path, dst: Path) -> None:
-        """The directory ``src`` copied into ``dst``, merging with what ``dst`` holds."""
+    def resolved(self, path: Path) -> Path:
+        """``path`` made absolute with every symlink followed, as :meth:`pathlib.Path.resolve` makes it — a missing
+        tail kept as given."""
         ...
 
-    def copy_file(self, src: Path, dst: Path) -> None:
-        """The file ``src`` copied to ``dst``, ``dst``'s parent made first."""
+    def exists(self, path: Path) -> bool:
+        """Whether ``path`` names something on disk, a symlink followed — a broken one does not."""
+        ...
+
+    def copy_path(self, src: Path, dst: Path) -> None:
+        """``src`` copied to ``dst``: a directory merged into what ``dst`` holds, a file copied with ``dst``'s parent
+        made first; nothing done when ``src`` does not exist."""
+        ...
+
+    def make_directory(self, path: Path) -> None:
+        """The directory ``path`` made, with its parents, when not there already."""
         ...
 
     def set_aside(self, store: Path, *, now: datetime) -> tuple[Path, ...]:
