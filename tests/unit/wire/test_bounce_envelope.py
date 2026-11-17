@@ -76,7 +76,7 @@ def test_a_bounce_no_action_answered_carries_the_summary_as_detail_and_diagnosti
 
 
 def test_a_stored_wrapper_body_still_validates_with_no_diagnostic() -> None:
-    stored = {
+    stored: dict[str, object] = {
         "cause": "failure",
         "detail": "PR #7 in acme/one did not land: `land` answered failure",
         "unlanded": [],
