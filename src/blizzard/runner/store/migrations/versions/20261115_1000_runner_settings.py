@@ -14,7 +14,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision: str = "20261115_1000_runner_settings"
-down_revision: str | None = "20261111_1000_binding_targets"
+down_revision: str | None = "20261114_1000_execution_observations"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
