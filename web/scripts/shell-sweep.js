@@ -37,8 +37,8 @@
  *     scrolls inside a bounded box rather than clipping with no scroll
  *     container — the flex chain jsdom cannot resolve.
  *   - projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts — the
- *     mobile glance board's spend-then-list ordering, a card's work-ref/short-id
- *     head line, two-line title bound and one-line meta, and no-overflow layout at
+ *     mobile glance board's spend-then-list ordering, each card's work-ref/short-id
+ *     head line, two-line title clamp and one-line meta, and no-overflow layout at
  *     390px and 320px.
  *   - projects/runner/src/app/shell/nav/app-header.shell-sweep.spec.ts — the
  *     runner app root's own desktop header (`AppHeader`, moved out of
@@ -58,23 +58,20 @@
  *   - projects/runner/src/app/board/rail/hub-panel.shell-sweep.spec.ts — the hub
  *     link, issue rows and fleet strip keep their 6px gap at phone and desktop widths.
  *   - projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts — the
- *     compact runner rail: runner rows and their agents line fit without horizontal
- *     overflow at 390/1280px; pause glyphs use their expected colours. A long runner
- *     name holds to one ellipsised line and, where offered, the pause/resume toggle
- *     spans each runner at 390/320px.
+ *     runner registry's rate-limit pace bars (issue #218): the stacked
+ *     utilization/elapsed pair per sampled window genuinely stacks, with no
+ *     horizontal overflow, at the board right rail's ~390px width; a long runner
+ *     name holds to one ellipsised line, and the phone Fleet tab's pause/resume
+ *     toggle spans each runner, at 390/320px.
  *   - projects/hub/src/app/runners/host-detail.shell-sweep.spec.ts — the host
  *     detail the phone's Fleet tab opens full-screen: its `@container` breakpoint
- *     stacks the connection fact lists and places runner facts above held chunks;
- *     environment lines and finger-sized held-chunk links stay inside their sections,
- *     with no horizontal overflow at 390/320px.
+ *     stacks connection facts, environment lines and each runner's facts over its
+ *     finger-sized held-chunk links, with no horizontal overflow at 390/320px.
  *   - projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts — the desktop
  *     Fleet tab: the host list and detail sit side by side at 1280px, the
  *     title-bar host actions are on screen and hit-testable, a selected
  *     host-less runner's slot bar and pace bars stay inside the detail, and
  *     nothing overflows horizontally at 1280/1024px.
- *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts —
- *     the gate panel preserves question and answer lines and indentation at 320/390px;
- *     origin and resolved lines remain inside the panel without horizontal overflow.
  *   - projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts —
  *     the runner's session-recovery surface (blizzard#312), which replaces the
  *     whole panel while a bounce could not be silently completed: the
@@ -84,14 +81,15 @@
  *     shell's own top tab strip (`AppNav`): the Board/Events/Host tabs and the
  *     Runner and Project filters never force the strip to overflow its own width.
  *   - projects/runner/src/app/host/host-page.shell-sweep.spec.ts — the host page:
- *     the serving runner's facts sit beside its held chunks at sampled widths above
- *     900px, with held chunks below the facts at sampled widths below 900px; runner
- *     rows and environment lines stay bounded, from 1400px down to 320px.
+ *     each runner's facts sit beside its held chunks when wide and stack under
+ *     them at 900px and below, and its runner rows and environment lines never
+ *     overflow, from 1400px down to 320px.
  *   - projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts —
  *     the shared chunk page through the runner's own route: each of its four
- *     tabs — General, Node history, Artifacts, Transcripts — has no page-shell
- *     horizontal overflow at phone widths; General's sections have distinct tops.
- *     The fixture includes a long unbroken artifact key; error statuses are also bounded.
+ *     tabs — General, Node history, Artifacts, Transcripts — genuinely stacks its own
+ *     sections with no horizontal overflow at phone widths, including the
+ *     General tab's `@media (min-width: 720px)` two-column grid collapse and
+ *     a long unbroken artifact key on the Artifacts tab.
  *   - projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts — the Events
  *     page feed: 80 events in a bounded shell genuinely scroll inside `.rows` alone
  *     (the panel body does not), to the last event, at 1280/390px.
@@ -100,13 +98,11 @@
  *     chunk-timeline, and chunk-artifacts rows: a computed-style claim, not a
  *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
  *     so only a real pointer (Playwright's `userEvent.hover`) proves a
- *     hovered rows differ from rest; card and timeline selections also differ from hover.
+ *     hovered row differs from both its resting and its selected state.
  *   - projects/hub/src/app/board/board-dock.shell-sweep.spec.ts — the board
  *     page's chunk dock: closed, it takes no box and the board runs the centre
  *     column's height; opened, it sits beneath the board, which keeps its left,
  *     top and width and shortens; dismissed, the board's at-rest box returns.
- *   - projects/hub/src/app/board/new-hub-item/new-hub-item.shell-sweep.spec.ts —
- *     the mounted new-item dialog and its controls fit the viewport at 1280/320px.
  *   - projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts — the
  *     graphs container/presentational split's `GraphDetailLifecycle`: its
  *     error line and entry line genuinely stack with the real gap `:host`'s
@@ -122,9 +118,10 @@
  *     with no horizontal overflow, and the last-swept table's own long
  *     revision hashes wrap inside their column rather than widening it.
  *   - projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts — the
- *     gardening scope panel: its header controls and description editor stay on screen,
- *     and the panel and related-routines read states have no horizontal overflow at
- *     1280/390/320px.
+ *     gardening scope panel: the description, lifecycle controls, and
+ *     related-routines list genuinely stack at 1280/390/320px with no
+ *     horizontal overflow, and a routine name long enough to wrap stays
+ *     inside the list rather than widening the panel.
  *   - projects/hub/src/app/garden/cadences/cadence-panel.shell-sweep.spec.ts —
  *     the gardening cadence panel: its rhythm, next moments, attention, and
  *     chores with their errands tables stack at 1280/390px with no horizontal
@@ -135,11 +132,11 @@
  *     overflow at 1280/390/320px; the secret form's value is a masked
  *     multi-line control at the same widths.
  *   - projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts — the
- *     members table: with long fixture tenant and member details, the
+ *     members table: with a tenant name and member details of any length, the
  *     page never scrolls sideways at 360/768/1280px; a table wider than a
  *     phone scrolls inside its panel, where the revoke button stays reachable.
  *   - projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts — the
- *     projects table: with a long fixture project name, slug and description
+ *     projects table: with a project name, slug and description of any length
  *     and the "no runner" badge showing, the page never scrolls sideways at
  *     360/768/1280px and the badge stays on screen.
  *   - projects/hub/src/app/admin/admin-shell.shell-sweep.spec.ts — Admin →
@@ -152,8 +149,8 @@
  *   - projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts — the
  *     gardening runs-and-findings tab's two presentational components
  *     (blizzard#401 Phase 3): `FleetRunList`'s escalated row carries a
- *     genuinely different computed background but the same border-left color as a
- *     normal unselected row at 390px, and `FleetRunDelta` genuinely stacks its
+ *     genuinely different computed background/border-left color from a
+ *     normal row at 390px, and `FleetRunDelta` genuinely stacks its
  *     finding-set blocks, and each set's added/observed/gone groups, with no
  *     overlap or horizontal overflow at 390px. Carries the two gardening panels
  *     too — `FleetFindingPanel`'s four CTA-sized triage buttons genuinely wrap
@@ -206,7 +203,8 @@
  *     phone and desktop widths the dialog is reachable at: the scope field's
  *     radio rows genuinely stack, the delta baseline block's finding-set-id
  *     line genuinely sits above its per-repo landed-since lines, the
- *     footer's Cancel/Run buttons genuinely sit side by side
+ *     new-scope near-match warning genuinely renders below both new-scope
+ *     inputs, and the footer's Cancel/Run buttons genuinely sit side by side
  *     with neither overflowing the panel.
  *   - projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts —
  *     the garden proposal docket container's own list-beside-panel grid: the
@@ -218,8 +216,8 @@
  *   - projects/hub/src/app/garden/proposals/gardening-proposal-accept-dialog.shell-sweep.spec.ts —
  *     the Accept dialog: the mint/decline radiogroup genuinely stacks its two
  *     options, the decline reason field genuinely renders below them once
- *     chosen at 1024px; the footer's Cancel/Accept sit side by side at
- *     320/390/1024px, with Accept inside the panel's right edge.
+ *     chosen, and the footer's Cancel/Accept sit side by side with neither
+ *     overflowing the panel, at phone and desktop widths.
  *   - projects/hub/src/app/garden/findings/gardening-findings-triage.shell-sweep.spec.ts —
  *     the findings triage list (`FleetFindingList`): with
  *     every row selected through the real select-all checkbox, the bulk bar's own
@@ -240,21 +238,22 @@
  *     each carry, driven from one table rather than one copied file per page.
  *   - projects/hub/src/app/garden/findings/gardening-findings-filters.shell-sweep.spec.ts —
  *     the findings tab widened to every routine and every scope (blizzard#486): the
- *     four filter dropdowns (routine, scope, class, state) fit with no horizontal overflow, and a row
+ *     four filter chip rows (routine, scope, class, state), each now carrying a
+ *     leading "All" option, genuinely fit with no horizontal overflow, and a row
  *     from a bucket mixing routines and scopes genuinely renders both its own
  *     routine and scope with no horizontal overflow of the row itself, at 390/320px.
  *   - projects/hub/src/app/board/board-card/board-card-rows.shell-sweep.spec.ts —
- *     the fleet chunk card as the hub fills it: its rows stack in order — title, blocked marking, PR links, cost row, then the step row with
- *     its id flush right — each inside the card, at 800px and at
+ *     the fleet chunk card as the hub fills it: its rows stack in order — title, blocked marking, PR links, the step row with
+ *     its id flush right, then the cost row — each inside the card, at 800px and at
  *     390/320px.
  *   - projects/hub/src/app/board/board-card/board-card-selected.shell-sweep.spec.ts — a
  *     selected fleet chunk card draws only the outer card's cyan edge (the kit card-open part
  *     inside has no padding, border or background), its PR links sit inside the card,
  *     and the content inset is the card's own padding, at 800px, 390px and 320px.
  *   - projects/hub/src/app/board/board-card/board-card-cost.shell-sweep.spec.ts — a
- *     done-lane fleet chunk card's completion stamp and cost figure stay side by side on
- *     one line without overflowing the card at 800/390/320px; at 390px the cost row
- *     sits above the step row, with the stamp at the left and cost flush right.
+ *     done-lane fleet chunk card's completion stamp, billed cost, and estimate stay side by side on
+ *     one line below the step row, flush right, without overflowing the card, at 800px
+ *     and at 390/320px.
  *   - projects/fleet/src/lib/chunk/chunk-card/chunk-card-tone.shell-sweep.spec.ts — the
  *     fleet chunk card's and list row's left edge resolve to `toneColor` in every tone;
  *     card ids stay gold, list-row ids retain their tone, and selected edges turn cyan.
@@ -273,9 +272,6 @@
  *     `⋯` overflow trigger, close): none of them overflows the header's own edge, at
  *     800px and at 390/320px. A second case per width opens the trigger's menu and
  *     sweeps its own panel items (Detach, Complete, Delete) on-viewport.
- *   - projects/hub/src/app/board/chunk-dock/chunk-delivery.shell-sweep.spec.ts —
- *     board and detail delivery links remain visible and reachable at 1280/390px;
- *     closed-only delivery remains visible in both detail views.
  *   - projects/runner/src/app/board/chunk-dock/machine-detail-header.shell-sweep.spec.ts — the
  *     machine detail dock's own header: a real pointer hover on Pause/Resume opens
  *     the wired `KitTooltip` naming the claiming runner, and the header's two
@@ -334,8 +330,8 @@
  *     genuinely distinct provenance badges beside their usage figures with no horizontal
  *     overflow at 390px.
  *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-timeline-forensics.shell-sweep.spec.ts —
- *     a bounce row renders above a restart row on the timeline
- *     without horizontal overflow at 390/320px; long diagnostics clamp to five lines.
+ *     a chunk's bounce and restart rows render in time order on both the timeline and
+ *     the Node history Selection list with no horizontal overflow at 390px and 320px.
  *   - projects/hub/src/app/delivery/delivery-layout.shell-sweep.spec.ts — the routed
  *     Delivery drawer and full-screen detail keep repositories/history bounded and
  *     the last history entry scrollable and hit-testable at 1280/901/900/390/320px.
@@ -343,13 +339,13 @@
  *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
  *     resume command with no horizontal overflow at 390px.
  *   - projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts — the tenant
- *     picker's three fixture options share a width and left edge and stay inside the
- *     viewport at 1280/390/320px.
+ *     picker's options share one width, the widest's, whatever their names' lengths,
+ *     and stay inside the viewport at 390px and 320px.
  *   - projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts — the
  *     project lens control in the view-tab row: a tenant with many long-named projects
- *     keeps the row within the viewport at sampled desktop widths; five route tabs and
- *     the All lens chip are hit-testable, and the chosen project is marked pressed.
- *     On phones the titlebar's project name, dot and menu stay within the viewport.
+ *     never pushes the row past the viewport (the chips scroll inside the control),
+ *     and every route tab and the lens's own choice stay on screen and hit-testable
+ *     at every desktop width.
  *   - projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts — the
  *     gardening doorway on All: one card per project reflows to a single column at
  *     phone widths with no horizontal overflow, a long project name or routine list
