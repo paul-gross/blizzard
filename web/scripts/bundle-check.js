@@ -5,7 +5,7 @@
  * hub's and the runner's), the tooled half of `architecture/frontend-structure/eager-shell.md`
  * (`bzh:frontend-eager-shell-entry`).
  *
- * Builds each app with esbuild's own metafile (`ng build <app> --stats-json`) and
+ * Builds each app with esbuild's own metafile (`ng build <app> --stats-json`, which writes `browser-stats.json`) and
  * resolves its initial chunk two ways from the same metafile:
  *
  * - At **output** granularity, for the size breakdown: the output whose `entryPoint` is
@@ -13,7 +13,7 @@
  *   (`kind: 'import-statement'`) edge, transitively. A `kind: 'dynamic-import'` edge
  *   starts a lazy chunk and is not followed.
  * - At **source-file** granularity, for forbidden-module detection and attribution: the
- *   same walk over the full module graph (`stats.json`'s top-level `inputs`), which also
+ *   same walk over the full module graph (`browser-stats.json`'s top-level `inputs`), which also
  *   carries each file's own import edges — the output-level chunks say nothing about
  *   which *file* pulled a given module in.
  *
@@ -84,7 +84,7 @@ const REPORT_AREAS = [
 function computeInitialOutputs(meta, main) {
   const outputs = meta.outputs;
   const mainKey = Object.keys(outputs).find((k) => outputs[k].entryPoint === main);
-  if (!mainKey) throw new Error(`bundle-check: no output in stats.json has entryPoint ${main}`);
+  if (!mainKey) throw new Error(`bundle-check: no output in browser-stats.json has entryPoint ${main}`);
 
   const visited = new Set();
   const stack = [mainKey];
@@ -218,9 +218,9 @@ function checkApp(app) {
       buildFailed = true;
     }
 
-    const statsPath = path.join(outDir, 'stats.json');
+    const statsPath = path.join(outDir, 'browser-stats.json');
     if (!fs.existsSync(statsPath)) {
-      console.error(`bundle-check: ${app.name} build produced no stats.json — see the build output above.`);
+      console.error(`bundle-check: ${app.name} build produced no browser-stats.json — see the build output above.`);
       return false;
     }
     const meta = JSON.parse(fs.readFileSync(statsPath, 'utf8'));

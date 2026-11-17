@@ -6,7 +6,7 @@
       [linkBase]="linkBase"
       [workRefs]="workRefs()"
       [statusLabel]="status()?.label ?? null"
-      [statusTone]="status()?.tone"
+      [statusTone]="$safeNavigationMigration(status()?.tone)"
       [nodeName]="l.node_name"
       [projectName]="projectName()"
       [lease]="l"
