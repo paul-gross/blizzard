@@ -7,12 +7,11 @@ import {
   type PermitVerb,
   type PermitView,
   grantPermitApiPermitsPermitIdGrantPost,
-  hubPermitKey,
-  hubPermitsKey,
   resumePermitApiPermitsPermitIdResumePost,
   revokePermitApiPermitsPermitIdRevokePost,
   suspendPermitApiPermitsPermitIdSuspendPost,
 } from 'fleet';
+import { hubPermitKey, hubPermitsKey } from '../core/query-keys';
 import { permitMoveMutationKey, permitRevokeMutationKey } from '../core/mutation-keys';
 
 /** A verb that moves a permit without a body. */

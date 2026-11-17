@@ -1,13 +1,8 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  chunkCountsApiChunkCountsGet,
-  type ChunkCountsView,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-  hubChunkCountsKey,
-  injectProjectFilter,
-  lensedKey,
-} from 'fleet/shell';
+import { chunkCountsApiChunkCountsGet, type ChunkCountsView, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { hubChunkCountsKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * Hub `GET /api/chunk-counts` read — the all-time count per chunk status, through

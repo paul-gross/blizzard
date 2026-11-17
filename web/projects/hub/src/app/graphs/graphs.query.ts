@@ -1,13 +1,14 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getGraphApiGraphsGraphIdGet, listGraphsApiGraphsGet, type GraphSummaryView, type GraphView, hubGraphKey, hubGraphsKey } from 'fleet';
+import { getGraphApiGraphsGraphIdGet, listGraphsApiGraphsGet, type GraphSummaryView, type GraphView } from 'fleet';
+import { hubGraphKey, hubGraphsKey } from '../core/query-keys';
 
 /**
  * Hub `GET /api/graphs` read — every minted graph's summary row (name, `graph_id`,
  * `created_at`, `entry_node_id`, and the derived `effective` marker), through
  * TanStack Query and the generated hub client (bzh:generated-client). Graphs are
  * immutable and minted rarely — not in the SSE event vocabulary
- * (`HUB_EVENT_TYPES` in `fleet-live.ts`) — so a plain query with no
+ * (`HUB_EVENT_TYPES` in `sse/hub-events.ts`) — so a plain query with no
  * `refetchInterval` is correct; nothing live-invalidates this list.
  */
 export function injectHubGraphsQuery() {

@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
+import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumePost } from 'fleet';
 import { chunkPauseMutationKey } from '../../core/mutation-keys';
+import { hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 
 /** The chunk whose operator pause brake to set, and the desired state. */
 export interface ChunkPauseVars {

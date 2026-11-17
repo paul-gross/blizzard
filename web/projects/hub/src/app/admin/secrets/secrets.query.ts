@@ -1,17 +1,12 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  getSecretApiSecretsNameGet,
-  hubConfigListKey,
-  hubConfigRecordKey,
-  listSecretsApiSecretsGet,
-  type SecretView,
-} from 'fleet';
+import { getSecretApiSecretsNameGet, listSecretsApiSecretsGet, type SecretView } from 'fleet';
+import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 
 const NOUN = 'secrets';
 
 /** `GET /api/secrets` — every secret, retired ones too while
- * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+ * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectSecretsQuery(includeRetired: () => boolean) {
   return injectQuery(() => {
     const retired = includeRetired();

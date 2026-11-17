@@ -1,7 +1,6 @@
 // exemplar: stand-in for `public-api.ts` — the real barrel plus the exports a permits feature would add to it.
 
 export * from './public-api';
-export { hubPermitKey, hubPermitsKey } from './lib/core/query-keys';
 export {
   getPermitApiPermitsPermitIdGet,
   grantPermitApiPermitsPermitIdGrantPost,

@@ -582,6 +582,24 @@ test('test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown', async ({ 
   // eslint-disable-next-line no-restricted-syntax -- the subject is how long a real shutdown takes
   expect(Date.now() - started).toBeLessThan(20_000);
   expect(typeof exit).toBe('number');
+});
+
+test('test_a_hung_trace_export_in_flight_at_shutdown_is_abandoned_and_logged', async ({ mockHub, runnerHosts }) => {
+  const host = await runnerHosts.create({
+    runnerLoop: 'timed',
+    runnerOtlp: 'hung',
+    runnerEnv: { OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '120' },
+    runnerConfig: { tick_seconds: 0.5, tracing: { sweep_seconds: 1n, settle_seconds: 0n } },
+  });
+  test.slow();
+  await seed(mockHub);
+  // The sweep waits at most the exporter's 8s bound on a hung transport, and shutdown joins it for 5s, so the sweep is
+  // still in flight at shutdown only for the 3s after the export starts, and only the first export is ever held (a
+  // later pass finds the transport busy and ends at once). Shutdown therefore follows the first open connection
+  // directly, with no other step between: a tick assertion here would spend that window.
+  await expect.poll(() => host.otlp!.openConnections(), { timeout: 120_000, intervals: [25] }).toBeGreaterThan(0);
+  const exit = await host.stop();
+  expect(typeof exit).toBe('number');
   expect(host.log()).toContain('lease trace sweep still running at shutdown');
 });
 

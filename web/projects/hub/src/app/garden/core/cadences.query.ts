@@ -7,7 +7,8 @@ import {
   listCadencesApiCadencesGet,
   listProjectCadencesApiProjectsProjectCadencesGet,
 } from 'fleet';
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
+import { injectProjectFilter } from '../../core/project-filter';
+import { lensedKey } from '../../core/query-keys';
 
 /** The cadence list's key — `GET /api/projects/{project}/cadences`, or `GET /api/cadences` on All. Cadences carry no
  * SSE event of their own, so only a cadence write invalidates it. */

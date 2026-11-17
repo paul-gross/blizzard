@@ -6,10 +6,13 @@
 
 export { AppShell } from './lib/shell/app-shell/app-shell';
 export { BoardHeader } from './lib/shell/board-header/board-header';
-export { FleetLiveUpdates } from './lib/sse/fleet-live';
-export { EVENT_SOURCE_FACTORY, FetchEventSource, type EventSourceFactory } from './lib/sse/sse.service';
+export { EVENT_SOURCE_FACTORY, FetchEventSource, SseService, type EventSourceFactory, type SseStatus } from './lib/sse/sse.service';
+export { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine } from './lib/sse/live-invalidation-spine';
+export { HUB_EVENT_TYPES, hubEventStreamUrl, type HubEventPayload } from './lib/sse/hub-events';
+export { ActivityChunkChangeCause, ActivityHubEventType, ActivityRunnerChangeKind, HubEventType, type ActivityView } from './lib/api/hub/types.gen';
+export { openLookup } from './lib/core/open-lookup';
+export { chunkDetailKey, chunkWorkItemsKey } from './lib/core/query-keys';
 export { FLEET_CLOCK, injectNowSignal } from './lib/core/now-signal';
-export { HUB_PROJECT_FILTER, injectProjectFilter } from './lib/core/project-filter';
 export { RUNNER_HOST_NAMES, RUNNER_NAMES } from './lib/core/runner-display-name';
 export { FlagStore, provideFlags, type FlagsRead } from './lib/core/flags/flag-store';
 export { flagGuard } from './lib/core/flags/flag-guard';
@@ -28,24 +31,6 @@ export { KitButton } from './lib/kit/kit-button';
 export { KitErrorLine } from './lib/kit/kit-error-line';
 export { errorMessage, problemType } from './lib/core/error-message';
 export { LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling/polling';
-export {
-  hubAuthProvidersKey,
-  hubBoardChunksKey,
-  hubChunkCountsKey,
-  hubDecisionsKey,
-  hubFlagsKey,
-  hubFleetSpendKey,
-  hubHealthKey,
-  hubHostsKey,
-  hubMeKey,
-  hubProjectKey,
-  hubProjectLinksKey,
-  hubProjectsKey,
-  hubQuestionsKey,
-  hubRunnersKey,
-  lensedKey,
-  type ProjectKeyPart,
-} from './lib/core/query-keys';
 export { client as hubClient } from './lib/api/hub/client.gen';
 export {
   chunkCountsApiChunkCountsGet,

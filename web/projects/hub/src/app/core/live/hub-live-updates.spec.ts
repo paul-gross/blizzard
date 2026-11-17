@@ -3,11 +3,19 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { ActivityRunnerChangeKind, RunnerChangeKind } from '../api/hub';
-import { HUB_PROJECT_FILTER } from '../core/project-filter';
-import { hubChunkTranscriptSegmentKey, hubChunkTranscriptsKey, hubDecisionsKey } from '../core/query-keys';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
-import { FleetLiveUpdates, HUB_EVENT_STREAM_URL, INVALIDATION_COALESCE_WINDOW_MS, hubEventStreamUrl } from './fleet-live';
+import {
+  EVENT_SOURCE_FACTORY,
+  HUB_EVENT_STREAM_URL,
+  INVALIDATION_COALESCE_WINDOW_MS,
+  type EventSourceFactory,
+  type FleetEventSource,
+  hubEventStreamUrl,
+  hubApi,
+} from 'fleet';
+import { HUB_PROJECT_FILTER } from '../project-filter';
+import { chunkTranscriptSegmentKey, chunkTranscriptsKey } from 'fleet';
+import { hubDecisionsKey } from '../query-keys';
+import { HubLiveUpdates } from './hub-live-updates';
 
 /** EventSource stand-in with named-listener support — jsdom ships none. */
 class FakeEventSource {
@@ -45,7 +53,7 @@ class FakeEventSource {
   }
 }
 
-describe('FleetLiveUpdates', () => {
+describe('HubLiveUpdates', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
@@ -70,9 +78,9 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, the events feed, and the env timeline\'s live reads on a chunk-changed event', () => {
-    // Rationale: chunkChangedKeys in fleet-live.ts.
+    // Rationale: chunkChangedKeys in hub-live-updates.ts.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -92,7 +100,7 @@ describe('FleetLiveUpdates', () => {
 
   it('invalidates the questions and decisions rails when a chunk-changed frame is flagged terminal', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -107,7 +115,7 @@ describe('FleetLiveUpdates', () => {
 
   it.each(['stopped', 'done'])('leaves the questions and decisions rails alone on an unflagged chunk-changed frame (%s)', (status) => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -124,7 +132,7 @@ describe('FleetLiveUpdates', () => {
     ['node-completed', false],
   ])('invalidates the activity backfill only on a chunk-changed frame that deletes the chunk (%s)', (cause, stales) => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -138,7 +146,7 @@ describe('FleetLiveUpdates', () => {
 
   it('collapses duplicate keys from multiple frames in one window into a single invalidation (issue #310)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -154,7 +162,7 @@ describe('FleetLiveUpdates', () => {
   it('collapses 100 frames within one second into one invalidation per key', () => {
     expect(INVALIDATION_COALESCE_WINDOW_MS).toBe(1000);
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
     const source = FakeEventSource.instances[0];
     source.open();
 
@@ -169,7 +177,7 @@ describe('FleetLiveUpdates', () => {
 
   it('flushes a continuous stream once per elapsed second without extending the first window', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
     const source = FakeEventSource.instances[0];
     source.open();
 
@@ -197,7 +205,7 @@ describe('FleetLiveUpdates', () => {
       expect(observer.getCurrentResult().isFetching).toBe(true);
       expect(observer.getCurrentResult().data).toBe('cached');
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
       const source = FakeEventSource.instances[0];
       source.open();
       source.emitNamed('queue-changed', JSON.stringify({}));
@@ -222,7 +230,7 @@ describe('FleetLiveUpdates', () => {
     const observer = new QueryObserver(queryClient, { queryKey: ['hub', 'events', null], queryFn });
     const unsubscribe = observer.subscribe(vi.fn());
     try {
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
       const source = FakeEventSource.instances[0];
       source.open();
       source.emitNamed('event-logged', JSON.stringify({ kind: 'worker-lost' }));
@@ -237,7 +245,7 @@ describe('FleetLiveUpdates', () => {
 
   it('preserves distinct keys from different frames in the same window (issue #310)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -258,7 +266,7 @@ describe('FleetLiveUpdates', () => {
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -281,17 +289,17 @@ describe('FleetLiveUpdates', () => {
     // re-decompressed an already-rendered segment for no reason, defeating this query's
     // own `refetchInterval: false`. Populate the cache with real entries at both keys and
     // assert on TanStack's actual prefix-match invalidation, not just call arguments.
-    queryClient.setQueryData(hubChunkTranscriptsKey('ch_live'), { chunk_id: 'ch_live', segments: [] });
-    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_1', true), { segment_id: 'sg_1' });
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    queryClient.setQueryData(chunkTranscriptsKey('hub', 'ch_live'), { chunk_id: 'ch_live', segments: [] });
+    queryClient.setQueryData(chunkTranscriptSegmentKey('hub', 'ch_live', 'sg_1', true), { segment_id: 'sg_1' });
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
-    expect(queryClient.getQueryState(hubChunkTranscriptsKey('ch_live'))?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_1', true))?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(chunkTranscriptsKey('hub', 'ch_live'))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(chunkTranscriptSegmentKey('hub', 'ch_live', 'sg_1', true))?.isInvalidated).toBe(false);
   });
 
   it('also refetches an open (non-final) segment’s content on chunk-changed (review:F2)', () => {
@@ -299,20 +307,20 @@ describe('FleetLiveUpdates', () => {
     // the caller hasn't resolved as `final` yet (or has resolved as still open) stays
     // under the `hub/chunk/<id>` prefix so the same signal that refetches the index also
     // refetches it, rather than freezing until an SSE reconnect's blanket invalidation.
-    queryClient.setQueryData(hubChunkTranscriptSegmentKey('ch_live', 'sg_2', false), { segment_id: 'sg_2' });
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    queryClient.setQueryData(chunkTranscriptSegmentKey('hub', 'ch_live', 'sg_2', false), { segment_id: 'sg_2' });
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
     vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
 
-    expect(queryClient.getQueryState(hubChunkTranscriptSegmentKey('ch_live', 'sg_2', false))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(chunkTranscriptSegmentKey('hub', 'ch_live', 'sg_2', false))?.isInvalidated).toBe(true);
   });
 
   it('invalidates the events feed, and that chunk when named, on an event-logged frame', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -332,7 +340,7 @@ describe('FleetLiveUpdates', () => {
     'invalidates the fleet-wide open-decision list, the fleet list, and that chunk on %s',
     (type) => {
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
       const source = FakeEventSource.instances[0];
       source.open();
@@ -353,7 +361,7 @@ describe('FleetLiveUpdates', () => {
     // keys off the frame *arriving*, never off the status value differing from the last
     // one, so the chunk read is staled and the dock re-reads the delivered question.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -372,7 +380,7 @@ describe('FleetLiveUpdates', () => {
 
   it('re-reads the registry on a runner-changed event and both order reads on queue-changed', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -390,7 +398,7 @@ describe('FleetLiveUpdates', () => {
 
   it.each(['queue-changed', 'runner-changed'])('invalidates Next on %s', (event) => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed(event, JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
@@ -404,7 +412,7 @@ describe('FleetLiveUpdates', () => {
     // emitted in its own coalesce window (coalescing collapses same-window duplicates),
     // so a per-kind flush still shows up as its own invalidation here.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -420,26 +428,26 @@ describe('FleetLiveUpdates', () => {
   it('admits exactly the activity runner kinds into the event feed', () => {
     // Only the kinds the hub's activity read backfills belong in the ring: anything else
     // vanishes on reload, and heartbeat-rate frames would evict events an operator wants.
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
-    for (const kind of [...Object.values(ActivityRunnerChangeKind), ...Object.values(RunnerChangeKind)]) {
+    for (const kind of [...Object.values(hubApi.ActivityRunnerChangeKind), ...Object.values(hubApi.RunnerChangeKind)]) {
       source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind }));
     }
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
 
-    const admitted = new Set<string>(Object.values(ActivityRunnerChangeKind));
+    const admitted = new Set<string>(Object.values(hubApi.ActivityRunnerChangeKind));
     expect(live.log().map((e) => e.data.kind)).toEqual([
-      ...Object.values(ActivityRunnerChangeKind),
-      ...Object.values(RunnerChangeKind).filter((kind) => admitted.has(kind)),
+      ...Object.values(hubApi.ActivityRunnerChangeKind),
+      ...Object.values(hubApi.RunnerChangeKind).filter((kind) => admitted.has(kind)),
     ]);
   });
 
   it('keeps an added runner out of the event feed but still invalidates the registry', () => {
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -449,8 +457,8 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('accumulates the event feed into the log, oldest first, without touching dispatch', () => {
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -469,8 +477,8 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('keeps a decision-opened frame out of the ring and a chunk-changed one in', () => {
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
     const source = FakeEventSource.instances[0];
     source.open();
 
@@ -483,8 +491,8 @@ describe('FleetLiveUpdates', () => {
 
   it('drops queue-changed from the ring, but still invalidates on it', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -499,8 +507,8 @@ describe('FleetLiveUpdates', () => {
 
   it('re-reads the hosts and runners on a host-changed frame, keeping it out of the ring', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -515,8 +523,8 @@ describe('FleetLiveUpdates', () => {
 
   it('re-reads the flows, the chunk list, and the named chunk on a flow-changed frame, keeping it out of the ring', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -534,7 +542,7 @@ describe('FleetLiveUpdates', () => {
 
   it('re-reads the hosts on a runner-changed frame, since host usage samples arrive as spender frames', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
@@ -548,8 +556,8 @@ describe('FleetLiveUpdates', () => {
 
   it('keeps one transition through lease and usage refreshes while invalidating every chunk fact', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'node-completed', key: 'transitions:1' }));
@@ -566,8 +574,8 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('dedupes keyed replay and cross-type notifications in the live ring, retaining distinct keyless rows', () => {
-    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
-    const live = TestBed.inject(FleetLiveUpdates);
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
     const source = FakeEventSource.instances[0];
     source.open();
     source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a', key: 'questions:1' }));
@@ -584,7 +592,7 @@ describe('FleetLiveUpdates', () => {
     vi.useFakeTimers();
     try {
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
       const source = FakeEventSource.instances[0];
       source.open();
@@ -623,13 +631,13 @@ describe('FleetLiveUpdates', () => {
 
     it('opens the stream narrowed to the project the filter holds', () => {
       filter.set('alpha');
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
 
       expect(FakeEventSource.instances.map((source) => source.url)).toEqual([hubEventStreamUrl('alpha')]);
     });
 
     it('reopens one stream on the new project when the filter changes, emptying the feed for its replay', () => {
-      const live = TestBed.inject(FleetLiveUpdates);
+      const live = TestBed.inject(HubLiveUpdates);
       TestBed.runInInjectionContext(() => live.start());
       const first = FakeEventSource.instances[0];
       first.open();
@@ -663,7 +671,7 @@ describe('FleetLiveUpdates', () => {
     });
 
     it('keeps start() idempotent: a second call opens no second stream, before or after a reopen', () => {
-      const live = TestBed.inject(FleetLiveUpdates);
+      const live = TestBed.inject(HubLiveUpdates);
       TestBed.runInInjectionContext(() => live.start());
       TestBed.runInInjectionContext(() => live.start());
       expect(FakeEventSource.instances).toHaveLength(1);
@@ -676,7 +684,7 @@ describe('FleetLiveUpdates', () => {
 
     it('never reopens while the filter holds its value', () => {
       filter.set('alpha');
-      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+      TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
       filter.set('alpha');
       TestBed.flushEffects();
 
@@ -690,9 +698,9 @@ describe('FleetLiveUpdates', () => {
     // throw NG0602 there, and its `handle.reopens()` watcher must still get installed:
     // a hand-built repro (`effect(() => effect(() => {}))`) would catch the NG0602
     // shape but says nothing about whether this app's actual wiring trips it.
-    @Component({ selector: 'fleet-test-host', template: '' })
+    @Component({ selector: 'app-test-host', template: '' })
     class Host {
-      readonly live = TestBed.inject(FleetLiveUpdates);
+      readonly live = TestBed.inject(HubLiveUpdates);
       constructor() {
         afterRenderEffect(() => this.live.start());
       }

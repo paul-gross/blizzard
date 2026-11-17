@@ -4,10 +4,11 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubConfigRecordKey, hubUrgencyIconKey, ViewportService, type UrgencyView } from 'fleet';
+import { ViewportService, type UrgencyView } from 'fleet';
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { configChangesPage, OPERATOR_ME_RESPONSE, settle, stubError, stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { UrgencyDetail } from './urgency-detail';
+import { hubConfigRecordKey, hubUrgencyIconKey } from '../../core/query-keys';
 
 const urgency: UrgencyView = { urgency_id: 'u', slug: 'soon', name: 'Soon', color: 'red', emoji: null, icon: null, retired: false, default: false, revision: 7, open_chunks: 0, place: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'u' };
 describe('UrgencyDetail writes', () => {

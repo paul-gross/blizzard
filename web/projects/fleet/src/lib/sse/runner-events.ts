@@ -1,6 +1,6 @@
 /**
  * The runner's SSE event vocabulary and payload types, beside the hub's own in
- * {@link "./fleet-live"}. Every vocabulary and payload here is the runner's generated
+ * `hub-events.ts`. Every vocabulary and payload here is the runner's generated
  * client's; the golden corpus's runner scope at `contracts/sse/runner/` is the single
  * description both sides hold to.
  *

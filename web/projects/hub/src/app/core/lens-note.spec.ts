@@ -4,10 +4,11 @@ import {
   QueryClient,
   provideTanStackQuery,
 } from '@tanstack/angular-query-experimental';
-import { type ProjectView, hubProjectsKey } from 'fleet';
+import { type ProjectView } from 'fleet';
 
 import { LensNote } from './lens-note';
 import { ProjectLens } from './project-lens';
+import { hubProjectsKey } from './query-keys';
 
 const WINTER: ProjectView = {
   project_id: 'proj_w',

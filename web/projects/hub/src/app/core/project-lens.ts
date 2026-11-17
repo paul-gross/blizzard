@@ -8,14 +8,10 @@ import {
 } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 
-import {
-  APP_SCOPE,
-  type AppScopePolicy,
-  HUB_PROJECT_FILTER,
-  type InAppLink,
-} from 'fleet/shell';
+import { APP_SCOPE, type AppScopePolicy, type InAppLink } from 'fleet/shell';
 
 import { isBoardLayout } from './board-layout.model';
+import { HUB_PROJECT_FILTER } from './project-filter';
 
 /** The URL segment a lensed board URL opens with: `/p/{project}/{view}/…`. */
 export const LENS_SEGMENT = 'p';

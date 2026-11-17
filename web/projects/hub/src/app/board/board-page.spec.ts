@@ -7,15 +7,7 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell } from './board-shell/board-shell';
-import {
-  type ChunkStatus,
-  type ChunkSummary,
-  compactRef,
-  hubQueueKey,
-  lensedKey,
-  type MeResponse,
-  type QueuePeekResponse,
-} from 'fleet';
+import { type ChunkStatus, type ChunkSummary, compactRef, type MeResponse, type QueuePeekResponse } from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
 import {
   backlogPeekEntry,
@@ -36,6 +28,7 @@ import {
 import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
+import { hubQueueKey, lensedKey } from '../core/query-keys';
 
 /**
  * The desktop board, driven through a **real** router (`RouterTestingHarness`)

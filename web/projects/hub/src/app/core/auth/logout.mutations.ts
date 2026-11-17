@@ -4,8 +4,9 @@ import {
   injectMutation,
 } from '@tanstack/angular-query-experimental';
 
-import { logoutApiAuthLogoutPost, hubMeKey } from 'fleet/shell';
+import { logoutApiAuthLogoutPost } from 'fleet/shell';
 import { logoutMutationKey } from '../mutation-keys';
+import { hubMeKey } from '../query-keys';
 
 /**
  * `POST /api/auth/logout` — revokes the session at the hub and clears the

@@ -1,16 +1,12 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type RunnerRegistryView,
-  listRunnersApiRunnersGet,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-  hubRunnersKey,
-} from 'fleet/shell';
+import { type RunnerRegistryView, listRunnersApiRunnersGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { hubRunnersKey } from './query-keys';
 
 /**
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived
  * liveness and `paused` state.
- * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  *
  * Retired runners are excluded unless `includeRetired()` is true. The include-retired read keys
  * under {@link hubRunnersKey}, so an invalidation of that key re-reads both.

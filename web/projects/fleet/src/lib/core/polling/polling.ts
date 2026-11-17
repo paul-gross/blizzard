@@ -1,6 +1,6 @@
 /**
  * Backstop `refetchInterval` for hub queries whose data is already kept current by a
- * live SSE event (see `EVENT_INVALIDATION_REGISTRY`), so the floor is not the
+ * live SSE event (see the hub's `EVENT_INVALIDATION_REGISTRY`, `hub/core/live/hub-live-updates.ts`), so the floor is not the
  * primary freshness mechanism, just insurance against a dropped frame. 45s: long enough that it is a
  * negligible share of idle request volume, short enough that a silent gap still
  * self-heals within roughly a minute.

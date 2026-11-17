@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { type MeResponse, type RoutineView, type ScopeView } from 'fleet';
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import {
   gardenRoutineView,
   gardenScopeView,
@@ -17,6 +16,7 @@ import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
 
 import { GardeningScopeDetail } from './gardening-scope-detail';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `graph:edit` — the default for tests unconcerned with the scope panel's gated

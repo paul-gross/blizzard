@@ -1,4 +1,5 @@
-import { compactRef, hubApi, type LoggedEvent, runnerDisplayName } from 'fleet';
+import { compactRef, hubApi, runnerDisplayName } from 'fleet';
+import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 const { ChunkChangeCause } = hubApi;
 

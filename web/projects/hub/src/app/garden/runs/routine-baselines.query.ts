@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type RoutineBaselineView, routineBaselinesApiRoutinesRoutineIdBaselinesGet, hubRoutineBaselinesKey } from 'fleet';
+import { type RoutineBaselineView, routineBaselinesApiRoutinesRoutineIdBaselinesGet } from 'fleet';
+import { hubRoutineBaselinesKey } from '../../core/query-keys';
 
 /**
  * Hub `GET /api/routines/{routine_id}/baselines` read — every scope a routine has

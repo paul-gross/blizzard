@@ -5,7 +5,6 @@ import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import {
   EVENT_SOURCE_FACTORY,
-  FleetLiveUpdates,
   ViewportService,
   hubClient,
   type EventSourceFactory,
@@ -25,9 +24,11 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, APP_SCOPE, hubMeKey, provideFlags } from 'fleet/shell';
+import { type FlagsResponse, APP_SCOPE, provideFlags } from 'fleet/shell';
 import { ProjectLens, lensScope } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
+import { HubLiveUpdates } from '../core/live/hub-live-updates';
+import { hubMeKey } from '../core/query-keys';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
 class FakeEventSource {
@@ -219,10 +220,10 @@ describe('hub App', () => {
     expect(graphsTab()?.classList.contains('active')).toBe(true);
   });
 
-  it('starts FleetLiveUpdates once from the app root and does not restart it on navigation', async () => {
+  it('starts HubLiveUpdates once from the app root and does not restart it on navigation', async () => {
     // Spy before the component is created: App's constructor calls `start()`
     // immediately, so the spy must be attached to the singleton beforehand.
-    const live = TestBed.inject(FleetLiveUpdates);
+    const live = TestBed.inject(HubLiveUpdates);
     const startSpy = vi.spyOn(live, 'start');
 
     const fixture = TestBed.createComponent(App);

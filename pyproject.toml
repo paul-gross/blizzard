@@ -287,8 +287,8 @@ also_copy = [
     "docs/deployment/findings-and-proposals.md",
     # The flag-registry lint scans every web source for a flag read.
     "web/projects",
-    "web/projects/fleet/src/lib/sse/fleet-live.ts",
-    "web/projects/fleet/src/lib/core/query-keys.ts",
+    "web/projects/hub/src/app/core/live/hub-live-updates.ts",
+    "web/projects/hub/src/app/core/query-keys.ts",
     "web/projects/fleet/src/lib/chunk/chunk-detail/chunk-escalation.ts",
     "web/angular.json",
     "src/blizzard/hub/system_artifacts/garden/finding-format.md",

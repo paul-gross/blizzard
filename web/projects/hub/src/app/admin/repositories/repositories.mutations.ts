@@ -4,7 +4,6 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import {
   createRepositoryApiRepositoriesPost,
   enableRepositoryApiRepositoriesRepositoryEnablePost,
-  hubConfigKey,
   patchRepositoryApiRepositoriesRepositoryPatch,
   retireRepositoryApiRepositoriesRepositoryRetirePost,
   type RepositoryCreateRequest,
@@ -15,6 +14,7 @@ import {
   editRepositoryMutationKey,
   repositoryLifecycleMutationKey,
 } from '../../core/mutation-keys';
+import { hubConfigKey } from '../../core/query-keys';
 
 /** A repository edit — the sparse patch against the shown `revision`. */
 export interface RepositoryEditVars {

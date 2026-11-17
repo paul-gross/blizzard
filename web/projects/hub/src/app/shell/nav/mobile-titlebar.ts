@@ -15,7 +15,7 @@ import { injectTenantSwitch } from './tenant-switch';
  * counterpart to the desktop {@link BoardHeader}/{@link AppNav} pair.
  *
  * A thin wrapper around the shared {@link FleetMobileTitlebar}. This
- * layer only supplies the hub's own live signal (`FleetLiveUpdates`) and the
+ * layer only supplies the hub's own live signal (`HubLiveUpdates`) and the
  * shell menu's panel — the appearance switcher (a CDK-menu
  * submenu), declared here rather than projected
  * because a `CdkMenu` cannot see items across an `<ng-content>` boundary.
@@ -36,7 +36,7 @@ import { injectTenantSwitch } from './tenant-switch';
   styleUrl: './mobile-titlebar.css',
 })
 export class MobileTitlebar {
-  /** Whether the SSE spine is currently connected — the same `FleetLiveUpdates`
+  /** Whether the SSE spine is currently connected — the same `HubLiveUpdates`
    * state (`app.ts`'s `streamLive`) the desktop titlebar's own "Hub" cell derives
    * its own connection string from. */
   readonly live = input.required<boolean>();

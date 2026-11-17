@@ -1,17 +1,12 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  getWorkSourceApiWorkSourcesSourceGet,
-  hubConfigListKey,
-  hubConfigRecordKey,
-  listWorkSourcesApiWorkSourcesGet,
-  type WorkSourceSummary,
-} from 'fleet';
+import { getWorkSourceApiWorkSourcesSourceGet, listWorkSourcesApiWorkSourcesGet, type WorkSourceSummary } from 'fleet';
+import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 
 const NOUN = 'work-sources';
 
 /** `GET /api/work-sources` — every work source, retired ones too while
- * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+ * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectWorkSourcesQuery(includeRetired: () => boolean) {
   return injectQuery(() => {
     const retired = includeRetired();

@@ -1,7 +1,15 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
-import { listProjectRunsApiProjectsProjectRunsGet, listRunsApiRunsGet, projectRunDeltaApiProjectsProjectRunsChunkIdGet, runDeltaApiRunsChunkIdGet, type RunDeltaView, type RunRowView, hubRunDeltaKey, hubRunsKey } from 'fleet';
+import {
+  listProjectRunsApiProjectsProjectRunsGet,
+  listRunsApiRunsGet,
+  projectRunDeltaApiProjectsProjectRunsChunkIdGet,
+  runDeltaApiRunsChunkIdGet,
+  type RunDeltaView,
+  type RunRowView,
+} from 'fleet';
+import { injectProjectFilter } from '../../core/project-filter';
+import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
 
 /**
  * The run list (`hub run list`) — every routine run minted in `[since, until)`, newest first: the lensed project's

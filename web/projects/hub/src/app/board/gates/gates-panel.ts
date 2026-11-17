@@ -8,7 +8,7 @@ import { injectHubDecisionsQuery } from './gates.query';
  * The open-gates panel — every decision awaiting a person across the fleet.
  *
  * A container: it owns the fleet-wide decisions query and renders the
- * presentational {@link GatesPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * presentational {@link GatesPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 @Component({
   selector: 'app-gates-panel',

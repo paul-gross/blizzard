@@ -5,12 +5,11 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import {
   type PermitView,
   getPermitApiPermitsPermitIdGet,
-  hubPermitKey,
-  hubPermitsKey,
   listPermitsApiPermitsGet,
 } from 'fleet';
-import { injectProjectFilter, lensedKey } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from '../core/paginated-read';
+import { injectProjectFilter } from '../core/project-filter';
+import { hubPermitKey, hubPermitsKey, lensedKey } from '../core/query-keys';
 
 /** `GET /api/permits` — the lensed project's permits, newest requested first, narrowed to `holder()` when named. */
 export function injectPermitsQuery(holder: () => string | null) {

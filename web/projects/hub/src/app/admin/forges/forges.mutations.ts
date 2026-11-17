@@ -1,10 +1,14 @@
 import { inject } from '@angular/core';
 import { injectMutation, QueryClient } from '@tanstack/angular-query-experimental';
 import {
-  createForgeApiForgesPost, enableForgeApiForgesForgeEnablePost, hubConfigKey,
-  patchForgeApiForgesForgePatch, retireForgeApiForgesForgeRetirePost,
-  type ForgeCreateRequest, type ForgePatchRequest,
+  createForgeApiForgesPost,
+  enableForgeApiForgesForgeEnablePost,
+  patchForgeApiForgesForgePatch,
+  retireForgeApiForgesForgeRetirePost,
+  type ForgeCreateRequest,
+  type ForgePatchRequest,
 } from 'fleet';
+import { hubConfigKey } from '../../core/query-keys';
 
 export interface ForgeEditVars {
   readonly forgeId: string;

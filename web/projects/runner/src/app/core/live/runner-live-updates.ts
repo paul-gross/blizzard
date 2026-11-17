@@ -2,17 +2,13 @@ import { DestroyRef, EnvironmentInjector, Injectable, type Signal, inject } from
 import { QueryClient } from '@tanstack/angular-query-experimental';
 import {
   backoffDelay,
-  INVALIDATION_COALESCE_WINDOW_MS,
-  LiveInvalidationSpine,
-  openLookup,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
   type RunnerEventPayload,
   type RunnerEventPayloads,
   type RunnerEventType,
-  SseService,
-  type SseStatus,
 } from 'fleet/runner-shell';
+import { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine, openLookup, SseService, type SseStatus } from 'fleet/shell';
 
 import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { SessionRecovery } from '../identity/session-recovery';

@@ -1,13 +1,8 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type DecisionView,
-  listDecisionsApiDecisionsGet,
-  LIVE_COVERED_POLL_BACKSTOP_MS,
-  hubDecisionsKey,
-  injectProjectFilter,
-  lensedKey,
-} from 'fleet/shell';
+import { type DecisionView, listDecisionsApiDecisionsGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { hubDecisionsKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * Hub `GET /api/decisions` read — every open (unresolved) gate across the fleet,
@@ -17,7 +12,7 @@ import {
  * Under a project lens the read carries `?project=`, so the hub narrows the list to the lensed project's gates
  * whatever the board's chunk list holds. The key carries the lens.
  *
- * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * Freshness: `EVENT_INVALIDATION_REGISTRY` (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 export function injectHubDecisionsQuery() {
   const projectFilter = injectProjectFilter();

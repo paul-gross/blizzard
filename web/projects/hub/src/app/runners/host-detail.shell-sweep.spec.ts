@@ -1,4 +1,4 @@
-import { RunnerConnection, hubRunnerNextClaimKey, hubUrgenciesKey, hubChunkKey, type RunnerRegistryView } from 'fleet';
+import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -10,6 +10,7 @@ import { HostDetail } from './host-detail';
 import { selectHostOrigin } from './host-origin.model';
 import type { HostCard } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
+import { hubRunnerNextClaimKey, hubUrgenciesKey, hubChunkKey } from '../core/query-keys';
 
 const REGISTRY: RunnerRegistryView = {
   agents: null,

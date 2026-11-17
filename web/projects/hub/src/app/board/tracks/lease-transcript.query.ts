@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { envTimelineStepTranscriptApiEnvTimelineStepTranscriptGet, hubEnvTimelineKey, type hubApi } from 'fleet';
+import { envTimelineStepTranscriptApiEnvTimelineStepTranscriptGet, type hubApi } from 'fleet';
+import { hubEnvTimelineKey } from '../../core/query-keys';
 
 /** Which session's transcript: its chunk, the node it ran, and the epoch it was fenced by. */
 export interface LeaseTranscriptRef {

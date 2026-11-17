@@ -1,4 +1,4 @@
-import { RunnerConnection, hubChunkKey, hubRunnerNextClaimKey, hubUrgenciesKey, type RunnerRegistryView } from 'fleet';
+import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -10,6 +10,7 @@ import { FleetView } from './fleet-view';
 import { type HostCard, groupHostRows } from './host-rows.model';
 import { NO_HOST_VERBS } from './host-verbs.model';
 import type { RunnerRow } from './runner-rows.model';
+import { hubChunkKey, hubRunnerNextClaimKey, hubUrgenciesKey } from '../core/query-keys';
 
 const REGISTRY: RunnerRegistryView = {
   agents: null,

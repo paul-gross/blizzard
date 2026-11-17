@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { detachChunkApiChunksChunkIdDetachPost, hubChunkKey, hubChunksKey, hubQueueKey } from 'fleet';
+import { detachChunkApiChunksChunkIdDetachPost } from 'fleet';
 import { chunkDetachMutationKey } from '../../core/mutation-keys';
+import { hubChunkKey, hubChunksKey, hubQueueKey } from '../../core/query-keys';
 
 /** The chunk to release from its live route. */
 export interface DetachVars {

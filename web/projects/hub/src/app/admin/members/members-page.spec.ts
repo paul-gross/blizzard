@@ -1,10 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubMembersKey, type MeResponse, type MemberView } from 'fleet';
+import { type MeResponse, type MemberView } from 'fleet';
 import { memberView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { MembersPage } from './members-page';
+import { hubMembersKey } from '../../core/query-keys';
 
 const ACME: MeResponse['tenants'][number] = { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['user:manage'] };
 

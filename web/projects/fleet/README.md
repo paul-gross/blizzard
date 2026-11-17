@@ -1,7 +1,8 @@
 # `fleet`
 
 The shared fleet layer both blizzard web apps compose: the design layer (tokens, scrollbars), the mission-control board
-views, the SSE transport and live-update spine, the reads and mutations, and the generated API clients.
+views, the SSE transport and live-update spine, the reads and mutations, and the generated API clients. Each app keeps
+its own query keys and event-invalidation registry; `fleet` holds only the mechanics both reach.
 
 It is **not published** — it is built into the `hub` and `runner` apps, whose output is embedded in the one blizzard
 wheel.

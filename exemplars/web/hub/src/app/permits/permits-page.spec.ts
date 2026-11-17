@@ -8,7 +8,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { type MeResponse, type PermitState, type PermitVerb, type PermitView } from 'fleet';
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
+import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { PermitsPage } from './permits-page';
 

@@ -1,4 +1,5 @@
-import { type FlagsRead, flagsApiFlagsGet, hubFlagsKey } from 'fleet/shell';
+import { type FlagsRead, flagsApiFlagsGet } from 'fleet/shell';
+import { hubFlagsKey } from './query-keys';
 
 /** `GET /api/flags` — the hub's own flags, read once at start and handed to the shared `FlagStore`. */
 export const hubFlagsRead: FlagsRead = {

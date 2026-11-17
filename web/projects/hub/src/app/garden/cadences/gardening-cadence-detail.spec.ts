@@ -2,7 +2,6 @@ import { Component, provideZonelessChangeDetection, signal } from '@angular/core
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
   gardenCadenceErrandView,
@@ -15,6 +14,7 @@ import {
 } from 'fleet/testing';
 
 import { GardeningCadenceDetail } from './gardening-cadence-detail';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 @Component({ selector: 'app-test-cadence-detail-host', imports: [RouterOutlet], template: '<router-outlet />' })
 class TestCadenceDetailHost {}

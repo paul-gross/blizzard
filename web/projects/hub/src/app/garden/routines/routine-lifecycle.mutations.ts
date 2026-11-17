@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { enableRoutineApiRoutinesRoutineIdEnablePost, retireRoutineApiRoutinesRoutineIdRetirePost, hubRoutinesKey } from 'fleet';
+import { enableRoutineApiRoutinesRoutineIdEnablePost, retireRoutineApiRoutinesRoutineIdRetirePost } from 'fleet';
 import { routineLifecycleMutationKey } from '../../core/mutation-keys';
+import { hubRoutinesKey } from '../../core/query-keys';
 
 /** Retire or re-enable a routine's reversible brake. */
 export interface RoutineLifecycleVars {

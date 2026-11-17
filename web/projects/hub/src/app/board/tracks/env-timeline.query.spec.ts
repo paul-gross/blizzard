@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { FLEET_CLOCK, type hubApi } from 'fleet';
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LOOKBACK_MS, type TimelineRange } from './tracks-window.model';
 import {
@@ -11,6 +10,7 @@ import {
   injectHubEnvTimelineNowQuery,
   injectHubEnvTimelineRangeQuery,
 } from './env-timeline.query';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 const HOUR = 60 * 60_000;
 const NOW = Date.UTC(2026, 0, 15, 12, 0, 0);

@@ -2,10 +2,11 @@ import { inject } from '@angular/core';
 import { type CanActivateFn, RedirectCommand, Router } from '@angular/router';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { type ProjectView, errorMessage, hubProjectsKey } from 'fleet/shell';
+import { type ProjectView, errorMessage } from 'fleet/shell';
 
 import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
 import { projectsQueryOptions, readProject } from '../core/projects.query';
+import { hubProjectsKey } from '../core/query-keys';
 
 /**
  * Settles a lensed URL's project segment, in the tenant the shell has entered (it waits for that first):

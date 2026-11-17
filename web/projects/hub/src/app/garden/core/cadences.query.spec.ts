@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { gardenCadenceErrandView, gardenCadenceView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { injectHubCadenceErrandsQuery, injectHubCadencesQuery } from './cadences.query';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 @Component({
   selector: 'app-test-cadences-query-host',

@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubEnvTimelineLiveKey, type hubApi } from 'fleet';
+import { type hubApi } from 'fleet';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { type StepRef } from './step.model';
 import { injectHubEnvTimelineStepQuery, stepQueryOptions, stepRunning } from './step.query';
+import { hubEnvTimelineLiveKey } from '../../core/query-keys';
 
 function stepView(chunkId: string, startedAt: string, endedAt: string | null = null): hubApi.EnvTimelineStepView {
   return {

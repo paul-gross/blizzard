@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type hubApi, type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost, hubRoutinesKey } from 'fleet';
+import { type hubApi, type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost } from 'fleet';
 import { runRoutineMutationKey } from '../../core/mutation-keys';
+import { hubRoutinesKey } from '../../core/query-keys';
 
 /** Variables for running an existing routine against a scope in a given mode. */
 export interface RoutineRunVars {

@@ -1,4 +1,4 @@
-import { chunkDetailKey } from 'fleet/runner-shell';
+import { chunkDetailKey } from 'fleet/shell';
 
 /**
  * The TanStack Query keys the panel reads under, in one place — mirrors `fleet`'s
@@ -60,3 +60,6 @@ export function runnerChunkDetailKey(runnerId: string, chunkId: string): readonl
 export function runnerSelftestKey(runnerId: string, selftestId: string): readonly unknown[] {
   return [runnerId, 'selftest', selftestId];
 }
+
+/** The host's flags read — `GET /api/flags` on the host root, read once at start and never refetched. */
+export const runnerFlagsKey = ['host', 'flags'] as const;

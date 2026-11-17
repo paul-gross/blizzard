@@ -1,8 +1,9 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
-import { hubApi, hubRoutinesKey } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { hubApi } from 'fleet';
 import { gardenProject } from '../core/garden-project';
+import { hubRoutinesKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 export function injectCreateRoutineMutation() {
   const client = inject(QueryClient);

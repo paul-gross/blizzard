@@ -2,7 +2,8 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 import { prerequisiteStatuses } from './runner-next-claim.model';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
-import { hubApi, hubChunkKey, hubRunnerNextClaimKey, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { hubApi, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { hubChunkKey, hubRunnerNextClaimKey } from '../core/query-keys';
 
 /** The hub's projection is authoritative; the client does not repeat the claim walk. */
 export function injectRunnerNextClaimQuery(runnerId: () => string) {

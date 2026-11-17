@@ -68,7 +68,7 @@ export function injectChunkDetailQuery(target: () => DaemonTarget | null, chunkI
       queryKey: chunkDetailKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
       queryFn: () => fetchChunkDetail(active!, id!),
-      // Live updates stale this key; see EVENT_INVALIDATION_REGISTRY and polling.ts.
+      // Live updates stale this key; see the hub's EVENT_INVALIDATION_REGISTRY (hub/core/live/hub-live-updates.ts) and polling.ts.
       refetchInterval: POLL_BACKSTOP_MS[active?.plane ?? 'hub'],
     };
   });

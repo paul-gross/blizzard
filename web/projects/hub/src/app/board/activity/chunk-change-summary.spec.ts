@@ -1,5 +1,5 @@
-import type { LoggedEvent } from 'fleet';
 import { summarizeChunkChange } from './chunk-change-summary';
+import { type LoggedEvent } from '../../core/live/hub-live-updates';
 
 /** No runner's host known — every runner keeps its compact-id name. */
 const NO_HOSTS: ReadonlyMap<string, string> = new Map();

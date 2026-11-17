@@ -34,11 +34,11 @@ const ROOT_BARREL = `${FLEET_SRC}/public-api.ts`;
  * Sources the root barrel may re-export directly (paths under `fleet/src/lib/`), each with a reason:
  *
  * - `api/` is the generated client surface; it has no feature owner and is regenerated, not edited.
- * - `core/query-keys` is the query-key registry; it has no single feature owner.
+ * - `core/query-keys` holds the plane-root chunk and transcript key helpers both daemons read; they have no single feature owner.
  */
 const ROOT_DIRECT_EXPORT_ALLOWED = [
   { path: 'api', reason: 'the generated client surface has no feature owner' },
-  { path: 'core/query-keys.ts', reason: 'the query-key registry has no single feature owner' },
+  { path: 'core/query-keys.ts', reason: 'the plane-root chunk and transcript key helpers both daemons read have no single feature owner' },
 ];
 
 /**

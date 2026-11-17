@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { gardenRoutineView, stubHubClient } from 'fleet/testing';
 import { injectCreateRoutineMutation } from './routine-create.mutations';
-import { HUB_PROJECT_FILTER } from 'fleet/shell';
+import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
 describe('create routine', () => {
   it('sends the selected urgency or null for the tenant default', async () => {

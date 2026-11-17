@@ -1,7 +1,8 @@
 import { injectInfiniteQuery } from '@tanstack/angular-query-experimental';
 
-import { type ConfigChangesPage, hubConfigChangesKey, lensedKey, listChangesApiConfigChangesGet } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
+import { type ConfigChangesPage, listChangesApiConfigChangesGet } from 'fleet';
+import { hubConfigChangesKey, lensedKey } from '../../core/query-keys';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /** The page size the change log asks for. */
 const CHANGES_PAGE = 50;
@@ -12,7 +13,7 @@ const CHANGES_PAGE = 50;
  * `next_before`, and a page with none is the last. Under a project lens it sends
  * `?project=`, which keeps that project's changes and the tenant-wide ones beside them
  * (a source, a repository, a secret). The list and the selected entry read the one cache
- * entry the lens keys. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`).
+ * entry the lens keys. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`).
  */
 export function injectConfigChangesQuery() {
   const filter = injectProjectFilter();

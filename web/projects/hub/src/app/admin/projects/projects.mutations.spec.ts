@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubConfigKey, hubProjectLinksKey } from 'fleet';
 import {
   projectView,
   type RequestClientStub,
@@ -18,6 +17,7 @@ import {
   injectProjectLinkMutation,
   injectRepositoryBranchMutation,
 } from './projects.mutations';
+import { hubConfigKey, hubProjectLinksKey } from '../../core/query-keys';
 
 describe('project mutations', () => {
   let stub: RequestClientStub;

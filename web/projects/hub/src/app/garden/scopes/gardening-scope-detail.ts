@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { FLEET_CLOCK, asyncStateOf, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
-import { injectProjectFilter } from 'fleet/shell';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -17,6 +16,7 @@ import { map } from 'rxjs';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { scopeSwept } from './gardening-scopes-page.model';
+import { injectProjectFilter } from '../../core/project-filter';
 
 /**
  * The selected scope's own detail — the right-hand child of `/gardening/scopes`

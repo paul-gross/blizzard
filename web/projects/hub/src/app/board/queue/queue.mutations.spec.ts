@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubQueueKey, type QueuePeekResponse } from 'fleet';
+import { type QueuePeekResponse } from 'fleet';
 import {
   type RequestClientStub,
   type StubDetailBody,
@@ -12,6 +12,7 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation } from './queue.mutations';
+import { hubQueueKey } from '../../core/query-keys';
 
 function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
   let resolve!: (value: T) => void;

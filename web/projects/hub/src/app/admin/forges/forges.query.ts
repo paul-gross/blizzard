@@ -1,5 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { getForgeApiForgesForgeGet, hubConfigListKey, hubConfigRecordKey, listForgesApiForgesGet, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { getForgeApiForgesForgeGet, listForgesApiForgesGet, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 
 const NOUN = 'forges';
 

@@ -759,7 +759,7 @@ function assertInvalidateReturnedDetectorWorks() {
 // `.mutate(vars, { onMutate: ... })`, say) can write the cache just as easily as the hook
 // itself, and forbidding it only inside a file that literally contains `injectMutation(` would
 // leave every consumer free to do it instead. Spec files are exempt — a spec legitimately
-// stubs/spies on `queryClient.setQueryData` as test setup (e.g. `sse/fleet-live.spec.ts`),
+// stubs/spies on `queryClient.setQueryData` as test setup (e.g. `core/live/hub-live-updates.spec.ts`),
 // which writes no real cache.
 const SET_QUERY_DATA = /\.setQueryData\s*\(/g;
 
@@ -859,7 +859,7 @@ function assertNoCacheWriteDetectorWorks() {
   const specFixture = `it('does something', () => {
     vi.spyOn(queryClient, 'setQueryData');
   });`;
-  if (cacheWriteLines(specFixture, path.join('fleet', 'src', 'lib', 'sse', 'fleet-live.spec.ts')).length > 0) {
+  if (cacheWriteLines(specFixture, path.join('hub', 'src', 'app', 'core', 'live', 'hub-live-updates.spec.ts')).length > 0) {
     throw new Error(`cache-write detector false-positived on a .spec.ts file:\n${specFixture}`);
   }
 

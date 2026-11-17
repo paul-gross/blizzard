@@ -10,7 +10,7 @@ import { injectRunnerRows } from './runner-rows';
  *
  * A container: it folds the registry + chunks reads via {@link injectRunnerRows} and renders the
  * presentational {@link RunnerPanelView}. Freshness: `EVENT_INVALIDATION_REGISTRY`
- * (`web/projects/fleet/src/lib/sse/fleet-live.ts`).
+ * (`web/projects/hub/src/app/core/live/hub-live-updates.ts`).
  */
 @Component({
   selector: 'app-runner-panel',

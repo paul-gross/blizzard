@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { type ConfigChangeView, hubConfigHistoryKey, listChangesApiConfigChangesGet, type RecordKind } from 'fleet';
+import { type ConfigChangeView, listChangesApiConfigChangesGet, type RecordKind } from 'fleet';
+import { hubConfigHistoryKey } from '../core/query-keys';
 
 /** The page size each history request asks for. */
 const HISTORY_PAGE = 100;
