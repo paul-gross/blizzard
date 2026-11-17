@@ -89,7 +89,7 @@ export function withdrawnAfter(facts: readonly FlowFactView[], turn: FlowFactVie
 }
 
 /** The repositories a bounce left unlanded, by forge-side `owner/repo` — none for an envelope that does not parse. */
-function unlandedOf(envelope: hubApi.BounceEnvelope | null): readonly hubApi.BounceUnlandedRepo[] {
+function unlandedOf(envelope: Pick<hubApi.BounceEnvelope, 'unlanded'> | null): readonly hubApi.BounceUnlandedRepo[] {
   return envelope?.unlanded ?? [];
 }
 
@@ -241,7 +241,7 @@ function bounceEntry(detail: ChunkDetail, bounce: hubApi.BounceView, index: numb
     ...draft(`b-${index}`, bounce.recorded_at, now, null, `bounced · ${deliveryFailureLabel(bounce.cause)}`, historyTone('bounced', bounce.rework)),
     bounce: { ...compact, full: deliveryDiagnostic(compact.full, bounce.cause) },
     repos: unlandedOf(envelope).map((each) => shortName(each.repo)),
-    detail: envelope?.detail ? bounceReason(bounce.envelope) : null,
+    detail: envelope?.diagnostic ? envelope.diagnostic : envelope?.diagnostic === undefined && envelope?.detail ? bounceReason(bounce.envelope) : null,
     logKey: logKey(detail, envelope?.action?.log_artifact ?? null, bounce.recorded_at),
   };
 }

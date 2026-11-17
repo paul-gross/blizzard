@@ -122,7 +122,8 @@ def test_a_red_check_envelope_names_the_unlanded_repo_its_pr_and_the_land_action
     assert envelope["unlanded"][0]["pr"] == {"number": 1, "url": "https://github.example/acme/widget/pull/1"}
     assert "step" not in envelope
     assert envelope["action"] == {"name": "land", "choice": "failure", "log_artifact": "hub-log.land"}
-    assert envelope["detail"] == "PR #1 in acme/widget did not land: `land` answered failure"
+    assert envelope["detail"] == ""
+    assert envelope["diagnostic"] is None
     artifact_names = {a["name"] for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]}
     assert "hub-log.land" in artifact_names
 
@@ -145,7 +146,8 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) ->
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
     assert envelope["unlanded"][0]["pr"] == {"number": 945, "url": "https://x/acme/widget/pull/945"}
-    assert envelope["detail"].startswith("PR #945 in acme/widget did not land: `land` answered ")
+    assert "did not land" not in envelope["detail"]
+    assert envelope["diagnostic"] is None
     assert [repo for repo, _ in double.named("open_change")] == []
 
 
@@ -159,7 +161,8 @@ def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_pat
     envelope = _envelope(hub, chunk_id)
     assert "step" not in envelope
     assert envelope["action"]["choice"] == "conflict"
-    assert "conflict" in envelope["detail"] and "acme/widget" in envelope["detail"]
+    assert envelope["cause"] == "conflict" and envelope["diagnostic"] is None
+    assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
     assert "exited" not in envelope["detail"]
 
 

@@ -111,9 +111,11 @@ class BounceEnvelope:
     """A hub node's kick-back envelope: why delivery did not complete."""
 
     cause: str
-    detail: str
     unlanded: list[dict[str, object]]
     action: BouncedAction | None
+    # The hub's own account of a bounce no action answered; ``None`` where an action answered, so nothing
+    # independent of the facts is said. ``detail`` serializes the same text, never a sentence rebuilt from the facts.
+    diagnostic: str | None
 
     @classmethod
     def of(
@@ -142,21 +144,15 @@ class BounceEnvelope:
                     "pr": {"number": pr.number, "url": pr.url} if pr else None,
                 }
             )
-        names = ", ".join(
-            f"PR #{pr['number']} in {u['repo']}" if isinstance(pr := u["pr"], dict) else str(u["repo"])
-            for u in unlanded
-        )
-        if action is None:
-            detail = f"{summary} (not landed: {names})" if names else summary
-        else:
-            detail = f"{names or summary} did not land: `{action.name}` answered {action.choice}"
-        return cls(cause=cause, detail=detail, unlanded=unlanded, action=action)
+        diagnostic = summary if action is None else None
+        return cls(cause=cause, unlanded=unlanded, action=action, diagnostic=diagnostic)
 
     def serialize(self) -> str:
         return json.dumps(
             {
                 "cause": self.cause,
-                "detail": self.detail,
+                "detail": self.diagnostic or "",
+                "diagnostic": self.diagnostic,
                 "unlanded": self.unlanded,
                 "action": self.action.payload() if self.action else None,
             },

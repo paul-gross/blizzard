@@ -248,6 +248,19 @@ describe('ChunkArtifactBody', () => {
     expect(el.querySelector('[data-testid="artifact-bounce-raw"]')?.textContent).toBe(raw);
   });
 
+  it.each([
+    ['a genuine diagnostic', 'hub node timed out', 'hub node timed out'],
+    ['a known-none', null, 'none'],
+  ])('renders %s as a Diagnostic row in place of Detail', async (_name, diagnostic, shown) => {
+    const raw = JSON.stringify({ cause: 'failure', detail: diagnostic ?? '', unlanded: [], action: null, diagnostic });
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifact-bounce-diagnostic"]')?.textContent).toContain(shown);
+    expect(el.querySelector('[data-testid="artifact-bounce-detail"]')).toBeNull();
+  });
+
   it('renders the action a pass answered on an action envelope', async () => {
     const raw = JSON.stringify({
       cause: 'failure',

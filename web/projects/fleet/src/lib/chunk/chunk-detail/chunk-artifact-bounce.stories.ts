@@ -1,13 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
-import type { BounceEnvelope } from '../../api/hub';
+import type { ParsedBounceEnvelope } from './parse-bounce-envelope';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
 
-const causeAndDetail: BounceEnvelope = {
+const causeAndDetail: ParsedBounceEnvelope = {
   cause: 'failure',
   detail: 'PR #7 in acme/one did not land: `land` answered failure',
   unlanded: [],
   action: null,
+  diagnostic: undefined,
 };
 
 const meta: Meta<ChunkArtifactBounce> = {
@@ -25,13 +26,14 @@ type Story = StoryObj<ChunkArtifactBounce>;
 
 export const CauseAndDetail: Story = {};
 
-const answeredAction: BounceEnvelope = {
+const answeredAction: ParsedBounceEnvelope = {
   ...causeAndDetail,
   action: { name: 'land', choice: 'failure', log_artifact: 'hub-log.land' },
+  diagnostic: undefined,
 };
 export const AnsweredAction: Story = { args: { envelope: answeredAction, raw: JSON.stringify(answeredAction) } };
 
-const unlanded: BounceEnvelope = {
+const unlanded: ParsedBounceEnvelope = {
   ...answeredAction,
   unlanded: [
     { repo: 'acme/one', branch: 'feat/x', commit: 'a1b2c3d', pr: { number: 7, url: 'https://forge.example/acme/one/pull/7' } },

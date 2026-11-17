@@ -187,6 +187,23 @@ describe('deliveryHistory', () => {
     expect(entry).not.toHaveProperty('step');
   });
 
+  it('shows a new record from its facts, with a known-none diagnostic leaving the detail column empty', () => {
+    const envelope = JSON.stringify({
+      cause: 'failure', detail: '', diagnostic: null,
+      unlanded: [{ repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: { number: 7, url: 'https://f/7' } }],
+      action: { name: 'land', choice: 'failure', log_artifact: null },
+    });
+    const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'failure', envelope })] }), FORGES, FIXTURE_NOW);
+    expect(entry.bounce?.reason).toBe('Land: failure');
+    expect(entry.detail).toBeNull();
+  });
+
+  it('shows a genuine diagnostic verbatim in the detail column', () => {
+    const envelope = JSON.stringify({ cause: 'poll-timeout', detail: 'timed out', diagnostic: 'timed out', unlanded: [], action: null });
+    const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'poll-timeout', envelope })] }), FORGES, FIXTURE_NOW);
+    expect(entry.detail).toBe('timed out');
+  });
+
   it('reads a bounce whose envelope is not JSON as carrying nothing but its cause', () => {
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', envelope: '<html>' })] }), FORGES, FIXTURE_NOW);
     expect(entry).toMatchObject({ text: 'bounced · merge conflict', tone: 'needs', repos: null, detail: null, logKey: null });

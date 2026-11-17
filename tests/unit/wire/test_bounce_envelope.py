@@ -56,11 +56,34 @@ def test_every_serialized_form_validates_and_round_trips_without_a_dropped_key(
     assert (parsed.action is not None) is (action is not None)
 
 
-def test_a_pass_bounce_reads_the_action_and_the_choice_it_answered() -> None:
+def test_a_pass_bounce_carries_its_facts_and_no_diagnostic() -> None:
     body = json.loads(_written(action=_ACTION, pr_markers=[]))
 
-    assert body["detail"] == "acme/one, acme/two did not land: `land` answered failure"
+    assert body["detail"] == ""
+    assert body["diagnostic"] is None
+    assert body["cause"] == "failure"
+    assert [u["repo"] for u in body["unlanded"]] == ["acme/one", "acme/two"]
     assert body["action"] == {"name": "land", "choice": "failure", "log_artifact": "hub-log.land"}
+
+
+@pytest.mark.parametrize("pr_markers", [[], [_PR]], ids=["no-pr", "pr"])
+def test_a_bounce_no_action_answered_carries_the_summary_as_detail_and_diagnostic(pr_markers: list[PrMarker]) -> None:
+    body = json.loads(_written(action=None, pr_markers=pr_markers))
+
+    assert body["detail"] == body["diagnostic"] == "delivery did not complete"
+    assert body["action"] is None
+    assert len(body["unlanded"]) == 2
+
+
+def test_a_stored_wrapper_body_still_validates_with_no_diagnostic() -> None:
+    stored: dict[str, object] = {
+        "cause": "failure",
+        "detail": "PR #7 in acme/one did not land: `land` answered failure",
+        "unlanded": [],
+        "action": None,
+    }
+
+    assert BounceEnvelope.model_validate(stored).diagnostic is None
 
 
 def test_a_stored_step_envelope_still_validates_with_its_step_ignored() -> None:
@@ -70,6 +93,7 @@ def test_a_stored_step_envelope_still_validates_with_its_step_ignored() -> None:
     assert parsed.model_dump(mode="json") == {
         **{k: v for k, v in _LEGACY_STEP_BODY.items() if k != "step"},
         "action": None,
+        "diagnostic": None,
     }
 
 

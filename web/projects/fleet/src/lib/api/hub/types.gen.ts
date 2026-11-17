@@ -1080,8 +1080,13 @@ export type BounceAction = {
 /**
  * BounceEnvelope
  *
- * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
- * ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout.
+ * Why delivery did not complete: the ``cause``, the repositories not yet landed, and the ``action`` whose pass
+ * answered the bounce — ``null`` when the hub itself judged it, as a poll timeout.
+ *
+ * ``diagnostic`` is the hub's own account of a bounce no action answered: ``null`` is known — there is none — and a
+ * body that omits the key is unknown, as every body written before it existed. ``detail`` carries the same text
+ * (``""`` when ``diagnostic`` is ``null``) for readers that predate ``diagnostic``; a body written before it also
+ * carries a sentence the hub generated from the other fields there.
  */
 export type BounceEnvelope = {
     action: BounceAction | null;
@@ -1093,6 +1098,10 @@ export type BounceEnvelope = {
      * Detail
      */
     detail: string;
+    /**
+     * Diagnostic
+     */
+    diagnostic: string | null;
     /**
      * Unlanded
      */
