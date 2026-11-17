@@ -65,7 +65,7 @@ def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening
     python = next(step for step in steps if step.get("name") == "Python for uv bootstrap")
     mise = next(step for step in steps if step.get("name") == "Node from mise.toml")
     execution = next(
-        step for step in steps if step.get("name") == "service tier — the Playwright half, `mise run playwright`"
+        step for step in steps if step.get("name") == "service tier — the Playwright half, `mise run playwright-shard`"
     )
     assert (
         steps.index(python) < steps.index(primary) < steps.index(fallback) < steps.index(mise) < steps.index(execution)
@@ -79,7 +79,10 @@ def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening
     assert not fallback.get("continue-on-error", False)
     assert mise["with"]["install_args"] == "node"
     assert not execution.get("continue-on-error", False)
-    assert "--shard=${{ matrix.shard }}/${{ matrix.shards }}" in execution["run"]
+    assert execution["run"] == (
+        "cd blizzard && mise run playwright-shard -- --project='service-*' --project=harness --project=harness-auth"
+        " --project=harness-runner --project=harness-actions --shard=${{ matrix.shard }}/${{ matrix.shards }}"
+    )
 
 
 def test_playwright_checkout_includes_release_tags() -> None:

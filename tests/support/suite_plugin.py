@@ -7,10 +7,10 @@ import fnmatch
 import json
 import os
 import tempfile
-import zlib
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 from _pytest.fixtures import SubRequest
@@ -28,7 +28,18 @@ from tests.support.revision_age import (
     colocated_versions,
     decide_colocated,
 )
-from tests.support.shard_weights import TIMINGS_ENV, TimingRecorder
+from tests.support.shard_weights import (
+    SUITES,
+    TIMINGS_ENV,
+    Inventory,
+    SuiteWeights,
+    TimingRecorder,
+    hash_shard,
+    load_inventory,
+    place,
+    unit_weight,
+)
+from tests.support.shard_weights import pytest_file_unit as file_unit_of
 from tests.support.tier_layout import (
     declared_layout_marker,
     flat_test_module,
@@ -102,27 +113,141 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if not spec or shard_by(os.environ) == SHARD_BY_FILE:
         return
     index, count = parse_shard(spec)
-    deselected = [item for item in items if shard_of(item.nodeid, count) != index]
+    inventory = _inventory(config)
+    nodeids = [item.nodeid for item in items]
+    weights = {nodeid: unit_weight(inventory, _TEST_SUITE, [nodeid]) for nodeid in nodeids}
+    owned = set(place(weights, count)[index - 1])
+    config.stash[_UNMEASURED] = _unmeasured(inventory, _TEST_SUITE, owned, nodeids)
+    deselected = [item for item in items if item.nodeid not in owned]
     if deselected:
         config.hook.pytest_deselected(items=deselected)
-        items[:] = [item for item in items if shard_of(item.nodeid, count) == index]
+        items[:] = [item for item in items if item.nodeid in owned]
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Skip a test module another file shard owns, before it is imported.
 
     Only under ``BLIZZARD_TEST_SHARD_BY=file``. ``None`` leaves every other path to pytest's own rules, so pytest's
-    discovery still decides what a test module is.
+    discovery still decides what a test module is. A module the walk of the run's collection roots found is owned by
+    the weighted placement; any other keeps its stable-hash owner.
     """
     spec = os.environ.get(SHARD_ENV)
     if not spec or shard_by(os.environ) != SHARD_BY_FILE:
         return None
-    patterns: list[str] = config.getini("python_files")
-    is_test_module = any(fnmatch.fnmatch(collection_path.name, pattern) for pattern in patterns)
-    if not is_test_module or not collection_path.is_file() or not collection_path.is_relative_to(config.rootpath):
+    if not _is_test_module(collection_path, config) or not collection_path.is_file():
+        return None
+    if not collection_path.is_relative_to(config.rootpath):
         return None
     index, count = parse_shard(spec)
-    return True if shard_of(collection_path.relative_to(config.rootpath).as_posix(), count) != index else None
+    unit = collection_path.relative_to(config.rootpath).as_posix()
+    owner = _file_owners(config, count).get(unit) or shard_of(unit, count)
+    return True if owner != index else None
+
+
+#: The inventory suite each pytest pool weighs its units by.
+_FILE_SUITE = next(entry.id for entry in SUITES if entry.kind == "cases" and entry.pool == "file")
+_TEST_SUITE = next(entry.id for entry in SUITES if entry.kind == "cases" and entry.pool == "test")
+
+#: The inventory a session places by, loaded once per process.
+SHARD_INVENTORY = pytest.StashKey[Inventory]()
+_FILE_OWNERS = pytest.StashKey[dict[str, int]]()
+_UNMEASURED = pytest.StashKey[list[str]]()
+
+
+def _inventory(config: pytest.Config) -> Inventory:
+    if SHARD_INVENTORY not in config.stash:
+        config.stash[SHARD_INVENTORY] = load_inventory()
+    return config.stash[SHARD_INVENTORY]
+
+
+def _is_test_module(path: Path, config: pytest.Config) -> bool:
+    patterns: list[str] = config.getini("python_files")
+    return any(fnmatch.fnmatch(path.name, pattern) for pattern in patterns)
+
+
+def collection_modules(config: pytest.Config) -> list[str]:
+    """Every test module under the run's collection roots, repo-relative and sorted — a walk by path and
+    ``python_files`` alone, so every shard and xdist worker of one command finds the same list before importing any."""
+    skip: list[str] = config.getini("norecursedirs")
+    found: set[str] = set()
+    for arg in config.args:
+        root = Path(arg.partition("::")[0])
+        root = root if root.is_absolute() else config.invocation_params.dir / root
+        candidates = [root] if root.is_file() else []
+        for directory, folders, files in os.walk(root):
+            folders[:] = [name for name in folders if not any(fnmatch.fnmatch(name, glob) for glob in skip)]
+            candidates += [Path(directory, name) for name in files]
+        for path in candidates:
+            path = path.resolve()
+            if _is_test_module(path, config) and path.is_relative_to(config.rootpath):
+                found.add(path.relative_to(config.rootpath).as_posix())
+    return sorted(found)
+
+
+def file_weights(inventory: Inventory, modules: list[str]) -> dict[str, int]:
+    """Each module's weight: the sum of its inventoried cases, or the file pool's fallback when it has none."""
+    weights = inventory.get(_FILE_SUITE, SuiteWeights())
+    cases: dict[str, list[str]] = {module: [] for module in modules}
+    for nodeid in weights.entries:
+        if (module := file_unit_of(nodeid)) in cases:
+            cases[module].append(nodeid)
+    return {
+        module: unit_weight(inventory, _FILE_SUITE, members) if members else weights.fallback
+        for module, members in cases.items()
+    }
+
+
+def _file_owners(config: pytest.Config, count: int) -> dict[str, int]:
+    """The 1-based owning shard of each walked module, computed once per process."""
+    if _FILE_OWNERS not in config.stash:
+        inventory = _inventory(config)
+        modules = collection_modules(config)
+        placed = place(file_weights(inventory, modules), count)
+        config.stash[_FILE_OWNERS] = {unit: shard for shard, units in enumerate(placed, 1) for unit in units}
+        index, _ = parse_shard(os.environ[SHARD_ENV])
+        config.stash[_UNMEASURED] = _unmeasured(inventory, _FILE_SUITE, set(placed[index - 1]), modules, by_file=True)
+    return config.stash[_FILE_OWNERS]
+
+
+def _unmeasured(
+    inventory: Inventory, suite_id: str, owned: set[str], units: list[str], *, by_file: bool = False
+) -> list[str]:
+    """The units this shard owns that the inventory holds no measurement for."""
+    weights = inventory.get(suite_id)
+    entries = weights.entries if weights is not None else {}
+    measured = {file_unit_of(nodeid) for nodeid in entries} if by_file else set(entries)
+    return [unit for unit in units if unit in owned and unit not in measured]
+
+
+class _WorkerNode(Protocol):
+    """The slice of xdist's worker controller the collection hook reads."""
+
+    config: pytest.Config
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_node_collection_finished(node: _WorkerNode, ids: list[str]) -> None:
+    """Under xdist the controller collects nothing itself; a worker's shard collection names its unmeasured tests."""
+    config = node.config
+    spec = os.environ.get(SHARD_ENV)
+    if not spec or _UNMEASURED in config.stash:
+        return
+    if shard_by(os.environ) == SHARD_BY_FILE:
+        _file_owners(config, parse_shard(spec)[1])
+        return
+    entries = _inventory(config).get(_TEST_SUITE)
+    measured = set(entries.entries) if entries is not None else set[str]()
+    config.stash[_UNMEASURED] = [nodeid for nodeid in ids if nodeid not in measured]
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter, config: pytest.Config) -> None:
+    """Name each unit this shard owns that weighed its suite's fallback, so a stale inventory shows in the job log."""
+    unmeasured = config.stash.get(_UNMEASURED, None)
+    if not unmeasured:
+        return
+    terminalreporter.section(f"shard placement: {len(unmeasured)} unmeasured unit(s) weighed the fallback")
+    for unit in unmeasured:
+        terminalreporter.write_line(unit)
 
 
 def apply_folder_layout(items: list[pytest.Item]) -> None:
@@ -184,7 +309,7 @@ def _retire_aged_revision_tests(items: list[pytest.Item]) -> None:
     """Skip each colocated store-migration test whose revision has aged out; refuse a file naming no sibling revision.
 
     Judged per file before the test split, so a bad name fails whichever shard collects the file, and a shard's
-    membership stays a hash of the nodeid or path alone.
+    membership never depends on it.
     """
     today = datetime.now(UTC).date()
     decided: dict[Path, Retired | None] = {}
@@ -218,9 +343,8 @@ def shard_by(environ: Mapping[str, str]) -> str:
 
 
 def shard_of(key: str, count: int) -> int:
-    """The 1-based shard a test or test module belongs to — a stable hash of its nodeid or repo-relative path,
-    identical in every process, so xdist workers agree on the collection and each lands in exactly one shard."""
-    return zlib.crc32(key.encode()) % count + 1
+    """The stable-hash owner of a test module the collection-root walk did not find."""
+    return hash_shard(key, count)
 
 
 #: The environment every daemon the suite spawns inherits, declared once so the Playwright harness reads the same file.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -12,16 +13,20 @@ from tests.support.shard_weights import (
     INVENTORY_PATH,
     SEP,
     SUITES,
+    TESTS_DIR,
     WORKFLOWS_DIR,
     Measured,
     SuiteWeights,
     TimingRecorder,
     dump_inventory,
     fibonacci_weight,
+    listed_tests,
     load_inventory,
+    main,
     place,
     plan,
     plan_playwright,
+    playwright_list_lines,
     refresh,
     unclassified_jobs,
 )
@@ -128,6 +133,7 @@ def _playwright_report(tests_dir: Path) -> dict[str, object]:
         "suites": [
             {
                 "title": "a.spec.ts",
+                "file": "a.spec.ts",
                 "specs": [{"title": "top", "file": "a.spec.ts", "tests": [test("service-hub", 400)]}],
                 "suites": [
                     {
@@ -221,3 +227,124 @@ def test_an_unmeasured_case_weighs_its_suite_fallback() -> None:
     )
     assert shards == [["tests/service/a.py::t"], ["tests/service/b.py::t"], ["tests/service/c.py::t"]]
     assert plan({}, "service-pytest", ["x::a", "x::b", "x::c", "x::d"]) == [["x::a", "x::d"], ["x::b"], ["x::c"]]
+
+
+def _spec(file: str, title: str, *projects: str) -> dict[str, object]:
+    return {"title": title, "file": file, "tests": [{"projectName": project, "results": []} for project in projects]}
+
+
+#: A ``--list --reporter=json`` shape: file suites (rootDir-relative), describe suites, and a traced test the shared
+#: helper declares, so its location is not its spec file.
+_LISTING: dict[str, object] = {
+    "config": {"rootDir": str(TESTS_DIR / "service" / "hub")},
+    "suites": [
+        {
+            "title": "../../harness/setup/setup.spec.ts",
+            "file": "../../harness/setup/setup.spec.ts",
+            "specs": [_spec("../../harness/setup/setup.spec.ts", "start the shared hubs", "setup-service-hub")],
+        },
+        {
+            "title": "a.spec.ts",
+            "file": "a.spec.ts",
+            "suites": [
+                {
+                    "title": "group",
+                    "specs": [
+                        _spec("a.spec.ts", "one", "service-hub"),
+                        _spec("a.spec.ts", "two", "service-hub"),
+                        _spec("../../harness/fixtures.ts", "two_traced", "service-hub"),
+                    ],
+                }
+            ],
+        },
+        {
+            "title": "../../harness/checks/b.spec.ts",
+            "file": "../../harness/checks/b.spec.ts",
+            "specs": [
+                _spec("../../harness/checks/b.spec.ts", "one", "harness"),
+                _spec("../../harness/checks/b.spec.ts", "one", "harness"),
+            ],
+        },
+        {
+            "title": "../../harness/checks/auth/c.spec.ts",
+            "file": "../../harness/checks/auth/c.spec.ts",
+            "specs": [_spec("../../harness/checks/auth/c.spec.ts", "one", "harness-auth")],
+        },
+        {
+            "title": "../runner/d.spec.ts",
+            "file": "../runner/d.spec.ts",
+            "specs": [_spec("../runner/d.spec.ts", "one", "service-runner")],
+        },
+    ],
+}
+
+
+def test_a_listing_becomes_identities_by_spec_file_without_dependency_projects() -> None:
+    assert [test.identity for test in listed_tests(_LISTING)] == [
+        f"service-hub{SEP}service/hub/a.spec.ts{SEP}group{SEP}one",
+        f"service-hub{SEP}service/hub/a.spec.ts{SEP}group{SEP}two",
+        f"service-hub{SEP}service/hub/a.spec.ts{SEP}group{SEP}two_traced",
+        f"harness{SEP}harness/checks/b.spec.ts{SEP}one",
+        f"harness{SEP}harness/checks/b.spec.ts{SEP}one #2",
+        f"harness-auth{SEP}harness/checks/auth/c.spec.ts{SEP}one",
+        f"service-runner{SEP}service/runner/d.spec.ts{SEP}one",
+    ]
+
+
+def test_a_unit_becomes_test_list_lines_naming_files_against_the_root_dir() -> None:
+    tests = listed_tests(_LISTING)
+    assert playwright_list_lines([f"harness{SEP}harness/checks/b.spec.ts"], tests) == [
+        f"[harness]{SEP}../../harness/checks/b.spec.ts"
+    ]
+    assert playwright_list_lines([f"service-hub{SEP}service/hub/a.spec.ts"], tests) == [
+        f"[service-hub]{SEP}a.spec.ts",
+        f"[service-hub]{SEP}../../harness/fixtures.ts{SEP}group{SEP}two_traced",
+    ]
+
+
+def _shard_lines(capsys: pytest.CaptureFixture[str], listing: Path, shard: str) -> tuple[int, list[str]]:
+    code = main(["plan-playwright", "--shard", shard, "--list", str(listing)])
+    return code, capsys.readouterr().out.splitlines()
+
+
+def _write(tmp_path: Path, listing: dict[str, object]) -> Path:
+    path = tmp_path / "list.json"
+    path.write_text(json.dumps(listing))
+    return path
+
+
+def test_the_planned_shards_cover_every_listed_unit_once(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    listing = _write(tmp_path, _LISTING)
+    shards = [_shard_lines(capsys, listing, f"{index}/6") for index in range(1, 7)]
+    assert [code for code, _ in shards] == [0] * 6
+    lines = [line for _, out in shards for line in out]
+    assert sorted(lines) == sorted(
+        [
+            f"[service-hub]{SEP}a.spec.ts",
+            f"[service-hub]{SEP}../../harness/fixtures.ts{SEP}group{SEP}two_traced",
+            f"[harness]{SEP}../../harness/checks/b.spec.ts",
+            f"[harness-auth]{SEP}../../harness/checks/auth/c.spec.ts",
+            f"[service-runner]{SEP}../runner/d.spec.ts",
+        ]
+    )
+    assert not any(line.startswith("[setup-") for line in lines)
+
+
+def test_a_shard_the_plan_leaves_empty_prints_no_test_list_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    one_file = {**_LISTING, "suites": cast(list[object], _LISTING["suites"])[:2]}
+    listing = _write(tmp_path, one_file)
+    shards = [_shard_lines(capsys, listing, f"{index}/6") for index in range(1, 7)]
+    assert [code for code, _ in shards] == [0] * 6
+    assert sum(1 for _, out in shards if not out) == 5
+
+
+@pytest.mark.parametrize("shard", ["0/6", "7/6", "1/3", "1", "a/6"])
+def test_a_shard_outside_the_pool_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str], shard: str) -> None:
+    assert _shard_lines(capsys, _write(tmp_path, _LISTING), shard) == (2, [])
+
+
+def test_a_listing_with_no_test_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    listing = _write(tmp_path, {**_LISTING, "suites": []})
+    assert _shard_lines(capsys, listing, "1/6") == (2, [])

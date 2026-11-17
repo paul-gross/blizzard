@@ -1,5 +1,5 @@
-"""``BLIZZARD_TEST_SHARD`` splits the suite into disjoint shards that together cover it — by test after collection,
-or by test module before import under ``BLIZZARD_TEST_SHARD_BY=file``."""
+"""``BLIZZARD_TEST_SHARD`` splits the suite into disjoint shards that together cover it, placed by measured weight —
+by test after collection, or by test module before import under ``BLIZZARD_TEST_SHARD_BY=file``."""
 
 from __future__ import annotations
 
@@ -8,12 +8,22 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
 from tests.support.repo_files import repo_root
-from tests.support.suite_plugin import parse_shard, pytest_ignore_collect, shard_by, shard_of
+from tests.support.shard_weights import Inventory, Measured, SuiteWeights
+from tests.support.suite_plugin import (
+    SHARD_INVENTORY,
+    collection_modules,
+    file_weights,
+    parse_shard,
+    pytest_ignore_collect,
+    shard_by,
+    shard_of,
+)
 
 _NODEIDS = [f"tests/test_mod_{m}.py::test_case[{p}]" for m in range(40) for p in range(25)]
 
@@ -59,14 +69,17 @@ def test_an_unknown_split_unit_is_a_usage_error() -> None:
 
 
 class _Config:
-    """The slice of pytest's config the file split reads."""
+    """The slice of pytest's config the file split reads: one collection root, ``root`` itself."""
 
-    def __init__(self, rootpath: Path) -> None:
+    def __init__(self, rootpath: Path, inventory: Inventory | None = None) -> None:
         self.rootpath = rootpath
+        self.args = [str(rootpath)]
+        self.invocation_params = SimpleNamespace(dir=rootpath)
+        self.stash = pytest.Stash()
+        self.stash[SHARD_INVENTORY] = inventory or {}
 
     def getini(self, name: str) -> list[str]:
-        assert name == "python_files"
-        return ["test_*.py", "*_test.py"]
+        return {"python_files": ["test_*.py", "*_test.py"], "norecursedirs": [".*", "node_modules"]}[name]
 
 
 def _modules(root: Path) -> list[Path]:
@@ -79,8 +92,8 @@ def _modules(root: Path) -> list[Path]:
     return paths
 
 
-def _ignored(path: Path, root: Path) -> bool | None:
-    return pytest_ignore_collect(path, cast("pytest.Config", _Config(root)))
+def _ignored(path: Path, root: Path, inventory: Inventory | None = None) -> bool | None:
+    return pytest_ignore_collect(path, cast("pytest.Config", _Config(root, inventory)))
 
 
 def _file_split(monkeypatch: pytest.MonkeyPatch, spec: str) -> None:
@@ -101,15 +114,52 @@ def test_the_file_split_keeps_each_test_module_in_exactly_one_shard(
     assert sorted(kept) == sorted(modules)
 
 
-def test_the_file_split_skips_a_module_by_its_repo_relative_path(
+def _measured(*cases: tuple[str, int]) -> Inventory:
+    return {"gate-pytest": SuiteWeights(2, {nodeid: Measured(float(weight), weight) for nodeid, weight in cases})}
+
+
+def test_the_walk_finds_every_test_module_under_the_roots_and_skips_ignored_folders(tmp_path: Path) -> None:
+    modules = _modules(tmp_path)
+    hidden = tmp_path / ".venv" / "test_vendored.py"
+    hidden.parent.mkdir()
+    hidden.write_text("")
+    (tmp_path / "tests" / "helpers.py").write_text("")
+    walked = collection_modules(cast("pytest.Config", _Config(tmp_path)))
+    assert walked == sorted(path.relative_to(tmp_path).as_posix() for path in modules)
+
+
+def test_a_module_weighs_its_measured_cases_or_the_fallback() -> None:
+    inventory = _measured(("tests/test_a.py::one", 5), ("tests/test_a.py::two[x]", 8), ("tests/gone.py::t", 13))
+    assert file_weights(inventory, ["tests/test_a.py", "tests/test_b.py"]) == {
+        "tests/test_a.py": 13,
+        "tests/test_b.py": 2,
+    }
+
+
+def test_the_file_split_gives_a_heavy_module_a_shard_of_its_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    modules = _modules(tmp_path)
+    inventory = _measured(("tests/test_mod_7.py::test_case", 1000))
+    _file_split(monkeypatch, "1/2")
+    assert [path for path in modules if _ignored(path, tmp_path, inventory) is None] == [modules[7]]
+    _file_split(monkeypatch, "2/2")
+    assert modules[7] not in [path for path in modules if _ignored(path, tmp_path, inventory) is None]
+
+
+def test_a_module_outside_the_walk_keeps_its_stable_hash_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = _modules(tmp_path)[0]
+
+    def ignored() -> bool | None:
+        config = _Config(tmp_path, _measured(("tests/test_mod_0.py::test_case", 1000)))
+        config.args = [str(tmp_path / "src")]
+        return pytest_ignore_collect(module, cast("pytest.Config", config))
+
     own = shard_of("tests/test_mod_0.py", 4)
     _file_split(monkeypatch, f"{own}/4")
-    assert _ignored(module, tmp_path) is None
+    assert ignored() is None
     _file_split(monkeypatch, f"{own % 4 + 1}/4")
-    assert _ignored(module, tmp_path) is True
+    assert ignored() is True
 
 
 @pytest.mark.parametrize("name", ["conftest.py", "__init__.py", "helpers.py"])
@@ -166,8 +216,9 @@ def _nodeids(shard: dict[str, str]) -> set[str]:
     return {line for line in result.stdout.splitlines() if "::" in line}
 
 
-def test_a_real_session_splits_by_file_into_disjoint_shards_covering_the_unsharded_run() -> None:
-    shards = [{"BLIZZARD_TEST_SHARD": f"{index}/2", "BLIZZARD_TEST_SHARD_BY": "file"} for index in (1, 2)]
+@pytest.mark.parametrize("unit", ["file", "test"])
+def test_a_real_session_splits_into_disjoint_shards_covering_the_unsharded_run(unit: str) -> None:
+    shards = [{"BLIZZARD_TEST_SHARD": f"{index}/2", "BLIZZARD_TEST_SHARD_BY": unit} for index in (1, 2)]
     with ThreadPoolExecutor() as pool:
         first, second, unsharded = pool.map(_nodeids, [*shards, {}])
     assert first and second

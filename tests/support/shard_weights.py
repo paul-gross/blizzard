@@ -244,32 +244,63 @@ def pytest_durations(path: Path) -> dict[str, float]:
     return {k: float(v) for k, v in cast(dict[str, float], json.loads(path.read_text())).items()}
 
 
-def playwright_durations(path: Path, tests_dir: Path = TESTS_DIR) -> dict[str, float]:
-    """Each passing test of a Playwright JSON report as ``<project> > <file relative to tests/> > <title path>``, joined by :data:`SEP`,
-    an ordinal suffix only where one file repeats a title path; seconds sum every attempt."""
-    report = cast(dict[str, object], json.loads(path.read_text()))
+@dataclass(frozen=True)
+class ReportTest:
+    """One test of a Playwright JSON report (a run's or a ``--list``'s), in one project.
+
+    ``identity`` is ``<project> > <spec file relative to tests/> > <title path>`` joined by :data:`SEP`, an ordinal
+    suffix only where one file repeats a title path. ``spec`` is the spec file and ``location`` the file declaring the
+    test (a shared helper such as ``harness/fixtures.ts`` for a traced test), both relative to the config's rootDir as
+    ``--test-list`` reads them; ``titles`` is the title path below the file.
+    """
+
+    identity: str
+    project: str
+    spec: str
+    location: str
+    titles: tuple[str, ...]
+    results: tuple[dict[str, object], ...]
+
+
+def report_tests(report: Mapping[str, object], tests_dir: Path = TESTS_DIR) -> list[ReportTest]:
     root_dir = Path(cast(dict[str, str], report["config"])["rootDir"])
-    seconds: dict[str, float] = {}
+    tests: list[ReportTest] = []
     seen: dict[str, int] = {}
 
-    def walk(node: dict[str, object], titles: tuple[str, ...], top: bool) -> None:
-        here = titles if top else (*titles, cast(str, node["title"]))
+    def walk(node: dict[str, object], spec_file: str, titles: tuple[str, ...]) -> None:
+        file = os.path.relpath(root_dir / spec_file, tests_dir).replace(os.sep, "/")
         for spec in cast(list[dict[str, object]], node.get("specs", [])):
-            file = os.path.relpath(root_dir / cast(str, spec["file"]), tests_dir).replace(os.sep, "/")
             for test in cast(list[dict[str, object]], spec["tests"]):
-                results = cast(list[dict[str, object]], test["results"])
-                if not results or results[-1].get("status") != "passed":
-                    continue
-                base = SEP.join((cast(str, test["projectName"]), file, *here, cast(str, spec["title"])))
+                project = cast(str, test["projectName"])
+                path = (*titles, cast(str, spec["title"]))
+                base = SEP.join((project, file, *path))
                 seen[base] = seen.get(base, 0) + 1
-                identity = base if seen[base] == 1 else f"{base} #{seen[base]}"
-                seconds[identity] = sum(cast(float, result["duration"]) for result in results) / 1000
+                tests.append(
+                    ReportTest(
+                        base if seen[base] == 1 else f"{base} #{seen[base]}",
+                        project,
+                        spec_file,
+                        cast(str, spec["file"]),
+                        path,
+                        tuple(cast(list[dict[str, object]], test.get("results", []))),
+                    )
+                )
         for child in cast(list[dict[str, object]], node.get("suites", [])):
-            walk(child, here, False)
+            walk(child, spec_file, (*titles, cast(str, child["title"])))
 
     for file_suite in cast(list[dict[str, object]], report["suites"]):
-        walk(file_suite, (), True)
-    return seconds
+        walk(file_suite, cast(str, file_suite["file"]), ())
+    return tests
+
+
+def playwright_durations(path: Path, tests_dir: Path = TESTS_DIR) -> dict[str, float]:
+    """Each passing test of a Playwright JSON report, by its :class:`ReportTest` identity; seconds sum every
+    attempt."""
+    return {
+        test.identity: sum(cast(float, result["duration"]) for result in test.results) / 1000
+        for test in report_tests(cast(dict[str, object], json.loads(path.read_text())), tests_dir)
+        if test.results and test.results[-1].get("status") == "passed"
+    }
 
 
 def job_durations(path: Path) -> dict[str, float]:
@@ -422,6 +453,37 @@ def plan_playwright(
     return plan(inventory, suite_id, identities)[index - 1]
 
 
+def is_dependency_project(project: str) -> bool:
+    """A harness ``setup-<profile>``/``teardown-<profile>`` project (``tests/harness/projects.ts``): Playwright runs
+    it with whichever selected project depends on it, so a shard never owns it."""
+    return project.startswith(("setup-", "teardown-"))
+
+
+def listed_tests(listing: Mapping[str, object], tests_dir: Path = TESTS_DIR) -> list[ReportTest]:
+    """The tests of a ``playwright test --list --reporter=json``, less the dependency projects'."""
+    return [test for test in report_tests(listing, tests_dir) if not is_dependency_project(test.project)]
+
+
+def playwright_list_lines(units: Iterable[str], tests: Iterable[ReportTest]) -> list[str]:
+    """The ``--test-list`` lines selecting exactly the tests of ``units`` (``(project, spec file)`` pairs).
+
+    Playwright matches a line's file against the test's declaring file and loads only the files the lines name. So a
+    unit is ``[<project>] > <spec file>`` — every test the spec declares — plus, for each test a shared helper
+    declares, ``[<project>] > <helper file> > <title path>``, which the spec line both loads and cannot match.
+    """
+    owned = set(units)
+    lines: list[str] = []
+    for test in tests:
+        if playwright_unit(test.identity) not in owned:
+            continue
+        spec_line = f"[{test.project}]{SEP}{test.spec}"
+        if spec_line not in lines:
+            lines.append(spec_line)
+        if test.location != test.spec:
+            lines.append(SEP.join((f"[{test.project}]", test.location, *test.titles)))
+    return lines
+
+
 # --- recorder -------------------------------------------------------------------------------------------------------
 
 
@@ -473,6 +535,31 @@ def _download_run(run_id: str, into: Path) -> None:
         path.rename(into / f"{path.parent.name}.json")
 
 
+def _plan_playwright_cli(suite_id: str, shard: str, listing: Path) -> int:
+    """Print shard ``<index>/<count>``'s ``--test-list`` lines; the unmeasured units placed by fallback go to stderr."""
+    index, _, count = shard.partition("/")
+    entry = suite(suite_id)
+    if not (index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count) == entry.shards):
+        print(f"plan-playwright: --shard {shard!r} is not <index>/{entry.shards} for {suite_id}", file=sys.stderr)
+        return 2
+    inventory = load_inventory()
+    tests = listed_tests(cast(dict[str, object], json.loads(listing.read_text())))
+    if not tests:
+        print(f"plan-playwright: the --list in {listing} holds no test", file=sys.stderr)
+        return 2
+    known = inventory.get(suite_id, SuiteWeights()).entries
+    unmeasured = sorted({playwright_unit(test.identity) for test in tests if test.identity not in known})
+    if unmeasured:
+        print(
+            f"plan-playwright: {len(unmeasured)} unit(s) hold unmeasured tests, weighed by the fallback",
+            file=sys.stderr,
+        )
+    owned = plan_playwright(inventory, [test.identity for test in tests], int(index), suite_id)
+    for line in playwright_list_lines(owned, tests):
+        print(line)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tests.support.shard_weights")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -482,14 +569,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     source.add_argument("--run", help="a CI run id, fetched with gh")
     commands.add_parser("report", help="each suite's measurement and each pool's predicted shard weights")
     playwright = commands.add_parser("plan-playwright", help="the (project, spec file) units one Playwright shard owns")
-    playwright.add_argument("--shard", required=True)
+    playwright.add_argument("--shard", required=True, help="<index>/<count>, the count the pool's registry declares")
+    playwright.add_argument(
+        "--list",
+        type=Path,
+        required=True,
+        dest="listing",
+        help="the suite's `playwright test --list --reporter=json` output",
+    )
+    playwright.add_argument("--suite", default="service-playwright")
     args = parser.parse_args(argv)
     if args.command == "report":
         print("\n".join(_report(load_inventory())))
         return 0
     if args.command == "plan-playwright":
-        print("plan-playwright: not wired to a Playwright --list yet", file=sys.stderr)
-        return 2
+        return _plan_playwright_cli(cast(str, args.suite), cast(str, args.shard), cast(Path, args.listing))
     with tempfile.TemporaryDirectory() as fetched:
         evidence = cast(Path | None, args.evidence)
         if evidence is None:
