@@ -20,8 +20,8 @@
         fleetKitSelectList
         class="rows"
         ariaLabel="Open questions"
-        [value]="null"
-        (valueChange)="open($any($event))"
+        [value]="noRowOpen"
+        (valueChange)="open($event)"
       >
       @for (q of questions(); track q.question_id) {
         <fleet-kit-select-row

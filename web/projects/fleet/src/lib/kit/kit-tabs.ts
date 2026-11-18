@@ -1,13 +1,8 @@
 import { Tab, TabList } from '@angular/aria/tabs';
 import {
-  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
-  ElementRef,
-  inject,
-  Injector,
   input,
   model,
   untracked,
@@ -15,6 +10,7 @@ import {
   viewChildren,
 } from '@angular/core';
 
+import { trackUserInput } from './user-input-window';
 import { KitTab, KitTabStrip, type KitTabVariant } from './kit-tab';
 
 /** One tab in a {@link KitTabs} strip. */
@@ -59,23 +55,9 @@ export class KitTabs {
   private readonly list = viewChild(TabList);
   private readonly tabs = viewChildren(Tab);
   /** True from a click or key press on the strip until Aria has published its selection. */
-  private userInput = false;
+  private readonly userInput = trackUserInput();
 
   constructor() {
-    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    const injector = inject(Injector);
-    // Aria moves its selection inside the click/key handler but publishes it to `selectedTab`
-    // only in its next render's write phase, so a person's input is a window that closes after
-    // that render — the read phase, which runs once every write-phase effect has.
-    const begin = () => {
-      this.userInput = true;
-      afterNextRender({ read: () => (this.userInput = false) }, { injector });
-    };
-    for (const type of ['click', 'keydown']) host.addEventListener(type, begin, true);
-    inject(DestroyRef).onDestroy(() => {
-      for (const type of ['click', 'keydown']) host.removeEventListener(type, begin, true);
-    });
-
     afterRenderEffect({
       write: () => {
         const list = this.list();
@@ -95,6 +77,6 @@ export class KitTabs {
   }
 
   protected onSelected(value: string | undefined): void {
-    if (this.userInput && value !== undefined && value !== this.active()) this.active.set(value);
+    if (this.userInput() && value !== undefined && value !== this.active()) this.active.set(value);
   }
 }

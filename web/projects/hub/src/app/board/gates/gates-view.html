@@ -20,8 +20,8 @@
         fleetKitSelectList
         class="rows"
         ariaLabel="Open gates"
-        [value]="null"
-        (valueChange)="open($any($event))"
+        [value]="noRowOpen"
+        (valueChange)="open($event)"
       >
       @for (gate of gates(); track gate.decision_id) {
         <fleet-kit-select-row

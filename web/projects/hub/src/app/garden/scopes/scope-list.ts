@@ -1,13 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import {
-  FleetWhen,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBadge,
-  KitSelectList,
-  KitSelectRow,
-} from 'fleet';
+import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 

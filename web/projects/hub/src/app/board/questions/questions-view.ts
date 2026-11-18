@@ -1,17 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import {
-  type QuestionView,
-  compactRef,
-  runnerBoardParts,
-  runnerTitle,
-  type RunnerBoardParts,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitPanel,
-  KitSelectList,
-  KitSelectRow,
-} from 'fleet';
+import { type QuestionView, compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -42,6 +31,9 @@ export class QuestionsPanelView {
 
   /** Emitted with a chunk id when an ask is activated — opens it in the detail panel. */
   readonly selectChunk = output<string>();
+
+  /** The list's `value`: a rail opens a chunk rather than holding a selection, so no row is ever the open one. */
+  protected readonly noRowOpen = null as string | null;
 
   /** A row's value is its own id (one chunk can hold several), so open the chunk it belongs to. */
   protected open(id: string): void {

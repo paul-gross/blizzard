@@ -1,17 +1,5 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
-import {
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBadge,
-  KitSelectList,
-  KitSelectRow,
-  type Tone,
-} from 'fleet';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, type Tone } from 'fleet';
 
 /** A marker a config row or detail header carries. */
 export interface ConfigBadgeVm {

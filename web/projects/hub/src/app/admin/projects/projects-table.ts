@@ -1,19 +1,5 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
-import {
-  compactRef,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBadge,
-  KitSelectList,
-  KitSelectRow,
-  KitSwatch,
-  toneColor,
-} from 'fleet';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, KitSwatch, toneColor } from 'fleet';
 
 import { type ProjectRowVm, projectLightTone } from './projects.model';
 

@@ -1,17 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import {
-  type ChunkStatus,
-  type hubApi,
-  STATUS_TONE,
-  compactRef,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitBadge,
-  KitSelectList,
-  KitSelectRow,
-  FleetWhen,
-} from 'fleet';
+import { type ChunkStatus, type hubApi, STATUS_TONE, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */

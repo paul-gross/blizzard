@@ -1,13 +1,7 @@
 import { ChangeDetectionStrategy, Component, Directive, computed, contentChild, input, output, signal } from '@angular/core';
 
 import { FleetWhen } from '../../core/when-display';
-import {
-  KitBadge,
-  KitCardOpen,
-  KitSkeleton,
-  projectTint,
-  toneColor,
-} from '../../kit';
+import { KitBadge, KitCardOpen, KitSkeleton, projectTint, toneColor } from '../../kit';
 import { type ChunkCardView, foldTitles } from './chunk-card.model';
 
 /**

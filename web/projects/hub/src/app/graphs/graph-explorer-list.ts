@@ -1,23 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import {
-  type GraphLifecycle,
-  type GraphSummaryView,
-  compactRef,
-  KitBadge,
-  KitChip,
-  KitSelectList,
-  KitSelectRow,
-  type Tone,
-  FleetWhen,
-} from 'fleet';
+import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectList, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
 import { graphLifecycleTone } from '../core/lifecycle-tone';
 

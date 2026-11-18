@@ -36,16 +36,7 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 @Component({
   selector: 'fleet-chunk-transcripts-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    KitAsyncState,
-    KitBadge,
-    KitButton,
-    KitMasterDetail,
-    KitSelectList,
-    KitSelectRow,
-    TranscriptSegmentView,
-    TranscriptViewer,
-  ],
+  imports: [KitAsyncState, KitBadge, KitButton, KitMasterDetail, KitSelectList, KitSelectRow, TranscriptSegmentView, TranscriptViewer],
   templateUrl: './chunk-transcripts-tab.html',
   styleUrl: './chunk-transcripts-tab.css',
 })
