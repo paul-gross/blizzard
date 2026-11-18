@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, inspect, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.logging import get_logger
@@ -35,13 +35,8 @@ class HostHubTokenStore:
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         try:
             with self._store.begin() as conn:
-                if _held(conn, runner_id) is not None:
+                if not seal_if_absent_locked(conn, runner_id, sealed, at=at):
                     return False
-                conn.execute(
-                    runner_hub_tokens.insert().values(
-                        runner_id=runner_id, revision=FIRST_REVISION, updated_at=at, **_sealed_columns(sealed)
-                    )
-                )
         except IntegrityError:
             return False
         _log.info("runner hub token sealed", runner_id=runner_id, revision=FIRST_REVISION, key_id=sealed.key_id)
@@ -78,6 +73,30 @@ class HostHubTokenStore:
                 )
         _log.info("runner hub token replaced", runner_id=runner_id, revision=revision, key_id=sealed.key_id)
         return revision
+
+    def drop(self, runner_id: str) -> bool:
+        with self._store.begin() as conn:
+            if runner_hub_tokens.name not in inspect(conn).get_table_names():
+                return False
+            dropped = bool(
+                conn.execute(runner_hub_tokens.delete().where(runner_hub_tokens.c.runner_id == runner_id)).rowcount
+            )
+        if dropped:
+            _log.info("runner hub token dropped", runner_id=runner_id)
+        return dropped
+
+
+def seal_if_absent_locked(conn: Connection, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
+    """Insert the runner's row at :data:`FIRST_REVISION` on ``conn``'s open transaction unless one exists; whether it
+    was inserted."""
+    if _held(conn, runner_id) is not None:
+        return False
+    conn.execute(
+        runner_hub_tokens.insert().values(
+            runner_id=runner_id, revision=FIRST_REVISION, updated_at=at, **_sealed_columns(sealed)
+        )
+    )
+    return True
 
 
 def _held(conn: Connection, runner_id: str) -> SealedHubToken | None:

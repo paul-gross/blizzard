@@ -3,16 +3,18 @@ stand on, in opposite directions.
 
 A copy writes one runner's rows into a destination store in one transaction, the destination issuing every integer
 surrogate key anew, with the source's host rows merged by each host table's declared treatment and any ingest recorded
-there too; it never writes the source. A removal deletes one runner's rows from one store."""
+there too, the runner's hub token sealed under the destination's key; it never writes the source. A removal deletes one
+runner's rows from one store."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.secrets.sealing import SealedValue
 
 __all__ = [
     "DanglingReference",
@@ -30,12 +32,15 @@ __all__ = [
 @dataclass(frozen=True)
 class HostIngest:
     """One runner this host took in: from which resolved ``source``, the source's last liveness stamp at the copy
-    (``None`` for a source that never ticked), and when, by this host's clock."""
+    (``None`` for a source that never ticked), and when, by this host's clock. ``hub_token`` is the runner's token
+    sealed under this host's key at its first revision, written with the record unless this host holds a row for the
+    runner already; it is never read back from the record."""
 
     runner_id: str
     source: str
     source_alive_at: datetime | None
     ingested_at: datetime
+    hub_token: SealedValue | None = field(default=None, compare=False, repr=False)
 
 
 class WorkspacePromptConflict(RuntimeError):
@@ -88,7 +93,8 @@ class IWriteHostIngestRepository(IReadHostIngestRepository, Protocol):
         ...
 
     def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
-        """Append ``ingest`` on ``handle``'s transaction."""
+        """Append ``ingest`` on ``handle``'s transaction, and seal its ``hub_token`` as the runner's row unless the
+        destination holds one."""
         ...
 
 

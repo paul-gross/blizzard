@@ -1,6 +1,7 @@
 """SQLAlchemy adapter for the host half of a runner transfer (package-private): its host-row merge and ingest record.
 
-Host-scoped: every statement here names a host table, so none carries a runner equality. Each host table's treatment is
+Host-scoped: every statement here names a host table, so none carries a runner equality; the ingest record and the
+runner's sealed hub token name their runner explicitly. Each host table's treatment is
 the one it declares (``info["transfer"]``), applied over the schema's host tables in the order their reference
 declarations put them; no list of them is kept here."""
 
@@ -14,6 +15,7 @@ from sqlalchemy import Connection, Table, and_, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.runner.store import schema
+from blizzard.runner.store.internal.host_hub_token_store import seal_if_absent_locked
 from blizzard.runner.store.internal.row_transfer import (
     WORKSPACE_COLUMN,
     TransferHandle,
@@ -86,7 +88,8 @@ class HostIngestStore:
         _log.info("host rows merged", runner_id=copy.runner_id, rows=carried)
 
     def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
-        handle_of(handle).destination.execute(
+        destination = handle_of(handle).destination
+        destination.execute(
             host_ingests.insert().values(
                 runner_id=ingest.runner_id,
                 source=ingest.source,
@@ -94,7 +97,10 @@ class HostIngestStore:
                 ingested_at=ingest.ingested_at,
             )
         )
-        _log.info("host ingest recorded", runner_id=ingest.runner_id, source=ingest.source)
+        sealed = ingest.hub_token is not None and seal_if_absent_locked(
+            destination, ingest.runner_id, ingest.hub_token, at=ingest.ingested_at
+        )
+        _log.info("host ingest recorded", runner_id=ingest.runner_id, source=ingest.source, hub_token_sealed=sealed)
 
 
 def _matching(table: Table, row: Mapping[str, Any]) -> Any:

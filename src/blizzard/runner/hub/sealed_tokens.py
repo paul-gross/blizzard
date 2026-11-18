@@ -110,6 +110,11 @@ class IWriteHubTokenRepository(IReadHubTokenRepository, Protocol):
         and write it; the revision written. ``seal`` is local work only, called under the transaction."""
         ...
 
+    def drop(self, runner_id: str) -> bool:
+        """Delete the runner's row, for a runner leaving this host's store; whether one went. A store behind the
+        revision that adds the table holds none."""
+        ...
+
 
 class HubTokens:
     """Seals, opens and replaces a runner's stored token."""

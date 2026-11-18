@@ -46,6 +46,9 @@ class _Rows:
         self.rows[runner_id] = SealedHubToken(runner_id, revision, seal(revision), at)
         return revision
 
+    def drop(self, runner_id: str) -> bool:
+        return self.rows.pop(runner_id, None) is not None
+
 
 def _tokens(tmp_path: Path) -> tuple[HubTokens, _Rows]:
     keys = host_key_provider({ENV_HOST_SECRET_KEY: _KEY}, HostLayout(tmp_path), mint=True)

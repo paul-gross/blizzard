@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import EnvBinding
+from blizzard.runner.hub.sealed_tokens import SealedHubToken
 from blizzard.runner.transfer.rows import HostIngest
 
 __all__ = [
@@ -51,7 +52,7 @@ class RunnerStoreView:
 
 
 class IRunnerBoundReads(Protocol):
-    """One runner's reads of store files: its view and its latest ingest."""
+    """One runner's reads of store files: its view, its latest ingest, and its sealed hub token."""
 
     def runner_view(self, url: str) -> RunnerStoreView:
         """What the store at ``url`` holds about the runner."""
@@ -59,6 +60,10 @@ class IRunnerBoundReads(Protocol):
 
     def latest_host_ingest(self, url: str) -> HostIngest | None:
         """The newest ingest of the runner the store at ``url`` recorded."""
+        ...
+
+    def sealed_hub_token(self, url: str) -> SealedHubToken | None:
+        """The runner's sealed hub token the store at ``url`` holds, or ``None``."""
         ...
 
 
@@ -78,8 +83,9 @@ class IRunnerBoundStores(IRunnerBoundReads, Protocol):
         destination transaction; the source is only read (:meth:`IRunnerTransfer.copy_runner`)."""
         ...
 
-    def remove_runner_rows(self, url: str, *, keep_counters: bool) -> None:
-        """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``."""
+    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
+        """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``, and its
+        sealed hub token with ``drop_hub_token``."""
         ...
 
 

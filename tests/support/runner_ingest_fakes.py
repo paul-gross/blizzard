@@ -10,10 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.sealing import ISecretCipher, SealedSecret, SealedValue, SecretUnreadable
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.hub.client import HostHeldRunner, HostRecord, HostRefused
 from blizzard.runner.hub.host_identity import HostIdentity
+from blizzard.runner.hub.sealed_tokens import SealedHubToken
 from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
@@ -25,7 +28,7 @@ from blizzard.runner.transfer.hosts import (
     RunnerDeclaration,
     SourceHost,
 )
-from blizzard.runner.transfer.ingest import IHostFileEditor, IIngestStores, ITokenFiles, RunnerIngest
+from blizzard.runner.transfer.ingest import IHostCiphers, IHostFileEditor, IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.transfer.rows import HostIngest
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
 from blizzard.runner.transfer.source import SourceKind
@@ -187,6 +190,9 @@ class FakeRunnerStores:
     def latest_host_ingest(self, url: str) -> HostIngest | None:
         return self.stores.ingests.get(url)
 
+    def sealed_hub_token(self, url: str) -> SealedHubToken | None:
+        return self.stores.hub_tokens.get(self.stores.source_of(url))
+
     def copy_runner(
         self,
         source_url: str,
@@ -200,9 +206,13 @@ class FakeRunnerStores:
         self.stores.journal.append(("copy_runner", ingest.source))
         self.stores.named[destination_url] = (*self.stores.named.get(destination_url, ()), self.runner_id)
         self.stores.ingests[destination_url] = ingest
+        if ingest.hub_token is not None and destination_url not in self.stores.hub_tokens:
+            self.stores.hub_tokens[destination_url] = SealedHubToken(self.runner_id, 1, ingest.hub_token, T0)
 
-    def remove_runner_rows(self, url: str, *, keep_counters: bool) -> None:
+    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
         self.stores.journal.append(("remove_runner_rows", url))
+        if drop_hub_token:
+            self.stores.hub_tokens.pop(url, None)
         self.stores.named[url] = tuple(r for r in self.stores.named.get(url, ()) if r != self.runner_id)
         self.stores.on_remove(url)
 
@@ -214,6 +224,8 @@ class FakeIngestStores:
     journal: list[tuple[object, ...]]
     named: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     ingests: dict[str, HostIngest] = field(default_factory=dict[str, HostIngest])
+    #: The moving runner's sealed hub token each store holds.
+    hub_tokens: dict[str, SealedHubToken] = field(default_factory=dict[str, SealedHubToken])
     #: Called with a store's URL once a runner's rows leave it.
     on_remove: Callable[[str], None] = lambda _url: None
 
@@ -264,11 +276,40 @@ class FakeTokenFiles:
     def held(self, root: Path, token_env: str) -> str:
         return self.tokens.get((root, token_env), "")
 
-    def write(self, root: Path, token_env: str, token: str) -> None:
-        self.tokens[root, token_env] = token
-
     def remove(self, root: Path, token_env: str) -> None:
         self.tokens.pop((root, token_env), None)
+
+
+@dataclass(frozen=True)
+class FakeCipher:
+    """A cipher under one key generation, ``key_id``: a value "sealed" in the clear, bound to its name and revision."""
+
+    key_id: str
+
+    def seal(self, value: SecretValue, *, name: str, revision: int) -> SealedValue:
+        return SealedValue(self.key_id, value.expose().encode(), f"{name}@{revision}".encode())
+
+    def open(self, secret: SealedSecret) -> SecretValue:
+        sealed = secret.sealed
+        if sealed.key_id != self.key_id or sealed.nonce != f"{secret.name}@{secret.revision}".encode():
+            raise SecretUnreadable(secret.name, key_id=sealed.key_id)
+        return SecretValue(sealed.ciphertext.decode())
+
+
+@dataclass
+class FakeHostCiphers:
+    """Each host's key by its root; a minted key is named for the host it was minted on."""
+
+    journal: list[tuple[object, ...]]
+    keys: dict[Path, str] = field(default_factory=dict[Path, str])
+
+    def cipher(self, root: Path, *, mint: bool) -> ISecretCipher | None:
+        if root not in self.keys:
+            if not mint:
+                return None
+            self.journal.append(("mint_key", root))
+            self.keys[root] = f"key-{root.name}"
+        return FakeCipher(self.keys[root])
 
 
 @dataclass(frozen=True)
@@ -317,6 +358,7 @@ class IngestWorld:
     stores: FakeIngestStores
     host_file: FakeHostFileEditor
     tokens: FakeTokenFiles
+    ciphers: FakeHostCiphers
 
     def ingest(self) -> RunnerIngest:
         return RunnerIngest(
@@ -333,6 +375,7 @@ class IngestWorld:
             stores=self.stores,
             host_file=self.host_file,
             tokens=self.tokens,
+            ciphers=self.ciphers,
             hub=FakeHostRecordReader(),
             holder=_nothing_answers,
             files=self.files,
@@ -350,6 +393,7 @@ def ingest_world(kinds: Mapping[Path, SourceKind]) -> IngestWorld:
         stores=FakeIngestStores(journal),
         host_file=FakeHostFileEditor(journal),
         tokens=FakeTokenFiles(),
+        ciphers=FakeHostCiphers(journal),
     )
 
 
@@ -358,3 +402,5 @@ _sources_conforms: type[ISourceHosts] = FakeSourceHosts
 _stores_conforms: type[IIngestStores] = FakeIngestStores
 _editor_conforms: type[IHostFileEditor] = FakeHostFileEditor
 _tokens_conforms: type[ITokenFiles] = FakeTokenFiles
+_cipher_conforms: type[ISecretCipher] = FakeCipher
+_ciphers_conforms: type[IHostCiphers] = FakeHostCiphers

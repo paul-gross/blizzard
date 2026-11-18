@@ -337,6 +337,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "a runner's token replacement by its operator — a runner's sealed hub token, which no runner's board or SSE "
         "stream carries."
     ),
+    "drop": Silent(
+        "a runner ingest's removal from its source, offline, with no daemon running — a runner's sealed hub token, "
+        "which no runner's board or SSE stream carries."
+    ),
     "claim_credential_renewal": Silent(
         "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "
         "in the vocabulary represents a renewal, nothing reaches the fact log, and the panel's subscriptions "

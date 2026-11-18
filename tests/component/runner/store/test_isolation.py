@@ -628,6 +628,7 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHostIngestRepository, "record_host_ingest_locked"): _HOST_ONLY + " (host_ingests)",
     (IWriteHubTokenRepository, "seal_if_absent"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHubTokenRepository, "replace"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteHubTokenRepository, "drop"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY
     + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",

@@ -42,6 +42,7 @@ from blizzard.foundation.platform_tracing.handle import (
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.secrets.factories import secret_cipher
+from blizzard.foundation.secrets.sealing import ISecretCipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -127,7 +128,13 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClient, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.hub.sealed_tokens import HubTokens, RunnerHubTokenSource, StoredToken, StoredTokenState
+from blizzard.runner.hub.sealed_tokens import (
+    HubTokens,
+    RunnerHubTokenSource,
+    SealedHubToken,
+    StoredToken,
+    StoredTokenState,
+)
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
@@ -232,7 +239,7 @@ from blizzard.runner.transfer.hosts import (
     RunnerDeclaration,
     SourceHost,
 )
-from blizzard.runner.transfer.ingest import IIngestStores, ITokenFiles, RunnerIngest
+from blizzard.runner.transfer.ingest import IHostCiphers, IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.transfer.internal.host_files import HostFiles
 from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
@@ -1561,11 +1568,15 @@ class RunnerBoundStoreFiles:
                 source, destination, errors=self.files.errors, runner_id=self.runner_id, clock=self.files.clock
             ).copy_runner(workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest)
 
-    def remove_runner_rows(self, url: str, *, keep_counters: bool) -> None:
+    def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
         with _engine(url) as engine:
             build_runner_removal(engine, errors=self.files.errors, runner_id=self.runner_id).remove_runner_rows(
                 keep_counters=keep_counters
             )
+            if drop_hub_token:
+                build_host_stores(engine, errors=self.files.errors, clock=self.files.clock).hub_tokens.drop(
+                    self.runner_id
+                )
 
     def runner_view(self, url: str) -> RunnerStoreView:
         errors, clock = self.files.errors, self.files.clock
@@ -1588,6 +1599,10 @@ class RunnerBoundStoreFiles:
             return build_host_read_stores(engine, errors=self.files.errors).host_ingests.latest_host_ingest(
                 self.runner_id
             )
+
+    def sealed_hub_token(self, url: str) -> SealedHubToken | None:
+        with _engine(url) as engine:
+            return build_host_read_stores(engine, errors=self.files.errors).hub_tokens.sealed(self.runner_id)
 
 
 def _served_slugs(answer: ServedProjectsAnswer | None) -> tuple[str, ...]:
@@ -1624,14 +1639,26 @@ class DotenvTokenFiles:
     def held(self, root: Path, token_env: str) -> str:
         return HubTokenFile.of(root, token_env).held()
 
-    def write(self, root: Path, token_env: str, token: str) -> None:
-        HubTokenFile.of(root, token_env).write(token)
-
     def remove(self, root: Path, token_env: str) -> None:
         HubTokenFile.of(root, token_env).remove()
 
 
 _token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
+
+
+@collaborator
+@dataclass(frozen=True)
+class HostKeyCiphers:
+    """The cipher under a host directory's key, read from ``environ`` first and its ``data/secret-keys/`` otherwise."""
+
+    environ: Mapping[str, str]
+
+    def cipher(self, root: Path, *, mint: bool) -> ISecretCipher | None:
+        keys = host_key_provider(self.environ, HostLayout(root), mint=mint)
+        return None if keys is None else secret_cipher(keys)
+
+
+_host_ciphers_conforms: type[IHostCiphers] = HostKeyCiphers
 
 
 def declared_workspace(workspace: HostWorkspace, host_root: Path) -> DeclaredWorkspace:
@@ -1834,9 +1861,11 @@ def build_runner_ingest(
     clock: IClock | None = None,
     migrations: Callable[[str], MigrationRunner] = runner_store_migrations,
     files: IHostFiles | None = None,
+    environ: Mapping[str, str] | None = None,
 ) -> RunnerIngest:
-    """The ingest into the host ``host``, reaching its hub through ``hub``, probing sockets with ``holder``, and
-    migrating each source copy through ``migrations``."""
+    """The ingest into the host ``host``, reaching its hub through ``hub``, probing sockets with ``holder``,
+    migrating each source copy through ``migrations``, and reading each host's key from ``environ`` — the process
+    environment by default — before its key directory."""
     resolved = clock or SystemClock()
     return RunnerIngest(
         host=ingest_host(host),
@@ -1844,6 +1873,7 @@ def build_runner_ingest(
         stores=build_runner_store_files(resolved),
         host_file=HostFileEditor(strict=host.strict),
         tokens=DotenvTokenFiles(),
+        ciphers=HostKeyCiphers(os.environ if environ is None else environ),
         hub=hub,
         holder=holder,
         files=files

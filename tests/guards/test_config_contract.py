@@ -122,7 +122,8 @@ _ENV_WRITER_MODULES: dict[str, set[str]] = {
     "runner/hub/bootstrap.py": {"init"},
     "runner/hub/host_bootstrap.py": {"host"},
 }
-_ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.write(", "HubTokenFile.of(")
+#: Ingest writes no ``.env`` line here; it removes the moving runner's line from the source's.
+_ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.remove(", "HubTokenFile.of(")
 _RUNNER_DIR_MARKERS = ("RUNNERS_DIRNAME / ", "runners_dir / ")
 _RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/transfer/ingest.py": {"ingest"}}
 

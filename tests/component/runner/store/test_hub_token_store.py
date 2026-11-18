@@ -53,3 +53,14 @@ def test_reads_name_their_runner_under_the_statement_guard(tmp_path: Path) -> No
     tokens.seal_if_absent(store.connections.bound_runner_id(), _sealed(b"own"), at=_AT)
     row = tokens.sealed("rn_a")
     assert row is not None and row.sealed == _sealed(b"a")
+
+
+def test_drop_deletes_only_its_runners_row(tmp_path: Path) -> None:
+    tokens = HostHubTokenStore(make_store(f"sqlite:///{tmp_path / 'host.db'}").connections)
+    tokens.seal_if_absent("rn_a", _sealed(b"a"), at=_AT)
+    tokens.seal_if_absent("rn_b", _sealed(b"b"), at=_AT)
+
+    assert tokens.drop("rn_a")
+    assert not tokens.drop("rn_a")
+    assert tokens.sealed("rn_a") is None
+    assert tokens.sealed("rn_b") is not None
