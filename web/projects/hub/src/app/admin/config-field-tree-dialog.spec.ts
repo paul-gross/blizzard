@@ -127,7 +127,7 @@ describe('ConfigFieldTreeDialog', () => {
       await type('src-field-name', 'ledger');
       await pick('src-field-kind', 'Forge');
       let release!: () => void;
-      const pending = submitForm(host.f, () => new Promise((resolve) => (release = () => resolve({ ok: true }))));
+      const pending = submitForm(host.f, () => new Promise((resolve) => (release = () => resolve({ ok: true }))), { refusalState: host.refusal });
       await fixture.whenStable();
       q('kit-form-cancel')!.click();
       document.querySelector('.scrim')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));

@@ -54,42 +54,40 @@ export function createRefusalState<D>() {
 export type RefusalState<D> = ReturnType<typeof createRefusalState<D>>;
 
 /**
- * Marks fields touched and runs `save` only when local validation passes. A managed refusal state allows retries to
- * replace previous errors. An alternative action can disregard local errors unrelated to it. Focuses the first field
+ * Marks fields touched and runs `save` only when local validation passes. Apply the refusal state's schema to the form
+ * so retries replace previous errors. An alternative action can disregard local errors unrelated to it. Focuses the first field
  * in error; root errors focus nothing. Answers whether the save succeeded.
  */
 export async function submitForm<D>(
   form: FieldTree<D>,
   save: (draft: D) => Promise<SaveOutcome<D>>,
-  options?: { ignoreLocalErrors?: boolean; refusalState?: RefusalState<D> },
+  options: { ignoreLocalErrors?: boolean; refusalState: RefusalState<D>; isCurrent?: () => boolean },
 ): Promise<boolean> {
   if (form().submitting()) return false;
-  options?.refusalState?.clear();
+  options.refusalState.clear();
   let locallyInvalid = false;
   let refused = false;
   let refusal: ValidationError.WithOptionalFieldTree[] | undefined;
-  // Angular retains submission errors until their field changes. They must not block a retry of the same draft.
   const submitted = await submit(form, {
     ignoreValidators: 'all',
     action: async () => {
-      locallyInvalid = !options?.ignoreLocalErrors && form().errorSummary().some((error) => error.kind !== HUB);
+      locallyInvalid = !options.ignoreLocalErrors && form().errorSummary().some((error) => error.kind !== HUB);
       if (locallyInvalid) return undefined;
       const draft = form().value();
       const outcome = await save(draft);
+      if (options.isCurrent && !options.isCurrent()) return undefined;
       refusal = toFormErrors(outcome, form);
       refused = !!refusal;
-      if (options?.refusalState) {
-        options.refusalState.set(outcome, draft);
-        return undefined;
-      }
-      return refusal;
+      options.refusalState.set(outcome, draft);
+      return undefined;
     },
   });
+  if (options.isCurrent && !options.isCurrent()) return false;
   const ok = submitted && !locallyInvalid && !refused;
   if (!ok) {
     const first = locallyInvalid
       ? form().errorSummary().find((error) => error.fieldTree !== form && error.kind !== HUB)?.fieldTree
-      : refusal?.find((error) => error.fieldTree !== form)?.fieldTree;
+      : form().errorSummary().find((error) => error.fieldTree !== form && error.kind === HUB)?.fieldTree;
     first?.().focusBoundControl();
   }
   return ok;

@@ -380,6 +380,7 @@ describe('ProjectDetail', () => {
     document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-submit"]')!.click();
     await settle(harness.fixture);
     expect(stub.forRoute('/api/projects/proj_b/source-links/wsrc_g', 'PUT')).toHaveLength(1);
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).toBeNull();
 
     el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-unlink-jira"]')!.click();
     await settle(harness.fixture);
@@ -430,6 +431,76 @@ describe('ProjectDetail', () => {
     await router.navigateByUrl('/admin/projects/proj_other');
     await settle(harness.fixture);
     expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).toBeNull();
+  });
+
+  it.each([false, true])('keeps a newly opened link dialog after an earlier link succeeds (return to original: %s)', async (returnToOriginal) => {
+    let release!: (value: ReturnType<typeof sourceLinkView>) => void;
+    const delayed = new Promise<ReturnType<typeof sourceLinkView>>((resolve) => { release = resolve; });
+    const { harness, el, router } = await open('/admin/projects/proj_b', [], {
+      'GET /api/projects/{project}': (_request, { project }) => project === 'proj_b' ? BLIZZARD : { ...BLIZZARD, project_id: 'proj_other', name: 'Other' },
+      'PUT /api/projects/{project}/source-links/{source}': () => delayed,
+    });
+    await click(harness, el, 'admin-projects-tab-sources');
+    await click(harness, el, 'admin-projects-sources-link');
+    document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-submit"]')!.click();
+    await pump(harness.fixture);
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-submit"]')!.disabled).toBe(true);
+    await router.navigateByUrl('/admin/projects/proj_other');
+    await pump(harness.fixture);
+    if (returnToOriginal) {
+      await router.navigateByUrl('/admin/projects/proj_b');
+      await pump(harness.fixture);
+    }
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-tab-sources"]')!.click();
+    await pump(harness.fixture);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-link"]')!.click();
+    await pump(harness.fixture);
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-submit"]')!.disabled).toBe(false);
+    const cancel = document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-cancel"]')!;
+    expect(cancel.disabled).toBe(false);
+    cancel.click();
+    await pump(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).toBeNull();
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-link"]')!.click();
+    await pump(harness.fixture);
+    const choice = document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-choice"]')!;
+    const selection = choice.textContent;
+    expect(selection).toContain('gh');
+    release(sourceLinkView({ name: 'wsrc_g' }));
+    await settle(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="admin-projects-link-source-choice"]')!.textContent).toBe(selection);
+  });
+
+  it.each([false, true])('discards a delayed link refusal after navigation and reopening (return to original: %s)', async (returnToOriginal) => {
+    let release!: (value: StubHttpError<number, StubDetailBody>) => void;
+    const delayed = new Promise<StubHttpError<number, StubDetailBody>>((resolve) => { release = resolve; });
+    const { harness, el, router } = await open('/admin/projects/proj_b', [], {
+      'GET /api/projects/{project}': (_request, { project }) => project === 'proj_b' ? BLIZZARD : { ...BLIZZARD, project_id: 'proj_other', name: 'Other' },
+      'PUT /api/projects/{project}/source-links/{source}': () => delayed,
+    });
+    await click(harness, el, 'admin-projects-tab-sources');
+    await click(harness, el, 'admin-projects-sources-link');
+    document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-submit"]')!.click();
+    await pump(harness.fixture);
+    await router.navigateByUrl('/admin/projects/proj_other');
+    await pump(harness.fixture);
+    if (returnToOriginal) {
+      await router.navigateByUrl('/admin/projects/proj_b');
+      await pump(harness.fixture);
+    }
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-tab-sources"]')!.click();
+    await pump(harness.fixture);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-link"]')!.click();
+    await pump(harness.fixture);
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-submit"]')!.disabled).toBe(false);
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-cancel"]')!.disabled).toBe(false);
+    const active = document.activeElement;
+    release(stubError(409, { detail: 'old link failed' }));
+    await settle(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('old link failed');
+    expect(document.activeElement).toBe(active);
   });
 
   it('shows loading, not the empty copy, while the link and runner reads are pending', async () => {

@@ -19,8 +19,8 @@ import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectProjectRunnersQuery } from '../../core/runners.query';
 import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
-import type { ConfigFieldView } from '../config-field-tree.model';
 import { projectDraft, type ProjectDraft } from './project.domain';
+import { PROJECT_FIELDS } from './project-fields';
 import { projectCreateSchema } from './project.form';
 import { injectProjectService } from './project.service';
 import {
@@ -33,12 +33,6 @@ import {
 import { projectToOpen, rowKeys } from './project-open.model';
 import { injectProjectFigures } from './projects.query';
 import { ProjectsTable } from './projects-table';
-
-const CREATE_FIELDS: readonly ConfigFieldView<ProjectDraft>[] = [
-  { key: 'slug', label: 'Slug', kind: 'text' },
-  { key: 'name', label: 'Name', kind: 'text' },
-  { key: 'description', label: 'Description', kind: 'text' },
-];
 
 /**
  * `/admin/projects` — the tenant's projects beside a `<router-outlet>` holding the project the
@@ -78,7 +72,7 @@ export class ProjectsPage {
 
   private readonly meQuery = injectMeQuery();
   private readonly projectService = injectProjectService();
-  protected readonly fields = CREATE_FIELDS;
+  protected readonly fields = PROJECT_FIELDS;
   private readonly createRefusal = createRefusalState<ProjectDraft>();
   protected readonly createForm = form(signal(projectDraft(null)), (p) => {
     apply(p, projectCreateSchema);

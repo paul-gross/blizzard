@@ -42,7 +42,7 @@ describe('submitForm', () => {
     const { fixture, host, el } = setup();
     document.body.append(el);
     const save = vi.fn(async (): Promise<SaveOutcome<Draft>> => ({ ok: true }));
-    expect(await submitForm(host.f, save)).toBe(false);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(false);
     expect(save).not.toHaveBeenCalled();
     expect(host.f.name().touched()).toBe(true);
     expect(host.f.slug().touched()).toBe(true);
@@ -55,15 +55,37 @@ describe('submitForm', () => {
     const { host } = setup();
     host.model.set({ name: 'a', slug: 'b' });
     const save = vi.fn(async (): Promise<SaveOutcome<Draft>> => ({ ok: true }));
-    expect(await submitForm(host.f, save)).toBe(true);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(true);
     expect(save).toHaveBeenCalledWith({ name: 'a', slug: 'b' });
+  });
+
+  it.each([
+    { ok: false, fields: { slug: 'old field' }, form: null },
+    { ok: false, fields: {}, form: 'old root' },
+    { ok: true },
+  ] satisfies SaveOutcome<Draft>[])('discards an outcome from an earlier opening: %o', async (outcome) => {
+    const { host, el } = setup();
+    document.body.append(el);
+    host.model.set({ name: 'a', slug: 'b' });
+    let release!: (value: SaveOutcome<Draft>) => void;
+    const delayed = new Promise<SaveOutcome<Draft>>((resolve) => { release = resolve; });
+    let current = true;
+    const pending = submitForm(host.f, () => delayed, { refusalState: host.refusal, isCurrent: () => current });
+    current = false;
+    host.refusal.clear();
+    host.f().reset({ name: 'a', slug: 'b' });
+    release(outcome);
+    expect(await pending).toBe(false);
+    expect(host.f().errorSummary()).toEqual([]);
+    expect(el.contains(document.activeElement)).toBe(false);
+    el.remove();
   });
 
   it('lands a hub field error on its field, focuses it, and clears it when the field is edited', async () => {
     const { fixture, host, el } = setup();
     document.body.append(el);
     host.model.set({ name: 'a', slug: 'b' });
-    const ok = await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: null }));
+    const ok = await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: null }), { refusalState: host.refusal });
     expect(ok).toBe(false);
     expect(host.f.slug().errors().map((e) => e.message)).toEqual(['taken']);
     expect(host.f.name().errors()).toEqual([]);
@@ -79,9 +101,40 @@ describe('submitForm', () => {
     const { host, el } = setup();
     document.body.append(el);
     host.model.set({ name: 'a', slug: 'b' });
-    const ok = await submitForm(host.f, async () => ({ ok: false, fields: {}, form: 'conflict' }));
+    const ok = await submitForm(host.f, async () => ({ ok: false, fields: {}, form: 'conflict' }), { refusalState: host.refusal });
     expect(ok).toBe(false);
     expect(host.f().errors().map((e) => e.message)).toEqual(['conflict']);
+    expect(el.contains(document.activeElement)).toBe(false);
+    el.remove();
+  });
+
+  it('focuses only refusals still visible when a pending save resolves', async () => {
+    const { host, el } = setup();
+    document.body.append(el);
+    host.model.set({ name: 'a', slug: 'b' });
+    let release!: (value: SaveOutcome<Draft>) => void;
+    const delayed = new Promise<SaveOutcome<Draft>>((resolve) => { release = resolve; });
+    const pending = submitForm(host.f, () => delayed, { refusalState: host.refusal });
+    host.f.name().value.set('changed');
+    release({ ok: false, fields: { name: 'old name', slug: 'bad slug' }, form: null });
+    expect(await pending).toBe(false);
+    expect(host.f.name().errors()).toEqual([]);
+    expect(host.f.slug().errors().map((error) => error.message)).toEqual(['bad slug']);
+    expect(document.activeElement).toBe(el.querySelector('#slug'));
+    el.remove();
+  });
+
+  it('does not focus a refusal hidden by an edit during the save', async () => {
+    const { host, el } = setup();
+    document.body.append(el);
+    host.model.set({ name: 'a', slug: 'b' });
+    let release!: (value: SaveOutcome<Draft>) => void;
+    const delayed = new Promise<SaveOutcome<Draft>>((resolve) => { release = resolve; });
+    const pending = submitForm(host.f, () => delayed, { refusalState: host.refusal });
+    host.f.name().value.set('changed');
+    release({ ok: false, fields: { name: 'old name' }, form: null });
+    expect(await pending).toBe(false);
+    expect(host.f.name().errors()).toEqual([]);
     expect(el.contains(document.activeElement)).toBe(false);
     el.remove();
   });
@@ -93,21 +146,21 @@ describe('submitForm', () => {
       .mockResolvedValueOnce({ ok: false, fields: {}, form: 'Network failure' })
       .mockResolvedValueOnce({ ok: false, fields: { slug: 'taken' }, form: null })
       .mockResolvedValueOnce({ ok: true });
-    expect(await submitForm(host.f, save)).toBe(false);
-    expect(await submitForm(host.f, save)).toBe(false);
-    expect(await submitForm(host.f, save)).toBe(true);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(false);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(false);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(true);
     expect(save).toHaveBeenCalledTimes(3);
   });
 
   it('still blocks local errors after a refusal, unless the action explicitly ignores them', async () => {
     const { host } = setup();
     host.model.set({ name: 'a', slug: 'b' });
-    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: null }));
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: null }), { refusalState: host.refusal });
     host.f.name().value.set('');
     const save = vi.fn(async (): Promise<SaveOutcome<Draft>> => ({ ok: true }));
-    expect(await submitForm(host.f, save)).toBe(false);
+    expect(await submitForm(host.f, save, { refusalState: host.refusal })).toBe(false);
     expect(save).not.toHaveBeenCalled();
-    expect(await submitForm(host.f, save, { ignoreLocalErrors: true })).toBe(true);
+    expect(await submitForm(host.f, save, { ignoreLocalErrors: true, refusalState: host.refusal })).toBe(true);
     expect(host.f.name().errors().some((error) => error.kind === 'required')).toBe(true);
   });
 
@@ -115,8 +168,10 @@ describe('submitForm', () => {
     const { fixture, host, el } = setup();
     document.body.append(el);
     host.model.set({ name: 'a', slug: 'b' });
-    await submitForm(host.f, async () => ({ ok: false, fields: { name: 'old' }, form: null }));
-    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'new' }, form: null }));
+    await submitForm(host.f, async () => ({ ok: false, fields: { name: 'old' }, form: null }), { refusalState: host.refusal });
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'new' }, form: null }), { refusalState: host.refusal });
+    expect(host.f.name().errors()).toEqual([]);
+    expect(host.f.slug().errors().map((error) => error.message)).toEqual(['new']);
     fixture.detectChanges();
     expect(document.activeElement).toBe(el.querySelector('#slug'));
     el.remove();
@@ -165,7 +220,7 @@ describe('submitForm', () => {
   it('fails a refused outcome that names nothing (D7)', async () => {
     const { host } = setup();
     host.model.set({ name: 'a', slug: 'b' });
-    expect(await submitForm(host.f, async () => ({ ok: false, fields: {}, form: null }))).toBe(false);
+    expect(await submitForm(host.f, async () => ({ ok: false, fields: {}, form: null }), { refusalState: host.refusal })).toBe(false);
     expect(host.f().errors().length).toBe(1);
   });
 });

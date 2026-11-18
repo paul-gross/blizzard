@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, linkedSignal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, linkedSignal, signal } from '@angular/core';
 import { apply, form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -28,14 +28,14 @@ import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectRunnersQuery } from '../../core/runners.query';
 import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
-import type { ConfigFieldView } from '../config-field-tree.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectProjectHistoryQuery } from '../config-history.query';
 import { injectProjectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectProjectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { projectDraft, type ProjectDraft } from './project.domain';
-import { projectLinkChoices, projectLinkDraft, type ProjectLinkDraft } from './project-link.domain';
-import { projectLinkSchema } from './project-link.form';
+import { PROJECT_FIELDS } from './project-fields';
+import { projectLinkChoices, projectLinkDraft } from './project-link.domain';
+import { injectProjectLinkFormFactory } from './project-link-state';
 import { injectProjectLinkService } from './project-link.service';
 import { projectBranchBaseline, type ProjectBranchBaseline, type ProjectBranchDraft } from './project-branch.domain';
 import { injectProjectBranchService } from './project-branch.service';
@@ -104,6 +104,7 @@ export class ProjectDetail {
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly lens = inject(ProjectLens);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
     initialValue: null,
@@ -193,14 +194,12 @@ export class ProjectDetail {
   private readonly positionMutation = injectLandingPositionMutation();
   protected readonly linkService = injectProjectLinkService();
   protected readonly branchService = injectProjectBranchService();
-  private readonly linkDraft = signal<ProjectLinkDraft>(projectLinkDraft([]));
-  private readonly linkRefusal = createRefusalState<ProjectLinkDraft>();
-  protected readonly linkForm = form(this.linkDraft, (p) => {
-    apply(p, projectLinkSchema(() => this.linkChoices()));
-    apply(p, this.linkRefusal.schema);
-  });
+  private readonly createLinkForm = injectProjectLinkFormFactory();
+  private linkState = this.createLinkForm(() => []);
+  protected linkForm = this.linkState.form;
   private readonly linkProjectId = signal<string | null>(null);
   protected readonly linkOpeningKey = signal<string | null>(null);
+  private linkOpening = 0;
   private linkChoiceInitialized = false;
   private readonly branchDraft = signal<ProjectBranchDraft>({ baseBranch: '' });
   private readonly inheriting = signal(false);
@@ -212,11 +211,7 @@ export class ProjectDetail {
   private readonly branchBaseline = signal<ProjectBranchBaseline | null>(null);
   protected readonly branchRow = signal<ProjectLinkRowVm | null>(null);
   protected readonly branchProjectName = signal('');
-  protected readonly fields: readonly ConfigFieldView<ProjectDraft>[] = [
-    { key: 'slug', label: 'Slug', kind: 'text' },
-    { key: 'name', label: 'Name', kind: 'text' },
-    { key: 'description', label: 'Description', kind: 'text' },
-  ];
+  protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
   private readonly editDraft = signal<ProjectDraft>(projectDraft(null));
   private readonly editRefusal = createRefusalState<ProjectDraft>();
@@ -259,7 +254,7 @@ export class ProjectDetail {
       const choices = this.linkChoices();
       if (this.linkOpen() && !this.linkChoiceInitialized && choices.length > 0) {
         this.linkChoiceInitialized = true;
-        if (!this.linkDraft().name) this.linkForm().reset(projectLinkDraft(choices));
+        if (!this.linkForm().value().name) this.linkForm().reset(projectLinkDraft(choices));
       }
     });
     effect(() => {
@@ -275,7 +270,6 @@ export class ProjectDetail {
       }
     });
   }
-
   protected onTab(value: string): void {
     const tab = parseProjectTab(value);
     if (tab !== null) this.tab.set(tab);
@@ -326,21 +320,25 @@ export class ProjectDetail {
   protected onLinkOpen(kind: ProjectLinkKind): void {
     const id = this.projectId();
     if (id === null || !this.canEdit()) return;
+    this.linkOpening += 1;
     this.linkProjectId.set(id);
     this.linkOpeningKey.set(this.key());
     this.linkOpen.set(kind);
     const choices = this.linkChoices();
     this.linkChoiceInitialized = choices.length > 0;
-    this.linkRefusal.clear();
-    this.linkForm().reset(projectLinkDraft(choices));
+    this.linkState = this.createLinkForm(() => this.linkChoices());
+    this.linkForm = this.linkState.form;
   }
 
   protected async onLink(): Promise<void> {
     const id = this.linkProjectId();
     const kind = this.linkOpen();
     if (id === null || kind === null || this.key() !== this.linkOpeningKey() || !this.canEdit()) return;
-    const ok = await submitForm(this.linkForm, (draft) => this.linkService.link(id, kind, draft, this.linkChoices()), { refusalState: this.linkRefusal });
-    if (ok) this.linkOpen.set(null);
+    const opening = this.linkOpening;
+    const openingKey = this.linkOpeningKey();
+    const isCurrent = () => !this.destroyRef.destroyed && opening === this.linkOpening && this.key() === openingKey && this.linkOpen() === kind;
+    const ok = await submitForm(this.linkForm, (draft) => this.linkService.link(id, kind, draft, this.linkChoices()), { refusalState: this.linkState.refusal, isCurrent });
+    if (ok && isCurrent()) this.linkOpen.set(null);
   }
 
   protected async onUnlink({ kind, row }: ProjectUnlinkEvent): Promise<void> {

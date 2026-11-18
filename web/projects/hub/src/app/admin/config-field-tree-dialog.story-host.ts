@@ -1,6 +1,6 @@
 import { Component, input, signal } from '@angular/core';
-import { disabled, form, required, schema, validate } from '@angular/forms/signals';
-import { type SaveOutcome, submitForm } from 'fleet';
+import { apply, disabled, form, required, schema, validate } from '@angular/forms/signals';
+import { createRefusalState, type SaveOutcome, submitForm } from 'fleet';
 
 import { applyShownWhen } from './config-field-tree.form';
 import type { ConfigFieldView } from './config-field-tree.model';
@@ -91,7 +91,11 @@ export class SourceDialogHost {
   readonly outcome = input<SaveOutcome<SourceDraft>>({ ok: true });
   readonly kind = input('');
   readonly fields = SOURCE_FIELDS;
-  readonly f = form(signal<SourceDraft>({ name: '', kind: '', project: '', token: '' }), sourceRules);
+  readonly refusal = createRefusalState<SourceDraft>();
+  readonly f = form(signal<SourceDraft>({ name: '', kind: '', project: '', token: '' }), (p) => {
+    apply(p, sourceRules);
+    apply(p, this.refusal.schema);
+  });
   saved: SourceDraft[] = [];
   closes = 0;
 
@@ -106,7 +110,7 @@ export class SourceDialogHost {
       const outcome = this.outcome();
       if (outcome.ok) this.saved.push(draft);
       return outcome;
-    });
+    }, { refusalState: this.refusal });
   }
 }
 
@@ -120,7 +124,11 @@ export class UrgencyDialogHost {
   readonly outcome = input<SaveOutcome<UrgencyDraft>>({ ok: true });
   readonly fields = URGENCY_FIELDS;
   readonly baseline = URGENCY_BASELINE;
-  readonly f = form(signal<UrgencyDraft>({ ...URGENCY_BASELINE }), urgencyRules);
+  readonly refusal = createRefusalState<UrgencyDraft>();
+  readonly f = form(signal<UrgencyDraft>({ ...URGENCY_BASELINE }), (p) => {
+    apply(p, urgencyRules);
+    apply(p, this.refusal.schema);
+  });
   saved: UrgencyDraft[] = [];
   closes = 0;
 
@@ -129,7 +137,7 @@ export class UrgencyDialogHost {
       const outcome = this.outcome();
       if (outcome.ok) this.saved.push(draft);
       return outcome;
-    });
+    }, { refusalState: this.refusal });
   }
 }
 
