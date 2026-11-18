@@ -13,6 +13,7 @@ interface Draft {
   detail: string;
   count: string;
   mark: string;
+  tint: string;
   on: boolean;
 }
 
@@ -40,20 +41,30 @@ const FIELDS: readonly ConfigFieldView<Draft>[] = [
   { key: 'detail', label: 'Detail', kind: 'text', shownWhen: { key: 'kind', value: 'b' } },
   { key: 'count', label: 'Count', kind: 'number' },
   { key: 'mark', label: 'Mark', kind: 'mark' },
+  {
+    key: 'tint',
+    label: 'Tint',
+    kind: 'color',
+    options: [
+      { value: 'red', label: 'Red' },
+      { value: 'blue', label: 'Blue' },
+    ],
+  },
   { key: 'on', label: 'On', kind: 'checkbox' },
 ];
 
-const BASE: Draft = { name: 'n', kind: 'a', flavor: 'a1', detail: '', count: '5', mark: '', on: false };
+const BASE: Draft = { name: 'n', kind: 'a', flavor: 'a1', detail: '', count: '5', mark: '', tint: 'red', on: false };
 
 describe('config field tree model', () => {
   it('shows the fields a mode and the draft allow', () => {
-    expect(shownFieldViews(FIELDS, 'create', BASE).map((f) => f.key)).toEqual(['name', 'kind', 'flavor', 'count', 'mark', 'on']);
+    expect(shownFieldViews(FIELDS, 'create', BASE).map((f) => f.key)).toEqual(['name', 'kind', 'flavor', 'count', 'mark', 'tint', 'on']);
     expect(shownFieldViews(FIELDS, 'edit', { ...BASE, kind: 'b' }).map((f) => f.key)).toEqual([
       'kind',
       'flavor',
       'detail',
       'count',
       'mark',
+      'tint',
       'on',
     ]);
   });
@@ -81,6 +92,11 @@ describe('config field tree model', () => {
     expect(diff[0]).toMatchObject({ old: 'a', new: 'b', old_label: 'Alpha', new_label: 'Beta' });
     expect(diff[2]).toMatchObject({ old: '5', new: '7' });
     expect(diff[3]).toMatchObject({ old: false, new: true });
+  });
+
+  it('names a color change by its option labels', () => {
+    const [change] = fieldChanges(FIELDS, BASE, { ...BASE, tint: 'blue' });
+    expect(change).toMatchObject({ field: 'Tint', old_label: 'Red', new_label: 'Blue' });
   });
 
   it('reads a cleared text as none, a hidden field as unchanged, and an image mark as Image', () => {

@@ -78,7 +78,7 @@ function sameNumber(before: unknown, after: unknown): boolean {
 
 function labelOf<D>(field: ConfigFieldView<D>, value: unknown): string | null {
   if (field.kind === 'mark') return typeof value === 'string' && markIsImage(value) ? 'Image' : null;
-  if (field.kind !== 'select' || typeof value !== 'string') return null;
+  if ((field.kind !== 'select' && field.kind !== 'color') || typeof value !== 'string') return null;
   return field.options?.find((option) => option.value === value)?.label ?? null;
 }
 
