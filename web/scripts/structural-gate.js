@@ -42,10 +42,15 @@
  * export of a `fleet` sub-barrel needs a consumer outside that sub-barrel's directory, and
  * `public-api.ts` re-exports only sub-barrels, save the generated client and the query-key registry.
  *
- * Also the wire-conformist sweeps (`wire-conformist-sweep.js`), neither with an exemption
- * list: hand-written TS never cites a backend `.py` file, and a generated client function from
- * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or
- * `*.mutations.ts` file.
+ * Also the domain-boundary sweeps (`domain-boundary-sweep.js`, `bzh:frontend-wire-conformist`). The
+ * symbol-origin sweep resolves every symbol a file references to its declaration and fails a file outside
+ * the boundary — `fleet/src/lib/api/`, `fleet/src/lib/testing/transport/`, and `*.query.ts`,
+ * `*.mutations.ts`, and `*.translate.ts` files with their focused specs — that consumes one declared in
+ * a generated `types.gen.ts`; a unit still migrating is named in `DOMAIN_BOUNDARY_EXEMPT`, and an entry
+ * whose unit no longer consumes the wire fails as stale. It also fails a production file or a story
+ * reaching a symbol declared under `testing/transport/`. Beside it, with no exemption list: hand-written
+ * TS never cites a backend `.py` file, and a generated client function from
+ * `fleet/src/lib/api/{hub,runner}/sdk.gen.ts` is named only inside a `*.query.ts` or `*.mutations.ts` file.
  *
  * Also the package-layers sweep (`bzh:frontend-package-layers`), with no exemption list: each
  * project's source root is cut into folder units, and `LAYERED_PROJECTS` declares as data which
@@ -55,8 +60,9 @@
  * the spec-support entry), and a cycle in a table.
  *
  * Also the open-vocabulary sweeps (`open-vocabulary-sweep.js`, `bzh:frontend-open-vocabulary`), with no
- * exemption list: every template `@switch` carries an `@default`, and a full `Record` keyed by a generated
- * vocabulary is built through `openLookup` instead.
+ * exemption list: every template `@switch` carries an `@default`, and, in a `*.translate.ts` file or a unit
+ * still on `DOMAIN_BOUNDARY_EXEMPT` — where wire vocabularies are read — a full `Record` keyed by a
+ * generated vocabulary is built through `openLookup` instead.
  *
  * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
  * `bzh:frontend-containers-compose`), with no exemption list: in a `@Component` class that calls a
@@ -77,7 +83,9 @@ const {
   backendCitationViolations,
   assertClientCallPlacementDetectorWorks,
   clientCallPlacementViolations,
-} = require('./wire-conformist-sweep');
+  assertDomainBoundaryDetectorWorks,
+  sweepDomainBoundary,
+} = require('./domain-boundary-sweep');
 const {
   CONTAINERS_COMPOSE_HEADER,
   assertContainersComposeDetectorWorks,
@@ -971,6 +979,80 @@ const LAYERED_PROJECTS = [
   { name: 'runner', root: 'runner/src/app', kernel: 'core', specSupport: null, layers: RUNNER_LAYERS },
 ];
 
+/**
+ * The domain-boundary exemptions (`bzh:frontend-wire-conformist`): each entry is a package-layers unit,
+ * `<source root>/<unit>` (the longest `LAYERED_PROJECTS` key prefixing a file), and passes every file in
+ * it. One reason covers the whole list: these units still read wire types outside the boundary and move
+ * behind it one landing at a time (`decision:ui-toolkit/incremental-replacement`). A unit leaves the list
+ * in the landing that moves it; an entry whose unit no longer consumes a wire type fails as stale, so the
+ * list only shrinks. A file in no declared unit is keyed by its own folder.
+ */
+const DOMAIN_BOUNDARY_EXEMPT = [
+  'fleet/src/lib/chunk',
+  'fleet/src/lib/core',
+  'fleet/src/lib/host',
+  'fleet/src/lib/shell',
+  'fleet/src/lib/sse',
+  'fleet/src/lib/transcripts',
+  'hub/src/app/admin',
+  'hub/src/app/board',
+  'hub/src/app/core',
+  'hub/src/app/delivery',
+  'hub/src/app/demo',
+  'hub/src/app/events',
+  'hub/src/app/garden',
+  'hub/src/app/garden/cadences',
+  'hub/src/app/garden/core',
+  'hub/src/app/garden/doorway',
+  'hub/src/app/garden/findings',
+  'hub/src/app/garden/proposals',
+  'hub/src/app/garden/routines',
+  'hub/src/app/garden/runs',
+  'hub/src/app/garden/scopes',
+  'hub/src/app/graphs',
+  'hub/src/app/login',
+  'hub/src/app/runners',
+  'hub/src/app/shell',
+  'runner/src/app/asks',
+  'runner/src/app/board',
+  'runner/src/app/core',
+  'runner/src/app/events',
+  'runner/src/app/host',
+  'runner/src/app/runners',
+  'runner/src/app/shell',
+];
+
+/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
+ * @param {string} rel
+ */
+function domainBoundaryUnitOf(rel) {
+  for (const project of LAYERED_PROJECTS) {
+    if (!rel.startsWith(`${project.root}/`)) continue;
+    const unit = layerUnitOf(rel.slice(project.root.length + 1), project.layers);
+    if (unit !== null) return `${project.root}/${unit}`;
+  }
+  return path.posix.dirname(rel);
+}
+
+/** The domain-boundary sweep over the real tree, one printable line per finding, in three reports.
+ * @param {readonly string[]} [exempt]
+ */
+function domainBoundaryViolations(exempt = DOMAIN_BOUNDARY_EXEMPT) {
+  const { consumers, stale, reach } = sweepDomainBoundary({ root: ROOT, unitOf: domainBoundaryUnitOf, exempt });
+  return {
+    consumers: consumers.map((c) => `  ${c.file} (${c.unit}): ${c.names.join(', ')}`),
+    stale: stale.map((unit) => `  ${unit}`),
+    reach: reach.map((r) => `  ${r.file}: ${r.names.join(', ')}`),
+  };
+}
+
+/** Whether `rel` sits in a unit still on `DOMAIN_BOUNDARY_EXEMPT`.
+ * @param {string} rel
+ */
+function inExemptDomainBoundaryUnit(rel) {
+  return DOMAIN_BOUNDARY_EXEMPT.includes(domainBoundaryUnitOf(rel));
+}
+
 const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g;
 
 const COMPONENT_RESOURCE_KEYS = new Set(['styleUrl', 'styleUrls', 'templateUrl']);
@@ -1276,6 +1358,7 @@ function main() {
   assertDisjointDiffsDetectorWorks();
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
+  assertDomainBoundaryDetectorWorks();
   assertPackageLayersDetectorWorks();
   assertContainersComposeDetectorWorks();
   assertTemplateSwitchDetectorWorks();
@@ -1354,6 +1437,7 @@ function main() {
   const disjointDiffsLines = disjointDiffsViolations();
   const backendCitationLines = backendCitationViolations();
   const clientCallLines = clientCallPlacementViolations();
+  const domainBoundary = domainBoundaryViolations();
 
   /** @type {Map<string, string>} */
   const layeredFiles = new Map();
@@ -1366,7 +1450,7 @@ function main() {
   const containersComposeLines = containersComposeViolations();
   const kitStories = kitStoriesViolations(readKitSources());
   const templateSwitchLines = templateSwitchViolations();
-  const vocabularyRecordLines = vocabularyRecordViolations();
+  const vocabularyRecordLines = vocabularyRecordViolations(inExemptDomainBoundaryUnit);
 
   if (
     realTimerViolations.length > 0 ||
@@ -1381,6 +1465,9 @@ function main() {
     disjointDiffsLines.length > 0 ||
     backendCitationLines.length > 0 ||
     clientCallLines.length > 0 ||
+    domainBoundary.consumers.length > 0 ||
+    domainBoundary.stale.length > 0 ||
+    domainBoundary.reach.length > 0 ||
     packageLayerLines.length > 0 ||
     containersComposeLines.length > 0 ||
     templateSwitchLines.length > 0 ||
@@ -1483,6 +1570,28 @@ function main() {
           'and inject that hook where the call is needed.',
       );
     }
+    if (domainBoundary.consumers.length > 0) {
+      console.error('structural-gate: wire types consumed outside the domain boundary:\n');
+      for (const line of domainBoundary.consumers) console.error(line);
+      console.error(
+        '\nRead the wire only in a `*.query.ts`, `*.mutations.ts`, or `*.translate.ts` file (or its focused spec) ' +
+          'and hand the rest of the feature a domain type; a generated type re-exported through a barrel is still ' +
+          'the wire. DOMAIN_BOUNDARY_EXEMPT only shrinks: move the unit behind the boundary instead of adding it.',
+      );
+    }
+    if (domainBoundary.stale.length > 0) {
+      console.error('structural-gate: stale DOMAIN_BOUNDARY_EXEMPT entries:\n');
+      for (const line of domainBoundary.stale) console.error(line);
+      console.error('\nA unit that no longer consumes a wire type has moved behind the boundary: delete its entry.');
+    }
+    if (domainBoundary.reach.length > 0) {
+      console.error('structural-gate: production files or stories reaching the test transport:\n');
+      for (const line of domainBoundary.reach) console.error(line);
+      console.error(
+        '\n`fleet/src/lib/testing/transport/` is test-only: a story renders from domain or fixture builders, and ' +
+          'production code never imports the typed stub or its operation tables, directly or through a barrel.',
+      );
+    }
     if (packageLayerLines.length > 0) {
       console.error('structural-gate: imports and folders outside the package-layer tables:\n');
       for (const line of packageLayerLines) console.error(line);
@@ -1534,6 +1643,7 @@ function main() {
   console.log('structural-gate: disjoint-diffs sweep clean.');
   console.log('structural-gate: backend-citation sweep clean.');
   console.log('structural-gate: client-call placement sweep clean.');
+  console.log('structural-gate: domain-boundary sweep clean.');
   console.log('structural-gate: package-layers sweep clean.');
   console.log('structural-gate: containers-compose sweep clean.');
   console.log('structural-gate: template-switch sweep clean.');
