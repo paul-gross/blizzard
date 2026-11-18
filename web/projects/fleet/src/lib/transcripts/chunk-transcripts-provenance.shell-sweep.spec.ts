@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { transitionView } from '../testing/builders/chunk';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
+import { transitionView } from '../testing/builders/chunk.translate';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —

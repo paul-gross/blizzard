@@ -10,7 +10,7 @@ import {
   type StubHttpError,
   stubError,
   stubHubClient,
-} from '../../testing/stub-request-client';
+} from '../../testing/transport/stub-request-client';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
 
 const READ: FlagsRead = {

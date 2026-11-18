@@ -12,7 +12,7 @@ import {
   stubError,
   stubHubClient,
   stubRunnerClient,
-} from '../testing/stub-request-client';
+} from '../testing/transport/stub-request-client';
 import {
   TranscriptFetchError,
   injectChunkTranscriptSegmentQuery,

@@ -1,5 +1,5 @@
 import type { ChunkCountsView, ChunkSummary, FleetSpendView } from '../../api/hub';
-import { chunkUsageTotalView } from './chunk';
+import { chunkUsageTotalView } from './chunk.translate';
 import { fixtureInstant } from './clock';
 
 /** The board's chunk counts: a fleet mid-day, `total` summing the rest. */

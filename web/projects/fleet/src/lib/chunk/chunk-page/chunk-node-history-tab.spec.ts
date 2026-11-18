@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { ArtifactView, ChunkDetail } from '../../api/hub';
-import { assetArtifactView } from '../../testing/builders/artifact';
-import { chunkDetail, transitionView } from '../../testing/builders/chunk';
+import { assetArtifactView } from '../../testing/builders/artifact.translate';
+import { chunkDetail, transitionView } from '../../testing/builders/chunk.translate';
 
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 

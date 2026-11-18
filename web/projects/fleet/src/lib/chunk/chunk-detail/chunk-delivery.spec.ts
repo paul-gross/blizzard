@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { type WaitKind } from '../../api/hub';
-import { chunkDetail, prView } from '../../testing/builders/chunk';
+import { chunkDetail, prView } from '../../testing/builders/chunk.translate';
 import { ChunkDelivery } from './chunk-delivery';
 
 describe('ChunkDelivery', () => {

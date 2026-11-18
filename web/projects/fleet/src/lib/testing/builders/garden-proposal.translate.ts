@@ -6,7 +6,7 @@ import type {
   GardenProposalView,
 } from '../../api/hub';
 import { fixtureInstant } from './clock';
-import { gardenFindingDetailView } from './garden';
+import { gardenFindingDetailView } from './garden.translate';
 
 /** A routine-run garden proposal still waiting on a decision, under no project. */
 export function gardenProposalView(

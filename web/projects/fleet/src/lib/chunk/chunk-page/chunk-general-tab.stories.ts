@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { chunkDetail, decisionView, questionView, transitionView, workItemEntry } from '../../testing/builders/chunk';
+import { chunkDetail, decisionView, questionView, transitionView, workItemEntry } from '../../testing/builders/chunk.translate';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
 const HISTORY = [

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ArtifactView } from '../../api/hub';
-import { assetArtifactView, commitArtifactView } from '../../testing/builders/artifact';
+import { assetArtifactView, commitArtifactView } from '../../testing/builders/artifact.translate';
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
 
 const OLDER: ArtifactView = commitArtifactView({

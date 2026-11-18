@@ -1,6 +1,6 @@
-import { client as hubClient } from '../api/hub/client.gen';
-import { client as runnerClient } from '../api/runner/client.gen';
-import type { AnswerResult } from '../api/hub';
+import { client as hubClient } from '../../api/hub/client.gen';
+import { client as runnerClient } from '../../api/runner/client.gen';
+import type { AnswerResult } from '../../api/hub';
 import type { HubOperations } from './hub-operations.gen';
 import type { RunnerOperations } from './runner-operations.gen';
 

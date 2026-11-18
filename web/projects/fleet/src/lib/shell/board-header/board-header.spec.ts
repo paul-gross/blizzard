@@ -4,8 +4,8 @@ import { hiddenAtContainerWidth } from 'fleet/testing';
 
 import type { ChunkCountsView, ChunkSummary } from '../../api/hub';
 import { LANES, STATUS_LANE } from '../../core/chunk-lanes';
-import { chunkCountsView, chunkSummary } from '../../testing/builders/board';
-import { chunkUsageTotalView } from '../../testing/builders/chunk';
+import { chunkCountsView, chunkSummary } from '../../testing/builders/board.translate';
+import { chunkUsageTotalView } from '../../testing/builders/chunk.translate';
 import { BoardHeader } from './board-header';
 
 const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary =>

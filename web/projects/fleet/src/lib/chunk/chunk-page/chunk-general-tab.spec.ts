@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, decisionView, questionView, transitionView, workItemEntry, workRefView } from '../../testing/builders/chunk';
+import { chunkDetail, decisionView, questionView, transitionView, workItemEntry, workRefView } from '../../testing/builders/chunk.translate';
 import type { WorkItemsState } from '../chunk-detail';
 import { ChunkGeneralTab } from './chunk-general-tab';
 

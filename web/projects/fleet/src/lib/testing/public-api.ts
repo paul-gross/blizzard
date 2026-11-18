@@ -19,8 +19,8 @@ export {
   type RequestClientStub,
   type CapturedRequest,
   type StubHttpError,
-} from './stub-request-client';
-export { OPERATOR_ME_RESPONSE } from './auth-fixtures';
+} from './transport/stub-request-client';
+export { OPERATOR_ME_RESPONSE } from './auth-fixtures.translate';
 export { chunkControlStub, type ChunkControlStub, type ChunkControlVerb } from './chunk-control-stub';
 export { FIXTURE_NOW, fixtureInstant } from './builders/clock';
 export {
@@ -45,7 +45,7 @@ export {
   escalatedChunkDetail,
   landedChunkDetail,
   stoppedChunkDetail,
-} from './builders/chunk';
+} from './builders/chunk.translate';
 export {
   assetArtifactView,
   commitArtifactView,
@@ -58,28 +58,28 @@ export {
   surveyArtifactView,
   deltaArtifactView,
   bounceArtifactView,
-} from './builders/artifact';
+} from './builders/artifact.translate';
 export {
   turnSegmentView,
   toolCallSegmentView,
   sidechainSegmentView,
   transcriptSegmentIndexEntry,
   transcriptSegmentContentView,
-} from './builders/transcript';
-export { chunkCountsView, chunkSummary, fleetSpendView } from './builders/board';
-export { graphView, graphNodeView, graphEdgeView } from './builders/graph';
-export { pauseStateView, capacitiesView, hubConnectivityView, runnerStatusView, runnerDashboardView, hostRunnerView } from './builders/runner-dashboard';
-export { hostEnvironmentView, hostRegistrationView, servedProjectStatusView, selfTestView, hostSubscriptionView, harnessHealthView } from './builders/host-shell-views';
-export { runnerRegistryView, hostRegistryView, runnerBindingView, subscriptionUsageView } from './builders/fleet-runner-host';
-export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, credentialSummary, credentialDocument, configChangeView, configChangesPage } from './builders/admin-config';
-export { queuePeekEntry, backlogPeekEntry } from './builders/board-root-queue';
-export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runner-core';
-export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden';
-export { gardenProposalView, gardenProposalClosureView, gardenProposalAcceptResponse, gardenProposalsPageView, gardenEvidenceFindingView } from './builders/garden-proposal';
-export { deliveredSetView, deliveredSetDeltaView, runEscalationView, runRowView, runDeltaView, routineRunResponse, routineBaselineView, gardenRoutineView, gardenScopeView, gardenProjectView } from './builders/garden-run';
-export { gardenCadenceView, gardenChoreView, gardenCadenceAttentionView, gardenCadenceErrandView, gardenErrandRunView, runCadenceView } from './builders/cadence';
-export { gardenWorkItemView } from './builders/garden';
-export { gardenFindingView } from './builders/garden';
-export { graphSummaryView } from './builders/graph-summary';
-export { eventView } from './builders/event-log';
-export { flowView, flowFactView } from './builders/delivery-flow';
+} from './builders/transcript.translate';
+export { chunkCountsView, chunkSummary, fleetSpendView } from './builders/board.translate';
+export { graphView, graphNodeView, graphEdgeView } from './builders/graph.translate';
+export { pauseStateView, capacitiesView, hubConnectivityView, runnerStatusView, runnerDashboardView, hostRunnerView } from './builders/runner-dashboard.translate';
+export { hostEnvironmentView, hostRegistrationView, servedProjectStatusView, selfTestView, hostSubscriptionView, harnessHealthView } from './builders/host-shell-views.translate';
+export { runnerRegistryView, hostRegistryView, runnerBindingView, subscriptionUsageView } from './builders/fleet-runner-host.translate';
+export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, credentialSummary, credentialDocument, configChangeView, configChangesPage } from './builders/admin-config.translate';
+export { queuePeekEntry, backlogPeekEntry } from './builders/board-root-queue.translate';
+export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runner-core.translate';
+export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden.translate';
+export { gardenProposalView, gardenProposalClosureView, gardenProposalAcceptResponse, gardenProposalsPageView, gardenEvidenceFindingView } from './builders/garden-proposal.translate';
+export { deliveredSetView, deliveredSetDeltaView, runEscalationView, runRowView, runDeltaView, routineRunResponse, routineBaselineView, gardenRoutineView, gardenScopeView, gardenProjectView } from './builders/garden-run.translate';
+export { gardenCadenceView, gardenChoreView, gardenCadenceAttentionView, gardenCadenceErrandView, gardenErrandRunView, runCadenceView } from './builders/cadence.translate';
+export { gardenWorkItemView } from './builders/garden.translate';
+export { gardenFindingView } from './builders/garden.translate';
+export { graphSummaryView } from './builders/graph-summary.translate';
+export { eventView } from './builders/event-log.translate';
+export { flowView, flowFactView } from './builders/delivery-flow.translate';

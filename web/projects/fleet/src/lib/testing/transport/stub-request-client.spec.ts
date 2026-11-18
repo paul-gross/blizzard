@@ -1,5 +1,5 @@
-import { client as hubClient } from '../api/hub/client.gen';
-import { client as runnerClient } from '../api/runner/client.gen';
+import { client as hubClient } from '../../api/hub/client.gen';
+import { client as runnerClient } from '../../api/runner/client.gen';
 import { stubError, stubHubClient, stubRunnerClient, type RequestClientStub } from './stub-request-client';
 
 const PROJECT = {

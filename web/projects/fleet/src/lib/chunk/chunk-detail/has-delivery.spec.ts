@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { WaitKind } from '../../api/hub';
-import { chunkDetail, prView } from '../../testing/builders/chunk';
+import { chunkDetail, prView } from '../../testing/builders/chunk.translate';
 import { hasDelivery } from './has-delivery';
 
 describe('hasDelivery', () => {

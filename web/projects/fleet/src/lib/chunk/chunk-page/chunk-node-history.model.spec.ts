@@ -1,5 +1,5 @@
 import type { ArtifactView } from '../../api/hub';
-import { assetArtifactView } from '../../testing/builders/artifact';
+import { assetArtifactView } from '../../testing/builders/artifact.translate';
 import { parseSelectedKey, stepArtifacts } from './chunk-node-history.model';
 
 function artifact(overrides: Partial<ArtifactView>): ArtifactView {
