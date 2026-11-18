@@ -1,0 +1,8 @@
+<fleet-kit-option-group [formField]="f" ariaLabel="Scope">
+  <fleet-kit-option value="project">Project</fleet-kit-option>
+  <fleet-kit-option value="workspace">Workspace</fleet-kit-option>
+  <fleet-kit-option value="tenant">Tenant</fleet-kit-option>
+</fleet-kit-option-group>
+<p style="font-size: 12px">
+  value: {{ f().value() | json }} · touched: {{ f().touched() }}
+</p>

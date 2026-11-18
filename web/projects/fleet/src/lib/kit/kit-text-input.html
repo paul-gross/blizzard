@@ -1,5 +1,6 @@
 @if (multiline()) {
   <textarea
+    #native
     class="ctl"
     [class.masked]="type() === 'password'"
     [rows]="rows()"
@@ -7,10 +8,13 @@
     [attr.aria-label]="ariaLabel()"
     [attr.data-testid]="testid()"
     [value]="value()"
+    [disabled]="disabled()"
+    (blur)="touch.emit()"
     (input)="onInput($event)"
   ></textarea>
 } @else {
   <input
+    #native
     class="ctl"
     [type]="type()"
     [attr.inputmode]="type() === 'number' ? 'numeric' : null"
@@ -18,6 +22,8 @@
     [attr.aria-label]="ariaLabel()"
     [attr.data-testid]="testid()"
     [value]="value()"
+    [disabled]="disabled()"
+    (blur)="touch.emit()"
     (input)="onInput($event)"
   />
 }

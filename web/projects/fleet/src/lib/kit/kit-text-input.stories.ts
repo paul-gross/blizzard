@@ -1,7 +1,21 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { JsonPipe } from '@angular/common';
+import { Component, input, signal } from '@angular/core';
+import { FormField, disabled, form } from '@angular/forms/signals';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import { KitTextInput } from './kit-text-input';
+
+/** Form-bound stories render through this host: `form()` needs an injection context; the readout shows the field. */
+@Component({
+  selector: 'fleet-story-text-input-form',
+  imports: [FormField, KitTextInput, JsonPipe],
+  templateUrl: './kit-text-input.form-story.html',
+})
+class TextInputFormHost {
+  readonly locked = input(false);
+  readonly f = form(signal('draft'), (p) => disabled(p, () => this.locked()));
+}
 
 const meta: Meta<KitTextInput> = {
   title: 'Kit/Text input',
@@ -64,3 +78,12 @@ export const LongValue: Story = {
       'Use the hosted hub for the runner, but keep the board pointed at the local mock until the migration for the new lease columns has been applied everywhere',
   },
 };
+
+const formBound = (locked: boolean): Story => ({
+  decorators: [moduleMetadata({ imports: [TextInputFormHost] })],
+  render: () => ({ template: `<fleet-story-text-input-form [locked]="${locked}" />` }),
+});
+/** Bound to a field: edit it and the readout follows; leave it and touched flips. */
+export const FormBound: Story = formBound(false);
+/** A schema `disabled()` rule on the field disables the native control. */
+export const FormBoundDisabledByRule: Story = formBound(true);

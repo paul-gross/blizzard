@@ -1,4 +1,7 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { JsonPipe } from '@angular/common';
+import { Component, input, signal } from '@angular/core';
+import { FormField, disabled, form } from '@angular/forms/signals';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import type { KitChipOption } from './kit-chips';
@@ -15,6 +18,22 @@ const MANY: readonly KitChipOption[] = Array.from({ length: 40 }, (_, i) => ({
   value: `routine-${i}`,
   label: `Routine ${i + 1}`,
 }));
+
+/** Form-bound stories render through this host: `form()` needs an injection context; the readout shows the field. */
+@Component({
+  selector: 'fleet-story-select-form',
+  imports: [FormField, KitSelect, JsonPipe],
+  templateUrl: './kit-select.form-story.html',
+})
+class SelectFormHost {
+  readonly options = [
+    { value: 'a', label: 'Alpha' },
+    { value: 'b', label: 'Beta' },
+    { value: 'c', label: 'Gamma' },
+  ];
+  readonly locked = input(false);
+  readonly f = form(signal('b'), (p) => disabled(p, () => this.locked()));
+}
 
 const meta: Meta<KitSelect> = {
   title: 'Kit/Select',
@@ -47,8 +66,7 @@ export const LongValueTruncating: Story = {
       ...OPTIONS,
       {
         value: 'long',
-        label:
-          'A routine whose name runs well past the width the trigger is given here',
+        label: 'A routine whose name runs well past the width the trigger is given here',
       },
     ],
     selectedValue: 'long',
@@ -65,3 +83,12 @@ export const LongValueTruncating: Story = {
 export const ManyOptions: Story = {
   args: { options: MANY, selectedValue: 'routine-7' },
 };
+
+const formBound = (locked: boolean): Story => ({
+  decorators: [moduleMetadata({ imports: [SelectFormHost] })],
+  render: () => ({ template: `<fleet-story-select-form [locked]="${locked}" />` }),
+});
+/** Bound to a field: edit it and the readout follows; leave it and touched flips. */
+export const FormBound: Story = formBound(false);
+/** A schema `disabled()` rule on the field disables the native control. */
+export const FormBoundDisabledByRule: Story = formBound(true);
