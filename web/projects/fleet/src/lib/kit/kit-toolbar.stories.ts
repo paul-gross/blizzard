@@ -14,7 +14,7 @@ const meta: Meta<ToolbarArgs> = {
   argTypes: { orientation: { control: 'select', options: ['horizontal', 'vertical'] } },
   render: (args) => ({ props: args, template: `
     <button type="button">Before toolbar</button>
-    <div fleetKitToolbar [disabled]="disabled" [orientation]="orientation" aria-label="Actions" style="max-width: 16rem">
+    <div fleetKitToolbar [disabled]="disabled" [orientation]="orientation" aria-label="Actions" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; max-width: 16rem" [style.flex-direction]="orientation === 'vertical' ? 'column' : 'row'">
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Accept</fleet-kit-chip>
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Decline</fleet-kit-chip>
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Defer</fleet-kit-chip>

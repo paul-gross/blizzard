@@ -18,7 +18,7 @@ const meta: Meta<ChipGroupArgs> = {
   },
   render: (args) => ({
     props: args,
-    template: `<div fleetKitChipGroup [orientation]="orientation" [disabled]="disabled" [selectionMode]="selectionMode" aria-label="Project" [value]="value" [hasSelection]="hasSelection" (valueChange)="value = $event; hasSelection = true; valueChange($event)">
+    template: `<div fleetKitChipGroup [orientation]="orientation" [disabled]="disabled" [selectionMode]="selectionMode" aria-label="Project" [value]="value" [hasSelection]="hasSelection" (valueChange)="value = $event; hasSelection = true; valueChange($event)" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start" [style.flex-direction]="orientation === 'vertical' ? 'column' : 'row'">
       <fleet-kit-chip fleetKitChipOption [value]="null" label="All">All</fleet-kit-chip>
       <fleet-kit-chip fleetKitChipOption value="alpha" label="Alpha">Alpha</fleet-kit-chip>
       <fleet-kit-chip fleetKitChipOption value="disabled" label="Disabled" [disabled]="true">Disabled</fleet-kit-chip>
