@@ -67,8 +67,9 @@ the hub's, the record's turns are rejected and stored empty.
 Every ceiling is an overridable default under the owning daemon's `[transcripts]` — runner: `record_max_bytes`,
 `chunk_max_bytes`; hub: `record_max_bytes`, `chunk_budget_max_bytes`, `runner_daily_rate_max_bytes`; widen for a
 backfill window then restore, keeping the runner's record cap at or below the hub's so the ordering holds. Runner
-ceilings take effect on restart. Hub ceilings are live [hub settings](./hub-settings.md) and take effect on subsequent
-requests; a non-integer or non-positive cap is refused.
+ceilings are live [host settings](./runner-settings.md#the-hosts-settings) and take effect on the next tick. Hub
+ceilings are live [hub settings](./hub-settings.md) and take effect on subsequent requests; a non-integer or
+non-positive cap is refused.
 
 Widening lifts neither of two limits: a proxy still rejects an oversized body first (raise `client_max_body_size` with
 the hub's record cap — [human-auth.md](./human-auth.md)), and a stopped chunk stays stopped — the per-chunk budget

@@ -1031,7 +1031,7 @@ def test_read_stores_narrow_lease_traces_to_the_same_instance(tmp_path: Path) ->
     assert RunnerReadStores.of(stores).lease_traces is stores.lease_traces
 
 
-def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
+def test_process_graph_builds_the_trace_sweep_over_its_exporter_without_boot_tracing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built: list[dict[str, object]] = []
@@ -1065,7 +1065,9 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
     )
     try:
         (kwargs,) = built
-        assert kwargs["config"] is config.tracing
+        # The sweep takes its tracing settings from each pass's snapshot, never from its construction.
+        assert "config" not in kwargs
+        assert graph.config.tracing is config.tracing
         assert len(wrapped) == 1
         assert wrapped[0][0] is exporter
         assert kwargs["exporter"] is wrapped[0][1]

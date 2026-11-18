@@ -29,3 +29,17 @@ def runner_keys(registry: ConfigRegistry) -> dict[str, Lifetime]:
         if previous != key.lifetime:
             raise ValueError(f"{path}: array members have different settings lifetimes")
     return result
+
+
+def host_keys(registry: ConfigRegistry) -> dict[str, Lifetime]:
+    """Return the host record's keys: the top-level pass/session keys, each value whole.
+
+    A key inside an array belongs to that array's records, not the host's; a table-valued key is one whole entry,
+    as an array is in the runner record. A deprecated declaration is not a second writable key."""
+    result: dict[str, Lifetime] = {}
+    for key in registry.keys:
+        lifetime = key.lifetime
+        if "[]" in key.path or key.deprecated or lifetime is None or lifetime not in (Lifetime.PASS, Lifetime.SESSION):
+            continue
+        result[key.path] = lifetime
+    return result

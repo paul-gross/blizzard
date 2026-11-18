@@ -62,7 +62,12 @@ from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessReposit
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
-from blizzard.runner.settings.ports import IReadRunnerSettings, IWriteRunnerSettings
+from blizzard.runner.settings.ports import (
+    IReadHostSettings,
+    IReadRunnerSettings,
+    IWriteHostSettings,
+    IWriteRunnerSettings,
+)
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
     IReadRunnerUsageLimitRepository,
@@ -316,6 +321,8 @@ class HostStores:
     host_ingests: IWriteHostIngestRepository
     #: Each subscription's usage-limit marks and floor clears, shared by every runner spending it.
     usage_limits: IWriteSubscriptionUsageLimitRepository
+    #: The host's own settings record: its host-level pass and session keys.
+    settings: IWriteHostSettings
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -334,6 +341,7 @@ class HostReadStores:
     host_lane: IReadHostLaneRepository
     host_ingests: IReadHostIngestRepository
     usage_limits: IReadSubscriptionUsageLimitRepository
+    settings: IReadHostSettings
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -346,4 +354,5 @@ class HostReadStores:
             host_lane=stores.host_lane,
             host_ingests=stores.host_ingests,
             usage_limits=stores.usage_limits,
+            settings=stores.settings,
         )

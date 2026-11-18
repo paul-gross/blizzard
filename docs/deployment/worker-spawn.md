@@ -507,9 +507,10 @@ provisioning and credential renewal. It holds `path_prepend` and `env_passthroug
 expansion as under `[runner.worker]`. Without a `[tools]` table the host takes the runners' own values when every runner
 declares the same `path_prepend` and `env_passthrough`, which a single-runner host always does. Runners that disagree
 make `runner host --check` and `runner host` refuse, naming `[tools]`; declare it to resolve the conflict. Without an
-explicit `[tools]`, this implicit host profile is derived from file values on every boot, not the stored runner
-settings. Declare `[tools]` explicitly to keep host children independent of later file edits. `[runner.worker]` `shell`
-has no host counterpart: only a worker's own environment reads it.
+explicit `[tools]`, a host's start seeds this implicit profile into its settings record where the record holds none, and
+the stored profile then stands against later file edits and disagreeing runners
+([the host's settings](./runner-settings.md#the-hosts-settings)). `[runner.worker]` `shell` has no host counterpart:
+only a worker's own environment reads it.
 
 `[runner.worker]` `shell` names the absolute shell (`~` allowed) a worker's Bash tool runs under, `/bin/bash` when
 unset. A Claude Code worker's environment carries it as `CLAUDE_CODE_SHELL` — the supported override, which the

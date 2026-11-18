@@ -69,6 +69,8 @@ class LoopConfig:
     runner_id: str
     #: Revision of the runner settings snapshot held by this pass.
     runner_settings_revision: int | None = None
+    #: Revision of the host settings snapshot held by this pass, beside the runner's.
+    host_settings_revision: int | None = None
     #: This runner's own browser-reachable base URL; empty registers no
     #: federation identity.
     public_url: str = ""

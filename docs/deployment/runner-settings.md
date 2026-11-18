@@ -1,16 +1,35 @@
 # Runner settings
 
-Each identified runner has its own settings record in the runner store. On every start, explicitly authored live runner
-settings in the host file seed keys that have no stored entry. Thus a key newly added to the file can be seeded on a
-later start; omitted keys resolve to defaults. Existing entries, including an explicit unset, are not overwritten by
-later file edits or restarts. Use the settings API or CLI to change stored settings. Host settings, including the hub
-address and authentication, remain file-owned and require a restart. Boot-only runner settings also remain file-owned
-and require a restart. Runner identity is immutable.
+Each identified runner has its own settings record in the runner store, and the host has one more for its own live keys.
+On every start, explicitly authored live settings in the host file seed keys that have no stored entry. Thus a key newly
+added to the file can be seeded on a later start; omitted keys resolve to defaults. Existing entries, including an
+explicit unset, are not overwritten by later file edits or restarts. Use the settings API or CLI to change stored
+settings. Boot-only settings — the host's, such as the hub address and authentication, and each runner's — remain
+file-owned and require a restart. Runner identity is immutable.
 
-Without an explicit host `[tools]` table, the host's implicit tools profile is derived from the runners' **file** values
-on every boot, even when stored runner worker values differ. Set `[tools]` explicitly to avoid coupling host children to
-those file values. Worker sessions use the stored runner settings. See [worker environments](./worker-spawn.md) for the
-two profiles.
+## The host's settings
+
+The host's record holds its top-level live keys: `tick_seconds`, `transcripts.ship`, `transcripts.record_max_bytes`,
+`transcripts.chunk_max_bytes`, `worker_stdout.retention_days`, `tracing.sweep_seconds`, `tracing.settle_seconds`,
+`tracing.batch_limit`, `tracing.max_lag_seconds`, `tracing.replay_max_window`, `tracing.worker_programs`,
+`tracing.worker_program_services`, `tracing.harness_telemetry`, `tools.path_prepend` and `tools.env_passthrough`. A
+table value such as `tracing.worker_program_services` is one whole entry. Each key's lifetime is in the settings view: a
+`pass` key reaches the next runner tick, host pass or trace sweep, and a `session` key — the `tools.*` keys and the
+three worker tracing keys — reaches the next worker spawn, tool child or worker export, never one already running.
+
+The host seeds its record at start, before any runner is built, in one write. Beyond the file's authored keys:
+
+- `tick_seconds` falls through to the deprecated `BZ_RUNNER_TICK_SECONDS` only where neither the store nor the file
+  states it; the variable's value is then seeded. A set variable warns at start, saying whether it was seeded or
+  ignored.
+- Without a `[tools]` table, the seed captures the profile every runner declares alike as the `tools.*` entries, when
+  that profile is not empty. Once the store holds a `tools.*` entry, the host no longer refuses runners whose file
+  profiles disagree, and later file edits to the runners' worker values do not move the host's profile. See
+  [worker environments](./worker-spawn.md) for the two profiles. Worker sessions use the stored runner settings.
+
+A write that moves `tick_seconds` or `tracing.sweep_seconds` wakes every timed driver to re-read its interval: one whose
+new due time, counted from the end of its last pass, has passed runs at once, and the others wait out the rest. A cut
+from an hour to a second therefore takes hold without waiting the hour.
 
 ## Lifetimes and status
 
@@ -52,6 +71,20 @@ latter accepts `limit` and `before` and returns `next_before` for pagination. A 
 `{"set":{"agents":2},"unset":[]}`. Missing or stale revisions, invalid values, unknown or non-writable keys, and
 insufficient authority are refused; a refusal does not apply a partial edit. Worker credentials cannot access these
 settings. Local Unix-socket operator access has implicit authority.
+
+Add `--host` to any `settings` verb to address the host's own record instead of a runner's; it takes no runner selector,
+and naming `--runner` beside it is refused:
+
+```bash
+blizzard runner settings get --host --dir /var/lib/blizzard
+blizzard runner settings set tick_seconds 10 --host --dir /var/lib/blizzard
+blizzard runner settings changes --host --dir /var/lib/blizzard
+```
+
+The host's routes are `GET` and `PATCH /api/host/settings` and `GET /api/host/settings/changes`, with the same
+authority, `If-Match` and refusals as a runner's. Naming a boot key such as `port` is refused `setting_not_live`, and an
+edit that leaves the host's file invalid is refused `settings_invalid`, naming every failing key. Each change row also
+carries `record_kind` — `host` for the host's own entries — and `record_key`, and the changes route filters on both.
 
 ## Retirement and recovery
 

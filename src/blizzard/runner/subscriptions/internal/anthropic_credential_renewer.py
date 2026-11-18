@@ -16,7 +16,7 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.foundation.instants import epoch_millis_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.untyped import as_table
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import ChildEnv, IToolProfile
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, renewal_due
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
@@ -44,7 +44,7 @@ class AnthropicCredentialRenewer:
         credentials_path: str | None = None,
         claude_binary: str = DEFAULT_CLAUDE_BINARY,
         subprocess: IOneShotProcess,
-        env: ChildEnv,
+        env: IToolProfile,
         clock: IClock,
     ) -> None:
         self._credentials_path = credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH
@@ -98,7 +98,7 @@ class AnthropicCredentialRenewer:
         return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
 
     def _child_env(self, config_dir: str) -> ChildEnv:
-        kept = ChildEnv(tuple((k, v) for k, v in self._env.pairs if k not in _OVERRIDING_CREDENTIAL_VARS))
+        kept = ChildEnv(tuple((k, v) for k, v in self._env.current().pairs if k not in _OVERRIDING_CREDENTIAL_VARS))
         # The tool profile carries the PATH a bare binary name resolves on; CLAUDE_CONFIG_DIR and HOME name the
         # credential home the vendor CLI refreshes.
         return kept.adding({"CLAUDE_CONFIG_DIR": config_dir, "HOME": str(Path.home())})

@@ -6,6 +6,7 @@ sweep's cursor, latch and backoff as they were."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -83,17 +84,19 @@ class LeaseTraceReplay:
         exporter: ITraceExporter | None,
         identity: ICurrentRunnerIdentity,
         clock: IClock,
-        config: TracingConfig,
+        config: Callable[[], TracingConfig],
     ) -> None:
         self._clock = clock
         self._leases = leases
         self._exporter = exporter
         self._identity = identity
-        self._batch_limit = config.batch_limit
-        self._max_window_seconds = config.replay_max_window
+        #: Read at each replay's start: a replay works from the tracing settings in force when it began.
+        self._config = config
 
     def replay(self, since: datetime, until: datetime, *, dry_run: bool) -> ReplayResult:
-        window = ReplayWindow.of(since, until, max_window_seconds=self._max_window_seconds, now=self._clock.now())
+        config = self._config()
+        batch_limit = config.batch_limit
+        window = ReplayWindow.of(since, until, max_window_seconds=config.replay_max_window, now=self._clock.now())
         if not dry_run and self._exporter is None:
             raise ReplayUnavailable("runner tracing is off; a replay without --dry-run has nowhere to send spans")
         if self._identity.current() is None:
@@ -102,7 +105,7 @@ class LeaseTraceReplay:
         position = window.opening
         last = window.last_inclusive
         while True:
-            keys = self._leases.closed_leases_after(position, last, self._batch_limit)
+            keys = self._leases.closed_leases_after(position, last, batch_limit)
             if not keys:
                 return ReplayResult(leases, spans, batches, dry_run)
             facts = self._leases.lease_trace_facts_for([k.lease_id for k in keys])

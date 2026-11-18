@@ -28,6 +28,9 @@ from tests.support.scaffolding import (
 
 #: The mock harness's fence variable, which a worker reaches only through the runner's passthrough list.
 FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
+#: The deprecated variable every host ticks on, and its interval: a supported release reads only it.
+TICK_SECONDS_VAR = "BZ_RUNNER_TICK_SECONDS"
+TICK_SECONDS = 0.3
 _HUB_DB_VAR = "BZ_HUB_DB_URL"
 #: The mock harness binaries a shaped host file names, Claude Code's then OpenCode's.
 _MOCK_HARNESSES = ("mock-claude-code", "mock-opencode")
@@ -176,7 +179,7 @@ class Host:
         """Host the directory under ``installation`` until its ``/api/ready`` answers."""
         log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
         # A supported release predates the host file's tick_seconds and ticks only on the variable.
-        env = runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.3", FENCE_VAR: "1"}, base=installation.env())
+        env = runner_spawn_env(hub_url, {TICK_SECONDS_VAR: str(TICK_SECONDS), FENCE_VAR: "1"}, base=installation.env())
         port_args, publishes = _port_args(installation, "blizzard-runner", listening, self.port)
         command = [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir), *port_args]
         if len(str(self.dir.resolve() / "host.sock")) > 107:
@@ -202,7 +205,8 @@ def shape_host_file(host: Host, *, name: str, hub_url: str, project: str, worksp
     text = path.read_text()
     for pattern, replacement in (
         (r'^hub_url = ".*"$', f'hub_url = "{hub_url}"'),
-        (r"^port = \d+$", f"port = {host.port}\ntick_seconds = 0.3"),
+        # No tick_seconds: the host ticks on the deprecated variable alone, which the upgrade seeds into its store.
+        (r"^port = \d+$", f"port = {host.port}"),
         (
             r"^sample_interval_seconds = (\d+)$",
             rf'sample_interval_seconds = \1\ncredentials_path = "{host.dir / "no-such-credentials.json"}"',

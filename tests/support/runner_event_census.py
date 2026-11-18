@@ -313,6 +313,14 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "the host's registration step, once, from its first answered report — the identity is the host's own, "
         "which no runner's board or SSE stream carries."
     ),
+    "seed": Silent(
+        "the host record's seed at a host's start (runner/cli/runtime.py::seed_host), before any runner is built — "
+        "the host's own settings, which no runner's board or SSE stream carries."
+    ),
+    "write": Silent(
+        "HostSettingsAuthoring.edit (runner/settings/authoring.py) — the host's own settings record, which no "
+        "runner's board or SSE stream carries; each pass reads it at its start."
+    ),
     "merge_host_rows_locked": Silent(
         "a runner transfer's copy, offline, with no daemon running — host rows merged into a store, which no runner's "
         "board or SSE stream carries."

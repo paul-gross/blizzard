@@ -74,6 +74,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.host_settings import router as host_settings_router
 from blizzard.runner.api.hub_proxy import UpstreamRefusal, relay_upstream_refusal
 from blizzard.runner.api.invariants import router as host_invariants_router
 from blizzard.runner.api.invocation_usage import router as invocation_usage_router
@@ -109,6 +110,7 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnes
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.host_settings_reader import HostSettingsInForce
 from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
@@ -128,6 +130,7 @@ from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import ResumeMarking, RunnerStepper, host_pass_stepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
@@ -135,6 +138,7 @@ from blizzard.runner.public_origins import HubOrigin
 from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
@@ -180,6 +184,7 @@ _HUMAN_GATE = (Depends(require_human_api),)
 _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 # The host's human web lane: its own reads, the workspace prompts, and the one event stream.
 _HOST_HUMAN = (
+    host_settings_router,
     host_router,
     workspace_prompt_router,
     host_floor_router,
@@ -275,6 +280,7 @@ def runner_seams(
     identity: ICurrentRunnerIdentity | None = None,
     stepper: RunnerStepper | None = None,
     tracing: TracingSettings | None = None,
+    tool_profile: IToolProfile | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
@@ -282,7 +288,8 @@ def runner_seams(
     configured runner; absent either, the proxy forwards ungated. ``hub_token`` is the token the proxy presents;
     absent, the proxy presents ``config``'s. ``binding`` is the store's runner binding; should it name no runner, the
     routes that write runner-scoped rows answer 503. ``identity`` is the runner's own holder, which every platform
-    span its requests open is stamped from."""
+    span its requests open is stamped from. ``tool_profile`` is the host's tool profile in force, which the selftest's
+    scratch ``git`` launches under; absent, it is ``config``'s."""
     runner_id = config.served_id()
     seams = State()
     seams.config = config
@@ -325,7 +332,9 @@ def runner_seams(
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     seams.selftests = selftests or SelfTestService(
-        scratch_git=SubprocessScratchGit(children, config.tool_env(tracing or TracingSettings.of(os.environ))),
+        scratch_git=SubprocessScratchGit(
+            children, tool_profile or config.tool_env(tracing or TracingSettings.of(os.environ))
+        ),
         process=process,
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
@@ -393,6 +402,8 @@ def create_app(
     stepper: RunnerStepper | None = None,
     host_stepper: HostPassStepper | None = None,
     host_invariants: HostInvariantCheck | None = None,
+    host_settings: HostSettingsInForce | None = None,
+    host_settings_authoring: HostSettingsAuthoring | None = None,
     flags: Flags,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
@@ -467,6 +478,9 @@ def create_app(
     app.state.host_stepper = host_stepper
     # The runner half of the invariant checker; absent, `GET /api/host/invariants` answers 503.
     app.state.host_invariants = host_invariants
+    # The host's own settings record and its one write path; absent, `/api/host/settings` answers 503.
+    app.state.host_settings = host_settings
+    app.state.host_settings_authoring = host_settings_authoring
     app.state.flags = flags
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
@@ -732,6 +746,8 @@ def _wire_hosted_app(
         process=host.process,
         host_stepper=host_stepper,
         host_invariants=host.invariants,
+        host_settings=host.host_settings,
+        host_settings_authoring=host.host_settings_authoring,
         flags=host.flags,
     )
     resumes = tuple(
@@ -939,6 +955,7 @@ def _wire_runner(
         process=process,
         children=graph.children,
         tracing=graph.trace_settings,
+        tool_profile=host.tool_profile,
         events=graph.events,
         binding=connections,
         identity_verdict=graph.identity_verdict,
@@ -1006,6 +1023,8 @@ def _wire_runnerless_app(
         clock=host.clock,
         process=host.process,
         host_invariants=host.invariants,
+        host_settings=host.host_settings,
+        host_settings_authoring=host.host_settings_authoring,
         flags=host.flags,
     )
     return HostedApp(app, (), host.engine, None, (), hub_http_client, owned_host)

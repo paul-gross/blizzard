@@ -39,6 +39,7 @@ import type {
   SettingsView,
   SettingsWrite,
   ChangesPage,
+  HostChangesPage,
 } from './wire/runner/types.gen';
 
 /** The calls one runner of a host answers, under `<host>/runners/<id>`. Types come from `wire/runner`. */
@@ -151,6 +152,12 @@ export interface RunnerHostClient extends HostRoutes {
   subscriptions(): Promise<ApiResponse<HostSubscriptionListResponse>>;
   /** `POST /api/host/subscriptions/{slug}/floor/clear`. */
   clearSubscriptionFloor(slug: string, by?: string): Promise<ApiResponse<FloorClearView>>;
+  /** `GET /api/host/settings`: the host's own record. */
+  hostSettings(options?: { headers?: Record<string, string> }): Promise<ApiResponse<SettingsView>>;
+  /** `PATCH /api/host/settings`, conditioned on `revision` through `If-Match` when given. */
+  writeHostSettings(edit: SettingsWrite, revision?: number, options?: { headers?: Record<string, string> }): Promise<ApiResponse<SettingsView>>;
+  /** `GET /api/host/settings/changes`, newest first. */
+  hostSettingsChanges(options?: { limit?: number; before?: number; record_kind?: string; record_key?: string }): Promise<ApiResponse<HostChangesPage>>;
   runner(runnerId: string): RunnerClient;
   expecting(status: number): RunnerHostClient;
   readonly raw: Verbs;
@@ -206,6 +213,9 @@ export function runnerHostApi(options: {
     replaceWorkspacePrompt: (workspaceId, replacement) => host.put(`/api/host/workspaces/${encodeURIComponent(workspaceId)}/prompt`, { data: replacement }),
     subscriptions: () => host.get('/api/host/subscriptions'),
     clearSubscriptionFloor: (slug, by) => host.post(`/api/host/subscriptions/${encodeURIComponent(slug)}/floor/clear`, { data: by === undefined ? {} : { by } }),
+    hostSettings: (settingsOptions) => host.get('/api/host/settings', { headers: settingsOptions?.headers }),
+    writeHostSettings: (edit, revision, settingsOptions) => host.patch('/api/host/settings', { data: edit, headers: { ...settingsOptions?.headers, ...(revision === undefined ? {} : { 'If-Match': String(revision) }) } }),
+    hostSettingsChanges: (changesOptions) => host.get('/api/host/settings/changes', { params: changesOptions }),
     runner(runnerId) {
       const raw = under(`/runners/${runnerId}`);
       const status = (): Promise<ApiResponse<RunnerStatusView>> => raw.get('/api/runner');

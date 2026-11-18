@@ -7,8 +7,10 @@ copy: anything not named here — foremost a daemon credential — is absent fro
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 
@@ -41,9 +43,36 @@ class ChildEnv:
     def adding(self, extra: Mapping[str, str]) -> ChildEnv:
         return ChildEnv(tuple({**dict(self.pairs), **extra}.items()))
 
+    def current(self) -> ChildEnv:
+        """A fixed profile is its own profile in force."""
+        return self
+
     @property
     def variables(self) -> dict[str, str]:
         return dict(self.pairs)
+
+
+class IToolProfile(Protocol):
+    """The tool profile in force: what a tool child takes at the moment it launches."""
+
+    def current(self) -> ChildEnv: ...
+
+
+class ToolProfileHolder:
+    """The host's own tool profile in force, held for its tool children and replaced by the host tick from each
+    pass's snapshot, so a child takes the profile in force when it launches and a running one keeps its own."""
+
+    def __init__(self, env: ChildEnv) -> None:
+        self._env = env
+        self._lock = threading.Lock()
+
+    def current(self) -> ChildEnv:
+        with self._lock:
+            return self._env
+
+    def hold(self, env: ChildEnv) -> None:
+        with self._lock:
+            self._env = env
 
 
 @domain_model

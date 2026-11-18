@@ -105,3 +105,25 @@ def test_validation_attributes_parser_errors_to_whole_setting_paths(tmp_path: Pa
     )
     assert set(errors) == {"claude_code.enabled", "opencode.enabled"}
     assert reader._error_keys("unrecognized parser diagnostic", {"agents": Entry(1)}) == {"agents"}  # pyright: ignore[reportPrivateUsage]
+
+
+def test_host_keys_are_the_top_level_pass_and_session_keys_each_whole() -> None:
+    from blizzard.runner.settings.keys import host_keys
+
+    assert host_keys(HOST_REGISTRY) == {
+        "tick_seconds": Lifetime.PASS,
+        "tracing.sweep_seconds": Lifetime.PASS,
+        "tracing.settle_seconds": Lifetime.PASS,
+        "tracing.batch_limit": Lifetime.PASS,
+        "tracing.max_lag_seconds": Lifetime.PASS,
+        "tracing.replay_max_window": Lifetime.PASS,
+        "tracing.worker_programs": Lifetime.SESSION,
+        "tracing.worker_program_services": Lifetime.SESSION,
+        "tracing.harness_telemetry": Lifetime.SESSION,
+        "transcripts.ship": Lifetime.PASS,
+        "transcripts.record_max_bytes": Lifetime.PASS,
+        "transcripts.chunk_max_bytes": Lifetime.PASS,
+        "worker_stdout.retention_days": Lifetime.PASS,
+        "tools.path_prepend": Lifetime.SESSION,
+        "tools.env_passthrough": Lifetime.SESSION,
+    }

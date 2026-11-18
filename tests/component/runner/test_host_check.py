@@ -18,6 +18,7 @@ from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.runtime import migration_runner, sqlite_store_file
+from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from tests.support.config_inputs import host_runtime_of, load_host_config, selector_over
 from tests.support.host_files import load_runner_config
@@ -296,3 +297,31 @@ def test_a_host_start_refuses_a_missing_worker_shell_naming_the_runner(tmp_path:
     assert "runner alpha" in refused.value.message
     assert "no-such-shell" in refused.value.message
     assert "does not exist" in refused.value.message
+
+
+def test_disagreeing_runner_tool_profiles_are_refused_only_while_the_store_holds_no_host_profile(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _joined(tmp_path, fake_init_hub)
+    layout = HostLayout(root)
+    elsewhere = tmp_path / "tools"
+    elsewhere.mkdir()
+    layout.config_path.write_text(
+        layout.config_path.read_text()
+        + f'\n[[runner]]\nname = "second"\nprojects = []\n[runner.worker]\npath_prepend = ["{elsewhere}"]\n'
+    )
+    disagreement = "disagree on [runner.worker] path_prepend"
+
+    refused = _check(fake_init_hub, root)
+    assert refused.exit_code != 0 and disagreement in " ".join(refused.output.split()), refused.output
+
+    store = HostSettingsStore(make_store(layout.default_db_url).connections, SystemClock())
+    store.write(
+        Change("edit", sets={"tools.path_prepend": [str(elsewhere)]}),
+        if_match=store.revision(),
+        validate=lambda _: {},
+        door="cli",
+        actor="test",
+    )
+    checked = _check(fake_init_hub, root)
+    assert disagreement not in " ".join(checked.output.split()), checked.output

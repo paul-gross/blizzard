@@ -129,3 +129,37 @@ def test_ambiguous_selection_does_not_read_settings() -> None:
     )
     assert result.exit_code != 0
     assert "several runners" in result.output
+
+
+def test_host_write_reaches_the_host_record_without_selecting_a_runner() -> None:
+    requests: list[httpx2.Request] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        assert request.url.path == "/api/host/settings"
+        if request.method == "PATCH":
+            assert request.headers["If-Match"] == "4"
+            assert json.loads(request.content) == {"set": {"tick_seconds": 2}, "unset": []}
+        return httpx2.Response(200, json={"revision": 4, "settings": []})
+
+    result = CliRunner().invoke(
+        runner_group,
+        ["settings", "set", "tick_seconds", "2", "--host", "--runner-url", "http://runner.test"],
+        obj=bind_transport(answer).collaborators,
+    )
+    assert result.exit_code == 0, result.output
+    assert [r.method for r in requests] == ["GET", "PATCH"]
+
+
+@pytest.mark.parametrize("verb", [["get"], ["set", "tick_seconds", "2"], ["unset", "tick_seconds"], ["changes"]])
+def test_host_and_runner_are_mutually_exclusive(verb: list[str]) -> None:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        raise AssertionError(f"no request is sent: {request.url}")
+
+    result = CliRunner().invoke(
+        runner_group,
+        ["settings", *verb, "--host", "--runner", "r", "--runner-url", "http://runner.test"],
+        obj=bind_transport(answer).collaborators,
+    )
+    assert result.exit_code == 2
+    assert "--host and --runner are mutually exclusive" in result.output

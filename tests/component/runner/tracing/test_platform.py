@@ -84,7 +84,7 @@ from blizzard.runner.tracing.receiver_limits import (
     ReceiverCounter,
     SpanRateLimiter,
 )
-from blizzard.runner.tracing.receiving import TelemetryReceiver
+from blizzard.runner.tracing.receiving import ReceiverTracing, TelemetryReceiver
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from tests.support import claude_code_telemetry
 from tests.support.config_inputs import create_runner_app
@@ -228,9 +228,9 @@ def _app(
         metric_bounds=metric_bounds or ReceiverBounds.fresh(clock),
         log_bounds=log_bounds or ReceiverBounds.fresh(clock),
         clock=clock,
-        worker_programs=worker_programs,
-        harness_telemetry=harness_telemetry,
-        mapped_services=services or {},
+        tracing=lambda: ReceiverTracing(
+            worker_programs=worker_programs, harness_telemetry=harness_telemetry, mapped_services=services or {}
+        ),
     )
     app = create_runner_app(
         config,

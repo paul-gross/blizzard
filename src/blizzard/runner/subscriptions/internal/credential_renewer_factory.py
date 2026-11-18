@@ -8,7 +8,7 @@ binding, which keeps today's read-only behaviour exactly."""
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
@@ -21,7 +21,7 @@ def select_renewer(
     *,
     clock: IClock,
     subprocess: IOneShotProcess,
-    env: ChildEnv,
+    env: IToolProfile,
 ) -> ICredentialRenewer | None:
     """The renewer ``declaration.provider`` binds to, launching under the tool profile ``env``, or ``None`` for
     an unknown provider."""

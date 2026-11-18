@@ -437,7 +437,7 @@ def test_one_runners_blocked_tick_delays_neither_the_other_runner_nor_the_host_t
     renewal: Any = _CountingRenewal()
     host.host_tick = HostTick(credential_renewal=renewal)
     drivers = [PeriodicDriver(config, interval=lambda: 0.01, process_graph=runner) for runner in (blocked, free)]
-    host_tick = host_tick_driver(host, tick_seconds=0.01)
+    host_tick = host_tick_driver(host, interval=lambda: 0.01)
     assert not isinstance(renewal, CredentialRenewalPass)  # a counting double stands in for the renewal pass
     try:
         for driver in drivers:
@@ -750,5 +750,5 @@ def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_ru
     host = build_host_process(host_config, [BuiltRunner("rn_a", first, ResolvedToken())])
     host.close()
 
-    path = launched[0].variables["PATH"].split(":")
+    path = launched[0].current().variables["PATH"].split(":")
     assert "/opt/host" in path and "/opt/first" not in path

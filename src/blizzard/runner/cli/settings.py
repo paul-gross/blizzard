@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 import click
@@ -19,6 +21,9 @@ from blizzard.runner.host_config import decode_host_text
 
 
 def _options(command: Any) -> Any:
+    command = click.option(
+        "--host", "host", is_flag=True, default=False, help="The host's own settings record, not a runner's."
+    )(command)
     command = runner_option(command)
     command = click.option("--runner-url", default=None, envvar=ENV_LOCAL_API_URL, help="Runner local API over TCP.")(
         command
@@ -39,13 +44,38 @@ def _answer(daemon: RunnerDaemon, response: Response) -> dict[str, Any]:
     return daemon.decode_answer(response, TypeAdapter(dict[str, Any]))[1]
 
 
+class _Record:
+    """Which record a verb addresses: the host's own, at the host root, or a runner's, under its prefix."""
+
+    def __init__(self, daemon: RunnerDaemon, *, host: bool) -> None:
+        self._daemon = daemon
+        self._host = host
+
+    def send(
+        self, method: str, path: str, *, json_body: object | None = None, headers: dict[str, str] | None = None
+    ) -> Response:
+        if self._host:
+            return self._daemon.send_to_host(method, f"/api/host{path}", json_body=json_body, headers=headers)
+        return self._daemon.send(method, f"/api{path}", json_body=json_body, headers=headers)
+
+
+@contextmanager
+def _reach(
+    ctx: click.Context, verb: str, directory: str, runner_url: str | None, runner: str | None, host: bool
+) -> Generator[tuple[RunnerDaemon, _Record]]:
+    if host and runner is not None:
+        raise click.UsageError("--host and --runner are mutually exclusive: --host names the host's own record")
+    with RunnerDaemon.reach(verb, directory, runner_url, Door.of(ctx), runner) as daemon:
+        yield daemon, _Record(daemon, host=host)
+
+
 def _echo(value: object) -> None:
     click.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 
 @click.group("settings", cls=GetGroup)
 def settings_group() -> None:
-    """Read and edit a runner's live settings."""
+    """Read and edit a runner's live settings, or the host's own with --host."""
 
 
 @settings_group.command("get")
@@ -53,11 +83,11 @@ def settings_group() -> None:
 @_options
 @click.pass_context
 def get_settings(
-    ctx: click.Context, key: str | None, directory: str, runner_url: str | None, runner: str | None
+    ctx: click.Context, key: str | None, directory: str, runner_url: str | None, runner: str | None, host: bool
 ) -> None:
     """Read the settings view, or one KEY."""
-    with RunnerDaemon.reach("settings get", directory, runner_url, Door.of(ctx), runner) as daemon:
-        view = _answer(daemon, daemon.send("get", "/api/settings"))
+    with _reach(ctx, "settings get", directory, runner_url, runner, host) as (daemon, record):
+        view = _answer(daemon, record.send("get", "/settings"))
     if key is None:
         _echo(view)
         return
@@ -70,10 +100,12 @@ def get_settings(
     raise click.ClickException(f"settings get: unknown setting {key!r}")
 
 
-def _write(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, body: object) -> None:
-    with RunnerDaemon.reach("settings write", directory, runner_url, Door.of(ctx), runner) as daemon:
-        view = _answer(daemon, daemon.send("get", "/api/settings"))
-        response = daemon.send("patch", "/api/settings", json_body=body, headers={"If-Match": str(view["revision"])})
+def _write(
+    ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, host: bool, body: object
+) -> None:
+    with _reach(ctx, "settings write", directory, runner_url, runner, host) as (daemon, record):
+        view = _answer(daemon, record.send("get", "/settings"))
+        response = record.send("patch", "/settings", json_body=body, headers={"If-Match": str(view["revision"])})
         _echo(_answer(daemon, response))
 
 
@@ -83,7 +115,7 @@ def _write(ctx: click.Context, directory: str, runner_url: str | None, runner: s
 @_options
 @click.pass_context
 def set_settings(
-    ctx: click.Context, key: str, value: str, directory: str, runner_url: str | None, runner: str | None
+    ctx: click.Context, key: str, value: str, directory: str, runner_url: str | None, runner: str | None, host: bool
 ) -> None:
     """Set KEY to VALUE, a TOML literal (including inline tables and lists)."""
     try:
@@ -91,22 +123,26 @@ def set_settings(
         json.dumps(parsed, allow_nan=False)
     except (ConfigError, ValueError, TypeError) as error:
         raise click.BadParameter(str(error), param_hint="VALUE") from error
-    _write(ctx, directory, runner_url, runner, {"set": {key: parsed}, "unset": []})
+    _write(ctx, directory, runner_url, runner, host, {"set": {key: parsed}, "unset": []})
 
 
 @settings_group.command("unset")
 @click.argument("key")
 @_options
 @click.pass_context
-def unset_settings(ctx: click.Context, key: str, directory: str, runner_url: str | None, runner: str | None) -> None:
+def unset_settings(
+    ctx: click.Context, key: str, directory: str, runner_url: str | None, runner: str | None, host: bool
+) -> None:
     """Restore KEY to its default."""
-    _write(ctx, directory, runner_url, runner, {"set": {}, "unset": [key]})
+    _write(ctx, directory, runner_url, runner, host, {"set": {}, "unset": [key]})
 
 
 @settings_group.command("changes")
 @_options
 @click.pass_context
-def changes_settings(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
+def changes_settings(
+    ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, host: bool
+) -> None:
     """Read the settings change history."""
-    with RunnerDaemon.reach("settings changes", directory, runner_url, Door.of(ctx), runner) as daemon:
-        _echo(_answer(daemon, daemon.send("get", "/api/settings/changes")))
+    with _reach(ctx, "settings changes", directory, runner_url, runner, host) as (daemon, record):
+        _echo(_answer(daemon, record.send("get", "/settings/changes")))

@@ -46,7 +46,7 @@ from blizzard.runner.tracing.receiver_limits import (
     ReceiverCounter,
     SpanRateLimiter,
 )
-from blizzard.runner.tracing.receiving import RateExceeded, ReceiverOff, TelemetryReceiver
+from blizzard.runner.tracing.receiving import RateExceeded, ReceiverOff, ReceiverTracing, TelemetryReceiver
 from blizzard.runner.tracing.replay import ReplayWindow, ReplayWindowRefused
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint, LeaseTraceExportFailure
 from blizzard.runner.tracing.status import cursor_lag, export_failure_ongoing
@@ -261,9 +261,8 @@ def _receiver(
         metric_bounds=ReceiverBounds(SpanRateLimiter(clock, capacity=capacity), ReceiverCounter()),
         log_bounds=ReceiverBounds.fresh(clock),
         clock=clock,
-        harness_telemetry=harness,
         telemetry_names=names,
-        mapped_services=mapped or {},
+        tracing=lambda: ReceiverTracing(harness_telemetry=harness, mapped_services=mapped or {}),
     )
 
 

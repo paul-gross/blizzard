@@ -11,12 +11,14 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlsplit
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.flags import FlagRegistry, FlagResolution, HeldKey
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.auth.roles import RolePolicy
@@ -1005,18 +1007,45 @@ class RunnerConfig:
         return {"Authorization": f"Bearer {self.hub_token}"}
 
 
-def resolve_tick_seconds(stated: float | None, environ: Mapping[str, str]) -> tuple[float, str | None]:
-    """A timed host's interval and the warning it earns: the host file's ``tick_seconds``, else the deprecated
-    ``BZ_RUNNER_TICK_SECONDS``, else the default. The warning names the variable whenever it is set, saying whether
-    it was honored or overridden by the file."""
+@domain_model
+@dataclass(frozen=True)
+class TickSecondsSource:
+    """Where a timed host's interval comes from at a start: the interval it ticks at, the value the seed writes from
+    the deprecated variable (``None`` when the variable seeds nothing), and the warning the variable earns."""
+
+    interval: float
+    seed: float | None = None
+    warning: str | None = None
+
+
+def resolve_tick_seconds(
+    *, stored: Entry | None, stated: float | None, environ: Mapping[str, str]
+) -> TickSecondsSource:
+    """A timed host's interval: the store's ``tick_seconds`` entry, an unset included, else the host file's, else the
+    deprecated ``BZ_RUNNER_TICK_SECONDS``, which the seed then writes, else the default. The warning names the
+    variable whenever it is set, saying whether it was seeded or ignored."""
     variable = environ.get(ENV_TICK_SECONDS)
-    if variable is None:
-        return (DEFAULT_TICK_SECONDS if stated is None else stated), None
+    if stored is not None:
+        interval = DEFAULT_TICK_SECONDS if stored.at_default else float(cast(float, stored.value))
+        warning = None
+        if variable is not None:
+            warning = f"{ENV_TICK_SECONDS} is deprecated and ignored: the store holds tick_seconds; unset it"
+        return TickSecondsSource(interval, warning=warning)
     if stated is not None:
-        return stated, (
-            f"{ENV_TICK_SECONDS} is deprecated and overridden by the host file's tick_seconds = {stated}; unset it"
-        )
-    return float(variable), (
-        f"{ENV_TICK_SECONDS} is deprecated; honored as {variable} because the host file states no tick_seconds — "
-        "set tick_seconds in the host file instead"
+        warning = None
+        if variable is not None:
+            warning = (
+                f"{ENV_TICK_SECONDS} is deprecated and ignored: the host file states tick_seconds = {stated}; unset it"
+            )
+        return TickSecondsSource(stated, warning=warning)
+    if variable is None:
+        return TickSecondsSource(DEFAULT_TICK_SECONDS)
+    seeded = float(variable)
+    return TickSecondsSource(
+        seeded,
+        seed=seeded,
+        warning=(
+            f"{ENV_TICK_SECONDS} is deprecated; seeded as tick_seconds = {seeded} because neither the store nor the "
+            "host file states one — unset it"
+        ),
     )

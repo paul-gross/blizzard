@@ -63,8 +63,9 @@ from blizzard.runner.transcripts.service import TranscriptService
 if TYPE_CHECKING:
     # `src/blizzard/runner/api/federation.py` resolves its own collaborators through this module.
     from blizzard.runner.api.federation import FederationSettings
+    from blizzard.runner.host_settings_reader import HostSettingsInForce
     from blizzard.runner.loop_wiring import RunnerStepper
-    from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
+    from blizzard.runner.settings.authoring import HostSettingsAuthoring, RunnerSettingsAuthoring
     from blizzard.runner.settings_reader import RunnerSettingsReader
 
 _STORE = "runner store"
@@ -247,6 +248,15 @@ class RunnerWiring:
     def settings_authoring(self) -> RunnerSettingsAuthoring:
         service: RunnerSettingsAuthoring | None = self._seam("settings_authoring")
         return service if service is not None else self._refuse("runner settings authoring")
+
+    def host_settings(self) -> HostSettingsInForce:
+        """The host record and the revision the host tick holds in force."""
+        held: HostSettingsInForce | None = self._seam("host_settings")
+        return held if held is not None else self._refuse("host settings")
+
+    def host_settings_authoring(self) -> HostSettingsAuthoring:
+        service: HostSettingsAuthoring | None = self._seam("host_settings_authoring")
+        return service if service is not None else self._refuse("host settings authoring")
 
     def stepper(self) -> RunnerStepper:
         stepper: RunnerStepper | None = self._seam("stepper")

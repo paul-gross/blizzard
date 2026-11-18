@@ -240,6 +240,7 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
         pgid: int | None = None,
         spawn_cwd: str | None = None,
         park_resume: ParkResume | None = None,
+        host_settings_revision: int | None = None,
         runner_settings_revision: int | None = None,
         transcripts_root: str | None = None,
     ) -> int | None:

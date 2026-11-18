@@ -96,10 +96,10 @@ def test_an_endpoint_builds_a_sweep_over_the_injected_exporter(tmp_path: Path) -
     try:
         assert graph.trace_settings.state == "enabled"
         assert isinstance(graph.trace_sweep, LeaseTraceSweep)
-        graph.trace_sweep.sweep()  # the first pass opens the cursor at now
+        graph.trace_sweep.sweep(graph.config.tracing)  # the first pass opens the cursor at now
         now = graph.clock.now()
         closed_lease(store, "lease-01", opened=now - timedelta(minutes=1), closed=now)
-        graph.trace_sweep.sweep()
+        graph.trace_sweep.sweep(graph.config.tracing)
         assert len(exporter.batches) == 1
         assert _cursor_rows(store) == 2
     finally:

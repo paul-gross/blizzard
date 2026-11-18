@@ -205,7 +205,8 @@ export interface RunnerHost extends OriginReads {
   /** The installed `blizzard` CLI, by absolute path: a worker's own `PATH` need not hold it, as under `npx playwright test`. */
   readonly cliBinary: string;
   /**
-   * Edits live runner settings through the API, or boot configuration in the stopped host's file.
+   * Edits live host and runner settings through the API on a running host, or boot configuration in the stopped host's
+   * file; before the first boot, the file seeds both.
    */
   reconfigure(overlay: TomlTable): Promise<void>;
   /** Removes the transcripts root, as an operator's rotation does. */
@@ -785,15 +786,11 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           if (problems.length > 0) throw new Error(`the host overlay is unsound:\n${problems.join('\n')}`);
           const placed = expandProfile(overlay, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, opencode, usageBase: ctx.vendor.url, bundle, stubs });
           const running = daemon !== undefined && isAlive(daemon.pid);
+          const { runner: placedRunners, ...placedHost } = placed;
           if (running) {
-            if (Object.keys(placed).some((key) => key !== 'runner') || !Array.isArray(placed.runner)) throw new Error('boot configuration requires stop() and restart()');
-            for (const item of placed.runner as TomlTable[]) {
-              const name = item.name;
-              if (typeof name !== 'string' || runners[name] === undefined) throw new Error(`unknown runner ${String(name)}`);
-              const client = runners[name];
-              const current = await client.settings();
-              if (!current.ok) throw new Error(`reading settings answered ${current.status}: ${JSON.stringify(current.body)}`);
-              const keys = new Set(current.body.settings.map((setting) => setting.key));
+            if (placedRunners !== undefined && !Array.isArray(placedRunners)) throw new Error('boot configuration requires stop() and restart()');
+            /** The record's live keys `table` states, each whole value as JSON; anything else is boot configuration. */
+            const liveEdit = (table: TomlTable, keys: Set<string>, record: string): Record<string, unknown> => {
               const set: Record<string, unknown> = {};
               const visit = (value: unknown, key: string): void => {
                 if (keys.has(key)) {
@@ -806,25 +803,45 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
                 } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
                   for (const [part, child] of Object.entries(value)) visit(child, key ? `${key}.${part}` : part);
                 } else {
-                  throw new Error(`${key}: not a live runner setting; boot configuration requires stop() and restart()`);
+                  throw new Error(`${key}: not a live ${record} setting; boot configuration requires stop() and restart()`);
                 }
               };
-              for (const [key, value] of Object.entries(item)) if (key !== 'name') visit(value, key);
+              for (const [key, value] of Object.entries(table)) visit(value, key);
+              return set;
+            };
+            if (Object.keys(placedHost).length > 0) {
+              const current = await api.hostSettings();
+              if (!current.ok) throw new Error(`reading host settings answered ${current.status}: ${JSON.stringify(current.body)}`);
+              const set = liveEdit(placedHost, new Set(current.body.settings.map((setting) => setting.key)), 'host');
+              const answer = await api.writeHostSettings({ set }, current.body.revision);
+              if (!answer.ok) throw new Error(`writing host settings answered ${answer.status}: ${JSON.stringify(answer.body)}`);
+            }
+            for (const item of (placedRunners ?? []) as TomlTable[]) {
+              const { name, ...keys } = item;
+              if (typeof name !== 'string' || runners[name] === undefined) throw new Error(`unknown runner ${String(name)}`);
+              const client = runners[name];
+              const current = await client.settings();
+              if (!current.ok) throw new Error(`reading settings answered ${current.status}: ${JSON.stringify(current.body)}`);
+              const set = liveEdit(keys, new Set(current.body.settings.map((setting) => setting.key)), 'runner');
               const answer = await client.writeSettings({ set }, current.body.revision);
               if (!answer.ok) throw new Error(`writing settings answered ${answer.status}: ${JSON.stringify(answer.body)}`);
             }
             return;
           }
-          if (daemon !== undefined && Array.isArray(placed.runner)) {
+          if (daemon !== undefined) {
+            // Once booted, the store holds every live key: a file edit to one would change nothing at the next start.
             const contract = JSON.parse(fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts/config/host.json'), 'utf8')) as { keys: { path: string; lifetime: string | null }[] };
-            const live = contract.keys.filter((key) => key.path.startsWith('runner[].') && (key.lifetime === 'pass' || key.lifetime === 'session')).map((key) => key.path.slice('runner[].'.length));
-            const containsLive = (value: unknown, key: string): boolean => {
+            const isLive = (key: { lifetime: string | null }): boolean => key.lifetime === 'pass' || key.lifetime === 'session';
+            const containsLive = (value: unknown, key: string, live: string[]): boolean => {
               if (live.includes(key) || live.some((candidate) => candidate.startsWith(`${key}[].`))) return true;
               return value !== null && typeof value === 'object' && !Array.isArray(value)
-                && Object.entries(value).some(([part, child]) => containsLive(child, key ? `${key}.${part}` : part));
+                && Object.entries(value).some(([part, child]) => containsLive(child, key ? `${key}.${part}` : part, live));
             };
-            for (const item of placed.runner as TomlTable[]) {
-              if (Object.entries(item).some(([key, value]) => key !== 'name' && containsLive(value, key))) throw new Error('live runner settings require a running host; use reconfigure() before stop()');
+            const liveHost = contract.keys.filter((key) => !key.path.includes('[]') && isLive(key)).map((key) => key.path);
+            if (Object.entries(placedHost).some(([key, value]) => containsLive(value, key, liveHost))) throw new Error('live host settings require a running host; use reconfigure() before stop()');
+            const live = contract.keys.filter((key) => key.path.startsWith('runner[].') && isLive(key)).map((key) => key.path.slice('runner[].'.length));
+            for (const item of Array.isArray(placedRunners) ? (placedRunners as TomlTable[]) : []) {
+              if (Object.entries(item).some(([key, value]) => key !== 'name' && containsLive(value, key, live))) throw new Error('live runner settings require a running host; use reconfigure() before stop()');
             }
           }
           fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(mergeHostProfile(readHostFile(dir), placed)));

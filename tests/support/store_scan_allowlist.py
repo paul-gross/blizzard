@@ -41,7 +41,7 @@ from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatu
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
-from blizzard.runner.settings.ports import IReadRunnerSettings
+from blizzard.runner.settings.ports import IReadHostSettings, IReadRunnerSettings
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
@@ -211,6 +211,21 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
     *[
         MethodScopedAllowance(IReadRunnerSettings, method, "runner_setting_changes", 200, _RARE_OPERATOR_EVENT_REASON)
         for method in ("snapshot_with_provenance", "provenance", "changes")
+    ],
+    # The host record: the same finite key vocabulary, and its rare operator-written change rows.
+    *[
+        MethodScopedAllowance(
+            IReadHostSettings,
+            method,
+            "host_setting_entries",
+            50,
+            "host settings snapshots read the host's finite set of pass and session keys",
+        )
+        for method in ("snapshot", "snapshot_with_provenance")
+    ],
+    *[
+        MethodScopedAllowance(IReadHostSettings, method, "host_setting_changes", 200, _RARE_OPERATOR_EVENT_REASON)
+        for method in ("snapshot_with_provenance", "changes")
     ],
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),

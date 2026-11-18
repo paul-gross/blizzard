@@ -4,9 +4,9 @@ surfaces: [config]
 removes-in: "0.6"
 ---
 
-`BZ_RUNNER_TICK_SECONDS` is deprecated; set `tick_seconds` in `blizzard-host.toml`. The host honors the variable only
-when the file states no `tick_seconds`, and warns at start whenever it is set, saying whether it was honored or
-overridden.
+`BZ_RUNNER_TICK_SECONDS` is deprecated; set `tick_seconds` in `blizzard-host.toml`. The host seeds the variable's value
+into its settings record only when neither the store nor the file holds `tick_seconds`, and warns at start whenever it
+is set, saying whether it was seeded or ignored.
 
 ## Upgrade
 

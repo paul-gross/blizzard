@@ -60,7 +60,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IWriteDaemonLivenessReposi
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
-from blizzard.runner.settings.ports import IWriteRunnerSettings
+from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
@@ -621,6 +621,8 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHostLaneAppendRepository, "record_host_external_usage_attempt"): _HOST_ONLY
     + " (external_usage_samples, host_outbound_buffer)",
     (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
+    (IWriteHostSettings, "seed"): _HOST_ONLY + " (host_settings, host_setting_entries, host_setting_changes)",
+    (IWriteHostSettings, "write"): _HOST_ONLY + " (host_settings, host_setting_entries, host_setting_changes)",
     (IWriteHostIngestRepository, "merge_host_rows_locked"): _HOST_ONLY + " (every carried host table)",
     (IWriteHostIngestRepository, "record_host_ingest_locked"): _HOST_ONLY + " (host_ingests)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY

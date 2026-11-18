@@ -18,6 +18,7 @@ from blizzard.foundation.platform_tracing.received import (
     ReceivedMetrics,
     ReceivedSpan,
 )
+from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity
 from blizzard.runner.leases.model import Lease
@@ -54,10 +55,21 @@ class RateExceeded(Exception):
         self.detail = detail
 
 
+@domain_model
+@dataclass(frozen=True)
+class ReceiverTracing:
+    """The host's tracing settings a worker export is admitted under, read once per export."""
+
+    worker_programs: bool = False
+    harness_telemetry: bool = False
+    mapped_services: Mapping[str, str] = field(default_factory=dict[str, str])
+
+
 @dataclass(frozen=True)
 class TelemetryReceiver:
     """One worker telemetry export's orchestration, over the host's limiters and tallies. Each call names its
-    ``sender``, the runner the export arrived under: its latest registration is who every kept item says sent it."""
+    ``sender``, the runner the export arrived under: its latest registration is who every kept item says sent it.
+    ``tracing`` answers the host's tracing settings in force, read on each export."""
 
     platform_tracing: IPlatformTracing
     received_telemetry: IReceivedTelemetryExport
@@ -68,9 +80,7 @@ class TelemetryReceiver:
     metric_bounds: ReceiverBounds
     log_bounds: ReceiverBounds
     clock: IClock
-    worker_programs: bool = False
-    harness_telemetry: bool = False
-    mapped_services: Mapping[str, str] = field(default_factory=dict[str, str])
+    tracing: Callable[[], ReceiverTracing] = ReceiverTracing
 
     def require_traces(self, sender: ICurrentRunnerIdentity) -> None:
         """Refuse while platform tracing is off, or before ``sender``'s first registration."""
@@ -81,7 +91,7 @@ class TelemetryReceiver:
     def require_harness_telemetry(self, sender: ICurrentRunnerIdentity) -> None:
         """Refuse unless platform tracing and ``harness_telemetry`` are both on, or before ``sender``'s
         first registration."""
-        if not (self.platform_tracing.enabled and self.harness_telemetry):
+        if not (self.platform_tracing.enabled and self.tracing().harness_telemetry):
             raise ReceiverOff("harness telemetry is off")
         _registered(sender)
 
@@ -89,12 +99,13 @@ class TelemetryReceiver:
         """Route, charge, forward and count one trace export; return how many spans it refused.
         Raises :class:`RateExceeded` — counting every span as dropped — when the kept spans
         exceed the lease's span rate."""
+        tracing = self.tracing()
         routing = route_spans(
             spans,
             lease,
             runner=_registered(sender),
-            programs=self.worker_programs,
-            harness=self.harness_telemetry,
+            programs=tracing.worker_programs,
+            harness=tracing.harness_telemetry,
             names=self.telemetry_names,
         )
         if routing.kept and not self.span_limiter.take(lease.lease_id, routing.kept, now=self._now()):
@@ -102,7 +113,7 @@ class TelemetryReceiver:
             self.harness_span_counter.record(accepted=0, dropped=routing.harness_received)
             raise RateExceeded("span rate exceeded")
         grouped = spans_by_service_name(
-            [*routing.harness.kept, *routing.others], self.mapped_services, self.telemetry_names
+            [*routing.harness.kept, *routing.others], tracing.mapped_services, self.telemetry_names
         )
         for service_name, group in grouped.items():
             self.platform_tracing.forward(group, service_name)
@@ -158,10 +169,9 @@ class TelemetryReceiver:
             bounds.counter.record(accepted=0, dropped=received)
             raise RateExceeded("rate exceeded")
         groups: dict[str, list[T]] = {}
+        mapped = self.tracing().mapped_services
         for item in admission.kept:
-            groups.setdefault(service_name_for(scope_of(item), self.mapped_services, self.telemetry_names), []).append(
-                item
-            )
+            groups.setdefault(service_name_for(scope_of(item), mapped, self.telemetry_names), []).append(item)
         for service_name, group in groups.items():
             forward(group, service_name)
         bounds.counter.record(accepted=len(admission.kept), dropped=admission.dropped)

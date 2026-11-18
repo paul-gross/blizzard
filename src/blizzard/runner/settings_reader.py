@@ -13,8 +13,15 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, RunnerEntry, parse_runner_entry
+from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.settings.keys import runner_keys
-from blizzard.runner.settings.ports import IReadRunnerSettings, IWriteRunnerSettings, SettingsChange, SettingsSnapshot
+from blizzard.runner.settings.ports import (
+    IReadRunnerSettings,
+    IWriteRunnerSettings,
+    SettingsChange,
+    SettingsPair,
+    SettingsSnapshot,
+)
 
 
 class RunnerSettingsReader:
@@ -28,8 +35,11 @@ class RunnerSettingsReader:
         *,
         deferred_seed: IWriteRunnerSettings | None = None,
         identity_present: Callable[[], bool] | None = None,
+        host_settings: HostSettingsReader | None = None,
     ) -> None:
         self.host = host
+        #: The host's own record, whose entries every resolution lays over ``host``; ``None`` resolves against it.
+        self.host_settings = host_settings
         self.entry = entry
         self.store = store
         self._deferred_seed = deferred_seed
@@ -55,8 +65,33 @@ class RunnerSettingsReader:
         return tuple(key for key in (*self.keys, *self.aliases) if key not in blocked)
 
     def snapshot(self) -> tuple[SettingsSnapshot, RunnerConfig]:
-        snapshot = self.snapshot_record()
-        return snapshot, self.resolve_for_read(snapshot.entries)
+        pair, config = self.snapshot_pair()
+        return pair.runner, config
+
+    def snapshot_pair(self) -> tuple[SettingsPair, RunnerConfig]:
+        """The host revision and this runner's, as they stood together, and the configuration they resolve to."""
+        pair = self.pair_record()
+        return pair, self.resolve_pair(pair)
+
+    def pair_record(self) -> SettingsPair:
+        """Acquire both revisions coherently: the runner's is read between two reads of the host's, and kept only
+        when the host's held across it, so the pair stood together at that read."""
+        host_settings = self.host_settings
+        if host_settings is None:
+            return SettingsPair(None, self.snapshot_record())
+        while True:
+            host = host_settings.snapshot_record()
+            runner = self.snapshot_record()
+            if host_settings.revision() == host.revision:
+                return SettingsPair(host, runner)
+
+    def resolve_pair(self, pair: SettingsPair) -> RunnerConfig:
+        return self.resolve_for_read(pair.runner.entries, host=self._host_at(pair.host))
+
+    def _host_at(self, snapshot: SettingsSnapshot | None) -> HostConfig:
+        if self.host_settings is None:
+            return self.host
+        return self.host_settings.resolve(snapshot if snapshot is not None else self.host_settings.snapshot_record())
 
     def snapshot_record(self) -> SettingsSnapshot:
         """Acquire the revision before resolving entries, including any deferred seed."""
@@ -78,15 +113,17 @@ class RunnerSettingsReader:
 
     def preview_seed(self) -> RunnerConfig:
         """Resolve the entries a first seed would produce, without writing them."""
-        return self._preview_entries(self.store.snapshot().entries)
+        return self._preview_entries(self.store.snapshot().entries, host=self._host_at(None))
 
-    def resolve_for_read(self, entries: Mapping[str, Entry]) -> RunnerConfig:
-        """Show authored inputs until registration makes a durable seed possible."""
+    def resolve_for_read(self, entries: Mapping[str, Entry], *, host: HostConfig | None = None) -> RunnerConfig:
+        """Show authored inputs until registration makes a durable seed possible. ``host`` is the effective host
+        configuration to resolve against, the host record's current one when absent."""
+        effective = host if host is not None else self._host_at(None)
         if self._deferred_seed is not None:
-            return self._preview_entries(entries)
-        return self.resolve(entries)
+            return self._preview_entries(entries, host=effective)
+        return self.resolve(entries, host=effective)
 
-    def _preview_entries(self, current: Mapping[str, Entry]) -> RunnerConfig:
+    def _preview_entries(self, current: Mapping[str, Entry], *, host: HostConfig) -> RunnerConfig:
         entries = dict(current)
         authored = self.entry.authored
         assert authored is not None
@@ -97,13 +134,14 @@ class RunnerSettingsReader:
                 if key not in entries and authored.states(key)
             }
         )
-        return self.resolve(entries)
+        return self.resolve(entries, host=host)
 
-    def resolve(self, entries: Mapping[str, Entry]) -> RunnerConfig:
+    def resolve(self, entries: Mapping[str, Entry], *, host: HostConfig | None = None) -> RunnerConfig:
         entry, errors = self._resolve(entries)
         if errors or entry.own is None:
             raise ValueError("; ".join(errors))
-        return self.host.config_for_runner(entry, entry.own, self.host.token_for(self.entry))
+        effective = host if host is not None else self._host_at(None)
+        return effective.config_for_runner(entry, entry.own, self.host.token_for(self.entry))
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
         unknown = {

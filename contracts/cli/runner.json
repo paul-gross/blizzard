@@ -1764,6 +1764,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's own settings record, not a runner's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "host",
+              "opts": [
+                "--host"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
             }
           ],
           "path": "runner settings changes",
@@ -1818,6 +1830,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's own settings record, not a runner's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "host",
+              "opts": [
+                "--host"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
             }
           ],
           "path": "runner settings get",
@@ -1883,6 +1907,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's own settings record, not a runner's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "host",
+              "opts": [
+                "--host"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
             }
           ],
           "path": "runner settings set",
@@ -1937,16 +1973,28 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "The host's own settings record, not a runner's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "host",
+              "opts": [
+                "--host"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
             }
           ],
           "path": "runner settings unset",
           "short_help": "Restore KEY to its default."
         }
       },
-      "help": "Read and edit a runner's live settings.",
+      "help": "Read and edit a runner's live settings, or the host's own with --host.",
       "params": [],
       "path": "runner settings",
-      "short_help": "Read and edit a runner's live settings."
+      "short_help": "Read and edit a runner's live settings, or the host's own with --host."
     },
     "start": {
       "help": "Clear the pause ``blizzard runner pause`` set: this runner starts new workers again.\n\nWorks with the hub unreachable. A runner also paused at the hub stays paused until\n``blizzard hub runner resume <runner_id>`` clears that one too.",

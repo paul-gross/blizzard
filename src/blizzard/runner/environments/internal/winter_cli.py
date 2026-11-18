@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 
 _log = get_logger("blizzard.runner.winter")
@@ -28,7 +28,7 @@ class WinterCliError(RuntimeError):
 class SubprocessWinterCli:
     """Run ``winter <args>`` with ``workspace_root`` as the resolved workspace root."""
 
-    def __init__(self, *, children: IChildProcesses, env: ChildEnv) -> None:
+    def __init__(self, *, children: IChildProcesses, env: IToolProfile) -> None:
         self._children = children
         self._env = env
 
@@ -54,7 +54,7 @@ class SubprocessWinterCli:
         return self._run(["winter", *args], cwd=workspace_root, what=f"winter {' '.join(args)}")
 
     def _run(self, cmd: list[str], *, cwd: Path, what: str) -> str:
-        result = self._children.run(cmd, cwd=cwd, env=self._env, timeout=WINTER_CLI_TIMEOUT)
+        result = self._children.run(cmd, cwd=cwd, env=self._env.current(), timeout=WINTER_CLI_TIMEOUT)
         if result.timed_out:
             _log.error("winter timed out", what=what, timeout=WINTER_CLI_TIMEOUT)
             raise WinterCliError(f"{what} timed out after {WINTER_CLI_TIMEOUT}s")

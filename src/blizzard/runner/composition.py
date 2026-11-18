@@ -45,10 +45,12 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.store.readiness import Readiness, ReadinessService
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.environments.workspaces import (
@@ -107,6 +109,7 @@ from blizzard.runner.host_layout import (
     HostLayout,
     hold_host,
 )
+from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -127,7 +130,8 @@ from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.loop.wake import WakeSignals
+from blizzard.runner.process.child_env import ChildEnv, IToolProfile, ToolProfileHolder
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
@@ -139,7 +143,8 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
-from blizzard.runner.settings.ports import IWriteRunnerSettings
+from blizzard.runner.settings.authoring import HostSettingsAuthoring
+from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -159,6 +164,7 @@ from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
@@ -209,7 +215,7 @@ from blizzard.runner.tracing.received_export import (
     build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
-from blizzard.runner.tracing.receiving import TelemetryReceiver
+from blizzard.runner.tracing.receiving import ReceiverTracing, TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.transfer.host_files import IHostFiles
@@ -236,6 +242,14 @@ from blizzard.runner.usage.external_usage_sample import (
     SampledSubscription,
 )
 from blizzard.runner.usage.repository import IWriteExternalUsageAttemptRepository
+
+
+def _receiver_tracing(host: HostConfig | RunnerConfig) -> ReceiverTracing:
+    return ReceiverTracing(
+        worker_programs=host.tracing.worker_programs,
+        harness_telemetry=host.tracing.harness_telemetry,
+        mapped_services=host.tracing.worker_program_services,
+    )
 
 
 @dataclass
@@ -303,6 +317,16 @@ class HostProcess:
     )
     #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
     host_hub_http_client: httpx2.Client | None = None
+    #: The tool profile every host tool child launches under — the workspaces' ``git`` and ``winter``, credential
+    #: renewal, the selftest's scratch ``git`` — set by the host tick from its snapshot.
+    tool_profile: ToolProfileHolder = field(default_factory=lambda: ToolProfileHolder(ChildEnv(())))
+    #: The host record in force, which the host tick snapshots first; ``None`` for a host built from no host file.
+    host_settings: HostSettingsInForce | None = None
+    #: The host record's one write path, which wakes :attr:`wakes` after a write moving an interval; ``None`` beside
+    #: an absent :attr:`host_settings`.
+    host_settings_authoring: HostSettingsAuthoring | None = None
+    #: Every timed driver's wake signal; a host write moving an interval wakes them all.
+    wakes: WakeSignals = field(default_factory=WakeSignals)
     _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
         default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
     )
@@ -538,7 +562,7 @@ def credential_renewal_pass(
     clock: IClock,
     *,
     children: IChildProcesses,
-    env: ChildEnv,
+    env: IToolProfile,
 ) -> CredentialRenewalPass | None:
     """Every subscription the host declares paired with its provider's renewer binding, sharing one
     one-shot subprocess seam over ``children`` under the tool profile ``env``; ``None`` when no provider binds
@@ -670,6 +694,21 @@ def build_host_process(
         tcp_socket=tcp_socket,
     )
     try:
+        graph.host_settings = HostSettingsInForce(
+            HostSettingsReader(host, graph.host_stores.settings),
+            tool_profile=graph.tool_profile,
+            tracing=TracingSettings.of(os.environ if environ is None else environ),
+            clock=graph.clock,
+        )
+        graph.host_settings_authoring = HostSettingsAuthoring(
+            graph.host_settings.reader, graph.host_stores.settings, HOST_REGISTRY, drivers=graph.wakes
+        )
+        if graph.readiness.evaluate().ready:
+            graph.host_settings.take()
+        # Host entries read on use: each worker export is admitted under the host record's current revision.
+        graph.telemetry_receiver = replace(
+            graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
+        )
         for built in runners:
             entry = next((entry for entry in host.runners if entry.id == built.id), None)
             runner = _build_runner(
@@ -697,6 +736,7 @@ def build_host_process(
                         identity_present=lambda identity_store=identity_store: (
                             identity_store.runner_identity() is not None
                         ),
+                        host_settings=graph.host_settings.reader,
                     ),
                 )
             graph.runners = (
@@ -850,11 +890,13 @@ def _build_host_graph(
         log_bounds = ReceiverBounds.fresh(clock)
         telemetry_names = declared_telemetry_names()
         children = SubprocessChildProcesses(monotonic_clock)
-        tool_env = config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
+        tool_profile = ToolProfileHolder(
+            config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
+        )
         workspaces = build_workspaces(
             config.workspaces,
             config.root,
-            launch=WorkspaceLaunch(children=children, env=tool_env),
+            launch=WorkspaceLaunch(children=children, env=tool_profile),
             audit=host_stores.runner_audit,
         )
         host_identity = HostIdentityHolder()
@@ -890,9 +932,7 @@ def _build_host_graph(
                 metric_bounds=metric_bounds,
                 log_bounds=log_bounds,
                 clock=clock,
-                worker_programs=config.tracing.worker_programs,
-                harness_telemetry=config.tracing.harness_telemetry,
-                mapped_services=config.tracing.worker_program_services,
+                tracing=functools.partial(_receiver_tracing, config),
             ),
             span_limiter=span_limiter,
             receiver_counter=receiver_counter,
@@ -925,7 +965,7 @@ def _build_host_graph(
                     else None
                 ),
                 credential_renewal=credential_renewal_pass(
-                    subscriptions, host_stores, clock, children=children, env=tool_env
+                    subscriptions, host_stores, clock, children=children, env=tool_profile
                 ),
             ),
             usage_http_client=usage_http_client,
@@ -937,6 +977,7 @@ def _build_host_graph(
             host_identity=host_identity,
             host_registration=host_registration,
             host_hub_http_client=host_hub_http_client,
+            tool_profile=tool_profile,
         )
         # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
         if readiness.evaluate().ready and (recorded := host_stores.host_identity.host_identity()) is not None:
@@ -1234,13 +1275,18 @@ def _build_runner(
                 exporter=exporter,
                 identity=identity,
                 clock=clock,
-                config=config.tracing,
             )
             if exporter is not None
             else None
         )
+
+        def replay_tracing() -> TracingConfig:
+            # Tracing is the host's: a replay reads the host record in force when it starts.
+            held = host.host_settings
+            return held.reader.current().tracing if held is not None else config.tracing
+
         trace_replay = LeaseTraceReplay(
-            leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
+            leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=replay_tracing
         )
         hub_token = held_hub_token(config, token)
         # This runner's own identity client: the host tick's watch reads on its thread, so no loop or app client is
@@ -1298,6 +1344,11 @@ def build_settings_stores(
     """Construct the runner-bound identity and settings adapters for the CLI edge."""
     connections = RunnerStoreConnections(engine, errors, runner_id)
     return RunnerIdentityStore(connections), RunnerSettingsStore(connections, SystemClock())
+
+
+def build_host_settings_store(engine: Engine, *, errors: RunnerStoreErrorFactory) -> IWriteHostSettings:
+    """Construct the host's settings adapter for the CLI edge — the seed at a host's start."""
+    return _build_host_stores(RunnerStoreConnections(engine, errors), SystemClock()).settings
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerStores:
@@ -1387,6 +1438,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
+        settings=HostSettingsStore(connections, clock),
         runner_audit=RunnerAudit(connections),
     )
 
