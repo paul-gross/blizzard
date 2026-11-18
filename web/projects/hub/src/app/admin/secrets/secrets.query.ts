@@ -1,7 +1,9 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getSecretApiSecretsNameGet, listSecretsApiSecretsGet, type SecretView } from 'fleet';
+import { getSecretApiSecretsNameGet, listSecretsApiSecretsGet } from 'fleet';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
+import type { Secret } from './secret.domain';
+import { fromSecretView } from './secret.translate';
 
 const NOUN = 'secrets';
 
@@ -12,13 +14,13 @@ export function injectSecretsQuery(includeRetired: () => boolean) {
     const retired = includeRetired();
     return {
       queryKey: hubConfigListKey(NOUN, retired),
-      queryFn: async (): Promise<SecretView[]> => {
+      queryFn: async (): Promise<Secret[]> => {
         const { data, error } = await listSecretsApiSecretsGet({
           query: { include_retired: retired },
           throwOnError: false,
         });
         if (error) throw error;
-        return data ?? [];
+        return (data ?? []).map(fromSecretView);
       },
     };
   });
@@ -31,13 +33,13 @@ export function injectSecretQuery(name: () => string | null) {
     return {
       queryKey: hubConfigRecordKey(NOUN, recordName),
       enabled: recordName !== null,
-      queryFn: async (): Promise<SecretView> => {
+      queryFn: async (): Promise<Secret> => {
         const { data, error } = await getSecretApiSecretsNameGet({
           path: { name: recordName! },
           throwOnError: false,
         });
         if (error) throw error;
-        return data!;
+        return fromSecretView(data!);
       },
     };
   });

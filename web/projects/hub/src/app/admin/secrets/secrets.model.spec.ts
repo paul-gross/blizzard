@@ -1,36 +1,20 @@
-import type { SecretView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { createBody } from '../config-edit.model';
+import { secret } from './secret.builders';
+import type { Secret } from './secret.domain';
 import {
   referenceCount,
-  SECRET_CREATE_FIELDS,
-  SECRET_REPLACE_FIELDS,
+  SECRET_CREATE_FIELD_VIEWS,
+  SECRET_REPLACE_FIELD_VIEWS,
   secretBadges,
-  secretCreate,
   secretRecordVm,
   secretRows,
 } from './secrets.model';
 
-const PEM = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----\n';
-
-const USED: SecretView = {
-  name: 'gh-blizzard',
-  revision: 3,
-  created_at: '2026-01-01T00:00:00Z',
-  replaced_at: '2026-01-05T00:00:00Z',
-  replaced_by: 'pgross',
-  replaced_by_name: null,
-  retirable: false,
-  retired: false,
-  references: [
-    { kind: 'work_source', key: 'blizzard', label: null },
-    { kind: 'repository', key: 'blizzard', label: null },
-  ],
-};
-const UNUSED: SecretView = { ...USED, name: 'gh-spare', references: [] };
-const RETIRED: SecretView = { ...USED, name: 'gh-old', references: [], retired: true };
+const USED: Secret = secret();
+const UNUSED: Secret = secret({ name: 'gh-spare', references: [] });
+const RETIRED: Secret = secret({ name: 'gh-old', references: [], retired: true });
 
 describe('secretBadges', () => {
   it('badges a secret nothing refers to as unused', () => {
@@ -85,8 +69,8 @@ describe('secretRecordVm', () => {
   });
 
   it('shows who replaced it by name, falling back to the id', () => {
-    const replacedBy = (secret: SecretView) => secretRecordVm(secret)!.facts.find((f) => f.label === 'Replaced by')?.value;
-    expect(replacedBy({ ...USED, replaced_by_name: 'Paul Gross' })).toBe('Paul Gross');
+    const replacedBy = (secret: Secret) => secretRecordVm(secret)!.facts.find((f) => f.label === 'Replaced by')?.value;
+    expect(replacedBy({ ...USED, replacedByName: 'Paul Gross' })).toBe('Paul Gross');
     expect(replacedBy(USED)).toBe('pgross');
   });
 
@@ -94,17 +78,8 @@ describe('secretRecordVm', () => {
     expect(secretRecordVm(UNUSED)?.links?.links).toEqual([]);
   });
 
-  it('creates a secret from the form, naming exactly its name and value', () => {
-    expect(secretCreate({ name: 'gh-blizzard', value: 's3cret' })).toEqual({ name: 'gh-blizzard', value: 's3cret' });
-  });
-
-  it('sends a pasted PEM in the create body with its line breaks intact', () => {
-    const body = secretCreate(createBody(SECRET_CREATE_FIELDS, { name: ' app-key ', value: PEM }));
-    expect(body).toEqual({ name: 'app-key', value: PEM });
-  });
-
   it('takes the value as masked multi-line text on create and replace', () => {
-    expect(SECRET_CREATE_FIELDS.find((field) => field.key === 'value')?.kind).toBe('secret-text');
-    expect(SECRET_REPLACE_FIELDS.map((field) => field.kind)).toEqual(['secret-text']);
+    expect(SECRET_CREATE_FIELD_VIEWS.find((field) => field.key === 'value')?.kind).toBe('secret-text');
+    expect(SECRET_REPLACE_FIELD_VIEWS.map((field) => field.kind)).toEqual(['secret-text']);
   });
 });

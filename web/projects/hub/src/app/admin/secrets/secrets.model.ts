@@ -1,70 +1,65 @@
-import type { SecretCreateRequestWritable, SecretReplaceRequest, SecretView } from 'fleet';
-
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { type ConfigFieldDef, createText } from '../config-edit.model';
+import type { ConfigFieldView } from '../config-field-tree.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { recordLink } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
-
-/** The create a new secret's form sends — its name and its write-only value. */
-export function secretCreate(body: Readonly<Record<string, string | boolean>>): SecretCreateRequestWritable {
-  return { name: createText(body, 'name'), value: createText(body, 'value') };
-}
+import type { Secret, SecretCreateDraft, SecretReplaceDraft } from './secret.domain';
+import { secretReferenceRefs } from './secret.translate';
 
 /** A secret's badges — retired, or unused when nothing live refers to it. */
-export function secretBadges(secret: SecretView): readonly ConfigBadgeVm[] {
+export function secretBadges(secret: Secret): readonly ConfigBadgeVm[] {
   if (secret.retired) return [{ label: 'retired', tone: lifecycleTone(true) }];
-  return (secret.references ?? []).length === 0 ? [{ label: 'unused', tone: 'waiting' }] : [];
+  return secret.references.length === 0 ? [{ label: 'unused', tone: 'waiting' }] : [];
 }
 
 /** How many records refer to a secret, as text. */
-export function referenceCount(secret: SecretView): string {
-  const count = (secret.references ?? []).length;
+export function referenceCount(secret: Secret): string {
+  const count = secret.references.length;
   return `${count} reference${count === 1 ? '' : 's'}`;
 }
 
 /** The secret list's rows under `filter`. */
-export function secretRows(secrets: readonly SecretView[], filter: LifecycleFilter): readonly ConfigRowVm[] {
+export function secretRows(secrets: readonly Secret[], filter: LifecycleFilter): readonly ConfigRowVm[] {
   return filterByLifecycle(secrets, filter).map((secret) => ({
     key: secret.name,
     title: secret.name,
     sub: [referenceCount(secret)],
     badges: secretBadges(secret),
     revision: secret.revision,
-    retired: secret.retired ?? false,
+    retired: secret.retired,
   }));
 }
 
 /** A secret's detail — `null` with none loaded. The value never reaches the board, so
  * there is none to show. */
-export function secretRecordVm(secret: SecretView | undefined): ConfigRecordVm | null {
+export function secretRecordVm(secret: Secret | undefined): ConfigRecordVm | null {
   if (!secret) return null;
   return {
     name: secret.name,
     badges: secretBadges(secret),
     facts: [
       { label: 'Value', value: '•••••••• write-only, never shown' },
-      { label: 'Replaced by', value: secret.replaced_by_name ?? secret.replaced_by },
+      { label: 'Replaced by', value: secret.replacedByName ?? secret.replacedBy },
     ],
     revision: secret.revision,
     note: null,
     links: {
       heading: 'Referred to by',
-      links: (secret.references ?? []).map(recordLink),
+      links: secretReferenceRefs(secret).map(recordLink),
       emptyText: 'Nothing refers to this secret.',
     },
     hasHistory: true,
   };
 }
 
-/** A new secret's form fields — its name and its write-only value. */
-export const SECRET_CREATE_FIELDS: readonly ConfigFieldDef<keyof SecretCreateRequestWritable>[] = [
-  { key: 'name', label: 'Name', kind: 'text', required: true },
-  { key: 'value', label: 'Value', kind: 'secret-text', required: true },
+/** The create form's fields, presentation only: the rules say both are required. The value is masked multi-line text. */
+export const SECRET_CREATE_FIELD_VIEWS: readonly ConfigFieldView<SecretCreateDraft>[] = [
+  { key: 'name', label: 'Name', kind: 'text' },
+  { key: 'value', label: 'Value', kind: 'secret-text' },
 ];
 
 /** The replace form's one field. */
-export const SECRET_REPLACE_FIELDS: readonly ConfigFieldDef<keyof SecretReplaceRequest>[] = [
-  { key: 'value', label: 'New value', kind: 'secret-text', required: true },
+export const SECRET_REPLACE_FIELD_VIEWS: readonly ConfigFieldView<SecretReplaceDraft>[] = [
+  { key: 'value', label: 'New value', kind: 'secret-text' },
 ];
