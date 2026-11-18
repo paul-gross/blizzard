@@ -116,10 +116,12 @@ def test_replace_seals_at_the_next_revision_and_refuses_blank_and_retired(tmp_pa
 
 def test_the_host_key_variable_wins_over_the_directory(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
+    on_disk = host_key_provider({}, layout, mint=True)
+    assert on_disk is not None
     keys = host_key_provider({ENV_HOST_SECRET_KEY: _KEY}, layout, mint=True)
     assert keys is not None
-    keys.current()
-    assert not layout.secret_keys_dir.exists()
+    assert keys.current().material == base64.b64decode(_KEY)
+    assert keys.current().key_id != on_disk.current().key_id
 
 
 def test_a_read_only_lookup_never_mints_and_a_sealing_one_mints_owner_only(tmp_path: Path) -> None:
@@ -138,9 +140,7 @@ def test_a_read_only_lookup_never_mints_and_a_sealing_one_mints_owner_only(tmp_p
 
 def test_a_malformed_host_key_variable_refuses(tmp_path: Path) -> None:
     with pytest.raises(ConfigError):
-        keys = host_key_provider({ENV_HOST_SECRET_KEY: "not-a-key"}, HostLayout(tmp_path), mint=True)
-        assert keys is not None
-        keys.current()
+        host_key_provider({ENV_HOST_SECRET_KEY: "not-a-key"}, HostLayout(tmp_path), mint=True)
 
 
 def test_sealing_refuses_a_key_variable_when_the_hosts_rows_are_under_its_key_directory(tmp_path: Path) -> None:
