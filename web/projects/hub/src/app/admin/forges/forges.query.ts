@@ -3,6 +3,8 @@ import { getForgeApiForgesForgeGet, listForgesApiForgesGet, type ForgeDetail, ty
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { Forge, ForgeRecord } from '../../forge/forge.domain';
 import { fromForgeDetail, fromForgeSummary } from '../../forge/forge.translate';
+import type { ForgeChoice, LandingPolicyHonour } from '../repositories/repository.domain';
+import { fromForgeSummary as fromForgeChoice, fromPolicyHonour } from '../repositories/repository.translate';
 
 const NOUN = 'forges';
 
@@ -52,5 +54,21 @@ export function injectForgeRecordQuery(key: () => string | null) {
   return injectQuery(() => ({
     ...forgeOptionsFor(key()),
     select: (wire: ForgeDetail): ForgeRecord => fromForgeDetail(wire),
+  }));
+}
+
+/** {@link injectForgesQuery}'s read, on the same cache key, as the forges a repository form may offer. */
+export function injectForgeChoicesQuery(includeRetired: () => boolean) {
+  return injectQuery(() => ({
+    ...forgesOptions(includeRetired()),
+    select: (forges: ForgeSummary[]): readonly ForgeChoice[] => forges.map(fromForgeChoice),
+  }));
+}
+
+/** {@link injectForgeQuery}'s read, on the same cache key, as which landing policies the forge can honour. */
+export function injectForgeHonourQuery(key: () => string | null) {
+  return injectQuery(() => ({
+    ...forgeOptionsFor(key()),
+    select: (forge: ForgeDetail): readonly LandingPolicyHonour[] => forge.landing_policies.map(fromPolicyHonour),
   }));
 }

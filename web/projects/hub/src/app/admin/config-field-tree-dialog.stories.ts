@@ -1,10 +1,10 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
-import { SourceDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
+import { SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
 
 const meta: Meta = {
   title: 'Hub admin/Config field-tree dialog',
-  decorators: [moduleMetadata({ imports: [SourceDialogHost, UrgencyDialogHost] })],
+  decorators: [moduleMetadata({ imports: [SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost] })],
   parameters: { layout: 'fullscreen' },
 };
 export default meta;
@@ -29,5 +29,10 @@ export const RootRefusal: Story = {
     template: '<app-story-urgency-dialog [outcome]="outcome" />',
   }),
 };
+const timeout = (attrs = ''): Story => ({ render: () => ({ template: `<app-story-timeout-dialog ${attrs} />` }) });
+
+export const DefaultChoice: Story = timeout();
+export const StatedHours: Story = timeout('[useDefault]="false"');
+export const DefaultChoicePhone: Story = { ...DefaultChoice, globals: { viewport: { value: 'phone', isRotated: false } } };
 export const CreatePhone: Story = { ...Create, globals: { viewport: { value: 'phone', isRotated: false } } };
 export const EditPhoneSm: Story = { ...Edit, globals: { viewport: { value: 'phone-sm', isRotated: false } } };

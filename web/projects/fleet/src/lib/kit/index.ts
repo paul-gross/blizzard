@@ -12,6 +12,7 @@ export { KitFactList, type KitFact } from './kit-fact-list';
 export { KitField } from './kit-field';
 export { KitForm } from './kit-form';
 export { KitNumberInput } from './kit-number-input';
+export { KitOrDefault } from './kit-or-default';
 export { KitGlyph } from './kit-glyph';
 export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';

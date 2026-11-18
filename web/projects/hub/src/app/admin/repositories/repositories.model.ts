@@ -1,164 +1,184 @@
-import {
-  type CredentialSummary,
-  type ForgeSummary,
-  hubApi,
-  openLookup,
-  RecordKind,
-  type RepositoryCreateRequest,
-  type RepositorySummary,
-} from 'fleet';
-
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { type ConfigFieldDef, type ConfigFieldOption, createText } from '../config-edit.model';
+import type { ConfigFieldOption } from '../config-edit.model';
+import type { ConfigFieldView } from '../config-field-tree.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
-import { credentialLinks, factText, recordLink } from '../config-links.model';
+import { credentialLinks, factText, recordKindLabel, recordRoute } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
-import type { ConfigRecordVm } from '../config-record-panel';
-import { credentialPickerFields } from '../credentials/credentials.model';
-import { forgePickerFields } from '../forges/forges.model';
+import type { ConfigLinkVm, ConfigRecordVm } from '../config-record-panel';
+import {
+  type CredentialChoice,
+  type ForgeChoice,
+  honourFor,
+  KNOWN_LANDING_POLICIES,
+  type KnownLandingPolicy,
+  type LandingPolicy,
+  type LandingPolicyHonour,
+  landingPolicyKey,
+  liveCredentials,
+  liveForges,
+  nameRepeatsSlug,
+  parks,
+  type Repository,
+  type RepositoryDraft,
+} from './repository.domain';
 
-type LandingPolicyName = hubApi.LandingPolicyName;
-type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
-type PolicyHonour = hubApi.PolicyHonour;
-const { LandingPolicyName } = hubApi;
+const LANDING_POLICY_LABEL: Readonly<Record<KnownLandingPolicy, string>> = {
+  'merge-on-checks': 'merge on checks',
+  'fast-forward': 'fast-forward',
+  park: 'park',
+};
 
-/** The create a new repository's form sends: a name left empty is omitted, and the hub takes the slug. */
-export function repositoryCreate(body: Readonly<Record<string, string | boolean>>): RepositoryCreateRequest {
-  const text = (key: string): string => createText(body, key);
-  const name = text('name');
-  return {
-    slug: text('slug'),
-    ...(name === '' ? {} : { name }),
-    forge: text('forge'),
-    owner: text('owner'),
-    repo: text('repo'),
-    base_branch: text('base_branch'),
-    credential: text('credential'),
-    ...(typeof body['allow_no_ci'] === 'boolean' ? { allow_no_ci: body['allow_no_ci'] } : {}),
-    ...(text('landing_policy') === '' ? {} : { landing_policy: text('landing_policy') as LandingPolicyName }),
-    ...(text('park_timeout_hours') === '' ? {} : { park_timeout_hours: Number(text('park_timeout_hours')) }),
-  };
+/** A landing policy's name as the board shows it; an unlisted one reads raw. */
+export function landingPolicyLabel(policy: LandingPolicy): string {
+  return typeof policy === 'string' ? LANDING_POLICY_LABEL[policy] : policy.unlisted;
 }
 
-/** A landing policy's name as the board shows it; an unknown one reads raw. */
-export const landingPolicyLabel = openLookup<LandingPolicyName, string>(
-  {
-    'merge-on-checks': 'merge on checks',
-    'fast-forward': 'fast-forward',
-    park: 'park',
-  },
-  (raw) => raw,
-);
-
 /**
- * The landing-policy choices. With the needs read, its policies in its order, each
- * disabled when the chosen forge's honour entry for it says `honoured: false` — its
- * label names what is `missing`. Without the needs, the generated policies; without a
+ * The landing-policy choices. With the hub's list read, its policies in its order, each
+ * disabled when the chosen forge's honour entry for it says it is not honoured — its
+ * label names what is missing. Without the list, the policies this build knows; without a
  * chosen forge's honour, none disabled. The hub answers a policy it refuses.
  */
 export function landingPolicyOptions(
-  needs: readonly LandingPolicyNeedsView[] | null,
-  honour: readonly PolicyHonour[] | null,
+  policies: readonly LandingPolicy[] | null,
+  honour: readonly LandingPolicyHonour[] | null,
 ): readonly ConfigFieldOption[] {
-  const policies: readonly string[] = needs === null ? Object.values(LandingPolicyName) : needs.map(({ policy }) => policy);
-  return policies.map((policy) => {
+  return (policies ?? KNOWN_LANDING_POLICIES).map((policy) => {
+    const value = landingPolicyKey(policy);
     const label = landingPolicyLabel(policy);
-    const entry = honour?.find((candidate) => candidate.policy === policy);
+    const entry = honour === null ? undefined : honourFor(honour, policy);
     return entry === undefined || entry.honoured
-      ? { value: policy, label }
-      : { value: policy, label: `${label} — forge lacks ${entry.missing.join(', ')}`, disabled: true };
+      ? { value, label }
+      : { value, label: `${label} — forge lacks ${entry.missing.join(', ')}`, disabled: true };
   });
 }
 
+/** The forge choices: each live forge. */
+function forgeOptions(forges: readonly ForgeChoice[]): readonly ConfigFieldOption[] {
+  return liveForges(forges).map((forge) => ({ value: forge.id, label: `${forge.slug} · ${forge.name}` }));
+}
+
+/** The credential choices: each live credential, keyed by its forge, so the select offers only the picked
+ * forge's credentials and a forge change clears the pick. */
+function credentialOptions(credentials: readonly CredentialChoice[]): readonly ConfigFieldOption[] {
+  return liveCredentials(credentials).map((credential) => ({
+    value: credential.id,
+    label: `${credential.slug} · ${credential.binding}`,
+    kind: credential.forgeId,
+  }));
+}
+
 /** The repository form's fields with its forge, credential and landing-policy choices filled in. */
-export function repositoryFields(
-  forges: readonly ForgeSummary[],
-  credentials: readonly CredentialSummary[],
-  needs: readonly LandingPolicyNeedsView[] | null,
-  honour: readonly PolicyHonour[] | null,
-): readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] {
-  return credentialPickerFields(forgePickerFields(REPOSITORY_FIELDS, forges), credentials).map((field) =>
-    field.key === 'landing_policy' ? { ...field, options: landingPolicyOptions(needs, honour) } : field,
-  );
+export function repositoryFieldViews(
+  forges: readonly ForgeChoice[],
+  credentials: readonly CredentialChoice[],
+  policies: readonly LandingPolicy[] | null,
+  honour: readonly LandingPolicyHonour[] | null,
+): readonly ConfigFieldView<RepositoryDraft>[] {
+  return REPOSITORY_FIELD_VIEWS.map((field) => {
+    switch (field.key) {
+      case 'forge':
+        return { ...field, options: forgeOptions(forges) };
+      case 'credential':
+        return { ...field, options: credentialOptions(credentials) };
+      case 'landingPolicy':
+        return { ...field, options: landingPolicyOptions(policies, honour) };
+      default:
+        return field;
+    }
+  });
+}
+
+/** The forge whose honour list a form's landing-policy choices follow: the draft's, while the form is open and names
+ * one. */
+export function honourForge(open: boolean, draft: Pick<RepositoryDraft, 'forge'>): string | null {
+  return open && draft.forge !== '' ? draft.forge : null;
 }
 
 /** A repository's park-timeout fact — only for a repository that parks. */
-function parkTimeoutFacts(repository: RepositorySummary): readonly { label: string; value: string }[] {
-  if (repository.landing_policy !== LandingPolicyName.PARK) return [];
-  const hours = repository.park_timeout_hours;
+function parkTimeoutFacts(repository: Repository): readonly { label: string; value: string }[] {
+  if (!parks(repository.landingPolicy)) return [];
+  const hours = repository.parkTimeoutHours;
   return [{ label: 'Park timeout', value: hours === null ? 'default' : `${hours} h` }];
 }
 
 /** A repository's badges — retired. */
-export function repositoryBadges(repository: RepositorySummary): readonly ConfigBadgeVm[] {
+export function repositoryBadges(repository: Repository): readonly ConfigBadgeVm[] {
   return repository.retired ? [{ label: 'retired', tone: lifecycleTone(true) }] : [];
 }
 
 /** The repository list's rows under `filter`. */
-export function repositoryRows(
-  repositories: readonly RepositorySummary[],
-  filter: LifecycleFilter,
-): readonly ConfigRowVm[] {
+export function repositoryRows(repositories: readonly Repository[], filter: LifecycleFilter): readonly ConfigRowVm[] {
   return filterByLifecycle(repositories, filter).map((repository) => ({
-    key: repository.repository_id,
+    key: repository.id,
     title: repository.slug,
     sub: [
-      ...(repository.name === repository.slug ? [] : [repository.name]),
+      ...(nameRepeatsSlug(repository) ? [] : [repository.name]),
       `${repository.owner}/${repository.repo}`,
-      `base ${repository.base_branch}`,
+      `base ${repository.baseBranch}`,
     ],
     badges: repositoryBadges(repository),
     revision: repository.revision,
-    retired: repository.retired ?? false,
+    retired: repository.retired,
   }));
 }
 
+/** A link to the forge a repository lands through. */
+function forgeLink(repository: Repository): ConfigLinkVm {
+  return {
+    kind: recordKindLabel('forge'),
+    name: repository.forge.slug,
+    route: recordRoute('forge', repository.forge.id),
+  };
+}
+
 /** A repository's detail — `null` with none loaded. */
-export function repositoryRecordVm(repository: RepositorySummary | undefined): ConfigRecordVm | null {
+export function repositoryRecordVm(repository: Repository | undefined): ConfigRecordVm | null {
   if (!repository) return null;
   return {
     name: repository.slug,
     badges: repositoryBadges(repository),
     facts: [
       { label: 'Name', value: factText(repository.name) },
-      { label: 'Forge', value: factText(repository.forge_name ?? repository.forge_slug) },
+      { label: 'Forge', value: factText(repository.forge.name) },
       { label: 'Owner', value: factText(repository.owner) },
       { label: 'Repository', value: factText(repository.repo) },
-      { label: 'Base branch', value: factText(repository.base_branch) },
-      { label: 'Landing policy', value: landingPolicyLabel(repository.landing_policy) },
-      { label: 'Allow no CI', value: repository.allow_no_ci ? 'Yes' : 'No' },
+      { label: 'Base branch', value: factText(repository.baseBranch) },
+      { label: 'Landing policy', value: landingPolicyLabel(repository.landingPolicy) },
+      { label: 'Allow no CI', value: repository.allowNoCi ? 'Yes' : 'No' },
       { label: 'No CI policy', value: 'Only permits absent checks, not failing or pending checks. Snapshotted at the first turn of a visit; changes affect later visits.' },
       ...parkTimeoutFacts(repository),
-      { label: 'Created by', value: factText(repository.created_by_name ?? repository.created_by) },
+      { label: 'Created by', value: factText(repository.createdByName ?? repository.createdBy) },
     ],
     revision: repository.revision,
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,
     links: {
       heading: 'Related records',
-      links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...credentialLinks(repository.credential_id, repository.credential_slug)],
+      links: [forgeLink(repository), ...credentialLinks(repository.credential?.id, repository.credential?.slug)],
       emptyText: 'No related records.',
     },
     hasHistory: true,
   };
 }
 
-/** A repository's form fields. The slug is the handle people type and may be renamed; the
- * name is its display label, and left blank on create it takes the slug. The credential it acts
- * with is one of its forge's. */
-export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] = [
-  { key: 'slug', label: 'Slug', kind: 'text', required: true },
+/** A repository's form fields, presentation only. The slug is the handle people type and may be renamed; the name is
+ * its display label, and left blank on create it takes the slug. The credential it acts with is one of its forge's,
+ * and the park timeout, shown only for `park`, is the default or a stated number of hours. */
+const REPOSITORY_FIELD_VIEWS: readonly ConfigFieldView<RepositoryDraft>[] = [
+  { key: 'slug', label: 'Slug', kind: 'text' },
   { key: 'name', label: 'Name', kind: 'text' },
-  { key: 'forge', label: 'Forge', kind: 'select', required: true },
-  { key: 'owner', label: 'Owner', kind: 'text', required: true },
-  { key: 'repo', label: 'Repository', kind: 'text', required: true },
-  { key: 'base_branch', label: 'Base branch', kind: 'text', required: true },
-  { key: 'credential', label: 'Credential', kind: 'select', required: true, filterBy: 'forge' },
-  { key: 'landing_policy', label: 'Landing policy', kind: 'select' },
-  { key: 'allow_no_ci', label: 'Allow no CI', kind: 'checkbox' },
+  { key: 'forge', label: 'Forge', kind: 'select' },
+  { key: 'owner', label: 'Owner', kind: 'text' },
+  { key: 'repo', label: 'Repository', kind: 'text' },
+  { key: 'baseBranch', label: 'Base branch', kind: 'text' },
+  { key: 'credential', label: 'Credential', kind: 'select', filterBy: 'forge' },
+  { key: 'landingPolicy', label: 'Landing policy', kind: 'select' },
+  { key: 'allowNoCi', label: 'Allow no CI', kind: 'checkbox' },
   {
-    key: 'park_timeout_hours',
+    key: 'parkTimeoutHours',
     label: 'Park timeout (hours)',
     kind: 'number',
-    shownWhen: { key: 'landing_policy', value: LandingPolicyName.PARK },
+    orDefault: { key: 'parkTimeoutDefault', label: 'Default' },
+    shownWhen: { key: 'landingPolicy', value: 'park' },
   },
 ];

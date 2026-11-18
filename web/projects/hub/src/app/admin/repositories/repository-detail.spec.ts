@@ -3,44 +3,31 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type CredentialCheckView, type MeResponse, type RepositorySummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
   credentialSummary,
   forgeDetail,
   OPERATOR_ME_RESPONSE,
+  repositorySummary,
   type RequestClientStub,
   settle,
+  stubError,
   stubHubClient,
 } from 'fleet/testing';
 
 import { RepositoryDetail } from './repository-detail';
+import { PARK_TIMEOUT_MESSAGE } from './repository.domain';
 
-const CORE: RepositorySummary = {
+const CORE = repositorySummary({
   forge_id: 'frg_github',
-  forge_slug: 'github',
-  forge_name: 'GitHub',
-  warnings: [],
   credential_id: 'cred_g',
   credential_slug: 'gh-main',
   credential_name: 'gh-main',
-  repository_id: 'repo_c',
-  slug: 'core',
   name: 'Core',
-  owner: 'acme',
-  repo: 'core',
-  base_branch: 'main',
-  secret_name: 'gh',
   landing_policy: 'merge-on-checks',
-  allow_no_ci: false,
-  park_timeout_hours: null,
   revision: 3,
-  created_at: '2026-10-01T00:00:00Z',
-  created_by: 'ada',
-  created_by_name: null,
-  retired: false,
-};
+});
 const HISTORY = configChangesPage({
   changes: [
     configChangeView({
@@ -63,27 +50,28 @@ const CREDENTIALS = [
   credentialSummary({ credential_id: 'cred_l', slug: 'lab-main', forge_id: 'frg_lab' }),
   credentialSummary({ credential_id: 'cred_r', slug: 'gh-retired', forge_id: 'frg_github', retired: true }),
 ];
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
-const CHECK: CredentialCheckView = {
+const CHECK = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
   not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
 };
 
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
-  let record: RepositorySummary = CORE;
+  let record = CORE;
+  let patch: () => unknown = () => ({ ...record, slug: 'core-2', revision: 4 });
   afterEach(() => {
     record = CORE;
+    patch = () => ({ ...record, slug: 'core-2', revision: 4 });
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
   async function open(url: string) {
     stub = stubHubClient({
-      'GET /api/me': () => EDITOR,
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] }),
       'GET /api/repositories/{repository}': () => record,
-      'PATCH /api/repositories/{repository}': () => ({ ...record, slug: 'core-2', revision: 4 }),
+      'PATCH /api/repositories/{repository}': () => patch() as never,
       'GET /api/config/changes': () => HISTORY,
       'POST /api/credentials/{credential}/checks': () => CHECK,
       'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_lab', slug: 'lab', name: 'Lab' })] }),
@@ -123,7 +111,7 @@ describe('RepositoryDetail', () => {
     input.value = 'core-2';
     input.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-repository-edit-submit"]')!.click();
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
     await settle(harness.fixture);
 
     const patch = stub.forRoute('/api/repositories/repo_c', 'PATCH');
@@ -139,20 +127,94 @@ describe('RepositoryDetail', () => {
     expect(text).not.toContain('Park timeout');
   });
 
-  it('sends a blank park timeout as null', async () => {
-    record = { ...CORE, landing_policy: 'park', park_timeout_hours: 6 };
-    const { harness } = await open('/admin/repositories/repo_c');
-    expect((harness.routeNativeElement as HTMLElement).textContent).toContain('6 h');
-    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!.click();
+  const root = (harness: RouterTestingHarness) => harness.routeNativeElement as HTMLElement;
+
+  async function startEdit(harness: RouterTestingHarness): Promise<void> {
+    testid(root(harness), 'admin-repository-edit')!.click();
     await settle(harness.fixture);
-    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-repository-edit-field-park_timeout_hours"]')!;
-    input.value = '';
+  }
+
+  async function type(harness: RouterTestingHarness, id: string, text: string): Promise<void> {
+    const el = testid(document, id)!;
+    const input = el instanceof HTMLInputElement ? el : el.querySelector<HTMLInputElement>('input')!;
+    input.value = text;
     input.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-repository-edit-submit"]')!.click();
+  }
+
+  async function save(harness: RouterTestingHarness): Promise<void> {
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
+  }
+
+  it('sends the default park timeout choice as null', async () => {
+    record = { ...CORE, landing_policy: 'park', park_timeout_hours: 6 };
+    const { harness } = await open('/admin/repositories/repo_c');
+    expect(root(harness).textContent).toContain('6 h');
+    await startEdit(harness);
+    testid(document, 'kit-or-default-chip')!.click();
+    await settle(harness.fixture);
+    expect(testid(document, 'admin-repository-edit-diff')?.textContent).toContain('Default');
+    await save(harness);
 
     expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ park_timeout_hours: null });
+  });
+
+  it('marks stated hours that are not whole hours from 1 and sends nothing', async () => {
+    record = { ...CORE, landing_policy: 'park', park_timeout_hours: 6 };
+    const { harness } = await open('/admin/repositories/repo_c');
+    await startEdit(harness);
+    for (const hours of ['4.5', '0', '99999999999999999999']) {
+      await type(harness, 'admin-repository-edit-field-parkTimeoutHours', hours);
+      await save(harness);
+      expect(document.querySelector('fleet-kit-dialog')!.textContent).toContain(PARK_TIMEOUT_MESSAGE);
+    }
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')).toHaveLength(0);
+  });
+
+  it('lands a revision conflict on the form line and keeps the typed draft open', async () => {
+    patch = () =>
+      stubError(409, {
+        type: 'urn:blizzard:problem:revision-conflict',
+        title: 'Conflict',
+        instance: '/',
+        detail: 'The repository changed since it was read.',
+      });
+    const { harness } = await open('/admin/repositories/repo_c');
+    await startEdit(harness);
+    await type(harness, 'admin-repository-edit-field-name', 'Core two');
+    await save(harness);
+
+    expect(testid(document, 'kit-form-line')?.textContent).toContain('changed since it was read');
+    expect(testid<HTMLInputElement>(document, 'admin-repository-edit-field-name')!.value).toBe('Core two');
+    expect(testid(document, 'admin-repository-edit-diff')?.textContent).toContain('Core two');
+  });
+
+  it('saves against the revision the edit opened at, even after the read refreshes', async () => {
+    const { harness } = await open('/admin/repositories/repo_c');
+    await startEdit(harness);
+    record = { ...CORE, revision: 8 };
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(harness.fixture);
+    await type(harness, 'admin-repository-edit-field-name', 'Core two');
+    await save(harness);
+
+    const patches = stub.forRoute('/api/repositories/repo_c', 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(patches[0].headers['if-match']).toBe('3');
+    expect(patches[0].body).toEqual({ name: 'Core two' });
+  });
+
+  it('marks the credential required, and refuses a save without one on its field', async () => {
+    record = { ...CORE, credential_id: null, credential_slug: null, credential_name: null };
+    const { harness } = await open('/admin/repositories/repo_c');
+    await startEdit(harness);
+    const credential = [...document.querySelectorAll('fleet-kit-field')].find((f) => f.textContent?.includes('Credential'))!;
+    expect(credential.querySelector('.req')).not.toBeNull();
+    await type(harness, 'admin-repository-edit-field-name', 'Core two');
+    await save(harness);
+    expect(credential.textContent).toContain('Required');
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')).toHaveLength(0);
   });
 
   it('keys the history read by the id', async () => {
@@ -162,7 +224,7 @@ describe('RepositoryDetail', () => {
     expect(reads[0].search).toContain('record_key=repo_c');
   });
 
-  const testid = (root: ParentNode, id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const testid = <E extends HTMLElement = HTMLElement>(root: ParentNode, id: string) => root.querySelector<E>(`[data-testid="${id}"]`);
   const optionLabels = () => Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).map((o) => o.textContent?.trim());
 
   async function choose(harness: RouterTestingHarness, field: string, label: string): Promise<void> {
@@ -181,7 +243,7 @@ describe('RepositoryDetail', () => {
     expect(optionLabels()).toEqual(['gh-main · github.token', 'gh-bot · github.token']);
     Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))[1].click();
     await settle(harness.fixture);
-    testid(document, 'admin-repository-edit-submit')!.click();
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ credential: 'cred_b' });
@@ -198,7 +260,7 @@ describe('RepositoryDetail', () => {
     expect(optionLabels()).toEqual(['lab-main · github.token']);
     Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))[0].click();
     await settle(harness.fixture);
-    testid(document, 'admin-repository-edit-submit')!.click();
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ forge: 'frg_lab', credential: 'cred_l' });

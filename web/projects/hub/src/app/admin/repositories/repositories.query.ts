@@ -2,32 +2,45 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getRepositoryApiRepositoriesRepositoryGet, hubApi, listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet';
 import { hubConfigKey, hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
+import type { LandingPolicy, Repository } from './repository.domain';
+import { fromLandingPolicyNeeds, fromRepositorySummary } from './repository.translate';
 
 type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
 
 const NOUN = 'repositories';
 
-/** `GET /api/repositories` — every repository, retired ones too while
- * `includeRetired()` holds. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
-export function injectRepositoriesQuery(includeRetired: () => boolean) {
-  return injectQuery(() => {
-    const retired = includeRetired();
-    return {
-      queryKey: hubConfigListKey(NOUN, retired),
-      queryFn: async (): Promise<RepositorySummary[]> => {
-        const { data, error } = await listRepositoriesApiRepositoriesGet({
-          query: { include_retired: retired },
-          throwOnError: false,
-        });
-        if (error) throw error;
-        return data?.repositories ?? [];
-      },
-    };
-  });
+function repositoriesOptions(retired: boolean) {
+  return {
+    queryKey: hubConfigListKey(NOUN, retired),
+    queryFn: async (): Promise<RepositorySummary[]> => {
+      const { data, error } = await listRepositoriesApiRepositoriesGet({
+        query: { include_retired: retired },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data?.repositories ?? [];
+    },
+  };
 }
 
-/** `GET /api/repositories/{repository}` — one repository by its id or slug, at rest while `key()` is `null`. */
-export function injectRepositoryQuery(key: () => string | null) {
+/** `GET /api/repositories` — every repository, retired ones too while `includeRetired()` holds, as the wire
+ * reads it, for the callers still outside the domain boundary. Freshness: `hubConfigKey`
+ * (`web/projects/hub/src/app/core/query-keys.ts`). */
+export function injectRepositoriesQuery(includeRetired: () => boolean) {
+  return injectQuery(() => repositoriesOptions(includeRetired()));
+}
+
+/** {@link injectRepositoriesQuery}'s read, on the same cache key, as domain {@link Repository} records. */
+export function injectRepositoryListQuery(includeRetired: () => boolean) {
+  return injectQuery(() => ({
+    ...repositoriesOptions(includeRetired()),
+    select: (repositories: RepositorySummary[]): readonly Repository[] => repositories.map(fromRepositorySummary),
+  }));
+}
+
+/** `GET /api/repositories/{repository}` — one repository by its id or slug, as a domain {@link Repository},
+ * at rest while `key()` is `null`. */
+export function injectRepositoryRecordQuery(key: () => string | null) {
   return injectQuery(() => {
     const recordName = key();
     return {
@@ -41,13 +54,14 @@ export function injectRepositoryQuery(key: () => string | null) {
         if (error) throw error;
         return data!;
       },
+      select: fromRepositorySummary,
     };
   });
 }
 
-/** `GET /api/config/landing-policies` — every landing policy with the forge capabilities it requires and
- * uses, in the hub's order. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
-export function injectLandingPoliciesQuery() {
+/** `GET /api/config/landing-policies` — every landing policy, in the hub's order, as the policies a form may
+ * offer. Freshness: `hubConfigKey` (`web/projects/hub/src/app/core/query-keys.ts`). */
+export function injectLandingPolicyChoicesQuery() {
   return injectQuery(() => ({
     queryKey: [...hubConfigKey, 'landing-policies'],
     queryFn: async (): Promise<LandingPolicyNeedsView[]> => {
@@ -55,5 +69,6 @@ export function injectLandingPoliciesQuery() {
       if (error) throw error;
       return data ?? [];
     },
+    select: (needs: LandingPolicyNeedsView[]): readonly LandingPolicy[] => fromLandingPolicyNeeds(needs),
   }));
 }

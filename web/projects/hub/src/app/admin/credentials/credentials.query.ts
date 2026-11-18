@@ -6,6 +6,8 @@ import {
   listCredentialsApiCredentialsGet,
 } from 'fleet';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
+import type { CredentialChoice } from '../repositories/repository.domain';
+import { fromCredentialSummary } from '../repositories/repository.translate';
 
 const NOUN = 'credentials';
 
@@ -13,17 +15,26 @@ const NOUN = 'credentials';
  * one's referrer count and the bindings a credential may name. Freshness: `hubConfigKey`
  * (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectCredentialsQuery(includeRetired: () => boolean) {
-  return injectQuery(() => {
-    const retired = includeRetired();
-    return {
-      queryKey: hubConfigListKey(NOUN, retired),
-      queryFn: async (): Promise<CredentialsListView> => {
-        const { data, error } = await listCredentialsApiCredentialsGet({ query: { include_retired: retired }, throwOnError: false });
-        if (error) throw error;
-        return data ?? { credentials: [], bindings: [], forge_bindings: [] };
-      },
-    };
-  });
+  return injectQuery(() => credentialsOptions(includeRetired()));
+}
+
+/** {@link injectCredentialsQuery}'s read, on the same cache key, as the credentials a repository form may offer. */
+export function injectCredentialChoicesQuery(includeRetired: () => boolean) {
+  return injectQuery(() => ({
+    ...credentialsOptions(includeRetired()),
+    select: (list: CredentialsListView): readonly CredentialChoice[] => list.credentials.map(fromCredentialSummary),
+  }));
+}
+
+function credentialsOptions(retired: boolean) {
+  return {
+    queryKey: hubConfigListKey(NOUN, retired),
+    queryFn: async (): Promise<CredentialsListView> => {
+      const { data, error } = await listCredentialsApiCredentialsGet({ query: { include_retired: retired }, throwOnError: false });
+      if (error) throw error;
+      return data ?? { credentials: [], bindings: [], forge_bindings: [] };
+    },
+  };
 }
 
 /** `GET /api/credentials/{credential}` — by id, slug, or former slug, with the records naming it. */
