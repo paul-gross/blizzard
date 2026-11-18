@@ -234,7 +234,7 @@ describe('GardeningProposalDetail', () => {
       'Author a docstring standard',
     );
 
-    el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-cancel"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!.click();
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="gardening-proposal-pass-dialog"]')).toBeNull();
@@ -250,7 +250,7 @@ describe('GardeningProposalDetail', () => {
       'Delete the dead helper',
     );
 
-    el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-cancel"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!.click();
     await settle(fixture);
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-accept"]')!.click();
@@ -294,7 +294,7 @@ describe('GardeningProposalDetail', () => {
       // Every exit route 422s a blank note, so the quick action writes one rather
       // than asking for it — naming the verb and the docket it was chosen from.
       expect(body.note).toContain("won't fix");
-      expect(body.note).toContain("evidence");
+      expect(body.note).toContain('evidence');
       expect(body.note.trim().length).toBeGreaterThan(0);
     });
 

@@ -1,8 +1,22 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { page, userEvent } from 'vitest/browser';
 
 import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialog-view';
+import { emptyPassDraft } from './proposal-pass.domain';
+import { proposalPassRules } from './proposal-pass.form';
+
+/** Mounts the view over a real `form()`, as the container does. */
+@Component({
+  selector: 'app-pass-sweep-host',
+  imports: [GardeningProposalPassDialogView],
+  template: '<app-gardening-proposal-pass-dialog-view [proposalTitle]="title()" [form]="f" />',
+})
+class Host {
+  readonly title = input.required<string>();
+  readonly f = form(signal(emptyPassDraft()), proposalPassRules);
+}
 
 /**
  * The Pass dialog's own half of `web:shell-sweep` — the footer's
@@ -10,7 +24,7 @@ import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialo
  * the phone and desktop widths the dialog is reachable at — a real CSS layout claim
  * jsdom cannot make.
  *
- * Mounts `GardeningProposalPassDialogView` directly with plain inputs — no query
+ * Mounts `GardeningProposalPassDialogView` over a real `form()` — no query
  * double, matching how the container actually feeds it
  * (`bzh:frontend-container-presentational`).
  *
@@ -20,11 +34,11 @@ import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialo
 async function mount(width: number) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [GardeningProposalPassDialogView],
+    imports: [Host],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(GardeningProposalPassDialogView);
-  fixture.componentRef.setInput('proposalTitle', 'Author a docstring standard covering change-history narration');
+  const fixture = TestBed.createComponent(Host);
+  fixture.componentRef.setInput('title', 'Author a docstring standard covering change-history narration');
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -42,15 +56,16 @@ describe('GardeningProposalPassDialogView shell sweep (web:shell-sweep)', () => 
         await userEvent.type(reason, 'not worth it yet');
         await fixture.whenStable();
 
-        const cancel = root.querySelector<HTMLElement>('[data-testid="proposal-pass-dialog-cancel"]')!;
-        const submit = root.querySelector<HTMLElement>('[data-testid="proposal-pass-dialog-submit"]')!;
+        const cancel = root.querySelector<HTMLElement>('[data-testid="kit-form-cancel"]')!;
+        const submit = root.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!;
         const cancelRect = cancel.getBoundingClientRect();
         const submitRect = submit.getBoundingClientRect();
         expect(
           Math.abs(cancelRect.top - submitRect.top),
           'Cancel and Pass must sit on the same row, not stacked',
         ).toBeLessThan(2);
-        expect(submitRect.left, 'Pass must not overlap Cancel').toBeGreaterThanOrEqual(cancelRect.right);
+        const [first, second] = cancelRect.left < submitRect.left ? [cancelRect, submitRect] : [submitRect, cancelRect];
+        expect(second.left, 'the action buttons must not overlap').toBeGreaterThanOrEqual(first.right);
 
         const panel = root.querySelector<HTMLElement>('[data-testid="gardening-proposal-pass-dialog"]')!;
         const panelRect = panel.getBoundingClientRect();

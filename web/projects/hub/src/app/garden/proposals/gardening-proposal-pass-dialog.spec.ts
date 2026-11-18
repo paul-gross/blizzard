@@ -32,19 +32,16 @@ describe('GardeningProposalPassDialog', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  it('disables submit until a reason is entered', async () => {
+  it('blocks Save on a blank reason with a field error and sends nothing', async () => {
     const mounted = await mount({});
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.disabled).toBe(true);
-
-    const input = el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-pass-reason-input"]')!;
-    input.value = 'not worth it yet';
-    input.dispatchEvent(new Event('input'));
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
     await settle(fixture);
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.disabled).toBe(false);
+    expect(el.textContent).toContain('Required');
+    expect(stub.forRoute('/api/garden-proposals/gp_1/pass', 'POST')).toHaveLength(0);
   });
 
   it('submits only with the entered reason, closing on success', async () => {
@@ -67,7 +64,7 @@ describe('GardeningProposalPassDialog', () => {
     input.value = 'not worth it yet';
     input.dispatchEvent(new Event('input'));
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
     await settle(fixture);
 
     const calls = stub.forRoute('/api/garden-proposals/gp_1/pass', 'POST');
@@ -76,9 +73,34 @@ describe('GardeningProposalPassDialog', () => {
     expect(closed).toBe(true);
   });
 
-  it('renders a 409 (already closed) as an action error rather than closing', async () => {
+  it('lands a hub field refusal on the reason field', async () => {
     const mounted = await mount({
-      'POST /api/garden-proposals/{proposal_id}/pass': () => stubError(409, { detail: 'garden proposal gp_1 already carries a closure' }),
+      'POST /api/garden-proposals/{proposal_id}/pass': () =>
+        stubError(422, {
+          type: 'urn:blizzard:problem:garden-proposal-invalid',
+          detail: 'reason must not be blank',
+        }),
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    const input = el.querySelector<HTMLTextAreaElement>('[data-testid="proposal-pass-reason-input"]')!;
+    input.value = 'x';
+    input.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(fixture);
+
+    expect(el.textContent).toContain('reason must not be blank');
+    expect(el.querySelector('[data-testid="kit-form-line"]')).toBeNull();
+  });
+
+  it('renders a 409 (already closed) as a form-level refusal, keeping the draft and not retrying', async () => {
+    const mounted = await mount({
+      'POST /api/garden-proposals/{proposal_id}/pass': () =>
+        stubError(409, {
+          detail: 'garden proposal gp_1 already carries a closure',
+        }),
     });
     stub = mounted.stub;
     const { el, fixture } = mounted;
@@ -89,12 +111,12 @@ describe('GardeningProposalPassDialog', () => {
     input.value = 'not worth it yet';
     input.dispatchEvent(new Event('input'));
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="proposal-pass-dialog-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="proposal-pass-submit-error"]')?.textContent).toContain(
-      'already carries a closure',
-    );
+    expect(el.querySelector('[data-testid="kit-form-line"]')?.textContent).toContain('already carries a closure');
     expect(closed).toBe(false);
+    expect(input.value).toBe('not worth it yet');
+    expect(stub.forRoute('/api/garden-proposals/gp_1/pass', 'POST')).toHaveLength(1);
   });
 });

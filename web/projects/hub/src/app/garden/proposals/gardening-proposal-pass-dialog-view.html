@@ -6,30 +6,19 @@
 >
   <h2 fleetKitDialogHeader data-testid="proposal-pass-dialog-title">Pass {{ proposalTitle() }}</h2>
 
-  <p>Passing is not a dismissal — it is the note that stops a later run raising the same response as though it were new.</p>
+  <p>
+    Passing is not a dismissal — it is the note that stops a later run raising the same response as though it were new.
+  </p>
 
-  <fleet-kit-text-input
-    multiline
-    [rows]="6"
-    placeholder="Why the proposal is passed — required"
-    [value]="reason()"
-    (valueChange)="reason.set($event)"
-    testid="proposal-pass-reason-input"
-  />
-
-  <div fleetKitDialogFooter class="footer">
-    <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="proposal-pass-submit-error" />
-    <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="proposal-pass-dialog-cancel">
-      Cancel
-    </fleet-kit-button>
-    <fleet-kit-button
-      size="cta"
-      variant="primary"
-      [disabled]="!canSubmit()"
-      (click)="onSubmitClick()"
-      testid="proposal-pass-dialog-submit"
-    >
-      Pass
-    </fleet-kit-button>
-  </div>
+  <fleet-kit-form [form]="form()" saveLabel="Pass" (save)="save.emit()" (cancel)="onClosed()">
+    <fleet-kit-field label="Reason" [field]="form().reason">
+      <fleet-kit-text-input
+        multiline
+        [rows]="6"
+        placeholder="Why the proposal is passed — required"
+        [formField]="form().reason"
+        testid="proposal-pass-reason-input"
+      />
+    </fleet-kit-field>
+  </fleet-kit-form>
 </fleet-kit-dialog>
