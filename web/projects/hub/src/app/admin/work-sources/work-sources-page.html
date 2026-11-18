@@ -19,15 +19,14 @@
   <router-outlet />
 </app-config-master>
 @if (createOpen()) {
-  <app-config-form-dialog
+  <app-config-field-tree-dialog
     heading="New work source"
     mode="create"
+    [form]="createForm"
     [fields]="fields()"
     submitLabel="Create"
-    [submitError]="createError()"
-    [submitting]="createMutation.isPending()"
     testidPrefix="admin-work-sources-create"
     (closed)="createOpen.set(false)"
-    (submitted)="onCreate($event)"
+    (save)="onCreate()"
   />
 }

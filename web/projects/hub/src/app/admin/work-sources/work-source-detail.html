@@ -17,17 +17,16 @@
     <app-credential-check [target]="target" />
   }
 </app-config-record-panel>
-@if (editOpen() && shown(); as initial) {
-  <app-config-form-dialog
+@if (editBaseline(); as baseline) {
+  <app-config-field-tree-dialog
     heading="Edit work source"
     mode="edit"
+    [form]="editForm"
     [fields]="fields()"
-    [initial]="initial"
+    [baseline]="baseline.draft"
     submitLabel="Save"
-    [submitError]="editError()"
-    [submitting]="editMutation.isPending()"
     testidPrefix="admin-work-source-edit"
-    (closed)="editOpen.set(false)"
-    (submitted)="onSave($event)"
+    (closed)="onCancel()"
+    (save)="onSave()"
   />
 }

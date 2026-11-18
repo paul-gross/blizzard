@@ -1,32 +1,37 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
+  type EditBaseline,
   errorMessage,
   type KitAsyncStateValue,
-  RecordKind,
   restingAsyncState,
+  submitForm,
   ViewportService,
 } from 'fleet';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
-import { injectWorkSourceLifecycleMutation, injectEditWorkSourceMutation } from './work-sources.mutations';
-import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
-import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { injectWorkSourceLifecycleMutation } from './work-sources.mutations';
+import { type ConfigFailure, failureFor } from '../config-actions.model';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { CredentialCheck } from '../credentials/credential-check';
-import { WORK_SOURCE_FIELDS, workSourceCliName, workSourceRecordVm } from './work-sources.model';
+import { EMPTY_WORK_SOURCE_DRAFT, type WorkSourceDraft } from './work-source.domain';
+import { workSourceEditRules } from './work-source.form';
+import { injectWorkSourceService } from './work-source.service';
+import { toEditBaseline, WORK_SOURCE_RECORD_KIND } from './work-source.translate';
+import { workSourceActions, workSourceCliName, workSourceFieldViews, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
-import { credentialCheckTarget, credentialPickerFields } from '../credentials/credentials.model';
+import { credentialCheckTarget, credentialOptions } from '../credentials/credentials.model';
 import { injectCredentialsQuery } from '../credentials/credentials.query';
-import { forgePickerFields } from '../forges/forges.model';
+import { forgeOptions } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
 
 /**
@@ -38,7 +43,7 @@ import { injectForgesQuery } from '../forges/forges.query';
 @Component({
   selector: 'app-work-source-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel, CredentialCheck],
+  imports: [ConfigFieldTreeDialog, ConfigRecordPanel, CredentialCheck],
   templateUrl: './work-source-detail.html',
 })
 export class WorkSourceDetail {
@@ -51,8 +56,8 @@ export class WorkSourceDetail {
     initialValue: null,
   });
   private readonly sourceQuery = injectWorkSourceQuery(() => this.key());
-  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.WORK_SOURCE, () =>
-    this.sourceQuery.data()?.work_source_id ?? null,
+  private readonly historyQuery = injectConfigHistoryQuery(WORK_SOURCE_RECORD_KIND, () =>
+    this.sourceQuery.data()?.id ?? null,
   );
 
   protected readonly vm = computed(() => workSourceRecordVm(this.sourceQuery.data()));
@@ -65,37 +70,39 @@ export class WorkSourceDetail {
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
   protected readonly cliCommand = computed(() =>
-    detailCliCommand(this.viewport.mode(), RecordKind.WORK_SOURCE, workSourceCliName(this.sourceQuery.data())),
+    detailCliCommand(this.viewport.mode(), WORK_SOURCE_RECORD_KIND, workSourceCliName(this.sourceQuery.data())),
   );
 
   private readonly meQuery = injectMeQuery();
-  protected readonly editMutation = injectEditWorkSourceMutation();
+  private readonly workSourceService = injectWorkSourceService();
   private readonly lifecycleMutation = injectWorkSourceLifecycleMutation();
 
   private readonly forgesQuery = injectForgesQuery(() => false);
   private readonly credentialsQuery = injectCredentialsQuery(() => false);
   protected readonly fields = computed(() =>
-    credentialPickerFields(forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []), this.credentialsQuery.data()?.credentials ?? []),
+    workSourceFieldViews(
+      forgeOptions(this.forgesQuery.data() ?? []),
+      credentialOptions(this.credentialsQuery.data()?.credentials ?? []),
+    ),
   );
-  protected readonly editOpen = signal(false);
-  protected readonly editError = signal<string | null>(null);
+
+  /** What the edit started from — `null` while no edit is under way. */
+  protected readonly editBaseline = signal<EditBaseline<WorkSourceDraft> | null>(null);
+  private readonly editDraft = signal<WorkSourceDraft>(EMPTY_WORK_SOURCE_DRAFT);
+  protected readonly editForm = form(this.editDraft, workSourceEditRules);
   private readonly pendingKey = signal<string | null>(null);
   private readonly failure = signal<ConfigFailure | null>(null);
 
   protected readonly actions = computed(() =>
-    configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()),
+    workSourceActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()),
   );
   /** The Check action's credential and scope — this record alone, shown to an editor when it names a credential. */
   protected readonly check = computed(() =>
-    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()?.credential_id, {
+    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()?.credentialId, {
       field: 'work_sources',
-      id: this.sourceQuery.data()?.work_source_id,
+      id: this.sourceQuery.data()?.id,
     }),
   );
-  protected readonly shown = computed(() => {
-    const record = this.sourceQuery.data();
-    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id, credential: record.credential_id });
-  });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
@@ -104,7 +111,7 @@ export class WorkSourceDetail {
     effect(() => {
       const source = this.sourceQuery.data();
       const key = this.key();
-      const id = source?.work_source_id;
+      const id = source?.id;
       if (id && key !== null && key !== id) {
         void this.router.navigate(this.lens.link(['/admin', 'work-sources', id]), {
           replaceUrl: true,
@@ -112,35 +119,37 @@ export class WorkSourceDetail {
         });
       }
     });
+    // Selecting another work source ends the edit.
+    effect(() => {
+      this.key();
+      untracked(() => this.editBaseline.set(null));
+    });
   }
 
+  /** Captures the baseline — id, revision, and draft from one read — and a working copy of its draft. */
   protected onEdit(): void {
-    this.editError.set(null);
-    this.editOpen.set(true);
+    const source = this.sourceQuery.data();
+    const baseline = source && toEditBaseline(source);
+    if (!baseline) return;
+    this.editForm().reset({ ...baseline.draft });
+    this.editBaseline.set(baseline);
   }
 
-  protected onSave(values: ConfigFormValues): void {
-    const record = this.sourceQuery.data();
-    const shown = this.shown();
-    const id = record?.work_source_id;
-    if (!record || !id || !shown || record.revision == null) return;
-    this.editError.set(null);
-    this.editMutation.mutate(
-      {
-        workSourceId: id,
-        revision: record.revision,
-        body: configEdit(this.fields(), shown, values).body,
-      },
-      {
-        onSuccess: () => this.editOpen.set(false),
-        onError: (error) => this.editError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+  /** Sends the working draft against the baseline, so a refresh of the read changes neither. */
+  protected async onSave(): Promise<void> {
+    const baseline = this.editBaseline();
+    if (baseline === null) return;
+    const saved = await submitForm(this.editForm, (draft) => this.workSourceService.edit(baseline, draft));
+    if (saved && this.editBaseline() === baseline) this.editBaseline.set(null);
+  }
+
+  protected onCancel(): void {
+    this.editBaseline.set(null);
   }
 
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.sourceQuery.data();
-    const id = record?.work_source_id;
+    const id = record?.id;
     if (!record || !id || record.revision == null) return;
     this.pendingKey.set(id);
     this.failure.set(null);

@@ -1,41 +1,35 @@
-import type { WorkSourceSummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { builtInTone, lifecycleTone } from '../../core/lifecycle-tone';
+import { builtInWorkSource, workSource } from './work-source.builders';
+import type { WorkSource } from './work-source.domain';
 import {
+  workSourceActions,
   workSourceBadges,
   workSourceCliName,
-  workSourceCreate,
+  workSourceFieldViews,
   workSourceRecordVm,
   workSourceRows,
 } from './work-sources.model';
 
-const WINTER: WorkSourceSummary = {
-  forge_id: 'frg_github',
-  forge_slug: 'github',
-  forge_name: 'GitHub',
-  warnings: [],
-  credential_id: 'cred_w',
-  credential_slug: 'gh-winter',
-  credential_name: 'gh-winter',
-  work_source_id: 'wsrc_w',
+const WINTER = workSource({
+  id: 'wsrc_w',
   slug: 'winter',
   name: 'winter',
   provider: 'github',
   locator: 'paul-gross/winter',
+  forgeId: 'frg_github',
+  forgeSlug: 'github',
+  forgeName: 'GitHub',
+  credentialId: 'cred_w',
+  credentialSlug: 'gh-winter',
   annotate: true,
   edit: false,
-  secret: 'gh-winter',
   revision: 2,
-  created_by: 'pgross',
-
-  built_in: false,
-  created_at: null,
-  created_by_name: null,
-  retired: false,
-};
-const OLD: WorkSourceSummary = { ...WINTER, work_source_id: 'wsrc_o', slug: 'old', name: 'Old one', annotate: false, retired: true, revision: 3 };
-const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], credential_id: null, credential_slug: null, credential_name: null, name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
+  createdBy: 'pgross',
+});
+const OLD = workSource({ ...WINTER, id: 'wsrc_o', slug: 'old', name: 'Old one', annotate: false, retired: true, revision: 3 });
+const HUB = builtInWorkSource({ slug: 'hub' });
 
 describe('workSourceBadges', () => {
   it('badges the built-in source and a retired one', () => {
@@ -89,9 +83,9 @@ describe('workSourceRecordVm', () => {
   });
 
   it('shows who created it by name, falling back to the id', () => {
-    const createdBy = (source: WorkSourceSummary) => workSourceRecordVm(source)!.facts.find((f) => f.label === 'Created by')?.value;
-    expect(createdBy({ ...WINTER, created_by: 'usr_1', created_by_name: 'Paul Gross' })).toBe('Paul Gross');
-    expect(createdBy({ ...WINTER, created_by: 'usr_1' })).toBe('usr_1');
+    const createdBy = (source: WorkSource) => workSourceRecordVm(source)!.facts.find((f) => f.label === 'Created by')?.value;
+    expect(createdBy({ ...WINTER, createdBy: 'usr_1', createdByName: 'Paul Gross' })).toBe('Paul Gross');
+    expect(createdBy({ ...WINTER, createdBy: 'usr_1' })).toBe('usr_1');
   });
 
   it('titles the record by slug and shows the display name as a fact', () => {
@@ -120,19 +114,26 @@ describe('workSourceCliName', () => {
     expect(workSourceCliName(HUB)).toBeNull();
     expect(workSourceCliName(undefined)).toBeNull();
   });
+});
 
-  it('creates a work source from the form, carrying the checkbox as a boolean and leaving empty text out', () => {
-    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', forge: 'frg_github', credential: '', annotate: true };
-    expect(workSourceCreate(body)).toEqual({
-      slug: 'winter',
-      provider: 'github',
-      locator: 'paul-gross/winter',
-      forge: 'frg_github',
-      annotate: true,
-    });
-    expect(workSourceCreate({ ...body, annotate: false, credential: 'cred_w' })).toMatchObject({
-      annotate: false,
-      credential: 'cred_w',
-    });
+describe('workSourceActions', () => {
+  it('offers retire to an editor on a desktop, enable once retired, and nothing for the built-in source', () => {
+    expect(workSourceActions('desktop', true, WINTER)).toMatchObject({ edit: true, lifecycle: 'retire' });
+    expect(workSourceActions('desktop', true, OLD)).toMatchObject({ lifecycle: 'enable' });
+    expect(workSourceActions('desktop', true, HUB)).toBeNull();
+    expect(workSourceActions('desktop', false, WINTER)).toBeNull();
+    expect(workSourceActions('mobile', true, WINTER)).toBeNull();
+  });
+});
+
+describe('workSourceFieldViews', () => {
+  const forges = [{ value: 'frg_github', label: 'github', kind: 'github' }];
+  const credentials = [{ value: 'cred_w', label: 'gh-winter', kind: 'frg_github' }];
+
+  it('draws the forge and credential from the given choices, each hanging on its parent', () => {
+    const fields = workSourceFieldViews(forges, credentials);
+    expect(fields.map((f) => f.key)).toEqual(['slug', 'name', 'provider', 'locator', 'forge', 'credential', 'annotate']);
+    expect(fields.find((f) => f.key === 'forge')).toMatchObject({ options: forges, filterBy: 'provider' });
+    expect(fields.find((f) => f.key === 'credential')).toMatchObject({ options: credentials, filterBy: 'forge' });
   });
 });
