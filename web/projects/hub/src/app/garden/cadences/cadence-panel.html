@@ -20,8 +20,8 @@
           <span class="cp-actions">
             <fleet-kit-button
               testid="gardening-cadence-panel-edit"
-              [disabled]="isOpen(panel, 'cadence')"
-              (click)="openForm(panel, 'cadence')"
+              [disabled]="editForm() !== null"
+              (click)="onStartEdit()"
             >
               Edit
             </fleet-kit-button>
@@ -48,19 +48,16 @@
         }
       </header>
 
-      @if (isOpen(panel, 'cadence')) {
+      @if (editForm(); as edit) {
         <app-cadence-form
           class="cp-form"
           testid="gardening-cadence-edit"
-          [initial]="panel.draft"
-          [pending]="editPending()"
-          [error]="actionError()"
-          (saved)="edit.emit($event)"
-          (cancelled)="closeForm()"
+          [form]="edit"
+          (save)="saveEdit.emit()"
+          (cancel)="cancelEdit.emit()"
         />
-      } @else {
-        <fleet-kit-error-line class="cp-error" [message]="actionError()" testid="gardening-cadence-panel-error" />
       }
+      <fleet-kit-error-line class="cp-error" [message]="actionError()" testid="gardening-cadence-panel-error" />
 
       <ng-template #momentsFact>
         @if (panel.nextMoments.length) {

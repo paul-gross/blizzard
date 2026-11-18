@@ -1,29 +1,25 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
-import type { ChoreView } from 'fleet';
-import {
-  gardenCadenceAttentionView,
-  gardenCadenceErrandView,
-  gardenCadenceView,
-  gardenChoreView,
-  gardenErrandRunView,
-} from 'fleet/testing';
+import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 
-import type { CadenceDraft } from './cadence-form';
+import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
+import type { CadenceDraft, ChoreDraft } from '../core/cadence.domain';
+import { toDraft } from '../core/cadence.translate';
+import { cadenceEditRules } from './cadence.form';
 import { type CadencePanelVm, type ChoreEditEvent, FleetCadencePanel } from './cadence-panel';
-import type { ChoreDraft } from './chore-form';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
 
-const CADENCE = gardenCadenceView({
+const CADENCE = gardenCadence({
   slug: 'evening',
   name: 'Evening sweep',
-  chores: [gardenChoreView(), gardenChoreView({ chore_id: 'chr_2', key: 'odd', mode: 'sampled' as ChoreView['mode'], scopes: ['web'] })],
-  attention: [gardenCadenceAttentionView()],
+  chores: [gardenChore(), gardenChore({ id: 'chr_2', key: 'odd', mode: { unlisted: 'sampled' }, scopes: ['web'] })],
+  attention: [gardenCadenceAttention()],
 });
 const ERRANDS = [
   gardenCadenceErrandView({ scope: 'blizzard', last_run: gardenErrandRunView() }),
-  gardenCadenceErrandView({ scope: 'gone', state: 'stopped', due_at: null, attention: [gardenCadenceAttentionView()] }),
+  gardenCadenceErrandView({ scope: 'gone', state: 'stopped', due_at: null, attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }] }),
   gardenCadenceErrandView({ chore: 'odd', scope: 'web', state: 'due' }),
 ];
 const VM = cadencePanelVm(CADENCE, null, ERRANDS)!;
@@ -166,25 +162,36 @@ describe('FleetCadencePanel', () => {
     ]);
   });
 
-  it('keeps the edit form open beside a refusal, and closes it once a new revision reads back', async () => {
-    const { fixture, click, type, q } = await mount();
-    const saved: CadenceDraft[] = [];
-    fixture.componentInstance.edit.subscribe((draft) => saved.push(draft));
+  it('asks its container to start an edit, and renders the edit form exactly while handed a field tree', async () => {
+    const { fixture, click, q } = await mount();
+    let started = 0;
+    fixture.componentInstance.startEdit.subscribe(() => started++);
 
     await click('gardening-cadence-panel-edit');
-    await type('gardening-cadence-edit-cron', '0 21 * * *');
-    await click('gardening-cadence-edit-save');
-    expect(saved[0].cron).toBe('0 21 * * *');
+    expect(started).toBe(1);
+    expect(q('gardening-cadence-edit')).toBeNull();
 
-    fixture.componentRef.setInput('actionError', 'the cadence changed since it was read');
+    const tree = TestBed.runInInjectionContext(() => form(signal<CadenceDraft>(toDraft(CADENCE)), cadenceEditRules));
+    fixture.componentRef.setInput('editForm', tree);
     await fixture.whenStable();
-    expect(q('gardening-cadence-edit')).not.toBeNull();
-    expect(q('gardening-cadence-edit-error')?.textContent).toContain('the cadence changed since it was read');
+    expect((q('gardening-cadence-edit-cron') as HTMLInputElement).value).toBe('0 20 * * *');
+    expect((q('gardening-cadence-panel-edit') as HTMLButtonElement).disabled).toBe(true);
 
-    fixture.componentRef.setInput('actionError', null);
     fixture.componentRef.setInput('vm', { ...VM, revision: VM.revision + 1 });
     await fixture.whenStable();
-    expect(q('gardening-cadence-edit')).toBeNull();
+    expect(q('gardening-cadence-edit')).not.toBeNull();
+  });
+
+  it('ends the edit when a chore form opens', async () => {
+    const { fixture, click } = await mount();
+    let cancelled = 0;
+    fixture.componentInstance.cancelEdit.subscribe(() => cancelled++);
+    const tree = TestBed.runInInjectionContext(() => form(signal<CadenceDraft>(toDraft(CADENCE)), cadenceEditRules));
+    fixture.componentRef.setInput('editForm', tree);
+    await fixture.whenStable();
+
+    await click('gardening-cadence-chore-add');
+    expect(cancelled).toBe(1);
   });
 
   it('disables every save and remove while an edit is in flight', async () => {

@@ -1,0 +1,8 @@
+@if (selected(); as cadence) {
+  <h2 data-testid="cadence-edit-name">{{ cadence.name }}</h2>
+  @if (editForm(); as f) {
+    <app-cadence-edit-form [form]="f" (save)="onSave()" (cancel)="onCancel()" />
+  } @else {
+    <fleet-kit-button testid="cadence-edit-start" (click)="onStartEdit()">Edit</fleet-kit-button>
+  }
+}

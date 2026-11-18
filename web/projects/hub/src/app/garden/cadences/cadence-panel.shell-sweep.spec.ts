@@ -1,15 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ChoreView } from 'fleet';
-import {
-  gardenCadenceAttentionView,
-  gardenCadenceErrandView,
-  gardenCadenceView,
-  gardenChoreView,
-  gardenErrandRunView,
-} from 'fleet/testing';
+import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { page } from 'vitest/browser';
+
+import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
 
 import { type CadencePanelVm, FleetCadencePanel } from './cadence-panel';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
@@ -24,21 +19,21 @@ import { cadencePanelVm } from './gardening-cadence-detail.model';
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const CADENCE = gardenCadenceView({
+const CADENCE = gardenCadence({
   slug: 'evening',
   name: 'Evening sweep over every scope the project keeps',
   chores: [
-    gardenChoreView({ note: 'the nightly docs pass, over every linked scope, promoting what it finds' }),
-    gardenChoreView({
-      chore_id: 'chr_2',
+    gardenChore({ note: 'the nightly docs pass, over every linked scope, promoting what it finds' }),
+    gardenChore({
+      id: 'chr_2',
       key: 'samples',
       routine: 'a-routine-with-a-rather-long-slug-that-must-wrap-inside-its-row',
       scopes: ['web', 'hub', 'a-scope-the-project-does-not-hold'],
-      mode: 'sampled' as ChoreView['mode'],
+      mode: { unlisted: 'sampled' },
       promote: false,
     }),
   ],
-  attention: [gardenCadenceAttentionView({ chore: 'samples', scope: 'a-scope-the-project-does-not-hold' })],
+  attention: [gardenCadenceAttention({ chore: 'samples', scope: 'a-scope-the-project-does-not-hold' })],
 });
 
 const ERRANDS = [
@@ -50,7 +45,7 @@ const ERRANDS = [
     scope: 'a-scope-the-project-does-not-hold',
     state: 'stopped',
     due_at: null,
-    attention: [gardenCadenceAttentionView({ chore: 'samples', scope: 'a-scope-the-project-does-not-hold' })],
+    attention: [{ chore: 'samples', scope: 'a-scope-the-project-does-not-hold', reason: 'scope_unknown' }],
   }),
 ];
 

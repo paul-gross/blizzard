@@ -9,6 +9,8 @@ import {
 } from 'fleet';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey } from '../../core/query-keys';
+import type { Cadence } from './cadence.domain';
+import { fromCadenceView } from './cadence.translate';
 
 /** The cadence list's key — `GET /api/projects/{project}/cadences`, or `GET /api/cadences` on All. Cadences carry no
  * SSE event of their own, so only a cadence write invalidates it. */
@@ -22,7 +24,7 @@ export function hubCadenceErrandsKey(cadenceId: string | null): readonly unknown
 /**
  * The cadence list — every cadence, newest first, retired ones included and marked, each carrying its attention, its
  * errands counted by state, and its next moments. Under a project lens it is that project's cadences; on All it is the
- * tenant's. Read by the cadences tab, its detail, and any garden surface naming the cadences that keep a routine.
+ * tenant's. The cache keeps the wire response; its readers take {@link Cadence}. Read by the cadences tab, its detail, and any garden surface naming the cadences that keep a routine.
  */
 export function injectHubCadencesQuery() {
   const project = injectProjectFilter();
@@ -42,6 +44,7 @@ export function injectHubCadencesQuery() {
         if (error) throw error;
         return data ?? [];
       },
+      select: (wire: CadenceView[]): readonly Cadence[] => wire.map(fromCadenceView),
     };
   });
 }

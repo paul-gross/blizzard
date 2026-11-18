@@ -1,4 +1,4 @@
-// exemplar: stand-in for the permit keys production adds to the hub's `core/query-keys.ts`; the exemplar overlay appends these lines.
+// exemplar: stand-in for the permit and cadence-edit keys production adds to the hub's `core/query-keys.ts`; the exemplar overlay appends these lines.
 
 /** The permit listing — `GET /api/permits`. */
 export const hubPermitsKey = ['hub', 'permits'] as const;
@@ -6,3 +6,5 @@ export const hubPermitsKey = ['hub', 'permits'] as const;
 export function hubPermitKey(permitId: string | null): readonly unknown[] {
   return ['hub', 'permit', permitId];
 }
+/** The cadence-edit unit's cadence list — `GET /api/cadences`. */
+export const hubCadenceEditListKey = ['hub', 'cadence-edit', 'cadences'] as const;

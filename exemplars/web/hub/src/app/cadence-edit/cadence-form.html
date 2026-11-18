@@ -1,0 +1,18 @@
+@let f = form();
+<fleet-kit-form data-testid="cadence-edit-form" [form]="f" testid="cadence-edit-form" saveLabel="Save" (save)="save.emit()" (cancel)="cancel.emit()">
+  <fleet-kit-field label="Name" [field]="f.name">
+    <fleet-kit-text-input [formField]="f.name" testid="cadence-edit-form-name" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Cron" [field]="f.cron">
+    <fleet-kit-text-input [formField]="f.cron" placeholder="0 20 * * *" testid="cadence-edit-form-cron" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Zone" [field]="f.zone">
+    <fleet-kit-text-input [formField]="f.zone" placeholder="America/Chicago" testid="cadence-edit-form-zone" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Spacing" [field]="f.spacing">
+    <fleet-kit-text-input [formField]="f.spacing" placeholder="10d" testid="cadence-edit-form-spacing" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Anchor" [field]="f.anchor">
+    <fleet-kit-select [formField]="f.anchor" [options]="anchorOptions" ariaLabel="Anchor" testid="cadence-edit-form-anchor" />
+  </fleet-kit-field>
+</fleet-kit-form>

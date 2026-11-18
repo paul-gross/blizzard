@@ -16,12 +16,10 @@
         <app-cadence-form
           class="gc-create"
           testid="gardening-cadence-create"
-          [initial]="emptyDraft"
+          [form]="createForm"
           [creating]="true"
-          [pending]="createPending()"
-          [error]="createError()"
-          (saved)="onCreate($event)"
-          (cancelled)="closeCreate()"
+          (save)="onCreate()"
+          (cancel)="closeCreate()"
         />
       } @else {
         <div class="gc-create">

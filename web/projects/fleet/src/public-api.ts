@@ -40,6 +40,7 @@ export * from './lib/core/query-state';
 export * from './lib/core/polling';
 export * from './lib/core/daemon-target';
 export * from './lib/core/flags';
+export * from './lib/core/forms';
 export * from './lib/shell/mobile-chrome';
 
 export {

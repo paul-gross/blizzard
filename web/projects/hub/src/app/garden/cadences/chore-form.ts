@@ -2,22 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, outp
 
 import { type KitChipOption, type UrgencyView, KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
+import type { ChoreDraft } from '../core/cadence.domain';
 import { choreModeLabel } from './cadence-vocabulary';
 import { urgencyOptions } from '../../core/urgency-options.model';
 
-/** A chore as its form states it, every field as typed. */
-export interface ChoreDraft {
-  readonly key: string;
-  /** The routine's slug. */
-  readonly routine: string;
-  /** `all`, a comma- or space-separated list of scope slugs, or blank for the routine's default scope. */
-  readonly scopes: string;
-  /** The run mode — kept verbatim, a mode this build does not know included. */
-  readonly mode: string;
-  readonly promote: boolean;
-  readonly note: string;
-  readonly urgency?: string | null;
-}
 
 /**
  * One chore as a form — adding a chore, or editing one in place. It holds only the draft typed so far, reopening on
