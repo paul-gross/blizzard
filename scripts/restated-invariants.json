@@ -487,14 +487,7 @@
       "markers": [
         "merge commit that preserves branch history"
       ],
-      "sites": [
-        {
-          "file": "README.md",
-          "symbol": "-how-it-works",
-          "role": "allowed",
-          "reason": "Public README delivery overview: its reader has no workspace context to resolve the workflow convention, so the behavior is stated inline."
-        }
-      ]
+      "sites": []
     },
     {
       "id": "web-live-update-reread-poll-backstop",
