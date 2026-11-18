@@ -61,16 +61,17 @@ describe('WorkSourcesPage create', () => {
       input.dispatchEvent(new Event('input'));
       await settle(harness.fixture);
     };
+    const overlayOptions = () => [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [role="option"]:not(fleet-kit-select-row)')];
     const pick = async (field: string, label: string) => {
       q(`admin-work-sources-create-field-${field}`)!.click();
       await settle(harness.fixture);
-      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes(label))!.click();
+      overlayOptions().find((o) => o.textContent?.includes(label))!.click();
       await settle(harness.fixture);
     };
     const options = async (field: string) => {
       q(`admin-work-sources-create-field-${field}`)!.click();
       await settle(harness.fixture);
-      const labels = [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((o) => o.textContent?.trim());
+      const labels = overlayOptions().map((o) => o.textContent?.trim());
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await settle(harness.fixture);
       return labels;
