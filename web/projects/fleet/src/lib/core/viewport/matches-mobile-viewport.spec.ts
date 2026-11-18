@@ -14,7 +14,7 @@ describe('matchesMobileViewport', () => {
     TestBed.inject(ViewportService).setOverride('mobile');
 
     const matched = TestBed.runInInjectionContext(() =>
-      matchesMobileViewport(undefined as never, [undefined as never]),
+      matchesMobileViewport(undefined as never, [undefined as never], undefined as never),
     );
 
     expect(matched).toBe(true);
@@ -24,7 +24,7 @@ describe('matchesMobileViewport', () => {
     TestBed.inject(ViewportService).setOverride('desktop');
 
     const matched = TestBed.runInInjectionContext(() =>
-      matchesMobileViewport(undefined as never, [undefined as never]),
+      matchesMobileViewport(undefined as never, [undefined as never], undefined as never),
     );
 
     expect(matched).toBe(false);

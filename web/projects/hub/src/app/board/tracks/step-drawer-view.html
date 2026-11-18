@@ -222,6 +222,6 @@
   } @else if (spend(); as sp) {
     <fleet-session-efficiency class="sd-spend" [usage]="sp" />
   } @else {
-    <span class="dim">{{ placed()?.segment?.ended_at === null ? 'no usage yet' : 'no usage recorded' }}</span>
+    <span class="dim">{{ $safeNavigationMigration(placed()?.segment?.ended_at) === null ? 'no usage yet' : 'no usage recorded' }}</span>
   }
 </ng-template>
