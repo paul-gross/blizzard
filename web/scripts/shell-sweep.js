@@ -396,6 +396,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-shell.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/projects/project-detail.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/projects/project-link-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/garden-runs.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/finding-panel.shell-sweep.spec.ts' },

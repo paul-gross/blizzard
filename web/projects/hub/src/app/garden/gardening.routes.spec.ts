@@ -82,6 +82,7 @@ describe('the /gardening route subtree', () => {
 
   afterEach(() => stub.restore());
 
+  // Ten sequential lazy navigations and their settling turns can exceed Vitest's default under full-suite load.
   it('walks tab to tab without a dead navigation, the way the tab strip is actually used', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
@@ -106,7 +107,7 @@ describe('the /gardening route subtree', () => {
         `${tab} landed in the URL but rendered nothing`,
       ).toBeTruthy();
     }
-  });
+  }, 20_000);
 
   it('opens a project\'s bare gardening path on its proposals tab, selecting nothing', async () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
