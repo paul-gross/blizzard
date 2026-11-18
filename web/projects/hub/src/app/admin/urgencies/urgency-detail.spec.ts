@@ -14,13 +14,13 @@ const urgency = { urgency_id: 'u', slug: 'soon', name: 'Soon', color: 'red', emo
 describe('UrgencyDetail writes', () => {
   let stub: RequestClientStub;
   afterEach(() => { stub?.restore(); localStorage.clear(); });
-  async function open(retired = false, refuse = false) {
+  async function open(retired = false, refuse = false, held?: Promise<typeof urgency>) {
     stub = stubHubClient({
       'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: ['config:edit', 'chunk:control'] }),
       'GET /api/urgencies': () => ({ urgencies: [urgency] }),
       'GET /api/urgencies/{key}': () => ({ ...urgency, retired }),
       'GET /api/config/changes': () => configChangesPage(),
-      'PATCH /api/urgencies/{key}': () => refuse ? stubError(409, { detail: 'stale edit' }) : urgency,
+      'PATCH /api/urgencies/{key}': () => held ?? (refuse ? stubError(409, { detail: 'stale edit' }) : urgency),
       'POST /api/urgencies/{key}/enable': () => refuse ? stubError(409, { detail: 'enable refused' }) : urgency,
       'POST /api/urgencies/{key}/retire': () => ({ ...urgency, retired: true, moved_chunks: 0 }),
     });
@@ -44,6 +44,30 @@ describe('UrgencyDetail writes', () => {
     await settle(harness.fixture);
     expect(stub.forRoute('/api/urgencies/u', 'PATCH')[0]).toMatchObject({ headers: { 'if-match': '7' }, body: { name: 'Later' } });
     expect(document.body.textContent).toContain('stale edit');
+  });
+  it('holds save, cancel and dismissal until the edit settles', async () => {
+    let release!: (value: typeof urgency) => void;
+    const held = new Promise<typeof urgency>((resolve) => { release = resolve; });
+    const harness = await open(false, false, held);
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-urgency-edit"]')!.click();
+    await settle(harness.fixture);
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-urgency-edit-field-name"]')!;
+    input.value = 'Later'; input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    const save = document.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+    const cancel = document.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!;
+    save.click();
+    await vi.waitFor(() => { harness.fixture.detectChanges(); expect(stub.forRoute('/api/urgencies/u', 'PATCH')).toHaveLength(1); expect(save.disabled).toBe(true); });
+    expect(cancel.disabled).toBe(true);
+    save.click(); cancel.click();
+    const dialog = document.querySelector<HTMLElement>('[data-testid="admin-urgency-edit-dialog"]')!;
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    dialog.parentElement!.click();
+    harness.fixture.detectChanges();
+    expect(document.querySelector('[data-testid="admin-urgency-edit-dialog"]')).not.toBeNull();
+    expect(stub.forRoute('/api/urgencies/u', 'PATCH')).toHaveLength(1);
+    release(urgency);
+    await vi.waitFor(async () => { await settle(harness.fixture); expect(document.querySelector('[data-testid="admin-urgency-edit-dialog"]')).toBeNull(); });
   });
   it('enables using the shown revision and surfaces a refusal', async () => {
     const harness = await open(true, true);

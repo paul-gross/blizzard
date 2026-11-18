@@ -35,6 +35,23 @@ describe('ChunkUrgency', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chunk-urgency"]')?.textContent).toBe('former');
   });
 
+  it('shows the reference slug read-only when the runner has no urgency catalog', async () => {
+    const fixture = await mount('standard');
+    fixture.componentRef.setInput('control', null);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="chunk-urgency"]')?.textContent).toBe('standard');
+    expect(root.querySelector('.sep')?.textContent).toBe('·');
+    expect(root.querySelector('button, img, .mark')).toBeNull();
+  });
+
+  it('renders no urgency when the reference is absent', async () => {
+    const fixture = TestBed.createComponent(ChunkUrgency);
+    fixture.componentRef.setInput('detail', chunkDetail({ urgency: null }));
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chunk-urgency"]')).toBeNull();
+  });
+
   it('renders the banner name and emoji without an editor', async () => {
     const fixture = await mount('urgent');
     fixture.componentRef.setInput('banner', true);
