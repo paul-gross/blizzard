@@ -1,0 +1,50 @@
+<button type="button" data-testid="grid-before">before</button>
+<table fleetKitGrid ariaLabel="Members" [softDisabled]="false" data-testid="grid">
+  <tbody>
+    @for (row of rows; track row.name) {
+      <tr fleetKitGridRow [attr.data-testid]="'grid-row-' + row.name">
+        <td fleetKitGridCell>{{ row.name }}</td>
+        <td fleetKitGridCell>
+          <fleet-kit-select
+            #sel
+            fleetKitGridWidget
+            #selWidget="fleetKitGridWidget"
+            [gridFocusTarget]="sel.controlElement()"
+            gridWidgetType="complex"
+            [gridDisabled]="sel.disabled()"
+            [controlTabIndex]="selWidget.controlTabIndex()"
+            (gridActivated)="sel.openFromGrid()"
+            (gridDeactivated)="sel.closeFromGrid()"
+            (opened)="selWidget.activate()"
+            (closed)="selWidget.deactivate()"
+            [ariaLabel]="'Role for ' + row.name"
+            [testid]="'grid-select-' + row.name"
+            [options]="options"
+            [selectedValue]="picked()[row.name] ?? 'guest'"
+            [disabled]="row.disabled"
+            (choose)="pick(row.name, $event)"
+          />
+        </td>
+        <td fleetKitGridCell>
+          <fleet-kit-button
+            #btn
+            fleetKitGridWidget
+            #btnWidget="fleetKitGridWidget"
+            [gridFocusTarget]="btn.controlElement()"
+            gridWidgetType="simple"
+            [gridDisabled]="btn.disabled()"
+            [controlTabIndex]="btnWidget.controlTabIndex()"
+            variant="danger"
+            [testid]="'grid-button-' + row.name"
+            [disabled]="row.disabled"
+            (click)="clicks.set(clicks() + 1)"
+          >
+            Remove
+          </fleet-kit-button>
+        </td>
+      </tr>
+    }
+  </tbody>
+</table>
+<button type="button" data-testid="grid-after">after</button>
+<output data-testid="grid-clicks">{{ clicks() }}</output>

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type KitChipOption, type KitAsyncStateValue, type MemberView, FleetWhen, KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect } from 'fleet';
+import { type hubApi, type KitChipOption, type KitAsyncStateValue, type MemberView, FleetWhen, KitAsyncState, KitBadge, KitButton, KitGrid, KitGridCell, KitGridRow, KitGridWidget, KitPanel, KitSelect } from 'fleet';
 import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 
 /**
@@ -12,11 +12,14 @@ import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
  * - a row the hub marks `revocable` has a revoke button.
  *
  * A member who is also a hub administrator carries a `hub admin` tag beside their username.
+ *
+ * The body is a kit grid: the whole table is one Tab stop, the arrow keys move between cells, and Enter or Space works
+ * a cell's role select or revoke button. A pending row's disabled controls, and a row's empty revoke cell, are skipped.
  */
 @Component({
   selector: 'app-members-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitButton, KitGrid, KitGridCell, KitGridRow, KitGridWidget, KitPanel, KitSelect, FleetWhen],
   templateUrl: './members-table.html',
   styleUrl: './members-table.css',
 })

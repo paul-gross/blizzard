@@ -10,6 +10,7 @@
   [attr.aria-label]="triggerName()"
   [attr.data-testid]="testid()"
   [disabled]="disabled()"
+  [attr.tabindex]="controlTabIndex()"
   (click)="toggle()"
   (focusout)="onTriggerFocusOut($event)"
 >

@@ -44,3 +44,7 @@ td {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+td:focus-visible {
+  outline: 1px solid var(--accent, currentColor);
+  outline-offset: -1px;
+}

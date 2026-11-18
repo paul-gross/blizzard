@@ -75,6 +75,18 @@ export class KitSelect implements FormValueControl<string> {
   /** Emits the picked option's `value`, on every pick. */
   readonly choose = output<string>();
 
+  /** Emits when the popup opens, by any route — pointer, keyboard, or {@link openFromGrid}. */
+  readonly opened = output<void>();
+
+  /** Emits when the popup closes, by any route — a pick, Escape, dismissal, or {@link closeFromGrid}. */
+  readonly closed = output<void>();
+
+  /**
+   * The trigger button's `tabindex`, set by a surrounding grid bridge (`fleetKitGridWidget`)
+   * that owns which control is the Tab stop. `null` (the default) leaves the native tab order alone.
+   */
+  readonly controlTabIndex = input<number | null>(null);
+
   protected readonly open = signal(false);
   protected readonly listboxId = `fleet-kit-select-${nextId++}`;
 
@@ -98,6 +110,25 @@ export class KitSelect implements FormValueControl<string> {
     const value = this.shown();
     return value !== null && this.options().some((o) => o.value === value) ? [value] : [];
   });
+
+  /** The native trigger `<button>` — the element a grid bridge points Aria's `focusTarget` at. */
+  controlElement(): HTMLButtonElement | undefined {
+    return this.trigger()?.nativeElement;
+  }
+
+  /** Opens the popup for a grid bridge; a no-op while disabled or already open. */
+  openFromGrid(): void {
+    if (this.disabled()) return;
+    this.setOpen(true);
+  }
+
+  /**
+   * Closes the popup for a grid bridge; a no-op while already closed. Unlike a pick or Escape it leaves
+   * focus where it is — the bridge calls it when the widget deactivated because focus went elsewhere.
+   */
+  closeFromGrid(): void {
+    this.setOpen(false);
+  }
 
   /** Focuses the trigger button. */
   focus(options?: FocusOptions): void {
@@ -126,7 +157,14 @@ export class KitSelect implements FormValueControl<string> {
 
   protected toggle(): void {
     if (this.disabled()) return;
-    this.open.update((o) => !o);
+    this.setOpen(!this.open());
+  }
+
+  private setOpen(next: boolean): void {
+    if (this.open() === next) return;
+    this.open.set(next);
+    if (next) this.opened.emit();
+    else this.closed.emit();
   }
 
   /** Focus the option carrying the current value (or the first) once the popup renders. */
@@ -153,7 +191,7 @@ export class KitSelect implements FormValueControl<string> {
 
   protected close(): void {
     if (!this.open()) return;
-    this.open.set(false);
+    this.setOpen(false);
     this.trigger()?.nativeElement.focus();
   }
 }

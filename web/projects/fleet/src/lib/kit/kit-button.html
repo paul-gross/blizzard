@@ -1,4 +1,5 @@
 <button
+  #buttonEl
   [type]="type()"
   class="act"
   [class.primary]="variant() === 'primary'"
@@ -6,6 +7,7 @@
   [class.cta]="size() === 'cta'"
   [class.icon]="size() === 'icon'"
   [disabled]="disabled()"
+  [attr.tabindex]="controlTabIndex()"
   [attr.aria-label]="ariaLabel()"
   [attr.title]="title()"
   [attr.data-testid]="testid()"
