@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse, ProjectView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
+import { ViewportService } from 'fleet';
 import {
   chunkCountsView,
   OPERATOR_ME_RESPONSE,
@@ -18,10 +18,11 @@ import {
 } from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
+import type { Project } from '../../core/project.domain';
 import { ProjectDetail } from './project-detail';
 import { ProjectsPage } from './projects-page';
 
-const BLIZZARD: ProjectView = {
+const BLIZZARD: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -30,8 +31,8 @@ const BLIZZARD: ProjectView = {
   revision: 2,
   created_at: '2026-10-01T00:00:00Z',
 };
-const WINTER: ProjectView = { ...BLIZZARD, project_id: 'proj_w', slug: 'winter', name: 'Winter', description: '' };
-const NOVA: ProjectView = { ...WINTER, project_id: 'proj_n', slug: 'nova', name: 'Nova' };
+const WINTER: Project = { ...BLIZZARD, project_id: 'proj_w', slug: 'winter', name: 'Winter', description: '' };
+const NOVA: Project = { ...WINTER, project_id: 'proj_n', slug: 'nova', name: 'Nova' };
 const SERVING = runnerRegistryView({
   runner_id: 'rnr_1',
   runner_name: 'desk',
@@ -43,10 +44,10 @@ const SERVING = runnerRegistryView({
 });
 
 /** An operator who may change configuration. */
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 
 /** A lens fixed on `project` (or All), linking the way the shell's lens does. */
-function lensOn(project: ProjectView | null) {
+function lensOn(project: Project | null) {
   const slug = project?.slug ?? null;
   return {
     slug: signal(slug).asReadonly(),
@@ -70,7 +71,7 @@ describe('ProjectsPage', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string, lens: ProjectView | null = null) {
+  async function open(url: string, lens: Project | null = null, options: { refuse?: boolean; readonly?: boolean } = {}) {
     const projects = new Map(
       [WINTER, BLIZZARD, NOVA].flatMap((project) => [
         [project.project_id, project],
@@ -78,8 +79,10 @@ describe('ProjectsPage', () => {
       ]),
     );
     stub = stubHubClient({
-      'GET /api/me': () => EDITOR,
-      'POST /api/projects': () => NOVA,
+      'GET /api/me': () => options.readonly ? OPERATOR_ME_RESPONSE : EDITOR,
+      'POST /api/projects': () => options.refuse
+        ? stubError(409, { type: 'urn:blizzard:problem:project-slug-taken', detail: 'Slug already taken.' })
+        : NOVA,
       'GET /api/projects': () => ({ projects: [WINTER, BLIZZARD] }),
       'GET /api/projects/{project}': (_request, { project }) =>
         projects.get(project) ?? stubError(404, { detail: `unknown project ${project}` }),
@@ -156,7 +159,7 @@ describe('ProjectsPage', () => {
       input.dispatchEvent(new Event('input'));
     }
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-projects-create-submit"]')!.click();
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/projects', 'POST')[0].body).toEqual({
@@ -165,5 +168,58 @@ describe('ProjectsPage', () => {
       description: 'A new body of work',
     });
     expect(router.url).toBe('/admin/projects/proj_n');
+  });
+
+  it('focuses a locally invalid slug without sending a request', async () => {
+    const { harness, el } = await open('/admin/projects');
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-new"]')!.click();
+    await settle(harness.fixture);
+    const slug = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-create-field-slug"]')!;
+    slug.value = 'Bad slug';
+    slug.dispatchEvent(new Event('input'));
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/projects', 'POST')).toHaveLength(0);
+    expect(slug.closest('fleet-kit-field')!.textContent).toContain('lowercase');
+    expect(document.activeElement).toBe(slug);
+  });
+
+  it('opens the created project in its own lens', async () => {
+    const { harness, el, router } = await open('/p/winter/admin/projects/proj_w', WINTER);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-new"]')!.click();
+    await settle(harness.fixture);
+    const slug = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-create-field-slug"]')!;
+    slug.value = 'nova';
+    slug.dispatchEvent(new Event('input'));
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(router.url).toBe('/p/nova/admin/projects/proj_n');
+  });
+
+  it('keeps the draft open and focuses a slug refused by the hub', async () => {
+    const { harness, el, router } = await open('/admin/projects', null, { refuse: true });
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-new"]')!.click();
+    await settle(harness.fixture);
+    const slug = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-create-field-slug"]')!;
+    slug.value = 'nova';
+    slug.dispatchEvent(new Event('input'));
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(slug.closest('fleet-kit-field')!.textContent).toContain('Slug already taken.');
+    expect(document.activeElement).toBe(slug);
+    expect(slug.value).toBe('nova');
+    expect(router.url).toBe('/admin/projects/proj_b');
+  });
+
+  it('hides create without config permission', async () => {
+    const { el } = await open('/admin/projects', null, { readonly: true });
+    expect(el.querySelector('[data-testid="admin-projects-new"]')).toBeNull();
+  });
+
+  it('hides create on mobile even with config permission', async () => {
+    const { harness, el } = await open('/admin/projects');
+    TestBed.inject(ViewportService).setOverride('mobile');
+    await settle(harness.fixture);
+    expect(el.querySelector('[data-testid="admin-projects-new"]')).toBeNull();
   });
 });

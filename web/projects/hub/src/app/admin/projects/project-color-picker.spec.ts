@@ -1,15 +1,16 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ProjectColor } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { ProjectColorPicker } from './project-color-picker';
+
+const COLORS = ['teal', 'pink'];
 
 describe('ProjectColorPicker', () => {
   async function mount(disabled = false, current = 'teal') {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const fixture = TestBed.createComponent(ProjectColorPicker);
-    fixture.componentRef.setInput('colors', Object.values(ProjectColor));
+    fixture.componentRef.setInput('colors', COLORS);
     fixture.componentRef.setInput('current', current);
     fixture.componentRef.setInput('disabled', disabled);
     await fixture.whenStable();
@@ -20,7 +21,7 @@ describe('ProjectColorPicker', () => {
     const root: HTMLElement = (await mount()).nativeElement;
     expect(root.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Project color');
     const chips = root.querySelectorAll<HTMLButtonElement>('[role="option"]');
-    expect(chips.length).toBe(Object.values(ProjectColor).length + 1);
+    expect(chips.length).toBe(COLORS.length + 1);
     expect(chips[chips.length - 1].querySelector<HTMLElement>('[data-testid]')?.dataset['testid']).toBe('project-color-custom');
     expect(root.querySelector('[data-testid="project-color-custom"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('false');
     expect(root.querySelector('[data-testid="project-color-custom-input"]')).toBeNull();
@@ -83,7 +84,7 @@ describe('ProjectColorPicker', () => {
   });
 
   it('opens Custom through keyboard navigation without emitting a color', async () => {
-    const palette = Object.values(ProjectColor);
+    const palette = COLORS;
     const fixture = await mount(false, palette[palette.length - 1]);
     const root: HTMLElement = fixture.nativeElement;
     const chosen: string[] = [];

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import type { InAppLink } from 'fleet/shell';
 import {
   chunkCountsView,
@@ -24,7 +24,7 @@ import { ProjectDetail } from './project-detail';
  * in flight (no `0`, no empty copy), and a project with no revisions — each without
  * horizontal overflow. Run via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
-const PROJECT: ProjectView = {
+const PROJECT: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -50,7 +50,7 @@ describe('ProjectDetail overview shell sweep', () => {
     await page.viewport(width, 800);
     const pending = new Promise<never>(() => undefined);
     stub = stubHubClient({
-      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] }),
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] }),
       'GET /api/projects/{project}': () => PROJECT,
       'GET /api/projects/{project}/source-links': () => ({ source_links: [] }),
       'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),

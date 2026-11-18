@@ -14,7 +14,8 @@
  * permitted under `fleet/src/lib/api/` and `fleet/src/lib/testing/transport/`, and in `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files and their own focused specs; every other `.ts` under
  * `projects/` (`.storybook/` included) is judged. A unit the caller exempts passes, and an exempt unit
- * that no longer consumes the wire is reported stale. Separately, a production file or a story whose
+ * that no longer consumes the wire outside a strict scope is reported stale. Strict scopes cannot be
+ * excused by a parent unit's exemption. Separately, a production file or a story whose
  * consumed symbol is declared under `testing/transport/` reaches the test transport; specs and test
  * helpers may.
  *
@@ -462,11 +463,12 @@ function referencedDeclarations(checker, sf) {
  * Run the symbol-origin sweep over the tree at `root`.
  *
  * @param {{ root: string, memory?: Map<string, string> | null, unitOf: (rel: string) => string,
- *   exempt: readonly string[] }} opts `unitOf` maps a `projects/`-relative file to its exemption unit
+ *   exempt: readonly string[], strictScopes?: readonly string[] }} opts `unitOf` maps a `projects/`-relative file to its exemption unit;
+ *   `strictScopes` are projects-relative directory prefixes, without a trailing slash
  * @returns {DomainBoundaryResult} unexempted consumers, consumers an exemption passed, exempt units
  *   that consume nothing, and transport reach — paths `projects/`-relative
  */
-function sweepDomainBoundary({ root, memory = null, unitOf, exempt }) {
+function sweepDomainBoundary({ root, memory = null, unitOf, exempt, strictScopes = [] }) {
   const projects = toPosix(path.join(root, "projects"));
   const files = memory ? [...memory.keys()] : walkSources(projects);
   const program = createProgram(root, files, memory);
@@ -498,7 +500,8 @@ function sweepDomainBoundary({ root, memory = null, unitOf, exempt }) {
     }
     if (judgeWire && wireNames.size > 0) {
       const unit = unitOf(rel);
-      (exempt.includes(unit) ? exempted : consumers).push({ file: rel, unit, names: [...wireNames].sort() });
+      const strict = strictScopes.some((scope) => rel.startsWith(`${scope}/`));
+      (exempt.includes(unit) && !strict ? exempted : consumers).push({ file: rel, unit, names: [...wireNames].sort() });
     }
     if (judgeReach && transportNames.size > 0) reach.push({ file: rel, names: [...transportNames].sort() });
   }
@@ -588,13 +591,22 @@ function assertDomainBoundaryDetectorWorks() {
     // An exempted unit, and an exempt unit that consumes nothing.
     ["hub/src/app/gamma/g.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
     ["hub/src/app/delta/d.ts", "export const d = 1;\n"],
+    ["hub/src/app/admin/projects/view.ts", "import type { Detail as Shape } from '../../core/wire-barrel';\nexport let d: Shape;\n"],
+    ["hub/src/app/admin/projects/view.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.query.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.query.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.mutations.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.mutations.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.translate.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/projects/project.translate.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/sibling/view.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
   ];
   const memory = new Map(tree.map(([rel, text]) => [`${p}/${rel}`, text]));
   /** @param {string} rel */
   const unitOf = (rel) => rel.split("/").slice(0, 4).join("/");
   const run = (/** @type {string[]} */ exempt) => sweepDomainBoundary({ root, memory, unitOf, exempt });
 
-  const { consumers, exempted, stale, reach } = run(["hub/src/app/gamma", "hub/src/app/delta"]);
+  const { consumers, exempted, stale, reach } = run(["hub/src/app/gamma", "hub/src/app/delta", "hub/src/app/admin"]);
   const flagged = new Set(consumers.map((c) => c.file));
   const mustCatch = [
     "hub/src/app/alpha/direct.ts",
@@ -635,6 +647,29 @@ function assertDomainBoundaryDetectorWorks() {
   }
   for (const file of reached) {
     if (!file.includes("/reach-")) throw new Error(`domain-boundary detector false-positived transport reach from ${file}`);
+  }
+
+  const strictScopes = ["hub/src/app/admin/projects"];
+  const admin = "hub/src/app/admin";
+  const strictRun = (/** @type {Map<string, string>} */ sources) =>
+    sweepDomainBoundary({ root, memory: sources, unitOf, exempt: [admin], strictScopes });
+  const strictResult = strictRun(memory);
+  for (const file of ["hub/src/app/admin/projects/view.ts", "hub/src/app/admin/projects/view.spec.ts"]) {
+    if (!strictResult.consumers.some((c) => c.file === file)) throw new Error(`strict scope missed ${file}`);
+  }
+  for (const suffix of ["query.ts", "query.spec.ts", "mutations.ts", "mutations.spec.ts", "translate.ts", "translate.spec.ts"]) {
+    const file = `hub/src/app/admin/projects/project.${suffix}`;
+    if ([...strictResult.consumers, ...strictResult.exempted].some((c) => c.file === file)) {
+      throw new Error(`strict scope rejected boundary file ${file}`);
+    }
+  }
+  if (!strictResult.exempted.some((c) => c.file === "hub/src/app/admin/sibling/view.ts") || strictResult.stale.includes(admin)) {
+    throw new Error("strict scope did not preserve the sibling exemption");
+  }
+  const withoutSibling = new Map(memory);
+  withoutSibling.delete(`${p}/hub/src/app/admin/sibling/view.ts`);
+  if (!strictRun(withoutSibling).stale.includes(admin)) {
+    throw new Error("strict scope sustained a stale parent exemption");
   }
 }
 

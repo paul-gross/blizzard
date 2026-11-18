@@ -1,4 +1,4 @@
-import type { LandingPositionRequest, RepositoryLinkView } from 'fleet';
+import type { LandingPosition, LandingRepository } from './project-landing-order.domain';
 
 import { movedItem } from '../../core/array-move';
 
@@ -25,14 +25,14 @@ export interface LandingDrop {
 /** One landing-position write — the request against one project. */
 export interface LandingPositionVars {
   readonly projectId: string;
-  readonly body: LandingPositionRequest;
+  readonly body: LandingPosition;
 }
 
 /**
  * The rows split into ranked and unranked by their link's `position`. The hub already lists ranked links by position,
  * then unranked ones by slug, so each section keeps the rows' order.
  */
-export function landingSections(rows: readonly ProjectLinkRowVm[], links: readonly RepositoryLinkView[]): LandingSections {
+export function landingSections(rows: readonly ProjectLinkRowVm[], links: readonly LandingRepository[]): LandingSections {
   const ranked = new Set(links.filter((link) => link.position !== null).map((link) => link.repository_id));
   return {
     ranked: rows.filter((row) => ranked.has(row.key)),
@@ -46,7 +46,7 @@ export function landingSections(rows: readonly ProjectLinkRowVm[], links: readon
  * landing in the unranked section from the ranked one unranks it. A move within the unranked section, or a drop that
  * changed nothing, resolves to `null`.
  */
-export function resolveLandingDrop(sections: LandingSections, drop: LandingDrop): LandingPositionRequest | null {
+export function resolveLandingDrop(sections: LandingSections, drop: LandingDrop): LandingPosition | null {
   if (drop.to === 'unranked') return drop.from === 'ranked' ? { repository: drop.key, unranked: true } : null;
   let order = sections.ranked.map((row) => row.key);
   if (drop.from === 'ranked') {
@@ -55,11 +55,11 @@ export function resolveLandingDrop(sections: LandingSections, drop: LandingDrop)
   } else {
     order.splice(drop.currentIndex, 0, drop.key);
   }
-  return { repository: drop.key, after_repository: drop.currentIndex === 0 ? null : order[drop.currentIndex - 1] };
+  return { repository: drop.key, afterRepository: drop.currentIndex === 0 ? null : order[drop.currentIndex - 1] };
 }
 
 /** `sections` with one requested position applied: the row leaves where it sat and lands where it asked to. */
-function withPosition(sections: LandingSections, body: LandingPositionRequest): LandingSections {
+function withPosition(sections: LandingSections, body: LandingPosition): LandingSections {
   const row = [...sections.ranked, ...sections.unranked].find((candidate) => candidate.key === body.repository);
   if (!row) return sections;
   const ranked = sections.ranked.filter((candidate) => candidate !== row);
@@ -70,7 +70,7 @@ function withPosition(sections: LandingSections, body: LandingPositionRequest): 
     unranked.splice(at === -1 ? unranked.length : at, 0, row);
     return { ranked, unranked };
   }
-  const anchor = body.after_repository ?? null;
+  const anchor = body.afterRepository ?? null;
   const at = anchor === null ? 0 : ranked.findIndex((candidate) => candidate.key === anchor) + 1;
   ranked.splice(at === 0 && anchor !== null ? ranked.length : at, 0, row);
   return { ranked, unranked };

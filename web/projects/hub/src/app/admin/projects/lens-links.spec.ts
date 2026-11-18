@@ -3,11 +3,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import { type InAppLink } from 'fleet/shell';
 import {
   configChangesPage,
   OPERATOR_ME_RESPONSE,
+  projectView,
   type RequestClientStub,
   repositorySummary,
   settle,
@@ -22,7 +23,7 @@ import { RepositoriesPage } from '../repositories/repositories-page';
 import { WorkSourcesPage } from '../work-sources/work-sources-page';
 import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 
-const WINTER: ProjectView = {
+const WINTER: Project = {
   project_id: 'proj_w',
   slug: 'winter',
   name: 'Winter',
@@ -40,7 +41,7 @@ describe('admin lists under the project lens', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function open(url: string, lens: ProjectView | null) {
+  async function open(url: string, lens: Project | null) {
     const slug = lens?.slug ?? null;
     stub = stubHubClient({
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
@@ -57,7 +58,7 @@ describe('admin lists under the project lens', () => {
           repositorySummary({ repository_id: 'repo_a', name: 'archive', slug: 'archive', owner: 'a', repo: 'archive', base_branch: 'main', revision: 1 }),
         ],
       }),
-      'GET /api/projects': () => ({ projects: [WINTER] }),
+      'GET /api/projects': () => ({ projects: [projectView({ ...WINTER })] }),
       'GET /api/projects/{project}/source-links': () => ({
         source_links: [
           sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null }),

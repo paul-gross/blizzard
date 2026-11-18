@@ -12,8 +12,21 @@ import {
   type SourceLinkView,
 } from 'fleet';
 
-import type { ProjectFigures } from './projects.model';
-import { hubChunkCountsKey, hubProjectsKey, hubProjectKey, hubProjectLinksKey, lensedKey } from '../../core/query-keys';
+import type { Project } from '../../core/project.domain';
+import { fromProjectView } from '../../core/project.translate';
+import type { ProjectFigures } from './project-read.domain';
+import {
+  fromChunkCountsView,
+  fromRepositoryLinkView,
+  fromSourceLinkView,
+} from './project-read.translate';
+import {
+  hubChunkCountsKey,
+  hubProjectsKey,
+  hubProjectKey,
+  hubProjectLinksKey,
+  lensedKey,
+} from '../../core/query-keys';
 
 /** `GET /api/projects/{project}` — one project by id, current slug or former slug, at rest
  * while `project()` is `null`. Keyed under `hubProjectsKey`, so a project write refreshes it. */
@@ -23,6 +36,7 @@ export function injectProjectQuery(project: () => string | null) {
     return {
       queryKey: hubProjectKey(key),
       enabled: key !== null,
+      select: fromProjectView,
       queryFn: async (): Promise<ProjectView> => {
         const { data, error } = await getProjectApiProjectsProjectGet({
           path: { project: key! },
@@ -44,11 +58,13 @@ export function injectProjectSourceLinksQuery(projectId: () => string | null) {
     return {
       queryKey: hubProjectLinksKey(id, 'source'),
       enabled: id !== null,
+      select: (links: SourceLinkView[]) => links.map(fromSourceLinkView),
       queryFn: async (): Promise<SourceLinkView[]> => {
-        const { data, error } = await listSourceLinksApiProjectsProjectSourceLinksGet({
-          path: { project: id! },
-          throwOnError: false,
-        });
+        const { data, error } =
+          await listSourceLinksApiProjectsProjectSourceLinksGet({
+            path: { project: id! },
+            throwOnError: false,
+          });
         if (error) throw error;
         return data?.source_links ?? [];
       },
@@ -59,17 +75,22 @@ export function injectProjectSourceLinksQuery(projectId: () => string | null) {
 /** `GET /api/projects/{project}/repository-links` — the project's repository links, unlinked
  * ones included. At rest while `projectId()` —
  * the project's id or slug — is `null`. */
-export function injectProjectRepositoryLinksQuery(projectId: () => string | null) {
+export function injectProjectRepositoryLinksQuery(
+  projectId: () => string | null,
+) {
   return injectQuery(() => {
     const id = projectId();
     return {
       queryKey: hubProjectLinksKey(id, 'repository'),
       enabled: id !== null,
+      select: (links: RepositoryLinkView[]) =>
+        links.map(fromRepositoryLinkView),
       queryFn: async (): Promise<RepositoryLinkView[]> => {
-        const { data, error } = await listRepositoryLinksApiProjectsProjectRepositoryLinksGet({
-          path: { project: id! },
-          throwOnError: false,
-        });
+        const { data, error } =
+          await listRepositoryLinksApiProjectsProjectRepositoryLinksGet({
+            path: { project: id! },
+            throwOnError: false,
+          });
         if (error) throw error;
         return data?.repository_links ?? [];
       },
@@ -78,23 +99,37 @@ export function injectProjectRepositoryLinksQuery(projectId: () => string | null
 }
 
 async function readSourceLinks(project: string): Promise<SourceLinkView[]> {
-  const { data, error } = await listSourceLinksApiProjectsProjectSourceLinksGet({ path: { project }, throwOnError: false });
+  const { data, error } = await listSourceLinksApiProjectsProjectSourceLinksGet(
+    { path: { project }, throwOnError: false },
+  );
   if (error) throw error;
   return data?.source_links ?? [];
 }
 
-async function readRepositoryLinks(project: string): Promise<RepositoryLinkView[]> {
-  const { data, error } = await listRepositoryLinksApiProjectsProjectRepositoryLinksGet({
-    path: { project },
-    throwOnError: false,
-  });
+async function readRepositoryLinks(
+  project: string,
+): Promise<RepositoryLinkView[]> {
+  const { data, error } =
+    await listRepositoryLinksApiProjectsProjectRepositoryLinksGet({
+      path: { project },
+      throwOnError: false,
+    });
   if (error) throw error;
   return data?.repository_links ?? [];
 }
 
-async function readChunkCounts(slug: string, doneSince: string | null = null): Promise<ChunkCountsView> {
-  const query = doneSince === null ? { project: slug } : { project: slug, done_since: doneSince };
-  const { data, error } = await chunkCountsApiChunkCountsGet({ query, throwOnError: false });
+async function readChunkCounts(
+  slug: string,
+  doneSince: string | null = null,
+): Promise<ChunkCountsView> {
+  const query =
+    doneSince === null
+      ? { project: slug }
+      : { project: slug, done_since: doneSince };
+  const { data, error } = await chunkCountsApiChunkCountsGet({
+    query,
+    throwOnError: false,
+  });
   if (error) throw error;
   return data!;
 }
@@ -102,7 +137,10 @@ async function readChunkCounts(slug: string, doneSince: string | null = null): P
 /** `GET /api/chunk-counts?project=&done_since=` — the project's chunks per status and how many finished since
  * `doneSince()`, the caller's own day boundary, at rest while `slug()` is `null`. Keyed under the header's read for
  * that project's lens, so the live chunk events refresh it with the header's. */
-export function injectProjectChunkCountsQuery(slug: () => string | null, doneSince: () => string) {
+export function injectProjectChunkCountsQuery(
+  slug: () => string | null,
+  doneSince: () => string,
+) {
   return injectQuery(() => {
     const project = slug();
     const since = doneSince();
@@ -110,6 +148,7 @@ export function injectProjectChunkCountsQuery(slug: () => string | null, doneSin
       queryKey: [...lensedKey(hubChunkCountsKey, project), 'done-since', since],
       enabled: project !== null,
       queryFn: () => readChunkCounts(project!, since),
+      select: fromChunkCountsView,
     };
   });
 }
@@ -121,12 +160,19 @@ interface ProjectLinkSets {
 
 /** Each listed project's links, by project id — what the projects list judges a row's wiring by. The links sit under
  * `hubProjectsKey`, so a project or link write refreshes them. */
-export function injectProjectFigures(projects: () => readonly ProjectView[]): Signal<ReadonlyMap<string, ProjectFigures>> {
+export function injectProjectFigures(
+  projects: () => readonly Project[],
+): Signal<ReadonlyMap<string, ProjectFigures>> {
   const links = injectQuery(() => {
     const ids = projects().map((project) => project.project_id);
     return {
       queryKey: [...hubProjectsKey, 'figures', ids],
       enabled: ids.length > 0,
+      select: (sets: ProjectLinkSets[]) =>
+        sets.map((set) => ({
+          sourceLinks: set.sourceLinks.map(fromSourceLinkView),
+          repositoryLinks: set.repositoryLinks.map(fromRepositoryLinkView),
+        })),
       queryFn: (): Promise<ProjectLinkSets[]> =>
         Promise.all(
           ids.map(async (id) => ({

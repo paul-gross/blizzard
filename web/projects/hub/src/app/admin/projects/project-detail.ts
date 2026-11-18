@@ -1,18 +1,14 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  linkedSignal,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, linkedSignal, signal } from '@angular/core';
+import { apply, form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
+  createRefusalState,
   asyncStateOf,
   errorMessage,
+  submitForm,
+  type EditBaseline,
   injectNowSignal,
   injectPendingMutationVariables,
   type KitAsyncStateValue,
@@ -21,9 +17,6 @@ import {
   KitDialog,
   KitErrorLine,
   type KitTabOption,
-  type LandingPositionRequest,
-  ProjectColor,
-  RecordKind,
   restingAsyncState,
   ViewportService,
 } from 'fleet';
@@ -33,14 +26,25 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { landingPositionMutationKey, projectLinkMutationKey } from '../../core/mutation-keys';
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
-import { injectHubRunnersQuery } from '../../core/runners.query';
-import { type ConfigFormValues, configEdit } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { injectProjectRunnersQuery } from '../../core/runners.query';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
-import { injectConfigHistoryQuery } from '../config-history.query';
-import { injectRepositoriesQuery } from '../repositories/repositories.query';
-import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
+import { injectProjectHistoryQuery } from '../config-history.query';
+import { injectProjectRepositoriesQuery } from '../repositories/repositories.query';
+import { injectProjectWorkSourcesQuery } from '../work-sources/work-sources.query';
+import { projectDraft, type ProjectDraft } from './project.domain';
+import { PROJECT_FIELDS } from './project-fields';
+import { projectLinkChoices, projectLinkDraft } from './project-link.domain';
+import { injectProjectLinkFormFactory } from './project-link-state';
+import { injectProjectLinkService } from './project-link.service';
+import { projectBranchBaseline, type ProjectBranchBaseline, type ProjectBranchDraft } from './project-branch.domain';
+import { injectProjectBranchService } from './project-branch.service';
+import { branchDialogSchema } from './project-branch.form';
+import { projectEditSchema } from './project.form';
+import { injectProjectService } from './project.service';
 import { ProjectColorPicker } from './project-color-picker';
+import { PROJECT_COLORS } from './project-color.translate';
+import type { LandingPosition } from './project-landing-order.domain';
 import {
   foldLandingPositions,
   pendingRepositionKeys,
@@ -51,10 +55,8 @@ import { ProjectBranchDialog } from './project-branch-dialog';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
 import {
-  injectEditProjectMutation,
   injectLandingPositionMutation,
   injectProjectLinkMutation,
-  injectRepositoryBranchMutation,
   type ProjectLinkKind,
   type ProjectLinkVars,
 } from './projects.mutations';
@@ -65,9 +67,6 @@ import {
   pendingUnlinkNames,
   type PanelFailure,
   type ProjectLinkRowVm,
-  PROJECT_FIELDS,
-  projectFormValues,
-  projectPatch,
   projectServedBy,
   repositoryChoices,
   repositoryLinkRows,
@@ -83,20 +82,11 @@ import {
   injectProjectSourceLinksQuery,
 } from './projects.query';
 
-/**
- * The selected project — the right-hand child of `/admin/projects`, mounted by both its bare
- * child (nothing selected) and `:key`. The key is the project's id; an older link naming a
- * slug or a former slug still opens it, and the URL is rewritten to the id. Its Overview tab
- * answers "is this project wired?": where its work comes from, where it may land, who serves
- * it — with a callout for what is missing — each card opening the tab that edits it; the
- * Linked sources and Linked repositories tabs link and unlink, and a repository link's branch is edited or cleared
- * in its own dialog.
- */
 @Component({
   selector: 'app-project-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ConfigFormDialog,
+    ConfigFieldTreeDialog,
     KitAsyncState,
     KitButton,
     KitDialog,
@@ -114,6 +104,7 @@ export class ProjectDetail {
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
   private readonly lens = inject(ProjectLens);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
     initialValue: null,
@@ -124,19 +115,17 @@ export class ProjectDetail {
 
   private readonly sourceLinksQuery = injectProjectSourceLinksQuery(() => this.projectId());
   private readonly repositoryLinksQuery = injectProjectRepositoryLinksQuery(() => this.projectId());
-  private readonly sourcesQuery = injectWorkSourcesQuery(() => true);
-  private readonly repositoriesQuery = injectRepositoriesQuery(() => true);
-  private readonly runnersQuery = injectHubRunnersQuery();
-  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.PROJECT, () => this.projectId());
+  private readonly sourcesQuery = injectProjectWorkSourcesQuery(() => true);
+  private readonly repositoriesQuery = injectProjectRepositoriesQuery(() => true);
+  private readonly runnersQuery = injectProjectRunnersQuery();
+  private readonly historyQuery = injectProjectHistoryQuery(() => this.projectId());
   private readonly now = injectNowSignal();
-  /** Today's boundary, cut from the shared clock; string equality stops the tick here, so the key changes only when the local day does. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
   protected readonly countsQuery = injectProjectChunkCountsQuery(
     () => this.project()?.slug ?? null,
     () => this.dayStart(),
   );
 
-  /** The open tab — Overview again whenever another project opens. */
   protected readonly tab = linkedSignal<string | null, ProjectTab>({
     source: this.projectId,
     computation: () => 'overview',
@@ -153,7 +142,6 @@ export class ProjectDetail {
     repositoryLinkRows(this.repositoryLinksQuery.data() ?? [], this.repositoriesQuery.data() ?? []),
   );
   private readonly pendingPositions = injectPendingMutationVariables<LandingPositionVars>(landingPositionMutationKey);
-  /** The repository rows as a landing order, each pending move folded in so it renders before it settles. */
   protected readonly landingOrder = computed(() =>
     foldLandingPositions(
       landingSections(this.repositoryRows(), this.repositoryLinksQuery.data() ?? []),
@@ -165,7 +153,6 @@ export class ProjectDetail {
     projectServedBy(this.projectId(), this.runnersQuery.data()),
   );
   protected readonly servedLines = computed(() => servedByLines(this.servedBy()));
-  /** Each list rests on its own links read and its catalogue; the empty copy waits for both. */
   protected readonly sourcesState = computed<KitAsyncStateValue>(() =>
     asyncStateOf([this.sourceLinksQuery, this.sourcesQuery], this.sourceRows().length === 0),
   );
@@ -198,40 +185,55 @@ export class ProjectDetail {
 
   private readonly meQuery = injectMeQuery();
 
-  /** Writes are a desktop with `config:edit`. */
   protected readonly canEdit = computed(
     () => this.viewport.mode() !== 'mobile' && hasPermission(this.meQuery.data(), 'config:edit'),
   );
 
-  protected readonly editMutation = injectEditProjectMutation();
+  protected readonly projectService = injectProjectService();
   protected readonly linkMutation = injectProjectLinkMutation();
   private readonly positionMutation = injectLandingPositionMutation();
-  protected readonly branchMutation = injectRepositoryBranchMutation();
-  /** The repository link row whose branch dialog is open. */
+  protected readonly linkService = injectProjectLinkService();
+  protected readonly branchService = injectProjectBranchService();
+  private readonly createLinkForm = injectProjectLinkFormFactory();
+  private linkState = this.createLinkForm(() => []);
+  protected linkForm = this.linkState.form;
+  private readonly linkProjectId = signal<string | null>(null);
+  protected readonly linkOpeningKey = signal<string | null>(null);
+  private linkOpening = 0;
+  private linkChoiceInitialized = false;
+  private readonly branchDraft = signal<ProjectBranchDraft>({ baseBranch: '' });
+  private readonly inheriting = signal(false);
+  private readonly branchRefusal = createRefusalState<ProjectBranchDraft>();
+  protected readonly branchForm = form(this.branchDraft, (p) => {
+    apply(p, this.branchRefusal.schema);
+    apply(p, branchDialogSchema(() => this.inheriting()));
+  });
+  private readonly branchBaseline = signal<ProjectBranchBaseline | null>(null);
   protected readonly branchRow = signal<ProjectLinkRowVm | null>(null);
-  protected readonly branchError = signal<string | null>(null);
+  protected readonly branchProjectName = signal('');
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
-  protected readonly shown = computed(() => projectFormValues(this.project()));
-  /** The palette, by name, read from the generated enum. */
-  protected readonly palette: readonly string[] = Object.values(ProjectColor);
+  private readonly editDraft = signal<ProjectDraft>(projectDraft(null));
+  private readonly editRefusal = createRefusalState<ProjectDraft>();
+  protected readonly editForm = form(this.editDraft, (p) => {
+    apply(p, projectEditSchema);
+    apply(p, this.editRefusal.schema);
+  });
+  protected readonly editBaseline = signal<EditBaseline<ProjectDraft> | null>(null);
+  protected readonly palette: readonly string[] = PROJECT_COLORS;
   protected readonly colorOpen = signal(false);
   protected readonly colorError = signal<string | null>(null);
   protected readonly editOpen = signal(false);
-  protected readonly editError = signal<string | null>(null);
 
   protected readonly linkOpen = signal<ProjectLinkKind | null>(null);
-  protected readonly linkError = signal<string | null>(null);
   private readonly linkFailure = signal<PanelFailure<ProjectLinkKind> | null>(null);
   private readonly pendingLinks = injectPendingMutationVariables<ProjectLinkVars>(projectLinkMutationKey);
-  /** Every unlink in flight, per kind, so concurrent unlinks each keep their row waiting. */
   protected readonly pendingSourceKeys = computed(() =>
     pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'source'),
   );
   protected readonly pendingRepositoryKeys = computed(() =>
     pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'repository'),
   );
-  /** Every reposition in flight, so a moving row cannot be dragged again before its write settles. */
   protected readonly pendingRepositionKeys = computed(() =>
     pendingRepositionKeys(this.pendingPositions(), this.projectId()),
   );
@@ -245,7 +247,20 @@ export class ProjectDetail {
     repositoryChoices(this.repositoriesQuery.data(), this.repositoryLinksQuery.data()),
   );
 
+  private readonly linkChoices = computed(() => projectLinkChoices(this.linkOpen(), this.sourceChoices(), this.repositoryChoices()));
+
   constructor() {
+    effect(() => {
+      const choices = this.linkChoices();
+      if (this.linkOpen() && !this.linkChoiceInitialized && choices.length > 0) {
+        this.linkChoiceInitialized = true;
+        if (!this.linkForm().value().name) this.linkForm().reset(projectLinkDraft(choices));
+      }
+    });
+    effect(() => {
+      const key = this.key();
+      if (this.linkOpen() && key !== this.linkOpeningKey()) this.linkOpen.set(null);
+    });
     // A slug or former slug in the URL opens the project; the URL then names it by id.
     effect(() => {
       const project = this.project();
@@ -255,14 +270,18 @@ export class ProjectDetail {
       }
     });
   }
-
   protected onTab(value: string): void {
     const tab = parseProjectTab(value);
     if (tab !== null) this.tab.set(tab);
   }
 
   protected onEdit(): void {
-    this.editError.set(null);
+    const project = this.project();
+    if (!project || !this.canEdit()) return;
+    const draft = projectDraft(project);
+    this.editBaseline.set({ id: project.project_id, revision: project.revision, draft });
+    this.editRefusal.clear();
+    this.editForm().reset({ ...draft });
     this.editOpen.set(true);
   }
 
@@ -272,65 +291,56 @@ export class ProjectDetail {
   }
 
   protected onColorClose(): void {
-    if (this.editMutation.isPending()) return;
+    if (this.projectService.editPending()) return;
     this.colorOpen.set(false);
   }
 
-  /** Save the chosen color against the revision on screen; a stale revision or a refusal shows in the dialog. */
-  protected onColor(color: string): void {
+  protected async onColor(color: string): Promise<void> {
     const project = this.project();
-    if (!project || color === project.color) return;
+    if (!project || color === project.color || !this.canEdit()) return;
     this.colorError.set(null);
-    this.editMutation.mutate(
-      { projectId: project.project_id, revision: project.revision, body: { color } },
-      {
-        onSuccess: () => this.colorOpen.set(false),
-        onError: (error) => this.colorError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+    const outcome = await this.projectService.color(project.project_id, project.revision, color);
+    if (outcome.ok) this.colorOpen.set(false);
+    else this.colorError.set(outcome.form ?? (Object.values(outcome.fields).join('; ') || 'Save failed.'));
   }
 
-  protected onSave(values: ConfigFormValues): void {
-    const project = this.project();
-    if (!project) return;
-    const body = projectPatch(configEdit(this.fields, this.shown(), values).body);
-    this.editError.set(null);
-    this.editMutation.mutate(
-      { projectId: project.project_id, revision: project.revision, body },
-      {
-        onSuccess: (saved) => {
-          this.editOpen.set(false);
-          // Under this project's own lens a new slug moves the lens with it.
-          if (this.lens.slug() === project.slug && saved.slug !== project.slug) {
-            void this.router.navigate(lensLink(['/admin', 'projects', saved.project_id], saved.slug), {
-              replaceUrl: true,
-            });
-          }
-        },
-        onError: (error) => this.editError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+  protected async onSave(): Promise<void> {
+    const baseline = this.editBaseline();
+    if (!baseline || !this.canEdit()) return;
+    await submitForm(this.editForm, (draft) => this.projectService.edit(baseline, draft, (saved) => {
+      this.editOpen.set(false);
+      if (this.projectId() === baseline.id && this.lens.slug() === baseline.draft.slug && saved.slug !== baseline.draft.slug) {
+        void this.router.navigate(lensLink(['/admin', 'projects', saved.project_id], saved.slug), {
+          replaceUrl: true,
+        });
+      }
+    }), { refusalState: this.editRefusal });
   }
 
   protected onLinkOpen(kind: ProjectLinkKind): void {
-    this.linkError.set(null);
+    const id = this.projectId();
+    if (id === null || !this.canEdit()) return;
+    this.linkOpening += 1;
+    this.linkProjectId.set(id);
+    this.linkOpeningKey.set(this.key());
     this.linkOpen.set(kind);
+    const choices = this.linkChoices();
+    this.linkChoiceInitialized = choices.length > 0;
+    this.linkState = this.createLinkForm(() => this.linkChoices());
+    this.linkForm = this.linkState.form;
   }
 
-  protected onLink(kind: ProjectLinkKind, key: string): void {
-    const projectId = this.projectId();
-    if (projectId === null) return;
-    this.linkError.set(null);
-    this.linkMutation.mutate(
-      { projectId, kind, name: key, linked: true, revision: null },
-      {
-        onSuccess: () => this.linkOpen.set(null),
-        onError: (error) => this.linkError.set(errorMessage(error, 'Link failed.')),
-      },
-    );
+  protected async onLink(): Promise<void> {
+    const id = this.linkProjectId();
+    const kind = this.linkOpen();
+    if (id === null || kind === null || this.key() !== this.linkOpeningKey() || !this.canEdit()) return;
+    const opening = this.linkOpening;
+    const openingKey = this.linkOpeningKey();
+    const isCurrent = () => !this.destroyRef.destroyed && opening === this.linkOpening && this.key() === openingKey && this.linkOpen() === kind;
+    const ok = await submitForm(this.linkForm, (draft) => this.linkService.link(id, kind, draft, this.linkChoices()), { refusalState: this.linkState.refusal, isCurrent });
+    if (ok && isCurrent()) this.linkOpen.set(null);
   }
 
-  /** Each unlink settles on its own promise: a per-call `mutate` callback fires only for the observer's latest call. */
   protected async onUnlink({ kind, row }: ProjectUnlinkEvent): Promise<void> {
     const projectId = this.projectId();
     if (projectId === null) return;
@@ -343,32 +353,39 @@ export class ProjectDetail {
   }
 
   protected onBranchOpen(row: ProjectLinkRowVm): void {
-    this.branchError.set(null);
+    const link = this.repositoryLinksQuery.data()?.find((item) => item.repository_id === row.key);
+    if (!link || !row.branch || !this.canEdit()) return;
+    const baseline = projectBranchBaseline(link);
+    this.branchBaseline.set(baseline);
+    this.branchProjectName.set(this.project()!.name);
+    this.branchRefusal.clear();
+    this.branchForm().reset({ ...baseline.draft });
     this.branchRow.set(row);
   }
 
   protected onBranchClose(): void {
-    if (this.branchMutation.isPending()) return;
+    if (this.branchService.pending()) return;
     this.branchRow.set(null);
   }
 
-  /** Set or clear the link's own branch against the revision on screen; a refusal shows in the dialog. */
-  protected onBranch(baseBranch: string | null): void {
-    const projectId = this.projectId();
-    const row = this.branchRow();
-    if (projectId === null || row === null || row.revision === null) return;
-    this.branchError.set(null);
-    this.branchMutation.mutate(
-      { projectId, repositoryId: row.key, revision: row.revision, baseBranch },
-      {
-        onSuccess: () => this.branchRow.set(null),
-        onError: (error) => this.branchError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+  protected async onBranch(): Promise<void> {
+    const baseline = this.branchBaseline();
+    if (!baseline || !this.canEdit()) return;
+    const ok = await submitForm(this.branchForm, (draft) => this.branchService.save(baseline, draft), { refusalState: this.branchRefusal });
+    if (ok) this.branchRow.set(null);
   }
 
-  /** One drop's landing position; a refusal shows on the repositories panel's error line. */
-  protected async onReposition(body: LandingPositionRequest): Promise<void> {
+  protected async onInherit(): Promise<void> {
+    const baseline = this.branchBaseline();
+    if (!baseline || !this.canEdit() || this.branchService.pending()) return;
+    this.inheriting.set(true);
+    try {
+      const ok = await submitForm(this.branchForm, () => this.branchService.inherit(baseline), { ignoreLocalErrors: true, refusalState: this.branchRefusal });
+      if (ok) this.branchRow.set(null);
+    } finally { this.inheriting.set(false); }
+  }
+
+  protected async onReposition(body: LandingPosition): Promise<void> {
     const projectId = this.projectId();
     if (projectId === null) return;
     this.linkFailure.set(null);

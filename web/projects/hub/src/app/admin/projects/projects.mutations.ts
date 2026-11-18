@@ -134,7 +134,9 @@ export function injectLandingPositionMutation() {
     mutationFn: async (vars: LandingPositionVars): Promise<void> => {
       const { error } = await positionRepositoryApiProjectsProjectLandingOrderPositionPost({
         path: { project: vars.projectId },
-        body: vars.body,
+        body: vars.body.unranked
+          ? { repository: vars.body.repository, unranked: true }
+          : { repository: vars.body.repository, after_repository: vars.body.afterRepository },
         throwOnError: false,
       });
       if (error) throw error;

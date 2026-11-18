@@ -1,51 +1,28 @@
-import type {
-  ConfigChangeView,
-  KitAsyncStateValue,
-  ProjectCreateRequest,
-  ProjectPatchRequest,
-  ProjectView,
-  RepositoryLinkView,
-  RepositorySummary,
-  RunnerRegistryView,
-  SourceLinkView,
-  Tone,
-} from 'fleet';
+import type { KitAsyncStateValue, Tone } from 'fleet';
 
-import { servingRunners } from '../../core/project-serving';
-import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
-import type { WorkSource } from '../work-sources/work-source.domain';
-import { workSourceKey, workSourceSlug } from '../work-sources/work-sources.model';
+import type { Project } from '../../core/project.domain';
+import { servingProjectRunners, type ProjectRunner } from '../../core/runners.domain';
+import type { ConfigChange } from '../config-history.domain';
+import type { ProjectRepository } from '../repositories/repositories.domain';
+import type { ProjectWorkSource } from '../work-sources/work-sources.domain';
 import type { ProjectLinkKind, ProjectLinkVars } from './projects.mutations';
+import type { ProjectFigures, ProjectRepositoryLink, ProjectSourceLink } from './project-read.domain';
 
-/** A project's form: its handle, its display name and what it is for. Every field stays
- * editable — a slug change keeps the old one resolving until another project takes it. A create
- * may leave the name out: it defaults to the slug. */
-export const PROJECT_FIELDS: readonly ConfigFieldDef[] = [
-  { key: 'slug', label: 'Slug', kind: 'text', required: true },
-  { key: 'name', label: 'Name', kind: 'text' },
-  { key: 'description', label: 'Description', kind: 'text' },
-];
-
-/** The create a new project's form sends: a name left empty is the slug. */
-export function projectCreate(body: Readonly<Record<string, string | boolean | null>>): ProjectCreateRequest {
-  const text = (key: string): string => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
-  const slug = text('slug');
-  return { slug, name: text('name') || slug, description: text('description') };
-}
+const workSourceKey = (source: ProjectWorkSource): string => source.work_source_id ?? source.name;
+const workSourceSlug = (source: ProjectWorkSource): string => source.slug ?? source.name;
 
 /** What the slug field means, under the form. */
 export const SLUG_HINT =
   'Lowercase letters, digits and single hyphens. A former slug keeps opening this project until another project takes it.';
 
-/** The projects a list shows: every one on All, only the lensed one under a lens. */
-export function listedProjects(projects: readonly ProjectView[] | undefined, lensId: string | null): readonly ProjectView[] {
-  return (projects ?? []).filter((project) => lensId === null || project.project_id === lensId);
+/** Resolve the selected lens against the settled project read. */
+export function projectIdForSlug(projects: readonly Project[] | undefined, slug: string | null): string | null {
+  return projects?.find((project) => project.slug === slug)?.project_id ?? null;
 }
 
-/** What one project's own reads hold for its list row — each `undefined` until it answers. */
-export interface ProjectFigures {
-  readonly sourceLinks?: readonly SourceLinkView[];
-  readonly repositoryLinks?: readonly RepositoryLinkView[];
+/** The projects a list shows: every one on All, only the lensed one under a lens. */
+export function listedProjects(projects: readonly Project[] | undefined, lensId: string | null): readonly Project[] {
+  return (projects ?? []).filter((project) => lensId === null || project.project_id === lensId);
 }
 
 /** One row of the projects list. The key is the project's id: nothing holds a slug as a key. */
@@ -81,7 +58,7 @@ export function needsText(missing: readonly string[]): string {
 /** The projects list, by display name; under a lens, only the lensed project. A project is judged wired or wanting
  * only once its links and the runners are read. */
 export function projectRows(
-  projects: readonly ProjectView[],
+  projects: readonly Project[],
   figures: ReadonlyMap<string, ProjectFigures>,
   servedIds: ReadonlySet<string> | null,
   lensId: string | null,
@@ -105,42 +82,22 @@ export function projectRows(
 
 /** The ids of the projects at least one live runner serves, or `null` before the runners are read. */
 export function servedProjectIds(
-  projects: readonly ProjectView[],
-  runners: readonly RunnerRegistryView[] | undefined,
+  projects: readonly Project[],
+  runners: readonly ProjectRunner[] | undefined,
 ): ReadonlySet<string> | null {
   if (runners === undefined) return null;
   return new Set(
     projects
-      .filter((project) => servingRunners(project.project_id, runners).length > 0)
+      .filter((project) => servingProjectRunners(project.project_id, runners).length > 0)
       .map((project) => project.project_id),
   );
-}
-
-/** The patch an edit sends. A cleared description is sent as empty text: on a project `null`
- * means "leave it", and the description may be empty. */
-export function projectPatch(body: Readonly<Record<string, string | number | boolean | null>>): ProjectPatchRequest {
-  const patch: ProjectPatchRequest = {};
-  for (const [key, value] of Object.entries(body)) {
-    if (key === 'slug' || key === 'name') patch[key] = typeof value === 'string' ? value : null;
-    if (key === 'description') patch.description = typeof value === 'string' ? value : '';
-  }
-  return patch;
-}
-
-/** The form values a create starts from, or an edit shows. */
-export function projectFormValues(project: ProjectView | null): ConfigFormValues {
-  return {
-    slug: project?.slug ?? '',
-    name: project?.name ?? '',
-    description: project?.description ?? '',
-  };
 }
 
 /** The slugs a project has moved away from, newest first and without repeats, read from its
  * own change history. The project's current slug is left out: a slug taken back is current. */
 export function formerSlugs(
-  changes: readonly ConfigChangeView[] | undefined,
-  project: ProjectView | null,
+  changes: readonly ConfigChange[] | undefined,
+  project: Project | null,
 ): readonly string[] {
   if (!changes || project === null) return [];
   const current = project.slug;
@@ -181,7 +138,7 @@ export interface LinkBranchVm {
 }
 
 /** A repository link's branch as its row shows it, beside the repository record it inherits from. */
-export function linkBranch(link: RepositoryLinkView, repository: RepositorySummary | undefined): LinkBranchVm {
+export function linkBranch(link: ProjectRepositoryLink, repository: ProjectRepository | undefined): LinkBranchVm {
   return {
     name: link.effective_base_branch,
     marker: link.base_branch === null ? 'inherited' : 'override',
@@ -191,38 +148,38 @@ export function linkBranch(link: RepositoryLinkView, repository: RepositorySumma
 }
 
 /** What a link names its record by: a repository's id, a work source's id (or `hub`). */
-export function linkKey(link: SourceLinkView | RepositoryLinkView): string {
+export function linkKey(link: ProjectSourceLink | ProjectRepositoryLink): string {
   return 'repository_id' in link ? link.repository_id : link.name;
 }
 
 /** The keys of the links in force — an unlinked link stays in the listing with `linked: false`. */
-export function linkedKeys(links: readonly (SourceLinkView | RepositoryLinkView)[]): ReadonlySet<string> {
+export function linkedKeys(links: readonly (ProjectSourceLink | ProjectRepositoryLink)[]): ReadonlySet<string> {
   return new Set(links.filter((link) => link.linked).map(linkKey));
 }
 
 /** A source as its link row describes it. */
-export function sourceDetail(source: WorkSource | undefined): string {
+export function sourceDetail(source: ProjectWorkSource | undefined): string {
   if (!source) return '';
   const name = source.name === workSourceSlug(source) ? null : source.name;
   return [name, source.provider, source.locator].filter((part) => !!part).join(' · ');
 }
 
 /** A repository as a link choice describes it, with the branch a new link inherits. */
-export function repositoryDetail(repository: RepositorySummary | undefined): string {
+export function repositoryDetail(repository: ProjectRepository | undefined): string {
   if (!repository) return '';
   return `${repositoryIdentity(repository)} · ${repository.base_branch}`;
 }
 
 /** A repository as its link row describes it; the row shows the link's own effective branch beside it. */
-export function repositoryIdentity(repository: RepositorySummary | undefined): string {
+export function repositoryIdentity(repository: ProjectRepository | undefined): string {
   if (!repository) return '';
   return `${repository.name} · ${repository.owner}/${repository.repo}`;
 }
 
 /** The source links in force, built-in first, then by slug. */
 export function sourceLinkRows(
-  links: readonly SourceLinkView[],
-  sources: readonly WorkSource[],
+  links: readonly ProjectSourceLink[],
+  sources: readonly ProjectWorkSource[],
 ): readonly ProjectLinkRowVm[] {
   const byKey = new Map(sources.map((source) => [workSourceKey(source), source]));
   return links
@@ -240,8 +197,8 @@ export function sourceLinkRows(
 
 /** The repository links in force, in the project's landing order as the hub lists them. */
 export function repositoryLinkRows(
-  links: readonly RepositoryLinkView[],
-  repositories: readonly RepositorySummary[],
+  links: readonly ProjectRepositoryLink[],
+  repositories: readonly ProjectRepository[],
 ): readonly ProjectLinkRowVm[] {
   const byId = new Map(repositories.map((repository) => [repository.repository_id, repository]));
   return links
@@ -286,8 +243,8 @@ export function linkChoices(
 /** What a project still lacks to take work in, land it and get it done — the wiring the
  * overview calls out. The built-in source alone draws nothing from a tracker. */
 export function missingWiring(
-  sourceLinks: readonly SourceLinkView[],
-  repositoryLinks: readonly RepositoryLinkView[],
+  sourceLinks: readonly ProjectSourceLink[],
+  repositoryLinks: readonly ProjectRepositoryLink[],
   served: boolean,
 ): readonly string[] {
   const missing: string[] = [];
@@ -313,15 +270,15 @@ export function wiringCallout(missing: readonly string[], ready: number | null =
 /** The live runners serving the project, none while nothing is selected. */
 export function projectServedBy(
   projectId: string | null,
-  runners: readonly RunnerRegistryView[] | undefined,
-): readonly RunnerRegistryView[] {
-  return projectId === null ? [] : servingRunners(projectId, runners ?? []);
+  runners: readonly ProjectRunner[] | undefined,
+): readonly ProjectRunner[] {
+  return projectId === null ? [] : servingProjectRunners(projectId, runners ?? []);
 }
 
 /** The overview's callout once every read it judges by has answered, else `null`. */
 export function overviewCallout(
-  sourceLinks: readonly SourceLinkView[] | undefined,
-  repositoryLinks: readonly RepositoryLinkView[] | undefined,
+  sourceLinks: readonly ProjectSourceLink[] | undefined,
+  repositoryLinks: readonly ProjectRepositoryLink[] | undefined,
   runnersRead: boolean,
   served: boolean,
   ready: number | null = null,
@@ -343,8 +300,8 @@ export function failureFor<K extends string>(failure: PanelFailure<K> | null, ki
 
 /** The work sources a link dialog offers. */
 export function sourceChoices(
-  sources: readonly WorkSource[] | undefined,
-  links: readonly SourceLinkView[] | undefined,
+  sources: readonly ProjectWorkSource[] | undefined,
+  links: readonly ProjectSourceLink[] | undefined,
 ): readonly LinkChoiceVm[] {
   const byKey = new Map((sources ?? []).map((source) => [workSourceKey(source), source]));
   return linkChoices(
@@ -356,8 +313,8 @@ export function sourceChoices(
 
 /** The repositories a link dialog offers. */
 export function repositoryChoices(
-  repositories: readonly RepositorySummary[] | undefined,
-  links: readonly RepositoryLinkView[] | undefined,
+  repositories: readonly ProjectRepository[] | undefined,
+  links: readonly ProjectRepositoryLink[] | undefined,
 ): readonly LinkChoiceVm[] {
   const byId = new Map((repositories ?? []).map((repository) => [repository.repository_id, repository]));
   return linkChoices(

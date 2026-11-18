@@ -3,14 +3,9 @@
 
   @if (choices().length > 0) {
     <div class="field">
-      <fleet-kit-select
-        [options]="choices()"
-        [selectedValue]="selected()"
-        [label]="fieldLabel()"
-        [ariaLabel]="fieldLabel()"
-        [testid]="testidPrefix() + '-choice'"
-        (choose)="onChoose($event)"
-      />
+      <fleet-kit-field [label]="fieldLabel()" [field]="choiceField()">
+        <fleet-kit-select [options]="choices()" [formField]="choiceField()" [ariaLabel]="fieldLabel()" [testid]="testidPrefix() + '-choice'" />
+      </fleet-kit-field>
     </div>
     <p class="note">{{ note() }}</p>
   } @else {
@@ -18,18 +13,10 @@
   }
 
   <div fleetKitDialogFooter class="footer">
-    <fleet-kit-error-line class="submit-error" [message]="submitError()" [testid]="testidPrefix() + '-submit-error'" />
-    <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">
-      Cancel
-    </fleet-kit-button>
-    <fleet-kit-button
-      size="cta"
-      variant="primary"
-      [disabled]="!canSubmit()"
-      [testid]="testidPrefix() + '-submit'"
-      (click)="onSubmit()"
-    >
-      Link
-    </fleet-kit-button>
+    @for (message of messages(); track $index) {
+      <fleet-kit-error-line class="submit-error" [message]="message" [testid]="testidPrefix() + '-submit-error'" />
+    }
+    <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">Cancel</fleet-kit-button>
+    <fleet-kit-button size="cta" variant="primary" [disabled]="!canSubmit()" [testid]="testidPrefix() + '-submit'" (click)="onSubmit()">Link</fleet-kit-button>
   </div>
 </fleet-kit-dialog>

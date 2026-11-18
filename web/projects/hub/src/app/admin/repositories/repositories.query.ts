@@ -1,3 +1,4 @@
+import { toProjectRepository } from './repositories.translate';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getRepositoryApiRepositoriesRepositoryGet, hubApi, listRepositoriesApiRepositoriesGet, type RepositorySummary } from 'fleet';
@@ -70,5 +71,13 @@ export function injectLandingPolicyChoicesQuery() {
       return data ?? [];
     },
     select: (needs: LandingPolicyNeedsView[]): readonly LandingPolicy[] => fromLandingPolicyNeeds(needs),
+  }));
+}
+
+/** Project projection over the shared repository cache. */
+export function injectProjectRepositoriesQuery(includeRetired: () => boolean) {
+  return injectQuery(() => ({
+    ...repositoriesOptions(includeRetired()),
+    select: (rows: RepositorySummary[]) => rows.map(toProjectRepository),
   }));
 }

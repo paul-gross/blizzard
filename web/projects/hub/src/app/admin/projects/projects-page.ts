@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
+import { apply, form } from '@angular/forms/signals';
 import {
   asyncState,
-  errorMessage,
+  createRefusalState,
+  submitForm,
   type KitAsyncStateValue,
   KitButton,
   KitMasterDetail,
@@ -12,18 +14,18 @@ import {
 } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { lensedProject } from '../../core/lensed-project';
 import { ProjectLens, lensLink } from '../../core/project-lens';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectChildRouteParam } from '../../core/route-state';
-import { injectHubRunnersQuery } from '../../core/runners.query';
-import { type ConfigFormValues, createBody } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
-import { injectCreateProjectMutation } from './projects.mutations';
+import { injectProjectRunnersQuery } from '../../core/runners.query';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
+import { projectDraft, type ProjectDraft } from './project.domain';
+import { PROJECT_FIELDS } from './project-fields';
+import { projectCreateSchema } from './project.form';
+import { injectProjectService } from './project.service';
 import {
   listedProjects,
-  PROJECT_FIELDS,
-  projectCreate,
+  projectIdForSlug,
   projectRows,
   SLUG_HINT,
   servedProjectIds,
@@ -41,7 +43,7 @@ import { ProjectsTable } from './projects-table';
 @Component({
   selector: 'app-projects-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, KitButton, KitMasterDetail, KitPanel, KitPanelHeader, ProjectsTable, RouterOutlet],
+  imports: [ConfigFieldTreeDialog, KitButton, KitMasterDetail, KitPanel, KitPanelHeader, ProjectsTable, RouterOutlet],
   templateUrl: './projects-page.html',
   styleUrl: './projects-page.css',
 })
@@ -51,13 +53,11 @@ export class ProjectsPage {
   private readonly lens = inject(ProjectLens);
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
-  private readonly projectsQuery = injectProjectsQuery();
-  private readonly runnersQuery = injectHubRunnersQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
+  private readonly runnersQuery = injectProjectRunnersQuery();
 
   protected readonly selectedKey = injectChildRouteParam('key');
-  private readonly lensId = computed(
-    () => lensedProject(this.projectsQuery.data(), this.lens.slug())?.project_id ?? null,
-  );
+  private readonly lensId = computed(() => projectIdForSlug(this.projectsQuery.data(), this.lens.slug()));
   private readonly listed = computed(() => listedProjects(this.projectsQuery.data(), this.lensId()));
   private readonly figures = injectProjectFigures(() => this.listed());
   private readonly servedIds = computed(() =>
@@ -71,11 +71,15 @@ export class ProjectsPage {
   );
 
   private readonly meQuery = injectMeQuery();
-  protected readonly createMutation = injectCreateProjectMutation();
+  private readonly projectService = injectProjectService();
   protected readonly fields = PROJECT_FIELDS;
+  private readonly createRefusal = createRefusalState<ProjectDraft>();
+  protected readonly createForm = form(signal(projectDraft(null)), (p) => {
+    apply(p, projectCreateSchema);
+    apply(p, this.createRefusal.schema);
+  });
   protected readonly slugHint = SLUG_HINT;
   protected readonly createOpen = signal(false);
-  protected readonly createError = signal<string | null>(null);
 
   /** New is a write: a desktop with `config:edit` only. */
   protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
@@ -105,24 +109,20 @@ export class ProjectsPage {
   }
 
   protected onNew(): void {
-    this.createError.set(null);
+    this.createRefusal.clear();
+    this.createForm().reset(projectDraft(null));
     this.createOpen.set(true);
   }
 
-  protected onCreate(values: ConfigFormValues): void {
-    const body = projectCreate(createBody(this.fields, values));
-    this.createError.set(null);
-    this.createMutation.mutate(
-      body,
-      {
-        onSuccess: (project) => {
-          this.createOpen.set(false);
-          // Under a lens the new project opens in its own lens, where the list shows it.
-          const commands = lensLink(['/admin', 'projects', project.project_id], this.lens.lensed() ? project.slug : null);
-          void this.router.navigate(commands);
-        },
-        onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
-      },
+  protected async onCreate(): Promise<void> {
+    await submitForm(this.createForm, (draft) =>
+      this.projectService.create(draft, (project) => {
+        this.createOpen.set(false);
+        // Under a lens the new project opens in its own lens, where the list shows it.
+        const commands = lensLink(['/admin', 'projects', project.project_id], this.lens.lensed() ? project.slug : null);
+        void this.router.navigate(commands);
+      }),
+      { refusalState: this.createRefusal },
     );
   }
 }

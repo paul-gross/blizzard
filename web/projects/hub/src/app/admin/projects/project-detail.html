@@ -40,78 +40,81 @@
       (editBranch)="onBranchOpen($event)"
     />
 
-    @if (editOpen()) {
-      <app-config-form-dialog
-        [heading]="'Edit ' + p.name"
-        mode="edit"
-        [fields]="fields"
-        [initial]="shown()"
-        [hint]="slugHint"
-        submitLabel="Save"
-        [submitError]="editError()"
-        [submitting]="editMutation.isPending()"
-        testidPrefix="admin-projects-edit"
-        (closed)="editOpen.set(false)"
-        (submitted)="onSave($event)"
-      />
-    }
     @if (colorOpen()) {
       <fleet-kit-dialog [open]="true" [ariaLabel]="'Color of ' + p.name" testid="admin-projects-color-dialog" (closed)="onColorClose()">
         <h2 fleetKitDialogHeader>Color of {{ p.name }}</h2>
         <app-project-color-picker
           [colors]="palette"
           [current]="p.color"
-          [disabled]="editMutation.isPending()"
+          [disabled]="projectService.editPending()"
           (choose)="onColor($event)"
         />
         <div fleetKitDialogFooter class="color-footer">
           <fleet-kit-error-line class="color-error" [message]="colorError()" testid="admin-projects-color-error" />
-          <fleet-kit-button size="cta" [disabled]="editMutation.isPending()" testid="admin-projects-color-close" (click)="onColorClose()">
+          <fleet-kit-button size="cta" [disabled]="projectService.editPending()" testid="admin-projects-color-close" (click)="onColorClose()">
             Close
           </fleet-kit-button>
         </div>
       </fleet-kit-dialog>
     }
-    @if (linkOpen() === 'source') {
+    @if (linkOpen() === 'source' && key() === linkOpeningKey()) {
       <app-project-link-dialog
         [heading]="'Link a work source to ' + p.name"
         fieldLabel="Work source"
         [choices]="sourceChoices()"
         note="Linking changes nothing in the source and nothing already ingested."
         noneText="This project links every work source in the tenant. Add one under Work sources."
-        [submitting]="linkMutation.isPending()"
-        [submitError]="linkError()"
+        [form]="linkForm"
+        [choiceField]="linkForm.name"
         testidPrefix="admin-projects-link-source"
         (closed)="linkOpen.set(null)"
-        (submitted)="onLink('source', $event)"
+        (submitted)="onLink()"
       />
     }
-    @if (linkOpen() === 'repository') {
+    @if (linkOpen() === 'repository' && key() === linkOpeningKey()) {
       <app-project-link-dialog
         [heading]="'Link a repository to ' + p.name"
         fieldLabel="Repository"
         [choices]="repositoryChoices()"
         note="Linking lets this project's chunks land here, on the repository's branch until the link names its own. Projects landing on the same branch of a repository take turns."
         noneText="This project links every repository in the tenant. Add one under Repositories."
-        [submitting]="linkMutation.isPending()"
-        [submitError]="linkError()"
+        [form]="linkForm"
+        [choiceField]="linkForm.name"
         testidPrefix="admin-projects-link-repository"
         (closed)="linkOpen.set(null)"
-        (submitted)="onLink('repository', $event)"
+        (submitted)="onLink()"
       />
     }
-    @if (branchRow(); as row) {
-      @if (row.branch; as branch) {
-        <app-project-branch-dialog
-          [heading]="'Branch of ' + row.name + ' in ' + p.name"
-          [branch]="branch"
-          [submitting]="branchMutation.isPending()"
-          [submitError]="branchError()"
-          testidPrefix="admin-projects-branch"
-          (closed)="onBranchClose()"
-          (submitted)="onBranch($event)"
-        />
-      }
-    }
+
   }
 </fleet-kit-async-state>
+
+@if (editOpen()) {
+  <app-config-field-tree-dialog
+    [heading]="'Edit ' + editBaseline()!.draft.name"
+    mode="edit"
+    [fields]="fields"
+    [form]="editForm"
+    [baseline]="editBaseline()?.draft ?? null"
+    [hint]="slugHint"
+    submitLabel="Save"
+    testidPrefix="admin-projects-edit"
+    (closed)="editOpen.set(false)"
+    (save)="onSave()"
+  />
+}
+
+@if (branchRow(); as row) {
+  @if (row.branch; as branch) {
+    <app-project-branch-dialog
+      [heading]="'Branch of ' + row.name + ' in ' + branchProjectName()"
+      [branch]="branch"
+      [form]="branchForm"
+      [branchField]="branchForm.baseBranch"
+      testidPrefix="admin-projects-branch"
+      (closed)="onBranchClose()"
+      (submitted)="onBranch()"
+      (inherit)="onInherit()"
+    />
+  }
+}

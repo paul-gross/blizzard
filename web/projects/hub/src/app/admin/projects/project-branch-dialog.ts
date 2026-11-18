@@ -1,48 +1,49 @@
-import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, output } from '@angular/core';
-import { KitButton, KitDialog, KitErrorLine, KitTextInput } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
+import { KitButton, KitDialog, KitErrorLine, KitField, KitTextInput } from 'fleet';
 
 import type { LinkBranchVm } from './projects.model';
 
-/**
- * Edit one repository link's own branch: name the branch this project's chunks start from and land into, or clear it
- * so the link inherits the repository's `base_branch` again. Whether the branch exists is not checked here; a name
- * that is no git branch name is the hub's refusal, shown under the field. Presentational.
- */
+/** Presentational branch editor. Saving and explicitly inheriting are separate container actions. */
 @Component({
   selector: 'app-project-branch-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitErrorLine, KitTextInput],
+  imports: [FormField, KitButton, KitDialog, KitErrorLine, KitField, KitTextInput],
   templateUrl: './project-branch-dialog.html',
   styleUrl: './project-branch-dialog.css',
 })
 export class ProjectBranchDialog {
   readonly heading = input.required<string>();
+  /** The captured branch at opening, not a live read. */
   readonly branch = input.required<LinkBranchVm>();
-  readonly submitting = input(false);
-  readonly submitError = input<string | null>(null);
+  readonly form = input.required<FieldTree<unknown>>();
+  readonly branchField = input.required<FieldTree<string>>();
   readonly testidPrefix = input.required<string>();
 
   readonly closed = output<void>();
-  /** The link's new branch, or `null` to inherit the repository's again. */
-  readonly submitted = output<string | null>();
+  readonly submitted = output<void>();
+  readonly inherit = output<void>();
 
-  /** The typed name, starting from the link's own branch. */
-  protected readonly value = linkedSignal(() => this.branch().override ?? '');
-  protected readonly canSave = computed(
-    () => !this.submitting() && this.value() !== '' && this.value() !== this.branch().override,
-  );
+  protected readonly submitting = computed(() => this.form()().submitting());
+  protected readonly messages = computed(() => {
+    const state = this.form()();
+    return state.touched() ? state.errors().map((error) => error.message || (error.kind === 'required' ? 'Required' : 'Invalid')) : [];
+  });
+  protected readonly canSave = computed(() => {
+    const value = this.branchField()().value();
+    return !this.submitting() && value !== '' && value !== this.branch().override;
+  });
   protected readonly canInherit = computed(() => !this.submitting() && this.branch().override !== null);
 
   protected onSave(): void {
-    if (this.canSave()) this.submitted.emit(this.value());
+    if (this.canSave()) this.submitted.emit();
   }
 
   protected onInherit(): void {
-    if (this.canInherit()) this.submitted.emit(null);
+    if (this.canInherit()) this.inherit.emit();
   }
 
   protected onClosed(): void {
-    if (this.submitting()) return;
-    this.closed.emit();
+    if (!this.submitting()) this.closed.emit();
   }
 }

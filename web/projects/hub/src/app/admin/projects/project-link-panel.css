@@ -48,6 +48,14 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+.branch-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.branch fleet-kit-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .right {
   display: flex;
   align-items: center;
@@ -70,4 +78,10 @@
 }
 .armed {
   cursor: grab;
+}
+@media (max-width: 600px) {
+  .name,
+  .detail {
+    flex: 1 0 100%;
+  }
 }

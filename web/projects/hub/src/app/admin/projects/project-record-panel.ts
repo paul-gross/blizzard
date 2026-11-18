@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, viewChild, type TemplateRef } from '@angular/core';
 import {
-  type ChunkCountsView,
   FleetWhen,
   type KitAsyncStateValue,
   KitButton,
@@ -8,16 +7,17 @@ import {
   KitFactList,
   KitSwatch,
   type KitTabOption,
-  type LandingPositionRequest,
   KitTabContent,
   KitTabGroup,
   KitTabPanel,
   KitTabs,
-  type ProjectView,
 } from 'fleet';
 
+import type { Project } from '../../core/project.domain';
 import { type LastChangeVm, type RevisionRowVm } from '../config-history.model';
 import { ConfigRevisions } from '../config-revisions';
+import type { LandingPosition } from './project-landing-order.domain';
+import type { ProjectChunkCounts } from './project-read.domain';
 import type { LandingSections } from './project-landing-order.model';
 import { ProjectLinkPanel } from './project-link-panel';
 import { ProjectOverviewCard } from './project-overview-card';
@@ -48,14 +48,14 @@ export interface ProjectUnlinkEvent {
   styleUrl: './project-record-panel.css',
 })
 export class ProjectRecordPanel {
-  readonly project = input.required<ProjectView>();
+  readonly project = input.required<Project>();
   /** Whether the viewer may edit the project and its links. */
   readonly canEdit = input(false);
   readonly tabs = input.required<readonly KitTabOption[]>();
   readonly tab = input.required<ProjectTab>();
   /** The slugs the project left, newest first. */
   readonly formerSlugs = input<readonly string[]>([]);
-  readonly counts = input<ChunkCountsView | undefined>(undefined);
+  readonly counts = input<ProjectChunkCounts | undefined>(undefined);
   readonly lastChange = input<LastChangeVm | null>(null);
   /** What the project still lacks, or `null` when it is wired. */
   readonly callout = input<string | null>(null);
@@ -84,7 +84,7 @@ export class ProjectRecordPanel {
   readonly tabChange = output<string>();
   readonly link = output<ProjectLinkKind>();
   readonly unlink = output<ProjectUnlinkEvent>();
-  readonly reposition = output<LandingPositionRequest>();
+  readonly reposition = output<LandingPosition>();
   /** The repository link row whose branch the viewer asks to edit. */
   readonly editBranch = output<ProjectLinkRowVm>();
 

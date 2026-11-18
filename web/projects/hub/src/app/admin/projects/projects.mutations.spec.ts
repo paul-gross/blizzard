@@ -89,11 +89,17 @@ describe('project mutations', () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectLandingPositionMutation());
 
-    await mutation.mutateAsync({ projectId: 'proj_b', body: { repository: 'repo_c', after_repository: 'repo_a' } });
+    await mutation.mutateAsync({ projectId: 'proj_b', body: { repository: 'repo_c', afterRepository: 'repo_a' } });
+
+    await mutation.mutateAsync({ projectId: 'proj_b', body: { repository: 'repo_d', afterRepository: null } });
+    await mutation.mutateAsync({ projectId: 'proj_b', body: { repository: 'repo_e', unranked: true } });
 
     const calls = stub.forRoute('/api/projects/proj_b/landing-order/position', 'POST');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ repository: 'repo_c', after_repository: 'repo_a' });
+    expect(calls.map((call) => call.body)).toEqual([
+      { repository: 'repo_c', after_repository: 'repo_a' },
+      { repository: 'repo_d', after_repository: null },
+      { repository: 'repo_e', unranked: true },
+    ]);
     expect(invalidatedKeys(spy)).toContainEqual(hubProjectLinksKey('proj_b', 'repository'));
   });
 

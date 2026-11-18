@@ -1,8 +1,8 @@
-import type { ConfigChangeView, ConfigChangesPage } from 'fleet';
+import type { ConfigChange } from './config-history.domain';
 
 /** Who made a change, as a person reads it: the hub's name for the acting member, else the actor as recorded (the hub
  * itself, a removed member). */
-export function changeActor(change: ConfigChangeView): string {
+export function changeActor(change: ConfigChange): string {
   return change.actor_name ?? change.actor;
 }
 
@@ -29,14 +29,14 @@ export interface RevisionRowVm {
 
 /** A record's newest change, or `null` before the history resolves or when it is
  * empty. The history read is newest first. */
-export function lastChange(history: readonly ConfigChangeView[] | undefined): LastChangeVm | null {
+export function lastChange(history: readonly ConfigChange[] | undefined): LastChangeVm | null {
   const newest = history?.[0];
   if (!newest) return null;
   return { revision: newest.revision, at: newest.recorded_at, actor: changeActor(newest), door: newest.door };
 }
 
 /** The Revisions list — one row per change, newest first. */
-export function revisionRows(history: readonly ConfigChangeView[] | undefined): readonly RevisionRowVm[] {
+export function revisionRows(history: readonly ConfigChange[] | undefined): readonly RevisionRowVm[] {
   return (history ?? []).map((change) => ({
     id: change.id,
     revision: change.revision,
@@ -51,7 +51,7 @@ export function revisionRows(history: readonly ConfigChangeView[] | undefined): 
 }
 
 /** Every change across `pages`, in page order — newest first, since each page is. */
-export function changesOfPages(pages: readonly ConfigChangesPage[] | undefined): readonly ConfigChangeView[] {
+export function changesOfPages<P extends { readonly changes: readonly unknown[] }>(pages: readonly P[] | undefined): readonly P['changes'][number][] {
   return (pages ?? []).flatMap((page) => page.changes);
 }
 

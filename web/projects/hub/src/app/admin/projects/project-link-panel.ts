@@ -9,10 +9,10 @@ import {
   KitErrorLine,
   KitPanel,
   KitPanelHeader,
-  type LandingPositionRequest,
 } from 'fleet';
 
 import { branchMarkerTone, builtInTone } from '../../core/lifecycle-tone';
+import type { LandingPosition } from './project-landing-order.domain';
 import { type LandingSection, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -57,7 +57,7 @@ export class ProjectLinkPanel {
   /** The repository row whose branch the viewer asks to edit. */
   readonly editBranch = output<ProjectLinkRowVm>();
   /** The one landing position a drop asks for. */
-  readonly reposition = output<LandingPositionRequest>();
+  readonly reposition = output<LandingPosition>();
 
   /** The landing order's two sections, in render order, each connected to the other. */
   protected readonly sectionOrder = [

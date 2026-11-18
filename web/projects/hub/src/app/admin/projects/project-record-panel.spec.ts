@@ -1,12 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 
 import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
 import { projectTabs } from './project-overview.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
-const PROJECT: ProjectView = {
+const PROJECT: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
