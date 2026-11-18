@@ -34,9 +34,9 @@ and organizations move from **human in the loop** to **human on the loop**, one 
 </p>
 
 <p align="center">
-  <a href="./docs/index.md">Operator docs</a> ·
-  <a href="./docs/install.md">Install guide</a> ·
-  <a href="./docs/verifying.md">Verifying a release</a> ·
+  <a href="./docs/index.md">Operator docs</a>&emsp;
+  <a href="./docs/install.md">Install guide</a>&emsp;
+  <a href="./docs/verifying.md">Verifying a release</a>&emsp;
   <a href="./SECURITY.md">Security policy</a>
 </p>
 
