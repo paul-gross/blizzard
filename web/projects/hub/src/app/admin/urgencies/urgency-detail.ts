@@ -1,18 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, RecordKind, restingAsyncState, ViewportService } from 'fleet';
+import { asyncState, errorMessage, restingAsyncState, ViewportService, submitForm, type EditBaseline } from 'fleet';
 import { map } from 'rxjs';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
-import { type ConfigFormValues } from '../config-edit.model';
+import { EMPTY_URGENCY_DRAFT, type UrgencyDraft } from './urgency.domain';
+import { urgencyEditRules } from './urgency.form';
+import { toDraft, toEditBaseline, URGENCY_RECORD_KIND } from './urgency.translate';
+import { injectUrgencyService } from './urgency.service';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
-import { urgencyEdit, urgencyOptions } from './urgencies.model';
-import { injectEditUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';
-import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyFormValues, urgencyRecordVm } from './urgency-detail.model';
+import { urgencyOptions } from './urgencies.model';
+import { injectUrgencyLifecycleMutation } from './urgencies.mutations';
+import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyImageError, urgencyImageUrl, urgencyRecordVm } from './urgency-detail.model';
 import { injectDomainUrgencyQuery } from './urgencies.query';
-import { injectUrgencyIconDataUrl } from '../../core/urgency-icon.query';
+import { injectUrgencyIconDataUrlState } from '../../core/urgency-icon.query';
 import { UrgencyDetailView } from './urgency-detail-view';
 
 @Component({ selector: 'app-urgency-detail', changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,26 +28,28 @@ export class UrgencyDetail {
   private readonly all = injectDomainUrgenciesQuery();
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), { initialValue: null });
   private readonly query = injectDomainUrgencyQuery(() => this.key());
-  private readonly image = injectUrgencyIconDataUrl(() => {
+  private readonly image = injectUrgencyIconDataUrlState(() => {
     const u = this.query.data();
     return u?.icon ? { key: u.id, digest: u.icon.digest } : null;
   });
-  private readonly history = injectConfigHistoryQuery(RecordKind.URGENCY, () => this.query.data()?.id ?? null);
-  protected readonly editMutation = injectEditUrgencyMutation();
+  private readonly history = injectConfigHistoryQuery(URGENCY_RECORD_KIND, () => this.query.data()?.id ?? null);
+  private readonly urgencyService = injectUrgencyService();
+  private readonly editDraft = signal<UrgencyDraft>({ ...EMPTY_URGENCY_DRAFT });
+  protected readonly editForm = form(this.editDraft, urgencyEditRules);
   private readonly lifecycleMutation = injectUrgencyLifecycleMutation();
   protected readonly editOpen = signal(false);
-  protected readonly editRevision = signal<{ key: string; revision: number; shown: ConfigFormValues } | null>(null);
+  protected readonly editRevision = signal<EditBaseline<UrgencyDraft> | null>(null);
   protected readonly retireOpen = signal(false);
   protected readonly retireRevision = signal<{ key: string; revision: number; openChunks: number } | null>(null);
-  protected readonly editError = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly destination = signal('');
   protected readonly vm = computed(() => urgencyRecordVm(this.query.data()));
-  protected readonly shown = computed(() => urgencyFormValues(this.query.data(), this.image()));
+  protected readonly shown = computed(() => toDraft(this.query.data(), urgencyImageUrl(this.image())));
   protected readonly actions = computed(() => urgencyActions(
     this.viewport.mode(), hasPermission(this.me.data(), 'config:edit'), hasPermission(this.me.data(), 'chunk:control'),
     this.query.data(), this.shown(),
   ));
+  protected readonly imageError = computed(() => urgencyImageError(this.query.data(), this.actions(), this.image()));
   protected readonly destinations = computed(() => urgencyDestinations(this.all.data() ?? [], this.query.data()?.id));
   protected readonly destinationOptions = computed(() => urgencyOptions(this.destinations()));
   protected readonly busy = computed(() => this.lifecycleMutation.isPending());
@@ -57,16 +63,13 @@ export class UrgencyDetail {
   protected onEdit(): void {
     const record = this.query.data(); const shown = this.shown();
     if (!record || !shown || !this.actions()?.edit) return;
-    this.editRevision.set({ key: record.id, revision: record.revision, shown });
-    this.editError.set(null); this.editOpen.set(true);
+    this.editRevision.set(toEditBaseline(record, shown));
+    this.editForm().reset({ ...shown }); this.editOpen.set(true);
   }
-  protected onSave(values: ConfigFormValues): void {
-    const record = this.query.data(); const snapshot = this.editRevision();
-    if (!record || !snapshot || snapshot.key !== record.id || !this.actions()?.edit) return;
-    this.editError.set(null);
-    this.editMutation.mutate({ key: record.id, revision: snapshot.revision, body: urgencyEdit(snapshot.shown, values) }, {
-      onSuccess: () => this.editOpen.set(false), onError: (e) => this.editError.set(errorMessage(e, 'Save failed.')),
-    });
+  protected async onSave(): Promise<void> {
+    const record = this.query.data(); const baseline = this.editRevision();
+    if (!record || !baseline || baseline.id !== record.id || !this.actions()) return;
+    if (await submitForm(this.editForm, (draft) => this.urgencyService.edit(baseline, draft))) this.editOpen.set(false);
   }
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.query.data(); const actions = this.actions();

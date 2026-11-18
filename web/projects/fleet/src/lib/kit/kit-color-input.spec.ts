@@ -14,12 +14,14 @@ import { KitColorInput } from './kit-color-input';
     [value]="value()"
     [disabled]="disabled()"
     (valueChange)="committed.push($event)"
+    (invalidChange)="invalid.push($event)"
   />`,
 })
 class TestHost {
   readonly value = signal('#14b8a6');
   readonly disabled = signal(false);
   readonly committed: string[] = [];
+  readonly invalid: boolean[] = [];
 }
 
 function render() {
@@ -78,6 +80,18 @@ describe('KitColorInput', () => {
     type(text, '#abcdef');
     fixture.detectChanges();
     expect(host.committed).toEqual(['#abcdef']);
+    expect(text.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('reports uncommitted malformed and cleared input until a valid color is chosen', () => {
+    const { fixture, host, text, picker } = render();
+    type(text, 'bad'); fixture.detectChanges();
+    expect(host.invalid.at(-1)).toBe(true);
+    type(text, ''); fixture.detectChanges();
+    expect(host.invalid.at(-1)).toBe(true);
+    expect(text.getAttribute('aria-invalid')).toBe('true');
+    type(picker, '#abcdef'); fixture.detectChanges();
+    expect(host.invalid.at(-1)).toBe(false);
     expect(text.getAttribute('aria-invalid')).toBeNull();
   });
 

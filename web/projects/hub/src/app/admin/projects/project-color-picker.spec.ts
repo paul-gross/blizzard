@@ -73,6 +73,20 @@ describe('ProjectColorPicker', () => {
     expect(chosen).toEqual(['#ff8800']);
   });
 
+  it('reports an uncommitted color and clears the block when a palette color is chosen', async () => {
+    const fixture = await mount();
+    const root: HTMLElement = fixture.nativeElement;
+    const invalid: boolean[] = [];
+    fixture.componentInstance.invalidChange.subscribe((value) => invalid.push(value));
+    root.querySelector<HTMLButtonElement>('[data-testid="project-color-custom"]')!.click();
+    await fixture.whenStable();
+    const input = root.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')!;
+    input.value = 'bad'; input.dispatchEvent(new Event('input'));
+    expect(invalid.at(-1)).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-testid="project-color-pink"]')!.click();
+    expect(invalid.at(-1)).toBe(false);
+  });
+
   it('hides the input again when a palette chip is chosen', async () => {
     const fixture = await mount();
     const root: HTMLElement = fixture.nativeElement;

@@ -27,5 +27,6 @@
     [disabled]="disabled()"
     testid="project-color-custom-input"
     (valueChange)="choose.emit($event)"
+    (invalidChange)="invalidChange.emit($event)"
   />
 }

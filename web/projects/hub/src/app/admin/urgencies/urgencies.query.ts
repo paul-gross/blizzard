@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { getUrgencyApiUrgenciesKeyGet, type UrgencyView } from 'fleet';
 import { URGENCIES_POLL_MS } from '../../core/urgencies.query';
+import { fromSettingsView } from './urgency.translate';
 import { fromUrgencyView } from '../../core/urgency.translate';
 
 function urgencyQueryOptions(value: string | null) {
@@ -29,6 +30,7 @@ import { hubConfigRecordKey } from '../../core/query-keys';
 export function injectSettingsQuery() {
   return injectQuery(() => ({
     queryKey: ['hub', 'config', 'settings'],
+    select: fromSettingsView,
     refetchInterval: URGENCIES_POLL_MS, refetchOnWindowFocus: true, refetchOnReconnect: true,
     queryFn: async (): Promise<SettingsView> => {
       const { data, error } = await getSettingsApiSettingsGet({ throwOnError: false });

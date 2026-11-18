@@ -6,52 +6,17 @@ export function visibleUrgencies(records: readonly Urgency[], filter: LifecycleF
   return filterByLifecycle(records, filter);
 }
 
-import { ProjectColor, type UrgencyCreateRequest, type UrgencyPatchRequest, type UrgencyPositionRequest } from 'fleet';
+import type { UrgencyMove } from './urgency.domain';
 import { movedItem } from '../../core/array-move';
-import { type ConfigFieldDef, type ConfigFormValues, markIsImage } from '../config-edit.model';
 import { urgencyOptions as buildUrgencyOptions } from '../../core/urgency-options.model';
 
-export const URGENCY_FIELDS: readonly ConfigFieldDef[] = [
-  { key: 'slug', label: 'Slug', kind: 'text', required: true, createOnly: true },
-  { key: 'name', label: 'Name', kind: 'text', required: true },
-  { key: 'color', label: 'Color', kind: 'color', options: Object.values(ProjectColor).map((value) => ({ value, label: value })) },
-  { key: 'mark', label: 'Mark', kind: 'mark' },
-];
-
-function text(values: ConfigFormValues, key: string): string {
-  const value = values[key];
-  return typeof value === 'string' ? value.trim() : '';
-}
-function icon(value: string): { media_type: string; data: string } {
-  const [header, data] = value.split(',');
-  return { media_type: header.slice(5, header.indexOf(';')), data };
-}
-export function urgencyCreate(values: ConfigFormValues): UrgencyCreateRequest {
-  const mark = text(values, 'mark');
-  const color = text(values, 'color');
-  return { slug: text(values, 'slug'), name: text(values, 'name'), ...(color ? { color } : {}),
-    ...(mark ? markIsImage(mark) ? { icon: icon(mark) } : { emoji: mark } : {}) };
-}
-export function urgencyEdit(shown: ConfigFormValues, values: ConfigFormValues): UrgencyPatchRequest {
-  const body: UrgencyPatchRequest = {};
-  for (const key of ['name', 'color'] as const) {
-    if (text(shown, key) !== text(values, key)) body[key] = text(values, key);
-  }
-  const before = text(shown, 'mark');
-  const mark = text(values, 'mark');
-  if (before !== mark) {
-    body.emoji = mark && !markIsImage(mark) ? mark : null;
-    body.icon = mark && markIsImage(mark) ? icon(mark) : null;
-  }
-  return body;
-}
-export function urgencyPosition(rows: readonly Urgency[], from: number, to: number): UrgencyPositionRequest | null {
+export function urgencyPosition(rows: readonly Urgency[], from: number, to: number): UrgencyMove | null {
   if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return null;
   const ordered = movedItem(rows, from, to);
   return { urgency: ordered[to].id, after: to === 0 ? null : ordered[to - 1].id };
 }
 
-export function overlayUrgencies(records: readonly Urgency[], moves: readonly UrgencyPositionRequest[], defaults: readonly { key: string }[]): readonly Urgency[] {
+export function overlayUrgencies(records: readonly Urgency[], moves: readonly UrgencyMove[], defaults: readonly { key: string }[]): readonly Urgency[] {
   let rows = [...records];
   for (const move of moves) {
     const item = rows.find((row) => row.id === move.urgency);

@@ -135,7 +135,7 @@ async function render() {
   const entry = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 2, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: { urgency_id: 'urgent', slug: 'urgent' } };
   const blocked = { ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked', prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 2 };
   queryClient.setQueryData([...hubRunnerNextClaimKey, ROW.runner_id], { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 });
-  queryClient.setQueryData(hubUrgenciesKey, [{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false }]);
+  queryClient.setQueryData(hubUrgenciesKey, [{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1, revision: 1, open_chunks: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'operator' }]);
   queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
   await TestBed.configureTestingModule({
     imports: [HostDetail],

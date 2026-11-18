@@ -7,6 +7,7 @@ import {
   linkedSignal,
   model,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
 import type { FormValueControl } from '@angular/forms/signals';
@@ -41,6 +42,10 @@ export class KitColorInput implements FormValueControl<string> {
   /** Emits when focus leaves both inputs, so a bound field becomes touched. */
   readonly touch = output<void>();
 
+  /** Whether typed text has not committed a valid color. */
+  readonly invalidChange = output<boolean>();
+  private readonly typed = signal(false);
+
   private readonly text = viewChild<ElementRef<HTMLInputElement>>('text');
 
   /** Focuses the hex text field. */
@@ -60,7 +65,7 @@ export class KitColorInput implements FormValueControl<string> {
   );
 
   protected readonly malformed = computed(
-    () => this.draft() !== '' && !isHexColor(this.draft()),
+    () => this.typed() && !isHexColor(this.draft()),
   );
 
   /** The native picker needs a valid value of its own; it rests on black until a color is chosen. */
@@ -70,13 +75,17 @@ export class KitColorInput implements FormValueControl<string> {
 
   protected onText(event: Event): void {
     const text = (event.target as HTMLInputElement).value.trim();
+    this.typed.set(true);
     this.draft.set(text);
+    this.invalidChange.emit(!isHexColor(text));
     this.commit(text);
   }
 
   protected onPick(event: Event): void {
     const picked = (event.target as HTMLInputElement).value;
+    this.typed.set(false);
     this.draft.set(picked);
+    this.invalidChange.emit(false);
     this.commit(picked);
   }
 

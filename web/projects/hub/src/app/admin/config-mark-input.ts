@@ -21,6 +21,8 @@ export class ConfigMarkInput implements FormValueControl<string> {
   readonly disabled = input(false);
   readonly ariaLabel = input('Mark');
   readonly testid = input.required<string>();
+  readonly maxImageBytes = input<number | undefined>();
+  readonly invalidChange = output<boolean>();
 
   /** Whether a file is being read. */
   readonly reading = output<boolean>();
@@ -32,6 +34,7 @@ export class ConfigMarkInput implements FormValueControl<string> {
   protected onText(text: string): void {
     this.settle();
     this.error.set(null);
+    this.invalidChange.emit(false);
     this.value.set(text);
   }
 
@@ -43,9 +46,17 @@ export class ConfigMarkInput implements FormValueControl<string> {
     const read = this.settle();
     if (file.type !== 'image/png' && file.type !== 'image/webp') {
       this.error.set('Choose a PNG or WebP image.');
+      this.invalidChange.emit(true);
+      return;
+    }
+    const max = this.maxImageBytes();
+    if (max !== undefined && file.size > max) {
+      this.error.set(`Image must be at most ${max} bytes.`);
+      this.invalidChange.emit(true);
       return;
     }
     this.error.set(null);
+    this.invalidChange.emit(false);
     this.reading.emit(true);
     const reader = new FileReader();
     reader.onload = () => {
@@ -58,6 +69,7 @@ export class ConfigMarkInput implements FormValueControl<string> {
       if (read === this.read) {
         this.reading.emit(false);
         this.error.set('Could not read the image.');
+        this.invalidChange.emit(true);
       }
     };
     reader.readAsDataURL(file);

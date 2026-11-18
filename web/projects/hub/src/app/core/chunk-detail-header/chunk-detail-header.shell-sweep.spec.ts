@@ -84,8 +84,8 @@ async function renderHeader(
   fixture.componentRef.setInput('control', {
     ...chunkControlStub(),
     urgency: { values: signal([
-      { urgency_id: 'normal', slug: 'normal', name: 'Normal', default: true, retired: false, place: 1, color: 'blue', emoji: null, icon: null },
-      { urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 2, color: 'red', emoji: '🔥', icon: null },
+      { id: 'normal', slug: 'normal', name: 'Normal', default: true, retired: false, place: 1, color: 'blue', emoji: null, icon: null },
+      { id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 2, color: 'red', emoji: '🔥', icon: null },
     ]), pending: () => null, set: vi.fn() },
   });
   fixture.componentRef.setInput('runnerHosts', runnerHosts);

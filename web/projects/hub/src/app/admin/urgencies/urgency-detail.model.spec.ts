@@ -1,5 +1,6 @@
 import type { Urgency } from 'fleet';
-import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyFormValues, urgencyRecordVm } from './urgency-detail.model';
+import { toDraft as urgencyFormValues } from './urgency.translate';
+import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyRecordVm } from './urgency-detail.model';
 
 const urgency: Urgency = {
   id: 'u', slug: 'soon', name: 'Soon', color: 'red', emoji: '🔥', icon: null,
@@ -26,13 +27,13 @@ describe('urgency detail model', () => {
     expect(urgencyFormValues({ ...urgency, emoji: null }, null)?.['mark']).toBe('');
   });
   it('gates actions by viewport and permissions, default, in-use and image readiness', () => {
-    expect(urgencyActions('mobile', true, true, urgency, {})).toBeNull();
-    expect(urgencyActions('desktop', false, true, urgency, {})).toBeNull();
-    expect(urgencyActions('desktop', true, true, undefined, {})).toBeNull();
+    expect(urgencyActions('mobile', true, true, urgency, { slug: "", name: "", color: "", mark: "" })).toBeNull();
+    expect(urgencyActions('desktop', false, true, urgency, { slug: "", name: "", color: "", mark: "" })).toBeNull();
+    expect(urgencyActions('desktop', true, true, undefined, { slug: "", name: "", color: "", mark: "" })).toBeNull();
     expect(urgencyActions('desktop', true, false, urgency, null)).toMatchObject({ edit: false, lifecycle: 'retire', retireBlocked: 'Moving open chunks requires chunk control.' });
-    expect(urgencyActions('desktop', true, true, { ...urgency, default: true }, {})).toMatchObject({ edit: true, retireBlocked: 'Choose another default before retiring this urgency.' });
-    expect(urgencyActions('desktop', true, true, { ...urgency, retired: true, openChunks: 0 }, {})).toMatchObject({ edit: true, lifecycle: 'enable', retireBlocked: null });
-    expect(urgencyActions('desktop', true, false, { ...urgency, openChunks: 0 }, {})?.retireBlocked).toBeNull();
+    expect(urgencyActions('desktop', true, true, { ...urgency, default: true }, { slug: "", name: "", color: "", mark: "" })).toMatchObject({ edit: true, retireBlocked: 'Choose another default before retiring this urgency.' });
+    expect(urgencyActions('desktop', true, true, { ...urgency, retired: true, openChunks: 0 }, { slug: "", name: "", color: "", mark: "" })).toMatchObject({ edit: true, lifecycle: 'enable', retireBlocked: null });
+    expect(urgencyActions('desktop', true, false, { ...urgency, openChunks: 0 }, { slug: "", name: "", color: "", mark: "" })?.retireBlocked).toBeNull();
   });
   it('offers only other live destinations in their original order', () => {
     const other = { ...urgency, id: 'other' };

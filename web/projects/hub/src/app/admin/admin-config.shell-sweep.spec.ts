@@ -3,6 +3,8 @@ import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import type { Urgency } from 'fleet';
 
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';
@@ -13,6 +15,9 @@ import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
 import { SECRET_CREATE_FIELD_VIEWS } from './secrets/secrets.model';
 import { secretCreateRules } from './secrets/secret.form';
 import type { SecretCreateDraft } from './secrets/secret.domain';
+import { UrgenciesList } from './urgencies/urgencies-list';
+import { UrgencyDetailView } from './urgencies/urgency-detail-view';
+import { urgencyRecordVm } from './urgencies/urgency-detail.model';
 
 /**
  * The Admin config surfaces' real-render proof (the tooled half of
@@ -55,6 +60,46 @@ const REVISIONS: readonly RevisionRowVm[] = ['create', 'retire', 'enable'].map((
   actor: 'a-very-long-actor-name-that-must-wrap-without-squeezing-the-description',
   door: 'cli',
 }));
+const URGENCY: Urgency = {
+  id: 'u1', slug: LONG_NAME, name: LONG_NAME, color: 'red', emoji: '🔥', icon: null,
+  retired: false, default: false, revision: 2, openChunks: 3, place: 0, createdAt: '', createdBy: 'operator',
+};
+
+async function mountUrgenciesList() {
+  await TestBed.configureTestingModule({
+    imports: [UrgenciesList],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(UrgenciesList);
+  fixture.componentRef.setInput('canEdit', false);
+  fixture.componentRef.setInput('mobile', true);
+  fixture.componentRef.setInput('pending', false);
+  fixture.componentRef.setInput('settingsReady', true);
+  fixture.componentRef.setInput('defaultOptions', []);
+  fixture.componentRef.setInput('lifecycle', 'active');
+  fixture.componentRef.setInput('state', 'ready');
+  fixture.componentRef.setInput('rows', [URGENCY, { ...URGENCY, id: 'u2', emoji: null, slug: 'unmarked' }]);
+  await fixture.whenStable();
+  return fixture;
+}
+
+async function mountUrgencyDetail(retired: boolean) {
+  await TestBed.configureTestingModule({
+    imports: [UrgencyDetailView],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(UrgencyDetailView);
+  const record = { ...URGENCY, retired };
+  fixture.componentRef.setInput('vm', urgencyRecordVm(record));
+  fixture.componentRef.setInput('record', record);
+  fixture.componentRef.setInput('state', 'ready');
+  fixture.componentRef.setInput('changesState', 'ready');
+  fixture.componentRef.setInput('mobile', true);
+  fixture.componentRef.setInput('cli', `blizzard hub urgency edit ${record.slug}`);
+  fixture.componentRef.setInput('destinationOptions', []);
+  await fixture.whenStable();
+  return fixture;
+}
 
 async function mountPanel(write: boolean) {
   await TestBed.configureTestingModule({
@@ -172,6 +217,47 @@ function expectNoOverflow(root: HTMLElement, id: string, width: number) {
 }
 
 describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
+  it.each([390, 320])('urgency list at %ipx: marks, labels and CLI guidance without write controls or overflow', async (width) => {
+    await sweep(width, (root) => {
+      expect(has(root, 'admin-urgencies-new')).toBe(false);
+      expect(has(root, 'admin-urgencies-default')).toBe(false);
+      expect(root.querySelector('.drag-handle')).toBeNull();
+      const hints = root.querySelector<HTMLElement>('[data-testid="admin-urgencies-cli"]')!;
+      for (const command of ['urgency create', 'settings edit --default-urgency', 'urgency position']) {
+        expect(hints.textContent).toContain(`blizzard hub ${command}`);
+      }
+      const rows = root.querySelectorAll<HTMLElement>('.urgency-item');
+      expect(rows.length).toBe(2);
+      expect(rows[0].textContent).toContain('🔥');
+      expect(rows[0].textContent).toContain(LONG_NAME);
+      expect(rows[1].querySelector('.pill .name')?.textContent).toContain(LONG_NAME);
+      for (const el of [root, hints, ...rows]) {
+        expect(el.scrollWidth, `${el.tagName}.${el.className} overflows at ${width}px`).toBeLessThanOrEqual(el.clientWidth);
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    }, mountUrgenciesList);
+  });
+
+  it.each([390, 320])('urgency detail at %ipx: active and retired CLI guidance without write controls or overflow', async (width) => {
+    for (const retired of [false, true]) {
+      await sweep(width, (root) => {
+        for (const action of ['edit', 'replace', 'retire', 'enable']) expect(has(root, `admin-urgency-${action}`)).toBe(false);
+        const hints = root.querySelector<HTMLElement>('[data-testid="admin-urgency-cli-actions"]')!;
+        expect(hints.textContent).toContain(`blizzard hub urgency edit ${LONG_NAME}`);
+        expect(hints.textContent).toContain(`blizzard hub urgency ${retired ? 'enable' : 'retire'} ${LONG_NAME}`);
+        if (!retired) {
+          expect(hints.textContent).toContain('--move-to <slug>');
+          expect(hints.textContent).toContain('blizzard hub settings edit --default-urgency');
+          expect(hints.textContent).toContain('blizzard hub urgency position');
+        }
+        expectNoOverflow(root, 'admin-urgency-detail', width);
+        expectNoOverflow(root, 'admin-urgency-cli-actions', width);
+        expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+      }, () => mountUrgencyDetail(retired));
+      TestBed.resetTestingModule();
+    }
+  });
   it.each([1280, 390, 320])('forge picker at %ipx: usable without horizontal overflow', async (width) => {
     await sweep(width, async (root) => {
       const trigger = root.querySelector<HTMLButtonElement>('[data-testid="forge-form-field-forge"]')!;

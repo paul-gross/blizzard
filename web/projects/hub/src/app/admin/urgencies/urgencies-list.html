@@ -26,7 +26,6 @@
     </div>
     </fleet-kit-async-state>
 @if (createOpen() && canEdit()) {
-  <app-config-form-dialog heading="New urgency" mode="create" [fields]="fields" submitLabel="Create"
-    [submitError]="createError()" [submitting]="createPending()" testidPrefix="admin-urgencies-create"
-    (closed)="closeCreate.emit()" (submitted)="submitCreate.emit($event)" />
+  <app-config-field-tree-dialog heading="New urgency" mode="create" [fields]="fields" [form]="createForm()" submitLabel="Create" testidPrefix="admin-urgencies-create"
+    (closed)="closeCreate.emit()" (save)="submitCreate.emit()" />
 }

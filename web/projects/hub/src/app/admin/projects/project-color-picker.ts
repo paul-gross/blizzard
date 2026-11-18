@@ -24,6 +24,7 @@ export class ProjectColorPicker {
   readonly disabled = input(false);
 
   readonly choose = output<string>();
+  readonly invalidChange = output<boolean>();
 
   /** Whether the person opened the custom input on a palette color; a custom current color opens it on its own. */
   protected readonly customRequested = signal(false);
@@ -48,6 +49,7 @@ export class ProjectColorPicker {
 
   protected onPalette(color: string): void {
     this.customRequested.set(false);
+    this.invalidChange.emit(false);
     this.choose.emit(color);
   }
 }

@@ -1,6 +1,7 @@
 <app-config-record-panel [vm]="vm()" [state]="state()" [lastChange]="lastChange()" [revisions]="changes()"
   [revisionsState]="changesState()" [cliCommand]="cli()" [actions]="actions()" [busy]="busy()" [actionError]="actionError()"
   (edit)="edit.emit()" (lifecycle)="lifecycle.emit($event)" emptyText="Pick an urgency." testidPrefix="admin-urgency" />
+@if (imageError(); as error) { <fleet-kit-error-line [message]="error" testid="admin-urgency-image-error" /> }
 @if (mobile() && record(); as urgency) {
   <section class="urgency-cli-hints" data-testid="admin-urgency-cli-actions">
     <p>Edit: <code>blizzard hub urgency edit {{ urgency.slug }} --name "New name"</code></p>
@@ -13,10 +14,9 @@
     }
   </section>
 }
-@if (editOpen() && actions()?.edit && editInitial(); as initial) {
-  <app-config-form-dialog heading="Edit urgency" mode="edit" [fields]="fields" [initial]="initial" submitLabel="Save"
-    [submitError]="editError()" [submitting]="editPending()" testidPrefix="admin-urgency-edit"
-    (closed)="closeEdit.emit()" (submitted)="save.emit($event)" />
+@if (editOpen() && actions() && editBaseline(); as baseline) {
+  <app-config-field-tree-dialog heading="Edit urgency" mode="edit" [fields]="fields" [form]="editForm()" [baseline]="baseline" submitLabel="Save" testidPrefix="admin-urgency-edit"
+    (closed)="closeEdit.emit()" (save)="save.emit()" />
 }
 @if (retireSnapshot(); as snapshot) {
   <fleet-kit-dialog [open]="true" ariaLabel="Retire urgency" testid="admin-urgency-retire-dialog" (closed)="!busy() && closeRetire.emit()">

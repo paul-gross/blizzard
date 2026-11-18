@@ -26,6 +26,8 @@ interface FieldViewBase<D> {
   readonly label: string;
   /** Whether a create is the only place it can be set. */
   readonly createOnly?: boolean;
+  /** Maximum decoded image bytes for a mark upload. */
+  readonly maxImageBytes?: number;
   /** Choices for a select or color field. */
   readonly options?: readonly ConfigFieldOption[];
   /** A choice is offered only when its kind matches this other field's current value. */

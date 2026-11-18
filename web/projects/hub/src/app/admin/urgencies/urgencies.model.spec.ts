@@ -13,7 +13,8 @@ describe('visibleUrgencies', () => {
   });
 });
 
-import { urgencyCreate, urgencyEdit, urgencyPosition } from './urgencies.model';
+import { urgencyPosition } from './urgencies.model';
+import { toCreateRequest as urgencyCreate, toEditRequest as urgencyEdit } from './urgency.translate';
 
 describe('urgency writes', () => {
   const image = 'data:image/png;base64,YWJj';
