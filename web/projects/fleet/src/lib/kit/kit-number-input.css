@@ -1,0 +1,28 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ctl {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+}
+.ctl:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+.ctl:disabled {
+  opacity: 0.5;
+}
+.unit {
+  font-size: var(--fs-sm);
+  color: var(--label-dim);
+}

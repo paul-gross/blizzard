@@ -1,0 +1,17 @@
+<input
+  #native
+  class="ctl"
+  type="text"
+  inputmode="numeric"
+  [attr.placeholder]="placeholder()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-labelledby]="ariaLabel() ? null : (fieldLabel?.labelId ?? null)"
+  [attr.data-testid]="testid()"
+  [value]="value()"
+  [disabled]="disabled()"
+  (blur)="touch.emit()"
+  (input)="onInput($event)"
+/>
+@if (unit(); as text) {
+<span class="unit">{{ text }}</span>
+}

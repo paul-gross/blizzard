@@ -1,0 +1,23 @@
+<form class="form" novalidate (submit)="onSubmit($event)">
+  <div class="stack">
+    <ng-content />
+  </div>
+  @for (message of messages(); track $index) {
+  <fleet-kit-error-line [message]="message" testid="kit-form-line" />
+  }
+  <div class="actions">
+    <fleet-kit-button
+      type="submit"
+      variant="primary"
+      [disabled]="submitting()"
+      testid="kit-form-save"
+      >{{ saveLabel() }}</fleet-kit-button
+    >
+    <fleet-kit-button
+      type="button"
+      (click)="cancelled.emit()"
+      testid="kit-form-cancel"
+      >{{ cancelLabel() }}</fleet-kit-button
+    >
+  </div>
+</form>

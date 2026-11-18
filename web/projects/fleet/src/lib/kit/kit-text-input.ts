@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  inject,
   booleanAttribute,
   input,
   model,
@@ -9,6 +10,8 @@ import {
   viewChild,
 } from '@angular/core';
 import type { FormValueControl } from '@angular/forms/signals';
+
+import { KIT_FIELD_LABEL } from './kit-field-label';
 
 /**
  * The text-control chrome — the font, background, border, and
@@ -56,7 +59,10 @@ export class KitTextInput implements FormValueControl<string> {
   /** Emits on native blur, so a bound field becomes touched. */
   readonly touch = output<void>();
 
-  private readonly native = viewChild<ElementRef<HTMLInputElement | HTMLTextAreaElement>>('native');
+  protected readonly fieldLabel = inject(KIT_FIELD_LABEL, { optional: true });
+
+  private readonly native =
+    viewChild<ElementRef<HTMLInputElement | HTMLTextAreaElement>>('native');
 
   /** Focuses whichever native element renders — the `<textarea>` when `multiline`. */
   focus(options?: FocusOptions): void {
@@ -64,6 +70,8 @@ export class KitTextInput implements FormValueControl<string> {
   }
 
   protected onInput(event: Event): void {
-    this.value.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
+    this.value.set(
+      (event.target as HTMLInputElement | HTMLTextAreaElement).value,
+    );
   }
 }

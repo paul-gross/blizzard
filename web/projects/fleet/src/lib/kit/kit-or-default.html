@@ -1,0 +1,8 @@
+<div class="control"><ng-content /></div>
+<fleet-kit-chip
+  [selected]="checked()"
+  [disabled]="disabled()"
+  testid="kit-or-default-chip"
+  (click)="toggle()"
+  >{{ defaultLabel() }}</fleet-kit-chip
+>

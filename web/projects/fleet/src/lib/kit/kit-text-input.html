@@ -1,29 +1,31 @@
 @if (multiline()) {
-  <textarea
-    #native
-    class="ctl"
-    [class.masked]="type() === 'password'"
-    [rows]="rows()"
-    [attr.placeholder]="placeholder()"
-    [attr.aria-label]="ariaLabel()"
-    [attr.data-testid]="testid()"
-    [value]="value()"
-    [disabled]="disabled()"
-    (blur)="touch.emit()"
-    (input)="onInput($event)"
-  ></textarea>
+<textarea
+  #native
+  class="ctl"
+  [class.masked]="type() === 'password'"
+  [rows]="rows()"
+  [attr.placeholder]="placeholder()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-labelledby]="ariaLabel() ? null : (fieldLabel?.labelId ?? null)"
+  [attr.data-testid]="testid()"
+  [value]="value()"
+  [disabled]="disabled()"
+  (blur)="touch.emit()"
+  (input)="onInput($event)"
+></textarea>
 } @else {
-  <input
-    #native
-    class="ctl"
-    [type]="type()"
-    [attr.inputmode]="type() === 'number' ? 'numeric' : null"
-    [attr.placeholder]="placeholder()"
-    [attr.aria-label]="ariaLabel()"
-    [attr.data-testid]="testid()"
-    [value]="value()"
-    [disabled]="disabled()"
-    (blur)="touch.emit()"
-    (input)="onInput($event)"
-  />
+<input
+  #native
+  class="ctl"
+  [type]="type()"
+  [attr.inputmode]="type() === 'number' ? 'numeric' : null"
+  [attr.placeholder]="placeholder()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-labelledby]="ariaLabel() ? null : (fieldLabel?.labelId ?? null)"
+  [attr.data-testid]="testid()"
+  [value]="value()"
+  [disabled]="disabled()"
+  (blur)="touch.emit()"
+  (input)="onInput($event)"
+/>
 }

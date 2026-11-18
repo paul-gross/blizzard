@@ -1,0 +1,19 @@
+<fleet-kit-form
+  [form]="f"
+  saveLabel="Save"
+  cancelLabel="Cancel"
+  (save)="submit()"
+>
+  <fleet-kit-field
+    label="Slug"
+    [field]="f.slug"
+    hint="Lowercase letters and dashes"
+  >
+    <fleet-kit-text-input [formField]="f.slug" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Park timeout" [field]="f.hours">
+    <fleet-kit-or-default [formField]="f.useDefault" defaultLabel="Default">
+      <fleet-kit-number-input [formField]="f.hours" unit="hours" />
+    </fleet-kit-or-default>
+  </fleet-kit-field>
+</fleet-kit-form>

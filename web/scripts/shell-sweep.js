@@ -187,6 +187,10 @@
  *   - projects/fleet/src/lib/kit/kit-option-group.shell-sweep.spec.ts — the radio
  *     option group is one native same-name radio group: real arrow keys move the
  *     check and the bound form value, and a disabled group cannot be focused.
+ *   - projects/fleet/src/lib/kit/kit-form-chrome.shell-sweep.spec.ts — the form
+ *     chrome: Tab walks the native controls in source order, Save on an invalid form
+ *     focuses the first field in error, a chosen default makes Tab skip the number
+ *     input, and long errors wrap within the form at 390px and 320px.
  *   - projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts — the
  *     shared confirmation dialog: its Cancel and confirm controls render together
  *     in the dialog footer and the real focus trap keeps keyboard focus inside the prompt.
@@ -391,6 +395,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/core/kit-swatch.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-option-group.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-form-chrome.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
