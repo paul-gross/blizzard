@@ -79,7 +79,7 @@ describe('CredentialsPage', () => {
   const options = () =>
     Array.from(
       document.querySelectorAll<HTMLElement>(
-        '[role="option"]:not(fleet-kit-select-row)',
+        '.cdk-overlay-pane [role="option"]:not(fleet-kit-select-row)',
       ),
     );
 

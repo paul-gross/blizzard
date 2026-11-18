@@ -94,6 +94,13 @@ test('test_graphs_diagram_renders_in_the_browser', async ({ api, page, wideViewp
   await page.setViewportSize(wideViewport);
   await page.goto('/graphs');
   await expect(page.getByTestId('graph-explorer')).toBeVisible();
+  // Retired is an independent toggle, not a member of a choice list.
+  const retired = page.getByTestId('graph-explorer-show-retired');
+  await expect(retired).toHaveAttribute('aria-pressed', 'false');
+  await retired.click();
+  await expect(retired).toHaveAttribute('aria-pressed', 'true');
+  await retired.click();
+  await expect(retired).toHaveAttribute('aria-pressed', 'false');
   const group = page.locator(`[data-testid="graph-explorer-group"][data-name="${graphName}"]`);
   await expect(group).toHaveCount(1);
 

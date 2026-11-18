@@ -21,13 +21,12 @@ const meta: Meta<KitChips> = {
   args: {
     options: OPTIONS,
     selectedValue: 'running',
-    action: false,
     disabled: false,
     choose: fn(),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-chips [options]="options" [selectedValue]="selectedValue" [action]="action" [disabled]="disabled" (choose)="choose($event)" />`,
+    template: `<fleet-kit-chips [options]="options" [selectedValue]="selectedValue" [disabled]="disabled" (choose)="choose($event)" />`,
   }),
 };
 export default meta;
@@ -36,7 +35,6 @@ type Story = StoryObj<KitChips>;
 
 export const Selection: Story = {};
 export const NoneSelected: Story = { args: { selectedValue: null } };
-export const ActionRow: Story = { args: { action: true, selectedValue: null } };
 export const RowDisabled: Story = { args: { disabled: true } };
 export const OneOptionDisabled: Story = {
   args: {

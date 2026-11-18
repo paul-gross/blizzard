@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { KitChip, KitSwatch } from 'fleet/shell';
+import { KitChip, KitChipGroup, KitChipOptionDirective, KitSwatch } from 'fleet/shell';
 
 import type { LensChoice } from './project-lens.model';
 
@@ -15,7 +15,7 @@ import type { LensChoice } from './project-lens.model';
 @Component({
   selector: 'app-project-lens-control',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip, KitSwatch],
+  imports: [KitChip, KitChipGroup, KitChipOptionDirective, KitChipGroup, KitChipOptionDirective, KitSwatch],
   templateUrl: './project-lens-control.html',
   styleUrl: './project-lens-control.css',
 })
@@ -29,7 +29,12 @@ export class ProjectLensControl {
   /** The slug of the chosen choice, `null` for All. */
   readonly choose = output<string | null>();
 
-  protected onChoose(choice: LensChoice): void {
-    if (choice.slug !== this.current()) this.choose.emit(choice.slug);
+  protected hasCurrent(): boolean {
+    return this.choices().some((choice) => choice.slug === this.current());
+  }
+
+  protected onChoose(value: unknown): void {
+    const choice = this.choices().find((item) => item.slug === value);
+    if (choice && choice.slug !== this.current()) this.choose.emit(choice.slug);
   }
 }

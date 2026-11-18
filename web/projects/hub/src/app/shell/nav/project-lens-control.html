@@ -1,12 +1,15 @@
-<div class="lens" role="group" aria-label="Project lens" data-testid="project-lens">
+<div class="lens" data-testid="project-lens">
   <span class="lens-label" aria-hidden="true">Project lens</span>
-  <div class="chips">
+  <div class="chips" fleetKitChipGroup orientation="horizontal" aria-label="Project lens"
+    [value]="current()" [hasSelection]="hasCurrent()" [selectionMode]="hasCurrent() ? 'follow' : 'explicit'"
+    (valueChange)="onChoose($event)">
     @for (choice of choices(); track choice.slug) {
       <fleet-kit-chip
-        [selected]="choice.slug === current()"
+        fleetKitChipOption
+        [value]="choice.slug"
+        [label]="choice.label"
         [title]="choice.slug ?? 'every project of the tenant'"
         [testid]="'project-lens-' + (choice.slug ?? 'all')"
-        (click)="onChoose(choice)"
         >@if (choice.color; as color) {
           <fleet-kit-swatch class="lens-swatch" [color]="color" />
         }{{ choice.label }}</fleet-kit-chip

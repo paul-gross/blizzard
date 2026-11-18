@@ -110,7 +110,7 @@ describe('project lens control sweep (web:shell-sweep)', () => {
         }
 
         const chosen = root.querySelector<HTMLElement>('[data-testid="project-lens-blizzard"]')!;
-        expect(chosen.getAttribute('aria-pressed'), `${label}: the lens's choice is not marked`).toBe('true');
+        expect(chosen.closest('fleet-kit-chip')?.getAttribute('aria-selected'), `${label}: the lens's choice is not marked`).toBe('true');
       }
     } finally {
       root.remove();

@@ -6,9 +6,13 @@
         <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
         @if (canAnswer()) {
           @if (q.options && q.options.length > 0) {
-            <fleet-kit-chips class="chips" [options]="questionOptions(q.options)" [action]="true"
-              [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
-              (choose)="submitAnswer(q.question_id, $event)" />
+            <div class="chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Answers for ' + q.question">
+              @for (option of q.options; track $index) {
+                <fleet-kit-chip fleetKitToolbarWidget data-testid="question-option"
+                  [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
+                  (invoked)="submitAnswer(q.question_id, option)">{{ option }}</fleet-kit-chip>
+              }
+            </div>
           }
           <div class="answer-row">
             <fleet-kit-text-input
@@ -89,8 +93,14 @@
             [value]="noteDraft()"
             (valueChange)="noteDraft.set($event)"
           />
-          <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d)" [action]="true"
-            [disabled]="resolvePending()" (choose)="resolve(d.decision_id, $event)" />
+          @if (d.choices && d.choices.length > 0) {
+            <div class="decision-chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Choices for gate ' + d.node_name">
+              @for (choice of d.choices; track $index) {
+                <fleet-kit-chip fleetKitToolbarWidget data-testid="decision-choice" [title]="choice.description"
+                  [disabled]="resolvePending()" (invoked)="resolve(d.decision_id, choice.name)">{{ choice.name }}@if (choice.would_override_red_checks) { · overrides red checks }</fleet-kit-chip>
+              }
+            </div>
+          }
         }
       </div>
     }

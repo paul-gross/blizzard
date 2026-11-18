@@ -25,7 +25,7 @@ describe('ProjectLensControl', () => {
     fixture.componentRef.setInput('current', current);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
+    const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`)?.closest<HTMLElement>('fleet-kit-chip');
     const chosen: (string | null)[] = [];
     fixture.componentInstance.choose.subscribe((slug) => chosen.push(slug));
     return { fixture, chip, chosen };
@@ -34,9 +34,15 @@ describe('ProjectLensControl', () => {
   it('renders every choice and marks the current one', async () => {
     const { chip } = await mount('blizzard');
 
-    expect(chip('all')?.getAttribute('aria-pressed')).toBe('false');
-    expect(chip('blizzard')?.getAttribute('aria-pressed')).toBe('true');
+    expect(chip('all')?.getAttribute('aria-selected')).toBe('false');
+    expect(chip('blizzard')?.getAttribute('aria-selected')).toBe('true');
     expect(chip('zeta')?.textContent).toContain('Zeta');
+  });
+
+  it('does not select All for an unknown current value', async () => {
+    const { chip } = await mount('missing');
+    expect(chip('all')?.getAttribute('aria-selected')).toBe('false');
+    expect(chip('blizzard')?.getAttribute('aria-selected')).toBe('false');
   });
 
   it('emits the chosen slug, and null for All', async () => {

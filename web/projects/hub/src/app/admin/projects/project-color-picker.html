@@ -1,19 +1,21 @@
-<div class="colors" role="group" [attr.aria-label]="ariaLabel()" data-testid="project-color-picker">
+<div class="colors" fleetKitChipGroup orientation="horizontal" selectionMode="follow" [value]="selectedColor()" [disabled]="disabled()" (valueChange)="selectionChanged($event)" [attr.aria-label]="ariaLabel()" data-testid="project-color-picker">
   @for (color of colors(); track color) {
     <fleet-kit-chip
-      [selected]="color === current()"
+      fleetKitChipOption
+      [value]="color"
+      [label]="color"
       [disabled]="disabled()"
       [testid]="'project-color-' + color"
-      (click)="onPalette(color)"
     >
       <fleet-kit-swatch class="chip-swatch" [color]="color" />{{ color }}
     </fleet-kit-chip>
   }
   <fleet-kit-chip
-    [selected]="isCustom()"
+    fleetKitChipOption
+    [value]="null"
+    label="Custom"
     [disabled]="disabled()"
     testid="project-color-custom"
-    (click)="customRequested.set(true)"
   >
     Custom
   </fleet-kit-chip>

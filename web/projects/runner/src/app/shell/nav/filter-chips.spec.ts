@@ -39,7 +39,7 @@ async function render() {
   const fixture = TestBed.createComponent(TestHost);
   await fixture.whenStable();
   const el = fixture.nativeElement as HTMLElement;
-  const chip = (value: string) => el.querySelector<HTMLButtonElement>(`[data-testid="runner-filter-${value}"]`)!;
+  const chip = (value: string) => el.querySelector<HTMLElement>(`[data-testid="runner-filter-${value}"]`)!.closest<HTMLElement>('fleet-kit-chip')!;
   // The control hears the chip host's click — dispatched there so a disabled button's own
   // suppression of the event never masks the control's guard.
   const click = async (value: string) => {
@@ -52,25 +52,33 @@ async function render() {
 describe('FilterChips', () => {
   it('names its group by the label and renders a chip per choice, All keyed as all', async () => {
     const { el } = await render();
-    const group = el.querySelector('[data-testid="runner-filter"]');
+    const group = el.querySelector('[role="listbox"]');
 
-    expect(group?.getAttribute('role')).toBe('group');
+    expect(group?.getAttribute('role')).toBe('listbox');
     expect(group?.getAttribute('aria-label')).toBe('Runner');
     expect(
-      Array.from(el.querySelectorAll('button')).map((button) => button.getAttribute('data-testid')),
+      Array.from(el.querySelectorAll('fleet-kit-chip')).map((button) => button.querySelector('[data-testid]')?.getAttribute('data-testid')),
     ).toEqual(['runner-filter-all', 'runner-filter-r1', 'runner-filter-r2', 'runner-filter-r3', 'runner-filter-r4']);
   });
 
   it('selects the current choice, and only it', async () => {
     const { fixture, chip } = await render();
-    expect(chip('all').getAttribute('aria-pressed')).toBe('true');
-    expect(chip('r1').getAttribute('aria-pressed')).toBe('false');
+    expect(chip('all').getAttribute('aria-selected')).toBe('true');
+    expect(chip('r1').getAttribute('aria-selected')).toBe('false');
 
     fixture.componentInstance.current.set('r1');
     await fixture.whenStable();
 
-    expect(chip('all').getAttribute('aria-pressed')).toBe('false');
-    expect(chip('r1').getAttribute('aria-pressed')).toBe('true');
+    expect(chip('all').getAttribute('aria-selected')).toBe('false');
+    expect(chip('r1').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('leaves every option unselected when the current value is absent', async () => {
+    const { fixture, chip } = await render();
+    fixture.componentInstance.current.set('missing');
+    await fixture.whenStable();
+    expect(chip('all').getAttribute('aria-selected')).toBe('false');
+    expect(chip('r1').getAttribute('aria-selected')).toBe('false');
   });
 
   it('emits the chosen value, null for All', async () => {
@@ -95,7 +103,7 @@ describe('FilterChips', () => {
   it('offers a disabled choice disabled, and emits nothing for it', async () => {
     const { fixture, chip, click } = await render();
 
-    expect(chip('r4').disabled).toBe(true);
+    expect(chip('r4').getAttribute('aria-disabled')).toBe('true');
     await click('r4');
 
     expect(fixture.componentInstance.chosen).toEqual([]);
@@ -108,7 +116,7 @@ describe('FilterChips', () => {
     expect(paused?.getAttribute('data-glyph')).toBe('pause');
     expect(paused?.getAttribute('title')).toBe('r2 · paused: usage limit');
     expect(chip('r2').textContent?.trim()).toBe('r2');
-    expect(chip('r2').getAttribute('title')).toBe('r2 · paused: usage limit');
+    expect(chip('r2').querySelector('[title]')?.getAttribute('title')).toBe('r2 · paused: usage limit');
 
     expect(chip('r3').querySelector('[data-testid="runner-brake"]')?.getAttribute('data-glyph')).toBe('stop');
     expect(chip('r1').querySelector('[data-testid="runner-brake"]')).toBeNull();

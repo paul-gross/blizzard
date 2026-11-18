@@ -72,7 +72,7 @@ describe('PanelFiltersBar', () => {
     const fixture = TestBed.createComponent(PanelFiltersBar);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const chip = (testid: string) => el.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`);
+    const chip = (testid: string) => el.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
     return { fixture, router, el, chip };
   }
 
@@ -80,9 +80,9 @@ describe('PanelFiltersBar', () => {
     const { el, chip } = await render('/board');
 
     expect(
-      Array.from(el.querySelectorAll('[data-testid="runner-filter"] button')).map((b) => b.getAttribute('data-testid')),
+      Array.from(el.querySelectorAll('[data-testid="runner-filter"] [role="option"] > [data-testid]')).map((b) => b.getAttribute('data-testid')),
     ).toEqual(['runner-filter-all', 'runner-filter-r-claude', 'runner-filter-r-opencode', 'runner-filter-r-broken']);
-    expect(chip('runner-filter-r-broken')?.disabled).toBe(true);
+    expect(chip('runner-filter-r-broken')?.closest('[role=option]')?.getAttribute('aria-disabled')).toBe('true');
     expect(chip('runner-filter-r-opencode')?.querySelector('[data-testid="runner-brake"]')?.getAttribute('data-glyph')).toBe(
       'pause',
     );
@@ -92,15 +92,15 @@ describe('PanelFiltersBar', () => {
     const { el } = await render('/board');
 
     expect(
-      Array.from(el.querySelectorAll('[data-testid="project-filter"] button')).map((b) => b.textContent?.trim()),
+      Array.from(el.querySelectorAll('[data-testid="project-filter"] [role="option"] > [data-testid]')).map((b) => b.textContent?.trim()),
     ).toEqual(['All', 'Blizzard', 'Winter']);
   });
 
   it('selects the filters the URL names, All while absent', async () => {
     const { chip } = await render('/board?runner=r-claude');
 
-    expect(chip('runner-filter-r-claude')?.getAttribute('aria-pressed')).toBe('true');
-    expect(chip('project-filter-all')?.getAttribute('aria-pressed')).toBe('true');
+    expect(chip('runner-filter-r-claude')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
+    expect(chip('project-filter-all')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('rewrites only the Runner param on a runner choice, keeping the page and every other param', async () => {
@@ -110,7 +110,7 @@ describe('PanelFiltersBar', () => {
     await settle(fixture);
 
     expect(router.url).toBe('/events?project=winter&chunk=ch_1&runner=r-claude');
-    expect(chip('runner-filter-r-claude')?.getAttribute('aria-pressed')).toBe('true');
+    expect(chip('runner-filter-r-claude')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('rewrites only the Project param on a project choice, and drops it for All', async () => {
