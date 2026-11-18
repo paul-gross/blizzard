@@ -1005,7 +1005,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/admin/members',
   'hub/src/app/admin/projects',
   'hub/src/app/admin/repositories',
-  'hub/src/app/admin/secrets',
   'hub/src/app/admin/urgencies',
   'hub/src/app/board',
   'hub/src/app/core',

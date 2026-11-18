@@ -1,14 +1,18 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Injector, provideZonelessChangeDetection, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';
+import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import { ConfigFormDialog } from './config-form-dialog';
 import type { RevisionRowVm } from './config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
-import { SECRET_CREATE_FIELDS } from './secrets/secrets.model';
+import { SECRET_CREATE_FIELD_VIEWS } from './secrets/secrets.model';
+import { secretCreateRules } from './secrets/secret.form';
+import type { SecretCreateDraft } from './secrets/secret.domain';
 
 /**
  * The Admin config surfaces' real-render proof (the tooled half of
@@ -113,13 +117,16 @@ const PEM = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2
 
 async function mountSecretForm() {
   await TestBed.configureTestingModule({
-    imports: [ConfigFormDialog], providers: [provideZonelessChangeDetection()],
+    imports: [ConfigFieldTreeDialog], providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(ConfigFormDialog);
+  const fixture = TestBed.createComponent(ConfigFieldTreeDialog<SecretCreateDraft>);
+  const draft = form(signal<SecretCreateDraft>({ name: 'app-key', value: PEM }), secretCreateRules, {
+    injector: TestBed.inject(Injector),
+  });
   fixture.componentRef.setInput('heading', 'New secret');
   fixture.componentRef.setInput('mode', 'create');
-  fixture.componentRef.setInput('fields', SECRET_CREATE_FIELDS);
-  fixture.componentRef.setInput('initial', { name: 'app-key', value: PEM });
+  fixture.componentRef.setInput('form', draft);
+  fixture.componentRef.setInput('fields', SECRET_CREATE_FIELD_VIEWS);
   fixture.componentRef.setInput('submitLabel', 'Create');
   fixture.componentRef.setInput('testidPrefix', 'secret-form');
   await fixture.whenStable();
@@ -189,7 +196,7 @@ describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
       expect(value.value).toBe(PEM);
       expect(value.getBoundingClientRect().height).toBeGreaterThan(2 * name.getBoundingClientRect().height);
       expect(value.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-      expect(document.querySelector<HTMLButtonElement>('[data-testid="secret-form-submit"]')!.disabled).toBe(false);
+      expect(document.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.disabled).toBe(false);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
     }, mountSecretForm);
   });

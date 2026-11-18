@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { asyncState, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
-import { type ConfigFormValues, createBody } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import {
   includeRetired,
   LIFECYCLE_FILTER_PARAM,
@@ -15,8 +15,10 @@ import {
 } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
 import type { ConfigRowVm } from '../config-record-list';
-import { SECRET_CREATE_FIELDS, secretCreate, secretRows } from './secrets.model';
-import { injectCreateSecretMutation } from './secrets.mutations';
+import { EMPTY_SECRET_CREATE_DRAFT, type SecretCreateDraft } from './secret.domain';
+import { secretCreateRules } from './secret.form';
+import { injectSecretService } from './secret.service';
+import { SECRET_CREATE_FIELD_VIEWS, secretRows } from './secrets.model';
 import { injectSecretsQuery } from './secrets.query';
 import { ProjectLens } from '../../core/project-lens';
 import { LensNote } from '../../core/lens-note';
@@ -30,7 +32,7 @@ import { LensNote } from '../../core/lens-note';
 @Component({
   selector: 'app-secrets-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigMaster, LensNote, RouterOutlet],
+  imports: [ConfigFieldTreeDialog, ConfigMaster, LensNote, RouterOutlet],
   templateUrl: './secrets-page.html',
   styleUrl: '../config-page-host.css',
 })
@@ -73,30 +75,29 @@ export class SecretsPage {
   }
 
   private readonly meQuery = injectMeQuery();
-  protected readonly createMutation = injectCreateSecretMutation();
-  protected readonly fields = SECRET_CREATE_FIELDS;
+  private readonly secretService = injectSecretService();
+  protected readonly fields = SECRET_CREATE_FIELD_VIEWS;
+  /** Whether the create form is open. */
   protected readonly createOpen = signal(false);
-  protected readonly createError = signal<string | null>(null);
+  private readonly createDraft = signal<SecretCreateDraft>(EMPTY_SECRET_CREATE_DRAFT);
+  protected readonly createForm = form(this.createDraft, secretCreateRules);
 
   /** New is a write: a desktop with `config:edit` only. */
   protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
 
   protected onNew(): void {
-    this.createError.set(null);
+    this.createForm().reset({ ...EMPTY_SECRET_CREATE_DRAFT });
     this.createOpen.set(true);
   }
 
-  protected onCreate(values: ConfigFormValues): void {
-    const body = secretCreate(createBody(this.fields, values));
-    this.createError.set(null);
-    this.createMutation.mutate(body, {
-      onSuccess: () => {
-        this.createOpen.set(false);
-        void this.router.navigate(this.lens.link(['/admin', 'secrets', body.name]), {
-          queryParamsHandling: 'preserve',
-        });
-      },
-      onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
-    });
+  /** Saves the create draft; once it settles, closes the form and opens the created secret. A refusal keeps the draft. */
+  protected async onCreate(): Promise<void> {
+    const name = this.createDraft().name.trim();
+    if (await submitForm(this.createForm, (draft) => this.secretService.create(draft))) {
+      this.createOpen.set(false);
+      void this.router.navigate(this.lens.link(['/admin', 'secrets', name]), {
+        queryParamsHandling: 'preserve',
+      });
+    }
   }
 }
