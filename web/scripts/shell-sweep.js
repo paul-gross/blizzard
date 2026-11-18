@@ -306,6 +306,10 @@
  *     group's keyboard model in real Chromium: Tab reaches a header, Up/Down/Home/End move between
  *     headers, Enter and Space toggle with the panel's computed display following, a soft-disabled
  *     header is reached but inert, and each trigger is paired with its panel.
+ *   - projects/fleet/src/lib/kit/kit-grid.shell-sweep.spec.ts — the kit grid bridge's keyboard
+ *     model in real Chromium: one Tab stop, arrow keys between text cells and native controls
+ *     skipping disabled cells, exactly one click per Enter or Space on a button, and a select
+ *     popup that opens once, owns its keys, and returns focus to its trigger.
  *   - projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts — the kit select row's
  *     default chrome (6px 8px padding, hairline and left edge, selected background) is
  *     unchanged, while `bare` draws none of it in any state and lets a host flex rule
@@ -400,6 +404,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-accordion-section.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-grid.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },

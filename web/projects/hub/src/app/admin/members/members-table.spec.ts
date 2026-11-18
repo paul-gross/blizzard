@@ -176,4 +176,36 @@ describe('MembersTable', () => {
     expect(other?.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')?.disabled).toBe(false);
     expect(other?.querySelector<HTMLButtonElement>('[data-testid="members-table-revoke"]')?.disabled).toBe(false);
   });
+
+  it('renders the body as a grid: a labeled table, a row per member, and a cell per column', async () => {
+    const { el } = await mount();
+
+    const table = el.querySelector('table');
+    expect(table?.getAttribute('role')).toBe('grid');
+    expect(table?.getAttribute('aria-label')).toBe('Members');
+    expect(el.querySelectorAll('tbody tr[role="row"]')).toHaveLength(3);
+    expect(el.querySelectorAll('tbody td[ngGridCell]')).toHaveLength(21);
+  });
+
+  it("disables a row's empty revoke cell so navigation skips it, and keeps text cells navigable", async () => {
+    const { el } = await mount();
+
+    const revokeCell = (id: string) => row(el, id)?.querySelector<HTMLElement>('td.actions');
+    expect(revokeCell('usr_admin')?.getAttribute('aria-disabled')).toBe('true');
+    expect(revokeCell('usr_last')?.getAttribute('aria-disabled')).toBe('true');
+    expect(revokeCell('usr_guest')?.getAttribute('aria-disabled')).not.toBe('true');
+    const staticRole = row(el, 'usr_admin')?.querySelector('[data-testid="members-table-role-static"]')?.closest('td');
+    expect(staticRole?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it("takes a pending row's controls out of the Tab order and navigation", async () => {
+    const { fixture, el } = await mount();
+    fixture.componentRef.setInput('pendingUserIds', ['usr_guest']);
+    await fixture.whenStable();
+
+    const guest = row(el, 'usr_guest');
+    for (const id of ['members-table-role-select', 'members-table-revoke'])
+      expect(guest?.querySelector(`[data-testid="${id}"]`)?.getAttribute('tabindex')).toBe('-1');
+    expect(guest?.querySelector('td.actions')?.getAttribute('aria-disabled')).toBe('true');
+  });
 });

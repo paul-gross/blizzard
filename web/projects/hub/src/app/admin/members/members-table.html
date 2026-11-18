@@ -10,7 +10,7 @@
     emptyTestid="members-table-empty"
   >
     <div class="table-scroll" data-testid="members-table-scroll">
-      <table>
+      <table fleetKitGrid [ariaLabel]="label()" [softDisabled]="false">
         <thead>
           <tr>
             <th>Username</th>
@@ -24,21 +24,32 @@
         </thead>
         <tbody>
           @for (member of members(); track member.user_id) {
-            <tr data-testid="members-table-row" [attr.data-user-id]="member.user_id">
-              <td data-testid="members-table-username">
+            <tr fleetKitGridRow data-testid="members-table-row" [attr.data-user-id]="member.user_id">
+              <td fleetKitGridCell data-testid="members-table-username">
                 {{ member.username }}
                 @if (member.hub_admin) {
                   <fleet-kit-badge class="hub-admin" tone="idle" variant="pill" data-testid="members-table-hub-admin" title="Hub administrator">hub admin</fleet-kit-badge>
                 }
               </td>
-              <td data-testid="members-table-display-name">{{ member.display_name }}</td>
-              <td data-testid="members-table-email">{{ member.email ?? '—' }}</td>
-              <td data-testid="members-table-identities">
+              <td fleetKitGridCell data-testid="members-table-display-name">{{ member.display_name }}</td>
+              <td fleetKitGridCell data-testid="members-table-email">{{ member.email ?? '—' }}</td>
+              <td fleetKitGridCell data-testid="members-table-identities">
                 {{ member.identities.length ? member.identities.map((i) => i.provider_name).join(', ') : '—' }}
               </td>
-              <td>
+              <td fleetKitGridCell>
                 @if (canChangeRole(member)) {
                   <fleet-kit-select
+                    #roleSelect
+                    fleetKitGridWidget
+                    #roleWidget="fleetKitGridWidget"
+                    [gridFocusTarget]="roleSelect.controlElement()"
+                    gridWidgetType="complex"
+                    [gridDisabled]="roleSelect.disabled()"
+                    [controlTabIndex]="roleWidget.controlTabIndex()"
+                    (gridActivated)="roleSelect.openFromGrid()"
+                    (gridDeactivated)="roleSelect.closeFromGrid()"
+                    (opened)="roleWidget.activate()"
+                    (closed)="roleWidget.deactivate()"
                     [ariaLabel]="'Role for ' + member.username"
                     testid="members-table-role-select"
                     [options]="roleOptions(member)"
@@ -50,12 +61,19 @@
                   <span data-testid="members-table-role-static">{{ member.role }}{{ isSelf(member) ? ' (you)' : '' }}</span>
                 }
               </td>
-              <td>
+              <td fleetKitGridCell>
                 <fleet-when data-testid="members-table-created-at" [iso]="member.created_at" />
               </td>
-              <td class="actions">
+              <td fleetKitGridCell class="actions" [disabled]="!canRevoke(member)">
                 @if (canRevoke(member)) {
                   <fleet-kit-button
+                    #revokeButton
+                    fleetKitGridWidget
+                    #revokeWidget="fleetKitGridWidget"
+                    [gridFocusTarget]="revokeButton.controlElement()"
+                    gridWidgetType="simple"
+                    [gridDisabled]="revokeButton.disabled()"
+                    [controlTabIndex]="revokeWidget.controlTabIndex()"
                     variant="danger"
                     testid="members-table-revoke"
                     [ariaLabel]="'Revoke ' + member.username"

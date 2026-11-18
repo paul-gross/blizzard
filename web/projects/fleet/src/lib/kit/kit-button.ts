@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, viewChild } from '@angular/core';
 
 /**
  * The action button — a small bordered button in three variants. Wraps a real native `<button>` so type/disabled/keyboard
@@ -24,4 +24,17 @@ export class KitButton {
   readonly ariaLabel = input<string | null>(null);
   readonly title = input<string | null>(null);
   readonly testid = input<string | null>(null);
+  /**
+   * The native button's `tabindex`, set by a surrounding grid bridge (`fleetKitGridWidget`)
+   * that owns which control is the Tab stop. `null` (the default) leaves the native tab order
+   * alone, so a button outside a grid behaves as it always has.
+   */
+  readonly controlTabIndex = input<number | null>(null);
+
+  private readonly button = viewChild<ElementRef<HTMLButtonElement>>('buttonEl');
+
+  /** The native `<button>` — the element a grid bridge points Aria's `focusTarget` at. */
+  controlElement(): HTMLButtonElement | undefined {
+    return this.button()?.nativeElement;
+  }
 }
