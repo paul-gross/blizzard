@@ -66,9 +66,12 @@ export class ConfigFieldTreeDialog<D> {
     return this.mode() === 'edit' && baseline !== null ? fieldChanges(this.fields(), baseline, this.draft()) : [];
   });
 
+  /** Whether a shown mark's file is still being read; a mark that left the form with its read in flight no longer holds Save. */
+  private readonly readingShown = computed(() => this.visibleFields().some((field) => this.reading().has(field.key)));
+
   /** Save is held while an edit has nothing to send, and while a mark's file is still being read. */
   protected readonly saveHeld = computed(
-    () => this.reading().size > 0 || (this.mode() === 'edit' && this.changes().length === 0),
+    () => this.readingShown() || (this.mode() === 'edit' && this.changes().length === 0),
   );
 
   protected textField(key: string): FieldTree<string> {

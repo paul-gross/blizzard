@@ -105,7 +105,7 @@ export function fieldChanges<D>(
       new: next,
       old_label: labelOf(field, before),
       new_label: labelOf(field, next),
-    } as FieldChangeView);
+    });
   }
   return diff;
 }

@@ -1,6 +1,11 @@
 import { type Type, provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { type SaveOutcome, submitForm } from 'fleet';
+
+import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
+import type { ConfigFieldView } from './config-field-tree.model';
 
 import { SourceDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
 
@@ -199,5 +204,43 @@ describe('ConfigFieldTreeDialog', () => {
       await submit();
       expect(q('kit-form-line')!.textContent).toContain('could not save');
     });
+  });
+
+  it('stops holding Save for a mark whose read was in flight when it left the form', async () => {
+    interface D {
+      kind: string;
+      mark: string;
+    }
+    const fields: readonly ConfigFieldView<D>[] = [
+      { key: 'kind', label: 'Kind', kind: 'text' },
+      { key: 'mark', label: 'Mark', kind: 'mark', shownWhen: { key: 'kind', value: 'm' } },
+    ];
+    await TestBed.configureTestingModule({
+      imports: [ConfigFieldTreeDialog],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent<ConfigFieldTreeDialog<D>>(ConfigFieldTreeDialog);
+    const f = TestBed.runInInjectionContext(() => form(signal<D>({ kind: 'm', mark: '' })));
+    fixture.componentRef.setInput('heading', 'H');
+    fixture.componentRef.setInput('mode', 'create');
+    fixture.componentRef.setInput('form', f);
+    fixture.componentRef.setInput('fields', fields);
+    fixture.componentRef.setInput('submitLabel', 'Save');
+    fixture.componentRef.setInput('testidPrefix', 'd');
+    await fixture.whenStable();
+    const save = () => document.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+    const reading = FileReader.prototype.readAsDataURL;
+    const spy = vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(() => undefined);
+    const file = document.querySelector<HTMLInputElement>('[data-testid="d-field-mark-image"]')!;
+    Object.defineProperty(file, 'files', { value: [new File(['x'], 'a.png', { type: 'image/png' })], configurable: true });
+    file.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(save().disabled).toBe(true);
+    f.kind().value.set('other');
+    await fixture.whenStable();
+    expect(document.querySelector('[data-testid="d-field-mark-image"]')).toBeNull();
+    expect(save().disabled).toBe(false);
+    spy.mockRestore();
+    expect(FileReader.prototype.readAsDataURL).toBe(reading);
   });
 });
