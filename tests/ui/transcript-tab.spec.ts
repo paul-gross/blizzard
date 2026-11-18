@@ -90,7 +90,7 @@ test('test_chunk_transcripts_tab_browser', async ({ fleet, issue, page, wideView
   await expect(page.getByTestId('transcript-segment-item').nth(0)).toContainText('Segment 1');
   await expect(page.getByTestId('transcript-segment-item').nth(1)).toContainText('Segment 2');
 
-  const item = (id: string) => page.locator(`[data-segment-id="${id}"]`).getByTestId('transcript-segment-item');
+  const item = (id: string) => page.locator(`[data-segment-id="${id}"][data-testid="transcript-segment-item"]`);
   await item('sg_1').click();
   await expect(page.getByTestId('transcript-segment-body')).toBeVisible();
 
