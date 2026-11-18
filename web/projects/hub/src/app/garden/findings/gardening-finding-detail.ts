@@ -5,10 +5,10 @@ import { restingAsyncState, type FindingDetailView, type KitAsyncStateValue } fr
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingQuery } from '../core/finding.query';
-import { type FindingTriageVerb } from '../core/finding-list';
+import { type FindingTriageVerb } from '../core/finding-triage-verb.domain';
 import { map } from 'rxjs';
 
-import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';
+import { GardeningFindingTriageDialog } from './triage/gardening-finding-triage-dialog';
 import { injectFindingWorkItemLookup } from './gardening-finding-work-item-lookup';
 import { findingForSelection, findingPanelVm } from './gardening-finding-detail.model';
 

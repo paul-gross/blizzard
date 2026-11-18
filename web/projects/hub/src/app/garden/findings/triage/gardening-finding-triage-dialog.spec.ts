@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type FindingTriageVerb } from '../core/finding-list';
+import { type FindingTriageVerb } from '../../core/finding-triage-verb.domain';
 import { gardenFindingView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';
@@ -97,7 +97,7 @@ describe('GardeningFindingTriageDialog', () => {
       setNote(el, 'a note');
       testCase.fill?.(el);
       await settle(fixture);
-      el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
+      el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!.click();
       await settle(fixture);
 
       const calls = stub.forRoute(testCase.route, 'POST');
@@ -110,22 +110,27 @@ describe('GardeningFindingTriageDialog', () => {
     });
   }
 
-  it('refuses submission while the note is blank or whitespace-only', async () => {
+  const submit = (el: HTMLElement) =>
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+  const cancel = (el: HTMLElement) =>
+    el.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!;
+
+  it('sends nothing for a blank or whitespace-only note, names the missing field, and focuses it', async () => {
     const mounted = await mount('resolve', ['fnd_1']);
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.disabled).toBe(true);
+    expect(submit(el).disabled).toBe(false);
+    submit(el).click();
+    await settle(fixture);
+    expect(el.textContent).toContain('Required');
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="finding-triage-note-input"]'));
 
     setNote(el, '   ');
     await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.disabled).toBe(true);
-
-    setNote(el, 'a real note');
+    submit(el).click();
     await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.disabled).toBe(
-      false,
-    );
+    expect(stub.forRoute('/api/findings/resolve', 'POST')).toHaveLength(0);
   });
 
   it("supersede also requires the absorbing finding's id", async () => {
@@ -135,16 +140,39 @@ describe('GardeningFindingTriageDialog', () => {
 
     setNote(el, 'folds into fnd_9');
     await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.disabled).toBe(true);
-
-    setSupersededBy(el, 'fnd_9');
+    submit(el).click();
     await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.disabled).toBe(
-      false,
-    );
+    expect(stub.forRoute('/api/findings/supersede', 'POST')).toHaveLength(0);
+    expect(document.activeElement).toBe(el.querySelector('[data-testid="finding-triage-superseded-by-input"]'));
   });
 
-  it('surfaces a rejected batch as an error, keeping the dialog open and the selection intact', async () => {
+  it('shows a hub field refusal under its field, focused, keeping the draft and the dialog open', async () => {
+    const mounted = await mount('supersede', ['fnd_1'], {
+      'POST /api/findings/supersede': () =>
+        stubError(422, { type: 'urn:blizzard:problem:absorber-not-live', detail: 'fnd_9 is not live' }),
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    let closed = false;
+    let succeeded = false;
+    fixture.componentInstance.closed.subscribe(() => (closed = true));
+    fixture.componentInstance.succeeded.subscribe(() => (succeeded = true));
+
+    setNote(el, 'folds');
+    setSupersededBy(el, 'fnd_9');
+    await settle(fixture);
+    submit(el).click();
+    await settle(fixture);
+
+    const field = el.querySelector<HTMLElement>('[data-testid="finding-triage-superseded-by-input"]')!;
+    expect(field.closest('fleet-kit-field')!.textContent).toContain('fnd_9 is not live');
+    expect(document.activeElement).toBe(field);
+    expect(el.querySelector<HTMLTextAreaElement>('[data-testid="finding-triage-note-input"]')!.value).toBe('folds');
+    expect(closed).toBe(false);
+    expect(succeeded).toBe(false);
+  });
+
+  it('shows a root refusal on the form line, keeping the draft and the selection intact', async () => {
     const mounted = await mount('resolve', ['fnd_1', 'fnd_2'], {
       'POST /api/findings/resolve': () => stubError(404, { detail: 'unknown finding among fnd_1, fnd_2' }),
     });
@@ -155,63 +183,68 @@ describe('GardeningFindingTriageDialog', () => {
 
     setNote(el, 'landed elsewhere');
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
+    submit(el).click();
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="finding-triage-submit-error"]')?.textContent).toContain(
+    expect(el.querySelector('[data-testid="kit-form-line"]')?.textContent).toContain(
       'unknown finding among fnd_1, fnd_2',
+    );
+    expect(el.querySelector<HTMLTextAreaElement>('[data-testid="finding-triage-note-input"]')!.value).toBe(
+      'landed elsewhere',
     );
     expect(closed).toBe(false);
     expect(fixture.componentInstance.findingIds()).toEqual(['fnd_1', 'fnd_2']);
   });
 
-  it('closes on a successful submission', async () => {
+  it('emits succeeded then closed on success, and only closed on cancel', async () => {
     const mounted = await mount('reopen', ['fnd_1']);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    const events: string[] = [];
+    fixture.componentInstance.succeeded.subscribe(() => events.push('succeeded'));
+    fixture.componentInstance.closed.subscribe(() => events.push('closed'));
+
+    cancel(el).click();
+    await settle(fixture);
+    expect(events).toEqual(['closed']);
+
+    events.length = 0;
+    setNote(el, 'reopening');
+    await settle(fixture);
+    submit(el).click();
+    await settle(fixture);
+    expect(events).toEqual(['succeeded', 'closed']);
+  });
+
+  it('disables Save and Cancel and ignores Escape and the backdrop while the save is pending', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const mounted = await mount('resolve', ['fnd_1'], {
+      'POST /api/findings/resolve': async () => {
+        await gate;
+        return [FINDING];
+      },
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;
     fixture.componentInstance.closed.subscribe(() => (closed = true));
 
-    setNote(el, 'reopening');
+    setNote(el, 'n');
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
-    await settle(fixture);
-
-    expect(closed).toBe(true);
-  });
-
-  it('emits succeeded on a successful submission, distinct from a plain cancel (F1)', async () => {
-    const mounted = await mount('reopen', ['fnd_1']);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-    let succeeded = false;
-    fixture.componentInstance.succeeded.subscribe(() => (succeeded = true));
-
-    fixture.componentInstance.closed.emit();
-    expect(succeeded).toBe(false);
-
-    setNote(el, 'reopening');
-    await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
-    await settle(fixture);
-
-    expect(succeeded).toBe(true);
-  });
-
-  it('does not emit succeeded when the batch is rejected', async () => {
-    const mounted = await mount('resolve', ['fnd_1'], {
-      'POST /api/findings/resolve': () => stubError(404, { detail: 'unknown finding' }),
+    submit(el).click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(submit(el).disabled).toBe(true);
     });
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-    let succeeded = false;
-    fixture.componentInstance.succeeded.subscribe(() => (succeeded = true));
+    expect(cancel(el).disabled).toBe(true);
+    el.querySelector('dialog')?.dispatchEvent(new Event('cancel', { cancelable: true }));
+    cancel(el).click();
+    fixture.detectChanges();
+    expect(closed).toBe(false);
 
-    setNote(el, 'landed elsewhere');
+    release();
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="finding-triage-dialog-submit"]')!.click();
-    await settle(fixture);
-
-    expect(succeeded).toBe(false);
+    await vi.waitFor(() => expect(closed).toBe(true));
   });
 });

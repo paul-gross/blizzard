@@ -33,9 +33,6 @@ export interface FindingListRowVm {
   readonly raisedByChunkId: string | null;
 }
 
-/** The triage verbs a finding can be dispatched under, spelled as the `hub finding` CLI spells them. */
-export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a-finding' | 'supersede' | 'reopen';
-
 /**
  * The gardening findings tab's findings triage list — presentational only:
  * renders the rows it is handed, exactly as filtered by the container.

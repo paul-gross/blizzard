@@ -208,11 +208,19 @@ describe('form chrome', () => {
       root.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!
         .disabled,
     ).toBe(true);
+    expect(
+      root.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!
+        .disabled,
+    ).toBe(true);
     release();
     await pending;
     await fixture.whenStable();
     expect(
       root.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!
+        .disabled,
+    ).toBe(false);
+    expect(
+      root.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!
         .disabled,
     ).toBe(false);
   });

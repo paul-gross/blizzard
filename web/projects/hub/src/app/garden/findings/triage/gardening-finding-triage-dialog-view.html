@@ -1,0 +1,27 @@
+<fleet-kit-dialog
+  [open]="true"
+  [ariaLabel]="heading()"
+  testid="gardening-finding-triage-dialog"
+  (closed)="onClosed()"
+>
+  <h2 fleetKitDialogHeader data-testid="finding-triage-dialog-title">{{ heading() }}</h2>
+
+  <p class="blurb" data-testid="finding-triage-blurb">{{ blurb() }}</p>
+
+  <fleet-kit-form [form]="form()" [saveLabel]="heading()" (save)="save.emit()" (cancel)="onClosed()">
+    @if (verb() === 'supersede') {
+      <fleet-kit-field label="Absorbing finding id" [field]="form().supersededBy">
+        <fleet-kit-text-input [formField]="form().supersededBy" testid="finding-triage-superseded-by-input" />
+      </fleet-kit-field>
+    }
+
+    <fleet-kit-field label="Note" [field]="form().note">
+      <fleet-kit-text-input
+        multiline
+        [rows]="6"
+        [formField]="form().note"
+        testid="finding-triage-note-input"
+      />
+    </fleet-kit-field>
+  </fleet-kit-form>
+</fleet-kit-dialog>

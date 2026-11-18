@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { type FindingFactView, compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitProseBlock, FleetWhen, type Tone } from 'fleet';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
 import { findingSeverityTone, findingStateTone, isFindingExited } from '../core/finding-state';
-import type { FindingTriageVerb } from '../core/finding-list';
+import type { FindingTriageVerb } from '../core/finding-triage-verb.domain';
 import type { ProposalWorkItemVm } from '../proposals/proposal-panel';
 import { AppLink } from 'fleet/shell';
 
