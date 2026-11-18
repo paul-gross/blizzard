@@ -985,7 +985,7 @@ const LAYERED_PROJECTS = [
 /**
  * The domain-boundary exemptions (`bzh:frontend-domain-boundary`): each entry is a package-layers unit,
  * `<source root>/<unit>` (the longest `LAYERED_PROJECTS` key prefixing a file), and passes every file in
- * it. One reason covers the whole list: these units still read wire types outside the boundary and move
+ * it, except for strict scopes. One reason covers the whole list: these units still read wire types outside the boundary and move
  * behind it one landing at a time (`decision:ui-toolkit/incremental-replacement`). A unit leaves the list
  * in the landing that moves it; an entry whose unit no longer consumes a wire type fails as stale, so the
  * list only shrinks. A file in no declared unit is keyed by its own folder.
@@ -1003,7 +1003,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'hub/src/app/admin/forges',
   'hub/src/app/admin/hub-settings',
   'hub/src/app/admin/members',
-  'hub/src/app/admin/projects',
   'hub/src/app/admin/urgencies',
   'hub/src/app/board',
   'hub/src/app/core',
@@ -1032,12 +1031,9 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'runner/src/app/shell',
 ];
 
-/** The one package-layers unit whose exemption is keyed finer than the unit: `admin` is a single layer unit because
- * its folders import one another, yet each admin slice moves behind the boundary on its own landing. */
-const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
+const DOMAIN_BOUNDARY_STRICT_SCOPES = ['hub/src/app/admin/projects'];
 
-/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path. A file in a subfolder of
- * `DOMAIN_BOUNDARY_SUBKEYED` is keyed by that subfolder; a file directly in it keeps the unit's own key.
+/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
  * @param {string} rel
  */
 function domainBoundaryUnitOf(rel) {
@@ -1074,7 +1070,9 @@ function assertDomainBoundaryKeyingWorks() {
  * @param {readonly string[]} [exempt]
  */
 function domainBoundaryViolations(exempt = DOMAIN_BOUNDARY_EXEMPT) {
-  const { consumers, stale, reach } = sweepDomainBoundary({ root: ROOT, unitOf: domainBoundaryUnitOf, exempt });
+  const { consumers, stale, reach } = sweepDomainBoundary({
+    root: ROOT, unitOf: domainBoundaryUnitOf, exempt, strictScopes: DOMAIN_BOUNDARY_STRICT_SCOPES,
+  });
   return {
     consumers: consumers.map((c) => `  ${c.file} (${c.unit}): ${c.names.join(', ')}`),
     stale: stale.map((unit) => `  ${unit}`),

@@ -8,6 +8,7 @@ import {
   problemType,
 } from 'fleet/shell';
 import { hubProjectsKey } from './query-keys';
+import { fromProjectView } from './project.translate';
 
 /** The `type` of the hub's refusal when the tenant holds no such project. */
 const PROJECT_NOT_FOUND: ProjectNotFoundProblem['type'] =
@@ -38,6 +39,15 @@ export function projectsQueryOptions() {
 /** The tenant's projects, read through {@link projectsQueryOptions} while `enabled()` holds. */
 export function injectProjectsQuery(enabled: () => boolean = () => true) {
   return injectQuery(() => ({ ...projectsQueryOptions(), enabled: enabled() }));
+}
+
+/** Domain projection over the same cached wire read as {@link injectProjectsQuery}. */
+export function projectDomainsQueryOptions() {
+  return { ...projectsQueryOptions(), select: (projects: readonly ProjectView[]) => projects.map(fromProjectView) };
+}
+
+export function injectProjectDomainsQuery(enabled: () => boolean = () => true) {
+  return injectQuery(() => ({ ...projectDomainsQueryOptions(), enabled: enabled() }));
 }
 
 /**

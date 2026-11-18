@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ProjectColor } from 'fleet';
+import { PROJECT_COLORS } from './project-color.translate';
 import { describe, expect, it } from 'vitest';
 
 import { ProjectColorPicker } from './project-color-picker';
@@ -9,7 +9,7 @@ describe('ProjectColorPicker', () => {
   async function mount(disabled = false, current = 'teal') {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const fixture = TestBed.createComponent(ProjectColorPicker);
-    fixture.componentRef.setInput('colors', Object.values(ProjectColor));
+    fixture.componentRef.setInput('colors', PROJECT_COLORS);
     fixture.componentRef.setInput('current', current);
     fixture.componentRef.setInput('disabled', disabled);
     await fixture.whenStable();
@@ -19,7 +19,7 @@ describe('ProjectColorPicker', () => {
   it('offers every palette color, the current one pressed, and a Custom chip after them', async () => {
     const root: HTMLElement = (await mount()).nativeElement;
     const chips = root.querySelectorAll<HTMLButtonElement>('button[data-testid^="project-color-"]');
-    expect(chips.length).toBe(Object.values(ProjectColor).length + 1);
+    expect(chips.length).toBe(PROJECT_COLORS.length + 1);
     expect(chips[chips.length - 1].dataset['testid']).toBe('project-color-custom');
     expect(root.querySelector('[data-testid="project-color-custom"]')?.getAttribute('aria-pressed')).toBe('false');
     expect(root.querySelector('[data-testid="project-color-custom-input"]')).toBeNull();

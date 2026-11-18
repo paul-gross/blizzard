@@ -1,13 +1,9 @@
-import type {
-  ChunkCountsView,
-  ConfigChangeView,
-  FieldChangeView,
-  ProjectView,
-  RepositoryLinkView,
-  RepositorySummary,
-  RunnerRegistryView,
-  SourceLinkView,
-} from 'fleet';
+import type { Project } from '../../core/project.domain';
+import type { ProjectRunner } from '../../core/runners.domain';
+import type { ConfigChange, ConfigFieldChange } from '../config-history.domain';
+import type { ProjectRepository } from '../repositories/repositories.domain';
+import type { ProjectWorkSource } from '../work-sources/work-sources.domain';
+import type { ProjectChunkCounts, ProjectRepositoryLink, ProjectSourceLink } from './project-read.domain';
 
 import {
   failureFor,
@@ -21,6 +17,7 @@ import {
   pendingUnlinkNames,
   projectLightTone,
   projectCreate,
+  projectIdForSlug,
   projectPatch,
   projectRows,
   repositoryLinkRows,
@@ -29,46 +26,47 @@ import {
   wiringCallout,
 } from './projects.model';
 import { linkCount, projectTabs, queueText } from './project-overview.model';
-import { workSource } from '../work-sources/work-source.builders';
 
-function project(id: string, slug: string, name: string): ProjectView {
+function project(id: string, slug: string, name: string): Project {
   return { project_id: id, slug, name, description: '', color: 'teal', revision: 1, created_at: '2026-10-01T00:00:00Z' };
 }
 
 const BLIZZARD = project('proj_b', 'blizzard', 'Blizzard');
 const WINTER = project('proj_w', 'winter', 'Winter');
 
-function runner(id: string, served: string[], online = true): RunnerRegistryView {
+describe('projectIdForSlug', () => {
+  it('resolves a lens only from a matching loaded project', () => {
+    expect(projectIdForSlug([BLIZZARD, WINTER], 'winter')).toBe('proj_w');
+    expect(projectIdForSlug([BLIZZARD], 'winter')).toBeNull();
+    expect(projectIdForSlug(undefined, 'winter')).toBeNull();
+    expect(projectIdForSlug([BLIZZARD], null)).toBeNull();
+  });
+});
+
+function runner(id: string, served: string[], online = true): ProjectRunner {
   return {
     runner_id: id,
     runner_name: id,
-    added_at: '2026-10-01T00:00:00Z',
     connection: 'online',
-    hub_paused: false,
     online,
-    projects: served.map((projectId) => ({ entry: projectId, project_id: projectId, claimable: true })),
-  } as unknown as RunnerRegistryView;
+    projects: served.map((projectId) => ({ project_id: projectId, claimable: true })),
+  };
 }
 
-function change(id: number, diff: FieldChangeView[]): ConfigChangeView {
+function change(id: number, diff: ConfigFieldChange[]): ConfigChange {
   return {
     id,
     actor: 'ada',
     actor_name: null,
-    apply_id: null,
     door: 'board',
     op: 'edit',
-    project_id: null,
-    record_label: null,
-    record_key: 'proj_b',
-    record_kind: 'project',
     recorded_at: '2026-10-01T00:00:00Z',
     revision: id,
     diff,
   };
 }
 
-function counts(ready: number, running: number, done: number): ChunkCountsView {
+function counts(ready: number, running: number, done: number): ProjectChunkCounts {
   return {
     ready,
     running,
@@ -80,10 +78,12 @@ function counts(ready: number, running: number, done: number): ChunkCountsView {
     stopped: 0,
     terminal: done,
     total: ready + running + done,
-  } as ChunkCountsView;
+    done_since: null,
+    waiting_on_human: 0,
+  };
 }
 
-function sourceLink(link: Pick<SourceLinkView, 'name' | 'linked'> & Partial<SourceLinkView>): SourceLinkView {
+function sourceLink(link: Pick<ProjectSourceLink, 'name' | 'linked'> & Partial<ProjectSourceLink>): ProjectSourceLink {
   return { project_id: 'proj_b', built_in: false, revision: null, slug: null, ...link };
 }
 
@@ -133,8 +133,7 @@ describe('projects model', () => {
   });
 
   it('reads a project whose only server the hub judges cannot claim it as served by no one', () => {
-    const paused = { ...runner('r1', ['proj_b']), hub_paused: true } as RunnerRegistryView;
-    paused.projects = (paused.projects ?? []).map((served) => ({ ...served, claimable: false }));
+    const paused = { ...runner('r1', ['proj_b']), projects: [{ project_id: 'proj_b', claimable: false }] };
 
     expect(servedProjectIds([BLIZZARD], [paused])).toEqual(new Set());
   });
@@ -187,7 +186,17 @@ describe('projects model', () => {
   });
 
   it('lists the links in force — the built-in source first — and drops unlinked ones', () => {
-    const sources = [workSource({ id: 'wsrc_j', slug: 'jira', name: 'Acme Jira', provider: 'jira', locator: 'acme.atlassian.net' })];
+    const sources = [
+      {
+        work_source_id: 'wsrc_j',
+        slug: 'jira',
+        name: 'Acme Jira',
+        provider: 'jira',
+        locator: 'acme.atlassian.net',
+        retired: false,
+        built_in: false,
+      },
+    ] satisfies ProjectWorkSource[];
     const rows = sourceLinkRows(
       [
         sourceLink({ name: 'wsrc_o', slug: 'old', linked: false, revision: 2 }),
@@ -201,8 +210,8 @@ describe('projects model', () => {
       ['wsrc_j', 'jira', false, 'Acme Jira · jira · acme.atlassian.net'],
     ]);
     const repositories = [
-      { repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main' },
-    ] as RepositorySummary[];
+      { repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main', retired: false },
+    ] satisfies ProjectRepository[];
     expect(
       repositoryLinkRows(
         [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3, position: null, base_branch: null, effective_base_branch: 'main' }],
@@ -221,7 +230,7 @@ describe('projects model', () => {
   });
 
   it("marks a repository link's own branch as an override over the branch it would inherit", () => {
-    const link: RepositoryLinkView = {
+    const link: ProjectRepositoryLink = {
       project_id: 'proj_b',
       repository_id: 'repo_b',
       slug: 'blizzard',
@@ -232,7 +241,7 @@ describe('projects model', () => {
       base_branch: 'rust-rewrite',
       effective_base_branch: 'rust-rewrite',
     };
-    expect(linkBranch(link, { base_branch: 'main' } as RepositorySummary)).toEqual({
+    expect(linkBranch(link, { repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', owner: 'acme', repo: 'blizzard', base_branch: 'main', retired: false })).toEqual({
       name: 'rust-rewrite',
       marker: 'override',
       override: 'rust-rewrite',
@@ -247,7 +256,7 @@ describe('projects model', () => {
   });
 
   it('keeps the repository links in the landing order the hub lists them in', () => {
-    const link = (repository_id: string, slug: string, position: number | null): RepositoryLinkView => ({
+    const link = (repository_id: string, slug: string, position: number | null): ProjectRepositoryLink => ({
       project_id: 'proj_b',
       repository_id,
       slug,

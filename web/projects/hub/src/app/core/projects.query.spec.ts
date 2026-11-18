@@ -5,7 +5,7 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 
-import { readProject, readProjects } from './projects.query';
+import { projectDomainsQueryOptions, projectsQueryOptions, readProject, readProjects } from './projects.query';
 
 const BLIZZARD = projectView({ created_at: '2026-10-01T00:00:00Z' });
 
@@ -20,6 +20,15 @@ describe('the projects reads', () => {
     });
 
     await expect(readProjects()).resolves.toEqual([BLIZZARD]);
+  });
+
+  it('projects the same cached read for domain callers', () => {
+    const wire = projectsQueryOptions();
+    const domain = projectDomainsQueryOptions();
+    expect(domain.queryKey).toEqual(wire.queryKey);
+    expect(domain.queryFn).toBe(wire.queryFn);
+    expect(domain.select([BLIZZARD])).toEqual([BLIZZARD]);
+    expect(domain.select([BLIZZARD])[0]).not.toBe(BLIZZARD);
   });
 
   it('reads one project by the segment a URL names, and answers none for a project the tenant does not hold', async () => {

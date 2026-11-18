@@ -12,11 +12,10 @@ import {
 } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { lensedProject } from '../../core/lensed-project';
 import { ProjectLens, lensLink } from '../../core/project-lens';
-import { injectProjectsQuery } from '../../core/projects.query';
+import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectChildRouteParam } from '../../core/route-state';
-import { injectHubRunnersQuery } from '../../core/runners.query';
+import { injectProjectRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, createBody } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { injectCreateProjectMutation } from './projects.mutations';
@@ -24,6 +23,7 @@ import {
   listedProjects,
   PROJECT_FIELDS,
   projectCreate,
+  projectIdForSlug,
   projectRows,
   SLUG_HINT,
   servedProjectIds,
@@ -51,13 +51,11 @@ export class ProjectsPage {
   private readonly lens = inject(ProjectLens);
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
-  private readonly projectsQuery = injectProjectsQuery();
-  private readonly runnersQuery = injectHubRunnersQuery();
+  private readonly projectsQuery = injectProjectDomainsQuery();
+  private readonly runnersQuery = injectProjectRunnersQuery();
 
   protected readonly selectedKey = injectChildRouteParam('key');
-  private readonly lensId = computed(
-    () => lensedProject(this.projectsQuery.data(), this.lens.slug())?.project_id ?? null,
-  );
+  private readonly lensId = computed(() => projectIdForSlug(this.projectsQuery.data(), this.lens.slug()));
   private readonly listed = computed(() => listedProjects(this.projectsQuery.data(), this.lensId()));
   private readonly figures = injectProjectFigures(() => this.listed());
   private readonly servedIds = computed(() =>

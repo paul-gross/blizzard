@@ -5,7 +5,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse, ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
 import {
   chunkCountsView,
   configChangesPage,
@@ -21,7 +21,7 @@ import {
 import { ProjectLens } from '../../core/project-lens';
 import { ProjectDetail } from './project-detail';
 
-const PROJECT: ProjectView = {
+const PROJECT: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -54,7 +54,7 @@ const LINKS = {
   repository_links: [link('repo_a', 'alpha', 1), link('repo_b', 'bravo', 2), link('repo_x', 'xray', null)],
 };
 type PositionAnswer = NonNullable<Parameters<typeof stubHubClient>[0]['POST /api/projects/{project}/landing-order/position']>;
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 
 /** Render what has arrived without waiting for the app to be stable, for a write held open on purpose. */
 async function pump(fixture: { detectChanges: () => void }): Promise<void> {

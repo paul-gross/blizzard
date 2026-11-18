@@ -1,10 +1,6 @@
-import type {
-  ChunkCountsView,
-  KitTabOption,
-  RepositoryLinkView,
-  RunnerRegistryView,
-  SourceLinkView,
-} from 'fleet';
+import type { KitTabOption } from 'fleet';
+import type { ProjectRunner } from '../../core/runners.domain';
+import type { ProjectChunkCounts, ProjectRepositoryLink, ProjectSourceLink } from './project-read.domain';
 
 /** The project page's tabs: what it is and who serves it, then each kind of link it holds. */
 export type ProjectTab = 'overview' | 'sources' | 'repositories';
@@ -29,13 +25,13 @@ export function projectTabs(sourceCount: number | null, repositoryCount: number 
 }
 
 /** How many links in force a read holds, `null` until it answers. */
-export function linkCount(links: readonly (SourceLinkView | RepositoryLinkView)[] | undefined): number | null {
+export function linkCount(links: readonly (ProjectSourceLink | ProjectRepositoryLink)[] | undefined): number | null {
   return links ? links.filter((link) => link.linked).length : null;
 }
 
 /** The project's queue: `1 ready · 1 running · 3 done today`, today's done counted from the read's own
  * `done_since` — left off when the read carries none. */
-export function queueText(counts: ChunkCountsView): string {
+export function queueText(counts: ProjectChunkCounts): string {
   const queue = `${counts.ready} ready · ${counts.running} running`;
   return counts.done_since === null || counts.done_since === undefined ? queue : `${queue} · ${counts.done_since} done today`;
 }
@@ -47,6 +43,6 @@ export interface OverviewLineVm {
 }
 
 /** The overview's Served by card: each serving runner and its connection. */
-export function servedByLines(runners: readonly RunnerRegistryView[]): readonly OverviewLineVm[] {
+export function servedByLines(runners: readonly ProjectRunner[]): readonly OverviewLineVm[] {
   return runners.map((runner) => ({ name: runner.runner_name, detail: runner.connection }));
 }

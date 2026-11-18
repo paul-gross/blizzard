@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse, ProjectView, RepositoryLinkView, RunnerRegistryView, SourceLinkView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
 import {
   chunkCountsView,
@@ -24,11 +23,12 @@ import {
 } from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
+import type { Project } from '../../core/project.domain';
 import { ProjectDetail } from './project-detail';
 
 type Routes = Parameters<typeof stubHubClient>[0];
 
-const BLIZZARD: ProjectView = {
+const BLIZZARD: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -110,12 +110,12 @@ const HISTORY = configChangesPage({
 });
 
 /** An operator who may change configuration and read the members. */
-const EDITOR: MeResponse = {
+const EDITOR = {
   ...OPERATOR_ME_RESPONSE,
-  permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit', 'user:manage'],
+  permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const, 'user:manage' as const],
 };
 
-function lensOn(project: ProjectView | null) {
+function lensOn(project: Project | null) {
   const slug = project?.slug ?? null;
   return {
     slug: signal(slug).asReadonly(),
@@ -139,7 +139,7 @@ describe('ProjectDetail', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string, runners: RunnerRegistryView[] = [], overrides: Routes = {}, holding = false) {
+  async function open(url: string, runners: ReturnType<typeof runnerRegistryView>[] = [], overrides: Routes = {}, holding = false) {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/projects/{project}': () => BLIZZARD,
@@ -367,7 +367,7 @@ describe('ProjectDetail', () => {
     const { harness, el } = await open('/admin/projects/proj_b', [], {
       'GET /api/projects/{project}/source-links': () => links,
       'POST /api/projects/{project}/source-links/{source}/retire': (_request, { source }) =>
-        new Promise<SourceLinkView | StubHttpError<number, StubDetailBody>>((resolve) => {
+        new Promise<ReturnType<typeof sourceLinkView> | StubHttpError<number, StubDetailBody>>((resolve) => {
           retires.set(source, {
             resolve: () => resolve(sourceLinkView({ name: source, linked: false })),
             reject: () => resolve(stubError(409, { detail: 'stale revision' })),
@@ -407,7 +407,7 @@ describe('ProjectDetail', () => {
 
     /** The links read follows each PATCH, so a saved branch renders on the refetch. */
     function linkRoutes(): Routes {
-      let link: RepositoryLinkView = CORE_LINK;
+      let link: ReturnType<typeof repositoryLinkView> = CORE_LINK;
       return {
         'GET /api/projects/{project}/repository-links': () => ({ repository_links: [link] }),
         'PATCH /api/projects/{project}/repository-links/{repository}': (request) => {

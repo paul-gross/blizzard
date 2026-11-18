@@ -1,9 +1,10 @@
 import type { TemplateRef } from '@angular/core';
-import type { ChunkCountsView, ProjectView } from 'fleet';
+import type { Project } from '../../core/project.domain';
+import type { ProjectChunkCounts } from './project-read.domain';
 
 import { projectFacts } from './project-facts';
 
-const BLIZZARD: ProjectView = {
+const BLIZZARD: Project = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -13,7 +14,7 @@ const BLIZZARD: ProjectView = {
   created_at: '2026-10-01T00:00:00Z',
 };
 
-function counts(ready: number, running: number, done: number): ChunkCountsView {
+function counts(ready: number, running: number, done: number): ProjectChunkCounts {
   return {
     ready,
     running,
@@ -25,7 +26,9 @@ function counts(ready: number, running: number, done: number): ChunkCountsView {
     stopped: 0,
     terminal: done,
     total: ready + running + done,
-  } as ChunkCountsView;
+    done_since: null,
+    waiting_on_human: 0,
+  };
 }
 
 describe('projectFacts', () => {

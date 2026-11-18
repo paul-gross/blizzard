@@ -1,20 +1,10 @@
-import type { RepositoryLinkView } from 'fleet';
+import type { LandingRepository } from './project-landing-order.domain';
 
-import { foldLandingPositions, pendingRepositionKeys, landingSections, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
+import { foldLandingPositions, pendingRepositionKeys, landingSections, type LandingSections, type LandingPositionVars, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
 const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1, branch: null });
-const link = (repository_id: string, slug: string, position: number | null): RepositoryLinkView => ({
-  project_id: 'proj_b',
-  repository_id,
-  slug,
-  name: slug,
-  linked: true,
-  position,
-  revision: 1,
-  base_branch: null,
-  effective_base_branch: 'main',
-});
+const link = (repository_id: string, position: number | null): LandingRepository => ({ repository_id, position });
 
 const A = row('repo_a', 'alpha');
 const B = row('repo_b', 'bravo');
@@ -31,7 +21,7 @@ const keys = (sections: LandingSections) => ({
 describe('landingSections', () => {
   it("keeps the hub's order: ranked first, then unranked in its slug order, never re-sorted", () => {
     const rows = [C, A, X, Y];
-    const links = [link('repo_c', 'charlie', 1), link('repo_a', 'alpha', 2), link('repo_x', 'xray', null), link('repo_y', 'yankee', null)];
+    const links = [link('repo_c', 1), link('repo_a', 2), link('repo_x', null), link('repo_y', null)];
 
     expect(keys(landingSections(rows, links))).toEqual({ ranked: ['repo_c', 'repo_a'], unranked: ['repo_x', 'repo_y'] });
   });
@@ -41,14 +31,14 @@ describe('resolveLandingDrop', () => {
   it('places a repository dropped between two ranked ones after its new predecessor', () => {
     expect(resolveLandingDrop(SECTIONS, { key: 'repo_c', from: 'ranked', previousIndex: 2, to: 'ranked', currentIndex: 1 })).toEqual({
       repository: 'repo_c',
-      after_repository: 'repo_a',
+      afterRepository: 'repo_a',
     });
   });
 
   it('places a repository dropped at the front after nothing', () => {
     expect(resolveLandingDrop(SECTIONS, { key: 'repo_b', from: 'ranked', previousIndex: 1, to: 'ranked', currentIndex: 0 })).toEqual({
       repository: 'repo_b',
-      after_repository: null,
+      afterRepository: null,
     });
   });
 
@@ -62,11 +52,11 @@ describe('resolveLandingDrop', () => {
   it('ranks a repository dropped from "Unranked" after the ranked one above it', () => {
     expect(resolveLandingDrop(SECTIONS, { key: 'repo_y', from: 'unranked', previousIndex: 1, to: 'ranked', currentIndex: 3 })).toEqual({
       repository: 'repo_y',
-      after_repository: 'repo_c',
+      afterRepository: 'repo_c',
     });
     expect(resolveLandingDrop(SECTIONS, { key: 'repo_x', from: 'unranked', previousIndex: 0, to: 'ranked', currentIndex: 0 })).toEqual({
       repository: 'repo_x',
-      after_repository: null,
+      afterRepository: null,
     });
   });
 
@@ -78,7 +68,7 @@ describe('resolveLandingDrop', () => {
 
 describe('foldLandingPositions', () => {
   it('renders a pending placement where it asked to land, before it settles', () => {
-    const folded = foldLandingPositions(SECTIONS, [{ projectId: 'proj_b', body: { repository: 'repo_c', after_repository: null } }], 'proj_b');
+    const folded = foldLandingPositions(SECTIONS, [{ projectId: 'proj_b', body: { repository: 'repo_c', afterRepository: null } }], 'proj_b');
 
     expect(keys(folded)).toEqual({ ranked: ['repo_c', 'repo_a', 'repo_b'], unranked: ['repo_x', 'repo_y'] });
   });
@@ -87,7 +77,7 @@ describe('foldLandingPositions', () => {
     const folded = foldLandingPositions(
       SECTIONS,
       [
-        { projectId: 'proj_b', body: { repository: 'repo_y', after_repository: 'repo_a' } },
+        { projectId: 'proj_b', body: { repository: 'repo_y', afterRepository: 'repo_a' } },
         { projectId: 'proj_b', body: { repository: 'repo_b', unranked: true } },
       ],
       'proj_b',
@@ -97,7 +87,7 @@ describe('foldLandingPositions', () => {
   });
 
   it("ignores another project's pending writes", () => {
-    const folded = foldLandingPositions(SECTIONS, [{ projectId: 'proj_o', body: { repository: 'repo_c', after_repository: null } }], 'proj_b');
+    const folded = foldLandingPositions(SECTIONS, [{ projectId: 'proj_o', body: { repository: 'repo_c', afterRepository: null } }], 'proj_b');
 
     expect(folded).toBe(SECTIONS);
   });
@@ -105,10 +95,10 @@ describe('foldLandingPositions', () => {
 
 describe('pendingRepositionKeys', () => {
   it('collects the repositories this project has a write in flight for', () => {
-    const pending = [
+    const pending: LandingPositionVars[] = [
       { projectId: 'p1', body: { repository: 'repo_a', unranked: true } },
       { projectId: 'p2', body: { repository: 'repo_b', unranked: true } },
-      { projectId: 'p1', body: { repository: 'repo_c', after_repository: null } },
+      { projectId: 'p1', body: { repository: 'repo_c', afterRepository: null } },
     ];
     expect([...pendingRepositionKeys(pending, 'p1')]).toEqual(['repo_a', 'repo_c']);
     expect(pendingRepositionKeys(pending, null).size).toBe(0);

@@ -2,8 +2,7 @@ import { CdkDrag, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import type { LandingPositionRequest } from 'fleet';
-
+import type { LandingPosition } from './project-landing-order.domain';
 import type { LandingSection, LandingSections } from './project-landing-order.model';
 import { ProjectLinkPanel } from './project-link-panel';
 import type { ProjectLinkRowVm } from './projects.model';
@@ -68,7 +67,7 @@ describe('ProjectLinkPanel', () => {
 
   it('emits the one position a drop asks for, and nothing for a drop that changes nothing', async () => {
     const fixture = await mount(true);
-    const emitted: LandingPositionRequest[] = [];
+    const emitted: LandingPosition[] = [];
     fixture.componentInstance.reposition.subscribe((request) => emitted.push(request));
 
     drop(fixture, 'unranked', 'ranked', 'repo_x', 0, 1);
@@ -76,7 +75,7 @@ describe('ProjectLinkPanel', () => {
     drop(fixture, 'ranked', 'ranked', 'repo_b', 1, 1);
 
     expect(emitted).toEqual([
-      { repository: 'repo_x', after_repository: 'repo_a' },
+      { repository: 'repo_x', afterRepository: 'repo_a' },
       { repository: 'repo_a', unranked: true },
     ]);
   });

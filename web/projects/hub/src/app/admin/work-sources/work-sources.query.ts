@@ -44,3 +44,12 @@ export function injectWorkSourceQuery(key: () => string | null) {
     };
   });
 }
+
+/** Project projection over the shared domain cache. */
+export function injectProjectWorkSourcesQuery(includeRetired: () => boolean) {
+  const query = injectWorkSourcesQuery(includeRetired);
+  return { ...query, data: () => query.data()?.map(source => ({
+    work_source_id: source.id, slug: source.slug, name: source.name, provider: source.provider,
+    locator: source.locator, retired: source.retired, built_in: source.builtIn,
+  })) };
+}

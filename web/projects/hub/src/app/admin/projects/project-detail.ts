@@ -21,9 +21,6 @@ import {
   KitDialog,
   KitErrorLine,
   type KitTabOption,
-  type LandingPositionRequest,
-  ProjectColor,
-  RecordKind,
   restingAsyncState,
   ViewportService,
 } from 'fleet';
@@ -33,14 +30,16 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { landingPositionMutationKey, projectLinkMutationKey } from '../../core/mutation-keys';
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
-import { injectHubRunnersQuery } from '../../core/runners.query';
+import { injectProjectRunnersQuery } from '../../core/runners.query';
 import { type ConfigFormValues, configEdit } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
-import { injectConfigHistoryQuery } from '../config-history.query';
-import { injectRepositoriesQuery } from '../repositories/repositories.query';
-import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
+import { injectProjectHistoryQuery } from '../config-history.query';
+import { injectProjectRepositoriesQuery } from '../repositories/repositories.query';
+import { injectProjectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectColorPicker } from './project-color-picker';
+import { PROJECT_COLORS } from './project-color.translate';
+import type { LandingPosition } from './project-landing-order.domain';
 import {
   foldLandingPositions,
   pendingRepositionKeys,
@@ -124,10 +123,10 @@ export class ProjectDetail {
 
   private readonly sourceLinksQuery = injectProjectSourceLinksQuery(() => this.projectId());
   private readonly repositoryLinksQuery = injectProjectRepositoryLinksQuery(() => this.projectId());
-  private readonly sourcesQuery = injectWorkSourcesQuery(() => true);
-  private readonly repositoriesQuery = injectRepositoriesQuery(() => true);
-  private readonly runnersQuery = injectHubRunnersQuery();
-  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.PROJECT, () => this.projectId());
+  private readonly sourcesQuery = injectProjectWorkSourcesQuery(() => true);
+  private readonly repositoriesQuery = injectProjectRepositoriesQuery(() => true);
+  private readonly runnersQuery = injectProjectRunnersQuery();
+  private readonly historyQuery = injectProjectHistoryQuery(() => this.projectId());
   private readonly now = injectNowSignal();
   /** Today's boundary, cut from the shared clock; string equality stops the tick here, so the key changes only when the local day does. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
@@ -213,8 +212,8 @@ export class ProjectDetail {
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
   protected readonly shown = computed(() => projectFormValues(this.project()));
-  /** The palette, by name, read from the generated enum. */
-  protected readonly palette: readonly string[] = Object.values(ProjectColor);
+  /** The palette, by name. */
+  protected readonly palette: readonly string[] = PROJECT_COLORS;
   protected readonly colorOpen = signal(false);
   protected readonly colorError = signal<string | null>(null);
   protected readonly editOpen = signal(false);
@@ -368,7 +367,7 @@ export class ProjectDetail {
   }
 
   /** One drop's landing position; a refusal shows on the repositories panel's error line. */
-  protected async onReposition(body: LandingPositionRequest): Promise<void> {
+  protected async onReposition(body: LandingPosition): Promise<void> {
     const projectId = this.projectId();
     if (projectId === null) return;
     this.linkFailure.set(null);
