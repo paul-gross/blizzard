@@ -57,3 +57,7 @@ export { KitTextInput } from './kit-text-input';
 export type { Tone } from './tone';
 
 export { KitUrgencyPill } from './kit-urgency-pill';
+export { KitToolbar, KitToolbarWidget } from './kit-toolbar';
+
+export { KitChipGroup } from './kit-chip-group';
+export { KitChipOptionDirective } from './kit-chip-option';

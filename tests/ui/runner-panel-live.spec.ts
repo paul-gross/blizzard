@@ -33,6 +33,11 @@ test('test_runner_panel_updates_live_over_sse_with_no_reload', async ({ api, iss
   await page.setViewportSize(wideViewport);
   await page.goto(`${runnerHost.url}/board`);
   await expect(page.getByTestId('local-panel')).toBeVisible();
+  for (const name of ['Runner', 'Project']) {
+    const group = page.getByRole('listbox', { name, exact: true });
+    await expect(group.getByRole('option', { name: 'All', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(group.getByRole('option', { selected: true })).toHaveCount(1);
+  }
   const card = page.locator(`[data-testid="chunk-card"][data-chunk="${chunkId}"]`);
   const doneCard = page.getByTestId('lane-done').locator(`[data-testid="chunk-card"][data-chunk="${chunkId}"]`);
   await expect(card).toHaveCount(0);

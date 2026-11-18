@@ -219,7 +219,7 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="decision-node"]')?.textContent).toContain('approve-gate');
     const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
     expect(choices).toEqual(['approve', 'reject']);
-    expect(el.querySelector('[data-testid="decision-choice"]')?.closest('[title]')?.getAttribute('title')).toBe('Ship it.');
+    expect(el.querySelector('[data-testid="decision-choice"]')?.querySelector('[title]')?.getAttribute('title')).toBe('Ship it.');
     expect(el.querySelector('[data-testid="decision-choice"]')?.hasAttribute('aria-pressed')).toBe(false);
     expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
   });
@@ -523,14 +523,14 @@ describe('ChunkAwaitingHuman', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
-      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-disabled')).toBe('true');
     }
 
     fixture.componentRef.setInput('resolvePending', false);
     await fixture.whenStable();
 
     for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
-      expect(button.disabled).toBe(false);
+      expect(button.getAttribute('aria-disabled')).not.toBe('true');
     }
   });
 
@@ -544,7 +544,7 @@ describe('ChunkAwaitingHuman', () => {
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
     for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
-      expect(chip.disabled).toBe(true);
+      expect(chip.getAttribute('aria-disabled')).toBe('true');
     }
 
     fixture.componentRef.setInput('pendingAnswerQuestionIds', []);
@@ -552,7 +552,7 @@ describe('ChunkAwaitingHuman', () => {
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
     for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
-      expect(chip.disabled).toBe(false);
+      expect(chip.getAttribute('aria-disabled')).not.toBe('true');
     }
   });
 
@@ -572,7 +572,7 @@ describe('ChunkAwaitingHuman', () => {
     expect(pending.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
     expect(other.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
     for (const chip of other.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
-      expect(chip.disabled).toBe(false);
+      expect(chip.getAttribute('aria-disabled')).not.toBe('true');
     }
   });
 

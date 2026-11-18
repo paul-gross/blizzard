@@ -96,7 +96,9 @@
   color: var(--cyan);
 }
 .chips {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 .decision-chips {
   display: flex;

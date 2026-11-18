@@ -26,13 +26,13 @@ test('test_project_lens_deep_links_resolve_in_the_browser', async ({ api, page, 
   await page.goto('/p/default/board');
   await expect(page.getByTestId('board-shell')).toBeVisible();
   await expect(page).toHaveURL(/\/p\/default\/board$/);
-  await expect(page.getByTestId('project-lens-default')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('project-lens-default').locator('..')).toHaveAttribute('aria-selected', 'true');
 
   // A slug the project has left is replaced by its current slug.
   await page.goto(`/p/${formerSlug}/board`);
   await expect(page).toHaveURL(new RegExp(`/p/${currentSlug}/board$`));
   await expect(page.getByTestId('board-shell')).toBeVisible();
-  await expect(page.getByTestId(`project-lens-${currentSlug}`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId(`project-lens-${currentSlug}`).locator('..')).toHaveAttribute('aria-selected', 'true');
 
   // So is the project's id.
   await page.goto(`/p/${project.project_id}/board`);
@@ -43,5 +43,48 @@ test('test_project_lens_deep_links_resolve_in_the_browser', async ({ api, page, 
   await expect(page).toHaveURL(/\/board$/);
   await expect(page).not.toHaveURL(/\/p\//);
   await expect(page.getByTestId('lens-notice')).toBeVisible();
-  await expect(page.getByTestId('project-lens-all')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('project-lens-all').locator('..')).toHaveAttribute('aria-selected', 'true');
+
+  // The projected choices form one tab stop. Moving focus also changes the route-backed selection.
+  const lens = page.getByRole('listbox', { name: 'Project lens' });
+  const all = lens.getByRole('option', { name: 'All', exact: true });
+  const options = lens.getByRole('option');
+  await expect(lens).not.toHaveAttribute('aria-multiselectable', 'true');
+  await all.focus();
+  await expect(all).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  const next = options.nth(1);
+  await expect(next).toBeFocused();
+  await expect(next).toHaveAttribute('aria-selected', 'true');
+  await expect(all).toHaveAttribute('aria-selected', 'false');
+  await expect(page).toHaveURL(/\/p\//);
+  await page.keyboard.press('Tab');
+  await expect(next).not.toBeFocused();
+  await expect(lens.locator(':focus')).toHaveCount(0);
+  await page.keyboard.press('Shift+Tab');
+  await expect(next).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(all).toBeFocused();
+  await expect(all).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/\/board$/);
+  await expect(page).not.toHaveURL(/\/p\//);
+});
+
+test('proposal filters remain operable at the narrow viewport', async ({ page, narrowViewport }) => {
+  await page.setViewportSize(narrowViewport);
+  await page.goto('/gardening/proposals');
+  const group = page.getByRole('listbox', { name: 'Proposal waiting status' });
+  const selected = group.getByRole('option', { selected: true });
+  await expect(selected).toHaveCount(1);
+  await selected.focus();
+  await page.keyboard.press('ArrowRight');
+  const focused = group.locator('[role="option"]:focus');
+  await expect(focused).toHaveCount(1);
+  await expect(focused).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Tab');
+  await expect(group.locator(':focus')).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const browser = globalThis as unknown as { document: { documentElement: { scrollWidth: number } }; innerWidth: number };
+    return browser.document.documentElement.scrollWidth <= browser.innerWidth;
+  })).toBe(true);
 });

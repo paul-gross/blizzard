@@ -91,11 +91,11 @@ describe('runner app-nav shell sweep (web:shell-sweep)', () => {
         const nav = root.querySelector<HTMLElement>('[data-testid="app-nav"]');
         expect(nav, `${label}: no tab strip in the DOM`).not.toBeNull();
         expect(
-          root.querySelectorAll('[data-testid="runner-filter"] button').length,
+          root.querySelectorAll('[data-testid="runner-filter"] fleet-kit-chip[role="option"]').length,
           `${label}: the Runner filter does not offer All and every runner`,
         ).toBe(1 + RUNNERS.items.length);
         expect(
-          root.querySelectorAll('[data-testid="project-filter"] button').length,
+          root.querySelectorAll('[data-testid="project-filter"] fleet-kit-chip[role="option"]').length,
           `${label}: the Project filter does not offer All and every project`,
         ).toBe(PROJECT_CHOICES);
 
@@ -114,6 +114,10 @@ describe('runner app-nav shell sweep (web:shell-sweep)', () => {
 
         for (const testid of ['runner-filter', 'project-filter']) {
           const filter = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!;
+          const chips = filter.querySelector<HTMLElement>('.chips')!;
+          expect(chips.getBoundingClientRect().width, `${label}: ${testid} chips have zero width`).toBeGreaterThan(0);
+          expect(chips.getBoundingClientRect().right, `${label}: ${testid} chips overflow the filter`).toBeLessThanOrEqual(filter.getBoundingClientRect().right + 0.5);
+          expect(getComputedStyle(chips).overflowX, `${label}: ${testid} chips cannot scroll`).toBe('auto');
           expect(
             filter.getBoundingClientRect().right,
             `${label}: the ${testid}'s right edge is past the viewport`,

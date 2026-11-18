@@ -25,7 +25,7 @@ describe('FleetChoreForm', () => {
   it('emits the draft with the mode and promote picked', async () => {
     const { fixture, el, saved } = await mount(DRAFT);
 
-    const delta = Array.from(el.querySelectorAll<HTMLButtonElement>('fleet-kit-chips button')).find(
+    const delta = Array.from(el.querySelectorAll<HTMLElement>('fleet-kit-chips [role=option]')).find(
       (b) => b.textContent?.trim() === 'delta',
     )!;
     delta.click();
@@ -40,7 +40,7 @@ describe('FleetChoreForm', () => {
   it('offers a mode this build does not know as itself, and keeps it', async () => {
     const { el, saved } = await mount({ ...DRAFT, mode: 'sampled' });
 
-    const labels = Array.from(el.querySelectorAll('fleet-kit-chips button')).map((b) => b.textContent?.trim());
+    const labels = Array.from(el.querySelectorAll('fleet-kit-chips [role=option]')).map((b) => b.textContent?.trim());
     expect(labels).toEqual(['full', 'delta', 'sampled']);
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-chore-form-save"]')!.click();
     expect(saved[0].mode).toBe('sampled');

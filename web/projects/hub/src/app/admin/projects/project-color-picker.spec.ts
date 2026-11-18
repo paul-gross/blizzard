@@ -19,13 +19,14 @@ describe('ProjectColorPicker', () => {
 
   it('offers every palette color, the current one pressed, and a Custom chip after them', async () => {
     const root: HTMLElement = (await mount()).nativeElement;
-    const chips = root.querySelectorAll<HTMLButtonElement>('button[data-testid^="project-color-"]');
+    expect(root.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Project color');
+    const chips = root.querySelectorAll<HTMLButtonElement>('[role="option"]');
     expect(chips.length).toBe(COLORS.length + 1);
-    expect(chips[chips.length - 1].dataset['testid']).toBe('project-color-custom');
-    expect(root.querySelector('[data-testid="project-color-custom"]')?.getAttribute('aria-pressed')).toBe('false');
+    expect(chips[chips.length - 1].querySelector<HTMLElement>('[data-testid]')?.dataset['testid']).toBe('project-color-custom');
+    expect(root.querySelector('[data-testid="project-color-custom"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('false');
     expect(root.querySelector('[data-testid="project-color-custom-input"]')).toBeNull();
-    expect(root.querySelector('[data-testid="project-color-teal"]')?.getAttribute('aria-pressed')).toBe('true');
-    expect(root.querySelector('[data-testid="project-color-pink"]')?.getAttribute('aria-pressed')).toBe('false');
+    expect(root.querySelector('[data-testid="project-color-teal"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('[data-testid="project-color-pink"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('false');
   });
 
   it('emits the chosen color', async () => {
@@ -36,11 +37,23 @@ describe('ProjectColorPicker', () => {
     expect(chosen).toEqual(['pink']);
   });
 
+  it('emits once when a pointer focuses and picks a palette color after a custom color', async () => {
+    const fixture = await mount(false, '#ff8800');
+    const chosen: string[] = [];
+    fixture.componentInstance.choose.subscribe((color) => chosen.push(color));
+    const option = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-color-pink"]')!.closest<HTMLElement>('[role=option]')!;
+    option.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    option.focus();
+    option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    option.click();
+    expect(chosen).toEqual(['pink']);
+  });
+
   it('selects Custom and seeds the input with the color when the current color is a hex', async () => {
     const fixture = await mount(false, '#ff8800');
     const root: HTMLElement = fixture.nativeElement;
-    expect(root.querySelector('[data-testid="project-color-custom"]')?.getAttribute('aria-pressed')).toBe('true');
-    expect(root.querySelector('[data-testid="project-color-teal"]')?.getAttribute('aria-pressed')).toBe('false');
+    expect(root.querySelector('[data-testid="project-color-custom"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('[data-testid="project-color-teal"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('false');
     expect(root.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')?.value).toBe('#ff8800');
   });
 
@@ -51,6 +64,8 @@ describe('ProjectColorPicker', () => {
     fixture.componentInstance.choose.subscribe((color) => chosen.push(color));
     root.querySelector<HTMLButtonElement>('[data-testid="project-color-custom"]')!.click();
     await fixture.whenStable();
+    expect(chosen).toEqual([]);
+    expect(root.querySelector('[data-testid="project-color-custom"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
     const input = root.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')!;
     expect(input.value).toBe('');
     input.value = '#FF8800';
@@ -68,15 +83,31 @@ describe('ProjectColorPicker', () => {
     expect(root.querySelector('[data-testid="project-color-custom-input"]')).toBeNull();
   });
 
+  it('opens Custom through keyboard navigation without emitting a color', async () => {
+    const palette = COLORS;
+    const fixture = await mount(false, palette[palette.length - 1]);
+    const root: HTMLElement = fixture.nativeElement;
+    const chosen: string[] = [];
+    fixture.componentInstance.choose.subscribe((color) => chosen.push(color));
+    const options = root.querySelectorAll<HTMLElement>('[role=option]');
+    const lastPalette = options[options.length - 2];
+    lastPalette.focus();
+    lastPalette.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await fixture.whenStable();
+    expect(chosen).toEqual([]);
+    expect(options[options.length - 1].getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('[data-testid="project-color-custom-input"]')).not.toBeNull();
+  });
+
   it('disables every chip while an edit is pending', async () => {
     const root: HTMLElement = (await mount(true)).nativeElement;
-    const chips = [...root.querySelectorAll<HTMLButtonElement>('button[data-testid^="project-color-"]')];
-    expect(chips.every((chip) => chip.disabled)).toBe(true);
+    const chips = [...root.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+    expect(chips.every((chip) => chip.getAttribute('aria-disabled') === 'true')).toBe(true);
   });
 
   it('disables the custom color input along with the chips while an edit is pending', async () => {
     const root: HTMLElement = (await mount(true, '#ff8800')).nativeElement;
     expect(root.querySelector<HTMLInputElement>('[data-testid="project-color-custom-input"]')?.disabled).toBe(true);
-    expect(root.querySelector<HTMLButtonElement>('[data-testid="project-color-pink"]')?.disabled).toBe(true);
+    expect(root.querySelector('[data-testid="project-color-pink"]')?.closest('[role=option]')?.getAttribute('aria-disabled')).toBe('true');
   });
 });

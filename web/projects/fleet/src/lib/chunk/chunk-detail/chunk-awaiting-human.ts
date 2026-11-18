@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { KitButton } from '../../kit/kit-button';
-import { KitChips, type KitChipOption } from '../../kit/kit-chips';
+import { KitChip } from '../../kit/kit-chips';
+import { KitToolbar, KitToolbarWidget } from '../../kit/kit-toolbar';
 import { KitSectionHead } from '../../kit/kit-section-head';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
@@ -48,7 +49,7 @@ const ANSWERED_TRAIL_LIMIT = 3;
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, FleetWhen, KitButton, KitChips, KitSectionHead, KitTextInput],
+  imports: [ChunkEscalation, FleetWhen, KitButton, KitChip, KitToolbar, KitToolbarWidget, KitSectionHead, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -56,19 +57,6 @@ export class ChunkAwaitingHuman {
   /** Render one independently placed part, or the complete legacy presentation. */
   readonly section = input<'all' | 'asks' | 'answered' | 'decisions'>('all');
 
-  protected questionOptions(options: readonly string[]): readonly KitChipOption[] {
-    return options.map((value) => ({ value, label: value, testid: 'question-option' }));
-  }
-
-  /** A choice the hub judges would override a red check is marked as one. */
-  protected decisionOptions(decision: DecisionView): readonly KitChipOption[] {
-    return (decision.choices ?? []).map((choice) => ({
-      value: choice.name,
-      label: choice.would_override_red_checks ? `${choice.name} · overrides red checks` : choice.name,
-      title: choice.description,
-      testid: 'decision-choice',
-    }));
-  }
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();
 

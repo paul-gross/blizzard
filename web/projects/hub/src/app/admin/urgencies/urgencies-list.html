@@ -11,7 +11,7 @@
       </section>
     }
     <fleet-kit-error-line [message]="error()" />
-    <fleet-kit-chips [options]="options" [selectedValue]="lifecycle()" (choose)="filter.emit($event)" />
+    <fleet-kit-chips ariaLabel="Urgency lifecycle" [options]="options" [selectedValue]="lifecycle()" (choose)="filter.emit($event)" />
     <fleet-kit-async-state [state]="state()" placement="inline" loadingText="Loading urgencies…" errorText="Could not load urgencies." emptyText="No urgencies found.">
     <div cdkDropList fleetKitSelectList ariaLabel="Urgencies" [value]="selected()" (valueChange)="pick.emit($event)" [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="reorder.emit($event)">
       @for (urgency of rows(); track urgency.urgency_id) {

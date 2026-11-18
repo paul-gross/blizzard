@@ -67,7 +67,7 @@ describe('RepositoriesPage create', () => {
     root.querySelector<E>(`[data-testid="${id}"]`);
   const field = (label: string) =>
     [...document.querySelectorAll('fleet-kit-field')].find((f) => f.textContent?.trim().startsWith(label))!;
-  const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  const options = () => [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [role="option"]:not(fleet-kit-select-row)')];
 
   async function type(harness: RouterTestingHarness, key: string, text: string): Promise<void> {
     const el = q(document, `admin-repositories-create-field-${key}`)!;

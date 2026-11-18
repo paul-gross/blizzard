@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitChip, KitColorInput, KitSwatch } from 'fleet';
+import { KitChip, KitChipGroup, KitChipOptionDirective, KitColorInput, KitSwatch } from 'fleet';
 
 /**
  * The palette as a row of choice chips, each a swatch followed by its color name as text, the project's current color
@@ -10,7 +10,7 @@ import { KitChip, KitColorInput, KitSwatch } from 'fleet';
 @Component({
   selector: 'app-project-color-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip, KitColorInput, KitSwatch],
+  imports: [KitChip, KitChipGroup, KitChipOptionDirective, KitColorInput, KitSwatch],
   templateUrl: './project-color-picker.html',
   styleUrl: './project-color-picker.css',
 })
@@ -31,6 +31,20 @@ export class ProjectColorPicker {
   /** The current color is outside the palette, so it is a custom one. */
   protected readonly isCustom = computed(() => !this.colors().includes(this.current()));
   protected readonly customOpen = computed(() => this.isCustom() || this.customRequested());
+
+  protected readonly selectedColor = computed(() => this.customOpen() ? null : this.current());
+  protected selectionChanged(value: unknown): void {
+    if (typeof value === 'string' || value === null) this.select(value);
+  }
+
+  private select(color: string | null): void {
+    if (this.disabled()) return;
+    if (color === null) {
+      this.customRequested.set(true);
+    } else {
+      this.onPalette(color);
+    }
+  }
 
   protected onPalette(color: string): void {
     this.customRequested.set(false);

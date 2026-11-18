@@ -137,11 +137,12 @@ describe('ProjectDetail overview shell sweep', () => {
       find(root, 'admin-projects-color-open')!.click();
       await settle(harness.fixture);
       const dialog = document.querySelector<HTMLElement>('[data-testid="admin-projects-color-dialog"]')!;
-      const chips = [...dialog.querySelectorAll<HTMLElement>('button[data-testid^="project-color-"]')];
+      const chips = [...dialog.querySelectorAll<HTMLElement>('[data-testid="project-color-picker"] fleet-kit-chip[role="option"]')];
       expect(chips).toHaveLength(13);
       const panel = dialog.getBoundingClientRect();
       for (const chip of chips) {
         const box = chip.getBoundingClientRect();
+        expect(box.width, 'a chip has zero width').toBeGreaterThan(0);
         expect(box.right, 'a chip overflows the dialog').toBeLessThanOrEqual(panel.right + 0.5);
         expect(box.left, 'a chip starts left of the dialog').toBeGreaterThanOrEqual(panel.left - 0.5);
       }
