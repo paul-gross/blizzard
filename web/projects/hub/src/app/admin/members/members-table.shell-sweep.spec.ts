@@ -213,6 +213,26 @@ describe('members table keyboard sweep (web:shell-sweep)', () => {
       expect(document.activeElement).toBe(select);
     }));
 
+  it('keeps keyboard focus on the role select through a pick whose row goes pending and back', () =>
+    run(async ({ fixture, root, before }) => {
+      before.focus();
+      await press('{Tab}{ArrowDown}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}');
+      const select = control(root, 'members-table-role-select', 'usr_grace');
+      fixture.componentInstance.changeRole.subscribe(() =>
+        fixture.componentRef.setInput('pendingUserIds', ['usr_otto', 'usr_grace']),
+      );
+      await press(' ');
+      await press('{ArrowDown}');
+      await press('{Enter}');
+      expect((select as HTMLButtonElement).disabled).toBe(true);
+      fixture.componentRef.setInput('pendingUserIds', ['usr_otto']);
+      await settle();
+      expect(document.activeElement).toBe(select);
+      expect(select.getAttribute('tabindex')).toBe('0');
+      await press('{ArrowRight}{ArrowRight}');
+      expect(document.activeElement).toBe(control(root, 'members-table-revoke', 'usr_grace'));
+    }));
+
   for (const [name, key] of [['Enter', '{Enter}'], ['Space', ' ']] as const) {
     it(`${name} on revoke emits revoke once`, () =>
       run(async ({ root, before, revokes }) => {
