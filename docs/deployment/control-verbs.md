@@ -221,11 +221,14 @@ subscription, or the sole runner when it names no subscription.
 
 A timed host — the default, `loop = "timed"` — runs each runner's tick and its own pass every `tick_seconds` seconds,
 set at the top level of `blizzard-host.toml` and 30 when the file states none. Each wait is counted from the end of one
-pass to the start of the next, so a pass that runs long is followed by the whole interval. The host reads the key at
-start; a change takes hold on the next start.
+pass to the start of the next, so a pass that runs long is followed by the whole interval. The file seeds the key into
+the host's settings record, and from then on it is live: change it with
+`blizzard runner settings set tick_seconds
+<seconds> --host`, and every timed driver re-reads it at once rather than
+finishing its current wait ([the host's settings](./runner-settings.md#the-hosts-settings)).
 
-`BZ_RUNNER_TICK_SECONDS` is deprecated. The host honors it only when the file states no `tick_seconds`, and warns at
-start whenever it is set, saying whether it was honored or overridden. Set `tick_seconds` instead.
+`BZ_RUNNER_TICK_SECONDS` is deprecated. The host seeds it only when neither the store nor the file holds `tick_seconds`,
+and warns at start whenever it is set, saying whether it was seeded or ignored. Set `tick_seconds` instead.
 
 ### Stepping a host
 

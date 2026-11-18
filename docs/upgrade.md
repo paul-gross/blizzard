@@ -31,10 +31,7 @@ authored in the file can therefore be seeded on a later start; omitted keys use 
 previously seeded file value later does not change it. Change stored settings with the settings CLI or API
 ([runner settings](./deployment/runner-settings.md)).
 
-Host settings and boot-only runner settings remain file-owned in this release. In particular, without explicit
-`[tools]`, the implicit host tools profile is derived from file runner values on every boot, even when stored worker
-settings differ. Declare `[tools]` explicitly. A later host-settings migration will seed the effective host profile on
-its first seed; review that profile before taking that release.
+Boot-only runner settings remain file-owned.
 
 Retirement can retain an unconfigured identity with settings or history, causing the existing wrong-store guard to
 refuse a sibling's startup. Stop the owned host and use
@@ -45,6 +42,26 @@ runner; do not treat archive ingest as reinstatement.
 Keep the pre-upgrade backup until the upgrade is accepted. Rolling back to an older release cannot preserve or apply
 settings changes made only in the new store: restore the matching pre-upgrade store and file if rolling back, and
 reconcile any work or settings changes made since that backup before resuming. Preserve archives separately.
+
+### Host settings move to the store
+
+The host's live top-level keys — `tick_seconds`, `[transcripts]`, `[worker_stdout]`, the live `[tracing]` keys and
+`[tools]` — now live in a host settings record in the runner store, seeded from the host file at each start where the
+record holds no entry. Once a key is seeded, editing it in the file changes nothing: change it with
+`blizzard runner settings set <key> <value> --host`, or the host settings API
+([the host's settings](./deployment/runner-settings.md#the-hosts-settings)). Check the seeded record with
+`blizzard runner settings get --host`.
+
+Move `BZ_RUNNER_TICK_SECONDS` into the host file as `tick_seconds = <seconds>` before upgrading, and unset the variable.
+A host whose file states no `tick_seconds` seeds the variable's value on its first start, so it keeps ticking at the
+same interval, and warns while the variable stays set.
+
+Without explicit `[tools]`, the first start seeds the profile the runners agree on, when it is not empty, as the host's
+`tools.*` entries. Review it with `get --host` after the upgrade; from then on it no longer follows the runners' file
+values.
+
+The host record arrives in the same `blizzard runner migrate` as the runner settings above. Rolling back cannot apply
+host settings changes made only in the new store: restore the pre-upgrade store and file together.
 
 ## Upgrading to 0.4.0
 
