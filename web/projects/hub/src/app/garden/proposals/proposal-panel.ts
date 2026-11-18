@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitMarkdown, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
-import type { FindingTriageVerb } from '../core/finding-list';
+import type { FindingTriageVerb } from '../core/finding-triage-verb.domain';
 import { findingStateTone, isFindingExited } from '../core/finding-state';
 import { AppLink } from 'fleet/shell';
 

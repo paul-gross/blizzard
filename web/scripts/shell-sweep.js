@@ -224,12 +224,12 @@
  *     buttons genuinely stay inside the viewport and never overlap each other or the
  *     list itself, at 1400/390/320px, and a `gone`-flagged row (D8) carries a
  *     genuinely different computed background/border-left color from a plain row.
- *   - projects/hub/src/app/garden/findings/gardening-finding-triage-dialog.shell-sweep.spec.ts —
+ *   - projects/hub/src/app/garden/findings/triage/gardening-finding-triage-dialog.shell-sweep.spec.ts —
  *     the findings triage dialog: the note field renders
  *     without overflowing the panel, the `supersede` verb's extra absorbing-finding
- *     field renders below/beside the note field with no overlap, and the footer's
- *     Cancel/submit buttons sit side by side without overflowing the panel, at
- *     1400/390/320px.
+ *     field renders below/beside the note field with no overlap, the form's
+ *     Save/Cancel row sits side by side inside the panel, and a form-line error
+ *     stays inside the panel, at 1400/390/320px.
  *   - projects/hub/src/app/garden/gardening-page-grids.shell-sweep.spec.ts —
  *     the gardening sub-tabs sharing one split (Scopes, Cadences, Runs,
  *     Findings): each one's own master/detail grid sits list beside detail at
@@ -417,7 +417,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-pass-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposal-accept-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-findings-triage.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/findings/triage/gardening-finding-triage-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/findings/gardening-findings-filters.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-card/board-card-rows.shell-sweep.spec.ts' },

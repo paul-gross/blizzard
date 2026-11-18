@@ -145,7 +145,7 @@ export class GardeningProposalDetail {
   private readonly notAFindingFindings = injectNotAFindingFindingsMutation();
 
   /** One entry per verb the evidence table offers, each closing over its own injected
-   * mutation — the same by-verb dispatch table `gardening-finding-triage-dialog.ts`
+   * mutation — the same by-verb dispatch table `findings/triage/finding-triage.service.ts`
    * uses, since a mutation must be injected in a field initializer and cannot be
    * picked inside the handler. `label` is what the generated note names the change
    * as. */

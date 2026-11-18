@@ -131,8 +131,8 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
    * `FindingExitVars.findingIds` shape (`FindingSupersedeVars` too, which only adds a
    * field this read never touches), read by `mutationKey` alone
    * (`injectPendingMutationVariables`) rather than by owning any of the six mutations
-   * here — the triage dialog that actually fires them (`gardening-finding-triage-
-   * dialog.ts`) is a sibling surface this list never mounts.
+   * here — the triage dialog that actually fires them (through
+   * `triage/finding-triage.service.ts`) is a sibling surface this list never mounts.
    *
    * Each of these six verbs' resulting `FindingView.state` is fixed and known ahead
    * of the call settling (`reopened` resolves to `"live"`).
