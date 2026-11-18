@@ -55,12 +55,18 @@ export class KitColorInput implements FormValueControl<string> {
   }
 
   /** What the text field shows: the caller's `value` until the user types over it. */
-  protected readonly draft = linkedSignal(() => (isHexColor(this.value()) ? this.value().toLowerCase() : ''));
+  protected readonly draft = linkedSignal(() =>
+    isHexColor(this.value()) ? this.value().toLowerCase() : '',
+  );
 
-  protected readonly malformed = computed(() => this.draft() !== '' && !isHexColor(this.draft()));
+  protected readonly malformed = computed(
+    () => this.draft() !== '' && !isHexColor(this.draft()),
+  );
 
   /** The native picker needs a valid value of its own; it rests on black until a color is chosen. */
-  protected readonly pickerValue = computed(() => (isHexColor(this.draft()) ? this.draft().toLowerCase() : '#000000'));
+  protected readonly pickerValue = computed(() =>
+    isHexColor(this.draft()) ? this.draft().toLowerCase() : '#000000',
+  );
 
   protected onText(event: Event): void {
     const text = (event.target as HTMLInputElement).value.trim();

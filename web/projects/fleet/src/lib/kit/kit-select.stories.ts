@@ -66,7 +66,8 @@ export const LongValueTruncating: Story = {
       ...OPTIONS,
       {
         value: 'long',
-        label: 'A routine whose name runs well past the width the trigger is given here',
+        label:
+          'A routine whose name runs well past the width the trigger is given here',
       },
     ],
     selectedValue: 'long',

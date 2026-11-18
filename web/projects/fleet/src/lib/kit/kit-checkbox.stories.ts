@@ -42,7 +42,8 @@ export const Checked: Story = { args: { checked: true } };
 export const Disabled: Story = { args: { disabled: true } };
 export const LongLabel: Story = {
   args: {
-    label: 'Include stopped chunks, and every chunk whose graph has since been retired from the project',
+    label:
+      'Include stopped chunks, and every chunk whose graph has since been retired from the project',
   },
 };
 
