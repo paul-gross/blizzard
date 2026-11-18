@@ -5,9 +5,11 @@ import {
 } from '@storybook/angular-vite';
 
 import { FormChromeHost } from './kit-form-chrome.story-host';
+import { KitOrDefault } from './kit-or-default';
 
 const meta: Meta = {
   title: 'Kit/Or default',
+  component: KitOrDefault,
   decorators: [moduleMetadata({ imports: [FormChromeHost] })],
 };
 export default meta;

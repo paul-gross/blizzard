@@ -1,5 +1,5 @@
 import { Component, input, signal } from '@angular/core';
-import { form, required, schema, validate } from '@angular/forms/signals';
+import { disabled, form, required, schema, validate } from '@angular/forms/signals';
 import { type SaveOutcome, submitForm } from 'fleet';
 
 import { applyShownWhen } from './config-field-tree.form';
@@ -129,6 +129,69 @@ export class UrgencyDialogHost {
       const outcome = this.outcome();
       if (outcome.ok) this.saved.push(draft);
       return outcome;
+    });
+  }
+}
+
+/** An edit draft whose number field offers an explicit default, shown only while its policy parks. */
+export interface TimeoutDraft {
+  policy: string;
+  useDefault: boolean;
+  hours: string;
+}
+
+export const TIMEOUT_FIELDS: readonly ConfigFieldView<TimeoutDraft>[] = [
+  {
+    key: 'policy',
+    label: 'Policy',
+    kind: 'select',
+    options: [
+      { value: 'merge', label: 'Merge' },
+      { value: 'park', label: 'Park' },
+    ],
+  },
+  {
+    key: 'hours',
+    label: 'Timeout (hours)',
+    kind: 'number',
+    orDefault: { key: 'useDefault', label: 'Default' },
+    shownWhen: { key: 'policy', value: 'park' },
+  },
+];
+
+const timeoutRules = schema<TimeoutDraft>((p) => {
+  applyShownWhen(p, TIMEOUT_FIELDS);
+  disabled(p.hours, ({ valueOf }) => valueOf(p.useDefault));
+  validate(p.hours, ({ value, valueOf }) =>
+    valueOf(p.useDefault) || /^[1-9]\d*$/.test(value()) ? null : { kind: 'hours', message: 'Enter whole hours, or choose the default' },
+  );
+});
+
+/** A container for an edit whose timeout is the default or stated hours; `useDefault` seeds the baseline's choice. */
+@Component({
+  selector: 'app-story-timeout-dialog',
+  imports: [ConfigFieldTreeDialog],
+  templateUrl: './config-field-tree-dialog.timeout.form-story.html',
+})
+export class TimeoutDialogHost {
+  readonly useDefault = input(true);
+  readonly fields = TIMEOUT_FIELDS;
+  readonly baseline = signal<TimeoutDraft>({ policy: 'park', useDefault: true, hours: '' });
+  readonly f = form(signal<TimeoutDraft>({ ...this.baseline() }), timeoutRules);
+  saved: TimeoutDraft[] = [];
+
+  constructor() {
+    queueMicrotask(() => {
+      if (this.useDefault()) return;
+      this.baseline.set({ policy: 'park', useDefault: false, hours: '12' });
+      this.f().reset({ ...this.baseline() });
+    });
+  }
+
+  async onSave(): Promise<void> {
+    await submitForm(this.f, async (draft) => {
+      this.saved.push(draft);
+      return { ok: true };
     });
   }
 }

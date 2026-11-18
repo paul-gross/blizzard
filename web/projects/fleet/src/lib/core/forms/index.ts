@@ -5,4 +5,5 @@
 export type { EditBaseline } from './edit-baseline.domain';
 export type { RefusalMap, SaveOutcome } from './outcome';
 export { readRefusal } from './refusal.translate';
+export { readWholeNumber } from './whole-number.domain';
 export { submitForm } from './submit';

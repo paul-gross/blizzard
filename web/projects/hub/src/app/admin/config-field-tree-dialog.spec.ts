@@ -7,7 +7,7 @@ import { type SaveOutcome, submitForm } from 'fleet';
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import type { ConfigFieldView } from './config-field-tree.model';
 
-import { SourceDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
+import { SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
 
 async function mount<T>(host: Type<T>, inputs: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({ imports: [host], providers: [provideZonelessChangeDetection()] }).compileComponents();
@@ -203,6 +203,64 @@ describe('ConfigFieldTreeDialog', () => {
       await type('urg-field-label', 'Pressing');
       await submit();
       expect(q('kit-form-line')!.textContent).toContain('could not save');
+    });
+  });
+
+  describe('a number field with a default choice', () => {
+    const chip = () => document.querySelector<HTMLButtonElement>('[data-testid="kit-or-default-chip"]')!;
+    const hours = () => document.querySelector<HTMLInputElement>('[data-testid="tmo-field-hours"] input, input[data-testid="tmo-field-hours"]')!;
+    const save = () => document.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+
+    it('draws the default choice beside the hours, disabling them while it is chosen', async () => {
+      const { host, fixture } = await mount(TimeoutDialogHost);
+      expect(chip().getAttribute('aria-pressed')).toBe('true');
+      expect(hours().disabled).toBe(true);
+      chip().click();
+      await fixture.whenStable();
+      expect(host.f.useDefault().value()).toBe(false);
+      expect(hours().disabled).toBe(false);
+    });
+
+    it('holds Save while the default stays chosen, and names a change from the default by its label', async () => {
+      const { host, fixture, q, type, submit } = await mount(TimeoutDialogHost);
+      expect(save().disabled).toBe(true);
+      expect(q('tmo-diff-empty')).not.toBeNull();
+      chip().click();
+      await fixture.whenStable();
+      await type('tmo-field-hours', '6');
+      expect(q('tmo-diff')!.textContent).toContain('Default');
+      expect(q('tmo-diff')!.textContent).toContain('6');
+      await submit();
+      expect(host.saved).toEqual([{ policy: 'park', useDefault: false, hours: '6' }]);
+    });
+
+    it('reads choosing the default over stated hours as a change, the typed text kept', async () => {
+      const { host, fixture, q } = await mount(TimeoutDialogHost, { useDefault: false });
+      await fixture.whenStable();
+      expect(save().disabled).toBe(true);
+      chip().click();
+      await fixture.whenStable();
+      expect(save().disabled).toBe(false);
+      expect(q('tmo-diff')!.textContent).toContain('12');
+      expect(q('tmo-diff')!.textContent).toContain('Default');
+      expect(host.f.hours().value()).toBe('12');
+    });
+
+    it('marks stated hours from the host rules', async () => {
+      const { host, fixture, type, submit } = await mount(TimeoutDialogHost);
+      chip().click();
+      await fixture.whenStable();
+      await type('tmo-field-hours', '0');
+      await submit();
+      expect(host.saved).toEqual([]);
+      expect(document.querySelector('fleet-kit-dialog')!.textContent).toContain('Enter whole hours');
+    });
+
+    it('hides the field and its choice while the condition does not hold', async () => {
+      const { host, fixture } = await mount(TimeoutDialogHost);
+      host.f.policy().value.set('merge');
+      await fixture.whenStable();
+      expect(document.querySelector('[data-testid="kit-or-default-chip"]')).toBeNull();
     });
   });
 

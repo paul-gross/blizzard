@@ -1,12 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { form } from '@angular/forms/signals';
+import { asyncState, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectCreateRepositoryMutation } from './repositories.mutations';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
-import { type ConfigFormValues, createBody } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import {
   includeRetired,
   LIFECYCLE_FILTER_PARAM,
@@ -18,9 +17,11 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { repositoryFields, repositoryRows } from './repositories.model';
+import { honourForge, repositoryFieldViews, repositoryRows } from './repositories.model';
 import { injectLandingPolicyChoicesQuery, injectRepositoryListQuery } from './repositories.query';
-import { repositoryCreate } from './repository.translate';
+import { EMPTY_REPOSITORY_DRAFT, type RepositoryDraft } from './repository.domain';
+import { repositoryCreateRules } from './repository.form';
+import { injectRepositoryService } from './repository.service';
 import { ProjectLens } from '../../core/project-lens';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forges.query';
@@ -34,7 +35,7 @@ import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forge
 @Component({
   selector: 'app-repositories-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigMaster, RouterOutlet],
+  imports: [ConfigFieldTreeDialog, ConfigMaster, RouterOutlet],
   templateUrl: './repositories-page.html',
   styleUrl: '../config-page-host.css',
 })
@@ -86,49 +87,38 @@ export class RepositoriesPage {
   }
 
   private readonly meQuery = injectMeQuery();
-  protected readonly createMutation = injectCreateRepositoryMutation();
+  private readonly service = injectRepositoryService();
   private readonly forgesQuery = injectForgeChoicesQuery(() => false);
   private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   private readonly landingPoliciesQuery = injectLandingPolicyChoicesQuery();
-  /** The forge the create form has picked — its detail says which policies it can honour. */
-  private readonly pickedForge = signal<string | null>(null);
-  private readonly honourQuery = injectForgeHonourQuery(() => this.pickedForge());
+  protected readonly createOpen = signal(false);
+  private readonly draft = signal<RepositoryDraft>({ ...EMPTY_REPOSITORY_DRAFT });
+  protected readonly createForm = form(this.draft, repositoryCreateRules);
+  /** The forge the create form names — its detail says which policies it can honour. */
+  private readonly honourQuery = injectForgeHonourQuery(() => honourForge(this.createOpen(), this.draft()));
   protected readonly fields = computed(() =>
-    repositoryFields(
+    repositoryFieldViews(
       this.forgesQuery.data() ?? [],
       this.credentialsQuery.data() ?? [],
       this.landingPoliciesQuery.data() ?? null,
       this.honourQuery.data() ?? null,
     ),
   );
-  protected readonly createOpen = signal(false);
-  protected readonly createError = signal<string | null>(null);
 
   /** New is a write: a desktop with `config:edit` only. */
   protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
 
   protected onNew(): void {
-    this.createError.set(null);
-    this.pickedForge.set(null);
+    this.createForm().reset({ ...EMPTY_REPOSITORY_DRAFT });
     this.createOpen.set(true);
   }
 
-  protected onValues(values: ConfigFormValues): void {
-    const forge = values['forge'];
-    this.pickedForge.set(typeof forge === 'string' && forge !== '' ? forge : null);
-  }
-
-  protected onCreate(values: ConfigFormValues): void {
-    const body = repositoryCreate(createBody(this.fields(), values));
-    this.createError.set(null);
-    this.createMutation.mutate(body, {
-      onSuccess: () => {
-        this.createOpen.set(false);
-        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.slug]), {
-          queryParamsHandling: 'preserve',
-        });
-      },
-      onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
+  protected async onCreate(): Promise<void> {
+    const slug = this.createForm.slug().value().trim();
+    if (!(await submitForm(this.createForm, (draft) => this.service.create(draft)))) return;
+    this.createOpen.set(false);
+    void this.router.navigate(this.lens.link(['/admin', 'repositories', slug]), {
+      queryParamsHandling: 'preserve',
     });
   }
 }

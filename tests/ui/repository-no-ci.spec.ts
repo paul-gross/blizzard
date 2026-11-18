@@ -13,11 +13,11 @@ test('repository no-CI setting is editable on desktop and readable on a phone', 
   await expect(facts).toContainText('first turn of a visit');
 
   await page.getByTestId('admin-repository-edit').click();
-  const checkbox = page.getByTestId('admin-repository-edit-field-allow_no_ci');
+  const checkbox = page.getByTestId('admin-repository-edit-field-allowNoCi');
   await expect(checkbox).not.toBeChecked();
   await expect(page.getByTestId('admin-repository-edit-hint')).toContainText('absent checks');
   await checkbox.check();
-  await page.getByTestId('admin-repository-edit-submit').click();
+  await page.getByTestId('kit-form-save').click();
   await expect(facts).toContainText('Yes');
   expect((await api.get(`/api/repositories/${repo.name}`)).body.allow_no_ci).toBe(true);
   await page.reload();

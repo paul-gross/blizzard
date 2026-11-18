@@ -1,4 +1,4 @@
-import type { CredentialChoice, ForgeChoice, LandingPolicyHonour, Repository } from './repository.domain';
+import type { CredentialChoice, ForgeChoice, LandingPolicyHonour, Repository, RepositoryDraft } from './repository.domain';
 
 /** A live `blizzard` repository on the GitHub forge, acting with `gh-blizzard`, merging on checks, at revision 2. */
 export function repository(overrides: Partial<Repository> = {}): Repository {
@@ -38,4 +38,22 @@ export function policyHonour(
   missing: readonly string[] = [],
 ): LandingPolicyHonour {
   return { policy, honoured: missing.length === 0, missing };
+}
+
+/** A complete create draft for `blizzard` on the GitHub forge, merging on checks, the park timeout left at its default. */
+export function repositoryDraft(overrides: Partial<RepositoryDraft> = {}): RepositoryDraft {
+  return {
+    slug: 'blizzard',
+    name: '',
+    forge: 'frg_github',
+    owner: 'paul-gross',
+    repo: 'blizzard',
+    baseBranch: 'master',
+    credential: 'cred_1',
+    landingPolicy: 'merge-on-checks',
+    allowNoCi: false,
+    parkTimeoutDefault: true,
+    parkTimeoutHours: '',
+    ...overrides,
+  };
 }

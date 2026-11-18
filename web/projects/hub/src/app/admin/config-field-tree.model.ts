@@ -12,6 +12,16 @@ export type StringFieldKind = 'text' | 'password' | 'secret-text' | 'select' | '
 /** The keys of `D` whose value is text. */
 export type StringKeys<D> = { [K in keyof D & string]-?: D[K] extends string ? K : never }[keyof D & string];
 
+/** The keys of `D` whose value is a flag. */
+export type BooleanKeys<D> = { [K in keyof D & string]-?: D[K] extends boolean ? K : never }[keyof D & string];
+
+/** A `number` field's explicit default: the draft flag that holds the choice, and what the choice is called. While the
+ * flag holds, the field reads as the default, whatever its text. */
+export interface DefaultChoice<D> {
+  readonly key: BooleanKeys<D>;
+  readonly label: string;
+}
+
 interface FieldViewBase<D> {
   readonly label: string;
   /** Whether a create is the only place it can be set. */
@@ -33,12 +43,19 @@ export type ConfigFieldView<D> = {
   [K in keyof D & string]-?: D[K] extends boolean
     ? FieldViewBase<D> & { readonly key: K; readonly kind: 'checkbox' }
     : D[K] extends string
-      ? FieldViewBase<D> & { readonly key: K; readonly kind: StringFieldKind }
+      ?
+          | (FieldViewBase<D> & { readonly key: K; readonly kind: Exclude<StringFieldKind, 'number'> })
+          | (FieldViewBase<D> & { readonly key: K; readonly kind: 'number'; readonly orDefault?: DefaultChoice<D> })
       : never;
 }[keyof D & string];
 
 function valueOf<D>(draft: D, key: string): unknown {
   return (draft as Record<string, unknown>)[key];
+}
+
+/** A field's explicit default choice, or `null` when it offers none. */
+export function defaultChoiceOf<D>(field: ConfigFieldView<D>): DefaultChoice<D> | null {
+  return (field.kind === 'number' && field.orDefault) || null;
 }
 
 /** The fields a mode shows for `draft`: an edit leaves out the create-only ones, and a field whose `shownWhen` does
@@ -94,6 +111,12 @@ export function fieldChanges<D>(
 ): readonly FieldChangeView[] {
   const diff: FieldChangeView[] = [];
   for (const field of shownFieldViews(fields, 'edit', draft)) {
+    const choice = defaultChoiceOf(field);
+    if (choice !== null && (valueOf(baseline, choice.key) === true || valueOf(draft, choice.key) === true)) {
+      const change = defaultChange(field, choice, baseline, draft);
+      if (change !== null) diff.push(change);
+      continue;
+    }
     const before = valueOf(baseline, field.key);
     const raw = valueOf(draft, field.key);
     const after = typeof raw === 'string' ? raw.trim() : raw;
@@ -108,4 +131,28 @@ export function fieldChanges<D>(
     });
   }
   return diff;
+}
+
+/** A defaulted number field's change, when either side chose the default: none while both do, else the default named
+ * by its label on its side and the stated text on the other. */
+function defaultChange<D>(
+  field: ConfigFieldView<D>,
+  choice: DefaultChoice<D>,
+  baseline: D,
+  draft: D,
+): FieldChangeView | null {
+  const wasDefault = valueOf(baseline, choice.key) === true;
+  const isDefault = valueOf(draft, choice.key) === true;
+  if (wasDefault && isDefault) return null;
+  const stated = (side: D): string | null => {
+    const text = valueOf(side, field.key);
+    return typeof text === 'string' && text.trim() !== '' ? text.trim() : null;
+  };
+  return {
+    field: field.label,
+    old: wasDefault ? null : stated(baseline),
+    new: isDefault ? null : stated(draft),
+    old_label: wasDefault ? choice.label : null,
+    new_label: isDefault ? choice.label : null,
+  };
 }

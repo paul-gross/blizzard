@@ -1,5 +1,6 @@
 import {
   type ConfigFieldView,
+  defaultChoiceOf,
   dependentsOf,
   fieldChanges,
   optionsOf,
@@ -104,5 +105,38 @@ describe('config field tree model', () => {
     expect(diff.find((c) => c.field === 'Count')).toMatchObject({ old: '5', new: null });
     expect(diff.find((c) => c.field === 'Mark')).toMatchObject({ old: '🙂', new_label: 'Image', old_label: null });
     expect(fieldChanges(FIELDS, BASE, { ...BASE, detail: 'x' })).toEqual([]);
+  });
+});
+
+describe('a number field with a default choice', () => {
+  interface Timed {
+    hours: string;
+    useDefault: boolean;
+  }
+  const TIMED: readonly ConfigFieldView<Timed>[] = [
+    { key: 'hours', label: 'Hours', kind: 'number', orDefault: { key: 'useDefault', label: 'Default' } },
+  ];
+
+  it('names its choice, and a field without one has none', () => {
+    expect(defaultChoiceOf(TIMED[0])).toEqual({ key: 'useDefault', label: 'Default' });
+    expect(defaultChoiceOf(FIELDS[4])).toBeNull();
+  });
+
+  it('reads the default kept as no change, whatever the text', () => {
+    expect(fieldChanges(TIMED, { hours: '', useDefault: true }, { hours: '12', useDefault: true })).toEqual([]);
+  });
+
+  it('names a move to or from the default by its label', () => {
+    expect(fieldChanges(TIMED, { hours: '', useDefault: true }, { hours: ' 6 ', useDefault: false })).toEqual([
+      { field: 'Hours', old: null, new: '6', old_label: 'Default', new_label: null },
+    ]);
+    expect(fieldChanges(TIMED, { hours: '6', useDefault: false }, { hours: '6', useDefault: true })).toEqual([
+      { field: 'Hours', old: '6', new: null, old_label: null, new_label: 'Default' },
+    ]);
+  });
+
+  it('compares stated hours by value while the default is not chosen', () => {
+    expect(fieldChanges(TIMED, { hours: '6', useDefault: false }, { hours: '06', useDefault: false })).toEqual([]);
+    expect(fieldChanges(TIMED, { hours: '6', useDefault: false }, { hours: '7', useDefault: false })).toHaveLength(1);
   });
 });

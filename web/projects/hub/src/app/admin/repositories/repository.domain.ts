@@ -1,3 +1,5 @@
+import { readWholeNumber } from 'fleet';
+
 /** The landing policies this build knows, in the hub's declared order. */
 export const KNOWN_LANDING_POLICIES = ['merge-on-checks', 'fast-forward', 'park'] as const;
 
@@ -104,3 +106,56 @@ export function liveForges(forges: readonly ForgeChoice[]): readonly ForgeChoice
 export function liveCredentials(credentials: readonly CredentialChoice[]): readonly CredentialChoice[] {
   return credentials.filter((credential) => !credential.retired);
 }
+
+/** What the repository form edits: text as typed, choices by id or key. */
+export interface RepositoryDraft {
+  readonly slug: string;
+  readonly name: string;
+  /** A forge id; required here though optional on the wire. */
+  readonly forge: string;
+  readonly owner: string;
+  readonly repo: string;
+  readonly baseBranch: string;
+  /** A credential id of the chosen forge. */
+  readonly credential: string;
+  /** A landing-policy key; blank omits it on create, and a stored unlisted key is kept as it is. */
+  readonly landingPolicy: string;
+  readonly allowNoCi: boolean;
+  /** Whether the hub's default park timeout is chosen — an explicit choice, never a blank hours field. */
+  readonly parkTimeoutDefault: boolean;
+  /** Hours as typed; judged only while the policy parks and the default is not chosen. */
+  readonly parkTimeoutHours: string;
+}
+
+/** A new repository's starting draft: nothing chosen but the default park timeout. */
+export const EMPTY_REPOSITORY_DRAFT: RepositoryDraft = {
+  slug: '',
+  name: '',
+  forge: '',
+  owner: '',
+  repo: '',
+  baseBranch: '',
+  credential: '',
+  landingPolicy: '',
+  allowNoCi: false,
+  parkTimeoutDefault: true,
+  parkTimeoutHours: '',
+};
+
+/** What a stated park timeout that is not one says. */
+export const PARK_TIMEOUT_MESSAGE = 'Enter whole hours from 1, or choose the default';
+
+/** A stated park timeout's hours, or `null` when the text is not a whole number of at least one hour — the hub's
+ * own bound. Blank, malformed, unsafe, and overflowing text are all `null`, never a default. */
+export function readParkTimeoutHours(text: string): number | null {
+  const hours = readWholeNumber(text);
+  return hours !== null && hours >= 1 ? hours : null;
+}
+
+/** Whether a draft's park timeout is judged and sent: only while its policy parks. */
+export function draftParks(draft: Pick<RepositoryDraft, 'landingPolicy'>): boolean {
+  return draft.landingPolicy === 'park';
+}
+
+/** The record kind the hub's change log files a repository under. */
+export const REPOSITORY_RECORD_KIND = 'repository';

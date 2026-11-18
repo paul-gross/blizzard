@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitCheckbox, KitDialog, KitField, KitForm, KitNumberInput, KitSelect, KitTextInput } from 'fleet';
+import { KitCheckbox, KitDialog, KitField, KitForm, KitNumberInput, KitOrDefault, KitSelect, KitTextInput } from 'fleet';
 import type { FieldChangeView } from 'fleet';
 
 import { ConfigFieldDiff } from './config-field-diff';
 import {
   type ConfigFieldTreeMode,
   type ConfigFieldView,
+  defaultChoiceOf,
   dependentsOf,
   fieldChanges,
   optionsOf,
@@ -32,6 +33,7 @@ import { ProjectColorPicker } from './projects/project-color-picker';
     KitField,
     KitForm,
     KitNumberInput,
+    KitOrDefault,
     KitSelect,
     KitTextInput,
     ProjectColorPicker,
@@ -80,6 +82,10 @@ export class ConfigFieldTreeDialog<D> {
 
   protected flagField(key: string): FieldTree<boolean> {
     return (this.form() as unknown as Record<string, FieldTree<boolean>>)[key];
+  }
+
+  protected defaultChoiceFor(field: ConfigFieldView<D>) {
+    return defaultChoiceOf(field);
   }
 
   protected optionsFor(field: ConfigFieldView<D>) {

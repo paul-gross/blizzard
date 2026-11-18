@@ -1,30 +1,35 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { form } from '@angular/forms/signals';
 import {
   asyncState,
+  type EditBaseline,
   errorMessage,
   type KitAsyncStateValue,
-  RecordKind,
   restingAsyncState,
+  submitForm,
   ViewportService,
 } from 'fleet';
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
-import { injectRepositoryLifecycleMutation, injectEditRepositoryMutation } from './repositories.mutations';
+import { injectRepositoryLifecycleMutation } from './repositories.mutations';
 import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
-import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { CredentialCheck } from '../credentials/credential-check';
 import { credentialCheckTarget } from '../credentials/credentials.model';
-import { repositoryFields, repositoryFormRecord, repositoryRecordVm } from './repositories.model';
+import { honourForge, repositoryFieldViews, repositoryRecordVm } from './repositories.model';
 import { injectLandingPolicyChoicesQuery, injectRepositoryRecordQuery } from './repositories.query';
+import { EMPTY_REPOSITORY_DRAFT, REPOSITORY_RECORD_KIND, type RepositoryDraft } from './repository.domain';
+import { repositoryEditRules } from './repository.form';
+import { injectRepositoryService } from './repository.service';
+import { toEditBaseline } from './repository.translate';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forges.query';
 
@@ -37,7 +42,7 @@ import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forge
 @Component({
   selector: 'app-repository-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel, CredentialCheck],
+  imports: [ConfigFieldTreeDialog, ConfigRecordPanel, CredentialCheck],
   templateUrl: './repository-detail.html',
 })
 export class RepositoryDetail {
@@ -50,7 +55,7 @@ export class RepositoryDetail {
     initialValue: null,
   });
   private readonly repositoryQuery = injectRepositoryRecordQuery(() => this.key());
-  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.REPOSITORY, () =>
+  private readonly historyQuery = injectConfigHistoryQuery(REPOSITORY_RECORD_KIND, () =>
     this.repositoryQuery.data()?.id ?? null,
   );
 
@@ -64,30 +69,31 @@ export class RepositoryDetail {
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
   protected readonly cliCommand = computed(() =>
-    detailCliCommand(this.viewport.mode(), RecordKind.REPOSITORY, this.repositoryQuery.data()?.slug),
+    detailCliCommand(this.viewport.mode(), REPOSITORY_RECORD_KIND, this.repositoryQuery.data()?.slug),
   );
 
   private readonly meQuery = injectMeQuery();
-  protected readonly editMutation = injectEditRepositoryMutation();
+  private readonly service = injectRepositoryService();
   private readonly lifecycleMutation = injectRepositoryLifecycleMutation();
 
   private readonly forgesQuery = injectForgeChoicesQuery(() => false);
   private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   private readonly landingPoliciesQuery = injectLandingPolicyChoicesQuery();
-  /** The forge the edit form has picked; until it picks one, the repository's own. */
-  private readonly pickedForge = signal<string | null>(null);
-  private readonly chosenForge = computed(() => this.pickedForge() ?? this.repositoryQuery.data()?.forge.id ?? null);
-  private readonly honourQuery = injectForgeHonourQuery(() => (this.editOpen() ? this.chosenForge() : null));
+  /** What the open edit started from, captured from one read; `null` while no edit is open. */
+  private readonly baseline = signal<EditBaseline<RepositoryDraft> | null>(null);
+  private readonly draft = signal<RepositoryDraft>({ ...EMPTY_REPOSITORY_DRAFT });
+  protected readonly editForm = form(this.draft, repositoryEditRules);
+  protected readonly editBaseline = computed(() => this.baseline()?.draft ?? null);
+  /** The forge the edit form names — its detail says which policies it can honour. */
+  private readonly honourQuery = injectForgeHonourQuery(() => honourForge(this.baseline() !== null, this.draft()));
   protected readonly fields = computed(() =>
-    repositoryFields(
+    repositoryFieldViews(
       this.forgesQuery.data() ?? [],
       this.credentialsQuery.data() ?? [],
       this.landingPoliciesQuery.data() ?? null,
       this.honourQuery.data() ?? null,
     ),
   );
-  protected readonly editOpen = signal(false);
-  protected readonly editError = signal<string | null>(null);
   private readonly pendingKey = signal<string | null>(null);
   private readonly failure = signal<ConfigFailure | null>(null);
 
@@ -101,10 +107,6 @@ export class RepositoryDetail {
       id: this.repositoryQuery.data()?.id,
     }),
   );
-  protected readonly shown = computed(() => {
-    const record = this.repositoryQuery.data();
-    return shownFormValues(this.fields(), record && repositoryFormRecord(record));
-  });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
@@ -122,33 +124,26 @@ export class RepositoryDetail {
     });
   }
 
+  /** Edit captures the baseline from the record as read now; a later refresh of the read replaces neither it nor the
+   * working draft. */
   protected onEdit(): void {
-    this.editError.set(null);
-    this.pickedForge.set(null);
-    this.editOpen.set(true);
-  }
-
-  protected onValues(values: ConfigFormValues): void {
-    const forge = values['forge'];
-    this.pickedForge.set(typeof forge === 'string' && forge !== '' ? forge : null);
-  }
-
-  protected onSave(values: ConfigFormValues): void {
     const record = this.repositoryQuery.data();
-    const shown = this.shown();
-    if (!record || !shown) return;
-    this.editError.set(null);
-    this.editMutation.mutate(
-      {
-        repositoryId: record.id,
-        revision: record.revision,
-        body: configEdit(this.fields(), shown, values).body,
-      },
-      {
-        onSuccess: () => this.editOpen.set(false),
-        onError: (error) => this.editError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+    if (!record) return;
+    const baseline = toEditBaseline(record);
+    this.editForm().reset({ ...baseline.draft });
+    this.baseline.set(baseline);
+  }
+
+  /** Saves the working draft against the baseline; a refused save keeps both open. */
+  protected async onSave(): Promise<void> {
+    const baseline = this.baseline();
+    if (baseline === null) return;
+    const saved = await submitForm(this.editForm, (draft) => this.service.edit(baseline, draft));
+    if (saved && this.baseline() === baseline) this.baseline.set(null);
+  }
+
+  protected onCloseEdit(): void {
+    this.baseline.set(null);
   }
 
   protected onLifecycle(verb: 'retire' | 'enable'): void {

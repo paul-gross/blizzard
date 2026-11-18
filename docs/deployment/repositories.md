@@ -109,7 +109,12 @@ with `config:edit` can create, edit, retire, and enable them there, seeing the f
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change. The repository
 form picks an enabled forge by name instead of editing an address, and a credential of that forge in place of a token
 secret — changing the forge clears the credential — and picks the landing policy: a policy the chosen forge cannot
-honour is disabled and names the capabilities it lacks, and the park timeout appears only for `park`. A repository's
+honour is disabled and names the capabilities it lacks. The form marks the forge and the credential required with the
+other required fields, and checks each field as it is typed, so a save it cannot send is refused on the field at fault
+before anything reaches the hub; a refusal from the hub, such as a slug or an owner and repository already taken, lands
+on its field too, and an edit saved over a change someone else made since it opened is refused with the typed values
+kept. The park timeout appears only for `park`, as a choice between the default and a stated whole number of hours, one
+or more. A repository's
 detail shows its landing policy, and for `park` its timeout, or `default` when none is set. A
 [configuration document](./config-documents.md) names the forge by its slug in `forge`.
 

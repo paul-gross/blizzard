@@ -1,19 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { configEdit, formValuesOf, missingRequired, shownFields } from '../config-edit.model';
+import { shownFieldViews } from '../config-field-tree.model';
 import {
   landingPolicyLabel,
+  honourForge,
   landingPolicyOptions,
-  REPOSITORY_FIELDS,
   repositoryBadges,
-  repositoryFields,
-  repositoryFormRecord,
+  repositoryFieldViews,
   repositoryRecordVm,
   repositoryRows,
 } from './repositories.model';
 import { credentialChoice, forgeChoice, policyHonour, repository } from './repository.builders';
-import type { LandingPolicy, Repository } from './repository.domain';
+import { EMPTY_REPOSITORY_DRAFT, type LandingPolicy, type Repository } from './repository.domain';
 
 const BLIZZARD = repository();
 const OLD = repository({ id: 'repo_2', slug: 'old', name: 'Old one', retired: true });
@@ -153,51 +152,54 @@ describe('landing policy choices', () => {
   });
 });
 
-describe('repositoryFields', () => {
+describe('repositoryFieldViews', () => {
+  const fields = repositoryFieldViews(
+    [forgeChoice(), forgeChoice({ id: 'frg_old', retired: true })],
+    [credentialChoice(), credentialChoice({ id: 'cred_old', retired: true })],
+    POLICIES,
+    HONOUR_NO_POLL,
+  );
+  const field = (key: string) => fields.find((view) => view.key === key);
+
   it('fills the forge, credential and policy choices, live ones only', () => {
-    const fields = repositoryFields(
-      [forgeChoice(), forgeChoice({ id: 'frg_old', retired: true })],
-      [credentialChoice(), credentialChoice({ id: 'cred_old', retired: true })],
-      POLICIES,
-      HONOUR_NO_POLL,
-    );
-    const options = (key: string) => fields.find((field) => field.key === key)?.options;
-    expect(options('forge')).toEqual([{ value: 'frg_github', label: 'github · GitHub' }]);
-    expect(options('credential')).toEqual([{ value: 'cred_1', label: 'gh-blizzard · github.token', kind: 'frg_github' }]);
-    expect(options('landing_policy')?.[1]).toEqual({ value: 'park', label: 'park — forge lacks merge-poll', disabled: true });
+    expect(field('forge')?.options).toEqual([{ value: 'frg_github', label: 'github · GitHub' }]);
+    expect(field('credential')?.options).toEqual([{ value: 'cred_1', label: 'gh-blizzard · github.token', kind: 'frg_github' }]);
+    expect(field('landingPolicy')?.options?.[1]).toEqual({ value: 'park', label: 'park — forge lacks merge-poll', disabled: true });
+  });
+
+  it('keys the credential choices by the chosen forge', () => {
+    expect(field('credential')?.filterBy).toBe('forge');
+  });
+
+  it('draws the park timeout as hours or the default, shown only for park', () => {
+    expect(field('parkTimeoutHours')).toMatchObject({ kind: 'number', orDefault: { key: 'parkTimeoutDefault', label: 'Default' } });
+    const shown = (landingPolicy: string) =>
+      shownFieldViews(fields, 'create', { ...EMPTY_REPOSITORY_DRAFT, landingPolicy }).map((view) => view.key);
+    expect(shown('park')).toContain('parkTimeoutHours');
+    expect(shown('merge-on-checks')).not.toContain('parkTimeoutHours');
+    expect(shown('')).not.toContain('parkTimeoutHours');
+  });
+
+  it('offers every draft field but the default flag, which the timeout field carries', () => {
+    expect(fields.map((view) => view.key)).toEqual([
+      'slug',
+      'name',
+      'forge',
+      'owner',
+      'repo',
+      'baseBranch',
+      'credential',
+      'landingPolicy',
+      'allowNoCi',
+      'parkTimeoutHours',
+    ]);
   });
 });
 
-describe('repositoryFormRecord', () => {
-  it('starts the edit form from the repository, an unlisted policy raw', () => {
-    const shown = formValuesOf(REPOSITORY_FIELDS, repositoryFormRecord(repository({ landingPolicy: { unlisted: 'rebase' } })));
-    expect(shown).toMatchObject({
-      slug: 'blizzard',
-      forge: 'frg_github',
-      credential: 'cred_1',
-      base_branch: 'master',
-      landing_policy: 'rebase',
-      allow_no_ci: false,
-    });
-  });
-
-  it('edits allow no CI sparsely, both ways', () => {
-    const shown = formValuesOf(REPOSITORY_FIELDS, repositoryFormRecord(BLIZZARD));
-    expect(configEdit(REPOSITORY_FIELDS, shown, { ...shown, allow_no_ci: true }).body).toEqual({ allow_no_ci: true });
-    expect(configEdit(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true }, shown).body).toEqual({ allow_no_ci: false });
-  });
-});
-
-describe('park timeout field', () => {
-  it('shows only for park', () => {
-    const shown = (policy: string) => shownFields(REPOSITORY_FIELDS, { landing_policy: policy }).map((field) => field.key);
-    expect(shown('park')).toContain('park_timeout_hours');
-    expect(shown('merge-on-checks')).not.toContain('park_timeout_hours');
-    expect(shown('')).not.toContain('park_timeout_hours');
-  });
-
-  it('is not required', () => {
-    const form = { slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', credential: 'cred_1', landing_policy: 'park' };
-    expect(missingRequired(REPOSITORY_FIELDS, form)).toEqual([]);
+describe('honourForge', () => {
+  it('names the draft\'s forge only while the form is open and names one', () => {
+    expect(honourForge(true, { forge: 'frg_lab' })).toBe('frg_lab');
+    expect(honourForge(true, { forge: '' })).toBeNull();
+    expect(honourForge(false, { forge: 'frg_lab' })).toBeNull();
   });
 });
