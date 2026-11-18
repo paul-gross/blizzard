@@ -18,11 +18,12 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
-import { injectRepositoriesQuery, injectLandingPoliciesQuery } from './repositories.query';
+import { repositoryFields, repositoryRows } from './repositories.model';
+import { injectLandingPolicyChoicesQuery, injectRepositoryListQuery } from './repositories.query';
+import { repositoryCreate } from './repository.translate';
 import { ProjectLens } from '../../core/project-lens';
-import { injectCredentialsQuery } from '../credentials/credentials.query';
-import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
+import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
+import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forges.query';
 
 /**
  * `/admin/repositories` — the repository list beside a `<router-outlet>` holding the
@@ -48,11 +49,11 @@ export class RepositoriesPage {
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
   /** Under a project lens the list narrows to the records that project links. */
   private readonly lensLinks = injectLensLinks('repository');
-  private readonly repositoriesQuery = injectRepositoriesQuery(() => includeRetired(this.lifecycle()));
+  private readonly repositoriesQuery = injectRepositoryListQuery(() => includeRetired(this.lifecycle()));
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], (repository) => repository.repository_id, this.lensLinks.names()), this.lifecycle()),
+    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], (repository) => repository.id, this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     lensedListState(
@@ -86,18 +87,18 @@ export class RepositoriesPage {
 
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateRepositoryMutation();
-  private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly credentialsQuery = injectCredentialsQuery(() => false);
-  private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
+  private readonly forgesQuery = injectForgeChoicesQuery(() => false);
+  private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
+  private readonly landingPoliciesQuery = injectLandingPolicyChoicesQuery();
   /** The forge the create form has picked — its detail says which policies it can honour. */
   private readonly pickedForge = signal<string | null>(null);
-  private readonly forgeQuery = injectForgeQuery(() => this.pickedForge());
+  private readonly honourQuery = injectForgeHonourQuery(() => this.pickedForge());
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
-      this.credentialsQuery.data()?.credentials ?? [],
+      this.credentialsQuery.data() ?? [],
       this.landingPoliciesQuery.data() ?? null,
-      this.forgeQuery.data()?.landing_policies ?? null,
+      this.honourQuery.data() ?? null,
     ),
   );
   protected readonly createOpen = signal(false);

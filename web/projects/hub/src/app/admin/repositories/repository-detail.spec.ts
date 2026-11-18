@@ -3,13 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type CredentialCheckView, type MeResponse, type RepositorySummary } from 'fleet';
+import { type CredentialCheckView, type MeResponse } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
   credentialSummary,
   forgeDetail,
   OPERATOR_ME_RESPONSE,
+  repositorySummary,
   type RequestClientStub,
   settle,
   stubHubClient,
@@ -17,30 +18,15 @@ import {
 
 import { RepositoryDetail } from './repository-detail';
 
-const CORE: RepositorySummary = {
+const CORE = repositorySummary({
   forge_id: 'frg_github',
-  forge_slug: 'github',
-  forge_name: 'GitHub',
-  warnings: [],
   credential_id: 'cred_g',
   credential_slug: 'gh-main',
   credential_name: 'gh-main',
-  repository_id: 'repo_c',
-  slug: 'core',
   name: 'Core',
-  owner: 'acme',
-  repo: 'core',
-  base_branch: 'main',
-  secret_name: 'gh',
   landing_policy: 'merge-on-checks',
-  allow_no_ci: false,
-  park_timeout_hours: null,
   revision: 3,
-  created_at: '2026-10-01T00:00:00Z',
-  created_by: 'ada',
-  created_by_name: null,
-  retired: false,
-};
+});
 const HISTORY = configChangesPage({
   changes: [
     configChangeView({
@@ -72,7 +58,7 @@ const CHECK: CredentialCheckView = {
 
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
-  let record: RepositorySummary = CORE;
+  let record = CORE;
   afterEach(() => {
     record = CORE;
     stub?.restore();

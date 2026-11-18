@@ -23,10 +23,10 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { CredentialCheck } from '../credentials/credential-check';
 import { credentialCheckTarget } from '../credentials/credentials.model';
-import { repositoryFields, repositoryRecordVm } from './repositories.model';
-import { injectRepositoryQuery, injectLandingPoliciesQuery } from './repositories.query';
-import { injectCredentialsQuery } from '../credentials/credentials.query';
-import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
+import { repositoryFields, repositoryFormRecord, repositoryRecordVm } from './repositories.model';
+import { injectLandingPolicyChoicesQuery, injectRepositoryRecordQuery } from './repositories.query';
+import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
+import { injectForgeChoicesQuery, injectForgeHonourQuery } from '../forges/forges.query';
 
 /**
  * The selected repository's detail — the right-hand child of `/admin/repositories`,
@@ -49,9 +49,9 @@ export class RepositoryDetail {
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
     initialValue: null,
   });
-  private readonly repositoryQuery = injectRepositoryQuery(() => this.key());
+  private readonly repositoryQuery = injectRepositoryRecordQuery(() => this.key());
   private readonly historyQuery = injectConfigHistoryQuery(RecordKind.REPOSITORY, () =>
-    this.repositoryQuery.data()?.repository_id ?? null,
+    this.repositoryQuery.data()?.id ?? null,
   );
 
   protected readonly vm = computed(() => repositoryRecordVm(this.repositoryQuery.data()));
@@ -71,19 +71,19 @@ export class RepositoryDetail {
   protected readonly editMutation = injectEditRepositoryMutation();
   private readonly lifecycleMutation = injectRepositoryLifecycleMutation();
 
-  private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly credentialsQuery = injectCredentialsQuery(() => false);
-  private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
+  private readonly forgesQuery = injectForgeChoicesQuery(() => false);
+  private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
+  private readonly landingPoliciesQuery = injectLandingPolicyChoicesQuery();
   /** The forge the edit form has picked; until it picks one, the repository's own. */
   private readonly pickedForge = signal<string | null>(null);
-  private readonly chosenForge = computed(() => this.pickedForge() ?? this.repositoryQuery.data()?.forge_id ?? null);
-  private readonly forgeQuery = injectForgeQuery(() => (this.editOpen() ? this.chosenForge() : null));
+  private readonly chosenForge = computed(() => this.pickedForge() ?? this.repositoryQuery.data()?.forge.id ?? null);
+  private readonly honourQuery = injectForgeHonourQuery(() => (this.editOpen() ? this.chosenForge() : null));
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
-      this.credentialsQuery.data()?.credentials ?? [],
+      this.credentialsQuery.data() ?? [],
       this.landingPoliciesQuery.data() ?? null,
-      this.forgeQuery.data()?.landing_policies ?? null,
+      this.honourQuery.data() ?? null,
     ),
   );
   protected readonly editOpen = signal(false);
@@ -96,14 +96,14 @@ export class RepositoryDetail {
   );
   /** The Check action's credential and scope — this record alone, shown to an editor when it names a credential. */
   protected readonly check = computed(() =>
-    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()?.credential_id, {
+    credentialCheckTarget(hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()?.credential?.id, {
       field: 'repositories',
-      id: this.repositoryQuery.data()?.repository_id,
+      id: this.repositoryQuery.data()?.id,
     }),
   );
   protected readonly shown = computed(() => {
     const record = this.repositoryQuery.data();
-    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id, credential: record.credential_id });
+    return shownFormValues(this.fields(), record && repositoryFormRecord(record));
   });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
@@ -113,8 +113,8 @@ export class RepositoryDetail {
     effect(() => {
       const repository = this.repositoryQuery.data();
       const key = this.key();
-      if (repository && key !== null && key !== repository.repository_id) {
-        void this.router.navigate(this.lens.link(['/admin', 'repositories', repository.repository_id]), {
+      if (repository && key !== null && key !== repository.id) {
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', repository.id]), {
           replaceUrl: true,
           queryParamsHandling: 'preserve',
         });
@@ -136,11 +136,11 @@ export class RepositoryDetail {
   protected onSave(values: ConfigFormValues): void {
     const record = this.repositoryQuery.data();
     const shown = this.shown();
-    if (!record || !shown || record.revision == null) return;
+    if (!record || !shown) return;
     this.editError.set(null);
     this.editMutation.mutate(
       {
-        repositoryId: record.repository_id,
+        repositoryId: record.id,
         revision: record.revision,
         body: configEdit(this.fields(), shown, values).body,
       },
@@ -153,19 +153,19 @@ export class RepositoryDetail {
 
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.repositoryQuery.data();
-    if (!record || record.revision == null) return;
-    this.pendingKey.set(record.repository_id);
+    if (!record) return;
+    this.pendingKey.set(record.id);
     this.failure.set(null);
     this.lifecycleMutation.mutate(
       {
-        repositoryId: record.repository_id,
+        repositoryId: record.id,
         revision: record.revision,
         retired: verb === 'retire',
       },
       {
         onError: (error) =>
           this.failure.set({
-            key: record.repository_id,
+            key: record.id,
             message: errorMessage(error, `${verb} failed.`),
           }),
         onSettled: () => this.pendingKey.set(null),

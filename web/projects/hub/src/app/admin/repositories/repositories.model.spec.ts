@@ -1,46 +1,22 @@
-import type { hubApi, RepositorySummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { configEdit, createBody, formValuesOf, missingRequired, shownFields } from '../config-edit.model';
+import { configEdit, formValuesOf, missingRequired, shownFields } from '../config-edit.model';
 import {
+  landingPolicyLabel,
   landingPolicyOptions,
   REPOSITORY_FIELDS,
   repositoryBadges,
-  repositoryCreate,
   repositoryFields,
+  repositoryFormRecord,
   repositoryRecordVm,
   repositoryRows,
 } from './repositories.model';
+import { credentialChoice, forgeChoice, policyHonour, repository } from './repository.builders';
+import type { LandingPolicy, Repository } from './repository.domain';
 
-type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
-type PolicyHonour = hubApi.PolicyHonour;
-
-const BLIZZARD: RepositorySummary = {
-  forge_id: 'frg_github',
-  forge_slug: 'github',
-  forge_name: 'GitHub',
-  warnings: [],
-  credential_id: 'cred_1',
-  credential_slug: 'gh-blizzard',
-  credential_name: 'gh-blizzard',
-  repository_id: 'repo_1',
-  slug: 'blizzard',
-  name: 'blizzard',
-  owner: 'paul-gross',
-  repo: 'blizzard',
-  base_branch: 'master',
-  secret_name: 'gh-blizzard',
-  landing_policy: 'merge-on-checks',
-  allow_no_ci: false,
-  park_timeout_hours: null,
-  revision: 2,
-  created_at: '2026-01-01T00:00:00Z',
-  created_by: 'pgross',
-  created_by_name: null,
-  retired: false,
-};
-const OLD: RepositorySummary = { ...BLIZZARD, repository_id: 'repo_2', slug: 'old', name: 'Old one', retired: true };
+const BLIZZARD = repository();
+const OLD = repository({ id: 'repo_2', slug: 'old', name: 'Old one', retired: true });
 
 describe('repositoryBadges', () => {
   it('badges only a retired repository', () => {
@@ -63,6 +39,10 @@ describe('repositoryRows', () => {
       },
     ]);
   });
+
+  it('titles a row by slug and shows a name that differs from it', () => {
+    expect(repositoryRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'paul-gross/blizzard', 'base master'] });
+  });
 });
 
 describe('repositoryRecordVm', () => {
@@ -74,7 +54,7 @@ describe('repositoryRecordVm', () => {
     const vm = repositoryRecordVm(BLIZZARD)!;
     expect(vm.facts.map((f) => [f.label, f.value])).toEqual([
       ['Name', 'blizzard'],
-       ['Forge', 'GitHub'],
+      ['Forge', 'GitHub'],
       ['Owner', 'paul-gross'],
       ['Repository', 'blizzard'],
       ['Base branch', 'master'],
@@ -88,77 +68,58 @@ describe('repositoryRecordVm', () => {
       { kind: 'forge', name: 'github', route: ['/admin', 'forges', 'frg_github'] },
       { kind: 'credential', name: 'gh-blizzard', route: ['/admin', 'credentials', 'cred_1'] },
     ]);
-    expect(repositoryRecordVm({ ...BLIZZARD, credential_id: null })?.links?.links.map((l) => l.kind)).toEqual(['forge']);
+    expect(repositoryRecordVm(repository({ credential: null }))?.links?.links.map((l) => l.kind)).toEqual(['forge']);
     expect(vm.hasHistory).toBe(true);
   });
 
   it('shows who created it by name, falling back to the id', () => {
-    const createdBy = (repository: RepositorySummary) => repositoryRecordVm(repository)!.facts.find((f) => f.label === 'Created by')?.value;
-    expect(createdBy({ ...BLIZZARD, created_by_name: 'Paul Gross' })).toBe('Paul Gross');
+    const createdBy = (record: Repository) => repositoryRecordVm(record)!.facts.find((f) => f.label === 'Created by')?.value;
+    expect(createdBy(repository({ createdByName: 'Paul Gross' }))).toBe('Paul Gross');
     expect(createdBy(BLIZZARD)).toBe('pgross');
-  });
-
-  it('titles a row by slug and shows a name that differs from it', () => {
-    expect(repositoryRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'paul-gross/blizzard', 'base master'] });
   });
 
   it('notes a retired repository', () => {
     expect(repositoryRecordVm(OLD)?.note).toContain('Retired');
   });
 
-  it('creates a repository from the form, leaving an empty name out', () => {
-    const body = {
-      slug: 'blizzard',
-      name: '',
-       forge: 'frg_github',
-      owner: 'paul-gross',
-      repo: 'blizzard',
-      base_branch: 'master',
-      credential: 'cred_1',
-    };
-    expect(repositoryCreate(body)).toEqual({
-      slug: 'blizzard',
-       forge: 'frg_github',
-      owner: 'paul-gross',
-      repo: 'blizzard',
-      base_branch: 'master',
-      credential: 'cred_1',
+  it('shows allow no CI', () => {
+    expect(repositoryRecordVm(repository({ allowNoCi: true }))?.facts.find((f) => f.label === 'Allow no CI')?.value).toBe('Yes');
+  });
+});
+
+describe('repository detail policy facts', () => {
+  const facts = (record: Repository) =>
+    Object.fromEntries(repositoryRecordVm(record)!.facts.map((fact) => [fact.label, fact.value]));
+
+  it('shows the policy, and the timeout only for park', () => {
+    expect(facts(BLIZZARD)['Park timeout']).toBeUndefined();
+    expect(facts(repository({ landingPolicy: 'park', parkTimeoutHours: 6 }))).toMatchObject({
+      'Landing policy': 'park',
+      'Park timeout': '6 h',
     });
-    expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe('Blizzard');
+    expect(facts(repository({ landingPolicy: 'park' }))['Park timeout']).toBe('default');
+  });
+
+  it('reads an unlisted stored policy raw', () => {
+    expect(facts(repository({ landingPolicy: { unlisted: 'rebase' } }))['Landing policy']).toBe('rebase');
   });
 });
 
-describe('allow no CI', () => {
-  it('maps both checkbox values on create and sparse edits', () => {
-    const shown = formValuesOf(REPOSITORY_FIELDS, BLIZZARD);
-    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, shown)).allow_no_ci).toBe(false);
-    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true })).allow_no_ci).toBe(true);
-    expect(configEdit(REPOSITORY_FIELDS, shown, { ...shown, allow_no_ci: true }).body).toEqual({ allow_no_ci: true });
-    expect(configEdit(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true }, shown).body).toEqual({ allow_no_ci: false });
-    expect(repositoryRecordVm({ ...BLIZZARD, allow_no_ci: true })?.facts.find((f) => f.label === 'Allow no CI')?.value).toBe('Yes');
+describe('landingPolicyLabel', () => {
+  it('names each known policy and reads an unlisted one raw', () => {
+    expect(landingPolicyLabel('merge-on-checks')).toBe('merge on checks');
+    expect(landingPolicyLabel('fast-forward')).toBe('fast-forward');
+    expect(landingPolicyLabel('park')).toBe('park');
+    expect(landingPolicyLabel({ unlisted: 'rebase' })).toBe('rebase');
   });
 });
 
-const NEEDS: readonly LandingPolicyNeedsView[] = [
-  { policy: 'merge-on-checks', requires: ['checks', 'merge'], uses: [] },
-  { policy: 'park', requires: ['merge-poll'], uses: ['checks'] },
-  { policy: 'fast-forward', requires: ['ref-update'], uses: [] },
-];
-
-const HONOUR_ALL: readonly PolicyHonour[] = NEEDS.map(({ policy }) => ({
-  policy,
-  honoured: true,
-  missing: [],
-}));
-const HONOUR_NO_POLL: readonly PolicyHonour[] = [
-  { policy: 'merge-on-checks', honoured: true, missing: [] },
-  { policy: 'park', honoured: false, missing: ['merge-poll'] },
-  { policy: 'fast-forward', honoured: true, missing: [] },
-];
+const POLICIES: readonly LandingPolicy[] = ['merge-on-checks', 'park', 'fast-forward'];
+const HONOUR_NO_POLL = [policyHonour('merge-on-checks'), policyHonour('park', ['merge-poll']), policyHonour('fast-forward')];
 
 describe('landing policy choices', () => {
-  it('offers the needs policies in order, none disabled, with no forge chosen', () => {
-    expect(landingPolicyOptions(NEEDS, null)).toEqual([
+  it('offers the hub\'s policies in order, none disabled, with no forge chosen', () => {
+    expect(landingPolicyOptions(POLICIES, null)).toEqual([
       { value: 'merge-on-checks', label: 'merge on checks' },
       { value: 'park', label: 'park' },
       { value: 'fast-forward', label: 'fast-forward' },
@@ -166,72 +127,68 @@ describe('landing policy choices', () => {
   });
 
   it('enables every policy a forge honours', () => {
-    expect(
-      landingPolicyOptions(NEEDS, HONOUR_ALL).some((option) => option.disabled),
-    ).toBe(false);
+    expect(landingPolicyOptions(POLICIES, POLICIES.map((policy) => policyHonour(policy))).some((option) => option.disabled)).toBe(false);
   });
 
   it('disables a policy the forge cannot honour and names what it lacks', () => {
-    expect(landingPolicyOptions(NEEDS, HONOUR_NO_POLL)).toEqual([
+    expect(landingPolicyOptions(POLICIES, HONOUR_NO_POLL)).toEqual([
       { value: 'merge-on-checks', label: 'merge on checks' },
       { value: 'park', label: 'park — forge lacks merge-poll', disabled: true },
       { value: 'fast-forward', label: 'fast-forward' },
     ]);
   });
 
-  it('falls back to the generated policies, none disabled, while the needs read is pending', () => {
+  it('falls back to the known policies, none disabled, while the list read is pending', () => {
     const fallback = landingPolicyOptions(null, null);
-    expect(fallback.map((option) => option.value)).toEqual([
-      'merge-on-checks',
-      'fast-forward',
-      'park',
-    ]);
+    expect(fallback.map((option) => option.value)).toEqual(['merge-on-checks', 'fast-forward', 'park']);
     expect(fallback.some((option) => option.disabled)).toBe(false);
   });
 
-  it('reads an unknown policy raw', () => {
-    const unknown = { policy: 'rebase' } as unknown as LandingPolicyNeedsView;
-    expect(
-      landingPolicyOptions(
-        [unknown],
-        [
-          {
-            policy: 'rebase',
-            honoured: false,
-            missing: ['rebase-api'],
-          } as unknown as PolicyHonour,
-        ],
-      ),
-    ).toEqual([
-      {
-        value: 'rebase',
-        label: 'rebase — forge lacks rebase-api',
-        disabled: true,
-      },
+  it('reads an unlisted policy raw', () => {
+    const rebase: LandingPolicy = { unlisted: 'rebase' };
+    expect(landingPolicyOptions([rebase], [policyHonour(rebase, ['rebase-api'])])).toEqual([
+      { value: 'rebase', label: 'rebase — forge lacks rebase-api', disabled: true },
     ]);
-    expect(landingPolicyOptions([unknown], null)).toEqual([
-      { value: 'rebase', label: 'rebase' },
-    ]);
-  });
-
-  it('fills the policy field in the repository form', () => {
-    const fields = repositoryFields([], [], NEEDS, HONOUR_NO_POLL);
-    expect(
-      fields.find((field) => field.key === 'landing_policy')?.options?.[1],
-    ).toEqual({
-      value: 'park',
-      label: 'park — forge lacks merge-poll',
-      disabled: true,
-    });
+    expect(landingPolicyOptions([rebase], null)).toEqual([{ value: 'rebase', label: 'rebase' }]);
   });
 });
 
-describe('park timeout', () => {
-  const FORM = {
-    slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', credential: 'cred_1',
-    park_timeout_hours: '12',
-  };
+describe('repositoryFields', () => {
+  it('fills the forge, credential and policy choices, live ones only', () => {
+    const fields = repositoryFields(
+      [forgeChoice(), forgeChoice({ id: 'frg_old', retired: true })],
+      [credentialChoice(), credentialChoice({ id: 'cred_old', retired: true })],
+      POLICIES,
+      HONOUR_NO_POLL,
+    );
+    const options = (key: string) => fields.find((field) => field.key === key)?.options;
+    expect(options('forge')).toEqual([{ value: 'frg_github', label: 'github · GitHub' }]);
+    expect(options('credential')).toEqual([{ value: 'cred_1', label: 'gh-blizzard · github.token', kind: 'frg_github' }]);
+    expect(options('landing_policy')?.[1]).toEqual({ value: 'park', label: 'park — forge lacks merge-poll', disabled: true });
+  });
+});
 
+describe('repositoryFormRecord', () => {
+  it('starts the edit form from the repository, an unlisted policy raw', () => {
+    const shown = formValuesOf(REPOSITORY_FIELDS, repositoryFormRecord(repository({ landingPolicy: { unlisted: 'rebase' } })));
+    expect(shown).toMatchObject({
+      slug: 'blizzard',
+      forge: 'frg_github',
+      credential: 'cred_1',
+      base_branch: 'master',
+      landing_policy: 'rebase',
+      allow_no_ci: false,
+    });
+  });
+
+  it('edits allow no CI sparsely, both ways', () => {
+    const shown = formValuesOf(REPOSITORY_FIELDS, repositoryFormRecord(BLIZZARD));
+    expect(configEdit(REPOSITORY_FIELDS, shown, { ...shown, allow_no_ci: true }).body).toEqual({ allow_no_ci: true });
+    expect(configEdit(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true }, shown).body).toEqual({ allow_no_ci: false });
+  });
+});
+
+describe('park timeout field', () => {
   it('shows only for park', () => {
     const shown = (policy: string) => shownFields(REPOSITORY_FIELDS, { landing_policy: policy }).map((field) => field.key);
     expect(shown('park')).toContain('park_timeout_hours');
@@ -239,35 +196,8 @@ describe('park timeout', () => {
     expect(shown('')).not.toContain('park_timeout_hours');
   });
 
-  it('is sent as a number on a parking create, and never when hidden', () => {
-    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' }))).toMatchObject({
-      landing_policy: 'park',
-      park_timeout_hours: 12,
-    });
-    const hidden = repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'fast-forward' }));
-    expect(hidden.landing_policy).toBe('fast-forward');
-    expect(hidden).not.toHaveProperty('park_timeout_hours');
-    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: '' }))).not.toHaveProperty(
-      'landing_policy',
-    );
-    expect(missingRequired(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' })).toEqual([]);
-  });
-});
-
-describe('repository detail policy facts', () => {
-  const facts = (repository: RepositorySummary) =>
-    Object.fromEntries(repositoryRecordVm(repository)!.facts.map((fact) => [fact.label, fact.value]));
-
-  it('shows the policy, and the timeout only for park', () => {
-    expect(facts(BLIZZARD)['Park timeout']).toBeUndefined();
-    expect(facts({ ...BLIZZARD, landing_policy: 'park', park_timeout_hours: 6 })).toMatchObject({
-      'Landing policy': 'park',
-      'Park timeout': '6 h',
-    });
-    expect(facts({ ...BLIZZARD, landing_policy: 'park' })['Park timeout']).toBe('default');
-  });
-
-  it('reads an unknown stored policy raw', () => {
-    expect(facts({ ...BLIZZARD, landing_policy: 'rebase' })['Landing policy']).toBe('rebase');
+  it('is not required', () => {
+    const form = { slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', credential: 'cred_1', landing_policy: 'park' };
+    expect(missingRequired(REPOSITORY_FIELDS, form)).toEqual([]);
   });
 });
