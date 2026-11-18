@@ -107,7 +107,7 @@ export interface ChunkCardBlocked {
 
 /**
  * One chunk as the fleet card and list row draw it — presentation data each app derives from its own reads,
- * never a mirror of one of them (`bzh:frontend-wire-conformist`). Status arrives as a word and a {@link Tone}, never
+ * never a mirror of one of them (`bzh:frontend-domain-boundary`). Status arrives as a word and a {@link Tone}, never
  * as a status vocabulary of its own; the card's edge and id are drawn in that tone. A region only one app fills is
  * optional, and renders nothing without its data.
  */

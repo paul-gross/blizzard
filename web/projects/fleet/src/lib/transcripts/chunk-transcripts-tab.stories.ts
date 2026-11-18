@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { transitionView } from '../testing/builders/chunk';
-import { toolCallSegmentView, transcriptSegmentContentView, transcriptSegmentIndexEntry, turnSegmentView } from '../testing/builders/transcript';
+import { transitionView } from '../testing/builders/chunk.translate';
+import { toolCallSegmentView, transcriptSegmentContentView, transcriptSegmentIndexEntry, turnSegmentView } from '../testing/builders/transcript.translate';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 const HISTORY = [

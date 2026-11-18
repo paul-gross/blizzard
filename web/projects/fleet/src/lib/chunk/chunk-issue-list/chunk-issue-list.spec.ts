@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { WorkItemAuthorView, WorkItemEntry } from '../../api/hub';
-import { workItemEntry } from '../../testing/builders/chunk';
+import { workItemEntry } from '../../testing/builders/chunk.translate';
 import { ChunkIssueList } from './chunk-issue-list';
 
 describe('ChunkIssueList', () => {

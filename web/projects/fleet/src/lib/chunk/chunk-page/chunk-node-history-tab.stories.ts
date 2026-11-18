@@ -5,9 +5,9 @@ import { nodeStepKey } from '../../core/node-step';
 import {
   chunkDetail,
   transitionView,
-} from '../../testing/builders/chunk';
-import { assetArtifactView } from '../../testing/builders/artifact';
-import { toolCallSegmentView, transcriptSegmentContentView, turnSegmentView } from '../../testing/builders/transcript';
+} from '../../testing/builders/chunk.translate';
+import { assetArtifactView } from '../../testing/builders/artifact.translate';
+import { toolCallSegmentView, transcriptSegmentContentView, turnSegmentView } from '../../testing/builders/transcript.translate';
 import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 
 const HISTORY = [

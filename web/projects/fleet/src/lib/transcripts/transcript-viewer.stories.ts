@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { sidechainSegmentView, toolCallSegmentView, turnSegmentView } from '../testing/builders/transcript';
+import { sidechainSegmentView, toolCallSegmentView, turnSegmentView } from '../testing/builders/transcript.translate';
 import { TranscriptViewer } from './transcript-viewer';
 
 const meta: Meta<TranscriptViewer> = {

@@ -11,7 +11,7 @@ import {
   type StubHttpError,
   stubError,
   stubHubClient,
-} from '../../testing/stub-request-client';
+} from '../../testing/transport/stub-request-client';
 import { APP_SCOPE, type InAppLink } from '../app-scope';
 import { flagGuard } from './flag-guard';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';

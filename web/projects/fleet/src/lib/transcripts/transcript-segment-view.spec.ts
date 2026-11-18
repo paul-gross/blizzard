@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import type { TranscriptSegmentIndexEntry } from '../api/hub';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
 import type { TranscriptTurn } from './transcript-turn';
 import { TranscriptSegmentView } from './transcript-segment-view';
 

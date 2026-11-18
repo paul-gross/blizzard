@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry, TurnSegmentViewOutput } from '../api/hub';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 interface Props {

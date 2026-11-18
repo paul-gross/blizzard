@@ -1,5 +1,5 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
-import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
+import { transcriptSegmentIndexEntry } from '../testing/builders/transcript.translate';
 import { deriveTranscriptSteps, resolveSegmentSeams } from './transcript-steps';
 
 function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {

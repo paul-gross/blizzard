@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkRefView } from '../../api/hub';
-import { workRefView } from '../../testing/builders/chunk';
+import { workRefView } from '../../testing/builders/chunk.translate';
 import { WorkRefLink } from './work-ref-link';
 
 const LINKED: WorkRefView = { source: 'github', ref: '42', label: 'Fix the thing', web_url: 'https://example.test/42' };
