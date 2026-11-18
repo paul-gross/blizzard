@@ -46,8 +46,11 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  *   reach it, and their reach does not count.
  * - `core/format/` is a declaration-free re-export barrel over top-level modules; reach lands on
  *   those modules, which are units of their own, never on the barrel.
+ * - `core/forms` is a bootstrap exemption: the shared form-save contracts land before any app
+ *   form adopts them, so neither app reaches the unit yet. Awaiting-human adoption, where both apps
+ *   reach it, removes this entry.
  */
-const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format'];
+const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format', 'core/forms'];
 
 /** Folders that only group units: a file under one belongs to the unit named by its first two segments. */
 const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];
@@ -311,6 +314,11 @@ function assertPlacementDetectorWorks() {
     // its sibling `core/both-tool` reaches both apps.
     [`${root}/projects/fleet/src/lib/core/hub-tool.ts`, 'export const hubTool = 3;\n'],
     [`${root}/projects/fleet/src/lib/core/both-tool.ts`, 'export const bothTool = 4;\n'],
+    // The bootstrap exemption is the exact unit `core/forms`: its unreached file passes, while an unreached
+    // sibling under `core/` and an unreached top-level `forms/` unit are still caught.
+    [`${root}/projects/fleet/src/lib/core/forms/outcome.ts`, 'export const outcome = 6;\n'],
+    [`${root}/projects/fleet/src/lib/core/unreached/thing.ts`, 'export const unreachedThing = 7;\n'],
+    [`${root}/projects/fleet/src/lib/forms/outcome.ts`, 'export const topLevelForms = 8;\n'],
     [`${root}/projects/fleet/src/shell-api.ts`, ''],
     [`${root}/projects/fleet/src/lib/shared/index.ts`, "export { sharedThing } from './shared-thing';\n"],
     [`${root}/projects/fleet/src/lib/shared/shared-thing.ts`, 'export const sharedThing = 1;\n'],
@@ -354,6 +362,15 @@ function assertPlacementDetectorWorks() {
   const runnerOnly = units.find((u) => u.unit === 'runner-only');
   if (!runnerOnly || runnerOnly.reach.join(',') !== 'runner') {
     throw new Error('placement self-test: a unit only the runner reaches was counted as hub-reached through a hub story');
+  }
+  if (units.some((u) => u.unit === 'core/forms')) {
+    throw new Error('placement self-test: the unreached core/forms bootstrap unit was flagged');
+  }
+  if (!units.some((u) => u.unit === 'core/unreached' && u.reach.length === 0)) {
+    throw new Error('placement self-test: an unreached core/ child other than core/forms was not caught as dead');
+  }
+  if (!units.some((u) => u.unit === 'forms' && u.reach.length === 0)) {
+    throw new Error('placement self-test: an unreached top-level forms unit was exempted by the core/forms entry');
   }
   if (units.some((u) => u.unit === 'shared')) {
     throw new Error('placement self-test: a unit both apps reach was flagged');
