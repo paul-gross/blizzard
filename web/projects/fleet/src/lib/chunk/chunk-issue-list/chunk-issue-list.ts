@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../api/hub';
-import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
+import { KitAccordionGroup, KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
 import type { Tone } from '../../kit';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { AppLink } from '../../core/app-scope';
@@ -17,7 +17,8 @@ const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal
  * A chunk's resolved work items as a one-line-per-issue accordion — the
  * ticket name first (the thing worth reading, carrying the visual weight)
  * then the work ref to its right as `- source#ref`, an independently
- * clickable address. Each row's own header is the accordion trigger;
+ * clickable address. Each row's own header is the accordion trigger, and the list is one
+ * {@link KitAccordionGroup} (Up/Down between headers);
  * expanding it reveals the item's own idiom — a forge
  * pointer's title/body/messages, or a hub pointer's markdown body,
  * authorship line, and stated priority, discriminated by
@@ -37,14 +38,14 @@ const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal
  * in — it is purely a function of how many issues there are): a lone issue
  * starts expanded, since there is nothing else on the row to scan past; two
  * or more start collapsed, so a grouped chunk's issue list reads as a list of
- * headers first. That default is *only* a default — {@link KitAccordionSection}
- * is fully controlled, so the operator toggling one section leaves the rest
+ * headers first. That default is *only* a default — {@link KitAccordionSection}'s
+ * `expanded` is the consumer's to own, so the operator toggling one section leaves the rest
  * exactly as they were, and more than one section can read open at once.
  */
 @Component({
   selector: 'fleet-chunk-issue-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead, RouterLink, AppLink],
+  imports: [KitAccordionGroup, KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead, RouterLink, AppLink],
   templateUrl: './chunk-issue-list.html',
   styleUrl: './chunk-issue-list.css',
 })

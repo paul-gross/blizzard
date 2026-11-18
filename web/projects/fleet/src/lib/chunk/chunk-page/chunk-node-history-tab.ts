@@ -8,6 +8,7 @@ import type {
 } from '../../api/hub';
 import { ChunkArtifactBody } from '../chunk-detail/chunk-artifact-body';
 import { ChunkTimeline } from '../chunk-detail/chunk-timeline';
+import { KitAccordionGroup } from '../../kit/kit-accordion-group';
 import { KitAccordionSection } from '../../kit/kit-accordion-section';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitMasterDetail } from '../../kit/kit-master-detail';
@@ -34,13 +35,13 @@ import { TranscriptSegmentView } from '../../transcripts/transcript-segment-view
  * from a settled empty read without that gate.
  *
  * Both accordion sections default open, and more than one can be open at once; nothing
- * here coordinates them shut. The transcript body renders through
+ * here coordinates them shut. The two sections share one {@link KitAccordionGroup}. The transcript body renders through
  * {@link TranscriptSegmentView}.
  */
 @Component({
   selector: 'fleet-chunk-node-history-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkArtifactBody, ChunkTimeline, KitAccordionSection, KitAsyncState, KitMasterDetail, TranscriptSegmentView],
+  imports: [ChunkArtifactBody, ChunkTimeline, KitAccordionGroup, KitAccordionSection, KitAsyncState, KitMasterDetail, TranscriptSegmentView],
   templateUrl: './chunk-node-history-tab.html',
   styleUrl: './chunk-node-history-tab.css',
 })

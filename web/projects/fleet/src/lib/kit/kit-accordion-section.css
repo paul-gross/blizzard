@@ -67,3 +67,11 @@
 .acc-body {
   padding: 0;
 }
+.acc-head[aria-disabled="true"] {
+  color: var(--label-dim);
+  cursor: default;
+}
+.acc-head[aria-disabled="true"]:hover {
+  background: var(--overlay-25);
+  color: var(--label-dim);
+}
