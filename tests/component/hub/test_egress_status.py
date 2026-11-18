@@ -107,7 +107,12 @@ def test_status_uses_append_order_for_position_and_recorded_time_for_pass_and_fi
     )
     assert store.append_cursor(written, after=None)
     reset = EgressCheckpoint(
-        "invocations", None, UsagePosition(now - timedelta(seconds=30)), 0, (), now - timedelta(seconds=20)
+        "invocations",
+        None,
+        UsagePosition(now - timedelta(seconds=30)),
+        3,
+        ("invocations/older-data.ndjson", "invocations/older-manifest.json"),
+        now - timedelta(seconds=20),
     )
     store.reset_cursor(reset)
 
