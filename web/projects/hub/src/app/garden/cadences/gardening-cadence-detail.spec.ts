@@ -215,4 +215,97 @@ describe('GardeningCadenceDetail', () => {
       expect(q('gardening-chore-add-key')).not.toBeNull();
     });
   });
+
+  describe('the chore forms', () => {
+    let read: typeof EVENING;
+    const cadences = () => [read];
+    beforeEach(() => (read = EVENING));
+
+    it('refuses a blank routine on its field, sending nothing, and focuses it', async () => {
+      const { click, type, q } = await render();
+
+      await click('gardening-cadence-chore-add');
+      await type('gardening-chore-add-key', 'weekly');
+      await click('gardening-chore-add-save');
+
+      expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(0);
+      expect(q('gardening-chore-add-routine')!.closest('fleet-kit-field')!.textContent).toContain('required');
+      expect(document.activeElement).toBe(q('gardening-chore-add-routine'));
+    });
+
+    it('adds a chore against the revision it opened on, and closes on success', async () => {
+      const { click, type, q, fixture, queryClient } = await render({ cadences });
+
+      await click('gardening-cadence-chore-add');
+      read = { ...EVENING, revision: 9 };
+      await queryClient.invalidateQueries({ queryKey: ['hub', 'cadences'] });
+      await settle(fixture, 12);
+      await type('gardening-chore-add-key', 'weekly');
+      await type('gardening-chore-add-routine', 'deep');
+      await click('gardening-chore-add-save');
+
+      const [call] = stub.forRoute('/api/cadences/cad_evening', 'PATCH');
+      expect(call.headers['if-match']).toBe('7');
+      expect((call.body as { chores: { key: string }[] }).chores.map((c) => c.key)).toEqual(['nightly', 'odd', 'weekly']);
+      expect(q('gardening-chore-add')).toBeNull();
+    });
+
+    it('keeps an edit open with its draft on a raced save, sending once, and Cancel restarts from the read', async () => {
+      const { click, type, q } = await render({
+        patch: () => stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'the cadence changed since it was read' }),
+      });
+
+      await click('gardening-cadence-chore-edit-odd');
+      await type('gardening-chore-edit-odd-note', 'typed');
+      await click('gardening-chore-edit-odd-save');
+
+      expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(1);
+      expect(q('gardening-chore-edit-odd-line')?.textContent).toContain('the cadence changed since it was read');
+      expect((q('gardening-chore-edit-odd-note') as HTMLInputElement).value).toBe('typed');
+
+      await click('gardening-chore-edit-odd-cancel');
+      expect(q('gardening-chore-edit-odd')).toBeNull();
+      await click('gardening-cadence-chore-edit-odd');
+      expect((q('gardening-chore-edit-odd-note') as HTMLInputElement).value).toBe('');
+    });
+
+    it('lands a hub refusal of the key on the key', async () => {
+      const { click, type, q } = await render({
+        patch: () => stubError(422, { detail: [{ loc: ['body', 'chores', 2, 'key'], msg: 'duplicate key', type: 'value_error' }] }),
+      });
+
+      await click('gardening-cadence-chore-add');
+      await type('gardening-chore-add-key', 'odd');
+      await type('gardening-chore-add-routine', 'deep');
+      await click('gardening-chore-add-save');
+
+      expect(q('gardening-chore-add-key')!.closest('fleet-kit-field')!.textContent).toContain('duplicate key');
+      expect(q('gardening-chore-add')).not.toBeNull();
+    });
+
+    it('is open one at a time with the cadence edit and the remove confirm', async () => {
+      const { click, q } = await render();
+
+      await click('gardening-cadence-chore-edit-odd');
+      await click('gardening-cadence-panel-edit');
+      expect(q('gardening-chore-edit-odd')).toBeNull();
+      expect(q('gardening-cadence-edit')).not.toBeNull();
+
+      await click('gardening-cadence-chore-add');
+      expect(q('gardening-cadence-edit')).toBeNull();
+      await click('gardening-cadence-chore-remove-odd');
+      expect(q('gardening-chore-add')).toBeNull();
+      expect(q('confirm-dialog')).not.toBeNull();
+    });
+
+    it('answers a raced remove on the panel line, from the captured revision', async () => {
+      const { click, q } = await render({ patch: () => stubError(409, { detail: 'the cadence changed since it was read' }) });
+
+      await click('gardening-cadence-chore-remove-odd');
+      await click('confirm-dialog-confirm');
+
+      expect(q('gardening-cadence-panel-error')?.textContent).toContain('the cadence changed since it was read');
+      expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(1);
+    });
+  });
 });

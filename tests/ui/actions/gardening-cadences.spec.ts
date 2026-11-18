@@ -162,3 +162,64 @@ test('test_gardening_cadence_form_refusals_browser', async ({ api, page, project
   const saved = await api.get(`/api/projects/${project.slug}/cadences`);
   expect((saved.body as Wire.CadenceView[]).find((c) => c.slug === 'evening')!.name).toBe('Evening sweep');
 });
+
+test('test_gardening_chore_form_refusals_browser', async ({ api, page, project, wideViewport }) => {
+  const made = await api.post(`/api/projects/${project.slug}/cadences`, {
+    data: {
+      slug: 'evening',
+      schedule: { cron: '0 20 * * *', zone: 'UTC' },
+      chores: [{ key: 'nightly', routine: 'sweep', scopes: 'all' }],
+    },
+  });
+  expect(made.status, JSON.stringify(made.body)).toBe(201);
+  const cadenceId = (made.body as Wire.CadenceView).cadence_id;
+
+  const patches: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && request.url().includes('/cadences/')) patches.push(request.url());
+  });
+  const field = (testid: string) => page.locator('fleet-kit-field', { has: page.getByTestId(testid) });
+  const storedChores = async () => {
+    const held = await api.get(`/api/projects/${project.slug}/cadences`);
+    return (held.body as Wire.CadenceView[]).find((c) => c.slug === 'evening')!.chores;
+  };
+
+  await page.setViewportSize(wideViewport);
+  await page.goto(`/p/${project.slug}/gardening/cadences/evening`);
+  await expect(page.getByTestId('gardening-cadence-panel')).toBeVisible();
+
+  // A blank routine is refused on its field, which takes focus, and nothing is sent.
+  await page.getByTestId('gardening-cadence-chore-add').click();
+  await page.getByTestId('gardening-chore-add-key').fill('weekly');
+  await page.getByTestId('gardening-chore-add-save').click();
+  await expect(field('gardening-chore-add-routine')).toContainText('required');
+  await expect(page.getByTestId('gardening-chore-add-routine')).toBeFocused();
+  expect(patches).toHaveLength(0);
+
+  // A key the cadence already holds is the hub's to refuse, and the refusal lands on the key.
+  await page.getByTestId('gardening-chore-add-key').fill('nightly');
+  await page.getByTestId('gardening-chore-add-routine').fill('sweep');
+  await page.getByTestId('gardening-chore-add-save').click();
+  await expect(page.getByTestId('gardening-chore-add-key')).toBeFocused();
+  await expect(page.getByTestId('gardening-chore-add-key')).toHaveValue('nightly');
+  expect(patches).toHaveLength(1);
+  await page.getByTestId('gardening-chore-add-cancel').click();
+
+  // An edit raced by another write is refused on the form line, keeping what was typed; the other write stands.
+  await page.getByTestId('gardening-cadence-chore-edit-nightly').click();
+  await page.getByTestId('gardening-chore-edit-nightly-note').fill('typed');
+  const raced = await api.patch(`/api/cadences/${cadenceId}`, { data: { spacing: '1d' } });
+  expect(raced.status, JSON.stringify(raced.body)).toBe(200);
+  await page.getByTestId('gardening-chore-edit-nightly-save').click();
+  await expect(page.getByTestId('gardening-chore-edit-nightly-line')).toBeVisible();
+  await expect(page.getByTestId('gardening-chore-edit-nightly-note')).toHaveValue('typed');
+  expect((await storedChores()).map((c) => c.note)).toEqual([null]);
+
+  // Cancel, then Edit again, starts from the fresh read and saves cleanly.
+  await page.getByTestId('gardening-chore-edit-nightly-cancel').click();
+  await page.getByTestId('gardening-cadence-chore-edit-nightly').click();
+  await page.getByTestId('gardening-chore-edit-nightly-note').fill('typed');
+  await page.getByTestId('gardening-chore-edit-nightly-save').click();
+  await expect(page.getByTestId('gardening-chore-edit-nightly')).toHaveCount(0);
+  expect((await storedChores()).map((c) => c.note)).toEqual(['typed']);
+});

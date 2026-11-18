@@ -1,61 +1,50 @@
-import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { type KitChipOption, type UrgencyView, KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
+import { KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
 
 import type { ChoreDraft } from '../core/cadence.domain';
-import { choreModeLabel } from './cadence-vocabulary';
 import { urgencyOptions } from '../../core/urgency-options.model';
-
+import { choreModeLabel } from './cadence-vocabulary';
 
 /**
- * One chore as a form — adding a chore, or editing one in place. It holds only the draft typed so far, reopening on
- * {@link initial}; Save emits the draft. A mode this build does not know is offered as itself, so saving an untouched
- * chore never rewrites it. Presentational: no query injection.
+ * One chore as a form — adding a chore, or editing one in place. Presentational: it renders the field tree it is
+ * handed, and its container owns the draft, the rules, and the save. A mode this build does not know is offered as
+ * itself ({@link heldMode}), so saving an untouched chore never rewrites it.
  */
 @Component({
   selector: 'app-chore-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput],
+  imports: [FormField, KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitSelect, KitTextInput],
   templateUrl: './chore-form.html',
   styleUrl: './chore-form.css',
 })
 export class FleetChoreForm {
-  readonly initial = input.required<ChoreDraft>();
+  readonly form = input.required<FieldTree<ChoreDraft>>();
+  /** Whether the form adds a chore — only then is the key typed; a chore keeps its key once written. */
+  readonly adding = input(false);
   readonly urgencies = input<readonly UrgencyView[]>([]);
-  /** Whether the key may be typed — a chore keeps its key once written, so an edit fixes it. */
-  readonly keyEditable = input(true);
-  readonly pending = input(false);
-  readonly error = input<string | null>(null);
+  /** The mode the chore held when the form opened — kept on offer after another is picked. */
+  readonly heldMode = input<string | null>(null);
   readonly testid = input('gardening-chore-form');
 
-  readonly saved = output<ChoreDraft>();
-  readonly cancelled = output<void>();
+  readonly save = output<void>();
+  // Named `cancel` as the forms spec declares, matching the kit form it forwards.
+  // eslint-disable-next-line @angular-eslint/no-output-native
+  readonly cancel = output<void>();
 
-  protected readonly draft = linkedSignal(() => this.initial());
-  protected readonly urgencyOptions = computed(() =>
-    urgencyOptions(this.urgencies(), { key: 'slug', retired: { current: this.draft().urgency ?? null }, inherit: { label: 'Routine default', name: null } }));
-
-  protected readonly urgencyValue = computed(() => {
-    const value = this.draft().urgency ?? '';
-    return this.urgencies().find((u) => u.urgency_id === value)?.slug ?? value;
-  });
-
-  /** The known modes, and the draft's own when this build does not know it. */
-  protected readonly modeOptions = computed<readonly KitChipOption[]>(() => {
+  /** The known modes, and the held one when this build does not know it. */
+  protected readonly modes = computed<readonly { value: string; label: string }[]>(() => {
     const known = choreModeLabel.keys.map((mode) => ({ value: mode, label: choreModeLabel(mode) }));
-    const mode = this.initial().mode;
-    return choreModeLabel.has(mode) ? known : [...known, { value: mode, label: mode }];
+    const held = this.heldMode();
+    return held === null || choreModeLabel.has(held) ? known : [...known, { value: held, label: held }];
   });
 
-  protected set(field: 'key' | 'routine' | 'scopes' | 'mode' | 'note' | 'urgency', value: string): void {
-    this.draft.update((draft) => ({ ...draft, [field]: value }));
-  }
-
-  protected setPromote(promote: boolean): void {
-    this.draft.update((draft) => ({ ...draft, promote }));
-  }
-
-  protected save(): void {
-    this.saved.emit(this.draft());
-  }
+  protected readonly urgencyOptions = computed(() =>
+    urgencyOptions(this.urgencies(), {
+      key: 'slug',
+      retired: { current: this.form().urgency().value() || null },
+      inherit: { label: 'Routine default', name: null },
+    }),
+  );
 }

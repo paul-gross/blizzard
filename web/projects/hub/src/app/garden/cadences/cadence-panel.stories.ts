@@ -5,7 +5,7 @@ import { fn } from 'storybook/test';
 import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
 
 import { FleetCadencePanel } from './cadence-panel';
-import { CadencePanelEditingStoryHost } from './cadence-panel.story-host';
+import { CadencePanelChoreStoryHost, CadencePanelEditingStoryHost } from './cadence-panel.story-host';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
 
 const CADENCE = gardenCadence({
@@ -48,9 +48,15 @@ const meta: Meta<FleetCadencePanel> = {
     startEdit: fn(),
     saveEdit: fn(),
     cancelEdit: fn(),
-    addChore: fn(),
-    editChore: fn(),
-    removeChore: fn(),
+    choreForm: null,
+    removing: null,
+    startAddChore: fn(),
+    startEditChore: fn(),
+    saveChore: fn(),
+    cancelChore: fn(),
+    startRemoveChore: fn(),
+    confirmRemoveChore: fn(),
+    cancelRemoveChore: fn(),
     retire: fn(),
     enable: fn(),
   },
@@ -77,3 +83,13 @@ export const Editing: Story = {
   render: () => ({ props: { vm: VM }, template: '<app-story-cadence-panel-editing [vm]="vm" />' }),
 };
 export const EditingPhone: Story = { ...Editing, globals: { viewport: { value: 'phone', isRotated: false } } };
+export const ChoreAdding: Story = {
+  decorators: [moduleMetadata({ imports: [CadencePanelChoreStoryHost] })],
+  render: () => ({ props: { vm: VM }, template: '<app-story-cadence-panel-chore [vm]="vm" [adding]="true" />' }),
+};
+export const ChoreEditing: Story = {
+  decorators: [moduleMetadata({ imports: [CadencePanelChoreStoryHost] })],
+  render: () => ({ props: { vm: VM }, template: '<app-story-cadence-panel-chore [vm]="vm" [adding]="false" />' }),
+};
+export const ChoreEditingPhone: Story = { ...ChoreEditing, globals: { viewport: { value: 'phone', isRotated: false } } };
+export const RemovingChore: Story = { args: { removing: 'samples' } };

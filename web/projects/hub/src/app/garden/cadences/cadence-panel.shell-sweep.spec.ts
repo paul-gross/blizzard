@@ -1,12 +1,16 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
 
+import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
+import { toChoreDraft } from '../core/cadence.translate';
 import { type CadencePanelVm, FleetCadencePanel } from './cadence-panel';
+import { choreAddRules, choreEditRules } from './chore.form';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
 
 /**
@@ -103,11 +107,30 @@ describe('gardening cadence panel layout shell sweep (web:shell-sweep)', () => {
       for (const wrap of Array.from(root.querySelectorAll<HTMLElement>('.cp-table-wrap'))) {
         expect(wrap.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
       }
-      root.querySelector<HTMLElement>('[data-testid="gardening-cadence-chore-add"]')!.click();
+      // The add form, touched so its rule errors show, then an edit form open on the long-routine chore.
+      const addTree = TestBed.runInInjectionContext(() => form(signal<ChoreDraft>(EMPTY_CHORE_DRAFT), choreAddRules));
+      addTree().markAsTouched();
+      addTree.key().markAsTouched();
+      addTree.routine().markAsTouched();
+      fixture.componentRef.setInput('choreForm', { key: null, form: addTree });
       await fixture.whenStable();
-      const urgency = root.querySelector<HTMLElement>('[data-testid="gardening-chore-add-urgency"]')!;
-      expect(urgency).not.toBeNull();
-      expect(urgency.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+      const editTree = TestBed.runInInjectionContext(() =>
+        form(signal<ChoreDraft>(toChoreDraft(CADENCE.chores[1])), choreEditRules),
+      );
+      for (const open of [{ key: null, form: addTree, id: 'gardening-chore-add' }, { key: 'samples', form: editTree, id: 'gardening-chore-edit-samples' }]) {
+        fixture.componentRef.setInput('choreForm', { key: open.key, form: open.form });
+        await fixture.whenStable();
+        const choreForm = root.querySelector<HTMLElement>(`[data-testid="${open.id}"]`)!;
+        expect(choreForm, `${open.id} is not rendered`).not.toBeNull();
+        if (open.key === null) expect(addTree.routine().errors().length, 'the add form shows its rule errors').toBeGreaterThan(0);
+        expect(choreForm.scrollWidth, `${open.id} overflows at ${width}px`).toBeLessThanOrEqual(choreForm.clientWidth);
+        const urgency = root.querySelector<HTMLElement>(`[data-testid="${open.id}-urgency"]`)!;
+        expect(urgency).not.toBeNull();
+        expect(urgency.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+      }
+      fixture.componentRef.setInput('choreForm', null);
+      await fixture.whenStable();
       const retire = root.querySelector<HTMLElement>('[data-testid="gardening-cadence-panel-retire"]')!;
       expect(retire.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       for (const state of ['loading', 'error', 'empty'] as const) {

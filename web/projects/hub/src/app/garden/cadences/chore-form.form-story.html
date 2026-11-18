@@ -1,0 +1,7 @@
+<app-chore-form
+  [form]="adding() ? addForm : editForm"
+  [adding]="adding()"
+  [urgencies]="urgencies()"
+  [heldMode]="heldMode()"
+  (save)="onSave()"
+/>

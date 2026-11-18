@@ -12,7 +12,9 @@ import {
   choresReplacing,
   fromCadenceView,
   spacingDraftText,
+  choreRefusals,
   toChoreDraft,
+  toChoresBaseline,
   toCreateRequest,
   toDraft,
   toEditBaseline,
@@ -208,7 +210,7 @@ describe('the whole chore list', () => {
 
   it('adds a chore at the end, carrying the others verbatim', () => {
     expect(
-      choresAdding(held.chores, { key: 'weekly', routine: 'deep', scopes: 'a, b c', mode: 'delta', promote: false, note: '' }),
+      choresAdding(held.chores, { key: 'weekly', routine: 'deep', scopes: 'a, b c', mode: 'delta', promote: false, note: '', urgency: '' }),
     ).toEqual([
       nightlyDoc,
       oddDoc,
@@ -278,5 +280,39 @@ describe('CADENCE_REFUSALS', () => {
   it('keeps a revision conflict on the form line', () => {
     const conflict = { type: 'urn:blizzard:problem:revision-conflict', status: 409, detail: 'the cadence changed since it was read' };
     expect(readRefusal(conflict, CADENCE_REFUSALS)).toEqual({ ok: false, fields: {}, form: 'the cadence changed since it was read' });
+  });
+});
+
+describe('a chore save', () => {
+  it('captures a baseline detached from a later read', () => {
+    const baseline = toChoresBaseline(held);
+    expect(baseline).toEqual({ id: held.id, revision: held.revision, draft: held.chores });
+    expect(baseline.draft).not.toBe(held.chores);
+  });
+
+  it('opens an unspecified urgency as the routine default', () => {
+    expect(toChoreDraft(NIGHTLY).urgency).toBe('');
+    expect(toChoreDraft(ODD).urgency).toBe('someday');
+  });
+
+  it('keeps the target key on an edit whatever the draft holds', () => {
+    expect(choresReplacing(held.chores, 'nightly', { ...toChoreDraft(NIGHTLY), key: 'renamed' })[0].key).toBe('nightly');
+  });
+
+  it("maps the target chore's fields and scope entries, and nothing else", () => {
+    const map = choreRefusals(1);
+    expect(map.field('chores[1].routine')).toBe('routine');
+    expect(map.field('chores[1].key')).toBe('key');
+    expect(map.field('chores[1].scopes[2]')).toBe('scopes');
+    expect(map.field('chores[0].routine')).toBeNull();
+    expect(map.field('chores[1].unknown')).toBeNull();
+    expect(map.field('chores')).toBeNull();
+    expect(map.field('name')).toBeNull();
+  });
+
+  it('reads a field 422 on the target onto its field and anything else onto the form line', () => {
+    const detail = (loc: unknown[]) => ({ detail: [{ loc, msg: 'bad', type: 'value_error' }] });
+    expect(readRefusal(detail(['body', 'chores', 1, 'routine']), choreRefusals(1))).toEqual({ ok: false, fields: { routine: 'bad' }, form: null });
+    expect(readRefusal(detail(['body', 'chores', 0, 'routine']), choreRefusals(1))).toEqual({ ok: false, fields: {}, form: 'chores[0].routine: bad' });
   });
 });
