@@ -114,3 +114,9 @@ class IWriteHostSettings(IReadHostSettings, Protocol):
         actor: str,
         apply_id: str | None = None,
     ) -> tuple[FieldChange, ...]: ...
+
+
+class IWakeDrivers(Protocol):
+    """The host's timed drivers, woken to re-read their intervals."""
+
+    def wake(self) -> None: ...

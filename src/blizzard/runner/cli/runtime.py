@@ -1152,7 +1152,13 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
     """``host --check``: every error a start would meet, reported together; starts nothing and holds nothing."""
     try:
         config = HostConfig.load_for_store(
-            root, host=host, port=port, loop=loop, flag_registry=packaged_flag_registry(), strict=strict_config()
+            root,
+            host=host,
+            port=port,
+            loop=loop,
+            flag_registry=packaged_flag_registry(),
+            strict=strict_config(),
+            defer_tool_agreement=True,
         )
     except HostConfigError as exc:
         raise click.ClickException("\n".join(f"host: {error}" for error in exc.errors)) from exc
@@ -1179,6 +1185,14 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
     collaborators = InitCollaborators.of(ctx)
     engine = create_engine_from_url(config.db_url) if current else None
     try:
+        # The runners' disagreeing tool profiles are refused only while the store holds no host profile of its own.
+        if config.tool_profile_conflict is not None:
+            stored_keys: Sequence[str] = ()
+            if engine is not None:
+                errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+                stored_keys = tuple(build_host_settings_store(engine, errors=errors).snapshot().entries)
+            if not any(key.startswith("tools.") for key in stored_keys):
+                problems.append(f"host: {config.tool_profile_conflict}")
         for entry in config.runners:
             if entry.id is not None and current:
                 problem = foreign_store_reason(
@@ -1284,9 +1298,37 @@ class _RunnerThreads:
         self.driver.stop()
 
 
-def _runner_threads(runner: RunnerProcess, stepper: RunnerStepper, *, interval: float) -> _RunnerThreads:
-    driver = PeriodicDriver(runner.config, interval=lambda: interval, process_graph=runner, stepper=stepper)
-    return _RunnerThreads(runner, driver, _pass_drivers(runner, stepper))
+def tick_interval(host: HostProcess, tick_seconds: float) -> Callable[[], float]:
+    """The live tick interval: ``tick_seconds`` at the host record's current revision, else the boot value on a
+    host built from no host file."""
+    if host.host_settings is None:
+        return lambda: tick_seconds
+    return host.host_settings.reader.live(
+        lambda config: config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS
+    )
+
+
+def sweep_interval(host: HostProcess, stepper: RunnerStepper) -> Callable[[], float]:
+    """The live trace-sweep interval: ``tracing.sweep_seconds`` at the host record's current revision, else the
+    runner's last sweep's on a host built from no host file."""
+    if host.host_settings is None:
+        return stepper.trace_interval
+    return host.host_settings.reader.live(lambda config: config.tracing.sweep_seconds)
+
+
+def build_runner_threads(
+    host: HostProcess, runner: RunnerProcess, stepper: RunnerStepper, *, tick_seconds: float
+) -> _RunnerThreads:
+    """One runner's timed drivers, each waiting its live interval on its own wake signal."""
+    driver = PeriodicDriver(
+        runner.config,
+        interval=tick_interval(host, tick_seconds),
+        process_graph=runner,
+        stepper=stepper,
+        signal=host.wakes.signal(),
+        clock=host.monotonic_clock,
+    )
+    return _RunnerThreads(runner, driver, _pass_drivers(host, runner, stepper))
 
 
 def _serve_host(
@@ -1299,7 +1341,8 @@ def _serve_host(
     listening_file: Path | None = None,
 ) -> None:
     """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer, each runner's tick and the
-    host tick waiting ``tick_seconds`` between passes; a ``stepped`` one starts none, and a pass runs only when
+    host tick waiting the live ``tick_seconds`` (``tick_seconds`` here is its boot value) between passes; a ``stepped``
+    one starts none, and a pass runs only when
     requested through its stepper."""
     app = hosted.app
     interval = tick_seconds
@@ -1310,14 +1353,14 @@ def _serve_host(
         []
         if stepped
         else [
-            _runner_threads(runner, stepper, interval=interval)
+            build_runner_threads(host, runner, stepper, tick_seconds=interval)
             for runner, stepper in zip(host.runners, hosted.steppers, strict=True)
         ]
     )
     host_tick = (
         None
         if stepped or hosted.host_stepper is None
-        else host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
+        else host_tick_driver(host, interval=tick_interval(host, interval), stepper=hosted.host_stepper)
     )
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
@@ -1398,22 +1441,25 @@ def _serve_host(
 
 
 def host_tick_driver(
-    host: HostProcess, *, tick_seconds: float, stepper: HostPassStepper | None = None
+    host: HostProcess, *, interval: Callable[[], float], stepper: HostPassStepper | None = None
 ) -> PeriodicPassDriver:
     """The host's own thread, passing on the tick's own interval with no jitter, so a credential lapsed across a
-    restart is renewed at once; each slug's own cadence gates it within the pass. ``stepper`` is the host pass it
+    restart is renewed at once; each slug's own cadence gates it within the pass. ``interval`` is the live tick
+    interval it waits between passes, and ``stepper`` the host pass it
     drives, else one built over the host's tick."""
     return PeriodicPassDriver(
         (stepper or host_pass_stepper(host)).timed,
         name="blizzard-host-tick",
         label="host tick",
         log=get_logger("blizzard.runner.subscriptions"),
-        interval=lambda: tick_seconds,
+        interval=interval,
         jitter_seconds=0,
+        signal=host.wakes.signal(),
+        clock=host.monotonic_clock,
     )
 
 
-def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[PeriodicPassDriver]:
+def _pass_drivers(host: HostProcess, runner: RunnerProcess, stepper: RunnerStepper) -> list[PeriodicPassDriver]:
     """One runner's off-tick drivers."""
     drivers: list[PeriodicPassDriver] = []
     if runner.trace_sweep is not None:
@@ -1423,7 +1469,9 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
                 name="blizzard-runner-trace-sweep",
                 label="lease trace sweep",
                 log=get_logger("blizzard.runner.trace_export"),
-                interval=stepper.trace_interval,
+                interval=sweep_interval(host, stepper),
+                signal=host.wakes.signal(),
+                clock=host.monotonic_clock,
             )
         )
     return drivers

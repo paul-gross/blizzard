@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -13,11 +15,19 @@ from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.cli.runtime import seed_host, seed_runners
+from blizzard.runner.cli.runtime import (
+    build_runner_threads,
+    host_tick_driver,
+    seed_host,
+    seed_runners,
+    tick_interval,
+)
 from blizzard.runner.composition import HostProcess, build_host_process
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
+from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
@@ -179,3 +189,89 @@ def test_an_edited_seeded_host_key_in_the_file_changes_nothing_after_a_restart(
         assert restarted.runners[0].config.worker_stdout_retention_days == 3
     finally:
         restarted.close()
+
+
+def test_a_tick_seconds_write_from_an_hour_to_a_second_takes_hold_without_waiting_the_hour(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = _host(tmp_path, monkeypatch, "tick_seconds = 3600")
+    hosted = build_hosted_app(host.runners[0].config, host)
+    held = host.host_settings
+    assert held is not None and hosted.host_stepper is not None
+    ticks = threading.Semaphore(0)
+    host_passes = threading.Semaphore(0)
+
+    def counted(ctx: LoopContext) -> None:
+        ticks.release()
+
+    monkeypatch.setattr(loop_wiring, "tick", counted)
+    host_pass = hosted.host_stepper
+
+    class _CountedHostPass:
+        def timed(self) -> None:
+            host_pass.timed()
+            host_passes.release()
+
+    threads = build_runner_threads(host, host.runners[0], hosted.steppers[0], tick_seconds=3600)
+    host_driver = host_tick_driver(host, interval=tick_interval(host, 3600), stepper=cast(Any, _CountedHostPass()))
+    threads.start()
+    host_driver.start()
+    try:
+        assert ticks.acquire(timeout=10) and host_passes.acquire(timeout=10)
+        authoring = HostSettingsAuthoring(held.reader, host.host_stores.settings, HOST_REGISTRY, drivers=host.wakes)
+        authoring.edit(
+            {"tick_seconds": 1}, frozenset(), if_match=host.host_stores.settings.revision(), door="api", actor="test"
+        )
+        # Both drivers were waiting out the hour; the write wakes each onto the new second.
+        assert ticks.acquire(timeout=10) and ticks.acquire(timeout=10)
+        assert host_passes.acquire(timeout=10)
+    finally:
+        host_driver.stop()
+        threads.stop()
+        hosted.close()
+        host.close()
+
+
+def test_a_write_not_naming_an_interval_wakes_no_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    host = _host(tmp_path, monkeypatch)
+    held = host.host_settings
+    assert held is not None
+    signal = host.wakes.signal()
+    try:
+        authoring = HostSettingsAuthoring(held.reader, host.host_stores.settings, HOST_REGISTRY, drivers=host.wakes)
+        authoring.edit(
+            {"worker_stdout.retention_days": 4},
+            frozenset(),
+            if_match=host.host_stores.settings.revision(),
+            door="api",
+            actor="test",
+        )
+        assert not signal.event.is_set()
+        authoring.edit(
+            {"tracing.sweep_seconds": 5},
+            frozenset(),
+            if_match=host.host_stores.settings.revision(),
+            door="api",
+            actor="test",
+        )
+        assert signal.event.is_set()
+    finally:
+        host.close()
+
+
+def test_a_tracing_write_reaches_the_next_worker_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    host = _host(tmp_path, monkeypatch)
+    try:
+        before = host.telemetry_receiver.tracing()
+        assert (before.harness_telemetry, before.worker_programs, dict(before.mapped_services)) == (False, False, {})
+        _write(
+            host,
+            tracing__harness_telemetry=True,
+            tracing__worker_programs=True,
+            tracing__worker_program_services={"winter": "winter-cli"},
+        )
+        after = host.telemetry_receiver.tracing()
+        assert (after.harness_telemetry, after.worker_programs) == (True, True)
+        assert dict(after.mapped_services) == {"winter": "winter-cli"}
+    finally:
+        host.close()

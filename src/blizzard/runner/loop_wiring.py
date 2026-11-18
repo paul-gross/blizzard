@@ -16,7 +16,7 @@ from typing import Protocol, TypeVar, cast
 
 import httpx2
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import collaborator
@@ -61,6 +61,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscr
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.loop.wake import IntervalWait, Wait, WakeSignal
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
@@ -721,7 +722,8 @@ def host_pass_stepper(host: HostProcess) -> HostPassStepper:
 
 class PeriodicDriver:
     """A background thread that ticks the loop through a ``RunnerStepper``, waiting ``interval()`` seconds from the
-    end of each tick to the start of the next."""
+    end of each tick to the start of the next. ``signal`` wakes a wait to re-read the interval; ``clock`` and ``wait``
+    are what the wait is measured and spent on."""
 
     def __init__(
         self,
@@ -730,14 +732,19 @@ class PeriodicDriver:
         interval: Callable[[], float],
         process_graph: RunnerProcess,
         stepper: RunnerStepper | None = None,
+        signal: WakeSignal | None = None,
+        clock: IMonotonicClock | None = None,
+        wait: Wait | None = None,
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/unit/runner/test_loop_build.py`).
         self._owned = stepper is None
         self._stepper = stepper or RunnerStepper(config, process_graph=process_graph)
         self._wiring = self._stepper.wiring
-        self._interval = interval
-        self._stop = threading.Event()
+        self._clock = clock or SystemMonotonicClock()
+        self._waits = IntervalWait(
+            interval, signal=signal or WakeSignal(), clock=self._clock, log=_log, label="reconciliation loop", wait=wait
+        )
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
 
     @property
@@ -759,15 +766,16 @@ class PeriodicDriver:
         handshake, bounded by `DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS` (60s) rather than
         returning immediately — left open by design, since OpenCode self-mints its session
         id with nowhere durable to poll it from until that handshake completes."""
-        self._stop.set()
+        self._waits.stop()
         self._thread.join()
         if self._owned:
             self._stepper.close()
 
     def _run(self) -> None:
         name = self._wiring.config.name
-        _log.info("reconciliation loop started", runner_name=name, interval=self._interval())
-        while not self._stop.is_set():
+        _log.info("reconciliation loop started", runner_name=name, interval=self._waits.interval())
+        while not self._waits.stopped:
             self._stepper.timed_tick()
-            self._stop.wait(self._interval())
+            if not self._waits.until_due(self._clock.monotonic()):
+                break
         _log.info("reconciliation loop stopped", runner_name=name)

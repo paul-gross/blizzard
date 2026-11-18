@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import replace
 from typing import Any, cast
@@ -52,6 +52,26 @@ class HostSettingsReader:
     def current(self) -> HostConfig:
         """The effective host configuration at the store's current host revision."""
         return self.snapshot()[1]
+
+    def live[T](self, pick: Callable[[HostConfig], T]) -> Callable[[], T]:
+        """A read of ``pick`` at the store's current host revision, re-evaluated only when the revision moves; a
+        revision that fails to resolve answers from the last resolution that succeeded."""
+        held: list[tuple[int, T]] = []
+
+        def read() -> T:
+            revision = self.revision()
+            if held and held[0][0] == revision:
+                return held[0][1]
+            snapshot = self.snapshot_record()
+            try:
+                config = self.resolve(snapshot)
+            except ValueError:
+                config = self.resolve_last()
+            value = pick(config)
+            held[:] = [(snapshot.revision, value)]
+            return value
+
+        return read
 
     def resolve(self, snapshot: SettingsSnapshot) -> HostConfig:
         with self._lock:

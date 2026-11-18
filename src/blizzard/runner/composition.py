@@ -129,6 +129,7 @@ from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
+from blizzard.runner.loop.wake import WakeSignals
 from blizzard.runner.process.child_env import ChildEnv, IToolProfile, ToolProfileHolder
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -212,7 +213,7 @@ from blizzard.runner.tracing.received_export import (
     build_received_telemetry_export,
 )
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
-from blizzard.runner.tracing.receiving import TelemetryReceiver
+from blizzard.runner.tracing.receiving import ReceiverTracing, TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from blizzard.runner.transfer.host_files import IHostFiles
@@ -239,6 +240,14 @@ from blizzard.runner.usage.external_usage_sample import (
     SampledSubscription,
 )
 from blizzard.runner.usage.repository import IWriteExternalUsageAttemptRepository
+
+
+def _receiver_tracing(host: HostConfig | RunnerConfig) -> ReceiverTracing:
+    return ReceiverTracing(
+        worker_programs=host.tracing.worker_programs,
+        harness_telemetry=host.tracing.harness_telemetry,
+        mapped_services=host.tracing.worker_program_services,
+    )
 
 
 @dataclass
@@ -311,6 +320,8 @@ class HostProcess:
     tool_profile: ToolProfileHolder = field(default_factory=lambda: ToolProfileHolder(ChildEnv(())))
     #: The host record in force, which the host tick snapshots first; ``None`` for a host built from no host file.
     host_settings: HostSettingsInForce | None = None
+    #: Every timed driver's wake signal; a host write moving an interval wakes them all.
+    wakes: WakeSignals = field(default_factory=WakeSignals)
     _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
         default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
     )
@@ -686,6 +697,10 @@ def build_host_process(
         )
         if graph.readiness.evaluate().ready:
             graph.host_settings.take()
+        # Host entries read on use: each worker export is admitted under the host record's current revision.
+        graph.telemetry_receiver = replace(
+            graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
+        )
         for built in runners:
             entry = next((entry for entry in host.runners if entry.id == built.id), None)
             runner = _build_runner(
@@ -909,9 +924,7 @@ def _build_host_graph(
                 metric_bounds=metric_bounds,
                 log_bounds=log_bounds,
                 clock=clock,
-                worker_programs=config.tracing.worker_programs,
-                harness_telemetry=config.tracing.harness_telemetry,
-                mapped_services=config.tracing.worker_program_services,
+                tracing=functools.partial(_receiver_tracing, config),
             ),
             span_limiter=span_limiter,
             receiver_counter=receiver_counter,

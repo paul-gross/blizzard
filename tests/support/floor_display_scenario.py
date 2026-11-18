@@ -177,7 +177,7 @@ def main() -> None:
 
                 check("before")
                 drivers = [PeriodicDriver(r.config, interval=lambda: 8, process_graph=r) for r in host.runners]
-                host_driver = host_tick_driver(host, tick_seconds=8)
+                host_driver = host_tick_driver(host, interval=lambda: 8)
                 started: list[PeriodicDriver] = []
                 host_started = False
                 try:
