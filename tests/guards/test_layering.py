@@ -3163,6 +3163,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "host_config",
         "host_file",
         "host_layout",
+        "host_settings_reader",
         "listeners",
         "loop_wiring",
         "public_origins",

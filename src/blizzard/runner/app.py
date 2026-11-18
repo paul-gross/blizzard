@@ -128,6 +128,7 @@ from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import ResumeMarking, RunnerStepper, host_pass_stepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
@@ -275,6 +276,7 @@ def runner_seams(
     identity: ICurrentRunnerIdentity | None = None,
     stepper: RunnerStepper | None = None,
     tracing: TracingSettings | None = None,
+    tool_profile: IToolProfile | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
@@ -282,7 +284,8 @@ def runner_seams(
     configured runner; absent either, the proxy forwards ungated. ``hub_token`` is the token the proxy presents;
     absent, the proxy presents ``config``'s. ``binding`` is the store's runner binding; should it name no runner, the
     routes that write runner-scoped rows answer 503. ``identity`` is the runner's own holder, which every platform
-    span its requests open is stamped from."""
+    span its requests open is stamped from. ``tool_profile`` is the host's tool profile in force, which the selftest's
+    scratch ``git`` launches under; absent, it is ``config``'s."""
     runner_id = config.served_id()
     seams = State()
     seams.config = config
@@ -325,7 +328,9 @@ def runner_seams(
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     seams.selftests = selftests or SelfTestService(
-        scratch_git=SubprocessScratchGit(children, config.tool_env(tracing or TracingSettings.of(os.environ))),
+        scratch_git=SubprocessScratchGit(
+            children, tool_profile or config.tool_env(tracing or TracingSettings.of(os.environ))
+        ),
         process=process,
         elicitation_replies=ElicitationFiles(root=""),
         clock=clock,
@@ -939,6 +944,7 @@ def _wire_runner(
         process=process,
         children=graph.children,
         tracing=graph.trace_settings,
+        tool_profile=host.tool_profile,
         events=graph.events,
         binding=connections,
         identity_verdict=graph.identity_verdict,

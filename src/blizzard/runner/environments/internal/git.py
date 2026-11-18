@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 
 _log = get_logger("blizzard.runner.env.git")
@@ -26,7 +26,7 @@ class SubprocessEnvGit:
     """Run git for the workspace bindings: clean untracked files, read an origin, or capture any call — each under the
     tool profile ``env``, through the launch seam."""
 
-    def __init__(self, *, children: IChildProcesses, env: ChildEnv, timeout: float = ENV_GIT_TIMEOUT) -> None:
+    def __init__(self, *, children: IChildProcesses, env: IToolProfile, timeout: float = ENV_GIT_TIMEOUT) -> None:
         self._children = children
         self._env = env
         self._timeout = timeout
@@ -62,7 +62,7 @@ class SubprocessEnvGit:
         where = f" in {cwd}" if cwd is not None else ""
         logged_cwd = str(cwd) if cwd is not None else None
         command = ["git", *(["-C", str(cwd)] if cwd is not None else []), *args]
-        result = self._children.run(command, cwd=None, env=self._env, timeout=self._timeout)
+        result = self._children.run(command, cwd=None, env=self._env.current(), timeout=self._timeout)
         if result.timed_out:
             _log.error("git command timed out", args=list(args), cwd=logged_cwd, timeout=self._timeout)
             raise EnvGitError(f"git {' '.join(args)} timed out{where} after {self._timeout}s")

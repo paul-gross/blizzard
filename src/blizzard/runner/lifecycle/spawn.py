@@ -181,6 +181,8 @@ class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
     @property
     def runner_settings_revision(self) -> int | None: ...
     @property
+    def host_settings_revision(self) -> int | None: ...
+    @property
     def default_retries_max(self) -> int: ...
     @property
     def local_api_url(self) -> str: ...
@@ -506,6 +508,7 @@ class Spawner:
                 pgid=pending.pgid,
                 spawned_at=now,
                 harness_id=owner,
+                host_settings_revision=self.ctx.config.host_settings_revision,
                 runner_settings_revision=self.ctx.config.runner_settings_revision,
                 transcripts_root=settings.transcript_root or None,
             )

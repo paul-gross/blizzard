@@ -14,9 +14,15 @@ from blizzard.runner.loop.mode import LoopMode
 
 
 def load_host(
-    directory: str, *, host: str | None = None, port: int | None = None, loop: LoopMode | None = None
+    directory: str,
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    loop: LoopMode | None = None,
+    defer_tool_agreement: bool = False,
 ) -> HostConfig:
-    """``directory``'s host file, or the error that refuses it."""
+    """``directory``'s host file, or the error that refuses it. ``defer_tool_agreement`` leaves the runners' tool
+    profile agreement to the caller, which judges it against the store."""
     try:
         return HostConfig.load_for_store(
             Path(directory),
@@ -25,6 +31,7 @@ def load_host(
             loop=loop,
             flag_registry=packaged_flag_registry(),
             strict=strict_config(),
+            defer_tool_agreement=defer_tool_agreement,
         )
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc

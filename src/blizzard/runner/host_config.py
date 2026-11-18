@@ -326,6 +326,12 @@ class HostConfig:
     runners: tuple[RunnerEntry, ...] = ()
     #: Start-up warnings the file earns, as text.
     warnings: tuple[str, ...] = ()
+    #: Why the runners' tool profiles disagree, held rather than refused for a load that defers the judgment to a
+    #: store holding the host's own profile; ``None`` when they agree or the file declares ``[tools]``.
+    tool_profile_conflict: str | None = None
+    #: The file's document as the load read it, which the host's settings entries are laid over; ``None`` for a
+    #: config built in code.
+    authored: Mapping[str, Any] | None = field(default=None, repr=False, compare=False)
 
     @property
     def layout(self) -> HostLayout:
@@ -590,9 +596,11 @@ class HostConfig:
         flag_registry: FlagRegistry,
         strict: bool,
         key_registry: ConfigRegistry | None = None,
+        defer_tool_agreement: bool = False,
     ) -> HostConfig:
         """Read a host directory's ``blizzard-host.toml``; overlay CLI host/port when given. A directory
-        holding only the pre-host file, an uninitialised one, and every host error are refused."""
+        holding only the pre-host file, an uninitialised one, and every host error are refused.
+        ``defer_tool_agreement`` holds the runners' disagreeing tool profiles on the config instead of refusing it."""
         root = root.resolve()
         layout = HostLayout(root)
         match layout.graduation():
@@ -622,6 +630,7 @@ class HostConfig:
                 flag_registry=flag_registry,
                 strict=strict,
                 key_registry=key_registry,
+                defer_tool_agreement=defer_tool_agreement,
             )
         except InvalidConfigValue as exc:
             raise HostConfigError((str(exc),)) from exc
@@ -636,11 +645,20 @@ class HostConfig:
         loop: LoopMode | None = None,
         flag_registry: FlagRegistry,
         strict: bool,
+        defer_tool_agreement: bool = False,
     ) -> HostConfig:
         """:meth:`load`, for a verb that opens the store without creating it: where the store is the default SQLite
         file and that file is absent, the directory is refused, naming ``migrate`` — which alone creates it, and
         adopts a pre-host ``runner.db`` first. A store named by ``db_url`` is left to the engine."""
-        config = cls.load(root, host=host, port=port, loop=loop, flag_registry=flag_registry, strict=strict)
+        config = cls.load(
+            root,
+            host=host,
+            port=port,
+            loop=loop,
+            flag_registry=flag_registry,
+            strict=strict,
+            defer_tool_agreement=defer_tool_agreement,
+        )
         layout = config.layout
         if config.db_url != layout.default_db_url or layout.store_path.exists():
             return config
@@ -666,6 +684,22 @@ class HostConfig:
                 f"first to adopt it (see {GRADUATION_PROCEDURE})",
             )
         )
+
+    def reparsed(self, document: Mapping[str, Any]) -> HostConfig:
+        """``document`` read as this host's file would be, under this load's overrides, flags and strictness; every
+        error is refused as a boot refuses the file's."""
+        try:
+            return parse(
+                dict(document),
+                layout=self.layout,
+                host=self.host,
+                port=self.port,
+                loop=self.loop,
+                flag_registry=self.flag_registry,
+                strict=self.strict,
+            )
+        except InvalidConfigValue as exc:
+            raise HostConfigError((str(exc),)) from exc
 
     @classmethod
     def graduated(
@@ -877,6 +911,7 @@ def parse(
     flag_registry: FlagRegistry,
     strict: bool,
     key_registry: ConfigRegistry | None = None,
+    defer_tool_agreement: bool = False,
 ) -> HostConfig:
     errors = _Errors()
     root = layout.root
@@ -949,8 +984,14 @@ def parse(
     )
     entries = _runner_entries(document, root=root, db_url=db_url, path=path, errors=errors)
     _check_runner_uniqueness(entries, has_host_token=bool(host_token.value), errors=errors)
+    tool_profile_conflict: str | None = None
     if not tools_declared:
-        tool_path_prepend, tool_env_passthrough = _agreed_tool_profile(entries, errors=errors)
+        agreement = _Errors()
+        tool_path_prepend, tool_env_passthrough = _agreed_tool_profile(entries, errors=agreement)
+        if agreement.found and defer_tool_agreement:
+            tool_profile_conflict = agreement.found[0]
+        else:
+            errors.found.extend(agreement.found)
     if errors.found:
         raise HostConfigError(tuple(errors.found))
     held = held_keys(registry, raw, resolution.flags) if resolution is not None else ()
@@ -988,6 +1029,8 @@ def parse(
             *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
             *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held),
         ),
+        tool_profile_conflict=tool_profile_conflict,
+        authored=raw,
     )
 
 

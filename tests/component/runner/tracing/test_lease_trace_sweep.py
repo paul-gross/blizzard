@@ -43,13 +43,14 @@ class _Runner:
         self.exporter = InMemoryTraceExporter()
         self.store.record_runner_identity(fx.REGISTERED)
         self.identity = RunnerIdentityHolder(fx.REGISTERED)
+        #: The tracing settings each sweep is started with.
+        self.config = config
         self.sweep = LeaseTraceSweep(
             leases=self.store,
             outbound=self.store,
             exporter=self.exporter,
             identity=self.identity,
             clock=self.clock,
-            config=config,
         )
         self._leases = 0
 
@@ -81,24 +82,24 @@ def test_the_first_pass_starts_the_cursor_at_now_and_exports_nothing(tmp_path: P
     runner.close_lease()  # closed before tracing was on: history is told only by replay
     runner.clock.advance(timedelta(seconds=1))
 
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     now = runner.clock.now()
     assert runner.store.newest_trace_cursor() == LeaseTraceCheckpoint(LeaseCursorKey.opening(now), 0, now)
     assert runner.exporter.attempts == 0
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.exporter.attempts == 0
     assert runner.cursor_rows() == 1
 
 
 def test_closed_leases_are_told_in_key_order_and_the_cursor_moves_after_acceptance(tmp_path: Path) -> None:
     runner = _Runner(tmp_path, TracingConfig(settle_seconds=0, batch_limit=1))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     first, second = runner.close_lease(), runner.close_lease()
 
     for _ in range(4):
-        runner.sweep.sweep()
+        runner.sweep.sweep(runner.config)
 
     assert [b[0].context.span_id for b in runner.exporter.batches] == [_worker(first), _worker(second)]
     newest = runner.store.newest_trace_cursor()
@@ -109,16 +110,16 @@ def test_closed_leases_are_told_in_key_order_and_the_cursor_moves_after_acceptan
 
 def test_a_lease_inside_the_settle_window_waits(tmp_path: Path) -> None:
     runner = _Runner(tmp_path, TracingConfig(settle_seconds=300))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     lease_id = runner.close_lease()
 
     runner.clock.advance(timedelta(seconds=299))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.exporter.attempts == 0
 
     runner.clock.advance(timedelta(seconds=1))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.exporter.batches[0][0].context.span_id == _worker(lease_id)
 
 
@@ -140,14 +141,13 @@ def test_late_transport_success_does_not_advance_the_cursor(tmp_path: Path) -> N
         exporter=BoundedTraceExporter(HeldExporter(), timeout=0.05),
         identity=runner.identity,
         clock=runner.clock,
-        config=_SETTLED,
     )
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     start = runner.store.newest_trace_cursor()
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     try:
-        runner.sweep.sweep()
+        runner.sweep.sweep(runner.config)
         assert runner.store.newest_trace_cursor() == start
         assert runner.kinds() == ["trace-export-failed"]
     finally:
@@ -160,99 +160,99 @@ def test_late_transport_success_does_not_advance_the_cursor(tmp_path: Path) -> N
 def test_a_failed_export_holds_the_cursor_backs_off_and_is_announced_once(tmp_path: Path, mode: str) -> None:
     runner = _Runner(tmp_path)
     exporter = runner.exporter
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     start = runner.store.newest_trace_cursor()
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     exporter.fail = mode == "refuses"
     exporter.raises = mode == "raises"
 
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert exporter.attempts == 1
     assert runner.store.newest_trace_cursor() == start
     assert runner.kinds() == ["trace-export-failed"]
 
     # The first retry waits one interval, the next two: a sweep in between does not call the exporter.
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert exporter.attempts == 1
     runner.clock.advance(timedelta(seconds=60))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert exporter.attempts == 2
     runner.clock.advance(timedelta(seconds=60))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert exporter.attempts == 2
     runner.clock.advance(timedelta(seconds=60))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert exporter.attempts == 3
     assert runner.kinds() == ["trace-export-failed"]
     assert runner.store.newest_trace_cursor() == start
 
     exporter.fail = exporter.raises = False
     runner.clock.advance(timedelta(seconds=240))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert len(exporter.batches) == 1
     assert runner.kinds() == ["trace-export-failed", "trace-export-recovered"]
 
     runner.close_lease()
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert len(exporter.batches) == 2
     assert runner.kinds() == ["trace-export-failed", "trace-export-recovered"]
 
 
 def test_the_backoff_stops_doubling_at_its_cap(tmp_path: Path) -> None:
     runner = _Runner(tmp_path, TracingConfig(settle_seconds=0, max_lag_seconds=86400))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     runner.exporter.fail = True
     for _ in range(8):
         runner.clock.advance(BACKOFF_CAP)
-        runner.sweep.sweep()
+        runner.sweep.sweep(runner.config)
     attempts = runner.exporter.attempts
 
     runner.clock.advance(BACKOFF_CAP - timedelta(seconds=1))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.exporter.attempts == attempts
     runner.clock.advance(timedelta(seconds=1))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.exporter.attempts == attempts + 1
 
 
 def test_a_restart_during_an_outage_does_not_announce_it_again(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     runner.exporter.fail = True
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert runner.kinds() == ["trace-export-failed"]
 
     restarted = _Runner(tmp_path, clock=FixedClock(runner.clock.now()))
     restarted.exporter.fail = True
-    restarted.sweep.sweep()
+    restarted.sweep.sweep(restarted.config)
     assert restarted.exporter.attempts == 1
     assert restarted.kinds() == ["trace-export-failed"]
 
     restarted.exporter.fail = False
     restarted.clock.advance(timedelta(seconds=60))
-    restarted.sweep.sweep()
+    restarted.sweep.sweep(restarted.config)
     assert len(restarted.exporter.batches) == 1
     assert restarted.kinds() == ["trace-export-failed", "trace-export-recovered"]
 
 
 def test_an_unsent_lease_older_than_the_lag_cap_jumps_the_cursor_and_records_the_window(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     start = runner.store.newest_trace_cursor()
     assert start is not None
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     runner.exporter.fail = True
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     runner.clock.advance(timedelta(seconds=3600 + 60))
     runner.exporter.fail = False
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     boundary = runner.clock.now() - timedelta(seconds=3600)
     now = runner.clock.now()
@@ -267,28 +267,28 @@ def test_an_unsent_lease_older_than_the_lag_cap_jumps_the_cursor_and_records_the
 
 def test_a_cursor_stale_only_because_the_runner_was_idle_never_jumps(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     runner.clock.advance(timedelta(days=3))
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     assert runner.cursor_rows() == 1
     assert runner.kinds() == []
     runner.close_lease()
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     assert len(runner.exporter.batches) == 1
 
 
 def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     start = runner.store.newest_trace_cursor()
     assert start is not None
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()  # closed while tracing was off again
 
     restarted = _Runner(tmp_path, clock=FixedClock(runner.clock.now() + timedelta(seconds=3600 + 60)))
-    restarted.sweep.sweep()
+    restarted.sweep.sweep(restarted.config)
 
     now = restarted.clock.now()
     assert restarted.store.newest_trace_cursor() == LeaseTraceCheckpoint(LeaseCursorKey.opening(now), 0, now)
@@ -302,10 +302,10 @@ def test_re_enabling_after_a_long_gap_jumps_to_now_and_records_what_it_skipped(t
 
 def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     restarted = _Runner(tmp_path, clock=FixedClock(runner.clock.now() + timedelta(seconds=3600 + 60)))
-    restarted.sweep.sweep()
+    restarted.sweep.sweep(restarted.config)
 
     assert restarted.cursor_rows() == 2
     assert restarted.kinds() == []
@@ -313,11 +313,11 @@ def test_a_gap_that_closed_nothing_jumps_without_an_event(tmp_path: Path) -> Non
 
 def test_a_window_of_leases_that_tell_nothing_advances_without_an_export(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     lease_id = runner.close_lease(identified=False)
 
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     assert runner.exporter.attempts == 0
     assert runner.store.newest_trace_cursor() == LeaseTraceCheckpoint(
@@ -328,18 +328,18 @@ def test_a_window_of_leases_that_tell_nothing_advances_without_an_export(tmp_pat
 
 def test_every_trace_event_rides_the_outbound_buffer_as_a_runner_wide_event(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
     runner.exporter.fail = True
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=3600 + 60))
     runner.close_lease()
-    runner.sweep.sweep()  # lag-cap jump past the held lease
+    runner.sweep.sweep(runner.config)  # lag-cap jump past the held lease
     runner.exporter.fail = False
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     rejected = TracingSettings.of(
         {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://x:4318", "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}
     )

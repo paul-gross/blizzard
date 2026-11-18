@@ -470,7 +470,8 @@ def test_standalone_tick_spawn_records_stored_settings_revision(
             ).all()
         assert len(rows) == 1
         pid = rows[0].pid
-        assert rows[0][:2] == (revision, None)
+        # The tick verb seeds no host record, so the spawn records the host record's revision 0 beside the runner's.
+        assert rows[0][:2] == (revision, 0)
         assert pid is not None
     finally:
         (tmp_path / "release").touch()
@@ -505,8 +506,19 @@ def test_spawn_after_failed_settings_rebuild_records_last_applied_revision(
             actor="test",
         )
         applied = settings.snapshot().revision
+        host_settings = graph.host_stores.settings
+        assert graph.host_settings is not None
+        host_settings.write(
+            Change("edit", sets={"worker_stdout.retention_days": 9}),
+            if_match=host_settings.revision(),
+            validate=graph.host_settings.reader.validate,
+            door="api",
+            actor="test",
+        )
+        host_revision = host_settings.revision()
         first = stepper._context()  # pyright: ignore[reportPrivateUsage]
         assert first.config.runner_settings_revision == applied
+        assert first.config.host_settings_revision == host_revision
         settings.write(
             Change("edit", sets={"agents": 2}),
             if_match=applied,
@@ -531,7 +543,8 @@ def test_spawn_after_failed_settings_rebuild_records_last_applied_revision(
             ).all()
         assert len(rows) == 1
         pid = rows[0].pid
-        assert rows[0][:2] == (applied, None)
+        # The spawn records both revisions of the last pair that built: the host's and the runner's.
+        assert rows[0][:2] == (applied, host_revision)
         assert pid is not None
     finally:
         (tmp_path / "release").touch()

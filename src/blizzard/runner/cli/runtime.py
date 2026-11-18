@@ -9,6 +9,7 @@ import socket
 import types
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
@@ -30,6 +31,7 @@ from blizzard.cli.runtime import (
     run_migrate,
 )
 from blizzard.foundation.clock import IClock, SystemMonotonicClock
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
@@ -57,12 +59,20 @@ from blizzard.runner.composition import (
     RunnerProcess,
     build_host_process,
     build_host_read_stores,
+    build_host_settings_store,
     build_identity_service,
     build_read_stores,
     build_runner_process,
     build_settings_stores,
 )
-from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, resolve_tick_seconds, worker_shell_refusal
+from blizzard.runner.config import (
+    DEFAULT_RUNNER_NAME,
+    DEFAULT_TICK_SECONDS,
+    ENV_TICK_SECONDS,
+    RunnerConfig,
+    resolve_tick_seconds,
+    worker_shell_refusal,
+)
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
@@ -86,6 +96,7 @@ from blizzard.runner.host_layout import (
     WORKER_SCRATCH_DIRNAME,
     HostLayout,
 )
+from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -951,7 +962,7 @@ def host(
     if check:
         _check(ctx, Path(directory), host=host_, port=port, loop=loop_mode)
         return
-    config = load_host(directory, host=host_, port=port, loop=loop_mode)
+    config = load_host(directory, host=host_, port=port, loop=loop_mode, defer_tool_agreement=True)
     # Bound before anything is built, so every derivation of the local API's URL sees the port actually bound.
     with bound_tcp(config.host, config.port) as sock:
         config = replace(config, port=bound_port(sock))
@@ -979,6 +990,7 @@ def host(
                 for entry in entries
                 if entry.id is not None and entry.id in foreign
             ]
+            config = seed_host(config, os.environ)
             seeded, seed_halted = seed_runners(config, kept)
             halted += seed_halted
             start(
@@ -991,12 +1003,51 @@ def host(
             )
 
 
+def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
+    """Seed the host's record from its file, in one write, after the store guard has passed and before any runner is
+    built; returns the host configuration the record resolves to. A key the store holds an entry for, an unset
+    included, is never touched. ``tick_seconds`` falls through to the deprecated variable where neither the store nor
+    the file states one. A file with no ``[tools]`` seeds the profile its runners agree on, while it is not empty."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        store = build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+        reader = HostSettingsReader(config, store)
+        held = store.snapshot().entries
+        tools = tuple(key for key in reader.keys if key.startswith("tools."))
+        if config.tool_profile_conflict is not None and not any(key in held for key in tools):
+            raise click.ClickException(f"host: {config.tool_profile_conflict}")
+        try:
+            tick = resolve_tick_seconds(stored=held.get("tick_seconds"), stated=config.tick_seconds, environ=environ)
+        except ValueError as exc:
+            raise click.ClickException(f"host: {ENV_TICK_SECONDS} is not a number of seconds: {exc}") from exc
+        source = deepcopy(dict(config.authored or {}))
+        if tick.seed is not None:
+            source["tick_seconds"] = tick.seed
+        profile = (config.tool_path_prepend, config.tool_env_passthrough)
+        if "tools" not in source and config.tool_profile_conflict is None and any(profile):
+            source["tools"] = {"path_prepend": list(profile[0]), "env_passthrough": list(profile[1])}
+        try:
+            store.seed(ConfigView.unchecked(source), tuple(reader.keys), validate=reader.validate)
+            _, effective = reader.snapshot()
+        except (SettingsInvalid, ValueError) as exc:
+            raise click.ClickException(f"host: {exc}") from exc
+    finally:
+        engine.dispose()
+    if tick.warning is not None:
+        click.echo(f"warning: {tick.warning}")
+    return effective
+
+
 def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
-    """Seed and resolve identified runners only after the store guard has passed."""
+    """Seed and resolve identified runners only after the store guard has passed, each against the host's record."""
     engine = create_engine_from_url(config.db_url)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
     try:
+        host_settings = HostSettingsReader(
+            config,
+            build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))),
+        )
         for entry in runners:
             assert entry.id is not None
             identity, settings = build_settings_stores(
@@ -1006,7 +1057,7 @@ def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[li
                 # An adopted runner first obtains its identity from registration.
                 # Use its authored configuration until that happens; do not persist
                 # settings without the identity that owns them.
-                reader = RunnerSettingsReader(config, entry, settings)
+                reader = RunnerSettingsReader(config, entry, settings, host_settings=host_settings)
                 try:
                     resolved = reader.preview_seed()
                     projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
@@ -1018,7 +1069,7 @@ def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[li
                     halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
                 continue
             assert entry.authored is not None
-            reader = RunnerSettingsReader(config, entry, settings)
+            reader = RunnerSettingsReader(config, entry, settings, host_settings=host_settings)
             try:
                 settings.seed(
                     entry.authored, (*reader.keys, *reader.aliases), validate=reader.validate, aliases=reader.aliases
@@ -1085,9 +1136,8 @@ def start(
         # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
         with click_exception_on(ConfigError):
             hosted = build_hosted_app(shared, process)
-        tick_seconds, tick_warning = resolve_tick_seconds(config.tick_seconds, os.environ)
-        if tick_warning is not None:
-            click.echo(f"warning: {tick_warning}")
+        # The host's record resolved into ``config`` at its seed: its entry, else the file's, else the default.
+        tick_seconds = config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS
         try:
             _serve_host(
                 shared, process, hosted, loop=config.loop, tick_seconds=tick_seconds, listening_file=listening_file
@@ -1487,6 +1537,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
                 graph.stores.settings,
                 deferred_seed=graph.stores.settings if identity_store.runner_identity() is None else None,
                 identity_present=lambda: identity_store.runner_identity() is not None,
+                host_settings=HostSettingsReader(config, graph.host.host_stores.settings),
             ),
         )
         try:

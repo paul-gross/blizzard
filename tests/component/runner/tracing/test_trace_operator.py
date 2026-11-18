@@ -51,20 +51,21 @@ class _Runner:
         self.settings = TracingSettings.of(_env(on))
         self.store.record_runner_identity(fx.REGISTERED)
         self.identity = RunnerIdentityHolder(fx.REGISTERED)
+        #: The tracing settings each sweep is started with.
+        self.config = _CONFIG
         self.sweep = LeaseTraceSweep(
             leases=self.store,
             outbound=self.store,
             exporter=self.exporter,
             identity=self.identity,
             clock=self.clock,
-            config=_CONFIG,
         )
         self.replayer = LeaseTraceReplay(
             leases=self.store,
             exporter=self.exporter if on else None,
             identity=self.identity,
             clock=self.clock,
-            config=_CONFIG,
+            config=lambda: _CONFIG,
         )
         self.status = LeaseTraceStatusReader(
             settings=self.settings, leases=self.store, clock=self.clock, replay_max_window=_CONFIG.replay_max_window
@@ -107,10 +108,10 @@ def _config(tmp_path: Path) -> RunnerConfig:
 
 def test_replay_ids_match_the_live_sweep_and_the_cursor_does_not_move(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     live = [s.context.span_id for b in runner.exporter.batches for s in b]
     cursor = runner.store.newest_trace_cursor()
     runner.exporter.batches.clear()
@@ -142,7 +143,7 @@ def test_a_window_is_half_open_and_pages_by_the_batch_limit(tmp_path: Path) -> N
         exporter=runner.exporter,
         identity=runner.identity,
         clock=runner.clock,
-        config=TracingConfig(batch_limit=1, replay_max_window=3600),
+        config=lambda: TracingConfig(batch_limit=1, replay_max_window=3600),
     )
     runner.close_lease()
     runner.clock.advance(timedelta(seconds=10))
@@ -178,14 +179,14 @@ def test_a_refusing_exporter_stops_the_replay_with_what_it_accepted(tmp_path: Pa
 
 def test_status_reports_the_origin_only_the_cursor_lag_export_and_failure(tmp_path: Path) -> None:
     runner = _Runner(tmp_path)
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=1))
     runner.close_lease()
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
     runner.clock.advance(timedelta(seconds=5))
     runner.close_lease()
     runner.exporter.fail = True
-    runner.sweep.sweep()
+    runner.sweep.sweep(runner.config)
 
     read = runner.status.read()
 
@@ -337,7 +338,7 @@ def test_cli_reports_a_replay_before_the_first_registration_as_unavailable_not_a
         exporter=runner.exporter,
         identity=RunnerIdentityHolder(),
         clock=runner.clock,
-        config=_CONFIG,
+        config=lambda: _CONFIG,
     )
     _reach_the_runner(runner, tmp_path, monkeypatch)
     since, until = runner.window()

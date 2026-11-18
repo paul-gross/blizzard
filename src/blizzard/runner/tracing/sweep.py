@@ -105,22 +105,19 @@ class LeaseTraceSweep:
         exporter: ITraceExporter,
         identity: ICurrentRunnerIdentity,
         clock: IClock,
-        config: TracingConfig,
     ) -> None:
         self._leases = leases
         self._identity = identity
         self._outbound = outbound
         self._exporter = exporter
         self._clock = clock
-        self._config = config
-        # A restart mid-outage must not announce the same failure again.
-        self._latch = OutageLatch(
-            timedelta(seconds=config.sweep_seconds), lambda: leases.newest_trace_latch() == _FAILED
-        )
+        # A restart mid-outage must not announce the same failure again. Its cadence is each sweep's own.
+        self._latch = OutageLatch(timedelta(0), lambda: leases.newest_trace_latch() == _FAILED)
         self._cursor_started = False
 
-    def sweep(self, config: TracingConfig | None = None) -> None:
-        config = config or self._config
+    def sweep(self, config: TracingConfig) -> None:
+        """One sweep, working only from ``config``, the tracing settings of the snapshot it was started with."""
+        self._latch.set_base(timedelta(seconds=config.sweep_seconds))
         settle = timedelta(seconds=config.settle_seconds)
         max_lag = timedelta(seconds=config.max_lag_seconds)
         if self._identity.current() is None:

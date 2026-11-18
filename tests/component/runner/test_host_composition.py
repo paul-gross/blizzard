@@ -750,5 +750,5 @@ def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_ru
     host = build_host_process(host_config, [BuiltRunner("rn_a", first, ResolvedToken())])
     host.close()
 
-    path = launched[0].variables["PATH"].split(":")
+    path = launched[0].current().variables["PATH"].split(":")
     assert "/opt/host" in path and "/opt/first" not in path

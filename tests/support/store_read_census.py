@@ -275,7 +275,7 @@ from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, Pi
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
-from blizzard.runner.settings.ports import IReadRunnerSettings
+from blizzard.runner.settings.ports import IReadHostSettings, IReadRunnerSettings
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import IReadPauseRepository
@@ -836,6 +836,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     host.host_identity.record_host_identity(
         HostIdentity(host_id="hs_census", tenant_id="tn_census", registered_at=_t(95))
     )
+    host.settings.write(
+        Change("edit", sets={"tick_seconds": 5}), if_match=0, validate=lambda _: {}, door="cli", actor="test"
+    )
     host.host_lane.record_host_external_usage_attempt(
         slug="census-host", sampled_at=_t(96), payload=None, report_kind="census.kind", report_payload="{}"
     )
@@ -1057,6 +1060,10 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
     ),
     (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
+    (IReadHostSettings, "snapshot"): lambda w: w.host_read.settings.snapshot(),
+    (IReadHostSettings, "revision"): lambda w: w.host_read.settings.revision(),
+    (IReadHostSettings, "snapshot_with_provenance"): lambda w: w.host_read.settings.snapshot_with_provenance(),
+    (IReadHostSettings, "changes"): lambda w: w.host_read.settings.changes(limit=10, record_kind="host"),
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
     (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
         w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)

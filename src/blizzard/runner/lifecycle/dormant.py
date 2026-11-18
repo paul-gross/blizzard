@@ -847,6 +847,7 @@ class DormantSession:
                 harness_version=version,
                 spawn_cwd=spawn_cwd,
                 park_resume=park_resume,
+                host_settings_revision=self.ctx.config.host_settings_revision,
                 runner_settings_revision=self.ctx.config.runner_settings_revision,
                 transcripts_root=settings.transcript_root or None,
             )

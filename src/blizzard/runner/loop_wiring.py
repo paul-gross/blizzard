@@ -439,7 +439,7 @@ class RunnerStepper:
         self._client_timeout: float | None = None
         self._retired: list[httpx2.Client] = []
         self._closed = False
-        self._revision: int | None = None
+        self._revision: tuple[int | None, int | None] | None = None
         self.failed_revision: int | None = None
         self.settings_in_force_revision: int | None = None
         self.settings_in_force_since: str | None = None
@@ -584,13 +584,16 @@ class RunnerStepper:
             timeout = self._timeout()
             reader = self._graph.settings_reader
             revision = None
+            host_revision: int | None = None
             client: httpx2.Client | None = None
             new_client = False
             try:
                 if reader is not None:
-                    snapshot = reader.snapshot_record()
-                    revision = snapshot.revision
-                    config = reader.resolve_for_read(snapshot.entries)
+                    # Rebuilt when either revision of the pair moves: the host's record or the runner's.
+                    pair = reader.pair_record()
+                    revision = pair.runner.revision
+                    host_revision = pair.host_revision()
+                    config = reader.resolve_pair(pair)
                 else:
                     config = self._wiring.config
                 wiring = LoopWiring.of(config, broker=self._graph.host.events)
@@ -635,7 +638,7 @@ class RunnerStepper:
                 if (
                     self._ctx is not None
                     and self._client_timeout == timeout
-                    and self._revision == revision
+                    and self._revision == (host_revision, revision)
                     and self._ctx_harness_set is selected
                 ):
                     self.failed_revision = None
@@ -658,7 +661,10 @@ class RunnerStepper:
                 ctx = wiring.context(
                     HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
                 )
-                ctx = replace(ctx, config=replace(ctx.config, runner_settings_revision=revision))
+                ctx = replace(
+                    ctx,
+                    config=replace(ctx.config, runner_settings_revision=revision, host_settings_revision=host_revision),
+                )
                 if self._ctx is not None:
                     ctx = replace(ctx, retention_passes=self._ctx.retention_passes)
             except Exception as exc:
@@ -691,7 +697,7 @@ class RunnerStepper:
             self._ctx_harness_key = key
             self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
             self._wiring = wiring
-            self._revision = revision
+            self._revision = (host_revision, revision)
             if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
                 from blizzard.foundation.store.utc import iso_utc
 
@@ -704,9 +710,13 @@ class RunnerStepper:
 
 
 def host_pass_stepper(host: HostProcess) -> HostPassStepper:
-    return HostPassStepper(
-        host.host_tick.run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick"
-    )
+    def run() -> None:
+        # The host record's snapshot first: its tool profile is in force for every tool child this pass launches.
+        if host.host_settings is not None:
+            host.host_settings.take()
+        host.host_tick.run()
+
+    return HostPassStepper(run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick")
 
 
 class PeriodicDriver:

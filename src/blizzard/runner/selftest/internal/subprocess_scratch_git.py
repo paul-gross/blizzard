@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.selftest.scratch_git import IScratchGit, ScratchRepo
 
@@ -30,7 +30,7 @@ class ScratchGitError(RuntimeError):
 class SubprocessScratchGit:
     """Mint a throwaway, single-commit git repo under a real temp dir, via the ``git`` CLI."""
 
-    def __init__(self, children: IChildProcesses, env: ChildEnv) -> None:
+    def __init__(self, children: IChildProcesses, env: IToolProfile) -> None:
         self._children = children
         self._env = env
 
@@ -55,7 +55,7 @@ class SubprocessScratchGit:
 
     def _git(self, cwd: Path, *args: str) -> str:
         result = self._children.run(
-            ["git", "-C", str(cwd), *args], cwd=None, env=self._env, timeout=_SCRATCH_GIT_TIMEOUT_SECONDS
+            ["git", "-C", str(cwd), *args], cwd=None, env=self._env.current(), timeout=_SCRATCH_GIT_TIMEOUT_SECONDS
         )
         if result.timed_out:
             _log.error("git timed out", args=list(args), cwd=str(cwd), timeout=_SCRATCH_GIT_TIMEOUT_SECONDS)

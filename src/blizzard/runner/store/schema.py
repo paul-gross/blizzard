@@ -1148,6 +1148,46 @@ host_identity = Table(
     info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
+# --- Host settings (the host-level pass and session keys, one record per host) ---
+# A fact about this host, never carried by a transfer: the destination's record stands. The one row serializes
+# every write; its fixed key keeps a second row from being inserted beside it.
+
+host_settings = Table(
+    "host_settings",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("revision", Integer, nullable=False),  # 1 at the first write; +1 per committed write
+    Column("updated_at", UtcDateTime, nullable=False),
+    CheckConstraint("id = 1", name="ck_host_settings_singleton"),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+host_setting_entries = Table(
+    "host_setting_entries",
+    metadata,
+    Column("key", String, primary_key=True),  # the key's dotted path, as the registry spells it
+    Column("value", Text, nullable=True),  # JSON: the key's whole value; null when at_default
+    Column("at_default", Boolean, nullable=False),
+    Column("revision", Integer, nullable=False),  # the host revision that last wrote it
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+host_setting_changes = Table(  # append-only
+    "host_setting_changes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("op", String, nullable=False),
+    Column("door", String, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("apply_id", String, nullable=True),
+    Column("diff", Text, nullable=False),  # JSON [{key, old, new}] for every key the write moved
+    Column("record_kind", String, nullable=False),  # the host record's own rows are "host"
+    Column("record_key", String, nullable=True),  # the record within its kind; null for the host record
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
 # --- Host outbound buffer (the host's own fact lane, per-host monotonic seq) ---
 # Shaped as `outbound_buffer`; the hub de-duplicates it against a mark of its own, never a runner's.
 

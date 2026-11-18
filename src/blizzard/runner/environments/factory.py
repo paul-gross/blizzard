@@ -10,7 +10,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
-from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.child_env import IToolProfile
 from blizzard.runner.process.child_processes import IChildProcesses
 
 
@@ -37,7 +37,7 @@ class WorkspaceLaunch:
     profile."""
 
     children: IChildProcesses
-    env: ChildEnv
+    env: IToolProfile
 
 
 type HeldIds = Callable[[], list[str]] | None
