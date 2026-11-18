@@ -12,6 +12,7 @@ from structlog import get_logger
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import GraduationError, TransactionMisuse
 from blizzard.hub.store import schema as s
@@ -117,20 +118,22 @@ def test_real_repositories_share_commit_and_rollback(tmp_path: Path) -> None:
     chunks = build_chunk_stores(store, FixedClock(now))
     for chunk_id in ("ch_a", "ch_b", "ch_c"):
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
-    with chunk_unit(store, ["ch_a", "ch_b", "ch_c"]) as locked:
+    with chunk_unit(store, ["ch_a", "ch_b", "ch_c"], keys=[DEPENDENCIES_LOCK]) as locked:
         chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
         chunks.dependencies.declare("ch_a", "ch_c", by="test", at=now, transaction=locked)
     service = tx.HubTransactions(store)
     with pytest.raises(ValueError), service.begin() as unit:
-        assert chunks.record.get("ch_a", transaction=unit) is not None
-        assert chunks.facts.load_facts("ch_a", transaction=unit) is not None
-        assert chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=unit) is not None
-        assert len(chunks.dependencies.standing_edges_for("ch_a", transaction=unit)) == 1
+        locked = unit.lock_set(keys=[DEPENDENCIES_LOCK])
+        assert chunks.record.get("ch_a", transaction=locked) is not None
+        assert chunks.facts.load_facts("ch_a", transaction=locked) is not None
+        assert chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=locked) is not None
+        assert len(chunks.dependencies.standing_edges_for("ch_a", transaction=locked)) == 1
         raise ValueError("abort")
     assert len(chunks.dependencies.standing_edges_for("ch_a")) == 2
     with service.begin() as unit:
-        assert chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=unit) is not None
-        assert chunks.dependencies.release("ch_a", "ch_c", by="test", at=now, transaction=unit) is not None
+        locked = unit.lock_set(keys=[DEPENDENCIES_LOCK])
+        assert chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=locked) is not None
+        assert chunks.dependencies.release("ch_a", "ch_c", by="test", at=now, transaction=locked) is not None
     assert chunks.dependencies.standing_edges_for("ch_a") == []
 
 
@@ -145,11 +148,11 @@ def test_locked_decision_requires_both_chunk_locks(tmp_path: Path) -> None:
         seed_chunk_record(chunks, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=now))
     service = tx.HubTransactions(store)
     with service.begin() as unit:
-        locked = unit.lock_chunks(["ch_a"])
+        locked = unit.lock_set(chunks=["ch_a"], keys=[DEPENDENCIES_LOCK])
         with pytest.raises(TransactionMisuse):
             chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
     with service.begin() as unit:
-        locked = unit.lock_chunks(["ch_b", "ch_a"])
+        locked = unit.lock_set(chunks=["ch_b", "ch_a"], keys=[DEPENDENCIES_LOCK])
         chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
     assert len(chunks.dependencies.standing_edges_for("ch_a")) == 1
     engine.dispose()
@@ -170,7 +173,7 @@ def _declare_fixture(tmp_path: Path) -> tuple[Any, Any, Any, datetime]:
 def test_declare_refuses_a_token_locking_only_the_prerequisite(tmp_path: Path) -> None:
     engine, store, chunks, now = _declare_fixture(tmp_path)
     with tx.HubTransactions(store).begin() as unit:
-        locked = unit.lock_chunks(["ch_b"])
+        locked = unit.lock_set(chunks=["ch_b"], keys=[DEPENDENCIES_LOCK])
         with pytest.raises(TransactionMisuse):
             chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
     assert chunks.dependencies.standing_edges_for("ch_a") == []
@@ -189,7 +192,7 @@ def test_declare_refuses_another_scopes_token(tmp_path: Path) -> None:
     engine, store, chunks, now = _declare_fixture(tmp_path)
     other = HubStoreConnections(engine, store.errors).scoped(StoreScope(TenantId("other")))
     with tx.HubTransactions(store).begin() as unit:
-        locked = unit.lock_chunks(["ch_a", "ch_b"])
+        locked = unit.lock_set(chunks=["ch_a", "ch_b"], keys=[DEPENDENCIES_LOCK])
         other_chunks = build_chunk_stores(other, FixedClock(now))
         with pytest.raises(TransactionMisuse):
             other_chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
@@ -200,7 +203,7 @@ def test_declare_refuses_another_scopes_token(tmp_path: Path) -> None:
 def test_declare_refuses_a_token_from_an_ended_unit(tmp_path: Path) -> None:
     engine, store, chunks, now = _declare_fixture(tmp_path)
     with tx.HubTransactions(store).begin() as unit:
-        locked = unit.lock_chunks(["ch_a", "ch_b"])
+        locked = unit.lock_set(chunks=["ch_a", "ch_b"], keys=[DEPENDENCIES_LOCK])
     with pytest.raises(TransactionMisuse):
         chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
     assert chunks.dependencies.standing_edges_for("ch_a") == []
@@ -210,8 +213,23 @@ def test_declare_refuses_a_token_from_an_ended_unit(tmp_path: Path) -> None:
 def test_declare_in_a_unit_that_raises_leaves_no_standing_edge(tmp_path: Path) -> None:
     engine, store, chunks, now = _declare_fixture(tmp_path)
     with pytest.raises(ValueError), tx.HubTransactions(store).begin() as unit:
-        locked = unit.lock_chunks(["ch_a", "ch_b"])
+        locked = unit.lock_set(chunks=["ch_a", "ch_b"], keys=[DEPENDENCIES_LOCK])
         chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
         raise ValueError("abort")
     assert chunks.dependencies.standing_edges_for("ch_a") == []
+    engine.dispose()
+
+
+def test_dependency_mutations_require_dependency_key(tmp_path: Path) -> None:
+    engine, store, chunks, now = _declare_fixture(tmp_path)
+    with tx.HubTransactions(store).begin() as unit:
+        locked = unit.lock_chunks(["ch_a", "ch_b"])
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=locked)
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.release("ch_a", "ch_b", by="test", at=now, transaction=locked)
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.release_outgoing("ch_a", by="test", at=now, transaction=locked)
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.record_fold([], grouped_into="ch_a", by="test", at=now, transaction=locked)
     engine.dispose()

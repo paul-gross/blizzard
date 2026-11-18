@@ -7,7 +7,6 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -27,7 +26,12 @@ from blizzard.hub.domain.chunk.model import (
     RouteCreatedFact,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    DEPENDENCIES_LOCK,
+    FoldMint,
+    FoldTarget,
+    IWriteChunkDependenciesRepository,
+)
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
@@ -175,8 +179,9 @@ class _FakeTransactions:
     def begin(self) -> Generator[Any]:
         yield self
 
-    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
-        assert chunk_ids[0] == "chk_survivor"
+    def lock_set(self, *, chunks: Sequence[str], keys: Sequence[Any]) -> LockedTransaction:
+        assert chunks[0] == "chk_survivor"
+        assert keys == [DEPENDENCIES_LOCK]
         return _TOKEN
 
 
@@ -198,7 +203,6 @@ def _service(
         record=cast(IReadChunkRecordRepository, record_repo),
         facts=cast(IReadChunkFactsRepository, facts_repo),
         clock=clock or FixedClock(instant=_T0),
-        cycle_lock=threading.Lock(),
     )
     return service, work_refs, dependencies
 
@@ -499,11 +503,12 @@ def test_group_declares_every_requested_id_before_any_reads(monkeypatch: pytest.
     service, _, _ = _service(chunks, {cid: _not_ready_facts() for cid in chunks})
     declared: list[str] = []
 
-    def lock_chunks(self: _FakeTransactions, chunk_ids: Sequence[str]) -> LockedTransaction:
-        declared.extend(chunk_ids)
+    def lock_set(self: _FakeTransactions, *, chunks: Sequence[str], keys: Sequence[Any]) -> LockedTransaction:
+        assert keys == [DEPENDENCIES_LOCK]
+        declared.extend(chunks)
         return _TOKEN
 
-    monkeypatch.setattr(_FakeTransactions, "lock_chunks", lock_chunks)
+    monkeypatch.setattr(_FakeTransactions, "lock_set", lock_set)
     result = service.group("chk_survivor", ["chk_a", "chk_survivor", "chk_a"])
     assert declared == ["chk_survivor", "chk_a", "chk_survivor", "chk_a"]
     assert result.grouped_id == 1

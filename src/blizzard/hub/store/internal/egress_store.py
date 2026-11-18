@@ -10,8 +10,9 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Row, insert
+from sqlalchemy import Connection, Row, insert
 
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
@@ -27,6 +28,7 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.open_tenants import OPEN_TENANTS
+from blizzard.hub.store.locking import lock_hub
 from blizzard.hub.tenancy import TenantId
 
 _FAILED: HubEventKind = "egress-write-failed"
@@ -44,6 +46,11 @@ class EgressStore:
         self._usage = usage
 
     def newest_cursor(self, dataset: str) -> EgressCheckpoint | None:
+        with self._store.read("egress_newest_cursor") as conn:
+            row = _current(conn, dataset)
+        return _cursor(row) if row is not None else None
+
+    def newest_recorded_cursor(self, dataset: str) -> EgressCheckpoint | None:
         c = s.egress_cursor.c
         stmt = (
             OPEN_TENANTS.select(s.egress_cursor)
@@ -85,27 +92,53 @@ class EgressStore:
         event = self._hub_events.newest(_LATCH_KINDS)
         return next((k for k in _LATCH_KINDS if event is not None and k == event.kind), None)
 
-    def append_cursor(self, record: EgressCheckpoint) -> None:
-        step = record.step
-        events = record.events
+    def append_cursor(self, record: EgressCheckpoint, *, after: int | None) -> bool:
         with self._store.write("egress_append_cursor") as conn:
-            conn.execute(
-                insert(s.egress_cursor).values(
-                    dataset=record.dataset,
-                    position_at=step.at if step is not None else events.at if events is not None else None,
-                    chunk_id=step.chunk_id if step is not None else None,
-                    epoch=step.epoch if step is not None else None,
-                    decision_id=step.decision_id if step is not None else None,
-                    segment_id=events.segment_id if events is not None else None,
-                    extractor_version=events.extractor_version if events is not None else None,
-                    events_tenant_id=events.tenant if events is not None else None,
-                    usage_recorded_at=record.usage.recorded_at,
-                    usage_id=record.usage.usage_id,
-                    row_count=record.row_count,
-                    files=json.dumps(list(record.files)),
-                    recorded_at=record.recorded_at,
-                )
-            )
+            lock_hub(conn, HubLock.EGRESS_CURSOR)
+            previous = _current(conn, record.dataset)
+            if (previous.id if previous is not None else None) != after:
+                return False
+            _insert(conn, record, previous.append_order + 1 if previous is not None else 1)
+        return True
+
+    def reset_cursor(self, record: EgressCheckpoint) -> EgressCheckpoint | None:
+        with self._store.write("egress_reset_cursor") as conn:
+            lock_hub(conn, HubLock.EGRESS_CURSOR)
+            previous = _current(conn, record.dataset)
+            _insert(conn, record, previous.append_order + 1 if previous is not None else 1)
+        return _cursor(previous) if previous is not None else None
+
+
+def _current(conn: Connection, dataset: str) -> Row[Any] | None:
+    c = s.egress_cursor.c
+    return conn.execute(
+        OPEN_TENANTS.select(s.egress_cursor)
+        .where(c.dataset == dataset)
+        .order_by(c.append_order.desc(), c.recorded_at.desc(), c.id.desc())
+        .limit(1)
+    ).first()
+
+
+def _insert(conn: Connection, record: EgressCheckpoint, order: int) -> None:
+    step, events = record.step, record.events
+    conn.execute(
+        insert(s.egress_cursor).values(
+            dataset=record.dataset,
+            append_order=order,
+            position_at=step.at if step is not None else events.at if events is not None else None,
+            chunk_id=step.chunk_id if step is not None else None,
+            epoch=step.epoch if step is not None else None,
+            decision_id=step.decision_id if step is not None else None,
+            segment_id=events.segment_id if events is not None else None,
+            extractor_version=events.extractor_version if events is not None else None,
+            events_tenant_id=events.tenant if events is not None else None,
+            usage_recorded_at=record.usage.recorded_at,
+            usage_id=record.usage.usage_id,
+            row_count=record.row_count,
+            files=json.dumps(list(record.files)),
+            recorded_at=record.recorded_at,
+        )
+    )
 
 
 def _cursor(row: Row[Any]) -> EgressCheckpoint:
@@ -127,6 +160,7 @@ def _cursor(row: Row[Any]) -> EgressCheckpoint:
         files=tuple(json.loads(row.files)),
         recorded_at=row.recorded_at,
         events=events,
+        cursor_id=row.id,
     )
 
 

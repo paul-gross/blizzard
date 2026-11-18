@@ -236,11 +236,11 @@ def hub_level_connections(engine: Engine) -> HubStoreConnections:
 
 
 @contextmanager
-def chunk_unit(store: ScopedConnections, *chunk_ids: str) -> Generator[LockedTransaction]:
+def chunk_unit(store: ScopedConnections, *chunk_ids: str, keys: Sequence[LockKey] = ()) -> Generator[LockedTransaction]:
     """A hub unit over ``store`` graduated on ``chunk_ids`` — the authority a chunk-locked write
     requires, for a test writing straight through a store."""
     with HubTransactions(store).begin() as transaction:
-        yield transaction.lock_chunks(chunk_ids)
+        yield transaction.lock_set(chunks=chunk_ids, keys=keys)
 
 
 @contextmanager

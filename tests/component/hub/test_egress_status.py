@@ -3,7 +3,7 @@ the facts the sweep leaves behind."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,10 +12,13 @@ import pytest
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.writer import EgressWriterSettings
+from blizzard.hub.store.internal.egress_store import EgressStore
 from tests.support.egress_world import closed_step, egress_hub
-from tests.support.scaffolding import HubHarness
+from tests.support.hub_event_rows import hub_events_of
+from tests.support.scaffolding import HubHarness, hub_level_connections
 from tests.support.worker_http import bind_stubs
 
 
@@ -85,6 +88,41 @@ def test_the_cursors_their_lag_the_last_pass_the_last_file_and_the_free_space(tm
     assert told["last_file"] is not None
     assert told["last_file"].startswith(("steps/", "invocations/"))
     assert chunk_id
+
+
+def test_status_uses_append_order_for_position_and_recorded_time_for_pass_and_file(tmp_path: Path) -> None:
+    hub, _ = egress_hub(tmp_path, _on(tmp_path))
+    connections = hub_level_connections(hub.engine)
+    store = EgressStore(
+        connections, hub_events=hub_events_of(hub.engine), usage=hub.hub_services.hub_scoped_reads.corpus
+    )
+    now = hub.clock.now()
+    written = EgressCheckpoint(
+        "invocations",
+        None,
+        UsagePosition(now - timedelta(seconds=10)),
+        7,
+        ("invocations/data.ndjson", "invocations/manifest.json"),
+        now,
+    )
+    assert store.append_cursor(written, after=None)
+    reset = EgressCheckpoint(
+        "invocations",
+        None,
+        UsagePosition(now - timedelta(seconds=30)),
+        3,
+        ("invocations/older-data.ndjson", "invocations/older-manifest.json"),
+        now - timedelta(seconds=20),
+    )
+    store.reset_cursor(reset)
+
+    status = _status(hub)
+    invocations = next(dataset for dataset in status["datasets"] if dataset["name"] == "invocations")
+    assert datetime.fromisoformat(invocations["cursor_at"]) == reset.usage.recorded_at
+    assert datetime.fromisoformat(status["last_pass_at"]) == written.recorded_at
+    assert status["last_pass_dataset"] == "invocations"
+    assert status["last_pass_row_count"] == 7
+    assert status["last_file"] == "invocations/data.ndjson"
 
 
 def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> None:

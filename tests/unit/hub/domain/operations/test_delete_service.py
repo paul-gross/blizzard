@@ -7,7 +7,6 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -31,7 +30,7 @@ from blizzard.hub.domain.chunk.model import (
     TransitionFact,
     WorkRef,
 )
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -134,7 +133,6 @@ def _service(
         record=cast(IWriteChunkRecordRepository, repo),
         dependencies=cast(IWriteChunkDependenciesRepository, repo),
         transactions=cast(IHubTransactions, repo),
-        cycle_lock=threading.Lock(),
     )
     return service, items
 
@@ -348,7 +346,6 @@ def test_delete_shares_one_locked_transaction_and_timestamp_for_all_writes() -> 
         record=cast(IWriteChunkRecordRepository, repo),
         dependencies=cast(IWriteChunkDependenciesRepository, repo),
         transactions=cast(IHubTransactions, repo),
-        cycle_lock=threading.Lock(),
     )
 
     service.delete(_CHUNK, by="alice")
@@ -384,14 +381,13 @@ def test_delete_reruns_over_a_hub_ref_outside_its_declared_keys_writing_nothing_
         record=cast(IWriteChunkRecordRepository, repo),
         dependencies=cast(IWriteChunkDependenciesRepository, repo),
         transactions=cast(IHubTransactions, repo),
-        cycle_lock=threading.Lock(),
     )
 
     service.delete(caller_chunk, by="operator")
 
     assert repo.declared == [
-        (["chk_1"], [work_item_lock(known)]),
-        (["chk_1"], sorted([work_item_lock(known), work_item_lock(folded)])),
+        (["chk_1"], [DEPENDENCIES_LOCK, work_item_lock(known)]),
+        (["chk_1"], sorted([DEPENDENCIES_LOCK, work_item_lock(known), work_item_lock(folded)])),
     ]
     assert writes_after_first_run == [0]
     assert items.deleted == [("chk_1", "operator", _T0)]
@@ -423,9 +419,8 @@ def test_delete_declares_the_chunk_and_every_hub_refs_key_once() -> None:
         record=cast(IWriteChunkRecordRepository, repo),
         dependencies=cast(IWriteChunkDependenciesRepository, repo),
         transactions=cast(IHubTransactions, repo),
-        cycle_lock=threading.Lock(),
     )
 
     service.delete(current, by="operator")
 
-    assert repo.declared == [(["chk_1"], [work_item_lock(hub_ref)])]
+    assert repo.declared == [(["chk_1"], [DEPENDENCIES_LOCK, work_item_lock(hub_ref)])]

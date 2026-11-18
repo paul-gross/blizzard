@@ -68,6 +68,7 @@ class EgressCheckpoint:
     files: tuple[str, ...]
     recorded_at: datetime
     events: EventsPosition | None = None
+    cursor_id: int | None = None
 
     @property
     def position(self) -> datetime:
@@ -97,6 +98,10 @@ class IReadEgress(Protocol):
         """The newest ``egress_cursor`` row of ``dataset`` — its position — or ``None`` before its first pass."""
         ...
 
+    def newest_recorded_cursor(self, dataset: str) -> EgressCheckpoint | None:
+        """The dataset's most recently recorded row, breaking timestamp ties by cursor id, or ``None``."""
+        ...
+
     def newest_cursor_with_files(self) -> EgressCheckpoint | None:
         """The newest ``egress_cursor`` row of any dataset that placed files, or ``None`` before the first write."""
         ...
@@ -123,7 +128,19 @@ class IReadUsageCorpus(Protocol):
 
 
 class IWriteEgressCursor(IReadEgress, Protocol):
-    def append_cursor(self, record: EgressCheckpoint) -> None: ...
+    def append_cursor(self, record: EgressCheckpoint, *, after: int | None) -> bool:
+        """Atomically append if the dataset's current cursor id equals ``after``; ``None`` expects no cursor.
+
+        Return ``True`` only after the append commits; on mismatch return ``False`` without writing.
+        """
+        ...
+
+    def reset_cursor(self, record: EgressCheckpoint) -> EgressCheckpoint | None:
+        """Atomically append a reset and return its exact predecessor, or ``None`` if there was none.
+
+        The result is returned only after the reset commits.
+        """
+        ...
 
 
 @domain_model

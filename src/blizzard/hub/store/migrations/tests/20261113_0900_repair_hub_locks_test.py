@@ -25,9 +25,9 @@ def _snapshot(engine: sa.Engine) -> dict[str, object]:
 
 def _assert_locks(engine: sa.Engine) -> None:
     with engine.begin() as conn:
-        for lock in HubLock:
+        for lock in (HubLock.IDENTITY, HubLock.TENANT_LIFECYCLE):
             lock_hub(conn, lock)
-        assert set(conn.execute(sa.text("SELECT name FROM hub_locks")).scalars()) >= {lock.value for lock in HubLock}
+        assert set(conn.execute(sa.text("SELECT name FROM hub_locks")).scalars()) >= {"identity", "tenant_lifecycle"}
 
 
 @pytest.mark.parametrize("old_revision", [_OLD_CI, _PARENT])

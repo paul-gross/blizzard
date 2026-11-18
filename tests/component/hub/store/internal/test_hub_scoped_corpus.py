@@ -459,13 +459,15 @@ def test_the_recorded_events_cursor_keeps_its_tenant_so_a_tie_split_by_a_pass_re
     )
     exported: list[EventsItem] = []
     position = EventsPosition(_BEFORE)
+    after: int | None = None
     while page := world.corpus.markers_after(position, _AFTER, 1, extractor_version=None):
         exported += page
-        cursor.append_cursor(
-            EgressCheckpoint("events", None, UsagePosition(_BEFORE), 1, (), _AT, position_of(page[-1]))
+        assert cursor.append_cursor(
+            EgressCheckpoint("events", None, UsagePosition(_BEFORE), 1, (), _AT, position_of(page[-1])), after=after
         )
         recorded = cursor.newest_cursor("events")
         assert recorded is not None and recorded.events is not None
+        after = recorded.cursor_id
         position = recorded.events
     assert exported == list(world.corpus.markers_after(EventsPosition(_BEFORE), _AFTER, 50, extractor_version=None))
     assert sorted(m.tenant or "" for m in exported if m.segment_id == "sg_tied") == sorted([world.carried, _OPEN])

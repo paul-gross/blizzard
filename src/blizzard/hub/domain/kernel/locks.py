@@ -15,6 +15,7 @@ class LockNamespace(StrEnum):
     """Every keyed-lock namespace; its value is the ``keyed_locks.namespace`` a lock row is written under."""
 
     CADENCE_ERRAND = "cadence_errand"
+    CHUNK_DEPENDENCIES = "chunk_dependencies"
     CREDENTIAL = "credential"
     FINDING = "finding"
     FLOW = "flow"
@@ -46,5 +47,6 @@ class HubLock(StrEnum):
     """A lock on a concept no tenant owns. Taken in the order ``IDENTITY``, a tenant's own rows, ``TENANT_LIFECYCLE``
     (``bzh:store-exclusive-write``)."""
 
+    EGRESS_CURSOR = "egress_cursor"
     IDENTITY = "identity"
     TENANT_LIFECYCLE = "tenant_lifecycle"

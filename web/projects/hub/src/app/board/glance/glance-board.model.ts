@@ -1,4 +1,4 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type UrgencyRef, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type UrgencyRef, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -50,6 +50,7 @@ export interface GlanceRow extends RowWork {
   /** The holding runner's host and name, or `null` when none holds it. */
   readonly runner: RunnerBoardParts | null;
   readonly gated: boolean;
+  readonly blocked?: { readonly label: string; readonly title: string } | null;
   /** An open ask's question, shown under the card. */
   readonly ask: string | null;
   readonly costUsd: number;
@@ -108,6 +109,10 @@ export function glanceListGroups(
       graphProgress: chunk.graph_progress,
       runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,
       gated: gated.has(chunk.chunk_id),
+      blocked: chunk.blocked ? {
+        label: blockedLabel(chunk.blocked.prerequisite_chunk_id, chunk.blocked.unmet_count ?? 1),
+        title: chunk.blocked.prerequisite_chunk_id,
+      } : null,
       ask: asks.get(chunk.chunk_id) ?? null,
       ...rowWork(chunk, workItems),
       costUsd: chunk.cost?.cost_usd ?? 0,

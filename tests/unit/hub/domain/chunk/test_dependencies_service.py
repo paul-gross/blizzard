@@ -8,7 +8,6 @@ cross-declaration race atomicity is proven at the component tier
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -27,10 +26,10 @@ from blizzard.hub.domain.chunk.dependencies import (
     PrerequisiteScope,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 TRANSACTION = object()
@@ -118,7 +117,13 @@ class _FakeDependenciesRepo:
         return edge
 
     def release(
-        self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        self,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        transaction: LockedTransaction,
     ) -> DependencyEdge | None:
         self.released.append((dependent_chunk_id, prerequisite_chunk_id, by, at))
         for i, edge in enumerate(self.standing):
@@ -147,7 +152,8 @@ def _as_dependencies(repo: _FakeDependenciesRepo) -> IWriteChunkDependenciesRepo
 class _FakeUnit:
     """An open unit whose ``lock_chunks`` graduates to the shared :data:`TRANSACTION` token."""
 
-    def lock_chunks(self, chunk_ids: Sequence[str]) -> Any:
+    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[Any] = ()) -> Any:
+        assert keys == [DEPENDENCIES_LOCK]
         return TRANSACTION
 
     def __getattr__(self, name: str) -> Any:
@@ -158,6 +164,21 @@ class _FakeTransactions:
     @contextmanager
     def begin(self) -> Generator[Any]:
         yield _FakeUnit()
+
+
+def test_declare_and_release_declare_their_exact_lock_sets(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[Sequence[str], Sequence[Any]]] = []
+
+    def lock_set(self: _FakeUnit, *, chunks: Sequence[str] = (), keys: Sequence[Any] = ()) -> Any:
+        calls.append((chunks, keys))
+        return TRANSACTION
+
+    monkeypatch.setattr(_FakeUnit, "lock_set", lock_set)
+    service, _ = _service(_FakeDependenciesRepo())
+    edge = service.declare(_DEPENDENT, _PREREQUISITE, by="user:alice")
+    service.release(edge, by="user:bob")
+
+    assert calls == [(["chk_dependent", "chk_prereq"], [DEPENDENCIES_LOCK]), ((), [DEPENDENCIES_LOCK])]
 
 
 def _not_ready_facts() -> ChunkFacts:
@@ -174,7 +195,7 @@ def _service(
     lifecycle: _FakeLifecycleRepo | None = None,
 ) -> tuple[DependencyService, _FakeFactsRepo]:
     """Build a ``DependencyService`` over ``dependencies`` with a fresh, single-test row
-    lock and cycle lock (the shared-lock race is proven at the component tier). ``facts``
+    lock. ``facts``
     defaults to a not-ready dependent; ``lifecycle`` defaults to no chunk being ephemeral."""
     facts_repo = facts or _FakeFactsRepo(facts=_not_ready_facts())
     lifecycle_repo = lifecycle or _FakeLifecycleRepo()
@@ -185,7 +206,6 @@ def _service(
             lifecycle=cast(IReadChunkLifecycleRepository, lifecycle_repo),
             transactions=cast(IHubTransactions, _FakeTransactions()),
             clock=FixedClock(instant=_T0),
-            cycle_lock=threading.Lock(),
         ),
         facts_repo,
     )

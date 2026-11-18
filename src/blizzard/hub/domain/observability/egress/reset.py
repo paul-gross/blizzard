@@ -1,13 +1,10 @@
 """Reset: moves one dataset's cursor to an instant the operator names, and records the moved window.
 
 Contract: ``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §Operator surface and §Delivery semantics.
-The move is one appended cursor row, written under the export pass lock."""
+The move is one appended cursor row."""
 
 from __future__ import annotations
 
-# The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -61,7 +58,6 @@ class EgressReset:
         active: bool,
         missing_path_key: str | None = None,
         exported_paths: Callable[[], ExportPaths] | None = None,
-        pass_lock: threading.Lock,
     ) -> None:
         self._egress = egress
         self._events = events
@@ -70,7 +66,6 @@ class EgressReset:
         self._active = active
         self._missing_path_key = missing_path_key
         self._exported_paths = exported_paths
-        self._lock = pass_lock
 
     def reset(self, dataset: str, to: datetime) -> ResetResult:
         exported = self._exported_paths() if self._exported_paths is not None else None
@@ -85,15 +80,9 @@ class EgressReset:
             now=now,
             missing_path_key=missing_path_key,
         )
-        with self._lock:
-            checkpoint, result = plan_reset(
-                dataset,
-                self._egress.newest_cursor(dataset),
-                to,
-                now=now,
-                settle=timedelta(seconds=config.settle_seconds),
-            )
-            self._egress.append_cursor(checkpoint)
+        checkpoint = plan_reset(dataset, to, now=now)
+        predecessor = self._egress.reset_cursor(checkpoint)
+        result = reset_result(dataset, predecessor, to, now=now, settle=timedelta(seconds=config.settle_seconds))
         self._events.record(
             kind="egress-cursor-reset",
             message=f"fact egress {dataset} cursor reset; the window was {result.direction}",
@@ -130,17 +119,19 @@ def require_resettable(
         raise ResetRefused("to must not be in the future")
 
 
-def plan_reset(
+def plan_reset(dataset: str, to: datetime, *, now: datetime) -> EgressCheckpoint:
+    """Construct the checkpoint without reading the predecessor."""
+    return _moved(dataset, to, now)
+
+
+def reset_result(
     dataset: str, cursor: EgressCheckpoint | None, to: datetime, *, now: datetime, settle: timedelta
-) -> tuple[EgressCheckpoint, ResetResult]:
-    """The cursor row a reset to ``to`` appends, and what it did. An unanchored dataset stands
-    where its first pass would anchor it — ``now`` less the settle window. The window is
-    ``skipped`` when ``to`` lies past where the dataset stood and ``repeated`` otherwise, a reset
-    to exactly the standing position included."""
+) -> ResetResult:
+    """Describe the window relative to the predecessor committed before this reset."""
     previous = cursor.position if cursor is not None else None
     standing = previous if previous is not None else now - settle
     direction: EgressResetDirection = "skipped" if to > standing else "repeated"
-    return _moved(dataset, to, now), ResetResult(dataset, previous, to, direction)
+    return ResetResult(dataset, previous, to, direction)
 
 
 def _moved(dataset: str, to: datetime, now: datetime) -> EgressCheckpoint:

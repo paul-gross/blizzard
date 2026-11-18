@@ -59,6 +59,9 @@
           @if (row.gated) {
             <fleet-kit-badge class="gate" tone="waiting" variant="pill">gate</fleet-kit-badge>
           }
+          @if (row.blocked; as blocked) {
+            <span class="blocked" data-testid="glance-blocked" [title]="blocked.title">blocked@if (blocked.label) { · {{ blocked.label }}}</span>
+          }
           @if (row.statusWord; as word) {
             <span class="st" data-testid="glance-row-status">{{ word }}</span>
           }
@@ -81,10 +84,13 @@
   <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state
       [state]="spendState()"
+      placement="inline"
       loadingText="—"
       loadingTestid="glance-spend-loading"
       errorText="FAILED TO LOAD"
       errorTestid="glance-spend-error"
+      emptyText="—"
+      emptyTestid="glance-spend-empty"
     >
       @if (spend(); as s) {
         <app-fleet-spend data-testid="glance-spend-row" [today]="s" [yesterday]="spendYesterday()" />

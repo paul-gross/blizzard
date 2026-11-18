@@ -3,8 +3,9 @@
 #
 # It races pairs of hub writers on a scratch database and, on a second database migrated to the head revision with
 # foreign keys enforced, a scoped write against a tenant's close, two closes of the last two open tenants, the drain
-# of a tenant with a row in every table it owns, and keyed locks of different keys. SQLite's single writer lock
-# serializes every writer, so no other tier can tell whether these hold on Postgres.
+# of a tenant with a row in every table it owns, keyed locks of different keys, and egress cursor serialization for a
+# pass followed by a reset and queued resets, including stale pass rejection. SQLite's single writer lock serializes
+# every writer, so no other tier can tell whether these hold on Postgres.
 #
 # It runs daily and on demand; never on a pull request, a `master` push, or as a called workflow, so day-to-day
 # landings pay nothing for it. A failing case exits non-zero and fails the run.

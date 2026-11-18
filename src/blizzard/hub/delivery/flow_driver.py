@@ -39,7 +39,7 @@ _CP_FLOW_AFTER_TURN_START_BEFORE_PASS = crashpoint(
     "flow.after-turn-start.before-pass", "a turn and its turn-started facts are durable; its pass has not started"
 )
 _CP_FLOW_BOOT_AFTER_INTERRUPT = crashpoint(
-    "flow.boot.after-interrupt", "one tenant's open turns are ended interrupted; the next tenant's are not"
+    "flow.boot.after-interrupt", "a tenant's open turns are ended interrupted; its lines are not yet reconciled"
 )
 
 #: A tenant holding none of the rows the probe counts.

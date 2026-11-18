@@ -197,6 +197,14 @@
 .where > .st {
   flex: none;
 }
+.blocked {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--amber);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .where > .runner {
   flex: 0 1 auto;
 }

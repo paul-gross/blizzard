@@ -5,7 +5,6 @@ see ``tests/component/hub/work_sources/internal/test_github_work_source.py`` for
 
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.chunk.ports.work_sources import WorkItemGoneError
 from blizzard.hub.domain.garden.findings.model import FindingExitService
@@ -78,7 +78,6 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
         record=chunks.record,
         dependencies=chunks.dependencies,
         transactions=HubTransactions(store),
-        cycle_lock=threading.Lock(),
     )
     edits = WorkItemEditService(
         items=items,
@@ -544,7 +543,9 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
     # `DeleteService.delete`, not the live-holder refusal.
     dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
     seed_chunk_record(chunks, dependent)
-    with chunk_unit(hub_store_connections(engine), [dependent.chunk_id, created.chunk_id]) as tx:
+    with chunk_unit(
+        hub_store_connections(engine), [dependent.chunk_id, created.chunk_id], keys=[DEPENDENCIES_LOCK]
+    ) as tx:
         chunks.dependencies.declare(
             dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant, transaction=tx
         )
@@ -864,7 +865,6 @@ def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock, engine:
         record=chunks.record,
         dependencies=chunks.dependencies,
         transactions=HubTransactions(hub_store_connections(engine)),
-        cycle_lock=threading.Lock(),
     )
     store = hub_store_connections(engine)
     return WorkItemEditService(

@@ -68,6 +68,18 @@ const groups = (
 const ids = (rows: readonly { chunkId: string }[]): string[] => rows.map((row) => row.chunkId);
 
 describe('glanceListGroups', () => {
+  it('carries the hub blocked marking on ready rows, naming one prerequisite or the count', () => {
+    const list = groups([
+      chunk('ch_one', 'ready', { blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 1 } }),
+      chunk('ch_many', 'ready', { blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 3 } }),
+      chunk('ch_clear', 'ready'),
+    ]);
+    expect(list.ready.map((row) => row.blocked)).toEqual([
+      { label: 'C-NGDA', title: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA' },
+      { label: '3 chunks', title: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA' },
+      null,
+    ]);
+  });
   it('leads with needs, then waiting, then running, then an unknown status', () => {
     const list = groups([
       chunk('ch_run', 'running'),

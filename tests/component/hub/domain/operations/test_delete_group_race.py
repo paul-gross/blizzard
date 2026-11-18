@@ -1,15 +1,14 @@
 """The delete/group race is atomic (component tier).
 
-``DeleteService`` and ``GroupService`` share the residual fleet-wide ``threading.Lock``
+``DeleteService`` and ``GroupService`` declare the tenant dependency key
 (``bzh:store-exclusive-write``): deleting a chunk releases its own outgoing edges, which
 races a concurrent fold reminting one of those same edges onto a chunk neither
 transaction's row lock names — the fold locks only the survivor and its merge ids, never
 the folded prerequisite's *dependent*. On Postgres, the row lock alone cannot serialize
 that pair; only the shared lock does. This test tier cannot isolate that contribution on
 its own: SQLite admits one writer transaction at a time regardless of which rows it
-locks, so the delete blocks here even with the shared lock stubbed to a no-op — a probe
-this test alone cannot distinguish from proof. What it does prove, tier-independent: the
-shared lock is acquired before the fold's edge rewrite, and no standing edge survives
+locks, so the delete blocks here even without the dependency key — a probe
+this test alone cannot distinguish from proof. The test proves no standing edge survives
 naming a chunk the delete just removed — the outcome an operator would see under either
 backend."""
 

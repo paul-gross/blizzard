@@ -375,9 +375,9 @@ wheel.
 demand (`workflow_dispatch`). SQLite's single writer lock serializes every writer, so only Postgres can show whether the
 hub's locks hold: the script races pairs of writers on a scratch database, then on a second database migrated to head,
 with foreign keys enforced, runs a scoped write against a tenant's close in both orders, two closes of the last two open
-tenants, the drain of a tenant with a row in every table it owns, and keyed locks of different keys. A failing case
-exits non-zero and fails the run. It is never called by another workflow and never runs on a pull request or a `master`
-push.
+tenants, the drain of a tenant with a row in every table it owns, keyed locks of different keys, and egress cursor
+serialization for a pass followed by a reset and for queued resets, including stale pass rejection. A failing case exits
+non-zero and fails the run. It is never called by another workflow and never runs on a pull request or a `master` push.
 
 Locally, set `BLIZZARD_UOW_POSTGRES_URL` to a Postgres server whose user may create and drop databases and run
 `uv run --extra postgres python scripts/check_hub_uow_postgres.py`.

@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,12 +22,14 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.domain.config.forges import ForgeId, forge_lock
 from blizzard.hub.domain.config.secrets import secret_lock
 from blizzard.hub.domain.garden.findings.model import finding_lock
 from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
+from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
 from blizzard.hub.domain.operations.delete import work_item_lock
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
@@ -37,6 +39,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal import egress_store
 from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -118,14 +121,27 @@ _PROPOSAL_CLOSE: _LockSet = ([], [_PROPOSAL])
 #: A chunk delete — the chunk's row, then the work item's key — against a work-item withdraw on that key alone, each
 #: way round: the withdraw never commits between the delete's closure re-read and its write.
 _ITEM = work_item_lock(WorkRef("hub", "wi_proof"))
-_DELETE_CHUNK: _LockSet = (["a"], [_ITEM])
+_DELETE_CHUNK: _LockSet = (["a"], [_ITEM, DEPENDENCIES_LOCK])
 _WITHDRAW_ITEM: _LockSet = ([], [_ITEM])
 #: A garden delivery — the plan's chunk row, then the finding's key — against a finding verb on that key alone, each
 #: way round.
 _FINDING = finding_lock("fnd_proof")
 _DELIVER: _LockSet = (["a"], [_FINDING])
 _FINDING_VERB: _LockSet = ([], [_FINDING])
+_DEP_DECLARE: _LockSet = (["a", "b"], [DEPENDENCIES_LOCK])
+_DEP_GROUP: _LockSet = (["c", "d"], [DEPENDENCIES_LOCK])
+_DEP_RELEASE: _LockSet = ([], [DEPENDENCIES_LOCK])
+_DEP_DELETE: _LockSet = (["a"], [DEPENDENCIES_LOCK])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
+    "disjoint dependency declares": (_DEP_DECLARE, (["c", "d"], [DEPENDENCIES_LOCK])),
+    "dependency group, then release": (_DEP_GROUP, _DEP_RELEASE),
+    "dependency release, then group": (_DEP_RELEASE, _DEP_GROUP),
+    "dependency delete, then disjoint group": (_DEP_DELETE, _DEP_GROUP),
+    "dependency group, then disjoint delete": (_DEP_GROUP, _DEP_DELETE),
+    "dependency declare, then disjoint group": (_DEP_DECLARE, _DEP_GROUP),
+    "dependency group, then disjoint declare": (_DEP_GROUP, _DEP_DECLARE),
+    "dependency release, then delete": (_DEP_RELEASE, _DEP_DELETE),
+    "dependency delete, then release": (_DEP_DELETE, _DEP_RELEASE),
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
     "urgency retire, then mint": (_RETIRE, _DEFAULT_MINT),
@@ -262,6 +278,8 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
         else:
             if not second_started.wait(_TIMEOUT):
                 raise RuntimeError(f"second writer failed to reach decision lock: {failures}")
+            if pids["first"] == pids["second"]:
+                raise RuntimeError("writers did not use independent Postgres connections")
             _wait_for_block(engine, pids["second"], pids["first"])
         release.set()
         first.join(_TIMEOUT)
@@ -568,7 +586,98 @@ def _case_different_keys_do_not_exclude(hub: _Hub) -> None:
         raise RuntimeError(f"expected both units to commit their keys: {failures}, rows={hub.probe_rows(tenant)}")
 
 
+def _case_egress_cursor_serialization(hub: _Hub, *, first_is_pass: bool) -> None:
+    """A waiting reset reads its predecessor after the writer holding the cursor lock commits."""
+    store = egress_store.EgressStore(hub.connections, hub_events=cast("Any", None), usage=cast("Any", None))
+    dataset = "proof_pass" if first_is_pass else "proof_resets"
+    now = _CLOCK.now()
+
+    def checkpoint(position: int, recorded: int) -> EgressCheckpoint:
+        return EgressCheckpoint(
+            dataset, None, UsagePosition(now + timedelta(seconds=position)), 0, (), now + timedelta(seconds=recorded)
+        )
+
+    first_record = checkpoint(10, 20)
+    reset_record = checkpoint(5, 10)
+    held, waiting, release = threading.Event(), threading.Event(), threading.Event()
+    pids: dict[str, int] = {}
+    outcomes: dict[str, EgressCheckpoint | bool | None] = {}
+    threads = _Threads()
+    original = egress_store.lock_hub
+
+    def lock(conn: Connection, key: Any) -> None:
+        name = threading.current_thread().name
+        pids[name] = _pid(conn)
+        isolation = conn.execute(sa.text("SHOW transaction_isolation")).scalar_one()
+        if isolation != "read committed":
+            raise RuntimeError(f"unexpected isolation: {isolation}")
+        if name == "second":
+            waiting.set()
+        original(conn, key)
+        if name == "first":
+            held.set()
+            if not release.wait(_TIMEOUT):
+                raise TimeoutError("first cursor writer was not released")
+
+    def first() -> None:
+        if first_is_pass:
+            outcomes["first"] = store.append_cursor(first_record, after=None)
+        else:
+            outcomes["first"] = store.reset_cursor(first_record)
+
+    def second() -> None:
+        outcomes["second"] = store.reset_cursor(reset_record)
+
+    egress_store.lock_hub = lock
+    try:
+        threads.start("first", first)
+        if not held.wait(_TIMEOUT):
+            raise RuntimeError(f"first cursor writer failed to hold: {threads.outcomes}")
+        threads.start("second", second)
+        if not waiting.wait(_TIMEOUT):
+            raise RuntimeError(f"second cursor writer failed to reach lock: {threads.outcomes}")
+        if pids["first"] == pids["second"]:
+            raise RuntimeError("cursor writers did not use independent connections")
+        _wait_for_block(hub.engine, pids["second"], pids["first"])
+    finally:
+        release.set()
+        try:
+            threads.join()
+        finally:
+            egress_store.lock_hub = original
+    failures = {name: exc for name, exc in threads.outcomes.items() if exc is not None}
+    if failures:
+        raise RuntimeError(f"cursor writers failed: {failures}")
+    if outcomes.get("first") != (True if first_is_pass else None):
+        raise RuntimeError(f"unexpected first result: {outcomes}")
+    predecessor = outcomes.get("second")
+    if (
+        not isinstance(predecessor, EgressCheckpoint)
+        or predecessor.position != first_record.position
+        or predecessor.recorded_at != first_record.recorded_at
+        or predecessor.cursor_id is None
+    ):
+        raise RuntimeError(f"reset did not return the committed predecessor: {predecessor}")
+    current = store.newest_cursor(dataset)
+    if current is None or current.position != reset_record.position or current.recorded_at != reset_record.recorded_at:
+        raise RuntimeError(f"reset is not current: {current}")
+    if store.append_cursor(checkpoint(30, 30), after=predecessor.cursor_id):
+        raise RuntimeError("stale pass appended after reset")
+    if store.newest_cursor(dataset) != current:
+        raise RuntimeError("stale pass changed the current cursor")
+
+
+def _case_egress_pass_then_reset(hub: _Hub) -> None:
+    _case_egress_cursor_serialization(hub, first_is_pass=True)
+
+
+def _case_egress_queued_resets(hub: _Hub) -> None:
+    _case_egress_cursor_serialization(hub, first_is_pass=False)
+
+
 _MIGRATED_CASES: dict[str, Callable[[_Hub], None]] = {
+    "egress pass then reset": _case_egress_pass_then_reset,
+    "egress queued resets": _case_egress_queued_resets,
     "closed tenant, write holds then close": _case_closed_tenant_write_holds,
     "closed tenant, close holds then write": _case_closed_tenant_close_holds,
     "two closes of the last two open tenants": _case_two_closes_last_tenants,
@@ -629,7 +738,10 @@ def main() -> None:
                     )
                 )
                 conn.execute(sa.text("INSERT INTO tenants VALUES (:tenant, 'proof')"), {"tenant": _TENANT})
-                conn.execute(sa.text("INSERT INTO chunks VALUES (:tenant, 'a'), (:tenant, 'b')"), {"tenant": _TENANT})
+                conn.execute(
+                    sa.text("INSERT INTO chunks VALUES (:tenant, 'a'), (:tenant, 'b'), (:tenant, 'c'), (:tenant, 'd')"),
+                    {"tenant": _TENANT},
+                )
                 conn.execute(
                     sa.text(
                         "INSERT INTO keyed_locks VALUES (:tenant, 'cadence_errand', 'a'), (:tenant, 'work_ref', 'b')"
@@ -639,6 +751,7 @@ def main() -> None:
             _run_pair(engine, kind="chunks", production_guard=False)
             _run_pair(engine, kind="keys", production_guard=False)
             _run_pair(engine, kind="chunks", production_guard=True)
+            _run_pair(engine, kind="dependency group, then release", production_guard=True)
             for kind in _LOCK_SETS:
                 _run_pair(engine, kind=kind, production_guard=False)
         finally:

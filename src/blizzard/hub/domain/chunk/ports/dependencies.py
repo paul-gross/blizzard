@@ -10,7 +10,10 @@ from typing import NamedTuple, Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DependencyEdge
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+
+DEPENDENCIES_LOCK = LockKey(LockNamespace.CHUNK_DEPENDENCIES, "standing")
 
 
 @domain_model
@@ -66,7 +69,9 @@ class IReadChunkDependenciesRepository(Protocol):
 class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protocol):
     """Read-write chunk-dependencies access."""
 
-    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None: ...
+    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
+        """Release outgoing edges under the chunk and :data:`DEPENDENCIES_LOCK` locks."""
+        ...
 
     def declare(
         self,
@@ -79,7 +84,7 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
     ) -> DependencyEdge:
         """Mint a fresh standing edge for this ordered pair — always a new row, never a
         revive of a previously-released one — in a unit whose ``transaction`` locks both
-        endpoints (``bzh:store-exclusive-write``). The caller has already checked that
+        endpoints and :data:`DEPENDENCIES_LOCK` (``bzh:store-exclusive-write``). The caller has already checked that
         declaring is admitted and closes no cycle."""
         ...
 
@@ -90,10 +95,10 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
         *,
         by: str,
         at: datetime,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> DependencyEdge | None:
         """Set ``released_at``/``released_by`` together, once, on the standing edge for
-        this ordered pair. A no-op returning ``None`` when no edge stands."""
+        this ordered pair under :data:`DEPENDENCIES_LOCK`. A no-op returning ``None`` when no edge stands."""
         ...
 
     def record_fold(
@@ -107,7 +112,7 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
     ) -> dict[str, int]:
         """Fold every target's dependency edges per its own release/mint split, atomically
         with recording each target's own ``chunk.grouped`` row, in a unit whose
-        ``transaction`` locks ``grouped_into`` and every target (``bzh:store-exclusive-write``). The split and the
-        resulting set's cycle check are already done. Returns each target chunk id's
+        ``transaction`` locks :data:`DEPENDENCIES_LOCK`, ``grouped_into`` and every target
+        (``bzh:store-exclusive-write``). The split and cycle check are already done. Returns each target's
         freshly-inserted ``chunk_grouped.id``."""
         ...

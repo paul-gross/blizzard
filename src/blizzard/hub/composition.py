@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import random
 
-# Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md —
-# and the tenant cache's lock, which guards this process's memory, not a store decision
+# The tenant cache's lock guards this process's memory, not a store decision.
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Mapping, Sequence
@@ -641,8 +640,6 @@ class TenantStores:
     hosts: HostRegistryStore
     work_item_store: WorkItemStore
     chunk_stores: ChunkStores
-    #: The tenant's cycle-check lock — dependencies never cross tenants.
-    cycle_lock: threading.Lock
     delete: DeleteService
     finding_store: FindingStore
     finding_exit: FindingExitService
@@ -707,14 +704,12 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     work_item_store = WorkItemStore(connections)
     transactions = tenant_transactions(connections)
     chunk_stores = build_chunk_stores(connections, clock)
-    cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
         clock=clock,
         facts=chunk_stores.facts,
         record=chunk_stores.record,
         dependencies=chunk_stores.dependencies,
-        cycle_lock=cycle_lock,
         transactions=transactions,
     )
     finding_store = FindingStore(connections)
@@ -732,7 +727,6 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         hosts=hosts,
         work_item_store=work_item_store,
         chunk_stores=chunk_stores,
-        cycle_lock=cycle_lock,
         delete=delete,
         finding_store=finding_store,
         finding_exit=finding_exit,
@@ -789,9 +783,8 @@ class TenantCache:
     A hit answers from memory and issues no statement: closing a tenant evicts it, and its write
     paths still refuse a closed tenant. A miss confirms the tenant exists and is open
     (``confirm_open`` raises :class:`UnknownTenant` or :class:`TenantClosed`) under the cache's one
-    lock before building, so two racing opens of a tenant never yield two entries — nor two of its
-    cycle-check locks — and a deletion's evict, which waits on that lock, drops an entry its close
-    raced."""
+    lock before building, so two racing opens of a tenant never yield two entries, and a deletion's
+    evict, which waits on that lock, drops an entry its close raced."""
 
     def __init__(
         self,
@@ -1464,7 +1457,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             lifecycle=chunk_lifecycle,
             transactions=stores.transactions,
             clock=clock,
-            cycle_lock=stores.cycle_lock,
         ),
         delete=stores.delete,
         facts=FactIngestService(
@@ -1509,7 +1501,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             record=chunk_record,
             clock=clock,
-            cycle_lock=stores.cycle_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,
@@ -1937,7 +1928,6 @@ def build_services(
     )
     egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
     egress_event_reads = core.hub_scoped_reads.corpus
-    egress_pass_lock = threading.Lock()
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
     egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
@@ -1970,7 +1960,6 @@ def build_services(
             clock=clock,
             config=egress_source,
             writer_for=configured_writer.for_config if configured_writer is not None else None,
-            pass_lock=egress_pass_lock,
         )
         if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
         else None
@@ -1983,7 +1972,6 @@ def build_services(
         active=egress_export is not None,
         missing_path_key=egress_missing_path_key,
         exported_paths=egress_exported_source,
-        pass_lock=egress_pass_lock,
     )
     egress_backfill = EgressBackfill(
         steps=trace_store,

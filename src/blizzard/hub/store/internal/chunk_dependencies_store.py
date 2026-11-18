@@ -17,7 +17,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
-from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    DEPENDENCIES_LOCK,
+    FoldTarget,
+    IWriteChunkDependenciesRepository,
+)
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
@@ -33,7 +37,8 @@ class ChunkDependenciesStore:
         self._clock = clock
 
     def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
-        release_outgoing_edges_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
+        conn = connection_for(self._store, transaction, chunk=chunk_id, key=DEPENDENCIES_LOCK)
+        release_outgoing_edges_conn(conn, chunk_id, by=by, at=at)
 
     def list_standing_edges(self, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
         with connection_in(self._store, transaction, "list_standing_edges") as conn:
@@ -90,7 +95,7 @@ class ChunkDependenciesStore:
         at: datetime,
         transaction: LockedTransaction,
     ) -> DependencyEdge:
-        conn = connection_for(self._store, transaction, chunk=dependent_chunk_id)
+        conn = connection_for(self._store, transaction, chunk=dependent_chunk_id, key=DEPENDENCIES_LOCK)
         connection_for(self._store, transaction, chunk=prerequisite_chunk_id)
         return self._declare_conn(conn, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
@@ -124,21 +129,17 @@ class ChunkDependenciesStore:
         *,
         by: str,
         at: datetime,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> DependencyEdge | None:
-        """Read-then-write on the same connection, so there is no window between the
-        two; see
-        :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IWriteChunkDependenciesRepository.release`."""
-        connection = connection_in(self._store, transaction, "release", write=True)
-        with connection as conn:
-            row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
-            if row is None:
-                return None
-            conn.execute(
-                self._store.update(s.chunk_dependencies)
-                .where(s.chunk_dependencies.c.dependency_id == row.dependency_id)
-                .values(released_at=at, released_by=by)
-            )
+        conn = connection_for(self._store, transaction, key=DEPENDENCIES_LOCK)
+        row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
+        if row is None:
+            return None
+        conn.execute(
+            self._store.update(s.chunk_dependencies)
+            .where(s.chunk_dependencies.c.dependency_id == row.dependency_id)
+            .values(released_at=at, released_by=by)
+        )
         return DependencyEdge(
             dependency_id=row.dependency_id,
             dependent_chunk_id=row.dependent_chunk_id,
@@ -160,7 +161,7 @@ class ChunkDependenciesStore:
     ) -> dict[str, int]:
         """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
         the group fold's own write, on the locked ``transaction``'s connection."""
-        conn = connection_for(self._store, transaction, chunk=grouped_into)
+        conn = connection_for(self._store, transaction, chunk=grouped_into, key=DEPENDENCIES_LOCK)
         for target in targets:
             connection_for(self._store, transaction, chunk=target.chunk_id)
         return self._record_fold_conn(conn, targets, grouped_into=grouped_into, by=by, at=at)

@@ -66,7 +66,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
-from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IReadChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -2242,7 +2242,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_dependency_prerequisite, "1018", at=_ht(78))
     _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
     _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
-    with chunk_unit(store_connections, chunk_dependency_dependent, chunk_dependency_prerequisite) as unit:
+    with chunk_unit(
+        store_connections, chunk_dependency_dependent, chunk_dependency_prerequisite, keys=[DEPENDENCIES_LOCK]
+    ) as unit:
         write.dependencies.declare(
             chunk_dependency_dependent,
             chunk_dependency_prerequisite,
@@ -2250,7 +2252,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             at=_ht(81),
             transaction=unit,
         )
-    with chunk_unit(store_connections, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2") as unit:
+    with chunk_unit(
+        store_connections, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", keys=[DEPENDENCIES_LOCK]
+    ) as unit:
         write.dependencies.declare(
             "ch_hub_dep_dependent_2",
             "ch_hub_dep_prerequisite_2",
@@ -2374,7 +2378,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- trace export cursor ----------------------------------------------------------
     _trace_store_of(store_connections, hub).append_cursor(TraceCheckpoint(CursorKey.opening(_ht(0)), 0, _ht(100)))
     _egress_store_of(store_connections, hub).append_cursor(
-        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
+        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100)), after=None
     )
 
     # --- the hub's own event log ------------------------------------------------------
@@ -3304,6 +3308,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_route_a]
     ),
     (IReadEnvTimelineFacts, "roster"): lambda w: EnvTimelineStore(w.store_connections).roster(),
+    (IReadEgress, "newest_recorded_cursor"): lambda w: _egress_store_of(
+        w.store_connections, w.hub
+    ).newest_recorded_cursor("steps"),
     (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_cursor("steps"),
     (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections, w.hub).usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50

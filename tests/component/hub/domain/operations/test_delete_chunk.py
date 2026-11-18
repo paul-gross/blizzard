@@ -6,7 +6,6 @@ way ``tests/component/hub/work_sources/internal/test_hub_work_source.py`` drives
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
@@ -62,7 +62,6 @@ def _stores(tmp_path: Path) -> tuple[ChunkStores, WorkItemStore, DeleteService, 
         record=chunks.record,
         dependencies=chunks.dependencies,
         transactions=HubTransactions(store),
-        cycle_lock=threading.Lock(),
     )
     return chunks, items, delete, engine
 
@@ -325,7 +324,7 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
     chunk = chunks.record.get(f"ch_{item.ref}")
     assert chunk is not None
     _mint(chunks, "ch_prereq")
-    with chunk_unit(hub_store_connections(engine), chunk.chunk_id, "ch_prereq") as tx:
+    with chunk_unit(hub_store_connections(engine), chunk.chunk_id, "ch_prereq", keys=[DEPENDENCIES_LOCK]) as tx:
         chunks.dependencies.declare(chunk.chunk_id, "ch_prereq", by="author", at=_T0, transaction=tx)
     original = items.withdraw_open
 
@@ -383,7 +382,6 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
         record=chunks.record,
         dependencies=chunks.dependencies,
         transactions=HubTransactions(hub_store_connections(hub.engine)),
-        cycle_lock=threading.Lock(),
     )
     chunk = chunks.record.get(first["chunk_id"])
     assert chunk is not None
@@ -407,7 +405,7 @@ def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) 
     chunks, _, delete, engine = _stores(tmp_path)
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
-    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq", keys=[DEPENDENCIES_LOCK]) as tx:
         chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
 
     with pytest.raises(ChunkHasDependents) as excinfo:
@@ -421,7 +419,7 @@ def test_delete_the_dependent_instead_succeeds_and_releases_its_outgoing_edge(tm
     chunks, _, delete, engine = _stores(tmp_path)
     _mint(chunks, "ch_prereq")
     dependent = _mint(chunks, "ch_dependent")
-    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq", keys=[DEPENDENCIES_LOCK]) as tx:
         chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
 
     delete.delete(dependent, by="operator")
@@ -434,9 +432,10 @@ def test_delete_succeeds_once_the_blocking_edge_is_released_first(tmp_path: Path
     chunks, _, delete, engine = _stores(tmp_path)
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
-    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq") as tx:
+    with chunk_unit(hub_store_connections(engine), "ch_dependent", "ch_prereq", keys=[DEPENDENCIES_LOCK]) as tx:
         chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=tx)
-    chunks.dependencies.release("ch_dependent", "ch_prereq", by="operator", at=_at(1))
+    with chunk_unit(hub_store_connections(engine), keys=[DEPENDENCIES_LOCK]) as tx:
+        chunks.dependencies.release("ch_dependent", "ch_prereq", by="operator", at=_at(1), transaction=tx)
 
     delete.delete(prerequisite, by="operator")
 

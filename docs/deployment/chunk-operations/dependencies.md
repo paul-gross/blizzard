@@ -33,7 +33,8 @@ named as a prerequisite: any chunk the hub holds is legal, on any graph, from an
 Release names the same ordered pair rather than a minted edge id. It has no status window: it is admitted whenever the
 edge stands, whatever status the dependent reads and whatever became of the prerequisite — including one since deleted.
 A release naming a pair with no standing edge is refused 409; a dependent the hub cannot resolve — never minted, or
-itself grouped away or deleted — is 404.
+itself grouped away or deleted — is 404. Release resolves the standing edge for the pair at the write: if an earlier
+edge was released and the pair declared again in the meantime, it releases the new edge.
 
 ## The blocked marking
 
@@ -54,9 +55,10 @@ chunk's own outgoing standing edges as part of the same delete, rather than refu
 
 Grouping a chunk away carries its standing edges onto the survivor rather than dropping them: each edge naming the
 folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. A
-re-minted edge keeps the source edge's `declared_at`, which `GET /api/chunks/{id}/dependencies` shows; a later-declared
-standing survivor edge that duplicates it is released and re-minted at the earlier instant. The whole fold is refused
-409 if carrying its edges would close a cycle in the resulting standing graph.
+re-minted edge keeps the source edge's `declared_at`; a later-declared standing survivor edge that duplicates it is
+released and re-minted at the earlier instant. The chunk detail's neighborhood, described below, shows the resulting
+standing relationships, not their declaration timestamps. The whole fold is refused 409 if carrying its edges would
+close a cycle in the resulting standing graph.
 
 ## The neighborhood
 

@@ -12,7 +12,12 @@ import pytest
 from sqlalchemy import Engine, func
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import (
+    DEPENDENCIES_LOCK,
+    FoldMint,
+    FoldTarget,
+    IWriteChunkDependenciesRepository,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.scoped import ScopedConnections
@@ -35,7 +40,7 @@ def _dependencies(tmp_path: Path) -> tuple[IWriteChunkDependenciesRepository, Sc
 def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
     dependencies, connections, _ = _dependencies(tmp_path)
 
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
 
     assert declared.dependent_chunk_id == "ch_dependent"
@@ -53,11 +58,12 @@ def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
 
 def test_released_edge_reads_released_and_still_exists(tmp_path: Path) -> None:
     dependencies, connections, engine = _dependencies(tmp_path)
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     released_at = _NOW + timedelta(hours=1)
 
-    released = dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=released_at)
+    with chunk_unit(connections, [], keys=[DEPENDENCIES_LOCK]) as tx:
+        released = dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=released_at, transaction=tx)
 
     assert released is not None
     assert released.dependency_id == declared.dependency_id
@@ -80,18 +86,20 @@ def test_released_edge_reads_released_and_still_exists(tmp_path: Path) -> None:
 
 
 def test_release_is_a_no_op_when_no_edge_stands(tmp_path: Path) -> None:
-    dependencies, _, _ = _dependencies(tmp_path)
+    dependencies, connections, _ = _dependencies(tmp_path)
 
-    assert dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=_NOW) is None
+    with chunk_unit(connections, [], keys=[DEPENDENCIES_LOCK]) as tx:
+        assert dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=_NOW, transaction=tx) is None
 
 
 def test_declare_after_release_mints_a_fresh_row(tmp_path: Path) -> None:
     dependencies, connections, _ = _dependencies(tmp_path)
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         first = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
-    dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
+    with chunk_unit(connections, [], keys=[DEPENDENCIES_LOCK]) as tx:
+        dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1), transaction=tx)
 
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         second = dependencies.declare(
             "ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=2), transaction=tx
         )
@@ -109,7 +117,7 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
     with engine.begin() as conn:
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"], keys=[DEPENDENCIES_LOCK]) as tx:
         later = dependencies.declare(
             "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1), transaction=tx
         )
@@ -126,7 +134,7 @@ def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None
     dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_dependent_2", graph_id="gr_1", at=_NOW)
-    with chunk_unit(connections, ["ch_dependent", "ch_dependent_2", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_dependent_2", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         as_dependent = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
         as_prerequisite = dependencies.declare(
             "ch_dependent_2",
@@ -145,7 +153,7 @@ def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -
     dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_other", graph_id="gr_1", at=_NOW)
-    with chunk_unit(connections, ["ch_other", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_other", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         dependencies.declare("ch_other", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
 
     assert dependencies.standing_edges_for("ch_dependent") == []
@@ -153,9 +161,10 @@ def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -
 
 def test_standing_edges_for_excludes_a_released_edge(tmp_path: Path) -> None:
     dependencies, connections, _ = _dependencies(tmp_path)
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
-    dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
+    with chunk_unit(connections, [], keys=[DEPENDENCIES_LOCK]) as tx:
+        dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1), transaction=tx)
 
     assert dependencies.standing_edges_for("ch_dependent") == []
 
@@ -167,11 +176,11 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     dependencies, connections, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq"], keys=[DEPENDENCIES_LOCK]) as tx:
         declared = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
     at = _NOW + timedelta(hours=1)
 
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_survivor"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_survivor"], keys=[DEPENDENCIES_LOCK]) as tx:
         grouped_ids = dependencies.record_fold(
             [
                 FoldTarget(
@@ -222,7 +231,10 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
         seed_chunk(conn, "ch_b", graph_id="gr_1", at=_NOW)
     at = _NOW + timedelta(hours=1)
 
-    with pytest.raises(HubStoreError), chunk_unit(connections, ["ch_a", "ch_b", "ch_survivor"]) as tx:
+    with (
+        pytest.raises(HubStoreError),
+        chunk_unit(connections, ["ch_a", "ch_b", "ch_survivor"], keys=[DEPENDENCIES_LOCK]) as tx,
+    ):
         dependencies.record_fold(
             [
                 FoldTarget(chunk_id="ch_a", release=[], mint=[]),
@@ -248,7 +260,7 @@ def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path:
     with engine.begin() as conn:
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
-    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"]) as tx:
+    with chunk_unit(connections, ["ch_dependent", "ch_prereq", "ch_prereq_2"], keys=[DEPENDENCIES_LOCK]) as tx:
         first = dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=tx)
         second = dependencies.declare("ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW, transaction=tx)
 

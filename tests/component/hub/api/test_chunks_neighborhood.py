@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
-from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -116,7 +116,7 @@ def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_pa
     hub = build_hub(tmp_path)
     subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
     dependencies = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
-    with chunk_unit(hub_store_connections(hub.engine), [subject_id, "chk_ghost"]) as tx:
+    with chunk_unit(hub_store_connections(hub.engine), [subject_id, "chk_ghost"], keys=[DEPENDENCIES_LOCK]) as tx:
         dependencies.declare(subject_id, "chk_ghost", by="test", at=hub.clock.now(), transaction=tx)
 
     prerequisites = _detail(hub, subject_id)["neighborhood"]["prerequisites"]

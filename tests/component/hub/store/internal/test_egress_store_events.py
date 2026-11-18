@@ -4,10 +4,12 @@ backfill's epoch selection, and the events cursor's persistence, over a real mig
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -255,8 +257,8 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
     position = EventsPosition(_at(10), "sg_a", _V1, default_tenant(engine))
 
-    store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))
-    store.append_cursor(EgressCheckpoint("invocations", None, UsagePosition(_at(5), 7), 0, (), _at(11)))
+    store.reset_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 3, ("a", "m"), _at(11), position))
+    store.reset_cursor(EgressCheckpoint("invocations", None, UsagePosition(_at(5), 7), 0, (), _at(11)))
 
     events = store.newest_cursor("events")
     assert events is not None
@@ -264,7 +266,7 @@ def test_the_events_cursor_round_trips(tmp_path: Path) -> None:
     invocations = store.newest_cursor("invocations")
     assert invocations is not None
     assert (invocations.events, invocations.step) == (None, None)
-    store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1))))
+    store.reset_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 0, (), _at(12), EventsPosition(_at(1))))
     reset = store.newest_cursor("events")
     assert reset is not None
     assert reset.events == EventsPosition(_at(1), "", "")
@@ -281,10 +283,64 @@ def test_an_events_position_two_tenants_tie_at_keeps_its_tenant_and_one_recorded
 
     recorded: list[EventsPosition | None] = []
     for seconds, position in enumerate([*tied, untenanted], start=11):
-        store.append_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 1, (), _at(seconds), position))
+        store.reset_cursor(EgressCheckpoint("events", None, UsagePosition(_at(0)), 1, (), _at(seconds), position))
         newest = store.newest_cursor("events")
         assert newest is not None
         recorded.append(newest.events)
 
     assert recorded == [*tied, untenanted]
     assert all(position < untenanted for position in tied)
+
+
+def test_append_order_beats_timestamps_and_rejects_stale_or_absent_predecessor(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
+    later = EgressCheckpoint("invocations", None, UsagePosition(_at(10)), 0, (), _at(20))
+    earlier = EgressCheckpoint("invocations", None, UsagePosition(_at(5)), 0, (), _at(15))
+    assert store.append_cursor(later, after=None)
+    first = store.newest_cursor("invocations")
+    assert first is not None
+    assert not store.append_cursor(earlier, after=None)
+    assert store.reset_cursor(earlier) == first
+    current = store.newest_cursor("invocations")
+    assert current is not None and current.position == _at(5)
+    assert not store.append_cursor(later, after=first.cursor_id)
+    recorded = store.newest_recorded_cursor("invocations")
+    assert recorded is not None and recorded.position == _at(10)
+
+
+@pytest.mark.parametrize("dataset", ["steps", "invocations", "events"])
+def test_absent_start_replay_cannot_replace_a_reset_for_any_dataset(tmp_path: Path, dataset: str) -> None:
+    engine = _engine(tmp_path)
+    store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
+    from blizzard.hub.domain.observability.egress.reset import plan_reset
+
+    stale = plan_reset(dataset, _at(30), now=_at(30))
+    reset = plan_reset(dataset, _at(5), now=_at(10))
+    assert store.newest_cursor(dataset) is None
+    assert store.reset_cursor(reset) is None
+    assert not store.append_cursor(stale, after=None)
+    current = store.newest_cursor(dataset)
+    assert current is not None and current.position == _at(5)
+    assert store.append_cursor(stale, after=current.cursor_id)
+    current = store.newest_cursor(dataset)
+    assert current is not None and current.position == _at(30)
+
+
+def test_recorded_time_and_file_metadata_are_independent_of_append_authority(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    store = EgressStore(hub_store_connections(engine), hub_events=hub_events_of(engine), usage=_store(engine))
+    old = EgressCheckpoint(
+        "events", None, UsagePosition(_at(0)), 1, ("data", "manifest"), _at(30), EventsPosition(_at(20))
+    )
+    assert store.append_cursor(old, after=None)
+    first = store.newest_cursor("events")
+    assert first is not None
+    reset = replace(old, events=EventsPosition(_at(5)), recorded_at=_at(10), files=(), row_count=0)
+    assert store.reset_cursor(reset) == first
+    current = store.newest_cursor("events")
+    recorded = store.newest_recorded_cursor("events")
+    with_files = store.newest_cursor_with_files()
+    assert current is not None and current.position == _at(5)
+    assert recorded == first
+    assert with_files == first
