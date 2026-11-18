@@ -4,9 +4,11 @@ import {
   type StoryObj,
 } from '@storybook/angular-vite';
 
+import { KitForm } from './kit-form';
 import { FormChromeHost } from './kit-form-chrome.story-host';
 
 const meta: Meta = {
+  component: KitForm,
   title: 'Kit/Form',
   decorators: [moduleMetadata({ imports: [FormChromeHost] })],
 };
@@ -22,6 +24,7 @@ export const Idle: Story = host('slug="ok-slug" hours="4"');
 export const Submitting: Story = host(
   'slug="ok-slug" hours="4" submitting="true"',
 );
+export const SaveHeld: Story = host('slug="ok-slug" hours="4" saveDisabled="true"');
 export const WithFormLineError: Story = host(
   'slug="ok-slug" hours="4" formError="The hub could not save this repository right now; try again in a moment."',
 );

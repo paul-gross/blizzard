@@ -52,6 +52,7 @@ export class FormChromeHost {
   readonly useDefault = input(false);
   readonly touched = input(false);
   readonly submitting = input(false);
+  readonly saveDisabled = input(false);
   readonly formError = input<string | null>(null);
 
   readonly f = form(

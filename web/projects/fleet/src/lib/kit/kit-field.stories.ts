@@ -4,9 +4,11 @@ import {
   type StoryObj,
 } from '@storybook/angular-vite';
 
+import { KitField } from './kit-field';
 import { FormChromeHost } from './kit-form-chrome.story-host';
 
 const meta: Meta = {
+  component: KitField,
   title: 'Kit/Field',
   decorators: [moduleMetadata({ imports: [FormChromeHost] })],
 };

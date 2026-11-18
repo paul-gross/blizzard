@@ -19,6 +19,7 @@ export * from './lib/kit';
 export * from './lib/shell/app-shell';
 export * from './lib/chunk/chunk-page';
 export * from './lib/core/design';
+export * from './lib/core/forms';
 export * from './lib/core/format';
 export * from './lib/core/when-display';
 export * from './lib/core/now-signal';

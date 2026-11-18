@@ -4,9 +4,11 @@ import {
   type StoryObj,
 } from '@storybook/angular-vite';
 
+import { KitNumberInput } from './kit-number-input';
 import { FormChromeHost } from './kit-form-chrome.story-host';
 
 const meta: Meta = {
+  component: KitNumberInput,
   title: 'Kit/Number input',
   decorators: [moduleMetadata({ imports: [FormChromeHost] })],
 };

@@ -1,0 +1,94 @@
+<fleet-kit-dialog [open]="true" [ariaLabel]="heading()" [testid]="testidPrefix() + '-dialog'" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader [attr.data-testid]="testidPrefix() + '-dialog-title'">{{ heading() }}</h2>
+
+  <fleet-kit-form
+    [form]="form()"
+    [saveLabel]="submitLabel()"
+    [saveDisabled]="saveHeld()"
+    (save)="save.emit()"
+    (cancel)="onClosed()"
+  >
+    @for (field of visibleFields(); track field.key) {
+      <fleet-kit-field [label]="field.label" [field]="field.kind === 'checkbox' ? flagField(field.key) : textField(field.key)">
+        @switch (field.kind) {
+          @case ('checkbox') {
+            <fleet-kit-checkbox
+              [formField]="flagField(field.key)"
+              [ariaLabel]="field.label"
+              [testid]="testidPrefix() + '-field-' + field.key"
+            />
+          }
+          @case ('select') {
+            <fleet-kit-select
+              [formField]="textField(field.key)"
+              [options]="optionsFor(field)"
+              [ariaLabel]="field.label"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (valueChange)="onChanged(field.key)"
+            />
+          }
+          @case ('color') {
+            <app-project-color-picker
+              [colors]="colorChoices(field)"
+              [current]="textField(field.key)().value()"
+              [ariaLabel]="field.label"
+              [disabled]="submitting()"
+              (choose)="onColor(field, $event)"
+            />
+          }
+          @case ('mark') {
+            <app-config-mark-input
+              [formField]="textField(field.key)"
+              [ariaLabel]="field.label"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (reading)="onReading(field.key, $event)"
+            />
+          }
+          @case ('secret-text') {
+            <fleet-kit-text-input
+              [formField]="textField(field.key)"
+              multiline
+              type="password"
+              [rows]="6"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (valueChange)="onChanged(field.key)"
+            />
+          }
+          @case ('number') {
+            <fleet-kit-number-input
+              [formField]="textField(field.key)"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (valueChange)="onChanged(field.key)"
+            />
+          }
+          @case ('password') {
+            <fleet-kit-text-input
+              [formField]="textField(field.key)"
+              type="password"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (valueChange)="onChanged(field.key)"
+            />
+          }
+          @default {
+            <fleet-kit-text-input
+              [formField]="textField(field.key)"
+              [testid]="testidPrefix() + '-field-' + field.key"
+              (valueChange)="onChanged(field.key)"
+            />
+          }
+        }
+      </fleet-kit-field>
+    }
+    @if (hint(); as note) {
+      <p class="form-note" [attr.data-testid]="testidPrefix() + '-hint'">{{ note }}</p>
+    }
+    @if (mode() === 'edit') {
+      <h3 class="section">Will change</h3>
+      @if (changes().length > 0) {
+        <app-config-field-diff [diff]="changes()" [testid]="testidPrefix() + '-diff'" />
+      } @else {
+        <p class="diff-empty" [attr.data-testid]="testidPrefix() + '-diff-empty'">Nothing yet.</p>
+      }
+    }
+  </fleet-kit-form>
+</fleet-kit-dialog>
