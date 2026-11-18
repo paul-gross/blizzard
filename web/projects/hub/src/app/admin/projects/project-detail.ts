@@ -1,17 +1,10 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  linkedSignal,
-  signal,
-} from '@angular/core';
-import { form, schema, validate } from '@angular/forms/signals';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, linkedSignal, signal } from '@angular/core';
+import { apply, form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
+  createRefusalState,
   asyncStateOf,
   errorMessage,
   submitForm,
@@ -44,8 +37,9 @@ import { projectDraft, type ProjectDraft } from './project.domain';
 import { projectLinkChoices, projectLinkDraft, type ProjectLinkDraft } from './project-link.domain';
 import { projectLinkSchema } from './project-link.form';
 import { injectProjectLinkService } from './project-link.service';
-import { projectBranchBaseline, projectBranchError, type ProjectBranchBaseline, type ProjectBranchDraft } from './project-branch.domain';
+import { projectBranchBaseline, type ProjectBranchBaseline, type ProjectBranchDraft } from './project-branch.domain';
 import { injectProjectBranchService } from './project-branch.service';
+import { branchDialogSchema } from './project-branch.form';
 import { projectEditSchema } from './project.form';
 import { injectProjectService } from './project.service';
 import { ProjectColorPicker } from './project-color-picker';
@@ -200,18 +194,21 @@ export class ProjectDetail {
   protected readonly linkService = injectProjectLinkService();
   protected readonly branchService = injectProjectBranchService();
   private readonly linkDraft = signal<ProjectLinkDraft>(projectLinkDraft([]));
-  protected readonly linkForm = form(this.linkDraft, projectLinkSchema(() => this.linkChoices()));
+  private readonly linkRefusal = createRefusalState<ProjectLinkDraft>();
+  protected readonly linkForm = form(this.linkDraft, (p) => {
+    apply(p, projectLinkSchema(() => this.linkChoices()));
+    apply(p, this.linkRefusal.schema);
+  });
   private readonly linkProjectId = signal<string | null>(null);
   protected readonly linkOpeningKey = signal<string | null>(null);
   private linkChoiceInitialized = false;
   private readonly branchDraft = signal<ProjectBranchDraft>({ baseBranch: '' });
   private readonly inheriting = signal(false);
-  protected readonly branchForm = form(this.branchDraft, schema<ProjectBranchDraft>((p) => {
-    validate(p.baseBranch, ({ value }) => {
-      const message = this.inheriting() ? null : projectBranchError(value());
-      return message ? { kind: 'branch', message } : null;
-    });
-  }));
+  private readonly branchRefusal = createRefusalState<ProjectBranchDraft>();
+  protected readonly branchForm = form(this.branchDraft, (p) => {
+    apply(p, this.branchRefusal.schema);
+    apply(p, branchDialogSchema(() => this.inheriting()));
+  });
   private readonly branchBaseline = signal<ProjectBranchBaseline | null>(null);
   protected readonly branchRow = signal<ProjectLinkRowVm | null>(null);
   protected readonly branchProjectName = signal('');
@@ -222,7 +219,11 @@ export class ProjectDetail {
   ];
   protected readonly slugHint = SLUG_HINT;
   private readonly editDraft = signal<ProjectDraft>(projectDraft(null));
-  protected readonly editForm = form(this.editDraft, projectEditSchema);
+  private readonly editRefusal = createRefusalState<ProjectDraft>();
+  protected readonly editForm = form(this.editDraft, (p) => {
+    apply(p, projectEditSchema);
+    apply(p, this.editRefusal.schema);
+  });
   protected readonly editBaseline = signal<EditBaseline<ProjectDraft> | null>(null);
   protected readonly palette: readonly string[] = PROJECT_COLORS;
   protected readonly colorOpen = signal(false);
@@ -285,6 +286,7 @@ export class ProjectDetail {
     if (!project || !this.canEdit()) return;
     const draft = projectDraft(project);
     this.editBaseline.set({ id: project.project_id, revision: project.revision, draft });
+    this.editRefusal.clear();
     this.editForm().reset({ ...draft });
     this.editOpen.set(true);
   }
@@ -318,7 +320,7 @@ export class ProjectDetail {
           replaceUrl: true,
         });
       }
-    }));
+    }), { refusalState: this.editRefusal });
   }
 
   protected onLinkOpen(kind: ProjectLinkKind): void {
@@ -329,6 +331,7 @@ export class ProjectDetail {
     this.linkOpen.set(kind);
     const choices = this.linkChoices();
     this.linkChoiceInitialized = choices.length > 0;
+    this.linkRefusal.clear();
     this.linkForm().reset(projectLinkDraft(choices));
   }
 
@@ -336,7 +339,7 @@ export class ProjectDetail {
     const id = this.linkProjectId();
     const kind = this.linkOpen();
     if (id === null || kind === null || this.key() !== this.linkOpeningKey() || !this.canEdit()) return;
-    const ok = await submitForm(this.linkForm, (draft) => this.linkService.link(id, kind, draft, this.linkChoices()));
+    const ok = await submitForm(this.linkForm, (draft) => this.linkService.link(id, kind, draft, this.linkChoices()), { refusalState: this.linkRefusal });
     if (ok) this.linkOpen.set(null);
   }
 
@@ -357,6 +360,7 @@ export class ProjectDetail {
     const baseline = projectBranchBaseline(link);
     this.branchBaseline.set(baseline);
     this.branchProjectName.set(this.project()!.name);
+    this.branchRefusal.clear();
     this.branchForm().reset({ ...baseline.draft });
     this.branchRow.set(row);
   }
@@ -369,7 +373,7 @@ export class ProjectDetail {
   protected async onBranch(): Promise<void> {
     const baseline = this.branchBaseline();
     if (!baseline || !this.canEdit()) return;
-    const ok = await submitForm(this.branchForm, (draft) => this.branchService.save(baseline, draft));
+    const ok = await submitForm(this.branchForm, (draft) => this.branchService.save(baseline, draft), { refusalState: this.branchRefusal });
     if (ok) this.branchRow.set(null);
   }
 
@@ -378,7 +382,7 @@ export class ProjectDetail {
     if (!baseline || !this.canEdit() || this.branchService.pending()) return;
     this.inheriting.set(true);
     try {
-      const ok = await submitForm(this.branchForm, () => this.branchService.inherit(baseline));
+      const ok = await submitForm(this.branchForm, () => this.branchService.inherit(baseline), { ignoreLocalErrors: true, refusalState: this.branchRefusal });
       if (ok) this.branchRow.set(null);
     } finally { this.inheriting.set(false); }
   }

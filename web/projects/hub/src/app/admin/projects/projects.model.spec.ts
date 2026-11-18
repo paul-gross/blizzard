@@ -16,9 +16,7 @@ import {
   missingWiring,
   pendingUnlinkNames,
   projectLightTone,
-  projectCreate,
   projectIdForSlug,
-  projectPatch,
   projectRows,
   repositoryLinkRows,
   servedProjectIds,
@@ -150,15 +148,6 @@ describe('projects model', () => {
     ]);
   });
 
-  it('creates a project named by its slug when the name is left empty', () => {
-    expect(projectCreate({ slug: 'nova' })).toEqual({ slug: 'nova', name: 'nova', description: '' });
-    expect(projectCreate({ slug: 'nova', name: 'Nova', description: 'New work' })).toEqual({
-      slug: 'nova',
-      name: 'Nova',
-      description: 'New work',
-    });
-  });
-
   it('carries its project color on a row', () => {
     expect(projectRows([BLIZZARD], new Map(), null, null)[0].color).toBe('teal');
   });
@@ -167,11 +156,6 @@ describe('projects model', () => {
     expect(queueText({ ...counts(1, 2, 40), done_since: 3 })).toBe('1 ready · 2 running · 3 done today');
     expect(queueText({ ...counts(0, 0, 40), done_since: 0 })).toBe('0 ready · 0 running · 0 done today');
     expect(queueText({ ...counts(0, 2, 40), done_since: null })).toBe('0 ready · 2 running');
-  });
-
-  it('sends a cleared description as empty text, and leaves unchanged fields out', () => {
-    expect(projectPatch({ slug: 'blizzard-hub', description: null })).toEqual({ slug: 'blizzard-hub', description: '' });
-    expect(projectPatch({ name: 'Blizzard Hub' })).toEqual({ name: 'Blizzard Hub' });
   });
 
   it('reads former slugs from the history, newest first, without the current one', () => {

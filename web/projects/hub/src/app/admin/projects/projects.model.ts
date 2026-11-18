@@ -3,7 +3,6 @@ import type { KitAsyncStateValue, Tone } from 'fleet';
 import type { Project } from '../../core/project.domain';
 import { servingProjectRunners, type ProjectRunner } from '../../core/runners.domain';
 import type { ConfigChange } from '../config-history.domain';
-import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
 import type { ProjectRepository } from '../repositories/repositories.domain';
 import type { ProjectWorkSource } from '../work-sources/work-sources.domain';
 import type { ProjectLinkKind, ProjectLinkVars } from './projects.mutations';
@@ -11,22 +10,6 @@ import type { ProjectFigures, ProjectRepositoryLink, ProjectSourceLink } from '.
 
 const workSourceKey = (source: ProjectWorkSource): string => source.work_source_id ?? source.name;
 const workSourceSlug = (source: ProjectWorkSource): string => source.slug ?? source.name;
-
-/** A project's form: its handle, its display name and what it is for. Every field stays
- * editable — a slug change keeps the old one resolving until another project takes it. A create
- * may leave the name out: it defaults to the slug. */
-export const PROJECT_FIELDS: readonly ConfigFieldDef[] = [
-  { key: 'slug', label: 'Slug', kind: 'text', required: true },
-  { key: 'name', label: 'Name', kind: 'text' },
-  { key: 'description', label: 'Description', kind: 'text' },
-];
-
-/** The create a new project's form sends: a name left empty is the slug. */
-export function projectCreate(body: Readonly<Record<string, string | boolean | null>>): { slug: string; name: string; description: string } {
-  const text = (key: string): string => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
-  const slug = text('slug');
-  return { slug, name: text('name') || slug, description: text('description') };
-}
 
 /** What the slug field means, under the form. */
 export const SLUG_HINT =
@@ -108,26 +91,6 @@ export function servedProjectIds(
       .filter((project) => servingProjectRunners(project.project_id, runners).length > 0)
       .map((project) => project.project_id),
   );
-}
-
-/** The patch an edit sends. A cleared description is sent as empty text: on a project `null`
- * means "leave it", and the description may be empty. */
-export function projectPatch(body: Readonly<Record<string, string | number | boolean | null>>): { slug?: string | null; name?: string | null; description?: string | null } {
-  const patch: { slug?: string | null; name?: string | null; description?: string | null } = {};
-  for (const [key, value] of Object.entries(body)) {
-    if (key === 'slug' || key === 'name') patch[key] = typeof value === 'string' ? value : null;
-    if (key === 'description') patch.description = typeof value === 'string' ? value : '';
-  }
-  return patch;
-}
-
-/** The form values a create starts from, or an edit shows. */
-export function projectFormValues(project: Project | null): ConfigFormValues {
-  return {
-    slug: project?.slug ?? '',
-    name: project?.name ?? '',
-    description: project?.description ?? '',
-  };
 }
 
 /** The slugs a project has moved away from, newest first and without repeats, read from its

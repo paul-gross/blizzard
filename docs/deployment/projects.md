@@ -76,6 +76,11 @@ On the board the same lives under Admin → Projects, a link's base branch inclu
 projects and their links too ([config-documents.md](./config-documents.md)), and every change to a project or a link is
 recorded in the change log ([config-changes.md](./config-changes.md)).
 
+The board shows validation and hub refusals beside the affected field when possible; other failures appear on the form.
+If a project or branch edit is refused because someone changed it since the dialog opened, the board keeps your draft
+and does not automatically retry it against the newer revision. To restart from the latest values, cancel and reopen the
+dialog, then reapply your changes.
+
 ## Links
 
 **A new work source or repository serves no project until it is linked.** Creating one adds it to the tenant; a project
@@ -154,7 +159,9 @@ is refused `409`. `get` shows each repository's effective branch, marked `inheri
 changes nothing. Unlinking a repository keeps the link's branch, and linking it again restores it.
 
 On the board, Admin → Projects shows each linked repository's effective branch, marked `inherited` or `override`. A user
-with `config:edit` opens its Branch dialog to name the link's branch, or Inherit to clear it.
+with `config:edit` opens its Branch dialog to name the link's branch, or chooses Inherit to clear the override. A blank
+branch is not an instruction to inherit; use Inherit explicitly. Invalid branch names and field-specific hub refusals
+appear beside the branch field.
 
 An edit reaches the chunks that have not yet captured the repository's branch; a chunk captures it at its claim and
 keeps it through every lease, retry and restart ([repositories.md](./repositories.md#how-delivery-uses-a-record)).

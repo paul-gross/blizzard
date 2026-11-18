@@ -1,8 +1,8 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { form, FormField, required } from '@angular/forms/signals';
+import { apply, form, FormField, required } from '@angular/forms/signals';
 import type { SaveOutcome } from './outcome';
-import { submitForm, toFormErrors } from './submit';
+import { createRefusalState, submitForm, toFormErrors } from './submit';
 
 interface Draft {
   name: string;
@@ -21,7 +21,9 @@ interface Draft {
 })
 class Host {
   readonly model = signal<Draft>({ name: '', slug: '' });
+  readonly refusal = createRefusalState<Draft>();
   readonly f = form(this.model, (p) => {
+    apply(p, this.refusal.schema);
     required(p.name);
     required(p.slug);
   });
@@ -82,6 +84,82 @@ describe('submitForm', () => {
     expect(host.f().errors().map((e) => e.message)).toEqual(['conflict']);
     expect(el.contains(document.activeElement)).toBe(false);
     el.remove();
+  });
+
+  it('retries an unchanged draft after a form or field refusal', async () => {
+    const { host } = setup();
+    host.model.set({ name: 'a', slug: 'b' });
+    const save = vi.fn<() => Promise<SaveOutcome<Draft>>>()
+      .mockResolvedValueOnce({ ok: false, fields: {}, form: 'Network failure' })
+      .mockResolvedValueOnce({ ok: false, fields: { slug: 'taken' }, form: null })
+      .mockResolvedValueOnce({ ok: true });
+    expect(await submitForm(host.f, save)).toBe(false);
+    expect(await submitForm(host.f, save)).toBe(false);
+    expect(await submitForm(host.f, save)).toBe(true);
+    expect(save).toHaveBeenCalledTimes(3);
+  });
+
+  it('still blocks local errors after a refusal, unless the action explicitly ignores them', async () => {
+    const { host } = setup();
+    host.model.set({ name: 'a', slug: 'b' });
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: null }));
+    host.f.name().value.set('');
+    const save = vi.fn(async (): Promise<SaveOutcome<Draft>> => ({ ok: true }));
+    expect(await submitForm(host.f, save)).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(await submitForm(host.f, save, { ignoreLocalErrors: true })).toBe(true);
+    expect(host.f.name().errors().some((error) => error.kind === 'required')).toBe(true);
+  });
+
+  it('focuses the latest refusal rather than a previous field error', async () => {
+    const { fixture, host, el } = setup();
+    document.body.append(el);
+    host.model.set({ name: 'a', slug: 'b' });
+    await submitForm(host.f, async () => ({ ok: false, fields: { name: 'old' }, form: null }));
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'new' }, form: null }));
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(el.querySelector('#slug'));
+    el.remove();
+  });
+
+  it('replaces and clears managed refusals on unchanged retries', async () => {
+    const { host } = setup();
+    host.model.set({ name: 'a', slug: 'b' });
+    const options = { refusalState: host.refusal };
+    expect(await submitForm(host.f, async () => ({ ok: false, fields: { name: 'old' }, form: 'old root' }), options)).toBe(false);
+    expect(host.f.name().errors().map((e) => e.message)).toEqual(['old']);
+    expect(host.f().errors().map((e) => e.message)).toEqual(['old root']);
+    expect(await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'new' }, form: null }), options)).toBe(false);
+    expect(host.f.name().errors()).toEqual([]);
+    expect(host.f().errors()).toEqual([]);
+    expect(host.f.slug().errors().map((e) => e.message)).toEqual(['new']);
+    expect(await submitForm(host.f, async () => ({ ok: true }), options)).toBe(true);
+    expect(host.f().errorSummary()).toEqual([]);
+  });
+
+  it('clears managed field refusals on edit and all refusals on reset', async () => {
+    const { host } = setup();
+    host.model.set({ name: 'a', slug: 'b' });
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'taken' }, form: 'failed' }), { refusalState: host.refusal });
+    host.f.slug().value.set('c');
+    expect(host.f.slug().errors()).toEqual([]);
+    host.refusal.clear();
+    host.f().reset({ name: 'a', slug: 'b' });
+    expect(host.f().errorSummary()).toEqual([]);
+  });
+
+  it('keeps an edited managed refusal dismissed after reverting without dismissing siblings', async () => {
+    const { host } = setup();
+    host.model.set({ name: 'a', slug: 'b' });
+    const options = { refusalState: host.refusal };
+    await submitForm(host.f, async () => ({ ok: false, fields: { name: 'bad name', slug: 'taken' }, form: null }), options);
+    host.f.slug().value.set('c');
+    expect(host.f.slug().errors()).toEqual([]);
+    host.f.slug().value.set('b');
+    expect(host.f.slug().errors()).toEqual([]);
+    expect(host.f.name().errors().map((e) => e.message)).toEqual(['bad name']);
+    await submitForm(host.f, async () => ({ ok: false, fields: { slug: 'still taken' }, form: null }), options);
+    expect(host.f.slug().errors().map((e) => e.message)).toEqual(['still taken']);
   });
 
   it('fails a refused outcome that names nothing (D7)', async () => {

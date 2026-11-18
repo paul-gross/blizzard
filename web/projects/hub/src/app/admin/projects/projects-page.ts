@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { form } from '@angular/forms/signals';
+import { apply, form } from '@angular/forms/signals';
 import {
   asyncState,
+  createRefusalState,
   submitForm,
   type KitAsyncStateValue,
   KitButton,
@@ -78,7 +79,11 @@ export class ProjectsPage {
   private readonly meQuery = injectMeQuery();
   private readonly projectService = injectProjectService();
   protected readonly fields = CREATE_FIELDS;
-  protected readonly createForm = form(signal(projectDraft(null)), projectCreateSchema);
+  private readonly createRefusal = createRefusalState<ProjectDraft>();
+  protected readonly createForm = form(signal(projectDraft(null)), (p) => {
+    apply(p, projectCreateSchema);
+    apply(p, this.createRefusal.schema);
+  });
   protected readonly slugHint = SLUG_HINT;
   protected readonly createOpen = signal(false);
 
@@ -110,6 +115,7 @@ export class ProjectsPage {
   }
 
   protected onNew(): void {
+    this.createRefusal.clear();
     this.createForm().reset(projectDraft(null));
     this.createOpen.set(true);
   }
@@ -122,6 +128,7 @@ export class ProjectsPage {
         const commands = lensLink(['/admin', 'projects', project.project_id], this.lens.lensed() ? project.slug : null);
         void this.router.navigate(commands);
       }),
+      { refusalState: this.createRefusal },
     );
   }
 }

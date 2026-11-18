@@ -593,6 +593,28 @@ describe('ProjectDetail', () => {
       expect(document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!.value).toBe('valid-branch');
     });
 
+    it('allows explicit inheritance after a branch refusal', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], {
+        ...linkRoutes(),
+        'GET /api/projects/{project}/repository-links': () => ({ repository_links: [{ ...CORE_LINK, base_branch: 'old' }] }),
+        'PATCH /api/projects/{project}/repository-links/{repository}': (request) =>
+          (request.body as { base_branch: string | null }).base_branch === null
+            ? { ...CORE_LINK, revision: 3 }
+            : stubError(422, { detail: [{ loc: ['body', 'base_branch'], msg: 'refused', type: 'value_error' }] }),
+      });
+      await openBranchDialog(harness, el);
+      type('valid-branch');
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+      expect(document.querySelector('[data-testid="admin-projects-branch-dialog"]')?.textContent).toContain('refused');
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-inherit"]')!.click();
+      await settle(harness.fixture);
+      const patch = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+      expect(patch.map((call) => call.body)).toEqual([{ base_branch: 'valid-branch' }, { base_branch: null }]);
+      expect(patch[1].headers['if-match']).toBe('2');
+    });
+
     it('rejects an invalid branch locally and focuses it', async () => {
       const { harness, el } = await open('/admin/projects/proj_b', [], linkRoutes());
       await openBranchDialog(harness, el);

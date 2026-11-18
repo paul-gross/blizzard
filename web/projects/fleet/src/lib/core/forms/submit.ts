@@ -1,4 +1,5 @@
-import { type FieldTree, submit, type ValidationError } from '@angular/forms/signals';
+import { signal } from '@angular/core';
+import { type FieldTree, type SchemaPath, schema, submit, validateTree, type ValidationError } from '@angular/forms/signals';
 import type { SaveOutcome } from './outcome';
 
 const HUB = 'hub';
@@ -23,19 +24,73 @@ export function toFormErrors<D>(
   return errors;
 }
 
+/** Apply the schema to the form and clear this state when starting a new draft. */
+export function createRefusalState<D>() {
+  const current = signal<{ outcome: SaveOutcome<D>; draft: D; dismissed: Set<string> } | null>(null);
+  return {
+    clear: () => current.set(null),
+    set: (outcome: SaveOutcome<D>, draft: D) => current.set({ outcome, draft, dismissed: new Set() }),
+    schema: schema<D>((path) => {
+      validateTree(path as SchemaPath<D>, ({ value, fieldTree }) => {
+        const saved = current();
+        if (!saved || saved.outcome.ok) return [];
+        const errors = toFormErrors(saved.outcome, fieldTree as FieldTree<D>) ?? [];
+        const now = value() as Record<string, unknown>;
+        const before = saved.draft as Record<string, unknown>;
+        const children = fieldTree as unknown as Record<string, FieldTree<unknown>>;
+        const fields = saved.outcome.fields;
+        return errors.filter((error) => {
+          if (error.fieldTree === fieldTree) return true;
+          const key = Object.keys(fields).find((k) => children[k] === error.fieldTree);
+          if (key === undefined) return false;
+          if (!Object.is(now[key], before[key])) saved.dismissed.add(key);
+          return !saved.dismissed.has(key);
+        });
+      });
+    }),
+  };
+}
+
+export type RefusalState<D> = ReturnType<typeof createRefusalState<D>>;
+
 /**
- * Runs Signal Forms' `submit`: it marks every field touched and runs `save` only when the form is valid. Afterwards
- * it focuses the first field in error, a rule's or the hub's, through that field's `focusBoundControl()`; errors on
- * the root alone focus nothing, and the form line carries them. Answers whether the save succeeded.
+ * Marks fields touched and runs `save` only when local validation passes. A managed refusal state allows retries to
+ * replace previous errors. An alternative action can disregard local errors unrelated to it. Focuses the first field
+ * in error; root errors focus nothing. Answers whether the save succeeded.
  */
 export async function submitForm<D>(
   form: FieldTree<D>,
   save: (draft: D) => Promise<SaveOutcome<D>>,
+  options?: { ignoreLocalErrors?: boolean; refusalState?: RefusalState<D> },
 ): Promise<boolean> {
-  const ok = await submit(form, async () => toFormErrors(await save(form().value()), form));
+  if (form().submitting()) return false;
+  options?.refusalState?.clear();
+  let locallyInvalid = false;
+  let refused = false;
+  let refusal: ValidationError.WithOptionalFieldTree[] | undefined;
+  // Angular retains submission errors until their field changes. They must not block a retry of the same draft.
+  const submitted = await submit(form, {
+    ignoreValidators: 'all',
+    action: async () => {
+      locallyInvalid = !options?.ignoreLocalErrors && form().errorSummary().some((error) => error.kind !== HUB);
+      if (locallyInvalid) return undefined;
+      const draft = form().value();
+      const outcome = await save(draft);
+      refusal = toFormErrors(outcome, form);
+      refused = !!refusal;
+      if (options?.refusalState) {
+        options.refusalState.set(outcome, draft);
+        return undefined;
+      }
+      return refusal;
+    },
+  });
+  const ok = submitted && !locallyInvalid && !refused;
   if (!ok) {
-    const first = form().errorSummary().find((error) => error.fieldTree !== form);
-    first?.fieldTree().focusBoundControl();
+    const first = locallyInvalid
+      ? form().errorSummary().find((error) => error.fieldTree !== form && error.kind !== HUB)?.fieldTree
+      : refusal?.find((error) => error.fieldTree !== form)?.fieldTree;
+    first?.().focusBoundControl();
   }
   return ok;
 }
