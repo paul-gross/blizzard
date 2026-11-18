@@ -1,5 +1,7 @@
 :host {
   display: block;
+  cursor: pointer;
+  outline: none;
 }
 .row {
   display: block;
@@ -9,14 +11,12 @@
   font: inherit;
   color: var(--text);
   background: transparent;
-  border: none;
   border-bottom: 1px solid var(--line);
-  /* Reserved transparent — `.selected` below only ever recolors this edge, so
+  /* Reserved transparent — the selected style below only ever recolors this edge, so
      selecting a row never shifts the row's own box (`design/tokens.css`'s
      `--surface-*` doc comment). */
   border-left: 2px solid transparent;
   padding: 6px 8px;
-  cursor: pointer;
   /* A long unbreakable token in the projected content (an id, a path) could
      otherwise overflow the row's own grid track; both properties are needed
      for `overflow-wrap` to actually take effect on a flex/grid item. */
@@ -26,31 +26,34 @@
 .row:hover {
   background: var(--surface-hover);
 }
-.row:focus-visible {
+:host(:focus-visible) .row {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }
-.row.selected {
+:host(.selected) .row {
   border-left-color: var(--cyan);
   background: var(--surface-selected);
 }
 /* Selection is the "stickier" state: hovering an already-selected row keeps
    the selected background rather than dimming to the hover tone. */
-.row.selected:hover {
+:host(.selected) .row:hover {
   background: var(--surface-selected);
 }
+:host([aria-disabled='true']) {
+  cursor: default;
+  opacity: 0.55;
+}
 /* Bare: the consumer owns layout and chrome, so every kit-drawn piece is dropped in
-   every state and the button borrows its arrangement from the host (`display: contents`
-   would lose the button's focusability and accessible role). */
-.row.bare,
-.row.bare:hover,
-.row.bare.selected,
-.row.bare.selected:hover {
+   every state and the inner element borrows its arrangement from the host. */
+:host(.bare) .row,
+:host(.bare) .row:hover,
+:host(.bare.selected) .row,
+:host(.bare.selected) .row:hover {
   padding: 0;
   border: none;
   background: transparent;
 }
-.row.bare {
+:host(.bare) .row {
   display: inherit;
   flex-direction: inherit;
   gap: inherit;
@@ -58,6 +61,6 @@
   justify-content: inherit;
   color: inherit;
 }
-.row.bare:focus-visible {
+:host(.bare:focus-visible) .row {
   outline: none;
 }

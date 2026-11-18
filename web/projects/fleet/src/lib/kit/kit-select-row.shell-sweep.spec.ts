@@ -2,6 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page, userEvent } from 'vitest/browser';
 
+import { KitSelectList } from './kit-select-list';
 import { KitSelectRow } from './kit-select-row';
 import { KitUrgencyPill } from './kit-urgency-pill';
 
@@ -17,12 +18,14 @@ import { KitUrgencyPill } from './kit-urgency-pill';
  */
 
 @Component({
-  imports: [KitSelectRow],
+  imports: [KitSelectList, KitSelectRow],
   template: `
-    <fleet-kit-select-row data-testid="plain" selected testid="plain-btn"><span>Plain</span></fleet-kit-select-row>
-    <fleet-kit-select-row class="flex-host" data-testid="bare" bare selected testid="bare-btn">
-      <span class="a">A</span><span class="b">B</span>
-    </fleet-kit-select-row>
+    <div fleetKitSelectList value="plain">
+      <fleet-kit-select-row value="plain" label="Plain" testid="plain-btn"><span>Plain</span></fleet-kit-select-row>
+      <fleet-kit-select-row class="flex-host" value="bare" label="Bare" bare testid="bare-btn">
+        <span class="a">A</span><span class="b">B</span>
+      </fleet-kit-select-row>
+    </div>
   `,
   styles: `
     .flex-host {
@@ -105,7 +108,10 @@ describe('KitSelectRow shell sweep', () => {
       await fixture.whenStable();
 
       try {
-        const plain = root.querySelector<HTMLElement>('[data-testid="plain-btn"]')!;
+        const plainRow = root.querySelector<HTMLElement>('[data-testid="plain-btn"]')!;
+        expect(plainRow.getAttribute('role')).toBe('option');
+        expect(plainRow.getAttribute('aria-selected')).toBe('true');
+        const plain = plainRow.querySelector<HTMLElement>('.row')!;
         const plainStyle = getComputedStyle(plain);
         expect(plainStyle.paddingTop).toBe('6px');
         expect(plainStyle.paddingLeft).toBe('8px');
@@ -113,7 +119,7 @@ describe('KitSelectRow shell sweep', () => {
         expect(plainStyle.borderLeftWidth).toBe('2px');
         expect(plainStyle.backgroundColor).toBe(tokenBackground('--surface-selected'));
 
-        const bare = root.querySelector<HTMLElement>('[data-testid="bare-btn"]')!;
+        const bare = root.querySelector<HTMLElement>('[data-testid="bare-btn"] .row')!;
         for (const hovered of [false, true]) {
           if (hovered) await userEvent.hover(bare);
           const style = getComputedStyle(bare);

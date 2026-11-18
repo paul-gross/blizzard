@@ -1,0 +1,26 @@
+:host {
+  display: block;
+}
+/* The invisible open button stretched under a card: the consumer owns layout and chrome, so the
+   button borrows its arrangement from the host. */
+.row {
+  display: inherit;
+  flex-direction: inherit;
+  gap: inherit;
+  align-items: inherit;
+  justify-content: inherit;
+  color: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.row:focus-visible {
+  outline: none;
+}
