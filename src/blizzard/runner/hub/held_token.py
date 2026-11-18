@@ -1,10 +1,8 @@
 """The hub bearer token a runner process presents, and taking up a replaced one without a restart.
 
-Every runner->hub client presents the process holder's current token. The token lives sealed in the host store, and
-at every identity check the holder compares the row's revision with the one it holds, opening the row only when the
-revision has moved: a token set again takes effect at the next check, whether or not the runner was refusing. A row
-that does not open under the host's key leaves the holder without a token, refusing until the token is set again.
-The holder never logs a token."""
+Every runner->hub client presents the holder's current token. At each identity check the holder opens the sealed row
+only when its revision has moved; a row that does not open under the host's key leaves it without a token, refusing
+until the token is set again. The holder never logs a token."""
 
 from __future__ import annotations
 

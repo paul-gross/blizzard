@@ -1,27 +1,9 @@
 """The identity check — the head of every tick, before any other hub call.
 
-A runner is the one its host file's ``[[runner]] id`` names, and its store is bound to that id before anything runs.
-Each tick asks the hub which runner the bearer token belongs to and compares that id with the configured one — the id
-alone, since a runner never changes tenant and ids are unique across the hub. The store's identity row takes no part:
-configuration, not the store, says whose it is. A different runner means a wrong token or a hub URL pointing
-somewhere else, and a token the hub refuses — unknown, revoked, retired — is a refusal of its own: either way the
-runner refuses to drive its leases or deliver its buffered facts, and checks again next
-tick, so restoring the right token or hub resumes it with nothing lost. A matching answer also fills in the
-tenant it names when the row lacks it or holds another name for it — the first contact after an upgrade gives
-a row written before tenants its tenant. Each check first compares the runner's stored token row with the token in
-use and checks with the row's when it has moved, so setting the token again needs no restart, whether or not the
-runner was refusing; a row that does not open under the host's key refuses without asking the hub, so the runner
-never registers under no token. A hub that does not answer leaves the
-verdict as it stood: an outage never reads as a mismatch. The check writes only the token's own verdict; the
-runner's standing under a registered host is the host tick's, and neither clears the other.
-
-A matching answer also carries the hub's ``fleet`` flags, which the check applies to the runner's flags before any
-later step of the tick reads them. Any other outcome — an outage, a refused token, a mismatch, a hub with no identity
-read — leaves the flags as they stood: a mismatched answer is not this runner's hub's, and an outage never flips
-behavior.
-
-A hub forward served outside the loop — the hub proxy — is a first contact too: while the loop has not
-checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentityCheck`), writing nothing."""
+Each tick asks the hub which runner the bearer token belongs to and compares that id with the configured one. A
+mismatch or a refused token stops the runner driving leases or delivering facts until the next tick resolves it; an
+outage leaves the verdict and the ``fleet`` flags as they stood. A match backfills the row's tenant and applies the
+hub's flags. A hub forward outside the loop judges its first contact the same way (:class:`ProxyIdentityCheck`)."""
 
 from __future__ import annotations
 
@@ -271,12 +253,9 @@ class IdentityCheck:
 
 
 class ProxyIdentityCheck:
-    """The identity check a hub forward outside the loop runs as its process's first contact. While the
-    loop has not checked, the forward asks the hub which runner its token belongs to and this judges the
-    answer against the configured runner. A match is remembered for the process, so the forward asks once; a
-    refused token, a hub with no identity read, or a mismatch forwards nothing and is asked again next
-    time. It writes nothing the status reports: the verdict stays the loop's, which alone logs a
-    transition and takes up a replaced token, and prevails once it has checked."""
+    """The identity check a hub forward outside the loop runs until the loop has checked. A match is remembered
+    for the process; any other answer forwards nothing and is asked again next time. It writes nothing: the
+    verdict stays the loop's, which prevails once it has checked."""
 
     def __init__(self, configured_id: str, verdict: ICurrentIdentityVerdict, clock: IClock) -> None:
         self._configured_id = configured_id

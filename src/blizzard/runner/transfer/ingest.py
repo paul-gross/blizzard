@@ -155,8 +155,7 @@ class IHostFileEditor(Protocol):
 
 
 class ITokenFiles(Protocol):
-    """A runner token in a host directory's ``.env`` — read from a host from before sealed tokens, and removed from the
-    source once the ingest holds it sealed."""
+    """A runner token in a host directory's ``.env``."""
 
     def held(self, root: Path, token_env: str) -> str:
         """The token ``.env`` assigns ``token_env``, or ``""``."""

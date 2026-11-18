@@ -271,8 +271,7 @@ class IdentityVerdictHolder:
             return self._token.refusing()
 
     def token_retired(self) -> bool:
-        """Whether the token's held verdict is the hub's refusal of it as retired — a runner whose token is never
-        replaced."""
+        """Whether the token's held verdict is the hub's refusal of it as retired."""
         with self._lock:
             return self._token_retired
 

@@ -1099,8 +1099,8 @@ def seed_runners(
 
 
 def _import_token(config: HostConfig, entry: RunnerEntry, tokens: HubTokens) -> StoredToken:
-    """Seed step 6 for one runner: its deprecated sources' token sealed unless it holds a row, warning when its row
-    does not open or a deprecated source still holds a token the host no longer reads."""
+    """One runner's deprecated-source token sealed unless it holds a row, warning when its row does not open or a
+    deprecated source still holds a token the host no longer reads."""
     assert entry.id is not None
     resolved = config.token_for(entry)
     outcome = import_hub_token(tokens, entry.id, resolved.value)

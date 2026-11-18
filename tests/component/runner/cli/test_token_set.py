@@ -147,9 +147,7 @@ def test_a_running_host_seals_the_token_over_its_socket(tmp_path: Path, monkeypa
         code, output = _set(tmp_path, _NEW)
 
     assert code == 0, output
-    assert "runner r-one (rn_one): hub token set in the host store; it takes effect at its next identity check" in (
-        output
-    )
+    assert "runner r-one (rn_one): hub token set in the host store; it takes effect at its next check cycle" in (output)
     assert _NEW not in output
     with host_hub_tokens(config.root, config.db_url) as tokens:
         assert tokens.stored(_RUNNER) == StoredToken.opened(_NEW, 2)

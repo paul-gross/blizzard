@@ -1,10 +1,9 @@
 """Moving one runner's rows between two runner stores — the seams ``runner ingest`` and ``runner store reset --runner``
 stand on, in opposite directions.
 
-A copy writes one runner's rows into a destination store in one transaction, the destination issuing every integer
-surrogate key anew, with the source's host rows merged by each host table's declared treatment and any ingest recorded
-there too, the runner's hub token sealed under the destination's key; it never writes the source. A removal deletes one
-runner's rows from one store."""
+A copy writes one runner's rows into a destination store in one transaction, issuing every surrogate key anew, merging
+host rows by each table's declared treatment and sealing the hub token under the destination's key; it never writes
+the source. A removal deletes one runner's rows from one store."""
 
 from __future__ import annotations
 

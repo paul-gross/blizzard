@@ -2268,7 +2268,7 @@
     "token": {
       "commands": {
         "set": {
-          "help": "Seal the runner's hub token, read from stdin \u2014 never an argument \u2014 in the host store.\n\nOn a running host the runner takes it up at its next identity check, and a runner its hub refused as retired is\nrefused; on a stopped host it takes effect at the next start. Trailing CR/LF is stripped; an empty value is\nrefused. DIRECTORY (positional) and --dir are equivalent \u2014 pass one. The token is never printed.",
+          "help": "Seal the runner's hub token, read from stdin \u2014 never an argument \u2014 in the host store.\n\nOn a running host the runner takes it up within its next check cycle, and a runner its hub refused as retired is\nrefused; on a stopped host it takes effect at the next start. Trailing CR/LF is stripped; an empty value is\nrefused. DIRECTORY (positional) and --dir are equivalent \u2014 pass one. The token is never printed.",
           "params": [
             {
               "hidden": false,

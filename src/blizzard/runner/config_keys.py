@@ -126,8 +126,7 @@ _WORKSPACE_HOME: tuple[tuple[str, str, Lifetime | None], ...] = (
 )
 
 
-#: The record kind that replaces every deprecated source of a runner's hub token: its token row in the host store,
-#: set through the API or `blizzard runner token set`.
+#: The record kind that replaces every deprecated source of a runner's hub token.
 SEALED_HUB_TOKEN_RECORDS = "sealed runner hub token records"
 
 

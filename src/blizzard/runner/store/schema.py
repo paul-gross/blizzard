@@ -1232,8 +1232,7 @@ host_ingests = Table(
 )
 
 # --- Runner hub tokens (each runner's hub bearer token, sealed under the host's key) ---
-# One row per runner id. A host row, not a runner-scoped one: it outlives the runner's identity row, and every
-# statement over it names its runner explicitly.
+# A host row keyed by runner id: it outlives the runner's identity row.
 
 runner_hub_tokens = Table(
     "runner_hub_tokens",

@@ -99,8 +99,7 @@ def _scenario_lines(scenario: dict[str, Any]) -> Iterator[str]:
 
 
 def _token_lines(runner_name: str, token: str, *, selector: str) -> tuple[str, str, str]:
-    """A freshly minted bearer token on a line of its own, between the `blizzard runner token set --runner
-    <selector>` that seals it on the host and the ``.env`` variable an older host reads it from."""
+    """A freshly minted bearer token on a line of its own, framed by how a host takes it up."""
     return (
         "bearer token, shown only once — on the runner's host, pipe it on stdin to "
         f"`blizzard runner token set --runner {selector}`:",

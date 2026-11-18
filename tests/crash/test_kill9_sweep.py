@@ -205,8 +205,7 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 # `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
 # from the source.
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
-# `seed.*` fires inside a start's token import, between one runner's sealed token and its settings seed, and between
-# two runners.
+# `seed.*` fires inside a start's token import, within one runner's import and between two runners.
 _SEED_POINTS = [p for p in _ALL_POINTS if p.startswith("seed.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]

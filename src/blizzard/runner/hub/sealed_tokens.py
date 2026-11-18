@@ -1,7 +1,7 @@
 """Each runner's hub bearer token, sealed in the host store under the host's key.
 
 A token is sealed under the name ``runner-hub-token/<runner id>`` at its row's revision, so the seal binds both: a row
-moved to another runner, or replayed at another revision, refuses to open. The prefix keeps a host token's binding
+moved to another runner, or replayed at another revision, refuses to open. The prefix keeps a runner's hub-token binding
 apart from any hub secret's under a shared key. The rules and ports live here; the adapter is
 ``src/blizzard/runner/store/internal/host_hub_token_store.py``."""
 

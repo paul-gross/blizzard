@@ -1,7 +1,7 @@
 """``blizzard runner token set`` — replace one of the host's runners' hub token, sealed in the host store.
 
 The value is read from stdin only and never printed. A running host seals it over its socket and the runner takes it up
-at its next identity check; a stopped host seals it in the store under the store write guard, for its next start."""
+within its next check cycle; a stopped host seals it in the store under the store write guard, for its next start."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def token_group() -> None:
 def token_set(ctx: click.Context, directory: str | None, dir_option: str, runner: str | None) -> None:
     """Seal the runner's hub token, read from stdin — never an argument — in the host store.
 
-    On a running host the runner takes it up at its next identity check, and a runner its hub refused as retired is
+    On a running host the runner takes it up within its next check cycle, and a runner its hub refused as retired is
     refused; on a stopped host it takes effect at the next start. Trailing CR/LF is stripped; an empty value is
     refused. DIRECTORY (positional) and --dir are equivalent — pass one. The token is never printed."""
     path = HostDirectory(directory, dir_option).path
@@ -84,7 +84,7 @@ def _set_on_running_host(directory: str, door: Door, runner: str | None, value: 
         detail = f": {refusal.message}" if refusal.message else ""
         kind = f" ({refusal.type})" if refusal.type else ""
         raise click.ClickException(f"{_VERB}: the host refused runner {target.name}'s token{kind}{detail}")
-    when = "its next start" if target.state == "halted" else "its next identity check"
+    when = "its next start" if target.state == "halted" else "its next check cycle"
     click.echo(f"runner {target.name} ({target.runner_id}): hub token set in the host store; it takes effect at {when}")
 
 
