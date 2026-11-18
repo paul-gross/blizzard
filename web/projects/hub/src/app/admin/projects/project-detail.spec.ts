@@ -22,6 +22,7 @@ import {
   workSourceSummary,
 } from 'fleet/testing';
 
+import { hubProjectKey } from '../../core/query-keys';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import type { Project } from '../../core/project.domain';
 import { ProjectDetail } from './project-detail';
@@ -265,13 +266,64 @@ describe('ProjectDetail', () => {
     const diff = document.querySelector('[data-testid="admin-projects-edit-diff"]')!.textContent!;
     expect(diff).toContain('blizzard');
     expect(diff).toContain('blizzard-hub');
-    document.querySelector<HTMLElement>('[data-testid="admin-projects-edit-submit"]')!.click();
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
     await settle(harness.fixture);
 
     const patch = stub.forRoute('/api/projects/proj_b', 'PATCH');
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ slug: 'blizzard-hub' });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('keeps the opening revision and draft through a refresh and stale refusal', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b', [], {
+      'PATCH /api/projects/{project}': () => stubError(409, { detail: 'stale revision' }),
+    });
+    await click(harness, el, 'admin-projects-edit');
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-edit-field-description"]')!;
+    input.value = 'My draft';
+    input.dispatchEvent(new Event('input'));
+    TestBed.inject(QueryClient).setQueryData(hubProjectKey('proj_b'), { ...BLIZZARD, revision: 9, description: 'Other edit' });
+    await settle(harness.fixture);
+    expect(input.value).toBe('My draft');
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    const patch = stub.forRoute('/api/projects/proj_b', 'PATCH');
+    expect(patch[0].headers['if-match']).toBe('3');
+    expect(patch[0].body).toEqual({ description: 'My draft' });
+    expect(input.value).toBe('My draft');
+    expect(document.querySelector('[data-testid="kit-form-line"]')?.textContent).toContain('stale revision');
+  });
+
+  it('focuses an invalid slug without sending a patch', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b');
+    await click(harness, el, 'admin-projects-edit');
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-edit-field-slug"]')!;
+    input.value = 'Bad slug';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/projects/proj_b', 'PATCH')).toHaveLength(0);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('binds a hub slug refusal and focuses the field', async () => {
+    const refusal = stubError(422, {
+      detail: [{ loc: ['body', 'slug'], msg: 'Slug is unavailable', type: 'value_error' }],
+    });
+    const { harness, el } = await open('/admin/projects/proj_b', [], {
+      'PATCH /api/projects/{project}': () => refusal,
+    });
+    await click(harness, el, 'admin-projects-edit');
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-edit-field-slug"]')!;
+    input.value = 'taken';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-edit-dialog"]')?.textContent).toContain('Slug is unavailable');
+    expect(document.activeElement).toBe(input);
   });
 
   it('states the color and saves a picked one by id at the shown revision', async () => {

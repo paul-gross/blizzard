@@ -41,18 +41,17 @@
     />
 
     @if (editOpen()) {
-      <app-config-form-dialog
+      <app-config-field-tree-dialog
         [heading]="'Edit ' + p.name"
         mode="edit"
         [fields]="fields"
-        [initial]="shown()"
+        [form]="editForm"
+        [baseline]="editBaseline()?.draft ?? null"
         [hint]="slugHint"
         submitLabel="Save"
-        [submitError]="editError()"
-        [submitting]="editMutation.isPending()"
         testidPrefix="admin-projects-edit"
         (closed)="editOpen.set(false)"
-        (submitted)="onSave($event)"
+        (save)="onSave()"
       />
     }
     @if (colorOpen()) {
@@ -61,12 +60,12 @@
         <app-project-color-picker
           [colors]="palette"
           [current]="p.color"
-          [disabled]="editMutation.isPending()"
+          [disabled]="projectService.editPending()"
           (choose)="onColor($event)"
         />
         <div fleetKitDialogFooter class="color-footer">
           <fleet-kit-error-line class="color-error" [message]="colorError()" testid="admin-projects-color-error" />
-          <fleet-kit-button size="cta" [disabled]="editMutation.isPending()" testid="admin-projects-color-close" (click)="onColorClose()">
+          <fleet-kit-button size="cta" [disabled]="projectService.editPending()" testid="admin-projects-color-close" (click)="onColorClose()">
             Close
           </fleet-kit-button>
         </div>

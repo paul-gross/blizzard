@@ -7,12 +7,15 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   asyncState,
   asyncStateOf,
   errorMessage,
+  submitForm,
+  type EditBaseline,
   injectNowSignal,
   injectPendingMutationVariables,
   type KitAsyncStateValue,
@@ -31,12 +34,15 @@ import { landingPositionMutationKey, projectLinkMutationKey } from '../../core/m
 import { startOfLocalDayIso } from '../../core/local-day';
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectRunnersQuery } from '../../core/runners.query';
-import { type ConfigFormValues, configEdit } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
+import type { ConfigFieldView } from '../config-field-tree.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectProjectHistoryQuery } from '../config-history.query';
 import { injectProjectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectProjectWorkSourcesQuery } from '../work-sources/work-sources.query';
+import { projectDraft, type ProjectDraft } from './project.domain';
+import { projectEditSchema } from './project.form';
+import { injectProjectService } from './project.service';
 import { ProjectColorPicker } from './project-color-picker';
 import { PROJECT_COLORS } from './project-color.translate';
 import type { LandingPosition } from './project-landing-order.domain';
@@ -50,7 +56,6 @@ import { ProjectBranchDialog } from './project-branch-dialog';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
 import {
-  injectEditProjectMutation,
   injectLandingPositionMutation,
   injectProjectLinkMutation,
   injectRepositoryBranchMutation,
@@ -64,9 +69,6 @@ import {
   pendingUnlinkNames,
   type PanelFailure,
   type ProjectLinkRowVm,
-  PROJECT_FIELDS,
-  projectFormValues,
-  projectPatch,
   projectServedBy,
   repositoryChoices,
   repositoryLinkRows,
@@ -95,7 +97,7 @@ import {
   selector: 'app-project-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ConfigFormDialog,
+    ConfigFieldTreeDialog,
     KitAsyncState,
     KitButton,
     KitDialog,
@@ -202,22 +204,27 @@ export class ProjectDetail {
     () => this.viewport.mode() !== 'mobile' && hasPermission(this.meQuery.data(), 'config:edit'),
   );
 
-  protected readonly editMutation = injectEditProjectMutation();
+  protected readonly projectService = injectProjectService();
   protected readonly linkMutation = injectProjectLinkMutation();
   private readonly positionMutation = injectLandingPositionMutation();
   protected readonly branchMutation = injectRepositoryBranchMutation();
   /** The repository link row whose branch dialog is open. */
   protected readonly branchRow = signal<ProjectLinkRowVm | null>(null);
   protected readonly branchError = signal<string | null>(null);
-  protected readonly fields = PROJECT_FIELDS;
+  protected readonly fields: readonly ConfigFieldView<ProjectDraft>[] = [
+    { key: 'slug', label: 'Slug', kind: 'text' },
+    { key: 'name', label: 'Name', kind: 'text' },
+    { key: 'description', label: 'Description', kind: 'text' },
+  ];
   protected readonly slugHint = SLUG_HINT;
-  protected readonly shown = computed(() => projectFormValues(this.project()));
+  private readonly editDraft = signal<ProjectDraft>(projectDraft(null));
+  protected readonly editForm = form(this.editDraft, projectEditSchema);
+  protected readonly editBaseline = signal<EditBaseline<ProjectDraft> | null>(null);
   /** The palette, by name. */
   protected readonly palette: readonly string[] = PROJECT_COLORS;
   protected readonly colorOpen = signal(false);
   protected readonly colorError = signal<string | null>(null);
   protected readonly editOpen = signal(false);
-  protected readonly editError = signal<string | null>(null);
 
   protected readonly linkOpen = signal<ProjectLinkKind | null>(null);
   protected readonly linkError = signal<string | null>(null);
@@ -261,7 +268,11 @@ export class ProjectDetail {
   }
 
   protected onEdit(): void {
-    this.editError.set(null);
+    const project = this.project();
+    if (!project || !this.canEdit()) return;
+    const draft = projectDraft(project);
+    this.editBaseline.set({ id: project.project_id, revision: project.revision, draft });
+    this.editForm().reset({ ...draft });
     this.editOpen.set(true);
   }
 
@@ -271,44 +282,31 @@ export class ProjectDetail {
   }
 
   protected onColorClose(): void {
-    if (this.editMutation.isPending()) return;
+    if (this.projectService.editPending()) return;
     this.colorOpen.set(false);
   }
 
   /** Save the chosen color against the revision on screen; a stale revision or a refusal shows in the dialog. */
-  protected onColor(color: string): void {
+  protected async onColor(color: string): Promise<void> {
     const project = this.project();
-    if (!project || color === project.color) return;
+    if (!project || color === project.color || !this.canEdit()) return;
     this.colorError.set(null);
-    this.editMutation.mutate(
-      { projectId: project.project_id, revision: project.revision, body: { color } },
-      {
-        onSuccess: () => this.colorOpen.set(false),
-        onError: (error) => this.colorError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+    const outcome = await this.projectService.color(project.project_id, project.revision, color);
+    if (outcome.ok) this.colorOpen.set(false);
+    else this.colorError.set(outcome.form ?? (Object.values(outcome.fields).join('; ') || 'Save failed.'));
   }
 
-  protected onSave(values: ConfigFormValues): void {
-    const project = this.project();
-    if (!project) return;
-    const body = projectPatch(configEdit(this.fields, this.shown(), values).body);
-    this.editError.set(null);
-    this.editMutation.mutate(
-      { projectId: project.project_id, revision: project.revision, body },
-      {
-        onSuccess: (saved) => {
-          this.editOpen.set(false);
-          // Under this project's own lens a new slug moves the lens with it.
-          if (this.lens.slug() === project.slug && saved.slug !== project.slug) {
-            void this.router.navigate(lensLink(['/admin', 'projects', saved.project_id], saved.slug), {
-              replaceUrl: true,
-            });
-          }
-        },
-        onError: (error) => this.editError.set(errorMessage(error, 'Save failed.')),
-      },
-    );
+  protected async onSave(): Promise<void> {
+    const baseline = this.editBaseline();
+    if (!baseline || !this.canEdit()) return;
+    await submitForm(this.editForm, (draft) => this.projectService.edit(baseline, draft, (saved) => {
+      this.editOpen.set(false);
+      if (this.lens.slug() === baseline.draft.slug && saved.slug !== baseline.draft.slug) {
+        void this.router.navigate(lensLink(['/admin', 'projects', saved.project_id], saved.slug), {
+          replaceUrl: true,
+        });
+      }
+    }));
   }
 
   protected onLinkOpen(kind: ProjectLinkKind): void {

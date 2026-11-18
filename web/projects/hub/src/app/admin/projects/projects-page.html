@@ -20,16 +20,15 @@
   </fleet-kit-panel>
 </fleet-kit-master-detail>
 @if (createOpen()) {
-  <app-config-form-dialog
+  <app-config-field-tree-dialog
     heading="New project"
     mode="create"
     [fields]="fields"
+    [form]="createForm"
     [hint]="slugHint"
     submitLabel="Create"
-    [submitError]="createError()"
-    [submitting]="createMutation.isPending()"
     testidPrefix="admin-projects-create"
     (closed)="createOpen.set(false)"
-    (submitted)="onCreate($event)"
+    (save)="onCreate()"
   />
 }

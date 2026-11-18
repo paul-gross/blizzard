@@ -8,6 +8,7 @@ import { type InAppLink } from 'fleet/shell';
 import {
   configChangesPage,
   OPERATOR_ME_RESPONSE,
+  projectView,
   type RequestClientStub,
   repositorySummary,
   settle,
@@ -57,7 +58,7 @@ describe('admin lists under the project lens', () => {
           repositorySummary({ repository_id: 'repo_a', name: 'archive', slug: 'archive', owner: 'a', repo: 'archive', base_branch: 'main', revision: 1 }),
         ],
       }),
-      'GET /api/projects': () => ({ projects: [WINTER] }),
+      'GET /api/projects': () => ({ projects: [projectView({ ...WINTER })] }),
       'GET /api/projects/{project}/source-links': () => ({
         source_links: [
           sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null }),

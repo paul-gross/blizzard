@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
+import { form } from '@angular/forms/signals';
 import {
   asyncState,
-  errorMessage,
+  submitForm,
   type KitAsyncStateValue,
   KitButton,
   KitMasterDetail,
@@ -16,13 +17,13 @@ import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectDomainsQuery } from '../../core/projects.query';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectProjectRunnersQuery } from '../../core/runners.query';
-import { type ConfigFormValues, createBody } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
-import { injectCreateProjectMutation } from './projects.mutations';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
+import type { ConfigFieldView } from '../config-field-tree.model';
+import { projectDraft, type ProjectDraft } from './project.domain';
+import { projectCreateSchema } from './project.form';
+import { injectProjectService } from './project.service';
 import {
   listedProjects,
-  PROJECT_FIELDS,
-  projectCreate,
   projectIdForSlug,
   projectRows,
   SLUG_HINT,
@@ -31,6 +32,12 @@ import {
 import { projectToOpen, rowKeys } from './project-open.model';
 import { injectProjectFigures } from './projects.query';
 import { ProjectsTable } from './projects-table';
+
+const CREATE_FIELDS: readonly ConfigFieldView<ProjectDraft>[] = [
+  { key: 'slug', label: 'Slug', kind: 'text' },
+  { key: 'name', label: 'Name', kind: 'text' },
+  { key: 'description', label: 'Description', kind: 'text' },
+];
 
 /**
  * `/admin/projects` — the tenant's projects beside a `<router-outlet>` holding the project the
@@ -41,7 +48,7 @@ import { ProjectsTable } from './projects-table';
 @Component({
   selector: 'app-projects-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, KitButton, KitMasterDetail, KitPanel, KitPanelHeader, ProjectsTable, RouterOutlet],
+  imports: [ConfigFieldTreeDialog, KitButton, KitMasterDetail, KitPanel, KitPanelHeader, ProjectsTable, RouterOutlet],
   templateUrl: './projects-page.html',
   styleUrl: './projects-page.css',
 })
@@ -69,11 +76,11 @@ export class ProjectsPage {
   );
 
   private readonly meQuery = injectMeQuery();
-  protected readonly createMutation = injectCreateProjectMutation();
-  protected readonly fields = PROJECT_FIELDS;
+  private readonly projectService = injectProjectService();
+  protected readonly fields = CREATE_FIELDS;
+  protected readonly createForm = form(signal(projectDraft(null)), projectCreateSchema);
   protected readonly slugHint = SLUG_HINT;
   protected readonly createOpen = signal(false);
-  protected readonly createError = signal<string | null>(null);
 
   /** New is a write: a desktop with `config:edit` only. */
   protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
@@ -103,24 +110,18 @@ export class ProjectsPage {
   }
 
   protected onNew(): void {
-    this.createError.set(null);
+    this.createForm().reset(projectDraft(null));
     this.createOpen.set(true);
   }
 
-  protected onCreate(values: ConfigFormValues): void {
-    const body = projectCreate(createBody(this.fields, values));
-    this.createError.set(null);
-    this.createMutation.mutate(
-      body,
-      {
-        onSuccess: (project) => {
-          this.createOpen.set(false);
-          // Under a lens the new project opens in its own lens, where the list shows it.
-          const commands = lensLink(['/admin', 'projects', project.project_id], this.lens.lensed() ? project.slug : null);
-          void this.router.navigate(commands);
-        },
-        onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
-      },
+  protected async onCreate(): Promise<void> {
+    await submitForm(this.createForm, (draft) =>
+      this.projectService.create(draft, (project) => {
+        this.createOpen.set(false);
+        // Under a lens the new project opens in its own lens, where the list shows it.
+        const commands = lensLink(['/admin', 'projects', project.project_id], this.lens.lensed() ? project.slug : null);
+        void this.router.navigate(commands);
+      }),
     );
   }
 }
