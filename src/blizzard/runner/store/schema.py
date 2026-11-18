@@ -1231,6 +1231,22 @@ host_ingests = Table(
     info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
+# --- Runner hub tokens (each runner's hub bearer token, sealed under the host's key) ---
+# One row per runner id. A host row, not a runner-scoped one: it outlives the runner's identity row, and every
+# statement over it names its runner explicitly.
+
+runner_hub_tokens = Table(
+    "runner_hub_tokens",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("ciphertext", Text, nullable=False),  # base64 AES-256-GCM output
+    Column("nonce", Text, nullable=False),  # base64 96-bit nonce, fresh per write
+    Column("key_id", String, nullable=False),  # the host-key generation that sealed it
+    Column("revision", Integer, nullable=False),  # bound into the seal; moves on every replacement
+    Column("updated_at", UtcDateTime, nullable=False),  # injected-clock stamp of the last write
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
 # --- Usage-limit marks and floor clears (the floor's facts) --------------------
 # Append-only; a floor derives from its key's newest mark and newest clear. Host rows per slug, runner rows per runner.
 

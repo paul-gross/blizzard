@@ -36,6 +36,7 @@ from blizzard.runner.hub.identity import (
     IRunnerIdentityStore,
 )
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.hub.sealed_tokens import IReadHubTokenRepository, IWriteHubTokenRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
@@ -319,6 +320,8 @@ class HostStores:
     host_identity: IWriteHostIdentityRepository
     #: The host half of a runner transfer into this store, and the ingests it recorded.
     host_ingests: IWriteHostIngestRepository
+    #: Each runner's hub token, sealed under the host's key; every statement names its runner.
+    hub_tokens: IWriteHubTokenRepository
     #: Each subscription's usage-limit marks and floor clears, shared by every runner spending it.
     usage_limits: IWriteSubscriptionUsageLimitRepository
     #: The host's own settings record: its host-level pass and session keys.
@@ -340,6 +343,7 @@ class HostReadStores:
     host_identity: IReadHostIdentityRepository
     host_lane: IReadHostLaneRepository
     host_ingests: IReadHostIngestRepository
+    hub_tokens: IReadHubTokenRepository
     usage_limits: IReadSubscriptionUsageLimitRepository
     settings: IReadHostSettings
 
@@ -353,6 +357,7 @@ class HostReadStores:
             host_identity=stores.host_identity,
             host_lane=stores.host_lane,
             host_ingests=stores.host_ingests,
+            hub_tokens=stores.hub_tokens,
             usage_limits=stores.usage_limits,
             settings=stores.settings,
         )

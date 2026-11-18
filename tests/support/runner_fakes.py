@@ -121,6 +121,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
@@ -387,6 +388,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         host_lane=store,
         host_identity=store,
         host_ingests=HostIngestStore(store.connections),
+        hub_tokens=HostHubTokenStore(store.connections),
         usage_limits=SubscriptionUsageLimitStore(store.connections),
         settings=HostSettingsStore(store.connections, clock or SystemClock()),
         runner_audit=RunnerAudit(store.connections),

@@ -1853,6 +1853,16 @@
       "written_by": []
     },
     {
+      "holds": "the host key's generations, when no key variable is set",
+      "mode": "0700",
+      "path": "data/secret-keys",
+      "written_by": [
+        "host",
+        "ingest",
+        "tick"
+      ]
+    },
+    {
       "holds": "host's effective worker scratch root binding",
       "mode": "0600",
       "path": "data/worker-scratch-root",

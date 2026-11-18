@@ -20,6 +20,8 @@ HOST_CONFIG_FILENAME = "blizzard-host.toml"
 DATA_DIRNAME = "data"
 HOST_STORE_FILENAME = "host.db"
 HOST_LOCK_FILENAME = "host.lock"
+#: The host key's generations, under the data directory, when no key variable is set.
+SECRET_KEYS_DIRNAME = "secret-keys"
 #: The host's local API socket, in the host directory itself.
 HOST_SOCKET_FILENAME = "host.sock"
 
@@ -85,6 +87,10 @@ class HostLayout:
     @property
     def default_db_url(self) -> str:
         return f"sqlite:///{self.store_path.resolve()}"
+
+    @property
+    def secret_keys_dir(self) -> Path:
+        return self.data_dir / SECRET_KEYS_DIRNAME
 
     @property
     def lock_path(self) -> Path:

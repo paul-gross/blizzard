@@ -159,6 +159,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
@@ -1437,6 +1438,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_lane=HostLaneStore(connections),
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
+        hub_tokens=HostHubTokenStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
         settings=HostSettingsStore(connections, clock),
         runner_audit=RunnerAudit(connections),

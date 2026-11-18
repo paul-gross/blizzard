@@ -62,6 +62,7 @@ from blizzard.runner.host_layout import (
     HOST_STORE_FILENAME,
     LEGACY_WORKER_SCRATCH_DIRNAME,
     RUNNERS_DIRNAME,
+    SECRET_KEYS_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
     WORKER_STDOUT_DIRNAME,
 )
@@ -293,6 +294,12 @@ HOST_REGISTRY = ConfigRegistry(
         ),
         DurablePath(DATA_DIRNAME, "the host's data directory"),
         DurablePath(f"{DATA_DIRNAME}/{HOST_STORE_FILENAME}", "the host's default store"),
+        DurablePath(
+            f"{DATA_DIRNAME}/{SECRET_KEYS_DIRNAME}",
+            "the host key's generations, when no key variable is set",
+            written_by=("host", "ingest", "tick"),
+            mode=0o700,
+        ),
         DurablePath(f"{DATA_DIRNAME}/{HOST_LOCK_FILENAME}", "the lock that keeps one host process on the directory"),
         DurablePath(HOST_SOCKET_FILENAME, "the host's local API socket"),
         DurablePath(RUNNERS_DIRNAME, "each runner's own files, by runner name"),
