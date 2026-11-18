@@ -9,7 +9,7 @@ from threading import Barrier, Event, current_thread, main_thread
 import pytest
 from sqlalchemy import event
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -172,13 +172,13 @@ def test_competing_writers_and_coherent_snapshot(tmp_path: Path) -> None:
     assert settings.snapshot().entries == {"agents": Entry(9)}
 
 
-def _identified(tmp_path: Path, clock: object) -> tuple[RunnerSettingsStore, RunnerSettingsStore]:
+def _identified(tmp_path: Path, clock: IClock) -> tuple[RunnerSettingsStore, RunnerSettingsStore]:
     base = make_store(f"sqlite:///{tmp_path / 'rollback.db'}")
     now = datetime(2026, 11, 1, tzinfo=UTC)
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(base.connections.bound_runner_id(), "one", now)
     )
-    return RunnerSettingsStore(base.connections, clock), RunnerSettingsStore(base.connections, FixedClock(now))  # type: ignore[arg-type]
+    return RunnerSettingsStore(base.connections, clock), RunnerSettingsStore(base.connections, FixedClock(now))
 
 
 def test_a_failed_audit_insert_rolls_back_revision_and_entries(tmp_path: Path) -> None:
