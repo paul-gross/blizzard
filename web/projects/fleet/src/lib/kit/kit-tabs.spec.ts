@@ -112,6 +112,7 @@ describe('KitTabs', () => {
     const tabs = (fixture.nativeElement as HTMLElement).querySelectorAll('.tab');
     expect(tabs[1].getAttribute('aria-selected')).toBe('true');
     expect(tabs[0].getAttribute('aria-selected')).toBe('false');
+    expect(Array.from(fixture.nativeElement.querySelectorAll('.tab')).map((t) => (t as HTMLElement).tabIndex)).toEqual([-1, 0]);
     expect(fixture.componentInstance.changes).toEqual([]);
   });
 

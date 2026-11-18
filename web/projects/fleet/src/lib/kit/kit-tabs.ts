@@ -82,8 +82,14 @@ export class KitTabs {
         this.tabs();
         const selected = list?.selectedTab();
         const want = this.active() ?? undefined;
-        if (list === undefined || selected === want) return;
-        untracked(() => list.selectedTab.set(want));
+        if (list === undefined) return;
+        untracked(() => {
+          if (selected !== want) list.selectedTab.set(want);
+          // Aria moves its roving Tab stop only on keys and focus, so a selection that came from
+          // outside (a card's jump, the browser's Back) would leave the stop on the old tab.
+          const target = list.findTab(want)?._pattern;
+          if (target !== undefined && list._pattern.inputs.activeItem() !== target) list._pattern.inputs.activeItem.set(target);
+        });
       },
     });
   }
