@@ -1,4 +1,4 @@
-<fleet-chunk-page-shell>
+<fleet-chunk-page-shell fleetKitTabGroup>
   <a chunk-page-back class="back-row" [routerLink]="boardLinkBase() | appLink: backParams()" data-testid="mobile-chunk-back">
     <fleet-kit-back-bar label="Board" />
   </a>
@@ -27,11 +27,11 @@
     />
   }
   @if (detail()) {
-    <fleet-kit-tabs chunk-page-tabs [options]="tabOptions()" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+    <fleet-kit-tabs chunk-page-tabs [options]="tabOptions()" [active]="tab()" (activeChange)="onChooseTab($event)" />
   }
   @if (detail(); as d) {
-    @switch (tab()) {
-      @case ('general') {
+    <div [fleetKitTabPanel]="'general'">
+      <ng-template fleetKitTabContent>
         <fleet-chunk-general-tab
           [detail]="d"
           [workItems]="workItems()"
@@ -48,8 +48,10 @@
           (resolveDecision)="onResolve($event)"
           (pickStep)="onSelectStep($event)"
         />
-      }
-      @case ('node-history') {
+      </ng-template>
+    </div>
+    <div [fleetKitTabPanel]="'node-history'">
+      <ng-template fleetKitTabContent>
         <fleet-chunk-node-history-container
           [chunkId]="chunkId()"
           [detail]="d"
@@ -58,8 +60,10 @@
           [drilldown]="mobile()"
           (pickStep)="onSelectStep($event)"
         />
-      }
-      @case ('artifacts') {
+      </ng-template>
+    </div>
+    <div [fleetKitTabPanel]="'artifacts'">
+      <ng-template fleetKitTabContent>
         <fleet-chunk-artifacts-panel
           [artifacts]="d.artifacts"
           [selectedKey]="selection.artifactKey()"
@@ -68,8 +72,10 @@
           (pickArtifact)="onSelectArtifact($event)"
           (clearArtifact)="onSelectArtifact(null)"
         />
-      }
-      @case ('transcripts') {
+      </ng-template>
+    </div>
+    <div [fleetKitTabPanel]="'transcripts'">
+      <ng-template fleetKitTabContent>
         <fleet-chunk-transcripts-container
           [target]="daemon.target()"
           [chunkId]="chunkId()"
@@ -84,9 +90,8 @@
           (pickSegment)="onSelectTranscriptSegment($event)"
           (pickSidechain)="onSelectTranscriptSidechain($event)"
         />
-      }
-      @default {}
-    }
+      </ng-template>
+    </div>
   } @else {
     <fleet-kit-async-state
       [state]="state()"

@@ -317,6 +317,25 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
   });
 
+  it('switches tabs from the keyboard exactly as a click does, writing ?tab= and showing only that panel', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?attempt=lease_1`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    const general = el.querySelector<HTMLElement>('[data-testid="tab-general"]')!;
+    general.focus();
+
+    general.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    const tab = TestBed.inject(Router).parseUrl(TestBed.inject(Router).url).queryParams['tab'];
+    expect(tab).not.toBe('general');
+    expect(el.querySelector(`[data-testid="tab-${tab}"]`)?.getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
+    expect(TestBed.inject(Router).url).toContain('attempt=lease_1');
+  });
+
   it('defaults to the General tab for a garbage ?tab value', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=not-a-real-tab`);
 

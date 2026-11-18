@@ -6,7 +6,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
  * tab's Transcripts/Artifacts panels.
  *
  * Fully controlled, the same shape {@link KitTabs} already uses for its own
- * `activeValue`/`choose` pair (`bzh:frontend-container-presentational`): the consumer
+ * `[(active)]` pair (`bzh:frontend-container-presentational`): the consumer
  * owns the open/closed signal and this component only renders it and reports a
  * toggle. No internal state, so more than one section reads open at once with
  * nothing here coordinating that — a consumer wanting single-open composes several

@@ -9,6 +9,9 @@ import { STATUS_TONE } from '../../core/chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
 import { KitBackBar } from '../../kit/kit-back-bar';
 import { KitErrorLine } from '../../kit/kit-error-line';
+import { KitTabContent } from '../../kit/kit-tab-content';
+import { KitTabGroup } from '../../kit/kit-tab-group';
+import { KitTabPanel } from '../../kit/kit-tab-panel';
 import { KitTabs, type KitTabOption } from '../../kit/kit-tabs';
 import { ChunkTranscriptsContainer } from '../../transcripts/chunk-transcripts-container';
 import { ViewportService } from '../../core/viewport/viewport-service';
@@ -58,6 +61,9 @@ import { AppLink, AppScope } from '../../core/app-scope';
     ChunkTranscriptsContainer,
     KitAsyncState,
     KitBackBar,
+    KitTabContent,
+    KitTabGroup,
+    KitTabPanel,
     KitTabs,
     RouterLink, AppLink,
     KitErrorLine,
@@ -138,7 +144,8 @@ export class ChunkPage {
 
   protected readonly tab = this.selection.tab;
 
-  protected onChooseTab(tab: string): void {
+  protected onChooseTab(tab: string | null): void {
+    if (tab === null) return;
     this.selection.select(tab as ChunkDetailTab);
   }
 
