@@ -23,3 +23,9 @@ invalid:
   # A publisher-port import.
   - |
     from blizzard.hub.domain.chunk.event_log import IChunkChangePublisher
+  # An aliased module import.
+  - |
+    import blizzard.hub.events.broker as b
+  # An aliased publisher-port import.
+  - |
+    from blizzard.hub.domain.observability.hub_events import IChunkPublisher as P
