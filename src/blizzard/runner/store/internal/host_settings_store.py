@@ -8,12 +8,14 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import Connection, and_, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
-from blizzard.foundation.settings_record.write import Validate, seed_entry, write
+from blizzard.foundation.settings_record.decision import decide, seed_choice
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
+from blizzard.foundation.settings_record.validator import Validate
+from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
 from blizzard.runner.settings.ports import HostSettingsChange, IWriteHostSettings, SettingsSnapshot
 from blizzard.runner.store.internal.host_settings_record import HOST_RECORD_KIND, HostSettingsRecord
 from blizzard.runner.store.schema import host_setting_changes, host_setting_entries
@@ -65,18 +67,53 @@ class HostSettingsStore:
             stmt = select(host_setting_entries.c.key, *host_setting_changes.c).select_from(joined)
             return snapshot, {row.key: _change(row) for row in conn.execute(stmt)}
 
+    def _apply(
+        self,
+        conn: Connection,
+        change: Change,
+        *,
+        if_match: int | None,
+        validate: Validate,
+        door: Door,
+        actor: str,
+        apply_id: str | None,
+    ) -> tuple[FieldChange, ...]:
+        """Decide, validate the whole candidate, then write only a moved diff, on the locked connection."""
+        decision = decide(self._record.revision(conn), self._record.entries(conn), change, if_match=if_match)
+        errors = validate(decision.candidate)
+        if errors:
+            raise SettingsInvalid(errors)
+        if not decision.diff:
+            return ()
+        revision = self._record.bump_revision(conn)
+        self._record.write_entries(conn, {field.key: field.new for field in decision.diff}, revision=revision)
+        self._record.append_change(
+            conn, diff=decision.diff, op=change.op, door=door, actor=actor, apply_id=apply_id, revision=revision
+        )
+        return decision.diff
+
     def seed(self, source: ConfigView, keys: Sequence[str], *, validate: Validate) -> None:
         with self._store.begin() as conn:
             self._record.lock(conn)
             # Validate the complete resulting seed, not transient prefixes: related keys can be valid only together.
             existing = self._record.entries(conn)
-            pending = {key: Entry(source.value(key)) for key in keys if key not in existing and source.states(key)}
+            pending = {key: Entry(value) for key, value in seed_choice(existing, keys, source).items()}
 
             def validate_seed(entries: Mapping[str, Entry]) -> Mapping[str, str]:
                 return validate({**pending, **entries})
 
             for key in keys:
-                seed_entry(conn, self._record, key, source, validate=validate_seed)
+                chosen = seed_choice(self._record.entries(conn), (key,), source)
+                if chosen:
+                    self._apply(
+                        conn,
+                        Change("seed", sets=chosen),
+                        if_match=self._record.revision(conn),
+                        validate=validate_seed,
+                        door=SEED,
+                        actor=SEED,
+                        apply_id=None,
+                    )
 
     def write(
         self,
@@ -90,15 +127,8 @@ class HostSettingsStore:
     ) -> tuple[FieldChange, ...]:
         with self._store.begin() as conn:
             self._record.lock(conn)
-            return write(
-                conn,
-                self._record,
-                change,
-                if_match=if_match,
-                validate=validate,
-                door=door,
-                actor=actor,
-                apply_id=apply_id,
+            return self._apply(
+                conn, change, if_match=if_match, validate=validate, door=door, actor=actor, apply_id=apply_id
             )
 
 
