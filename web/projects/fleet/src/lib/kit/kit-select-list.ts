@@ -69,7 +69,13 @@ export class KitSelectList<V = unknown> {
       this.focusedValue = this.listbox._pattern.inputs.activeItem()?.value();
     };
     const focusOut = (event: FocusEvent) => {
-      if (!host.contains(event.relatedTarget as Node | null)) this.hadFocus = false;
+      if (host.contains(event.relatedTarget as Node | null)) return;
+      this.hadFocus = false;
+      // Focus left the list: a selection that changed while it was inside deferred the roving stop's
+      // move, so put the stop on the selected row now (no focus, no scroll).
+      const selected = this.value();
+      const target = selected === null ? undefined : this.listbox._pattern.inputs.items().find((item) => item.value() === selected);
+      if (target !== undefined) this.listbox._pattern.inputs.activeItem.set(target);
     };
     host.addEventListener('focusin', focusIn);
     host.addEventListener('focusout', focusOut);

@@ -101,6 +101,23 @@ describe('KitSelectList', () => {
     expect(host.opened).toEqual([]);
   });
 
+  it('moves the Tab stop to the selected row when focus leaves after an outside change', async () => {
+    const { fixture, row, host } = await setup();
+    host.value.set('alpha');
+    await fixture.whenStable();
+    row('alpha').focus();
+    key(row('alpha'), 'ArrowDown');
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(row('bravo'));
+    host.value.set('charlie');
+    await fixture.whenStable();
+    expect(row('bravo').getAttribute('tabindex')).toBe('0');
+    row('bravo').dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body }));
+    await fixture.whenStable();
+    expect(row('charlie').getAttribute('tabindex')).toBe('0');
+    expect(row('bravo').getAttribute('tabindex')).toBe('-1');
+  });
+
   it('skips disabled rows and cannot open them', async () => {
     const { fixture, row, host } = await setup();
     host.rows.set([{ id: 'alpha' }, { id: 'bravo', disabled: true }, { id: 'charlie' }]);
