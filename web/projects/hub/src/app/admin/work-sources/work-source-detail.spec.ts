@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type CredentialCheckView, type MeResponse, type WorkSourceSummary } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
@@ -14,34 +13,37 @@ import {
   settle,
   stubError,
   stubHubClient,
+  workSourceSummary,
 } from 'fleet/testing';
 
 import { WorkSourceDetail } from './work-source-detail';
 
-const JIRA: WorkSourceSummary = {
+const JIRA = workSourceSummary({
   forge_id: 'frg_github',
   forge_slug: 'github',
   forge_name: 'GitHub',
-  warnings: [],
-  credential_id: null,
-  credential_slug: null,
-  credential_name: null,
   work_source_id: 'wsrc_j',
   slug: 'jira',
   name: 'Acme Jira',
   provider: 'github',
   locator: 'ACME',
   secret: 'jira-token',
-  annotate: false,
   edit: false,
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
   created_by: 'ada',
-  created_by_name: null,
-  built_in: false,
-  retired: false,
-};
-const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], credential_id: null, credential_slug: null, credential_name: null, name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
+});
+const HUB = workSourceSummary({
+  name: 'hub',
+  slug: 'hub',
+  work_source_id: null,
+  built_in: true,
+  edit: false,
+  created_at: null,
+  created_by: null,
+  provider: null,
+  revision: null,
+});
 const HISTORY = configChangesPage({
   changes: [
     configChangeView({
@@ -58,30 +60,38 @@ const HISTORY = configChangesPage({
     }),
   ],
 });
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
-
-const CHECK: CredentialCheckView = {
-  credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
-  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
-};
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 
 describe('WorkSourceDetail', () => {
   let stub: RequestClientStub;
-  let current: WorkSourceSummary = JIRA;
+  let current: ReturnType<typeof workSourceSummary> = JIRA;
   afterEach(() => {
     current = JIRA;
+    patch = () => ({ ...JIRA, slug: 'jira-2', revision: 4 });
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
+
+  let patch: () => unknown = () => ({ ...JIRA, slug: 'jira-2', revision: 4 });
 
   async function open(url: string) {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/work-sources/{source}': (_request, { source }) =>
         source === 'hub' ? HUB : ['wsrc_j', 'jira', 'tracker'].includes(source) ? current : stubError(404, { detail: 'no such work source' }),
-      'PATCH /api/work-sources/{source}': () => ({ ...JIRA, slug: 'jira-2', revision: 4 }),
+      'PATCH /api/work-sources/{source}': (() => patch()) as never,
       'GET /api/config/changes': () => HISTORY,
-      'POST /api/credentials/{credential}/checks': () => CHECK,
+      'POST /api/credentials/{credential}/checks': () => ({
+        credential: 'gh-main',
+        binding: 'github.token',
+        variant: 'classic',
+        variant_contradicted: false,
+        granted_permissions: null,
+        mint: null,
+        not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.',
+        unreached_reason: null,
+        uses: [],
+      }),
       'GET /api/forges': () => ({ forges: [forgeDetail({ forge_id: 'frg_github' }), forgeDetail({ forge_id: 'frg_ghe', slug: 'ghe', name: 'Enterprise' })] }),
       'GET /api/credentials': () => ({
         credentials: [
@@ -135,13 +145,37 @@ describe('WorkSourceDetail', () => {
     input.value = 'jira-2';
     input.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-work-source-edit-submit"]')!.click();
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
     await settle(harness.fixture);
 
     const patch = stub.forRoute('/api/work-sources/wsrc_j', 'PATCH');
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ slug: 'jira-2' });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('keeps the typed draft and the baseline revision through a stale save, sends once, and shows the conflict', async () => {
+    patch = () => stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'the work source changed since it was read' });
+    const { harness } = await open('/admin/work-sources/wsrc_j');
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-work-source-edit"]')!.click();
+    await settle(harness.fixture);
+    const field = () => document.querySelector<HTMLInputElement>('[data-testid="admin-work-source-edit-field-name"]')!;
+    field().value = 'typed';
+    field().dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    // The hub moves on while the form is open: the refreshed read must not replace the baseline.
+    current = { ...JIRA, name: 'other', revision: 4 };
+    await TestBed.inject(QueryClient).invalidateQueries();
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+
+    const patches = stub.forRoute('/api/work-sources/wsrc_j', 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(patches[0].headers['if-match']).toBe('3');
+    expect(patches[0].body).toEqual({ name: 'typed' });
+    expect(field().value).toBe('typed');
+    expect(document.querySelector('[data-testid="kit-form-line"]')!.textContent).toContain('changed since it was read');
   });
 
   it('keys the history read by the id', async () => {
@@ -173,7 +207,7 @@ describe('WorkSourceDetail', () => {
     expect(options().map((o) => o.textContent?.trim())).toEqual(['ghe-main · github.token']);
     options()[0].click();
     await settle(harness.fixture);
-    testid('admin-work-source-edit-submit')!.click();
+    testid('kit-form-save')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/work-sources/wsrc_j', 'PATCH')[0].body).toEqual({ forge: 'frg_ghe', credential: 'cred_e' });

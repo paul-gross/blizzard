@@ -996,6 +996,15 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/sse',
   'fleet/src/lib/transcripts',
   'hub/src/app/admin',
+  'hub/src/app/admin/changes',
+  'hub/src/app/admin/credentials',
+  'hub/src/app/admin/forges',
+  'hub/src/app/admin/hub-settings',
+  'hub/src/app/admin/members',
+  'hub/src/app/admin/projects',
+  'hub/src/app/admin/repositories',
+  'hub/src/app/admin/secrets',
+  'hub/src/app/admin/urgencies',
   'hub/src/app/board',
   'hub/src/app/core',
   'hub/src/app/delivery',
@@ -1023,16 +1032,42 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'runner/src/app/shell',
 ];
 
-/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
+/** The one package-layers unit whose exemption is keyed finer than the unit: `admin` is a single layer unit because
+ * its folders import one another, yet each admin slice moves behind the boundary on its own landing. */
+const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
+
+/** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path. A file in a subfolder of
+ * `DOMAIN_BOUNDARY_SUBKEYED` is keyed by that subfolder; a file directly in it keeps the unit's own key.
  * @param {string} rel
  */
 function domainBoundaryUnitOf(rel) {
   for (const project of LAYERED_PROJECTS) {
     if (!rel.startsWith(`${project.root}/`)) continue;
     const unit = layerUnitOf(rel.slice(project.root.length + 1), project.layers);
-    if (unit !== null) return `${project.root}/${unit}`;
+    if (unit === null) continue;
+    const key = `${project.root}/${unit}`;
+    if (key !== DOMAIN_BOUNDARY_SUBKEYED) return key;
+    const rest = rel.slice(key.length + 1).split('/');
+    return rest.length > 1 ? `${key}/${rest[0]}` : key;
   }
   return path.posix.dirname(rel);
+}
+
+/** Proves the admin keying before the sweep relies on it: a subfolder of `admin/` is its own unit, a file directly in
+ * `admin/` keeps the root's, and no other unit is split. */
+function assertDomainBoundaryKeyingWorks() {
+  const cases = [
+    ['hub/src/app/admin/work-sources/x.ts', 'hub/src/app/admin/work-sources'],
+    ['hub/src/app/admin/projects/deep/y.ts', 'hub/src/app/admin/projects'],
+    ['hub/src/app/admin/config-edit.model.ts', 'hub/src/app/admin'],
+    ['hub/src/app/board/z.ts', 'hub/src/app/board'],
+    ['hub/src/app/garden/cadences/c.ts', 'hub/src/app/garden/cadences'],
+  ];
+  const wrong = cases
+    .map(([rel, want]) => [rel, want, domainBoundaryUnitOf(rel)])
+    .filter(([, want, got]) => want !== got)
+    .map(([rel, want, got]) => `${rel}: want ${want}, got ${got}`);
+  if (wrong.length > 0) throw new Error(`domain-boundary keying self-test failed:\n${wrong.join('\n')}`);
 }
 
 /** The domain-boundary sweep over the real tree, one printable line per finding, in three reports.
@@ -1360,6 +1395,7 @@ function main() {
   assertBackendCitationDetectorWorks();
   assertClientCallPlacementDetectorWorks();
   assertDomainBoundaryDetectorWorks();
+  assertDomainBoundaryKeyingWorks();
   assertPackageLayersDetectorWorks();
   assertContainersComposeDetectorWorks();
   assertTemplateSwitchDetectorWorks();

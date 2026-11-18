@@ -89,7 +89,8 @@ before it saves. On a phone the page is read-only and names the `blizzard hub so
 built-in `hub` source is listed and cannot be changed. The form picks a matching enabled forge instead of editing its
 API and web origins, and a [configuration document](./config-documents.md) names it with `forge`. It picks the
 credential the source acts with from that forge's enabled credentials, in place of a token secret; changing the forge
-clears the pick.
+clears the pick. The form checks fields as you type and marks the required ones. A save made after someone else changed
+the source is refused, and the form keeps what you typed.
 
 ## Naming a work source
 

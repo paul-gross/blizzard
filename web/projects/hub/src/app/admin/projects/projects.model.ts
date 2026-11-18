@@ -9,11 +9,11 @@ import type {
   RunnerRegistryView,
   SourceLinkView,
   Tone,
-  WorkSourceSummary,
 } from 'fleet';
 
 import { servingRunners } from '../../core/project-serving';
 import type { ConfigFieldDef, ConfigFormValues } from '../config-edit.model';
+import type { WorkSource } from '../work-sources/work-source.domain';
 import { workSourceKey, workSourceSlug } from '../work-sources/work-sources.model';
 import type { ProjectLinkKind, ProjectLinkVars } from './projects.mutations';
 
@@ -201,7 +201,7 @@ export function linkedKeys(links: readonly (SourceLinkView | RepositoryLinkView)
 }
 
 /** A source as its link row describes it. */
-export function sourceDetail(source: WorkSourceSummary | undefined): string {
+export function sourceDetail(source: WorkSource | undefined): string {
   if (!source) return '';
   const name = source.name === workSourceSlug(source) ? null : source.name;
   return [name, source.provider, source.locator].filter((part) => !!part).join(' · ');
@@ -222,7 +222,7 @@ export function repositoryIdentity(repository: RepositorySummary | undefined): s
 /** The source links in force, built-in first, then by slug. */
 export function sourceLinkRows(
   links: readonly SourceLinkView[],
-  sources: readonly WorkSourceSummary[],
+  sources: readonly WorkSource[],
 ): readonly ProjectLinkRowVm[] {
   const byKey = new Map(sources.map((source) => [workSourceKey(source), source]));
   return links
@@ -343,7 +343,7 @@ export function failureFor<K extends string>(failure: PanelFailure<K> | null, ki
 
 /** The work sources a link dialog offers. */
 export function sourceChoices(
-  sources: readonly WorkSourceSummary[] | undefined,
+  sources: readonly WorkSource[] | undefined,
   links: readonly SourceLinkView[] | undefined,
 ): readonly LinkChoiceVm[] {
   const byKey = new Map((sources ?? []).map((source) => [workSourceKey(source), source]));

@@ -1,7 +1,9 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getWorkSourceApiWorkSourcesSourceGet, listWorkSourcesApiWorkSourcesGet, type WorkSourceSummary } from 'fleet';
+import { getWorkSourceApiWorkSourcesSourceGet, listWorkSourcesApiWorkSourcesGet } from 'fleet';
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
+import type { WorkSource } from './work-source.domain';
+import { fromWorkSourceSummary } from './work-source.translate';
 
 const NOUN = 'work-sources';
 
@@ -12,13 +14,13 @@ export function injectWorkSourcesQuery(includeRetired: () => boolean) {
     const retired = includeRetired();
     return {
       queryKey: hubConfigListKey(NOUN, retired),
-      queryFn: async (): Promise<WorkSourceSummary[]> => {
+      queryFn: async (): Promise<WorkSource[]> => {
         const { data, error } = await listWorkSourcesApiWorkSourcesGet({
           query: { include_retired: retired },
           throwOnError: false,
         });
         if (error) throw error;
-        return data?.sources ?? [];
+        return (data?.sources ?? []).map(fromWorkSourceSummary);
       },
     };
   });
@@ -31,13 +33,13 @@ export function injectWorkSourceQuery(key: () => string | null) {
     return {
       queryKey: hubConfigRecordKey(NOUN, source),
       enabled: source !== null,
-      queryFn: async (): Promise<WorkSourceSummary> => {
+      queryFn: async (): Promise<WorkSource> => {
         const { data, error } = await getWorkSourceApiWorkSourcesSourceGet({
           path: { source: source! },
           throwOnError: false,
         });
         if (error) throw error;
-        return data!;
+        return fromWorkSourceSummary(data!);
       },
     };
   });

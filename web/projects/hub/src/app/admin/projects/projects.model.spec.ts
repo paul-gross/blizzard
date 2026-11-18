@@ -7,7 +7,6 @@ import type {
   RepositorySummary,
   RunnerRegistryView,
   SourceLinkView,
-  WorkSourceSummary,
 } from 'fleet';
 
 import {
@@ -30,6 +29,7 @@ import {
   wiringCallout,
 } from './projects.model';
 import { linkCount, projectTabs, queueText } from './project-overview.model';
+import { workSource } from '../work-sources/work-source.builders';
 
 function project(id: string, slug: string, name: string): ProjectView {
   return { project_id: id, slug, name, description: '', color: 'teal', revision: 1, created_at: '2026-10-01T00:00:00Z' };
@@ -187,17 +187,7 @@ describe('projects model', () => {
   });
 
   it('lists the links in force — the built-in source first — and drops unlinked ones', () => {
-    const sources = [
-      {
-        work_source_id: 'wsrc_j',
-        slug: 'jira',
-        name: 'Acme Jira',
-        provider: 'jira',
-        locator: 'acme.atlassian.net',
-        annotate: false,
-        edit: true,
-      },
-    ] as WorkSourceSummary[];
+    const sources = [workSource({ id: 'wsrc_j', slug: 'jira', name: 'Acme Jira', provider: 'jira', locator: 'acme.atlassian.net' })];
     const rows = sourceLinkRows(
       [
         sourceLink({ name: 'wsrc_o', slug: 'old', linked: false, revision: 2 }),
