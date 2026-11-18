@@ -42,7 +42,7 @@
  * export of a `fleet` sub-barrel needs a consumer outside that sub-barrel's directory, and
  * `public-api.ts` re-exports only sub-barrels, save the generated client and the query-key registry.
  *
- * Also the domain-boundary sweeps (`domain-boundary-sweep.js`, `bzh:frontend-wire-conformist`). The
+ * Also the domain-boundary sweeps (`domain-boundary-sweep.js`, `bzh:frontend-domain-boundary`). The
  * symbol-origin sweep resolves every symbol a file references to its declaration and fails a file outside
  * the boundary — `fleet/src/lib/api/`, `fleet/src/lib/testing/transport/`, and `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files with their focused specs — that consumes one declared in
@@ -980,7 +980,7 @@ const LAYERED_PROJECTS = [
 ];
 
 /**
- * The domain-boundary exemptions (`bzh:frontend-wire-conformist`): each entry is a package-layers unit,
+ * The domain-boundary exemptions (`bzh:frontend-domain-boundary`): each entry is a package-layers unit,
  * `<source root>/<unit>` (the longest `LAYERED_PROJECTS` key prefixing a file), and passes every file in
  * it. One reason covers the whole list: these units still read wire types outside the boundary and move
  * behind it one landing at a time (`decision:ui-toolkit/incremental-replacement`). A unit leaves the list

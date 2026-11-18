@@ -1,6 +1,6 @@
 """Permit wire bodies — requesting, moving and reading a project's permits."""
 
-# exemplar: bzh:utc-instants, bzh:frontend-wire-conformist, bzh:wire-sent-is-required, bzh:open-response-vocabulary.
+# exemplar: bzh:utc-instants, bzh:frontend-domain-boundary, bzh:wire-sent-is-required, bzh:open-response-vocabulary.
 
 from __future__ import annotations
 

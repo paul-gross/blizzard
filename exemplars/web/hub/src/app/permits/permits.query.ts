@@ -1,4 +1,4 @@
-// exemplar: bzh:generated-client, bzh:frontend-wire-conformist — a data-access file over the generated client.
+// exemplar: bzh:generated-client, bzh:frontend-domain-boundary — a data-access file over the generated client.
 
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
