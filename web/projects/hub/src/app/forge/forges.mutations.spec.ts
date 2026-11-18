@@ -4,7 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 import { forgeDetail, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectCreateForgeMutation, injectEditForgeMutation, injectForgeLifecycleMutation } from './forges.mutations';
-import { hubConfigKey } from '../../core/query-keys';
+import { hubConfigKey } from '../core/query-keys';
 
 describe('forge mutations', () => {
   let stub: RequestClientStub;

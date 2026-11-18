@@ -8,7 +8,7 @@ import {
   type ForgeCreateRequest,
   type ForgePatchRequest,
 } from 'fleet';
-import { hubConfigKey } from '../../core/query-keys';
+import { hubConfigKey } from '../core/query-keys';
 
 export interface ForgeEditVars {
   readonly forgeId: string;
