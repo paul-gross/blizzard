@@ -20,6 +20,10 @@ import {
 import { CredentialDetail } from './credential-detail';
 
 const BINDINGS = [{ name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice' as const, choices: ['classic', 'fine-grained'] }] }];
+const APP_BINDINGS = [{ name: 'github.app-installation', forge_kind: 'github', settings: [
+  { key: 'app_id', kind: 'positive-integer' as const, choices: [] },
+  { key: 'installation_id', kind: 'positive-integer' as const, choices: [] },
+] }];
 const IN_USE = credentialDocument({
   revision: 3,
   settings: { variant: 'classic' },
@@ -49,10 +53,12 @@ describe('CredentialDetail', () => {
   let record = IN_USE;
   let me = EDITOR;
   let conflict = false;
+  let bindings: typeof BINDINGS | typeof APP_BINDINGS = BINDINGS;
   afterEach(() => {
     record = IN_USE;
     me = EDITOR;
     conflict = false;
+    bindings = BINDINGS;
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
@@ -61,7 +67,7 @@ describe('CredentialDetail', () => {
     stub = stubHubClient({
       'GET /api/me': () => me,
       'GET /api/forges': () => ({ forges: [forgeDetail()] }),
-      'GET /api/credentials': () => ({ credentials: [credentialSummary()], bindings: BINDINGS, forge_bindings: [{ forge_id: 'frg_g', bindings: ['github.token'] }] }),
+      'GET /api/credentials': () => ({ credentials: [credentialSummary()], bindings, forge_bindings: [{ forge_id: 'frg_g', bindings: ['github.token'] }] }),
       'GET /api/credentials/{credential}': () => record,
       'PATCH /api/credentials/{credential}': () => conflict
         ? stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'The credential changed since it was read.' })
@@ -127,6 +133,28 @@ describe('CredentialDetail', () => {
     expect(patch).toHaveLength(1);
     expect(patch[0].body).toEqual({ settings: { variant: 'fine-grained', future: { enabled: true } } });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('sends cleared numeric settings alongside a scalar edit', async () => {
+    bindings = APP_BINDINGS;
+    record = { ...IN_USE, binding: 'github.app-installation', settings: { app_id: 12, installation_id: 34, future: true } };
+    const { harness, el } = await open('/admin/credentials/cred_g');
+    testid(el, 'admin-credential-edit')!.click();
+    await settle(harness.fixture);
+    for (const key of ['app_id', 'installation_id']) {
+      const input = testid(document, `admin-credential-edit-setting-github.app-installation-${key}`) as HTMLInputElement;
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle(harness.fixture);
+    }
+    expect(testid(document, 'admin-credential-edit-diff-empty')).toBeNull();
+    const name = testid(document, 'admin-credential-edit-field-name') as HTMLInputElement;
+    name.value = 'New name';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(harness.fixture);
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials/cred_g', 'PATCH')[0].body).toEqual({ name: 'New name', settings: { future: true } });
   });
 
   it('keeps its captured revision and draft across a refreshed record', async () => {

@@ -1,0 +1,20 @@
+<app-config-field-tree-dialog
+  heading="Edit source settings"
+  mode="edit"
+  [form]="f"
+  [fields]="fields"
+  [baseline]="baseline"
+  [presentationDiff]="diff()"
+  [externalDependentKeys]="['kind']"
+  [hint]="hint()"
+  submitLabel="Save"
+  testidPrefix="projected"
+  (fieldChanged)="onFieldChanged($event)"
+  (save)="onSave()"
+>
+  <ng-container additional-fields>
+    <fleet-kit-field label="Setting" [field]="f.setting.value">
+      <fleet-kit-text-input [formField]="f.setting.value" testid="projected-setting" />
+    </fleet-kit-field>
+  </ng-container>
+</app-config-field-tree-dialog>

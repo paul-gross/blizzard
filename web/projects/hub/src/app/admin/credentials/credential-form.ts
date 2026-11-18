@@ -28,6 +28,6 @@ export class CredentialForm {
   readonly closed = output<void>();
 
   protected choices(type: CredentialSettingKind): readonly { value: string; label: string }[] {
-    return type.kind === 'choice' ? type.choices.map((value) => ({ value, label: value })) : [];
+    return type.kind === 'choice' ? [{ value: '', label: 'Not set' }, ...type.choices.map((value) => ({ value, label: value }))] : [];
   }
 }
