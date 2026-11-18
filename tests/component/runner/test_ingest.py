@@ -52,6 +52,7 @@ from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
 from blizzard.runner.transfer.ingest import RunnerIngest
 from tests.support.baseline_floor_trees import make_tree
 from tests.support.config_inputs import STRICT, init_host, load_host_config
+from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_ingest import (
     HERE_HOST,
     MOVING,
@@ -227,6 +228,9 @@ def test_ingest_of_a_reset_archive_takes_the_runner_back_and_moves_the_archive_a
     ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
     [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
     assert contents(here, "runner_identity", runner_id=MOVING_ID) == []
+    # An archive carrying a token row of its own, sealed under a key no host here holds, still needs none.
+    with host_hub_tokens(tmp_path / "elsewhere", f"sqlite:///{archive}") as tokens:
+        tokens.replace(MOVING_ID, "archived-token", retired=False)
 
     result = _ingest(fake_init_hub, hosts, source=archive)
 

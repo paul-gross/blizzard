@@ -17,7 +17,7 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import SealedValue, SecretUnreadable
 from blizzard.foundation.secrets.value import SecretValue, SecretValueBlank
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY, host_key_provider
+from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY, host_key_provider, sealing_key_provider
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.sealed_tokens import HubTokenRetired, HubTokens, SealedHubToken, sealed_name
 
@@ -33,6 +33,9 @@ class _Rows:
 
     def sealed(self, runner_id: str) -> SealedHubToken | None:
         return self.rows.get(runner_id)
+
+    def key_ids(self) -> frozenset[str]:
+        return frozenset(row.sealed.key_id for row in self.rows.values())
 
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         if runner_id in self.rows:
@@ -123,3 +126,24 @@ def test_a_malformed_host_key_variable_refuses(tmp_path: Path) -> None:
         keys = host_key_provider({ENV_HOST_SECRET_KEY: "not-a-key"}, HostLayout(tmp_path), mint=True)
         assert keys is not None
         keys.current()
+
+
+def test_sealing_refuses_a_key_variable_when_the_hosts_rows_are_under_its_key_directory(tmp_path: Path) -> None:
+    """Only the directory holds what the rows are sealed under, so the variable is not the key the host's service
+    resolves; sealing under it would leave the row unreadable at the next start."""
+    layout = HostLayout(tmp_path)
+    on_disk = sealing_key_provider({}, layout, sealed_under=frozenset()).current().key_id
+    with pytest.raises(ConfigError, match=ENV_HOST_SECRET_KEY):
+        sealing_key_provider({ENV_HOST_SECRET_KEY: _KEY}, layout, sealed_under=frozenset({on_disk}))
+
+
+def test_sealing_takes_the_key_variable_when_the_rows_are_under_it_or_under_no_key_here(tmp_path: Path) -> None:
+    layout = HostLayout(tmp_path)
+    sealing_key_provider({}, layout, sealed_under=frozenset())
+    environ = {ENV_HOST_SECRET_KEY: _KEY}
+    variable = host_key_provider(environ, layout, mint=False)
+    assert variable is not None
+    under_it = frozenset({variable.current().key_id})
+    assert sealing_key_provider(environ, layout, sealed_under=under_it).current() == variable.current()
+    lost = sealing_key_provider(environ, layout, sealed_under=frozenset({"gen-lost"}))
+    assert lost.current() == variable.current()

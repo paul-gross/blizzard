@@ -243,6 +243,10 @@ class FakeIngestStores:
     def held_bindings(self, url: str) -> tuple[HeldBinding, ...]:
         return ()
 
+    def sealed_key_ids(self, url: str) -> frozenset[str]:
+        held = self.hub_tokens.get(self.source_of(url))
+        return frozenset() if held is None else frozenset({held.sealed.key_id})
+
     def reads_for(self, runner_id: str) -> FakeRunnerStores:
         return FakeRunnerStores(runner_id, self)
 
@@ -303,13 +307,21 @@ class FakeHostCiphers:
     journal: list[tuple[object, ...]]
     keys: dict[Path, str] = field(default_factory=dict[Path, str])
 
-    def cipher(self, root: Path, *, mint: bool) -> ISecretCipher | None:
+    #: The key the invoking environment carries, which a source's row may also open under.
+    environ_key: str | None = None
+
+    def cipher(self, root: Path) -> ISecretCipher | None:
+        return FakeCipher(self.keys[root]) if root in self.keys else None
+
+    def sealing_cipher(self, root: Path, *, sealed_under: frozenset[str]) -> ISecretCipher:
         if root not in self.keys:
-            if not mint:
-                return None
             self.journal.append(("mint_key", root))
             self.keys[root] = f"key-{root.name}"
         return FakeCipher(self.keys[root])
+
+    def source_ciphers(self, root: Path) -> tuple[ISecretCipher, ...]:
+        held = (self.keys.get(root), self.environ_key)
+        return tuple(FakeCipher(key) for key in held if key is not None)
 
 
 @dataclass(frozen=True)

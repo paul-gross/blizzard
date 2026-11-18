@@ -1067,6 +1067,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHostSettings, "changes"): lambda w: w.host_read.settings.changes(limit=10, record_kind="host"),
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
     (IReadHubTokenRepository, "sealed"): lambda w: w.host_read.hub_tokens.sealed("rn_x"),
+    (IReadHubTokenRepository, "key_ids"): lambda w: w.host_read.hub_tokens.key_ids(),
     (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
         w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
     ),

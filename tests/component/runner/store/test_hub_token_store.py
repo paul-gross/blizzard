@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
@@ -64,3 +68,37 @@ def test_drop_deletes_only_its_runners_row(tmp_path: Path) -> None:
     assert not tokens.drop("rn_a")
     assert tokens.sealed("rn_a") is None
     assert tokens.sealed("rn_b") is not None
+
+
+def test_a_first_replace_losing_the_insert_race_writes_the_next_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a store whose zero-row update locks nothing (Postgres), a rival's first row can land between this replace's
+    lock and its insert; the insert's key conflict is retried as a replacement, never surfaced."""
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    tokens = HostHubTokenStore(make_store(url).connections)
+    rival = HostHubTokenStore(make_store(url).connections)
+    once = tokens._replace_once  # pyright: ignore[reportPrivateUsage]
+    raced: list[bool] = []
+
+    def losing(runner_id: str, seal: Callable[[int], SealedValue], *, at: datetime) -> tuple[int, SealedValue]:
+        if not raced:
+            raced.append(True)
+            assert rival.seal_if_absent(runner_id, _sealed(b"rival"), at=at)
+            raise IntegrityError("INSERT INTO runner_hub_tokens", None, Exception("duplicate key"))
+        return once(runner_id, seal, at=at)
+
+    monkeypatch.setattr(tokens, "_replace_once", losing)
+
+    assert tokens.replace("rn_a", lambda revision: _sealed(str(revision).encode()), at=_AT) == 2
+    row = tokens.sealed("rn_a")
+    assert row is not None
+    assert (row.revision, row.sealed) == (2, _sealed(b"2"))
+
+
+def test_key_ids_names_each_generation_the_hosts_rows_are_sealed_under(tmp_path: Path) -> None:
+    tokens = HostHubTokenStore(make_store(f"sqlite:///{tmp_path / 'host.db'}").connections)
+    assert tokens.key_ids() == frozenset()
+    tokens.seal_if_absent("rn_a", _sealed(b"a"), at=_AT)
+    tokens.seal_if_absent("rn_b", SealedValue(key_id="k2", ciphertext=b"c", nonce=b"n"), at=_AT)
+    assert tokens.key_ids() == {"k1", "k2"}

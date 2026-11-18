@@ -26,7 +26,7 @@ from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, 
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
-from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, SealedHubToken, sealed_name
+from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, sealed_name
 from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
@@ -137,6 +137,10 @@ class IIngestStores(IRunnerBoundReadsFactory, IRunnerBoundStoresFactory, Protoco
         """Every held binding of every runner the store at ``url`` names."""
         ...
 
+    def sealed_key_ids(self, url: str) -> frozenset[str]:
+        """The key generations the store at ``url``'s hub-token rows are sealed under."""
+        ...
+
 
 class IHostFileEditor(Protocol):
     """The host-file edits an ingest makes to the host at ``root``, and the re-read that tells whether one is made."""
@@ -162,11 +166,21 @@ class ITokenFiles(Protocol):
 
 
 class IHostCiphers(Protocol):
-    """The cipher under a host directory's key."""
+    """The ciphers under a host's key: this host's, resolved as its service resolves it, and a source's own."""
 
-    def cipher(self, root: Path, *, mint: bool) -> ISecretCipher | None:
-        """The cipher under the key of the host at ``root``; with ``mint``, its first key generation is minted when it
-        holds none, and without it ``None`` answers a host that holds no key."""
+    def cipher(self, root: Path) -> ISecretCipher | None:
+        """The cipher under the key of the host at ``root``, never minted; ``None`` when it holds no key."""
+        ...
+
+    def sealing_cipher(self, root: Path, *, sealed_under: frozenset[str]) -> ISecretCipher:
+        """The cipher the host at ``root`` seals under, its first key generation minted when it holds none; raises
+        :class:`ConfigError` as :func:`~blizzard.runner.host_keys.sealing_key_provider` does for ``sealed_under``,
+        the generations its rows are sealed under."""
+        ...
+
+    def source_ciphers(self, root: Path) -> tuple[ISecretCipher, ...]:
+        """The ciphers a source host directory's row may open under, never minted: its own key directory's, then
+        the invoking environment's key, which a source sharing this host's environment was sealed under."""
         ...
 
 
@@ -511,24 +525,26 @@ class RunnerIngest:
         return self.sources.carried(source, entry.name, projects=projects, copies=copies), files
 
     def _offered_token(self, source: SourceHost, entry: RunnerDeclaration, runner: IRunnerBoundStores, url: str) -> str:
-        """The token the source holds for the runner: its sealed row in the copy at ``url``, opened under the source's
-        key, which is never minted; else, for a source from before sealed tokens, its ``.env`` line. A row that does
-        not open refuses the ingest."""
-        row = runner.sealed_hub_token(url)
-        if row is not None:
-            root = source.declared.root if source.declared is not None else source.path
-            try:
-                return self._opened(row, root)
-            except SecretUnreadable as exc:
-                raise SourceTokenUnreadable(
-                    f"the source's sealed hub token for runner {entry.name} does not open under the source's key "
-                    f"(generation {exc.key_id}): set its token on the source first with `blizzard runner token set "
-                    f"--runner {entry.name} {root}`, or supply the source's key in BZ_HOST_SECRET_KEY; nothing was "
-                    "changed"
-                ) from exc
+        """The token a host-directory source holds for the runner: its sealed row in the copy at ``url``, opened
+        under the source's own key, which is never minted; else, for a source from before sealed tokens, its ``.env``
+        line. A row that does not open refuses the ingest. An archive offers none: the runner's token must already
+        be on this host."""
         if source.declared is None:
             return ""
-        return self.tokens.held(source.declared.root, source.token_variable(entry.name))
+        root = source.declared.root
+        row = runner.sealed_hub_token(url)
+        if row is None:
+            return self.tokens.held(root, source.token_variable(entry.name))
+        for cipher in self.ciphers.source_ciphers(root):
+            try:
+                return cipher.open(row.secret()).expose()
+            except SecretUnreadable:
+                continue
+        raise SourceTokenUnreadable(
+            f"the source's sealed hub token for runner {entry.name} does not open under the source's key "
+            f"(generation {row.sealed.key_id}): set its token on the source first with `blizzard runner token set "
+            f"--runner {entry.name} {root}`, run as the source's service runs; nothing was changed"
+        )
 
     def _held_here(self, runner: IRunnerBoundStores, entry: RunnerDeclaration, variable: str) -> str:
         """The token this host holds for the runner: its sealed row opened under this host's key, else its ``.env``
@@ -536,26 +552,25 @@ class RunnerIngest:
         row = runner.sealed_hub_token(self.host.db_url)
         if row is None:
             return self.tokens.held(self.host.root, variable)
+        cipher = self.ciphers.cipher(self.host.root)
         try:
-            return self._opened(row, self.host.root)
+            if cipher is None:
+                raise SecretUnreadable(row.secret().name, key_id=row.sealed.key_id)
+            return cipher.open(row.secret()).expose()
         except SecretUnreadable as exc:
             raise TokenConflict(
                 f"this host holds a sealed hub token for runner {entry.name} that does not open under its key "
                 f"(generation {exc.key_id}): set it with `blizzard runner token set --runner {entry.name}`, then re-run"
             ) from exc
 
-    def _opened(self, row: SealedHubToken, root: Path) -> str:
-        """``row`` opened under the key of the host at ``root``, never minted; :class:`SecretUnreadable` when that host
-        holds no key or the row does not open under it."""
-        cipher = self.ciphers.cipher(root, mint=False)
-        if cipher is None:
-            raise SecretUnreadable(row.secret().name, key_id=row.sealed.key_id)
-        return cipher.open(row.secret()).expose()
-
     def _sealed_here(self, runner_id: str, token: str) -> SealedValue:
         """``token`` sealed under this host's key as the runner's first revision, minting the key if it holds none."""
-        cipher = self.ciphers.cipher(self.host.root, mint=True)
-        assert cipher is not None
+        try:
+            cipher = self.ciphers.sealing_cipher(
+                self.host.root, sealed_under=self.stores.sealed_key_ids(self.host.db_url)
+            )
+        except ConfigError as exc:
+            raise TokenConflict(f"{exc}; nothing was changed") from exc
         return cipher.seal(SecretValue(token), name=sealed_name(runner_id), revision=FIRST_REVISION)
 
     def _refuse_conflicts(

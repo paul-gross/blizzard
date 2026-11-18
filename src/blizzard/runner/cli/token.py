@@ -24,6 +24,7 @@ from blizzard.runner.cli.runtime import host_answers
 from blizzard.runner.cli.store_guard import store_write_guard
 from blizzard.runner.composition import build_hub_tokens
 from blizzard.runner.config_table import ConfigError
+from blizzard.runner.host_keys import key_source
 from blizzard.runner.host_layout import HostLayout
 from blizzard.wire.runner_host import HostRunnerListResponse, HostRunnerView
 
@@ -130,6 +131,7 @@ def _set_on_stopped_host(ctx: click.Context, directory: str, door: Door, runner:
         finally:
             engine.dispose()
     click.echo(
-        f"runner {entry.name} ({entry.id}): hub token set in the host store at revision {revision}; "
-        "it takes effect at the host's next start"
+        f"runner {entry.name} ({entry.id}): hub token set in the host store at revision {revision}, sealed under "
+        f"{key_source(os.environ, config.layout)}; it takes effect at the host's next start, which must resolve the "
+        "same key"
     )

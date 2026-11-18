@@ -171,6 +171,10 @@ The key has two sources; the first that applies wins:
    mints it — a host start, an offline `tick`, `runner token set` on a stopped host, or an `ingest` into the host.
    `host --check` and reading an ingest's source never mint one.
 
+Run `runner token set` on a stopped host, and `ingest`, with the environment the host's service runs with: they resolve
+the key as it does, and `token set` prints where it sealed. Either refuses to seal under a `BZ_HOST_SECRET_KEY` while the host's
+stored tokens are sealed under its `data/secret-keys/` instead.
+
 Back the key up with the store ([backup.md](../backup.md#the-runner-host)): a sealed token is useless without it. A host
 whose key no longer opens a runner's token — the directory lost, or `BZ_HOST_SECRET_KEY` swapped — still starts. Each
 such runner warns, naming the key generation its token was sealed under, refuses at its first identity check with the
@@ -337,8 +341,9 @@ this build's schema, so the source's store is not written until the runner's row
 
 1. copies the runner's rows into this host's store in one transaction, which records the ingest and seals the runner's
    token under this host's key, never replacing a token this host already stores for it. The source's token is its
-   stored one, opened under the source's key — `BZ_HOST_SECRET_KEY` when set, otherwise the source directory's
-   `data/secret-keys/` — or, when the source stores none, the source `.env`'s;
+   stored one, opened under the source directory's own `data/secret-keys/`, or else under `BZ_HOST_SECRET_KEY` for
+   a source sharing this host's environment — or, when the source stores none, the source `.env`'s. An archive
+   store's token is never read: the runner's token must already be on this host;
 2. appends the runner's `[[workspace]]` unless this host declares one with the same root and environments, with a
    relative `prompt_file` made absolute against the source host's directory, its `[[subscription]]` unless this host
    declares that slug, and its `[[runner]]`, with each path key that points into the source rewritten to a copy of that

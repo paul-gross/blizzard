@@ -194,7 +194,8 @@ def test_a_source_row_that_does_not_open_refuses_before_anything_is_copied() -> 
     with pytest.raises(SourceTokenUnreadable, match="runner token set") as refused:
         world.ingest().run(IngestRequest(THERE, RUNNER))
 
-    assert "BZ_HOST_SECRET_KEY" in str(refused.value)
+    # This host's key resolves from the same environment, so the source's key is never asked for there.
+    assert "BZ_HOST_SECRET_KEY" not in str(refused.value)
     assert not any(op[0] in ("copy_runner", "mint_key") for op in world.journal)
     assert HERE_URL not in world.stores.hub_tokens
 
@@ -206,6 +207,19 @@ def test_a_source_row_without_a_source_key_refuses() -> None:
 
     with pytest.raises(SourceTokenUnreadable):
         world.ingest().run(IngestRequest(THERE, RUNNER))
+
+
+def test_a_source_row_opens_under_the_shared_environment_key_and_is_sealed_under_this_hosts_own() -> None:
+    world = _host_directory()
+    _source_row(world, "sealed-token", key_id="key-env")
+    del world.ciphers.keys[THERE]
+    world.ciphers.environ_key = "key-env"
+    world.ciphers.keys[HERE] = "key-here"
+
+    world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    assert world.stores.hub_tokens[HERE_URL].sealed.key_id == "key-here"
+    assert _opened_here(world) == "sealed-token"
 
 
 def test_a_different_token_held_here_in_a_row_refuses() -> None:

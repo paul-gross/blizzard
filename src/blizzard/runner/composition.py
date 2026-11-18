@@ -105,7 +105,7 @@ from blizzard.runner.host_file import (
     string_literal,
     with_runner_values,
 )
-from blizzard.runner.host_keys import host_key_provider
+from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY, host_key_provider, sealing_key_provider
 from blizzard.runner.host_layout import (
     HOST_CONFIG_FILENAME,
     HostLayout,
@@ -673,13 +673,18 @@ def build_hub_tokens(
     engine: Engine, root: Path, *, environ: Mapping[str, str], clock: IClock, mint: bool, runner_id: str | None = None
 ) -> HubTokens | None:
     """The host's sealed runner tokens under its key, or ``None`` when ``mint`` is off and the host holds no key yet.
-    ``mint`` mints the key directory's first generation when no key exists; a malformed key variable raises
+    ``mint`` mints the key directory's first generation when no key exists, and refuses as
+    :func:`~blizzard.runner.host_keys.sealing_key_provider` does; a malformed key variable raises
     :class:`ConfigError`."""
-    keys = host_key_provider(environ, HostLayout(root), mint=mint)
-    if keys is None:
-        return None
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    return HubTokens(HostHubTokenStore(RunnerStoreConnections(engine, errors, runner_id)), secret_cipher(keys), clock)
+    store = HostHubTokenStore(RunnerStoreConnections(engine, errors, runner_id))
+    if mint:
+        keys = sealing_key_provider(environ, HostLayout(root), sealed_under=store.key_ids())
+    elif (held := host_key_provider(environ, HostLayout(root), mint=False)) is not None:
+        keys = held
+    else:
+        return None
+    return HubTokens(store, secret_cipher(keys), clock)
 
 
 def stored_hub_token(
@@ -1535,6 +1540,10 @@ class RunnerStoreFiles:
         with _engine(url) as engine:
             return build_host_read_stores(engine, errors=self.errors).host_identity.host_identity()
 
+    def sealed_key_ids(self, url: str) -> frozenset[str]:
+        with _engine(url) as engine:
+            return build_host_read_stores(engine, errors=self.errors).hub_tokens.key_ids()
+
     def held_bindings(self, url: str) -> tuple[HeldBinding, ...]:
         with _engine(url) as engine:
             named = build_host_stores(engine, errors=self.errors, clock=self.clock).runner_audit.named_runners()
@@ -1649,13 +1658,26 @@ _token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
 @collaborator
 @dataclass(frozen=True)
 class HostKeyCiphers:
-    """The cipher under a host directory's key, read from ``environ`` first and its ``data/secret-keys/`` otherwise."""
+    """The ciphers under a host directory's key: read from ``environ`` first and its ``data/secret-keys/``
+    otherwise, as its service resolves it; a source's own directory key comes before ``environ``'s."""
 
     environ: Mapping[str, str]
 
-    def cipher(self, root: Path, *, mint: bool) -> ISecretCipher | None:
-        keys = host_key_provider(self.environ, HostLayout(root), mint=mint)
+    def cipher(self, root: Path) -> ISecretCipher | None:
+        keys = host_key_provider(self.environ, HostLayout(root), mint=False)
         return None if keys is None else secret_cipher(keys)
+
+    def sealing_cipher(self, root: Path, *, sealed_under: frozenset[str]) -> ISecretCipher:
+        return secret_cipher(sealing_key_provider(self.environ, HostLayout(root), sealed_under=sealed_under))
+
+    def source_ciphers(self, root: Path) -> tuple[ISecretCipher, ...]:
+        layers = (
+            host_key_provider({}, HostLayout(root), mint=False),
+            host_key_provider(self.environ, HostLayout(root), mint=False)
+            if self.environ.get(ENV_HOST_SECRET_KEY)
+            else None,
+        )
+        return tuple(secret_cipher(keys) for keys in layers if keys is not None)
 
 
 _host_ciphers_conforms: type[IHostCiphers] = HostKeyCiphers

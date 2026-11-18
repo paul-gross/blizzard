@@ -4,6 +4,7 @@ socket, where the runner takes it up at its next identity check."""
 
 from __future__ import annotations
 
+import base64
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -62,6 +63,32 @@ def test_a_stopped_host_seals_the_token_under_the_guard(tmp_path: Path, monkeypa
     assert "runner r-one (rn_one): hub token set in the host store at revision 1" in output
     assert "next start" in output and _NEW not in output
     assert (tmp_path / "data" / "secret-keys").is_dir()
+    with host_hub_tokens(config.root, config.db_url) as tokens:
+        assert tokens.stored(_RUNNER) == StoredToken.opened(_NEW, 1)
+
+
+def test_a_stopped_host_names_the_key_it_sealed_under(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _host(tmp_path, monkeypatch)
+
+    code, output = _set(tmp_path, f"{_NEW}\n")
+
+    assert code == 0, output
+    assert f"sealed under {tmp_path / 'data' / 'secret-keys'}" in output
+
+
+def test_a_shell_key_the_hosts_rows_are_not_under_is_refused_and_nothing_is_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host's rows are under its key directory, so a variable the shell sets is not the key its service reads."""
+    config = _host(tmp_path, monkeypatch)
+    assert _set(tmp_path, f"{_NEW}\n")[0] == 0
+    monkeypatch.setenv(ENV_HOST_SECRET_KEY, base64.b64encode(bytes(range(32))).decode())
+
+    code, output = _set(tmp_path, "tok-other\n")
+
+    assert code != 0
+    assert ENV_HOST_SECRET_KEY in output and "not the host's key" in output
+    monkeypatch.delenv(ENV_HOST_SECRET_KEY)
     with host_hub_tokens(config.root, config.db_url) as tokens:
         assert tokens.stored(_RUNNER) == StoredToken.opened(_NEW, 1)
 

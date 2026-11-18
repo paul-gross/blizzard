@@ -32,6 +32,14 @@ class HostHubTokenStore:
         with self._store.connect() as conn:
             return _held(conn, runner_id)
 
+    def key_ids(self) -> frozenset[str]:
+        with self._store.connect() as conn:
+            if runner_hub_tokens.name not in inspect(conn).get_table_names():
+                return frozenset()
+            return frozenset(
+                str(key_id) for key_id in conn.execute(select(runner_hub_tokens.c.key_id).distinct()).scalars()
+            )
+
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         try:
             with self._store.begin() as conn:
@@ -43,36 +51,45 @@ class HostHubTokenStore:
         return True
 
     def replace(self, runner_id: str, seal: Callable[[int], SealedValue], *, at: datetime) -> int:
+        try:
+            revision, sealed = self._replace_once(runner_id, seal, at=at)
+        except IntegrityError:
+            # A concurrent first replacement inserted the row; this one now finds it and writes the next revision.
+            revision, sealed = self._replace_once(runner_id, seal, at=at)
+        _log.info("runner hub token replaced", runner_id=runner_id, revision=revision, key_id=sealed.key_id)
+        return revision
+
+    def _replace_once(
+        self, runner_id: str, seal: Callable[[int], SealedValue], *, at: datetime
+    ) -> tuple[int, SealedValue]:
         with self._store.begin() as conn:
-            # Take the row's write lock before reading its revision, so two replacements serialize.
+            # Take an existing row's write lock before reading its revision, so two replacements of it serialize.
             locked = conn.execute(
                 runner_hub_tokens.update()
                 .where(runner_hub_tokens.c.runner_id == runner_id)
                 .values(revision=runner_hub_tokens.c.revision)
             ).rowcount
-            if locked:
-                revision = int(
-                    conn.execute(
-                        select(runner_hub_tokens.c.revision).where(runner_hub_tokens.c.runner_id == runner_id)
-                    ).scalar_one()
-                    + 1
-                )
-                sealed = seal(revision)
-                conn.execute(
-                    runner_hub_tokens.update()
-                    .where(runner_hub_tokens.c.runner_id == runner_id)
-                    .values(revision=revision, updated_at=at, **_sealed_columns(sealed))
-                )
-            else:
-                revision = FIRST_REVISION
-                sealed = seal(revision)
+            if not locked:
+                sealed = seal(FIRST_REVISION)
                 conn.execute(
                     runner_hub_tokens.insert().values(
-                        runner_id=runner_id, revision=revision, updated_at=at, **_sealed_columns(sealed)
+                        runner_id=runner_id, revision=FIRST_REVISION, updated_at=at, **_sealed_columns(sealed)
                     )
                 )
-        _log.info("runner hub token replaced", runner_id=runner_id, revision=revision, key_id=sealed.key_id)
-        return revision
+                return FIRST_REVISION, sealed
+            revision = int(
+                conn.execute(
+                    select(runner_hub_tokens.c.revision).where(runner_hub_tokens.c.runner_id == runner_id)
+                ).scalar_one()
+                + 1
+            )
+            sealed = seal(revision)
+            conn.execute(
+                runner_hub_tokens.update()
+                .where(runner_hub_tokens.c.runner_id == runner_id)
+                .values(revision=revision, updated_at=at, **_sealed_columns(sealed))
+            )
+            return revision, sealed
 
     def drop(self, runner_id: str) -> bool:
         with self._store.begin() as conn:

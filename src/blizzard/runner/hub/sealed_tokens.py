@@ -98,6 +98,11 @@ class StoredToken:
 class IReadHubTokenRepository(Protocol):
     def sealed(self, runner_id: str) -> SealedHubToken | None: ...
 
+    def key_ids(self) -> frozenset[str]:
+        """The key generations every runner's row is sealed under; empty for a store behind the revision that adds
+        the table."""
+        ...
+
 
 class IWriteHubTokenRepository(IReadHubTokenRepository, Protocol):
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
