@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:publish-after-commit
+language: Python
+severity: error
+message: >-
+  A store adapter neither publishes nor imports the event broker or a publisher port: it returns what changed and the
+  caller publishes after the commit (bzh:publish-after-commit in
+  blizzard-context:/architecture/repository-access.md). The read-only observability log is not the broker.
+files:
+  - src/blizzard/hub/store/**
+rule:
+  any:
+    - kind: call
+      has:
+        field: function
+        kind: attribute
+        has:
+          field: attribute
+          regex: ^publish(_\w+)?$
+    - kind: import_statement
+      has:
+        kind: dotted_name
+        stopBy: end
+        regex: ^blizzard\.hub\.(events(\.\w+)*|domain\.chunk\.event_log|delivery\.flow_changes)$
+    - kind: import_from_statement
+      has:
+        field: module_name
+        kind: dotted_name
+        regex: ^blizzard\.hub\.(events(\.\w+)*|domain\.chunk\.event_log|delivery\.flow_changes)$
+    - kind: import_from_statement
+      has:
+        kind: dotted_name
+        field: name
+        regex: (Publisher|Brokers?)$
+    - kind: import_from_statement
+      has:
+        kind: aliased_import
+        has:
+          field: name
+          kind: dotted_name
+          regex: (Publisher|Brokers?)$

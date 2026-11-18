@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:store-refuses-stale
+language: Python
+severity: error
+message: >-
+  A store write or guard helper decides on a status-family fact (terminal, retired, closed, live, open turn). A refusal
+  on such a fact belongs to the domain unit that read it under the key's lock; the store refuses only on its own
+  uniqueness, revision or insert-if-absent outcome (bzh:store-refuses-stale in
+  blizzard-context:/architecture/system-shape/exclusive-writes.md).
+files:
+  - src/blizzard/hub/store/internal/**
+utils:
+  status-helper:
+    kind: identifier
+    regex: ^(chunk_is_terminal|maybe_live|settled_stopped|settled_done|done_completed_at|_unsuperseded_terminal|load_live_statuses|_maybe_live_statuses|currently_promoted_ats|promoted_ats|not_closed_clause|decision_closure_ids|live_decisions_for|_live_decisions_batch|_newest_live_decisions_select|standing_forge|active_referrers|_retired_ids|retired_ids|retirements|_retired_among|retired_names|is_retired|_is_retired|retired_graph_ids|_retired_scope_ids|_retired_slugs|retired_slugs|newest_retired_select|_retired_keys|_retired_secrets|has_open_turn|_busy|_ahead_on|open_turns|open_turns_of|_facts_with_closure|_newest_fact_is_live|closures|_reached_terminal|find_live_holder|live_holders|live_holders_conn|_maybe_live_holders)$
+rule:
+  kind: call
+  any:
+    - has:
+        field: function
+        matches: status-helper
+    - has:
+        field: function
+        kind: attribute
+        has:
+          field: attribute
+          matches: status-helper
+  inside:
+    stopBy: end
+    any:
+      - kind: with_statement
+        has:
+          kind: with_clause
+          has:
+            pattern: $STORE.write($$$)
+            stopBy: end
+      - kind: function_definition
+        has:
+          field: name
+          kind: identifier
+          regex: ^(fence|mint_admission|_check_\w+)$

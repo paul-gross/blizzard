@@ -174,6 +174,27 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   `blizzard-context:/architecture/system-shape/exclusive-writes.md` (a no-op `UPDATE` before decision guard reads).
   - Scoped to `src/blizzard/hub/**`; matches any `$X.with_for_update($$$)` call.
 
+- **`bzh:store-refuses-stale`** (`rules/store-refuses-stale.yml`) — a store write or guard helper never refuses on a
+  status-family fact (terminal, retired, closed, live, open turn); the domain unit that read the fact under the key's
+  lock owns that refusal. The prose home is the `bzh:store-refuses-stale` rule's **Detect** in
+  `blizzard-context:/architecture/system-shape/exclusive-writes.md`.
+  - Scoped to `src/blizzard/hub/store/internal/**`.
+  - Matches a call to one of the listed status-family helpers (the rule file's `utils` list is the reach) inside a
+    `with … .write(…)` block, or inside a guard helper named `fence`, `mint_admission` or `_check_*`.
+  - Does not reach a call made inline in a domain unit, one level below a helper, a write opened through
+    `connection_in(…, write=True)`, or a status judgment spelled without a listed helper — a floor, not a proof.
+  - Exemption standing: `SecretStore.replace` projects the retired fact into its returned metadata while the write
+    refuses on the revision alone; it carries a reasoned `ast-grep-ignore`.
+
+- **`bzh:publish-after-commit`** (`rules/publish-after-commit.yml`) — a store adapter does not publish or import the
+  event broker. The prose home is `bzh:publish-after-commit` in `blizzard-context:/architecture/repository-access.md`.
+  - Scoped to `src/blizzard/hub/store/**`.
+  - Matches a `publish` or `publish_*` call, an import of `blizzard.hub.events`, `blizzard.hub.domain.chunk.event_log`
+    or `blizzard.hub.delivery.flow_changes`, and an import of a name ending `Publisher`, `Broker` or `Brokers`.
+  - The observability log (`IReadHubEventLog`) is a store-backed read port and does not match. A publish inside a domain
+    unit's `with … begin()` block is outside the store scope and stays judged at review.
+  - No exemption stands.
+
 - **`bzh:store-newest-read-limited`** (`rules/store-newest-read-limited.yml`) — a newest-per-key store read bounds its
   statement with `.limit(...)` rather than pulling a key's whole history to keep one row. The related rule is
   `bzh:newest-per-key-read`; this rule covers only the crisp sub-shape below and does not replace it.

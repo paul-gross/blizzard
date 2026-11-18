@@ -1,0 +1,77 @@
+id: bzh:publish-after-commit
+snapshots:
+  ? |
+    def retire(self, chunk_id):
+        self._broker.publish_chunk_changed(chunk_id)
+  : labels:
+    - source: self._broker.publish_chunk_changed(chunk_id)
+      style: primary
+      start: 32
+      end: 76
+    - source: publish_chunk_changed
+      style: secondary
+      start: 45
+      end: 66
+    - source: self._broker.publish_chunk_changed
+      style: secondary
+      start: 32
+      end: 66
+  ? |
+    from blizzard.hub.domain.chunk.event_log import IChunkChangePublisher
+  : labels:
+    - source: from blizzard.hub.domain.chunk.event_log import IChunkChangePublisher
+      style: primary
+      start: 0
+      end: 69
+    - source: blizzard.hub.domain.chunk.event_log
+      style: secondary
+      start: 5
+      end: 40
+  ? |
+    from blizzard.hub.domain.observability.hub_events import IChunkPublisher as P
+  : labels:
+    - source: from blizzard.hub.domain.observability.hub_events import IChunkPublisher as P
+      style: primary
+      start: 0
+      end: 77
+    - source: IChunkPublisher
+      style: secondary
+      start: 57
+      end: 72
+    - source: IChunkPublisher as P
+      style: secondary
+      start: 57
+      end: 77
+  ? |
+    from blizzard.hub.events.broker import EventBroker
+  : labels:
+    - source: from blizzard.hub.events.broker import EventBroker
+      style: primary
+      start: 0
+      end: 50
+    - source: blizzard.hub.events.broker
+      style: secondary
+      start: 5
+      end: 31
+  ? |
+    import blizzard.hub.events.broker
+  : labels:
+    - source: import blizzard.hub.events.broker
+      style: primary
+      start: 0
+      end: 33
+    - source: blizzard.hub.events.broker
+      style: secondary
+      start: 7
+      end: 33
+  ? |
+    import blizzard.hub.events.broker as b
+  : labels:
+    - source: import blizzard.hub.events.broker as b
+      style: primary
+      start: 0
+      end: 38
+    - source: blizzard.hub.events.broker
+      style: secondary
+      start: 7
+      end: 33

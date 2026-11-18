@@ -1,0 +1,31 @@
+id: bzh:publish-after-commit
+valid:
+  # The read-only observability log is a table the store owns, not the broker.
+  - |
+    from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
+  # A store method returns ids for its caller to publish after the commit.
+  - |
+    def retire(self, chunk_id):
+        with self._store.write("retire") as conn:
+            conn.execute(self._store.update(t).values(x=1))
+        return [chunk_id]
+invalid:
+  # A broker call in the store.
+  - |
+    def retire(self, chunk_id):
+        self._broker.publish_chunk_changed(chunk_id)
+  # A broker import.
+  - |
+    from blizzard.hub.events.broker import EventBroker
+  # A plain module import of the broker.
+  - |
+    import blizzard.hub.events.broker
+  # A publisher-port import.
+  - |
+    from blizzard.hub.domain.chunk.event_log import IChunkChangePublisher
+  # An aliased module import.
+  - |
+    import blizzard.hub.events.broker as b
+  # An aliased publisher-port import.
+  - |
+    from blizzard.hub.domain.observability.hub_events import IChunkPublisher as P
