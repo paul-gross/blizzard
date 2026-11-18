@@ -28,6 +28,7 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
 from tests.support.host_files import load_runner_config
+from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
 from tests.support.runner_join import DEFAULT_TOKEN_ENV
 from tests.support.session_store_fakes import InMemorySessionStore
@@ -172,6 +173,23 @@ def test_init_after_a_hub_reset_re_adds_the_runner_with_allow_readd(tmp_path: Pa
         f"OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n{HOST_TOKEN_VARIABLE}=init-host-token-1\n"
         f"{DEFAULT_TOKEN_ENV}=init-token-1\n"
     )
+
+
+def test_init_after_a_hub_reset_with_a_sealed_token_stops_naming_token_set(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """A re-added runner's token written to ``.env`` would go unread beside its row, which only ``token set``
+    replaces."""
+    root, env_bytes = _joined(tmp_path, fake_init_hub)
+    with host_hub_tokens(root, load_runner_config(root).db_url) as tokens:
+        tokens.replace("rn_init1", "init-token-1", retired=False)
+    fake_init_hub.admin.added.clear()
+    result = _init(fake_init_hub, root, "--allow-readd")
+    assert result.exit_code != 0
+    assert "blizzard runner token set --runner runner-local" in result.output
+    assert "remove it there" not in result.output
+    assert fake_init_hub.admin.added == []
+    assert (root / ENV_FILENAME).read_bytes() == env_bytes
 
 
 def test_init_after_a_hub_reset_stops_without_allow_readd_leaving_the_env_file_as_it_was(

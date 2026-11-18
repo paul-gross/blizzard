@@ -687,16 +687,20 @@ def test_a_row_at_the_revision_held_is_not_opened_again(tmp_path: Path) -> None:
     assert not [e for e in logs if e["event"].startswith("runner token replaced")]
 
 
-def test_a_replaced_row_that_does_not_open_leaves_the_token_in_use(tmp_path: Path) -> None:
-    ctx, hub, row = _started(tmp_path, _WRONG)
+def test_a_matched_runner_whose_replaced_row_does_not_open_refuses_and_presents_no_token(tmp_path: Path) -> None:
+    ctx, hub, row = _started(tmp_path, _RIGHT)
+    assert _state(ctx) is IdentityState.MATCHED
     row.replace(_RIGHT)
     row.unreadable = "gen-gone"
+    pushed = len(hub.push_facts_calls)
 
     tick(ctx)
 
-    assert hub.token == _WRONG
-    assert _state(ctx) is IdentityState.MISMATCHED
-    assert hub.push_facts_calls == []
+    verdict = ctx.identity_verdict.verdict()
+    assert verdict.state is IdentityState.REFUSED
+    assert verdict.reason is not None and "gen-gone" in verdict.reason
+    assert ctx.hub_token.auth_headers() == {}
+    assert len(hub.push_facts_calls) == pushed
 
 
 def test_a_runner_built_over_an_unreadable_row_refuses_without_asking_the_hub(tmp_path: Path) -> None:

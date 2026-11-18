@@ -670,6 +670,8 @@ class _Joining:
     overridden_by: str | None
     #: The host the runner joins under; ``None`` before the host is registered.
     host_id: str | None = None
+    #: Whether the held token is the host store's sealed row, which only ``runner token set`` replaces.
+    from_store: bool = False
 
 
 def _join_hub(
@@ -745,6 +747,7 @@ def _joining_of(
         token_env=token_env,
         overridden_by=None if token.source is TokenSource.DOTENV else _source_words(token, token_env, entry.name),
         host_id=host_id,
+        from_store=token.source is TokenSource.STORE,
     )
     return joining, HubTokenFile.of(config.root, token_env)
 
@@ -825,6 +828,12 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
                 f"put that runner's token in {token_file.path} as {token_env}, or — if it is gone for good — "
                 f"re-run `{rerun.readding()}` to set its store aside and add a new runner, or clear "
                 f"the store with `{reset_command(joining.root)}`"
+            )
+        case BootstrapStop.TOKEN_OVERRIDDEN if joining.from_store:
+            return (
+                f"the hub at {hub} does not know the token sealed in the host store, which init never replaces, so "
+                f"nothing was added: set the runner's new token with `blizzard runner token set --runner "
+                f"{joining.name}` and re-run `{rerun.again()}`"
             )
         case BootstrapStop.TOKEN_OVERRIDDEN:
             return (

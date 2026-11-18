@@ -332,4 +332,4 @@ def _take_up_a_replaced_token(token: HubTokenHolder) -> None:
     if refresh is TokenRefresh.SWITCHED:
         _log.info("runner token replaced in the host store: checking its identity with the new one")
     elif refresh is TokenRefresh.UNREADABLE:
-        _log.debug("runner token row does not open under the host's key: checking its identity with the token in use")
+        _log.debug("runner token row does not open under the host's key: refusing until its token is set again")

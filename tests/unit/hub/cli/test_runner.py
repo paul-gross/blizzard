@@ -101,7 +101,8 @@ def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds() -> No
     assert result.exit_code == 0, result.output
     assert posted[0]["url"] == f"{HUB_URL}/api/runners/{runner_id}/enrollments"
     assert read[0]["url"] == f"{HUB_URL}/api/runners/{runner_id}"
-    assert "`blizzard runner token set --runner r-chatgpt`" in result.output
+    # The host's [[runner]] may carry another name after a rename; its id is the one it always declares.
+    assert f"`blizzard runner token set --runner {runner_id}`" in result.output
     assert "rotated" in result.output.splitlines()
     assert "as BZ_HUB_TOKEN_R_CHATGPT)" in result.output
 

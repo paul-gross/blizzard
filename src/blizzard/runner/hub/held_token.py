@@ -44,7 +44,7 @@ class TokenRefresh(StrEnum):
     SWITCHED = "switched"
     #: The row is at the revision held, or there is none: nothing changed.
     UNCHANGED = "unchanged"
-    #: The row does not open under the host's key: the token in use, if any, stays.
+    #: The row does not open under the host's key: no token is held, so the runner refuses until it is set again.
     UNREADABLE = "unreadable"
 
 
@@ -94,9 +94,8 @@ class HubTokenHolder:
             opened = self._source.open()
         except SecretUnreadable as exc:
             with self._lock:
-                if self._unreadable_key is not None or not self._token:
-                    self._unreadable_key = exc.key_id
-                    self._token = ""
+                self._unreadable_key = exc.key_id
+                self._token = ""
             return TokenRefresh.UNREADABLE
         if opened is None:
             return TokenRefresh.UNCHANGED
