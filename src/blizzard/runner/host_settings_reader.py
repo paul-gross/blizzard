@@ -49,6 +49,11 @@ class HostSettingsReader:
     def snapshot_with_provenance(self) -> tuple[SettingsSnapshot, Mapping[str, HostSettingsChange]]:
         return self.store.snapshot_with_provenance()
 
+    def changes(
+        self, *, limit: int, before: int | None = None, record_kind: str | None = None, record_key: str | None = None
+    ) -> tuple[HostSettingsChange, ...]:
+        return self.store.changes(limit=limit, before=before, record_kind=record_kind, record_key=record_key)
+
     def current(self) -> HostConfig:
         """The effective host configuration at the store's current host revision."""
         return self.snapshot()[1]
@@ -167,7 +172,13 @@ class HostSettingsInForce:
         self._lock = threading.Lock()
         self.revision: int | None = None
         self.since: str | None = None
-        self.failure: tuple[int, str] | None = None
+        #: The revision that failed to resolve, its error, and since when; ``None`` while the latest resolves.
+        self.failure: tuple[int, str, str] | None = None
+
+    def status[T](self, read: Callable[[], T]) -> tuple[T, int | None, str | None, tuple[int, str, str] | None]:
+        """``read`` of the store beside the host tick's published state, the three read as one."""
+        with self._lock:
+            return read(), self.revision, self.since, self.failure
 
     def take(self) -> HostConfig:
         """Snapshot the record and put it in force; the configuration the pass works from."""
@@ -178,7 +189,7 @@ class HostSettingsInForce:
             with self._lock:
                 if self.failure is None or self.failure[0] != snapshot.revision:
                     _log.error("host settings rebuild failed", revision=snapshot.revision, detail=str(exc))
-                self.failure = (snapshot.revision, str(exc))
+                    self.failure = (snapshot.revision, str(exc), iso_utc(self._clock.now()))
             return self.reader.resolve_last()
         self._tool_profile.hold(effective.host_view().tool_env(self._tracing))
         with self._lock:

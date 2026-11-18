@@ -2301,6 +2301,68 @@ export type HistoryRowView = {
 };
 
 /**
+ * HostChangeView
+ *
+ * A host change row: the runner's, naming which of the host's records it moved.
+ */
+export type HostChangeView = {
+    /**
+     * Actor
+     */
+    actor: string;
+    /**
+     * Apply Id
+     */
+    apply_id: string | null;
+    /**
+     * Diff
+     */
+    diff: Array<FieldChangeView>;
+    /**
+     * Door
+     */
+    door: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Op
+     */
+    op: string;
+    /**
+     * Record Key
+     */
+    record_key: string | null;
+    /**
+     * Record Kind
+     */
+    record_kind: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * HostChangesPage
+ */
+export type HostChangesPage = {
+    /**
+     * Changes
+     */
+    changes: Array<HostChangeView>;
+    /**
+     * Next Before
+     */
+    next_before: number | null;
+};
+
+/**
  * HostEnvironmentListResponse
  *
  * Every workspace's environments, held or free, grouped by workspace.
@@ -5221,6 +5283,103 @@ export type ListRunnersApiHostRunnersGetResponses = {
 };
 
 export type ListRunnersApiHostRunnersGetResponse = ListRunnersApiHostRunnersGetResponses[keyof ListRunnersApiHostRunnersGetResponses];
+
+export type GetHostSettingsApiHostSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host/settings';
+};
+
+export type GetHostSettingsApiHostSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type GetHostSettingsApiHostSettingsGetResponse = GetHostSettingsApiHostSettingsGetResponses[keyof GetHostSettingsApiHostSettingsGetResponses];
+
+export type PatchHostSettingsApiHostSettingsPatchData = {
+    body: SettingsWrite;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/host/settings';
+};
+
+export type PatchHostSettingsApiHostSettingsPatchErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * Settings revision conflict
+     */
+    409: SettingsProblem;
+    /**
+     * Invalid settings edit or request
+     */
+    422: HttpValidationError | SettingsProblem;
+};
+
+export type PatchHostSettingsApiHostSettingsPatchError = PatchHostSettingsApiHostSettingsPatchErrors[keyof PatchHostSettingsApiHostSettingsPatchErrors];
+
+export type PatchHostSettingsApiHostSettingsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type PatchHostSettingsApiHostSettingsPatchResponse = PatchHostSettingsApiHostSettingsPatchResponses[keyof PatchHostSettingsApiHostSettingsPatchResponses];
+
+export type HostSettingsChangesApiHostSettingsChangesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Before
+         */
+        before?: number | null;
+        /**
+         * Record Kind
+         */
+        record_kind?: string | null;
+        /**
+         * Record Key
+         */
+        record_key?: string | null;
+    };
+    url: '/api/host/settings/changes';
+};
+
+export type HostSettingsChangesApiHostSettingsChangesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HostSettingsChangesApiHostSettingsChangesGetError = HostSettingsChangesApiHostSettingsChangesGetErrors[keyof HostSettingsChangesApiHostSettingsChangesGetErrors];
+
+export type HostSettingsChangesApiHostSettingsChangesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostChangesPage;
+};
+
+export type HostSettingsChangesApiHostSettingsChangesGetResponse = HostSettingsChangesApiHostSettingsChangesGetResponses[keyof HostSettingsChangesApiHostSettingsChangesGetResponses];
 
 export type ListSubscriptionsApiHostSubscriptionsGetData = {
     body?: never;

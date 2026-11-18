@@ -32,6 +32,7 @@ from tests.rehearsal.comparison import (
 )
 from tests.rehearsal.installation import (
     FENCE_VAR,
+    TICK_SECONDS,
     Host,
     Hub,
     Leg,
@@ -383,7 +384,30 @@ class Rehearsal:
         self.work.start(self.candidate, self.hub.url)
         client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
         self._await_landed(client, self.ingest(client, "the candidate runner"), step)
+        self._rehearse_the_seeded_interval(step)
         self._rehearse_seeded_settings(step)
+
+    def _rehearse_the_seeded_interval(self, step: str) -> None:
+        """A host whose file states no tick_seconds keeps the variable's interval: the upgrade seeds it as the host's
+        entry, and the host is seen ticking at it."""
+        with httpx2.Client(base_url=f"http://127.0.0.1:{self.work.port}", timeout=30.0) as api:
+            view = api.get("/api/host/settings")
+            if view.status_code != 200:
+                raise self._fail(step, f"GET /api/host/settings answered {view.status_code}: {view.text}")
+            row = next(row for row in view.json()["settings"] if row["key"] == "tick_seconds")
+            if (row["value"], row["source"]) != (TICK_SECONDS, "entry"):
+                raise self._fail(step, f"the variable's interval was not seeded as the host's entry: {row}")
+            runner_id = api.get("/api/host/runners").json()["items"][0]["runner_id"]
+            # Observed, not inferred: distinct last-tick stamps, against a default interval a hundred times longer.
+            ticks: list[str] = []
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline and len(ticks) < 6:
+                stamp = api.get(f"/runners/{runner_id}/api/runner").json().get("last_tick_at")
+                if stamp is not None and stamp not in ticks:
+                    ticks.append(stamp)
+                time.sleep(TICK_SECONDS / 3)
+        if len(ticks) < 6:
+            raise self._fail(step, f"the host ticked {len(ticks)} times in 5s, not every {TICK_SECONDS}s: {ticks}")
 
     def _rehearse_seeded_settings(self, step: str) -> None:
         """The first candidate boot seeds the authored file once; an unset remains authoritative."""

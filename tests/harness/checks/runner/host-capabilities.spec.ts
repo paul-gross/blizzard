@@ -76,7 +76,7 @@ test('a captured request carries its parsed JSON body', async ({ mockHub, runner
   expect(register?.body).toEqual(expect.objectContaining({ version: expect.any(String) }));
 });
 
-test('reconfigure sends live edits to settings and keeps boot edits stopped-only', async ({ runnerHost }) => {
+test('reconfigure sends live host and runner edits to settings and keeps boot edits stopped-only', async ({ runnerHost }) => {
   const runner = runnerHost.runners['runner-local']!;
   const file = runnerHost.hostFile();
   const before = (await runner.settings()).body;
@@ -86,14 +86,25 @@ test('reconfigure sends live edits to settings and keeps boot edits stopped-only
   expect(after.settings.find((setting) => setting.key === 'agents')?.value).toBe(2);
   expect(runnerHost.hostFile()).toBe(file);
   expect((await runner.settingsChanges()).body.changes.length).toBeGreaterThan(0);
+  const hostBefore = (await runnerHost.api.hostSettings()).body;
+  await runnerHost.reconfigure({ worker_stdout: { retention_days: 9n }, tracing: { worker_program_services: { winter_cli: 'winter-blizzard' } } });
+  const hostAfter = (await runnerHost.api.hostSettings()).body;
+  expect(hostAfter.revision).toBe(hostBefore.revision + 1);
+  expect(hostAfter.settings.find((setting) => setting.key === 'worker_stdout.retention_days')).toEqual(expect.objectContaining({ value: 9, source: 'entry' }));
+  expect(hostAfter.settings.find((setting) => setting.key === 'tracing.worker_program_services')?.value).toEqual({ winter_cli: 'winter-blizzard' });
+  expect(runnerHost.hostFile()).toBe(file);
+  expect((await runnerHost.api.hostSettingsChanges({ limit: 1 })).body.changes[0]).toEqual(expect.objectContaining({ revision: hostAfter.revision, record_kind: 'host', record_key: null }));
   await expect(runnerHost.reconfigure({ public_url: runnerHost.url })).rejects.toThrow(/stop\(\)/);
+  await expect(runnerHost.reconfigure({ tracing: { platform: true } })).rejects.toThrow(/tracing\.platform: not a live host setting/);
   await expect(runnerHost.reconfigure({ nonsense_key: 'x' })).rejects.toThrow(/nonsense_key: not a key the host declares/);
   await expect(runnerHost.reconfigure({ port: 1n })).rejects.toThrow(/port: the CLI or the fixture owns it/);
   await runnerHost.stop();
   await expect(runnerHost.reconfigure({ runner: [{ name: 'runner-local', agents: 3n }] })).rejects.toThrow(/running host/);
+  await expect(runnerHost.reconfigure({ worker_stdout: { retention_days: 3n } })).rejects.toThrow(/running host/);
   await runnerHost.reconfigure({ public_url: runnerHost.url });
   await runnerHost.restart();
   expect((await runner.settings()).body.settings.find((setting) => setting.key === 'agents')?.value).toBe(2);
+  expect((await runnerHost.api.hostSettings()).body.settings.find((setting) => setting.key === 'worker_stdout.retention_days')?.value).toBe(9);
   expect((await runnerHost.step()).outcome).toBe('completed');
 });
 

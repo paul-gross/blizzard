@@ -27,14 +27,14 @@ from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
 
 
-def _reject_worker_credential(request: Request) -> None:
+def reject_worker_credential(request: Request) -> None:
     # An ungated host grants implicit human authority, but a presented lease token
     # identifies the worker lane, not an implicit human caller.
     if presented_lease_token(request) is not None:
         raise HTTPException(status_code=401, detail="runner session required")
 
 
-router = APIRouter(prefix="/api/settings", tags=["runner settings"], dependencies=[Depends(_reject_worker_credential)])
+router = APIRouter(prefix="/api/settings", tags=["runner settings"], dependencies=[Depends(reject_worker_credential)])
 
 
 class SettingRow(WireModel):
@@ -114,11 +114,23 @@ class SettingsProblem(WireModel):
     errors: list[SettingError] | None = None
 
 
-_SETTINGS_PROBLEM = {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}
-_VALIDATION_ERROR = {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}
+SETTINGS_PROBLEM = {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}
+VALIDATION_ERROR = {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}
+#: A settings write's refusals, as every record's ``PATCH`` declares them.
+WRITE_RESPONSES: dict[int | str, dict[str, object]] = {
+    403: {"description": "Superuser required"},
+    409: {
+        "description": "Settings revision conflict",
+        "content": {"application/problem+json": SETTINGS_PROBLEM},
+    },
+    422: {
+        "description": "Invalid settings edit or request",
+        "content": {"application/problem+json": SETTINGS_PROBLEM, "application/json": VALIDATION_ERROR},
+    },
+}
 
 
-def _problem(status: int, code: str, message: str, **members: object) -> JSONResponse:
+def settings_problem(status: int, code: str, message: str, **members: object) -> JSONResponse:
     return JSONResponse(
         status_code=status,
         content=SettingsProblem.model_validate(
@@ -263,21 +275,7 @@ def get_settings(request: Request) -> SettingsView:
     return _view(RunnerWiring.of(request))
 
 
-@router.patch(
-    "",
-    response_model=SettingsView,
-    responses={
-        403: {"description": "Superuser required"},
-        409: {
-            "description": "Settings revision conflict",
-            "content": {"application/problem+json": _SETTINGS_PROBLEM},
-        },
-        422: {
-            "description": "Invalid settings edit or request",
-            "content": {"application/problem+json": _SETTINGS_PROBLEM, "application/json": _VALIDATION_ERROR},
-        },
-    },
-)
+@router.patch("", response_model=SettingsView, responses=WRITE_RESPONSES)
 def patch_settings(
     request: Request,
     body: SettingsWrite,
@@ -295,11 +293,11 @@ def patch_settings(
             body.set, frozenset(body.unset), if_match=revision, door="api", actor=session.username
         )
     except SettingRefusal as exc:
-        return _problem(422, exc.code, str(exc), key=exc.key)
+        return settings_problem(422, exc.code, str(exc), key=exc.key)
     except SettingsRevisionConflict as exc:
-        return _problem(409, "revision_conflict", str(exc), current=exc.current)
+        return settings_problem(409, "revision_conflict", str(exc), current=exc.current)
     except SettingsInvalid as exc:
-        return _problem(
+        return settings_problem(
             422,
             "settings_invalid",
             str(exc),
@@ -308,7 +306,7 @@ def patch_settings(
     return _view(wiring)
 
 
-def _entry(value: Entry | None) -> EntryView | None:
+def entry_view(value: Entry | None) -> EntryView | None:
     return EntryView(value=value.value, at_default=value.at_default) if value is not None else None
 
 
@@ -331,7 +329,7 @@ def settings_changes(
                 apply_id=c.apply_id,
                 diff=[
                     FieldChangeView(
-                        key=d.key, old=_entry(d.old), new=EntryView(value=d.new.value, at_default=d.new.at_default)
+                        key=d.key, old=entry_view(d.old), new=EntryView(value=d.new.value, at_default=d.new.at_default)
                     )
                     for d in c.diff
                 ],

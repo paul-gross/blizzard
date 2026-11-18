@@ -50,6 +50,7 @@ from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.environments.workspaces import (
@@ -142,6 +143,7 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
+from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
@@ -320,6 +322,9 @@ class HostProcess:
     tool_profile: ToolProfileHolder = field(default_factory=lambda: ToolProfileHolder(ChildEnv(())))
     #: The host record in force, which the host tick snapshots first; ``None`` for a host built from no host file.
     host_settings: HostSettingsInForce | None = None
+    #: The host record's one write path, which wakes :attr:`wakes` after a write moving an interval; ``None`` beside
+    #: an absent :attr:`host_settings`.
+    host_settings_authoring: HostSettingsAuthoring | None = None
     #: Every timed driver's wake signal; a host write moving an interval wakes them all.
     wakes: WakeSignals = field(default_factory=WakeSignals)
     _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
@@ -694,6 +699,9 @@ def build_host_process(
             tool_profile=graph.tool_profile,
             tracing=TracingSettings.of(os.environ if environ is None else environ),
             clock=graph.clock,
+        )
+        graph.host_settings_authoring = HostSettingsAuthoring(
+            graph.host_settings.reader, graph.host_stores.settings, HOST_REGISTRY, drivers=graph.wakes
         )
         if graph.readiness.evaluate().ready:
             graph.host_settings.take()
