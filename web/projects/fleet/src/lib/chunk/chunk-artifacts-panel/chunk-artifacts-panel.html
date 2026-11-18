@@ -14,20 +14,25 @@
       emptyText="No artifacts yet."
       [emptyTestid]="testidPrefix() + '-nav-empty'"
     >
-      <ul class="art-list" [attr.data-testid]="testidPrefix() + '-nav'">
+      <div
+        class="art-list"
+        fleetKitSelectList
+        ariaLabel="Artifacts"
+        [attr.data-testid]="testidPrefix() + '-nav'"
+        [value]="effectiveKey()"
+        (valueChange)="pickArtifact.emit($event)"
+      >
         @for (art of sortedArtifacts(); track art.key) {
-          <li class="art-row">
-            <fleet-kit-select-row
-              [testid]="testidPrefix() + '-nav-item'"
-              [attr.data-artifact-key]="art.key"
-              [selected]="art.key === effectiveKey()"
-              (picked)="pickArtifact.emit(art.key)"
-            >
-              <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
-            </fleet-kit-select-row>
-          </li>
+          <fleet-kit-select-row
+            [testid]="testidPrefix() + '-nav-item'"
+            [attr.data-artifact-key]="art.key"
+            [value]="art.key"
+            [label]="art.key"
+          >
+            <fleet-chunk-detail-artifact-body [artifact]="art" body="summary" />
+          </fleet-kit-select-row>
         }
-      </ul>
+      </div>
     </fleet-kit-async-state>
   </nav>
   <section class="art-view" kit-master-detail-detail>

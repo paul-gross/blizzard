@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow, FleetWhen } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
 
 /** One row of the proposal docket list — just enough to pick a proposal (`hub
  * garden-proposal list` is the read this list serves). `waiting` is the row's own
@@ -23,7 +23,7 @@ export interface ProposalListRowVm {
 @Component({
   selector: 'app-proposal-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitPanel, KitSelectRow],
+  imports: [FleetWhen, KitAsyncState, KitPanel, KitSelectList, KitSelectRow],
   templateUrl: './proposal-list.html',
   styleUrl: './proposal-list.css',
 })

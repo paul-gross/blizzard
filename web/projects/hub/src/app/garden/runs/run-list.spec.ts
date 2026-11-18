@@ -152,7 +152,35 @@ describe('FleetRunList', () => {
     let emitted: string | undefined;
     fixture.componentInstance.runPick.subscribe((chunkId) => (emitted = chunkId));
 
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-run-row-ch_2"]')!.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="gardening-run-row-ch_2"]',
+    )!.click();
+    await fixture.whenStable();
+
+    expect(emitted).toBe('ch_2');
+  });
+
+  it('emits runPick with the chunk id on Enter', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted: string | undefined;
+    fixture.componentInstance.runPick.subscribe(
+      (chunkId) => (emitted = chunkId),
+    );
+
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="gardening-run-row-ch_2"]',
+    )!;
+    // Highlight moves to the second row without opening it; Enter opens it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(emitted).toBeUndefined();
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
 
     expect(emitted).toBe('ch_2');
   });

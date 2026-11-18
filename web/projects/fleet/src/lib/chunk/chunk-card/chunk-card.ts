@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Directive, computed, contentChild, input, output, signal } from '@angular/core';
 
 import { FleetWhen } from '../../core/when-display';
-import { KitBadge, KitSelectRow, KitSkeleton, projectTint, toneColor } from '../../kit';
+import { KitBadge, KitCardOpen, KitSkeleton, projectTint, toneColor } from '../../kit';
 import { type ChunkCardView, foldTitles } from './chunk-card.model';
 
 /**
@@ -25,7 +25,7 @@ export class ChunkCardProgress {}
 @Component({
   selector: 'fleet-chunk-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitSelectRow, KitSkeleton],
+  imports: [FleetWhen, KitBadge, KitCardOpen, KitSkeleton],
   templateUrl: './chunk-card.html',
   styleUrl: './chunk-card.css',
 })

@@ -76,7 +76,27 @@ describe('FleetScopeList', () => {
     let emitted: string | undefined;
     fixture.componentInstance.scopePick.subscribe((slug) => (emitted = slug));
 
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-row-blizzard"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="gardening-scope-row-blizzard"]',
+    )!.click();
+    await fixture.whenStable();
+
+    expect(emitted).toBe('blizzard');
+  });
+
+  it('emits scopePick with the slug on Enter', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted: string | undefined;
+    fixture.componentInstance.scopePick.subscribe((slug) => (emitted = slug));
+
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="gardening-scope-row-blizzard"]',
+    )!;
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
 
     expect(emitted).toBe('blizzard');
   });

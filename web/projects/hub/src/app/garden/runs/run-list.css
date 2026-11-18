@@ -4,18 +4,13 @@
   font-size: var(--fs-base);
   color: var(--text);
 }
-.rl-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .rl-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   /* Cancels `kit-select-row.css`'s own fixed `padding: 6px 8px` on `.row` so this
    * div's background can flush against the row's edges. Nothing outside a
-   * component's own template can paint that button's encapsulated background, so an
+   * component's own template can paint the kit row's encapsulated inner element, so an
    * escalated row's tint instead rides this projected child, painting on top of
    * whatever background the kit row itself is currently showing (resting, hover, or
    * selected) rather than replacing it — the only way a selected *and* escalated row

@@ -1,80 +1,66 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import { KitSelectList } from './kit-select-list';
 import { KitSelectRow } from './kit-select-row';
 
 @Component({
   selector: 'fleet-test-host',
-  imports: [KitSelectRow],
+  imports: [KitSelectList, KitSelectRow],
   template: `
-    <fleet-kit-select-row [selected]="selected()" testid="row-a" (picked)="picks += 1">
-      Row A
-    </fleet-kit-select-row>
+    <div fleetKitSelectList [value]="selected()" (valueChange)="opens.push($event)">
+      <fleet-kit-select-row value="a" label="Row A" testid="row-a">Row A</fleet-kit-select-row>
+      <fleet-kit-select-row value="b" label="Row B" bare ariaLabel="Open chunk ch_1">Row B</fleet-kit-select-row>
+    </div>
   `,
 })
 class TestHost {
-  readonly selected = signal(false);
-  picks = 0;
+  readonly selected = signal<string | null>(null);
+  readonly opens: string[] = [];
 }
-
-@Component({
-  selector: 'fleet-test-bare-host',
-  imports: [KitSelectRow],
-  template: `<fleet-kit-select-row bare ariaLabel="Open chunk ch_1">Row B</fleet-kit-select-row>`,
-})
-class BareHost {}
 
 describe('KitSelectRow', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [TestHost, BareHost],
+      imports: [TestHost],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
 
-  it('renders a button carrying the projected content and testid', async () => {
+  it('is an option carrying the projected content and testid on its host', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="row-a"]') as HTMLElement;
 
-    const button = el.querySelector('button.row') as HTMLButtonElement;
-    expect(button).toBeTruthy();
-    expect(button.type).toBe('button');
-    expect(button.getAttribute('data-testid')).toBe('row-a');
-    expect(button.textContent).toContain('Row A');
+    expect(row.getAttribute('role')).toBe('option');
+    expect(row.textContent).toContain('Row A');
+    expect(row.querySelector('button')).toBeNull();
   });
 
-  it('reflects selected onto the row and emits picked on click', async () => {
+  it('reflects the list value onto the row and emits on click', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    const button = el.querySelector('button.row') as HTMLButtonElement;
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="row-a"]') as HTMLElement;
 
-    expect(button.classList.contains('selected')).toBe(false);
-
-    fixture.componentInstance.selected.set(true);
+    expect(row.classList.contains('selected')).toBe(false);
+    fixture.componentInstance.selected.set('a');
     await fixture.whenStable();
-    expect(button.classList.contains('selected')).toBe(true);
+    expect(row.classList.contains('selected')).toBe(true);
+    expect(row.getAttribute('aria-selected')).toBe('true');
 
-    button.click();
-    expect(fixture.componentInstance.picks).toBe(1);
+    row.click();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.opens).toEqual(['a']);
   });
 
-  it('renders no bare class or aria-label by default', async () => {
+  it('toggles the bare class and forwards ariaLabel onto the host', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();
-    const button = (fixture.nativeElement as HTMLElement).querySelector('button.row') as HTMLButtonElement;
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('fleet-kit-select-row');
 
-    expect(button.classList.contains('bare')).toBe(false);
-    expect(button.hasAttribute('aria-label')).toBe(false);
-  });
-
-  it('toggles the bare class and forwards ariaLabel onto the button', async () => {
-    const fixture = TestBed.createComponent(BareHost);
-    await fixture.whenStable();
-    const button = (fixture.nativeElement as HTMLElement).querySelector('button.row') as HTMLButtonElement;
-
-    expect(button.classList.contains('bare')).toBe(true);
-    expect(button.getAttribute('aria-label')).toBe('Open chunk ch_1');
+    expect(rows[0].classList.contains('bare')).toBe(false);
+    expect(rows[0].hasAttribute('aria-label')).toBe(false);
+    expect(rows[1].classList.contains('bare')).toBe(true);
+    expect(rows[1].getAttribute('aria-label')).toBe('Open chunk ch_1');
   });
 });

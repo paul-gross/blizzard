@@ -19,7 +19,6 @@
 .groups {
   flex: 1;
   min-height: 0;
-  list-style: none;
   margin: 0;
   padding: 4px;
   display: flex;
@@ -29,6 +28,13 @@
 }
 .group {
   display: block;
+}
+/* A header whose effective version is open keeps the selected row chrome, though the
+ * header itself is not the list's selected option. The row's own chrome is transparent
+ * outside hover, so the host's background and inset edge show through it. */
+.ge-group-open {
+  background: var(--surface-selected);
+  box-shadow: inset 2px 0 0 var(--cyan);
 }
 /* The group header's two lines — `run-list.css`'s own three-tier scale, used here
  * for the top two tiers only: the name is the row's headline (`--fs-base`/`--text`),
@@ -78,7 +84,6 @@
   white-space: nowrap;
 }
 .lineage {
-  list-style: none;
   margin: 0;
   padding: 2px 0 2px 12px;
   display: flex;

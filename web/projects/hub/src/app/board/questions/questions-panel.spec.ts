@@ -86,7 +86,8 @@ describe('QuestionsPanel', () => {
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="rail-question"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="rail-question"]')?.click();
+    await fixture.whenStable();
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 

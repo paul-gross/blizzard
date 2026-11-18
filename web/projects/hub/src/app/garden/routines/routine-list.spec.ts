@@ -113,7 +113,33 @@ describe('FleetRoutineList', () => {
     let emitted: string | undefined;
     fixture.componentInstance.routinePick.subscribe((slug) => (emitted = slug));
 
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-row-weekly-audit"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="gardening-routine-row-weekly-audit"]',
+    )!.click();
+    await fixture.whenStable();
+
+    expect(emitted).toBe('weekly-audit');
+  });
+
+  it('emits routinePick with the routine slug on Enter', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted: string | undefined;
+    fixture.componentInstance.routinePick.subscribe((slug) => (emitted = slug));
+
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="gardening-routine-row-weekly-audit"]',
+    )!;
+    // Highlight moves to the second row without opening it; Enter opens it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(emitted).toBeUndefined();
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
 
     expect(emitted).toBe('weekly-audit');
   });

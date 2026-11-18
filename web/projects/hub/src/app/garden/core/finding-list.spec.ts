@@ -258,7 +258,35 @@ describe('FleetFindingList', () => {
       let emitted: string | undefined;
       fixture.componentInstance.findingPick.subscribe((findingId) => (emitted = findingId));
 
-      el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fin_2"]')!.click();
+      el.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_2"]',
+      )!.click();
+      await fixture.whenStable();
+
+      expect(emitted).toBe('fin_2');
+    });
+
+    it('emits findingPick with the row id on Enter', async () => {
+      const fixture = await mount({});
+      const el = fixture.nativeElement as HTMLElement;
+      let emitted: string | undefined;
+      fixture.componentInstance.findingPick.subscribe(
+        (findingId) => (emitted = findingId),
+      );
+
+      const row = el.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_2"]',
+      )!;
+      // Highlight moves to the second row without opening it; Enter opens it.
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+      );
+      await fixture.whenStable();
+      expect(emitted).toBeUndefined();
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+      await fixture.whenStable();
 
       expect(emitted).toBe('fin_2');
     });

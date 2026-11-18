@@ -5,13 +5,19 @@
   loadingTestid="gardening-scopes-loading"
   emptyTestid="gardening-scopes-empty"
 >
-  <ul class="sc-list" data-testid="gardening-scopes-list">
+  <div
+    class="sc-list"
+    data-testid="gardening-scopes-list"
+    fleetKitSelectList
+    ariaLabel="Scopes"
+    [value]="selectedSlug()"
+    (valueChange)="pick($event)"
+  >
     @for (row of rows(); track row.slug) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.slug === selectedSlug()"
+          [value]="row.slug"
+          [label]="row.slug"
           [testid]="'gardening-scope-row-' + row.slug"
-          (picked)="pick(row.slug)"
         >
           <div class="sc-top">
             <span class="sc-slug">{{ row.slug }}</span>
@@ -37,7 +43,6 @@
             <div class="sc-desc">{{ row.description }}</div>
           }
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

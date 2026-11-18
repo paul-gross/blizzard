@@ -43,7 +43,7 @@
 .card:hover {
   background: var(--surface-hover);
 }
-.card:has(:focus-visible) {
+.card:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: -2px;
 }

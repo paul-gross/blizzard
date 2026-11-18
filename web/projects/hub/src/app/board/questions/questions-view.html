@@ -16,13 +16,21 @@
       emptyText="NO OPEN QUESTIONS"
       emptyTestid="questions-empty"
     >
+      <div
+        fleetKitSelectList
+        class="rows"
+        ariaLabel="Open questions"
+        [value]="noRowOpen"
+        (valueChange)="open($event)"
+      >
       @for (q of questions(); track q.question_id) {
         <fleet-kit-select-row
+          [value]="q.question_id"
+          [label]="shortId(q.chunk_id)"
           class="qq"
-          data-testid="rail-question"
+          testid="rail-question"
           [ariaLabel]="'Open chunk ' + shortId(q.chunk_id) + ' to answer its question'"
           [attr.data-chunk]="q.chunk_id"
-          (click)="selectChunk.emit(q.chunk_id)"
         >
           <span class="h">
             <span class="cid" data-testid="rail-question-chunk">{{ shortId(q.chunk_id) }}</span>
@@ -40,5 +48,6 @@
           }
         </fleet-kit-select-row>
       }
+      </div>
     </fleet-kit-async-state>
 </fleet-kit-panel>

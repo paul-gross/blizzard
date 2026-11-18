@@ -5,13 +5,19 @@
   [emptyTestid]="testidPrefix() + '-empty'"
   [errorTestid]="testidPrefix() + '-error'"
 >
-  <ul class="rows" [attr.data-testid]="testidPrefix() + '-list'">
+  <div
+    class="rows"
+    fleetKitSelectList
+    [ariaLabel]="listLabel()"
+    [value]="selectedKey()"
+    (valueChange)="pick.emit($event)"
+    [attr.data-testid]="testidPrefix() + '-list'"
+  >
     @for (row of rows(); track row.key) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.key === selectedKey()"
+          [value]="row.key"
+          [label]="row.title"
           [testid]="testidPrefix() + '-row-' + row.key"
-          (picked)="pick.emit(row.key)"
         >
           <span class="top">
             <span class="title" [class.retired]="row.retired">{{ row.title }}</span>
@@ -32,7 +38,6 @@
             </span>
           }
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

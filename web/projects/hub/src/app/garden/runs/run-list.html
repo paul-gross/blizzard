@@ -4,13 +4,19 @@
   emptyText="No runs yet."
   emptyTestid="gardening-runs-empty"
 >
-  <ul class="rl-list" data-testid="gardening-runs-list">
+  <div
+    class="rl-list"
+    data-testid="gardening-runs-list"
+    fleetKitSelectList
+    ariaLabel="Runs"
+    [value]="selectedChunkId()"
+    (valueChange)="pick($event)"
+  >
     @for (row of rows(); track row.chunkId) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.chunkId === selectedChunkId()"
+          [value]="row.chunkId"
+          [label]="row.routineName + '/' + row.scopeSlug"
           [testid]="'gardening-run-row-' + row.chunkId"
-          (picked)="pick(row.chunkId)"
         >
           <div class="rl-body" [class.rl-body--escalated]="row.escalated">
             <div class="rl-line">
@@ -39,7 +45,6 @@
             </div>
           </div>
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

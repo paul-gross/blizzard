@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
@@ -30,7 +30,7 @@ export interface RoutineListRowVm {
 @Component({
   selector: 'app-routine-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow],
+  imports: [KitAsyncState, KitBadge, KitSelectList, KitSelectRow],
   templateUrl: './routine-list.html',
   styleUrl: './routine-list.css',
 })

@@ -62,7 +62,10 @@ describe("ChunkPage's Artifacts tab", () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>(`[data-artifact-key="${OLDER.key}"] button`)?.click();
+    el.querySelector<HTMLElement>(
+      `[data-artifact-key="${OLDER.key}"]`,
+    )?.click();
+    await fixture.whenStable();
     expect(selected).toBe(OLDER.key);
   });
 
@@ -72,8 +75,12 @@ describe("ChunkPage's Artifacts tab", () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
-    const active = el.querySelector('fleet-kit-select-row:has(button.selected[aria-current="true"])');
+    expect(
+      el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent,
+    ).toContain('THE FINDINGS BODY');
+    const active = el.querySelector(
+      'fleet-kit-select-row[aria-selected="true"]',
+    );
     expect(active?.getAttribute('data-artifact-key')).toBe(NEWER.key);
   });
 

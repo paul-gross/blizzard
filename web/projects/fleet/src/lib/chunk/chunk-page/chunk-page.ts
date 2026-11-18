@@ -121,7 +121,7 @@ export class ChunkPage {
               (row) => row.getAttribute(request.attribute) === request.value,
             ) ?? root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`)
           : root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`);
-      (target?.matches('fleet-kit-select-row') ? target.querySelector<HTMLElement>('button') : target)?.focus();
+      target?.focus();
       this.focusRequest = null;
     });
   }

@@ -1,8 +1,14 @@
-import type { Routes } from '@angular/router';
+import type { Route, Routes, UrlSegment } from '@angular/router';
 import { matchesMobileViewport } from 'fleet/shell';
 import { enterInvitedTenant } from '../core/auth/invite-accepted';
 import { LENSED_ROUTE_PATH, LENS_PICKER_PATH } from '../core/project-lens';
 import { projectLensGuard } from './project-lens.guard';
+
+/** Matches `graphs` and `graphs/:graphId` as a single route, with `graphId` as a positional param when present. */
+function graphsMatcher(segments: UrlSegment[]): ReturnType<NonNullable<Route['matcher']>> {
+  if (segments.length === 0 || segments.length > 2 || segments[0].path !== 'graphs') return null;
+  return segments.length === 2 ? { consumed: segments, posParams: { graphId: segments[1] } } : { consumed: segments };
+}
 
 /**
  * The board's views, mounted twice by {@link routes}: at the root, the lens on All, and under `p/:projectSlug`, the
@@ -63,8 +69,8 @@ export const VIEW_ROUTES: Routes = [
   },
   // The phone's project lens picker, opened from the titlebar's lens name; `?from=` names the view it returns to.
   { path: LENS_PICKER_PATH, loadComponent: () => import('./lens-picker/lens-picker').then((m) => m.LensPicker) },
-  { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
-  { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
+  // One route for `/graphs` and `/graphs/:graphId`, so selecting a version keeps the page — and the list's focus — mounted.
+  { matcher: graphsMatcher, loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },
   // A shared event detail link remains available in either viewport.
   { path: 'events/:eventId', loadComponent: () => import('../events/event-detail-page').then((m) => m.EventDetailPage) },

@@ -18,9 +18,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 .art-view {
   position: relative;

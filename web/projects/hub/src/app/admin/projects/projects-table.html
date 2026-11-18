@@ -7,13 +7,19 @@
   emptyTestid="projects-table-empty"
   errorTestid="projects-table-error"
 >
-  <ul class="rows" data-testid="projects-table">
+  <div
+    class="rows"
+    fleetKitSelectList
+    ariaLabel="Projects"
+    [value]="selectedKey()"
+    (valueChange)="pick.emit($event)"
+    data-testid="projects-table"
+  >
     @for (row of rows(); track row.key) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.key === selectedKey()"
+          [value]="row.key"
+          [label]="row.name"
           [testid]="'projects-table-row-' + row.key"
-          (picked)="pick.emit(row.key)"
         >
           <span class="top">
             <span
@@ -38,7 +44,6 @@
             <span class="ref" [attr.data-testid]="'projects-table-ref-' + row.key">{{ ref(row) }}</span>
           </span>
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

@@ -10,6 +10,10 @@ const ROWS: readonly ProjectRowVm[] = [
   { key: 'proj_d', name: 'Dormant', projectId: 'proj_01ABCDEFGHJKMNPQRSTVWXYZ56', color: 'teal', needs: null, wired: false },
 ];
 
+function key(el: Element, name: string): void {
+  el.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+}
+
 describe('ProjectsTable', () => {
   async function mount(rows: readonly ProjectRowVm[], selectedKey: string | null = null) {
     await TestBed.configureTestingModule({
@@ -41,12 +45,38 @@ describe('ProjectsTable', () => {
     expect(row).not.toMatch(/\br\d/);
   });
 
-  it('picks a project by its id', async () => {
+  it('opens a project by its id on click and on Enter', async () => {
     const { fixture, el } = await mount(ROWS);
     const picked: string[] = [];
-    fixture.componentInstance.pick.subscribe((key) => picked.push(key));
-    el.querySelector<HTMLElement>('[data-testid="projects-table-row-proj_c"]')!.click();
-    expect(picked).toEqual(['proj_c']);
+    // The route feeds each open back in as the selection.
+    fixture.componentInstance.pick.subscribe((id) => {
+      picked.push(id);
+      fixture.componentRef.setInput('selectedKey', id);
+    });
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="projects-table-row-proj_c"]',
+    )!;
+    row.click();
+    await fixture.whenStable();
+    key(row, 'ArrowDown');
+    await fixture.whenStable();
+    key(row, 'Enter');
+    await fixture.whenStable();
+    expect(picked).toEqual(['proj_c', 'proj_d']);
+  });
+
+  it('marks the route-backed project as the selected option', async () => {
+    const { el } = await mount(ROWS, 'proj_b');
+    expect(
+      el
+        .querySelector('[data-testid="projects-table-row-proj_b"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      el
+        .querySelector('[data-testid="projects-table-row-proj_c"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('false');
   });
 
   it('says so when there is no project', async () => {

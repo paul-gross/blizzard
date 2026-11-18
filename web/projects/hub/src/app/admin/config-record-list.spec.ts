@@ -8,6 +8,10 @@ const ROWS: readonly ConfigRowVm[] = [
   { key: 'winter', title: 'winter', sub: ['github', 'paul-gross/winter'], badges: [], revision: 2, retired: false },
 ];
 
+function key(el: Element, name: string): void {
+  el.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+}
+
 describe('ConfigRecordList', () => {
   async function mount(inputs: { rows?: readonly ConfigRowVm[]; state?: 'loading' | 'error' | 'empty' | 'ready' }) {
     await TestBed.configureTestingModule({
@@ -37,12 +41,45 @@ describe('ConfigRecordList', () => {
     expect(winter.classList.contains('selected')).toBe(true);
   });
 
-  it('emits the picked key', async () => {
+  it('opens a row on click and on Enter', async () => {
     const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
     const picked: string[] = [];
-    fixture.componentInstance.pick.subscribe((key) => picked.push(key));
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="ws-row-hub"]')!.click();
-    expect(picked).toEqual(['hub']);
+    // The route feeds each open back in as the selection.
+    fixture.componentInstance.pick.subscribe((picked_) => {
+      picked.push(picked_);
+      fixture.componentRef.setInput('selectedKey', picked_);
+    });
+    const hub = el.querySelector<HTMLElement>('[data-testid="ws-row-hub"]')!;
+    hub.click();
+    await fixture.whenStable();
+    key(hub, 'ArrowDown');
+    await fixture.whenStable();
+    key(hub, 'Enter');
+    await fixture.whenStable();
+    expect(picked).toEqual(['hub', 'winter']);
+  });
+
+  it('marks the row the route-backed key names as the selected option', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    expect(
+      el
+        .querySelector('[data-testid="ws-row-winter"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    fixture.componentRef.setInput('selectedKey', 'hub');
+    await fixture.whenStable();
+    expect(
+      el
+        .querySelector('[data-testid="ws-row-hub"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      el
+        .querySelector('[data-testid="ws-row-winter"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('false');
   });
 
   it('renders the empty copy only once the read settles empty', async () => {

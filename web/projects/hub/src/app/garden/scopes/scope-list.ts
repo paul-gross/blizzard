@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow } from 'fleet';
+import { FleetWhen, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow } from 'fleet';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
@@ -37,7 +37,7 @@ export interface ScopeDescriptionEditEvent {
 @Component({
   selector: 'app-scope-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitSelectRow],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitSelectList, KitSelectRow],
   templateUrl: './scope-list.html',
   styleUrl: './scope-list.css',
 })

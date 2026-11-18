@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, type Tone } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, type Tone } from 'fleet';
 
 /** A marker a config row or detail header carries. */
 export interface ConfigBadgeVm {
@@ -22,12 +22,12 @@ export interface ConfigRowVm {
 
 /**
  * A config surface's selection list — one select row per record or change entry,
- * with its badges and revision. Presentational: rows in, picks out.
+ * with its badges and revision. Presentational: rows in, opens out.
  */
 @Component({
   selector: 'app-config-record-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow],
+  imports: [KitAsyncState, KitBadge, KitSelectList, KitSelectRow],
   templateUrl: './config-record-list.html',
   styleUrl: './config-record-list.css',
 })
@@ -36,6 +36,8 @@ export class ConfigRecordList {
   readonly state = input.required<KitAsyncStateValue>();
   readonly emptyText = input.required<string>();
   readonly selectedKey = input<string | null>(null);
+  /** The list's accessible name. */
+  readonly listLabel = input<string | null>(null);
   /** Roots every testid this list renders. */
   readonly testidPrefix = input.required<string>();
 

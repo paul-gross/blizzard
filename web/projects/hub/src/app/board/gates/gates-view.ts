@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectList, KitSelectRow } from 'fleet';
 
 /**
  * The open-gates rail's presentational half — one row per open decision,
@@ -14,7 +14,7 @@ import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type K
 @Component({
   selector: 'app-gates-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitSelectRow],
+  imports: [KitAsyncState, KitPanel, KitSelectList, KitSelectRow],
   templateUrl: './gates-view.html',
   styleUrl: './gates-view.css',
 })
@@ -30,6 +30,15 @@ export class GatesPanelView {
 
   /** Emitted with the gate's chunk id when a gate is activated. */
   readonly selectChunk = output<string>();
+
+  /** The list's `value`: a rail opens a chunk rather than holding a selection, so no row is ever the open one. */
+  protected readonly noRowOpen = null as string | null;
+
+  /** A row's value is its own id (one chunk can hold several), so open the chunk it belongs to. */
+  protected open(id: string): void {
+    const row = this.gates().find((r) => r.decision_id === id);
+    if (row !== undefined) this.selectChunk.emit(row.chunk_id);
+  }
 
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);

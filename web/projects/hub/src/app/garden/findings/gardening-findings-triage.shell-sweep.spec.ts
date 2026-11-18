@@ -161,11 +161,15 @@ describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep)', () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       // The gone tint rides `.fl-body`, the projected content inside
-      // `fleet-kit-select-row`'s own encapsulated `<button>` — `run-list.ts`'s own
+      // `fleet-kit-select-row`'s own inner `.row` element — `run-list.ts`'s own
       // `.rl-body` shape, compared here where each background is actually drawn
-      // rather than on the outer button (`kit-select-row.css`'s own `.selected`).
-      const plainBody = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_1"] .fl-body')!;
-      const goneBody = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_2"] .fl-body')!;
+      // rather than on the row's chrome (`kit-select-row.css`'s own `.selected`).
+      const plainBody = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_1"] .fl-body',
+      )!;
+      const goneBody = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_2"] .fl-body',
+      )!;
       const plainBg = getComputedStyle(plainBody).backgroundColor;
       const goneBg = getComputedStyle(goneBody).backgroundColor;
       expect(goneBg, `a gone-flagged row's background (${goneBg}) must not read as a plain row's (${plainBg})`).not.toBe(
@@ -174,8 +178,12 @@ describe('FleetFindingList gone-row tint shell sweep (web:shell-sweep)', () => {
 
       // The left edge belongs to selection unconditionally — an unselected
       // gone-flagged row must not claim it.
-      const plainRow = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_1"]')!;
-      const goneRow = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fin_2"]')!;
+      const plainRow = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_1"] > .row',
+      )!;
+      const goneRow = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-finding-row-fin_2"] > .row',
+      )!;
       expect(
         getComputedStyle(goneRow).borderLeftColor,
         'an unselected gone-flagged row must not claim the selection edge',

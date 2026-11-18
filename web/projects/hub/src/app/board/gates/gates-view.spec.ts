@@ -61,11 +61,15 @@ describe('GatesPanelView', () => {
     expect(rows[0].querySelector('[data-testid="rail-gate-choices"]')?.textContent).toContain('approve · reject');
   });
 
-  it("names each row's button after its chunk and the gate it resolves", async () => {
+  it('names each row after its chunk and the gate it resolves', async () => {
     const fixture = await render('ready', GATES);
-    const button = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="rail-gate"] button');
+    const row = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="rail-gate"]',
+    );
 
-    expect(button?.getAttribute('aria-label')).toBe('Open chunk C-3YJ9 to resolve its gate');
+    expect(row?.getAttribute('aria-label')).toBe(
+      'Open chunk C-3YJ9 to resolve its gate',
+    );
   });
 
   it('names the origin: the graph, or the runner that imposed the gate', async () => {
@@ -88,7 +92,31 @@ describe('GatesPanelView', () => {
     let selected: string | undefined;
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
 
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="rail-gate"]')?.click();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('[data-testid="rail-gate"]')
+      ?.click();
+    await fixture.whenStable();
+    expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+  });
+
+  it('opens the focused gate on Enter, in a rail with no selected row', async () => {
+    const fixture = await render('ready', GATES);
+    let selected: string | undefined;
+    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
+    const el = fixture.nativeElement as HTMLElement;
+    const row = el.querySelector<HTMLElement>('[data-testid="rail-gate"]')!;
+
+    expect(
+      el.querySelector('[role="listbox"]')?.getAttribute('aria-label'),
+    ).toBe('Open gates');
+    expect(
+      el.querySelector('[role="option"][aria-selected="true"]'),
+    ).toBeNull();
+    row.focus();
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 

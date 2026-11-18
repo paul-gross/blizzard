@@ -173,7 +173,7 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const item = root.querySelector<HTMLElement>('fleet-kit-select-row[data-segment-id="sg_open"]')!;
-      expect(item.querySelector('[data-testid="transcript-segment-item"]')).not.toBeNull();
+      expect(item.getAttribute('data-testid')).toBe('transcript-segment-item');
       const pills = new Map(
         [...item.querySelectorAll<HTMLElement>('fleet-kit-badge .badge')].map((b) => [b.textContent?.trim(), b] as const),
       );

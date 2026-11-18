@@ -1,0 +1,10 @@
+<button
+  type="button"
+  class="row"
+  [attr.data-testid]="testid()"
+  [attr.aria-current]="current() ? 'true' : null"
+  [attr.aria-label]="ariaLabel()"
+  (click)="opened.emit()"
+>
+  <ng-content />
+</button>

@@ -1,7 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, KitSelectRow, KitSkeleton, LaneIcon } from 'fleet';
+import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, KitCardOpen, KitSkeleton, LaneIcon } from 'fleet';
 import { DeliveryChunk } from './delivery-chunk';
 import { cardStageColor, deliveryWhen, type DeliveryList as DeliveryListValue, type DeliveryRow, type DeliveryWhen, STAGES } from './delivery.model';
 import { skeletonRows } from './delivery-skeleton.model';
@@ -14,7 +14,7 @@ import { skeletonRows } from './delivery-skeleton.model';
 @Component({
   selector: 'app-delivery-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DeliveryChunk, KitAsyncState, KitSelectRow, KitSkeleton, LaneIcon, NgTemplateOutlet],
+  imports: [DeliveryChunk, KitAsyncState, KitCardOpen, KitSkeleton, LaneIcon, NgTemplateOutlet],
   templateUrl: './delivery-list.html',
   styleUrl: './delivery-list.css',
 })
