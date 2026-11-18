@@ -123,8 +123,6 @@ async function landedOnClock(host: RunnerHost, api: HubApi, clock: Pick<Clock, '
 
 test.describe('a parked delivery, on the controlled clock', () => {
   test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
-  // Each case starts a hub and host and drives a full delivery across multiple controlled turns.
-  test.setTimeout(90_000);
   for (const method of ['merge', 'squash', 'rebase'] as const) {
     test(`test_park_waits_past_node_timeout_then_records_human_merge[${method}]`, async ({ repository, issue, api, clock, forge, runnerHosts }) => {
       const repo = await repository();

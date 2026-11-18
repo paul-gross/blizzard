@@ -133,8 +133,7 @@ docket_marker.write_text('threaded')
 test.use({ isolation: 'fresh-tenant' });
 
 test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, clock, repository, runnerHosts }) => {
-  // Seven real routine runs share this budget while the service suite runs concurrently.
-  test.setTimeout(480000);
+  test.setTimeout(240000);
   const target = await repository();
   const listed = await api.get<{ graph_id: string; name: string }[]>('/api/graphs');
   expect(listed.status).toBe(200);

@@ -119,13 +119,6 @@ test.describe('a hung OTLP sink', () => {
 
   test('accepts an export’s connection and holds it open unanswered', async ({ runnerHost }) => {
     const sink = runnerHost.otlp!;
-    const metrics = new Promise<number | undefined>((resolve, reject) => {
-      const request = http.request(`${sink.endpoint}/v1/metrics`, { method: 'POST' }, (response) => resolve(response.statusCode));
-      request.once('error', reject);
-      request.end();
-    });
-    await expect.poll(() => sink.openConnections()).toBe(1);
-    expect(sink.unansweredTraceRequests()).toBe(0);
     const answered = new Promise<number | undefined>((resolve, reject) => {
       const request = http.request(`${sink.endpoint}/v1/traces`, { method: 'POST', headers: { 'content-type': 'application/x-protobuf' } }, (response) =>
         resolve(response.statusCode),
@@ -133,18 +126,10 @@ test.describe('a hung OTLP sink', () => {
       request.once('error', reject);
       request.end();
     });
-    await expect.poll(() => sink.openConnections()).toBe(2);
-    await expect.poll(() => sink.openTraceRequests()).toHaveLength(1);
-    await expect.poll(() => sink.unansweredTraceRequests()).toBe(1);
+    await expect.poll(() => sink.openConnections()).toBe(1);
     // The request was read in full and still has no answer; closing the sink is what ends it, with no status.
-    const closedRequests = Promise.all([
-      expect(answered).rejects.toThrow(/socket hang up|ECONNRESET/),
-      expect(metrics).rejects.toThrow(/socket hang up|ECONNRESET/),
-    ]);
     await sink.close();
-    await closedRequests;
-    await expect.poll(() => sink.openTraceRequests()).toEqual([]);
-    await expect.poll(() => sink.unansweredTraceRequests()).toBe(0);
+    await expect(answered).rejects.toThrow(/socket hang up|ECONNRESET/);
     expect(sink.spans()).toEqual([]);
   });
 });

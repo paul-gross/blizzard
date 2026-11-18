@@ -4,7 +4,7 @@ import { discoverProfiles, SERVICE_HUB_DIR } from './harness/profiles';
 import { fleetProfileFolders, serviceProjects, uiProfileFolders, uiProjects } from './harness/projects';
 
 /** A run of up to this many workers shares one hub of the default profile. */
-export const WORKERS_PER_HUB = 4;
+export const WORKERS_PER_HUB = 8;
 
 // Minted once, written back into the environment so the config's re-evaluation in every worker reads the same id.
 process.env.BLIZZARD_RUN_ID ??= `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex')}`;

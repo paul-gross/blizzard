@@ -501,8 +501,6 @@ test.describe('poll timeout, on the controlled clock', () => {
   });
 
   traced(timeoutTitle, async ({ repository, issue, api, clock, flushTraces, forge, runnerHosts, traceSink }) => {
-    // Building, polling and collecting the trace all share the test budget.
-    test.setTimeout(90_000);
     const repo = await repository();
     const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
     await lever(forge, repo, 'checks_pending');
