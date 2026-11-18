@@ -4,8 +4,8 @@
   [busy]="busy()" [actionError]="actionError()" (edit)="onEdit()" (lifecycle)="onLifecycle($event)"
   emptyText="Pick a forge." testidPrefix="admin-forge"
 />
-@if (editOpen() && shown(); as initial) {
-  <app-config-form-dialog heading="Edit forge" mode="edit" [fields]="fields" [initial]="initial"
-    submitLabel="Save" [submitError]="editError()" [submitting]="editMutation.isPending()"
-    testidPrefix="admin-forge-edit" (closed)="editOpen.set(false)" (submitted)="onSave($event)" />
+@if (editBaseline(); as baseline) {
+  <app-config-field-tree-dialog heading="Edit forge" mode="edit" [form]="editTree" [fields]="fields"
+    [baseline]="baseline.draft" submitLabel="Save" testidPrefix="admin-forge-edit"
+    (closed)="editBaseline.set(null)" (save)="onSave()" />
 }

@@ -7,7 +7,7 @@
   <router-outlet />
 </app-config-master>
 @if (createOpen()) {
-  <app-config-form-dialog heading="New forge" mode="create" [fields]="fields" submitLabel="Create"
-    [submitError]="createError()" [submitting]="createMutation.isPending()" testidPrefix="admin-forges-create"
-    (closed)="createOpen.set(false)" (submitted)="onCreate($event)" />
+  <app-config-field-tree-dialog heading="New forge" mode="create" [form]="createForm" [fields]="fields"
+    submitLabel="Create" testidPrefix="admin-forges-create"
+    (closed)="createOpen.set(false)" (save)="onCreate()" />
 }

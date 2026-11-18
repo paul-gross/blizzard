@@ -911,7 +911,8 @@ const FLEET_LAYERS = {
  * `architecture/frontend-structure/placement.md`, which carries no hub table. */
 const HUB_LAYERS = {
   core: [],
-  admin: [],
+  forge: [],
+  admin: ['forge'],
   board: ['runners'],
   delivery: [],
   demo: [],
@@ -944,6 +945,7 @@ const HUB_LAYERS = {
     'delivery',
     'demo',
     'events',
+    'forge',
     'garden',
     'garden/cadences',
     'garden/findings',
