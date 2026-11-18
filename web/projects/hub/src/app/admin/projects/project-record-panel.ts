@@ -84,13 +84,13 @@ export class ProjectRecordPanel {
   readonly tabChange = output<string>();
   readonly link = output<ProjectLinkKind>();
   readonly unlink = output<ProjectUnlinkEvent>();
+  readonly reposition = output<LandingPositionRequest>();
+  /** The repository link row whose branch the viewer asks to edit. */
+  readonly editBranch = output<ProjectLinkRowVm>();
 
   protected onChooseTab(value: string | null): void {
     if (value !== null) this.tabChange.emit(value);
   }
-  readonly reposition = output<LandingPositionRequest>();
-  /** The repository link row whose branch the viewer asks to edit. */
-  readonly editBranch = output<ProjectLinkRowVm>();
 
   private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
   private readonly colorTemplate = viewChild<TemplateRef<unknown>>('colorFact');
