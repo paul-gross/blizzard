@@ -33,7 +33,7 @@ import { KitBackBar } from './kit-back-bar';
  *
  * A caption is optional per pane; given one, the pane reads `role="region"` labelled by
  * it, with the label's own `id` derived from the required `paneId` input the way
- * {@link KitAccordionSection.sectionId} already derives its `aria-controls`/`aria-labelledby`
+ * {@link KitAccordionSection.sectionId} already derives its trigger and panel ids
  * pair — an omitted caption leaves the pane unlabelled.
  *
  * The detail pane's own content inset is a CSS custom property

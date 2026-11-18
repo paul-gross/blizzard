@@ -1,4 +1,4 @@
-<div class="list" data-testid="chunk-issue-list">
+<div class="list" fleetKitAccordionGroup data-testid="chunk-issue-list">
   @for (item of items(); track keyFor(item)) {
     <fleet-kit-accordion-section
       [sectionId]="'issue-' + keyFor(item)"

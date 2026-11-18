@@ -3,6 +3,7 @@
  * surface, re-exported one line per feature from the root `public-api.ts`.
  */
 
+export { KitAccordionGroup } from './kit-accordion-group';
 export { KitAccordionSection } from './kit-accordion-section';
 export { KitDialog } from './kit-dialog';
 export { KitErrorLine } from './kit-error-line';

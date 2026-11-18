@@ -298,6 +298,10 @@
  *   - projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts — the kit tab strip's
  *     sub variant renders 30px tall on `--panel-deep` with a cyan active tab, beside
  *     the 32px amber-active top strip, at 1280px and 390px.
+ *   - projects/fleet/src/lib/kit/kit-accordion-section.shell-sweep.spec.ts — the kit accordion
+ *     group's keyboard model in real Chromium: Tab reaches a header, Up/Down/Home/End move between
+ *     headers, Enter and Space toggle with the panel's computed display following, a soft-disabled
+ *     header is reached but inert, and each trigger is paired with its panel.
  *   - projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts — the kit select row's
  *     default chrome (6px 8px padding, hairline and left edge, selected background) is
  *     unchanged, while `bare` draws none of it in any state and lets a host flex rule
@@ -390,6 +394,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tabs.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-accordion-section.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select-row.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/runs/gardening-run-dialog.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/proposals/gardening-proposals-page.shell-sweep.spec.ts' },
