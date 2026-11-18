@@ -132,6 +132,7 @@ describe('LocalPanelLayout', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLElement>('[data-testid="board-layout-list"]')?.click();
+    await fixture.whenStable();
     expect(chosen).toEqual(['list']);
   });
 

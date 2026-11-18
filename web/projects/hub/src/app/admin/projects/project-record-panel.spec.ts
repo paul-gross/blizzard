@@ -64,14 +64,15 @@ describe('ProjectRecordPanel', () => {
 
     byTestid(el, 'admin-projects-edit')!.click();
     byTestid(el, 'admin-projects-color-open')!.click();
-    byTestid(el, 'admin-projects-tab-repositories')!.click();
     byTestid(el, 'admin-projects-sources-link')!.click();
     byTestid(el, 'admin-projects-sources-unlink-jira')!.click();
+    byTestid(el, 'admin-projects-tab-repositories')!.click();
+    await fixture.whenStable();
     set('tab', 'overview');
     await fixture.whenStable();
     byTestid(el, 'admin-projects-draws-open')!.click();
 
-    expect(seen).toEqual(['edit', 'color', 'tab:repositories', 'link:source', 'unlink:source:wsrc_j', 'tab:sources']);
+    expect(seen).toEqual(['edit', 'color', 'link:source', 'unlink:source:wsrc_j', 'tab:repositories', 'tab:sources']);
   });
 
   it('disables the unlink of every row in the pending set', async () => {

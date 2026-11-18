@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type UrgencyView, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import { type UrgencyView, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
 import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
@@ -32,7 +32,7 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 @Component({
   selector: 'app-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, BoardList, KitPanel, KitPanelHeader, KitAsyncState, KitTabs],
+  imports: [BoardColumn, BoardList, KitPanel, KitPanelHeader, KitAsyncState, KitTabContent, KitTabGroup, KitTabPanel, KitTabs],
   templateUrl: './board-shell.html',
   styleUrl: './board-shell.css',
 })
@@ -149,7 +149,7 @@ export class BoardShell {
     };
   });
 
-  protected chooseLayout(value: string): void {
+  protected chooseLayout(value: string | null): void {
     this.layoutChange.emit(boardLayoutOf(value));
   }
 

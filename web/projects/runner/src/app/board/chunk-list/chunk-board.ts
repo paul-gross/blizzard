@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption, toneColor } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption, toneColor } from 'fleet';
 
 import { BOARD_LANES, type BoardLane, type MachineChunkRow } from '../../core/chunk-rows.model';
 import { rankedRows } from '../app-panel.model';
@@ -27,7 +27,7 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 @Component({
   selector: 'app-chunk-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkRow, KitAsyncState, KitPanel, KitPanelHeader, KitTabs],
+  imports: [ChunkRow, KitAsyncState, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs],
   templateUrl: './chunk-board.html',
   styleUrl: './chunk-board.css',
   host: { '[class.stacked]': 'stacked()' },
@@ -72,7 +72,7 @@ export class ChunkBoard {
   /** The list view's rows, ranked lane by lane. */
   protected readonly ranked = computed(() => rankedRows(this.rows()));
 
-  protected chooseLayout(value: string): void {
+  protected chooseLayout(value: string | null): void {
     this.layoutChange.emit(value === 'list' ? 'list' : 'board');
   }
 }

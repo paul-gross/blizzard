@@ -1,15 +1,18 @@
 <div class="mc" data-testid="board-shell">
-  <fleet-kit-panel class="board-panel" aria-label="Chunk board" [bodyScroll]="false">
+  <fleet-kit-panel class="board-panel" fleetKitTabGroup aria-label="Chunk board" [bodyScroll]="false">
     <div fleetKitPanelHeader class="hdr">
       <ng-content select="[boardActions]" />
-      <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
+      <fleet-kit-tabs variant="sub" [options]="layoutTabs" [active]="layout()" (activeChange)="chooseLayout($event)" />
     </div>
-    @if (layout() === 'tracks') {
-      <ng-content select="[boardTracks]" />
-    } @else {
-      <div class="board-content">
-        <span class="scroll-cue" data-testid="board-scroll-cue">Scroll sideways ↔</span>
-        @if (layout() === 'list') {
+    <div [fleetKitTabPanel]="'tracks'">
+      <ng-template fleetKitTabContent>
+        <ng-content select="[boardTracks]" />
+      </ng-template>
+    </div>
+    <div [fleetKitTabPanel]="'list'">
+      <ng-template fleetKitTabContent>
+        <div class="board-content">
+          <span class="scroll-cue" data-testid="board-scroll-cue">Scroll sideways ↔</span>
           <app-board-list
             [urgencies]="urgencies()"
             class="list"
@@ -25,7 +28,13 @@
             (reposition)="reposition.emit($event)"
             (laneMove)="laneMove.emit($event)"
           />
-        } @else {
+        </div>
+      </ng-template>
+    </div>
+    <div [fleetKitTabPanel]="'board'">
+      <ng-template fleetKitTabContent>
+        <div class="board-content">
+          <span class="scroll-cue" data-testid="board-scroll-cue">Scroll sideways ↔</span>
           <div class="board" data-testid="board" tabindex="0" role="region" aria-label="Chunk lanes">
             @for (col of columns(); track col.key) {
               <app-board-column
@@ -48,9 +57,9 @@
               />
             }
           </div>
-        }
-      </div>
-    }
+        </div>
+      </ng-template>
+    </div>
     @if (layout() !== 'tracks') {
       <fleet-kit-async-state
         [state]="state()"

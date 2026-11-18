@@ -9,6 +9,9 @@ import {
   KitSwatch,
   type KitTabOption,
   type LandingPositionRequest,
+  KitTabContent,
+  KitTabGroup,
+  KitTabPanel,
   KitTabs,
   type ProjectView,
 } from 'fleet';
@@ -40,7 +43,7 @@ export interface ProjectUnlinkEvent {
 @Component({
   selector: 'app-project-record-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigRevisions, FleetWhen, KitButton, KitFactList, KitSwatch, KitTabs, ProjectLinkPanel, ProjectOverviewCard],
+  imports: [ConfigRevisions, FleetWhen, KitButton, KitFactList, KitSwatch, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, ProjectLinkPanel, ProjectOverviewCard],
   templateUrl: './project-record-panel.html',
   styleUrl: './project-record-panel.css',
 })
@@ -81,6 +84,10 @@ export class ProjectRecordPanel {
   readonly tabChange = output<string>();
   readonly link = output<ProjectLinkKind>();
   readonly unlink = output<ProjectUnlinkEvent>();
+
+  protected onChooseTab(value: string | null): void {
+    if (value !== null) this.tabChange.emit(value);
+  }
   readonly reposition = output<LandingPositionRequest>();
   /** The repository link row whose branch the viewer asks to edit. */
   readonly editBranch = output<ProjectLinkRowVm>();

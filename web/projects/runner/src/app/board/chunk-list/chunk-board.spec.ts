@@ -135,7 +135,9 @@ describe('ChunkBoard', () => {
 
     expect(el.querySelector('[data-testid="board-layout-board"]')?.getAttribute('aria-selected')).toBe('true');
     el.querySelector<HTMLElement>('[data-testid="board-layout-list"]')?.click();
+    await fixture.whenStable();
     el.querySelector<HTMLElement>('[data-testid="board-layout-board"]')?.click();
+    await fixture.whenStable();
 
     expect(chosen).toEqual(['list', 'board']);
   });

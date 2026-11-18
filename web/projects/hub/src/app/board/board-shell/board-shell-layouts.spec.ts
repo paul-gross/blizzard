@@ -77,6 +77,7 @@ describe('BoardShell layouts', () => {
     fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="board-layout-list"]')!.click();
+    await fixture.whenStable();
 
     expect(chosen).toEqual(['list']);
   });
@@ -98,6 +99,7 @@ describe('BoardShell layouts', () => {
     fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="board-layout-tracks"]')!.click();
+    await fixture.whenStable();
 
     expect(chosen).toEqual(['tracks']);
   });

@@ -1,16 +1,22 @@
-<div class="tabs" fleetKitTabStrip [variant]="variant()" role="tablist">
+<div
+  class="tabs"
+  fleetKitTabStrip
+  ngTabList
+  [variant]="variant()"
+  [selectedTab]="active() ?? undefined"
+  (selectedTabChange)="onSelected($event)"
+>
   @for (option of options(); track option.value) {
     <button
       type="button"
       class="tab"
       fleetKitTab
+      ngTab
+      [value]="option.value"
       [variant]="variant()"
-      role="tab"
-      [class.active]="option.value === activeValue()"
-      [attr.aria-selected]="option.value === activeValue()"
+      [class.active]="option.value === active()"
       [attr.data-testid]="option.testid ?? null"
       [count]="option.count ?? null"
-      (click)="choose.emit(option.value)"
     >
       {{ option.label }}
     </button>

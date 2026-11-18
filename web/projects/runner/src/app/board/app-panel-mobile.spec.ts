@@ -173,6 +173,7 @@ describe('LocalPanelMobile', () => {
     fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
 
     el.querySelector<HTMLElement>('[data-testid="board-layout-list"]')?.click();
+    await fixture.whenStable();
 
     expect(chosen).toEqual(['list']);
   });
