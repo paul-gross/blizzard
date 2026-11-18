@@ -9,10 +9,13 @@ import {
   computed,
   inject,
   input,
+  model,
   output,
   signal,
   viewChild,
 } from '@angular/core';
+
+import { FORM_FIELD, type FormValueControl } from '@angular/forms/signals';
 
 import type { KitChipOption } from './kit-chips';
 
@@ -41,8 +44,20 @@ import type { KitChipOption } from './kit-chips';
   templateUrl: './kit-select.html',
   styleUrl: './kit-select.css',
 })
-export class KitSelect {
+export class KitSelect implements FormValueControl<string> {
   private readonly injector = inject(Injector);
+
+  /** Present when a `[formField]` binds this select; the bound `value` then wins over `selectedValue`. */
+  private readonly formField = inject(FORM_FIELD, {
+    optional: true,
+    self: true,
+  });
+
+  /** The picked value, for a `[formField]` binding (or a `[(value)]` caller). A pick always sets it. */
+  readonly value = model('');
+
+  /** Emits on focus leaving the trigger and its popup together, so a bound field becomes touched. */
+  readonly touch = output<void>();
 
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
@@ -65,9 +80,11 @@ export class KitSelect {
 
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('triggerEl');
 
+  /** The value on show: the bound field's when a `[formField]` binds this select, else the caller's `selectedValue`. */
+  protected readonly shown = computed<string | null>(() => (this.formField ? this.value() : this.selectedValue()));
   /** The matched option's label, else the raw value (a stale URL value matches no option), else empty. */
   protected readonly selectedLabel = computed(() => {
-    const value = this.selectedValue();
+    const value = this.shown();
     return this.options().find((o) => o.value === value)?.label ?? value ?? '';
   });
   /** The trigger's accessible name: its label (or `ariaLabel`), then the current selection. */
@@ -76,7 +93,36 @@ export class KitSelect {
     const selected = this.selectedLabel();
     return selected ? `${name}: ${selected}` : name;
   });
-  protected readonly selection = computed(() => [this.selectedValue()].filter((v): v is string => v !== null));
+  /** The listbox selection: the shown value, only while it is among the options (the listbox rejects any other). */
+  protected readonly selection = computed(() => {
+    const value = this.shown();
+    return value !== null && this.options().some((o) => o.value === value) ? [value] : [];
+  });
+
+  /** Focuses the trigger button. */
+  focus(options?: FocusOptions): void {
+    this.trigger()?.nativeElement.focus(options);
+  }
+
+  protected onTriggerFocusOut(event: FocusEvent): void {
+    if (this.open()) return;
+    this.touchUnlessInside(event);
+  }
+
+  protected onPopupFocusOut(event: FocusEvent): void {
+    if (!event.relatedTarget) return;
+    this.touchUnlessInside(event);
+  }
+
+  private touchUnlessInside(event: FocusEvent): void {
+    const next = event.relatedTarget as Node | null;
+    if (
+      next &&
+      (this.trigger()?.nativeElement.contains(next) || document.getElementById(this.listboxId)?.contains(next))
+    )
+      return;
+    this.touch.emit();
+  }
 
   protected toggle(): void {
     if (this.disabled()) return;
@@ -100,6 +146,7 @@ export class KitSelect {
 
   protected pick(value: string): void {
     if (this.disabled() || this.options().find((o) => o.value === value)?.disabled) return;
+    this.value.set(value);
     this.choose.emit(value);
     this.close();
   }

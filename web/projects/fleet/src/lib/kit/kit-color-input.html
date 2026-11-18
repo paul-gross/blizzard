@@ -5,8 +5,10 @@
   [value]="pickerValue()"
   [disabled]="disabled()"
   (change)="onPick($event)"
+  (blur)="onBlur($event)"
 />
 <input
+  #text
   class="text"
   type="text"
   spellcheck="false"
@@ -14,10 +16,11 @@
   placeholder="#rrggbb"
   maxlength="7"
   [attr.aria-label]="ariaLabel()"
-  [attr.aria-invalid]="invalid() ? 'true' : null"
+  [attr.aria-invalid]="malformed() ? 'true' : null"
   [attr.data-testid]="testid()"
-  [class.invalid]="invalid()"
+  [class.invalid]="malformed()"
   [value]="draft()"
   [disabled]="disabled()"
   (input)="onText($event)"
+  (blur)="onBlur($event)"
 />

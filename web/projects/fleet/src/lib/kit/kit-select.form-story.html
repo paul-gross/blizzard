@@ -1,0 +1,4 @@
+<fleet-kit-select [formField]="f" [options]="options" ariaLabel="Routine" />
+<p style="font-size: 12px">
+  value: {{ f().value() | json }} · touched: {{ f().touched() }}
+</p>

@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, booleanAttribute, computed, inject, input, output } from '@angular/core';
+
+import { KitOptionGroup } from './kit-option-group';
 
 /**
  * One selectable row inside an inline radio field — the
@@ -15,9 +17,15 @@ import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } f
   styleUrl: './kit-option.css',
 })
 export class KitOption {
-  readonly name = input.required<string>();
+  private readonly group = inject(KitOptionGroup, { optional: true });
+
+  /** The native radio name; optional inside a {@link KitOptionGroup}, which supplies it. */
+  readonly name = input<string | null>(null);
   readonly checked = input(false);
   readonly disabled = input(false);
+
+  /** This option's value inside a {@link KitOptionGroup}; the group's value selects the matching option. */
+  readonly value = input('');
   readonly testid = input<string | null>(null);
 
   /** `flex-start` alignment for multi-line content (e.g. a scope's description
@@ -25,4 +33,13 @@ export class KitOption {
   readonly alignTop = input(false, { transform: booleanAttribute });
 
   readonly changed = output<void>();
+
+  protected readonly radioName = computed(() => (this.group ? this.group.radioName() : this.name()));
+  protected readonly isChecked = computed(() => (this.group ? this.group.value() === this.value() : this.checked()));
+  protected readonly isDisabled = computed(() => this.disabled() || !!this.group?.disabled());
+
+  protected onChange(): void {
+    this.group?.value.set(this.value());
+    this.changed.emit();
+  }
 }

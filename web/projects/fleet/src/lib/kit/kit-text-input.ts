@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  booleanAttribute,
+  input,
+  model,
+  output,
+  viewChild,
+} from '@angular/core';
+import type { FormValueControl } from '@angular/forms/signals';
 
 /**
  * The text-control chrome — the font, background, border, and
@@ -15,11 +25,13 @@ import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } f
   templateUrl: './kit-text-input.html',
   styleUrl: './kit-text-input.css',
 })
-export class KitTextInput {
-  /** The control's current value — a plain controlled input, not `ngModel`: the
-   * caller owns the value (a local signal or a field on some other state) and
-   * passes it back in. */
-  readonly value = input('');
+export class KitTextInput implements FormValueControl<string> {
+  /** The control's current value. Two-way: `[value]`/`(valueChange)` keep working for a
+   * caller that owns the value, and a `[formField]` binds the same model. */
+  readonly value = model('');
+
+  /** Locks the native element; a bound field's `disabled` rule sets it. */
+  readonly disabled = input(false);
 
   readonly placeholder = input<string | null>(null);
 
@@ -41,9 +53,17 @@ export class KitTextInput {
    * its type; a multiline control masks each character and keeps its line breaks. */
   readonly type = input<'text' | 'password' | 'number'>('text');
 
-  readonly valueChange = output<string>();
+  /** Emits on native blur, so a bound field becomes touched. */
+  readonly touch = output<void>();
+
+  private readonly native = viewChild<ElementRef<HTMLInputElement | HTMLTextAreaElement>>('native');
+
+  /** Focuses whichever native element renders — the `<textarea>` when `multiline`. */
+  focus(options?: FocusOptions): void {
+    this.native()?.nativeElement.focus(options);
+  }
 
   protected onInput(event: Event): void {
-    this.valueChange.emit((event.target as HTMLInputElement | HTMLTextAreaElement).value);
+    this.value.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
   }
 }

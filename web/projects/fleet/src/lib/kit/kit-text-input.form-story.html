@@ -1,0 +1,5 @@
+<fleet-kit-text-input [formField]="f" ariaLabel="Name" />
+<fleet-kit-text-input [formField]="f" ariaLabel="Note" multiline />
+<p style="font-size: 12px">
+  value: {{ f().value() | json }} · touched: {{ f().touched() }}
+</p>

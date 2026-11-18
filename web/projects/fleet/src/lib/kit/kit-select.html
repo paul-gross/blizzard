@@ -11,6 +11,7 @@
   [attr.data-testid]="testid()"
   [disabled]="disabled()"
   (click)="toggle()"
+  (focusout)="onTriggerFocusOut($event)"
 >
   @if (label(); as prefix) {
     <span class="prefix">{{ prefix }} ·</span>
@@ -36,6 +37,7 @@
     [id]="listboxId"
     [attr.aria-label]="ariaLabel()"
     [cdkListboxValue]="selection()"
+    (focusout)="onPopupFocusOut($event)"
   >
     @for (option of options(); track option.value) {
       <div

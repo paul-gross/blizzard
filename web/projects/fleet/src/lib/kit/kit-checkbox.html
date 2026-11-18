@@ -1,10 +1,12 @@
 <label class="check">
   <input
+    #native
     type="checkbox"
     [checked]="checked()"
     [disabled]="disabled()"
     [attr.aria-label]="ariaLabel()"
     [attr.data-testid]="testid()"
+    (blur)="touch.emit()"
     (change)="changed($event)"
   />
   @if (label(); as text) {

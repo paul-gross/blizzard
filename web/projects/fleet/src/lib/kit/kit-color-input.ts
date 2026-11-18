@@ -2,10 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   input,
   linkedSignal,
+  model,
   output,
+  viewChild,
 } from '@angular/core';
+import type { FormValueControl } from '@angular/forms/signals';
 
 import { isHexColor } from './kit-swatch-color';
 
@@ -22,9 +26,9 @@ import { isHexColor } from './kit-swatch-color';
   templateUrl: './kit-color-input.html',
   styleUrl: './kit-color-input.css',
 })
-export class KitColorInput {
+export class KitColorInput implements FormValueControl<string> {
   /** The committed color, `#rrggbb`; a value that is not one seeds an empty field. */
-  readonly value = input('');
+  readonly value = model('');
 
   /** `aria-label` of the hex text field. */
   readonly ariaLabel = input<string>('Custom color, as #rrggbb');
@@ -34,15 +38,28 @@ export class KitColorInput {
   /** Locks both controls, e.g. while the caller is saving the color. */
   readonly disabled = input(false);
 
-  /** A well-formed lowercase `#rrggbb`, on each commit from either control. */
-  readonly valueChange = output<string>();
+  /** Emits when focus leaves both inputs, so a bound field becomes touched. */
+  readonly touch = output<void>();
+
+  private readonly text = viewChild<ElementRef<HTMLInputElement>>('text');
+
+  /** Focuses the hex text field. */
+  focus(options?: FocusOptions): void {
+    this.text()?.nativeElement.focus(options);
+  }
+
+  protected onBlur(event: FocusEvent): void {
+    const next = event.relatedTarget as Node | null;
+    if (next && (event.currentTarget as HTMLElement).parentElement?.contains(next)) return;
+    this.touch.emit();
+  }
 
   /** What the text field shows: the caller's `value` until the user types over it. */
   protected readonly draft = linkedSignal(() =>
     isHexColor(this.value()) ? this.value().toLowerCase() : '',
   );
 
-  protected readonly invalid = computed(
+  protected readonly malformed = computed(
     () => this.draft() !== '' && !isHexColor(this.draft()),
   );
 
@@ -65,7 +82,7 @@ export class KitColorInput {
 
   private commit(text: string): void {
     if (isHexColor(text)) {
-      this.valueChange.emit(text.toLowerCase());
+      this.value.set(text.toLowerCase());
     }
   }
 }
