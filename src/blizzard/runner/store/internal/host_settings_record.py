@@ -1,4 +1,4 @@
-"""Bound host settings record for the shared settings write rules (package-private).
+"""The host's private settings SQL (package-private).
 
 Host-scoped: the host's settings are a fact about this host, never a runner's, so its statements carry no runner
 equality."""
@@ -13,7 +13,6 @@ from typing import Final
 from sqlalchemy import Connection, insert, select, update
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.settings_record.record import ISettingsRecord
 from blizzard.foundation.settings_record.vocabulary import Door, Entry, FieldChange, Op
 from blizzard.runner.store.schema import host_setting_changes, host_setting_entries, host_settings
 
@@ -38,10 +37,6 @@ class HostSettingsRecord:
         return {
             row.key: Entry(json.loads(row.value) if row.value is not None else None, row.at_default) for row in rows
         }
-
-    def has_entry(self, conn: Connection, key: str) -> bool:
-        stmt = select(host_setting_entries.c.key).where(host_setting_entries.c.key == key)
-        return conn.execute(stmt).first() is not None
 
     def lock(self, conn: Connection) -> None:
         """Serialize writers on the one row, inserting it at revision 0 before the first write."""
@@ -97,6 +92,3 @@ class HostSettingsRecord:
                 record_key=None,
             )
         )
-
-
-_record_conforms: type[ISettingsRecord] = HostSettingsRecord

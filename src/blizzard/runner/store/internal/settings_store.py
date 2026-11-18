@@ -10,8 +10,10 @@ from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
-from blizzard.foundation.settings_record.write import Validate, seed_entry, write
+from blizzard.foundation.settings_record.decision import decide, seed_choice
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
+from blizzard.foundation.settings_record.validator import Validate
+from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
 from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsChange, SettingsSnapshot
 from blizzard.runner.store.internal.settings_record import RunnerSettingsRecord
 from blizzard.runner.store.schema import runner_identity, runner_setting_changes, runner_setting_entries
@@ -61,6 +63,31 @@ class RunnerSettingsStore:
         if not locked:
             raise ValueError("runner settings require a retained runner identity")
 
+    def _apply(
+        self,
+        conn: Connection,
+        change: Change,
+        *,
+        if_match: int | None,
+        validate: Validate,
+        door: Door,
+        actor: str,
+        apply_id: str | None,
+    ) -> tuple[FieldChange, ...]:
+        """Decide, validate the whole candidate, then write only a moved diff, on the locked connection."""
+        decision = decide(self._record.revision(conn), self._record.entries(conn), change, if_match=if_match)
+        errors = validate(decision.candidate)
+        if errors:
+            raise SettingsInvalid(errors)
+        if not decision.diff:
+            return ()
+        revision = self._record.bump_revision(conn)
+        self._record.write_entries(conn, {field.key: field.new for field in decision.diff}, revision=revision)
+        self._record.append_change(
+            conn, diff=decision.diff, op=change.op, door=door, actor=actor, apply_id=apply_id, revision=revision
+        )
+        return decision.diff
+
     def seed(
         self, file: ConfigView, keys: Sequence[str], *, validate: Validate, aliases: Mapping[str, str] | None = None
     ) -> None:
@@ -73,13 +100,23 @@ class RunnerSettingsStore:
                 blocked = {alias for alias, key in aliases.items() if key in existing}
                 blocked.update(key for alias, key in aliases.items() if alias in existing)
                 keys = tuple(key for key in keys if key not in blocked)
-            pending = {key: Entry(file.value(key)) for key in keys if key not in existing and file.states(key)}
+            pending = {key: Entry(value) for key, value in seed_choice(existing, keys, file).items()}
 
             def validate_seed(entries: Mapping[str, Entry]) -> Mapping[str, str]:
                 return validate({**pending, **entries})
 
             for key in keys:
-                seed_entry(conn, self._record, key, file, validate=validate_seed)
+                chosen = seed_choice(self._record.entries(conn), (key,), file)
+                if chosen:
+                    self._apply(
+                        conn,
+                        Change("seed", sets=chosen),
+                        if_match=self._record.revision(conn),
+                        validate=validate_seed,
+                        door=SEED,
+                        actor=SEED,
+                        apply_id=None,
+                    )
 
     def write(
         self,
@@ -94,15 +131,8 @@ class RunnerSettingsStore:
         with self._store.begin() as conn:
             # Serialize writers and identity removal, including before a settings row exists.
             self._lock_identity(conn)
-            return write(
-                conn,
-                self._record,
-                change,
-                if_match=if_match,
-                validate=validate,
-                door=door,
-                actor=actor,
-                apply_id=apply_id,
+            return self._apply(
+                conn, change, if_match=if_match, validate=validate, door=door, actor=actor, apply_id=apply_id
             )
 
 

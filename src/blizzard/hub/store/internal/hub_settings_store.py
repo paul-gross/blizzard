@@ -12,10 +12,10 @@ from sqlalchemy import Connection, delete, insert, select, true, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.settings_record.decision import decide
-from blizzard.foundation.settings_record.refusals import SettingsRevisionConflict
-from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
-from blizzard.foundation.settings_record.write import Validate, seed_entry, write
+from blizzard.foundation.settings_record.decision import decide, seed_choice
+from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
+from blizzard.foundation.settings_record.validator import Validate
+from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange, Op
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.settings.model import HubSettingsSnapshot
 from blizzard.hub.settings.values import freeze
@@ -43,11 +43,6 @@ class _Record:
             row.key: Entry(json.loads(row.value_json), row.at_default)
             for row in conn.execute(select(hub_setting_entries))
         }
-
-    def has_entry(self, conn: Connection, key: str) -> bool:
-        return (
-            conn.execute(select(hub_setting_entries.c.key).where(hub_setting_entries.c.key == key)).first() is not None
-        )
 
     def bump_revision(self, conn: Connection) -> int:
         expected = self._revision
@@ -97,6 +92,38 @@ class _Record:
         )
 
 
+def _apply(
+    conn: Connection,
+    record: _Record,
+    validate: Validate,
+    change: Change,
+    *,
+    if_match: int | None,
+    door: Door,
+    actor: str,
+    apply_id: str | None,
+) -> tuple[FieldChange, ...]:
+    """Decide, validate the whole candidate, then write only a moved diff, on the caller's locked connection."""
+    revision = record.revision(conn)
+    decision = decide(revision, record.entries(conn), change, if_match=if_match)
+    errors = validate(decision.candidate)
+    if errors:
+        raise SettingsInvalid(errors)
+    if not decision.diff:
+        return ()
+    moved = record.bump_revision(conn)
+    record.write_entries(conn, {field.key: field.new for field in decision.diff}, revision=moved)
+    record.append_change(
+        conn, diff=decision.diff, op=change.op, door=door, actor=actor, apply_id=apply_id, revision=moved
+    )
+    return decision.diff
+
+
+def _lock(conn: Connection) -> None:
+    """Take the singleton row's write lock before reading the revision and entries."""
+    conn.execute(update(hub_settings).where(hub_settings.c.id == 1).values(revision=hub_settings.c.revision))
+
+
 class HubSettingsStore:
     def __init__(self, store: HubStoreConnections, clock: IClock, validate: Validate) -> None:
         self._store, self._clock, self._validate = store, clock, validate
@@ -131,29 +158,40 @@ class HubSettingsStore:
             record = _Record(self._clock)
             revision = record.revision(conn)
             existing = record.entries(conn)
-            sets = {key: file.value(key) for key in keys if key not in existing and file.states(key)}
-            decide(revision, existing, Change("seed", sets=sets), if_match=revision, validate=self._validate)
+            change = Change("seed", sets=seed_choice(existing, keys, file))
+            errors = self._validate(decide(revision, existing, change, if_match=revision).candidate)
+            if errors:
+                raise SettingsInvalid(errors)
         for key in keys:
             if not file.states(key):
                 continue
             with self._store.write("hub_settings_seed") as conn:
-                conn.execute(
-                    update(hub_settings).where(hub_settings.c.id == 1).values(revision=hub_settings.c.revision)
-                )
-                seed_entry(conn, _Record(self._clock), key, file, validate=self._validate)
+                _lock(conn)
+                record = _Record(self._clock)
+                sets = seed_choice(record.entries(conn), (key,), file)
+                if sets:
+                    _apply(
+                        conn,
+                        record,
+                        self._validate,
+                        Change("seed", sets=sets),
+                        if_match=record.revision(conn),
+                        door=SEED,
+                        actor=SEED,
+                        apply_id=None,
+                    )
 
     def apply(
         self, change: Change, *, if_match: int | None, door: Door, actor: str, apply_id: str | None = None
     ) -> tuple[FieldChange, ...]:
         with self._store.write("hub_settings_apply") as conn:
-            # Acquire the singleton's write lock before reading the revision and entries.
-            conn.execute(update(hub_settings).where(hub_settings.c.id == 1).values(revision=hub_settings.c.revision))
-            return write(
+            _lock(conn)
+            return _apply(
                 conn,
                 _Record(self._clock),
+                self._validate,
                 change,
                 if_match=if_match,
-                validate=self._validate,
                 door=door,
                 actor=actor,
                 apply_id=apply_id,
@@ -165,16 +203,14 @@ class HubSettingsStore:
         """Apply against the revision held under the write lock; a preview rolls the transaction back."""
         try:
             with self._store.write("hub_settings_document") as conn:
-                conn.execute(
-                    update(hub_settings).where(hub_settings.c.id == 1).values(revision=hub_settings.c.revision)
-                )
+                _lock(conn)
                 record = _Record(self._clock)
-                diff = write(
+                diff = _apply(
                     conn,
                     record,
+                    self._validate,
                     change,
                     if_match=record.revision(conn),
-                    validate=self._validate,
                     door="apply",
                     actor=actor,
                     apply_id=apply_id,

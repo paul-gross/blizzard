@@ -9,7 +9,9 @@ from collections.abc import Callable, Sequence
 from threading import Lock
 
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.foundation.settings_record.decision import Validate, decide
+from blizzard.foundation.settings_record.decision import decide
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
+from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
 from blizzard.hub.settings.model import HubSettingsApply, IHubSettingsSnapshots, IWriteHubSettings
 from blizzard.hub.settings.values import thaw
@@ -40,7 +42,10 @@ class HubSettingsAuthoring:
     def submit(self, request: HubSettingsApply) -> tuple[FieldChange, ...]:
         snapshot = self._reader.snapshot()
         entries = {key: Entry(thaw(entry.value), entry.at_default) for key, entry in snapshot.entries.items()}
-        decide(snapshot.revision, entries, request.change, if_match=request.if_match, validate=self._validate)
+        decision = decide(snapshot.revision, entries, request.change, if_match=request.if_match)
+        errors = self._validate(decision.candidate)
+        if errors:
+            raise SettingsInvalid(errors)
         changed = self._store.apply(
             request.change, if_match=request.if_match, door=request.door, actor=request.actor, apply_id=request.apply_id
         )

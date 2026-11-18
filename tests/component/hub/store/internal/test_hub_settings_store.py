@@ -216,3 +216,58 @@ def test_complete_config_validation_refuses_bad_values_and_unknown_keys(tmp_path
         with pytest.raises(SettingsInvalid):
             store.apply(Change("edit", sets=sets), if_match=0, door="api", actor="operator")
     assert store.revision() == 0
+
+
+def test_a_no_op_change_is_still_refused_when_the_candidate_is_invalid(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
+    HubSettingsStore(hub_level_connections(engine), clock, lambda _: {}).apply(
+        Change("edit", sets={"x": 1}), if_match=0, door="api", actor="operator"
+    )
+    strict = HubSettingsStore(hub_level_connections(engine), clock, lambda _: {"x": "invalid"})
+    with pytest.raises(SettingsInvalid):
+        strict.apply(Change("edit", sets={"x": 1}), if_match=1, door="api", actor="operator")
+    assert strict.revision() == 1
+
+
+def test_a_document_dry_run_leaves_revision_entries_and_audit_untouched(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    store = HubSettingsStore(hub_level_connections(engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), lambda _: {})
+    preview = store.apply_document(Change("edit", sets={"x": 1}), actor="operator", apply_id=None, dry_run=True)
+    assert [field.key for field in preview] == ["x"]
+    assert store.snapshot().revision == 0 and not store.snapshot().entries
+    with engine.connect() as conn:
+        assert conn.execute(sa.select(sa.func.count()).select_from(hub_setting_changes)).scalar_one() == 0
+    store.apply_document(Change("edit", sets={"x": 1}), actor="operator", apply_id="apply_1", dry_run=False)
+    assert store.revision() == 1
+    with engine.connect() as conn:
+        row = conn.execute(sa.select(hub_setting_changes)).one()
+    assert (row.door, row.actor, row.apply_id) == ("apply", "operator", "apply_1")
+
+
+def test_two_concurrent_seeds_yield_one_entry_and_one_revision_per_key(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from blizzard.foundation.flags import FlagRegistry
+    from blizzard.hub.config_keys import HUB_REGISTRY
+    from blizzard.hub.settings.footing import HubSettingsFooting, setting_keys
+
+    _, engine = migrate_to(tmp_path, "head")
+    footing = HubSettingsFooting(tmp_path, None, None, False, FlagRegistry(), False, HUB_REGISTRY, {})
+    store = HubSettingsStore(
+        hub_level_connections(engine), FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), footing.validate
+    )
+    file = footing.file_view({"action_pass_seconds": 12, "annotation_interval_seconds": 60})
+    barrier = Barrier(2)
+
+    def seed(_: int) -> None:
+        barrier.wait(timeout=5)
+        store.seed(setting_keys(HUB_REGISTRY), file)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(seed, (1, 2)))
+    assert store.snapshot().entries == {"action_pass_seconds": Entry(12), "annotation_interval_seconds": Entry(60)}
+    assert store.revision() == 2
+    with engine.connect() as conn:
+        assert conn.execute(sa.select(sa.func.count()).select_from(hub_setting_changes)).scalar_one() == 2

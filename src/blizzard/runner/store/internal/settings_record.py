@@ -1,4 +1,4 @@
-"""Bound runner settings record for the shared settings write rules."""
+"""The runner's private settings SQL: revision, entries, bump, entry write and change row."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from dataclasses import asdict
 from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.settings_record.record import ISettingsRecord
 from blizzard.foundation.settings_record.vocabulary import Door, Entry, FieldChange, Op
 from blizzard.runner.store.schema import runner_setting_changes, runner_setting_entries, runner_settings
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -31,12 +30,6 @@ class RunnerSettingsRecord:
         return {
             row.key: Entry(json.loads(row.value) if row.value is not None else None, row.at_default) for row in rows
         }
-
-    def has_entry(self, conn: Connection, key: str) -> bool:
-        stmt = self._store.select(runner_setting_entries, runner_setting_entries.c.key).where(
-            runner_setting_entries.c.key == key
-        )
-        return conn.execute(stmt).first() is not None
 
     def bump_revision(self, conn: Connection) -> int:
         current = self.revision(conn)
@@ -81,6 +74,3 @@ class RunnerSettingsRecord:
                 diff=json.dumps([asdict(field) for field in diff]),
             )
         )
-
-
-_record_conforms: type[ISettingsRecord] = RunnerSettingsRecord

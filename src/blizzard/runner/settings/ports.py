@@ -9,8 +9,8 @@ from typing import Protocol
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
-from blizzard.foundation.settings_record.write import Validate
 
 
 @domain_model
