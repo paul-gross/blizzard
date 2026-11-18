@@ -2,6 +2,7 @@
   [form]="f"
   saveLabel="Save"
   cancelLabel="Cancel"
+  [saveDisabled]="saveDisabled()"
   (save)="submit()"
 >
   <fleet-kit-field

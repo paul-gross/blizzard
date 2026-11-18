@@ -9,12 +9,13 @@
     <fleet-kit-button
       type="submit"
       variant="primary"
-      [disabled]="submitting()"
+      [disabled]="submitting() || saveDisabled()"
       testid="kit-form-save"
       >{{ saveLabel() }}</fleet-kit-button
     >
     <fleet-kit-button
       type="button"
+      [disabled]="submitting()"
       (click)="cancel.emit()"
       testid="kit-form-cancel"
       >{{ cancelLabel() }}</fleet-kit-button

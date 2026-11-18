@@ -1,0 +1,11 @@
+<app-config-field-tree-dialog
+  heading="New source"
+  mode="create"
+  [form]="f"
+  [fields]="fields"
+  submitLabel="Create"
+  hint="A source feeds work in."
+  testidPrefix="src"
+  (save)="onSave()"
+  (closed)="closes = closes + 1"
+/>

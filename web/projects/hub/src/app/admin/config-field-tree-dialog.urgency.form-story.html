@@ -1,0 +1,11 @@
+<app-config-field-tree-dialog
+  heading="Edit urgency"
+  mode="edit"
+  [form]="f"
+  [fields]="fields"
+  [baseline]="baseline"
+  submitLabel="Save"
+  testidPrefix="urg"
+  (save)="onSave()"
+  (closed)="closes = closes + 1"
+/>

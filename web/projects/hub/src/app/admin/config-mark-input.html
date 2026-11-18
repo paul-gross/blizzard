@@ -1,0 +1,19 @@
+@if (isImage()) {
+  <img class="mark-preview" [src]="value()" alt="Selected mark" />
+}
+<fleet-kit-text-input
+  [ariaLabel]="ariaLabel() + ' emoji'"
+  [value]="isImage() ? '' : value()"
+  [disabled]="disabled()"
+  [testid]="testid()"
+  (valueChange)="onText($event)"
+/>
+<label>
+  Image (PNG or WebP)
+  <!-- eslint-disable-next-line no-restricted-syntax -- File selection needs the native file input; the kit has no file control. -->
+  <input type="file" accept="image/png,image/webp" [disabled]="disabled()" [attr.data-testid]="testid() + '-image'" (change)="onFile($event)" />
+</label>
+@if (value()) {
+  <fleet-kit-button [disabled]="disabled()" [testid]="testid() + '-clear'" (click)="onText('')">Clear mark</fleet-kit-button>
+}
+<fleet-kit-error-line [message]="error()" />

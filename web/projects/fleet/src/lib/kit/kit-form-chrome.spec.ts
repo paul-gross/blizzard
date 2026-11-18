@@ -59,6 +59,7 @@ const rules = schema<Draft>((p) => {
   template: `
     <fleet-kit-form
       [form]="f"
+      [saveDisabled]="held()"
       (save)="save()"
       (cancel)="cancels = cancels + 1"
     >
@@ -88,6 +89,7 @@ const rules = schema<Draft>((p) => {
 class Host {
   saves = 0;
   cancels = 0;
+  readonly held = signal(false);
   readonly model = signal<Draft>({
     slug: '',
     note: '',
@@ -268,5 +270,32 @@ describe('form chrome', () => {
         'fleet-kit-field > label, fleet-kit-field > div > label',
       ),
     ).toBeNull();
+  });
+
+  it('holds Save off while saveDisabled, leaves Cancel enabled, and disables Cancel while submitting', async () => {
+    const { fixture, host, root } = await mount();
+    const save = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="kit-form-save"]')!;
+    const cancel = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="kit-form-cancel"]')!;
+    expect(save().disabled).toBe(false);
+    host.held.set(true);
+    await fixture.whenStable();
+    expect(save().disabled).toBe(true);
+    expect(cancel().disabled).toBe(false);
+    host.held.set(false);
+    host.f.slug().value.set('x');
+    host.f.parkTimeoutHours().value.set('2');
+    let release!: () => void;
+    const pending = submitDraft(
+      host.f,
+      () => new Promise((resolve) => (release = () => resolve({ ok: true }))),
+    );
+    await fixture.whenStable();
+    expect(cancel().disabled).toBe(true);
+    release();
+    await pending;
+    await fixture.whenStable();
+    expect(cancel().disabled).toBe(false);
   });
 });

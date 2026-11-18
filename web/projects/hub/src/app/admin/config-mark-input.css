@@ -1,0 +1,17 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+fleet-kit-text-input {
+  align-self: stretch;
+}
+
+.mark-preview {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
