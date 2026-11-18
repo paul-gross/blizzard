@@ -118,6 +118,23 @@ describe('QuestionsPanelView', () => {
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
+  it('keeps one value per row when a chunk holds several asks, and opens that chunk', async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('questions', [QUESTIONS[0], { ...QUESTIONS[1], chunk_id: QUESTIONS[0].chunk_id }]);
+    const opened: string[] = [];
+    fixture.componentInstance.selectChunk.subscribe((id: string) => opened.push(id));
+    const warn = vi.spyOn(console, 'warn');
+    await fixture.whenStable();
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-testid="rail-question"]');
+    expect(rows).toHaveLength(2);
+    rows[1].click();
+    await fixture.whenStable();
+    expect(opened).toEqual([QUESTIONS[0].chunk_id]);
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('Duplicate option value');
+    warn.mockRestore();
+  });
+
   it('emits selectChunk when an ask is activated', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'ready');

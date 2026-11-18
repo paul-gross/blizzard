@@ -45,6 +45,12 @@ export class GatesPanelView {
   /** Emitted with the gate's chunk id when a gate is activated. */
   readonly selectChunk = output<string>();
 
+  /** A row's value is its own id (one chunk can hold several), so open the chunk it belongs to. */
+  protected open(id: string): void {
+    const row = this.gates().find((r) => r.decision_id === id);
+    if (row !== undefined) this.selectChunk.emit(row.chunk_id);
+  }
+
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }

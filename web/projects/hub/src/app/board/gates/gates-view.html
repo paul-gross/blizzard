@@ -21,11 +21,11 @@
         class="rows"
         ariaLabel="Open gates"
         [value]="null"
-        (valueChange)="selectChunk.emit($any($event))"
+        (valueChange)="open($any($event))"
       >
       @for (gate of gates(); track gate.decision_id) {
         <fleet-kit-select-row
-          [value]="gate.chunk_id"
+          [value]="gate.decision_id"
           [label]="shortId(gate.chunk_id)"
           class="gg"
           testid="rail-gate"

@@ -21,11 +21,11 @@
         class="rows"
         ariaLabel="Open questions"
         [value]="null"
-        (valueChange)="selectChunk.emit($any($event))"
+        (valueChange)="open($any($event))"
       >
       @for (q of questions(); track q.question_id) {
         <fleet-kit-select-row
-          [value]="q.chunk_id"
+          [value]="q.question_id"
           [label]="shortId(q.chunk_id)"
           class="qq"
           testid="rail-question"

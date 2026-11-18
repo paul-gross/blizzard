@@ -43,6 +43,12 @@ export class QuestionsPanelView {
   /** Emitted with a chunk id when an ask is activated — opens it in the detail panel. */
   readonly selectChunk = output<string>();
 
+  /** A row's value is its own id (one chunk can hold several), so open the chunk it belongs to. */
+  protected open(id: string): void {
+    const row = this.questions().find((r) => r.question_id === id);
+    if (row !== undefined) this.selectChunk.emit(row.chunk_id);
+  }
+
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }
