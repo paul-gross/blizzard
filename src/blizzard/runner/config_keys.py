@@ -302,7 +302,7 @@ HOST_REGISTRY = ConfigRegistry(
         DurablePath(
             f"{DATA_DIRNAME}/{SECRET_KEYS_DIRNAME}",
             "the host key's generations, when no key variable is set",
-            written_by=("host", "ingest", "tick"),
+            written_by=("host", "ingest", "tick", "token"),
             mode=0o700,
         ),
         DurablePath(f"{DATA_DIRNAME}/{HOST_LOCK_FILENAME}", "the lock that keeps one host process on the directory"),

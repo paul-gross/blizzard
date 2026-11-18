@@ -76,6 +76,8 @@ from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
 from blizzard.runner.api.host_settings import router as host_settings_router
 from blizzard.runner.api.hub_proxy import UpstreamRefusal, relay_upstream_refusal
+from blizzard.runner.api.hub_token import HubTokenProblem
+from blizzard.runner.api.hub_token import router as hub_token_router
 from blizzard.runner.api.invariants import router as host_invariants_router
 from blizzard.runner.api.invocation_usage import router as invocation_usage_router
 from blizzard.runner.api.leases import router as leases_router
@@ -117,6 +119,7 @@ from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostId
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
+from blizzard.runner.hub.sealed_tokens import HubTokens
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
@@ -186,6 +189,7 @@ _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 _HOST_HUMAN = (
     host_settings_router,
     host_router,
+    hub_token_router,
     workspace_prompt_router,
     host_floor_router,
     host_ticks_router,
@@ -364,6 +368,7 @@ def create_app(
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
     host_stores: HostStores | None = None,
+    hub_tokens: HubTokens | None = None,
     host_registration: ICurrentHostRegistration | None = None,
     host_identity: ICurrentHostIdentity | None = None,
     leases: LocalLeaseService | None = None,
@@ -503,6 +508,8 @@ def create_app(
     app.state.workspace_registry = workspace_registry
     # The host-scoped stores, narrowed for controllers the way each runner's are.
     app.state.host_read_stores = HostReadStores.of(host_stores) if host_stores is not None else None
+    # Each runner's sealed hub token, which the host's token route replaces; `None` on a host holding no key.
+    app.state.hub_tokens = hub_tokens
     # Where the host stands with its hub, as its registration step last found it.
     app.state.host_registration = host_registration or HostRegistrationHolder.for_host(registered=False)
     app.state.host_identity = host_identity or HostIdentityHolder()
@@ -608,7 +615,9 @@ def create_app(
     # The host-served web app: the human web lane the middleware above gates
     # — the only browser-facing surface this daemon serves.
     Frontend.embedded("runner", app_name="blizzard-runner", is_api_path=is_api_path).mount(app)
-    install_schema_components(app, (*RUNNER_SCHEMA_COMPONENTS.models, SettingsProblem), RUNNER_SCHEMA_COMPONENTS.enums)
+    install_schema_components(
+        app, (*RUNNER_SCHEMA_COMPONENTS.models, SettingsProblem, HubTokenProblem), RUNNER_SCHEMA_COMPONENTS.enums
+    )
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
     return app
@@ -737,6 +746,7 @@ def _wire_hosted_app(
         readiness=readiness,
         workspace_registry=host.workspaces,
         host_stores=host.host_stores,
+        hub_tokens=host.hub_tokens,
         host_registration=host.host_registration,
         host_identity=host.host_identity,
         telemetry_receiver=host.telemetry_receiver,
@@ -1016,6 +1026,7 @@ def _wire_runnerless_app(
         readiness=host.readiness,
         workspace_registry=host.workspaces,
         host_stores=host.host_stores,
+        hub_tokens=host.hub_tokens,
         host_registration=host.host_registration,
         host_identity=host.host_identity,
         hub_http_client=hub_http_client,

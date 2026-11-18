@@ -77,5 +77,6 @@ export interface RunnerOperations {
   'POST /runners/{runner_id}/api/selftests': { path: T.StartSelftestRunnersRunnerIdApiSelftestsPostData['path']; responses: T.StartSelftestRunnersRunnerIdApiSelftestsPostResponses; errors: T.StartSelftestRunnersRunnerIdApiSelftestsPostErrors };
   'POST /runners/{runner_id}/api/ticks': { path: T.RunTickRunnersRunnerIdApiTicksPostData['path']; responses: T.RunTickRunnersRunnerIdApiTicksPostResponses; errors: T.RunTickRunnersRunnerIdApiTicksPostErrors };
   'POST /runners/{runner_id}/api/traces/replay': { path: T.TraceReplayRunnersRunnerIdApiTracesReplayPostData['path']; responses: T.TraceReplayRunnersRunnerIdApiTracesReplayPostResponses; errors: T.TraceReplayRunnersRunnerIdApiTracesReplayPostErrors };
+  'PUT /api/host/runners/{runner_id}/token': { path: T.SetRunnerTokenApiHostRunnersRunnerIdTokenPutData['path']; responses: T.SetRunnerTokenApiHostRunnersRunnerIdTokenPutResponses; errors: T.SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors };
   'PUT /api/host/workspaces/{workspace_id}/prompt': { path: T.ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData['path']; responses: T.ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses; errors: T.ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors };
 }

@@ -1863,7 +1863,8 @@
       "written_by": [
         "host",
         "ingest",
-        "tick"
+        "tick",
+        "token"
       ]
     },
     {

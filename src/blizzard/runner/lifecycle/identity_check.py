@@ -36,6 +36,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.hub.client import (
     HubClientError,
     IdentityRouteMissing,
@@ -198,6 +199,7 @@ def check_token(
             store_runner_id=configured_id,
             reason=_refused(answer),
             checked_at=now,
+            retired=answer.reason is RunnerTokenRefusalReason.RETIRED,
         )
         log_transition(verdict, was)
         return None

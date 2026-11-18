@@ -206,6 +206,10 @@ class ICurrentIdentityVerdict(Protocol):
         """Whether the hub has no identity read, so the registration reply is the check."""
         ...
 
+    def token_retired(self) -> bool:
+        """Whether the hub last refused the runner's token as retired."""
+        ...
+
 
 class IIdentityOnContact(Protocol):
     """The identity verdict a hub contact outside the loop waits on."""
@@ -240,6 +244,7 @@ class IdentityVerdictHolder:
         self._standing = HostStanding.UNKNOWN
         self._standing_reason: str | None = None
         self._registration_checks = False
+        self._token_retired = False
 
     def verdict(self) -> IdentityVerdict:
         with self._lock:
@@ -264,6 +269,12 @@ class IdentityVerdictHolder:
         """Whether the token's own verdict refuses — what setting the runner's token again can lift."""
         with self._lock:
             return self._token.refusing()
+
+    def token_retired(self) -> bool:
+        """Whether the token's held verdict is the hub's refusal of it as retired — a runner whose token is never
+        replaced."""
+        with self._lock:
+            return self._token_retired
 
     def standing(self) -> HostStanding:
         with self._lock:
@@ -291,12 +302,17 @@ class IdentityVerdictHolder:
                 checked_at=checked_at,
                 reset_command=self._token.reset_command,
             )
+            self._token_retired = False
         return was
 
-    def refuse(self, *, store_runner_id: str, reason: str, checked_at: datetime) -> IdentityState:
-        """Hold that the hub refused the token for ``reason``, returning the composed state it replaced."""
+    def refuse(
+        self, *, store_runner_id: str, reason: str, checked_at: datetime, retired: bool = False
+    ) -> IdentityState:
+        """Hold that the hub refused the token for ``reason`` — ``retired`` when it refused it as retired —
+        returning the composed state it replaced."""
         with self._lock:
             was = self._composed().state
+            self._token_retired = retired
             self._token = IdentityVerdict(
                 state=IdentityState.REFUSED,
                 store_runner_id=store_runner_id,

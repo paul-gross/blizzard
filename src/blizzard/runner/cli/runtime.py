@@ -1637,7 +1637,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
     if host_pass and runner is not None:
         raise click.UsageError("--host and --runner are mutually exclusive: --host steps the host, not a runner")
     door = Door.of(ctx)
-    if _host_answers(HostLayout(Path(directory)).socket_path, door):
+    if host_answers(HostLayout(Path(directory)).socket_path, door):
         _tick_running_host(directory, door, runner, host_pass)
         return
     if host_pass:
@@ -1693,7 +1693,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
     click.echo("tick complete")
 
 
-def _host_answers(sock: Path, door: Door) -> bool:
+def host_answers(sock: Path, door: Door) -> bool:
     """Whether a host answers its health probe on ``sock`` — a socket file with nothing listening, or anything that
     does not answer cleanly, is not one."""
     if not sock.exists():

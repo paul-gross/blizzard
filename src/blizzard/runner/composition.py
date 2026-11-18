@@ -330,6 +330,8 @@ class HostProcess:
     host_settings_authoring: HostSettingsAuthoring | None = None
     #: Every timed driver's wake signal; a host write moving an interval wakes them all.
     wakes: WakeSignals = field(default_factory=WakeSignals)
+    #: Each runner's sealed hub token under the host's key — ``None`` on a host that holds no key yet.
+    hub_tokens: HubTokens | None = None
     _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
         default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
     )
@@ -963,6 +965,9 @@ def _build_host_graph(
             process=process,
             children=children,
             invariants=HostInvariantCheck(RunnerInvariants(host_stores.runner_audit, process)),
+            hub_tokens=build_hub_tokens(
+                engine, config.root, environ=os.environ if environ is None else environ, clock=clock, mint=False
+            ),
             telemetry_receiver=TelemetryReceiver(
                 platform_tracing=platform_tracing,
                 received_telemetry=received_telemetry,
