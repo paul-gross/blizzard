@@ -388,6 +388,50 @@ describe('ProjectDetail', () => {
     expect(retire[0].headers['if-match']).toBe('2');
   });
 
+  it('offers no write when every eligible source is linked', async () => {
+    const { harness, el } = await open('/admin/projects/proj_b', [], {
+      'GET /api/projects/{project}/source-links': () => ({
+        source_links: [...SOURCE_LINKS.source_links, sourceLinkView({ project_id: 'proj_b', name: 'wsrc_g', linked: true })],
+      }),
+    });
+    await click(harness, el, 'admin-projects-tab-sources');
+    await click(harness, el, 'admin-projects-sources-link');
+    expect(document.querySelector('[data-testid="admin-projects-link-source-none"]')).not.toBeNull();
+    const button = document.querySelector<HTMLButtonElement>('[data-testid="admin-projects-link-source-submit"]')!;
+    expect(button.disabled).toBe(true);
+    button.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/projects/proj_b/source-links/wsrc_g', 'PUT')).toHaveLength(0);
+  });
+
+  it('selects the first choice when the catalogue arrives after opening', async () => {
+    let release!: (value: typeof SOURCES) => void;
+    const delayed = new Promise<typeof SOURCES>((resolve) => { release = resolve; });
+    const { harness, el } = await open('/admin/projects/proj_b', [], { 'GET /api/work-sources': () => delayed }, true);
+    await pump(harness.fixture);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-tab-sources"]')?.click();
+    await pump(harness.fixture);
+    el.querySelector<HTMLElement>('[data-testid="admin-projects-sources-link"]')!.click();
+    await pump(harness.fixture);
+    release(SOURCES);
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="admin-projects-link-source-submit"]')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/projects/proj_b/source-links/wsrc_g', 'PUT')).toHaveLength(1);
+  });
+
+  it('closes an open link dialog when the route changes to another project', async () => {
+    const { harness, el, router } = await open('/admin/projects/proj_b', [], {
+      'GET /api/projects/{project}': (_request, { project }) => project === 'proj_b' ? BLIZZARD : { ...BLIZZARD, project_id: 'proj_other', name: 'Other' },
+    });
+    await click(harness, el, 'admin-projects-tab-sources');
+    await click(harness, el, 'admin-projects-sources-link');
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).not.toBeNull();
+    await router.navigateByUrl('/admin/projects/proj_other');
+    await settle(harness.fixture);
+    expect(document.querySelector('[data-testid="admin-projects-link-source-dialog"]')).toBeNull();
+  });
+
   it('shows loading, not the empty copy, while the link and runner reads are pending', async () => {
     const never = new Promise<never>(() => undefined);
     const { el } = await open(
@@ -540,13 +584,64 @@ describe('ProjectDetail', () => {
         'PATCH /api/projects/{project}/repository-links/{repository}': () => refusal,
       });
       await openBranchDialog(harness, el);
+      type('valid-branch');
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+      expect(document.querySelector('[data-testid="admin-projects-branch-dialog"]')?.textContent).toContain('not a valid git branch name');
+      expect(document.activeElement).toBe(document.querySelector('[data-testid="admin-projects-branch-input"]'));
+      expect(document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!.value).toBe('valid-branch');
+    });
+
+    it('rejects an invalid branch locally and focuses it', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], linkRoutes());
+      await openBranchDialog(harness, el);
       type('bad..name');
       await settle(harness.fixture);
       document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
       await settle(harness.fixture);
-      expect(document.querySelector('[data-testid="admin-projects-branch-submit-error"]')?.textContent).toContain(
-        'not a valid git branch name',
-      );
+      expect(stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH')).toHaveLength(0);
+      expect(document.activeElement).toBe(document.querySelector('[data-testid="admin-projects-branch-input"]'));
+    });
+
+    it('retains the opening link revision and draft after refresh and conflict', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], {
+        ...linkRoutes(),
+        'PATCH /api/projects/{project}/repository-links/{repository}': () => stubError(409, { detail: 'stale revision' }),
+      });
+      await openBranchDialog(harness, el);
+      type('my-branch');
+      const { hubProjectLinksKey } = await import('../../core/query-keys');
+      TestBed.inject(QueryClient).setQueryData(hubProjectLinksKey('proj_b', 'repository'), [{ ...CORE_LINK, revision: 9 }]);
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+      const patch = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+      expect(patch[0].headers['if-match']).toBe('2');
+      expect(patch[0].body).toEqual({ base_branch: 'my-branch' });
+      expect(document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!.value).toBe('my-branch');
+      expect(document.querySelector('[data-testid="admin-projects-branch-dialog"]')?.textContent).toContain('stale revision');
+    });
+
+    it('saves the opening branch identity and revision after the route changes', async () => {
+      const { harness, el, router } = await open('/admin/projects/proj_b', [], {
+        ...linkRoutes(),
+        'GET /api/projects/{project}': (_request, { project }) => project === 'proj_b' ? BLIZZARD : { ...BLIZZARD, project_id: 'proj_other', name: 'Other' },
+      });
+      await click(harness, el, 'admin-projects-tab-repositories');
+      await click(harness, el, 'admin-projects-repositories-edit-branch-core');
+      type('my-branch');
+      await router.navigateByUrl('/admin/projects/proj_other');
+      await settle(harness.fixture);
+      expect(document.querySelector('[data-testid="admin-projects-branch-dialog"]')?.textContent).toContain('core in Blizzard');
+      expect(document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!.value).toBe('my-branch');
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+      const patch = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+      expect(patch).toHaveLength(1);
+      expect(patch[0].headers['if-match']).toBe('2');
+      expect(patch[0].body).toEqual({ base_branch: 'my-branch' });
+      expect(stub.forRoute('/api/projects/proj_other/repository-links/repo_c', 'PATCH')).toHaveLength(0);
     });
 
     it('shows a viewer without config:edit the branch but no edit control', async () => {
