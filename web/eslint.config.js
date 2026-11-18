@@ -10,6 +10,19 @@ const angular = require("angular-eslint");
 // place exempt from this ban.
 const CLOCK_MESSAGE =
   "Read the clock through `injectNowSignal` (a ticking display) or `FLEET_CLOCK` (a single reading), never a raw `Date.now()` / zero-arg `new Date()`.";
+// The headless Aria primitives sit behind the kit (`bzh:frontend-kit-floor`): only
+// `fleet/src/lib/kit/` imports `@angular/aria` or a subpath of it. Flat config replaces
+// a rule's options per matching block, so every suffix block below that sets
+// `no-restricted-imports` restates this pattern alongside its own.
+const ARIA_PATTERN = {
+  group: ["@angular/aria", "@angular/aria/*"],
+  message: "Only the kit (`fleet/src/lib/kit/`) imports `@angular/aria`: compose the kit primitive instead.",
+};
+const PURE_PATTERN = (concept) => ({
+  group: ["@angular/*", "@tanstack/*"],
+  message: `A ${concept} is pure: move the Angular or query-library code to its container or component.`,
+});
+
 const CLOCK_SELECTORS = [
   { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: CLOCK_MESSAGE },
   { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: CLOCK_MESSAGE },
@@ -91,17 +104,54 @@ module.exports = defineConfig([
   // read from its own directory; no project config restates this rule, since flat config
   // replaces a rule's options per matching block. `web/scripts/model-imports-lint-probe.js`
   // proves it under each project's config.
+  // Every `.ts` outside the kit refuses `@angular/aria`. Each project reads this config
+  // from its own directory, so the kit's ignore names both its fleet-relative and
+  // web-relative paths.
+  {
+    files: ["**/*.ts"],
+    ignores: ["**/src/lib/kit/**/*.ts", "src/lib/kit/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": ["error", { patterns: [ARIA_PATTERN] }],
+    },
+  },
   {
     files: ["**/*.model.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        { patterns: [PURE_PATTERN("model"), ARIA_PATTERN] },
+      ],
+    },
+  },
+  // A domain file and a translator hold the same purity as a model: no Angular and no
+  // query library, a type-only import included. `web/scripts/boundary-imports-lint-probe.js`
+  // proves these blocks and the Aria refusal under each project's config.
+  {
+    files: ["**/*.domain.ts", "**/*.translate.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        { patterns: [PURE_PATTERN("domain file or translator"), ARIA_PATTERN] },
+      ],
+    },
+  },
+  // A form file builds on Signal Forms and nothing else of Angular's.
+  {
+    files: ["**/*.form.ts"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["@angular/*", "@tanstack/*"],
-              message: "A model is pure: move the Angular or query-library code to its container or component.",
+              regex: "^@angular/(?!forms/signals$)",
+              message: "A form file imports only `@angular/forms/signals` from Angular: move the rest to its container or component.",
             },
+            {
+              group: ["@tanstack/*"],
+              message: "A form file is pure of the query library: move the query code to its container.",
+            },
+            ARIA_PATTERN,
           ],
         },
       ],
