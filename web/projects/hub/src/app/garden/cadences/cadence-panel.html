@@ -21,7 +21,7 @@
             <fleet-kit-button
               testid="gardening-cadence-panel-edit"
               [disabled]="editForm() !== null"
-              (click)="onStartEdit()"
+              (click)="startEdit.emit()"
             >
               Edit
             </fleet-kit-button>
@@ -109,8 +109,8 @@
                 <span class="cp-actions">
                   <fleet-kit-button
                     [testid]="'gardening-cadence-chore-edit-' + chore.key"
-                    [disabled]="isOpen(panel, chore.key)"
-                    (click)="openForm(panel, { chore: chore.key })"
+                    [disabled]="choreForm()?.key === chore.key"
+                    (click)="startEditChore.emit(chore.key)"
                   >
                     Edit
                   </fleet-kit-button>
@@ -118,7 +118,7 @@
                     variant="danger"
                     [testid]="'gardening-cadence-chore-remove-' + chore.key"
                     [disabled]="editPending()"
-                    (click)="onRemoveChore(panel, chore.key)"
+                    (click)="startRemoveChore.emit(chore.key)"
                   >
                     Remove
                   </fleet-kit-button>
@@ -128,17 +128,17 @@
             @if (chore.note) {
               <p class="cp-note">{{ chore.note }}</p>
             }
-            @if (isOpen(panel, chore.key)) {
-              <app-chore-form
-                [urgencies]="urgencies()"
-                [testid]="'gardening-chore-edit-' + chore.key"
-                [initial]="chore.draft"
-                [keyEditable]="false"
-                [pending]="editPending()"
-                [error]="actionError()"
-                (saved)="editChore.emit({ key: chore.key, draft: $event })"
-                (cancelled)="closeForm()"
-              />
+            @if (choreForm(); as open) {
+              @if (open.key === chore.key) {
+                <app-chore-form
+                  [form]="open.form"
+                  [urgencies]="urgencies()"
+                  [heldMode]="chore.heldMode"
+                  [testid]="'gardening-chore-edit-' + chore.key"
+                  (save)="saveChore.emit()"
+                  (cancel)="cancelChore.emit()"
+                />
+              }
             }
             <fleet-kit-async-state
               [state]="chore.errandsState"
@@ -204,20 +204,20 @@
           <p class="cp-dim" data-testid="gardening-cadence-panel-no-chores">The cadence keeps no chore.</p>
         }
         @if (canEdit()) {
-          @if (isOpen(panel, 'add-chore')) {
-            <app-chore-form
-              [urgencies]="urgencies()"
-              testid="gardening-chore-add"
-              [initial]="newChore"
-              [pending]="editPending()"
-              [error]="actionError()"
-              (saved)="addChore.emit($event)"
-              (cancelled)="closeForm()"
-            />
-          } @else {
-            <fleet-kit-button testid="gardening-cadence-chore-add" (click)="openForm(panel, 'add-chore')">
-              Add chore
-            </fleet-kit-button>
+          @if (choreForm(); as open) {
+            @if (open.key === null) {
+              <app-chore-form
+                [form]="open.form"
+                [adding]="true"
+                [urgencies]="urgencies()"
+                testid="gardening-chore-add"
+                (save)="saveChore.emit()"
+                (cancel)="cancelChore.emit()"
+              />
+            }
+          }
+          @if (choreForm()?.key !== null) {
+            <fleet-kit-button testid="gardening-cadence-chore-add" (click)="startAddChore.emit()">Add chore</fleet-kit-button>
           }
         }
       </section>
@@ -225,6 +225,21 @@
   }
 </fleet-kit-async-state>
 
+@let vmNow = vm();
+@if (removing(); as key) {
+  @if (vmNow) {
+    <fleet-kit-confirm-dialog
+      [open]="true"
+      [heading]="'Remove chore ' + key"
+      [message]="removeMessage(vmNow, key)"
+      confirmLabel="Remove"
+      variant="danger"
+      testid="confirm-dialog"
+      (confirmed)="confirmRemoveChore.emit()"
+      (cancelled)="cancelRemoveChore.emit()"
+    />
+  }
+}
 @if (pendingConfirm(); as confirm) {
   <fleet-kit-confirm-dialog
     [open]="true"

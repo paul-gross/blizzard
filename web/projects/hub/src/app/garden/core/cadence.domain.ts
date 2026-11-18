@@ -124,5 +124,17 @@ export interface ChoreDraft {
   readonly mode: string;
   readonly promote: boolean;
   readonly note: string;
-  readonly urgency?: string | null;
+  /** An urgency slug; `''` is the routine's default. */
+  readonly urgency: string;
 }
+
+/** The empty chore a new one opens on. */
+export const EMPTY_CHORE_DRAFT: ChoreDraft = {
+  key: '',
+  routine: '',
+  scopes: 'all',
+  mode: 'full',
+  promote: true,
+  note: '',
+  urgency: '',
+};

@@ -1,69 +1,45 @@
-@let d = draft();
-<form class="chf" [attr.data-testid]="testid()" (submit)="$event.preventDefault(); save()">
+@let f = form();
+<fleet-kit-form
+  [attr.data-testid]="testid()"
+  [form]="f"
+  [testid]="testid()"
+  saveLabel="Save chore"
+  (save)="save.emit()"
+  (cancel)="cancel.emit()"
+>
   <div class="chf-row">
-    <div class="chf-field">
-      <span class="chf-label">Key</span>
-      @if (keyEditable()) {
-        <fleet-kit-text-input
-          [value]="d.key"
-          ariaLabel="Chore key"
-          placeholder="nightly"
-          [testid]="testid() + '-key'"
-          (valueChange)="set('key', $event)"
-        />
-      } @else {
-        <span class="chf-fixed" [attr.data-testid]="testid() + '-key'">{{ d.key }}</span>
-      }
-    </div>
-    <div class="chf-field">
-      <span class="chf-label">Routine</span>
-      <fleet-kit-text-input
-        [value]="d.routine"
-        ariaLabel="Routine slug"
-        placeholder="nightly"
-        [testid]="testid() + '-routine'"
-        (valueChange)="set('routine', $event)"
-      />
-    </div>
+    @if (adding()) {
+      <fleet-kit-field label="Key" [field]="f.key">
+        <fleet-kit-text-input [formField]="f.key" placeholder="nightly" [testid]="testid() + '-key'" />
+      </fleet-kit-field>
+    }
+    <fleet-kit-field label="Routine" [field]="f.routine">
+      <fleet-kit-text-input [formField]="f.routine" placeholder="nightly" [testid]="testid() + '-routine'" />
+    </fleet-kit-field>
   </div>
-  <div class="chf-field">
-    <span class="chf-label">Scopes</span>
+  <fleet-kit-field label="Scopes" [field]="f.scopes">
     <fleet-kit-text-input
-      [value]="d.scopes"
-      ariaLabel="Scopes"
+      [formField]="f.scopes"
       placeholder="all, a list of slugs, or blank for the routine's default"
       [testid]="testid() + '-scopes'"
-      (valueChange)="set('scopes', $event)"
     />
-  </div>
+  </fleet-kit-field>
   <div class="chf-row">
-    <div class="chf-field">
-      <span class="chf-label">Mode</span>
-      <fleet-kit-chips ariaLabel="Chore mode" [options]="modeOptions()" [selectedValue]="d.mode" (choose)="set('mode', $event)" />
-    </div>
-    <div class="chf-field">
-      <span class="chf-label">Promote</span>
-      <fleet-kit-checkbox
-        [checked]="d.promote"
-        label="promote its runs"
-        [testid]="testid() + '-promote'"
-        (checkedChange)="setPromote($event)"
-      />
-    </div>
+    <fleet-kit-field label="Mode" [field]="f.mode">
+      <fleet-kit-option-group [formField]="f.mode" ariaLabel="Chore mode">
+        @for (mode of modes(); track mode.value) {
+          <fleet-kit-option [value]="mode.value" [testid]="testid() + '-mode-' + mode.value">{{ mode.label }}</fleet-kit-option>
+        }
+      </fleet-kit-option-group>
+    </fleet-kit-field>
+    <fleet-kit-field label="Promote" [field]="f.promote">
+      <fleet-kit-checkbox [formField]="f.promote" label="promote its runs" [testid]="testid() + '-promote'" />
+    </fleet-kit-field>
   </div>
-  <div class="chf-field">
-    <span class="chf-label">Urgency</span>
-    <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgencyValue()" [testid]="testid() + '-urgency'" (choose)="set('urgency', $event)" />
-  </div>
-  <div class="chf-field">
-    <span class="chf-label">Note</span>
-    <fleet-kit-text-input [value]="d.note" ariaLabel="Note" [testid]="testid() + '-note'" (valueChange)="set('note', $event)" />
-  </div>
-  <fleet-kit-error-line [message]="error()" [testid]="testid() + '-error'" />
-  <div class="chf-actions">
-    <fleet-kit-button variant="primary" [disabled]="pending()" [testid]="testid() + '-save'" (click)="save()">
-      Save chore
-    </fleet-kit-button>
-    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="cancelled.emit()">Cancel</fleet-kit-button>
-  </div>
-</form>
+  <fleet-kit-field label="Urgency" [field]="f.urgency">
+    <fleet-kit-select [formField]="f.urgency" [options]="urgencyOptions()" ariaLabel="Urgency" [testid]="testid() + '-urgency'" />
+  </fleet-kit-field>
+  <fleet-kit-field label="Note" [field]="f.note">
+    <fleet-kit-text-input [formField]="f.note" [testid]="testid() + '-note'" />
+  </fleet-kit-field>
+</fleet-kit-form>

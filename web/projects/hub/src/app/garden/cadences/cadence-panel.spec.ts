@@ -5,10 +5,11 @@ import { provideRouter } from '@angular/router';
 import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 
 import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
-import type { CadenceDraft, ChoreDraft } from '../core/cadence.domain';
-import { toDraft } from '../core/cadence.translate';
+import { type CadenceDraft, type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
+import { toChoreDraft, toDraft } from '../core/cadence.translate';
 import { cadenceEditRules } from './cadence.form';
-import { type CadencePanelVm, type ChoreEditEvent, FleetCadencePanel } from './cadence-panel';
+import { type CadencePanelVm, FleetCadencePanel } from './cadence-panel';
+import { choreAddRules, choreEditRules } from './chore.form';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
 
 const CADENCE = gardenCadence({
@@ -123,43 +124,64 @@ describe('FleetCadencePanel', () => {
     expect(q('gardening-cadence-panel-state')?.textContent).toContain('retired');
   });
 
-  it('confirms a chore removal before emitting its key', async () => {
-    const { fixture, click } = await mount();
-    const removed: string[] = [];
-    fixture.componentInstance.removeChore.subscribe((key) => removed.push(key));
+  it('asks its container to remove a chore, and renders the confirm exactly while it holds `removing`', async () => {
+    const { fixture, click, q } = await mount();
+    const events: string[] = [];
+    fixture.componentInstance.startRemoveChore.subscribe((key) => events.push(`start:${key}`));
+    fixture.componentInstance.confirmRemoveChore.subscribe(() => events.push('confirm'));
+    fixture.componentInstance.cancelRemoveChore.subscribe(() => events.push('cancel'));
 
     await click('gardening-cadence-chore-remove-odd');
-    await click('confirm-dialog-confirm');
+    expect(events).toEqual(['start:odd']);
+    expect(q('confirm-dialog')).toBeNull();
 
-    expect(removed).toEqual(['odd']);
+    fixture.componentRef.setInput('removing', 'odd');
+    await fixture.whenStable();
+    expect(q('confirm-dialog')).not.toBeNull();
+    await click('confirm-dialog-confirm');
+    expect(events).toEqual(['start:odd', 'confirm']);
   });
 
-  it('adds a chore from the form', async () => {
-    const { fixture, click, type } = await mount();
-    const added: ChoreDraft[] = [];
-    fixture.componentInstance.addChore.subscribe((draft) => added.push(draft));
+  it('asks its container to start a chore add or edit, and renders a chore form exactly while handed one', async () => {
+    const { fixture, click, q } = await mount();
+    const events: (string | undefined)[] = [];
+    fixture.componentInstance.startAddChore.subscribe(() => events.push('add'));
+    fixture.componentInstance.startEditChore.subscribe((key) => events.push(`edit:${key}`));
+    fixture.componentInstance.saveChore.subscribe(() => events.push('save'));
+    fixture.componentInstance.cancelChore.subscribe(() => events.push('cancel'));
 
     await click('gardening-cadence-chore-add');
-    await type('gardening-chore-add-key', 'weekly');
-    await type('gardening-chore-add-routine', 'deep');
-    await click('gardening-chore-add-save');
-
-    expect(added).toEqual([{ key: 'weekly', routine: 'deep', scopes: 'all', mode: 'full', promote: true, note: '' }]);
-  });
-
-  it('edits a chore in place, keeping its key and its unknown mode', async () => {
-    const { fixture, click, type, q } = await mount();
-    const edits: ChoreEditEvent[] = [];
-    fixture.componentInstance.editChore.subscribe((event) => edits.push(event));
-
     await click('gardening-cadence-chore-edit-odd');
-    expect(q('gardening-chore-edit-odd-key')?.tagName.toLowerCase()).toBe('span');
-    await type('gardening-chore-edit-odd-scopes', 'web, hub');
-    await click('gardening-chore-edit-odd-save');
+    expect(events).toEqual(['add', 'edit:odd']);
+    expect(q('gardening-chore-add')).toBeNull();
+    expect(q('gardening-chore-edit-odd')).toBeNull();
 
-    expect(edits).toEqual([
-      { key: 'odd', draft: { key: 'odd', routine: 'nightly', scopes: 'web, hub', mode: 'sampled', promote: true, note: '', urgency: null } },
-    ]);
+    const addTree = TestBed.runInInjectionContext(() => form(signal<ChoreDraft>(EMPTY_CHORE_DRAFT), choreAddRules));
+    fixture.componentRef.setInput('choreForm', { key: null, form: addTree });
+    await fixture.whenStable();
+    expect(q('gardening-chore-add')).not.toBeNull();
+    expect(q('gardening-cadence-chore-add')).toBeNull();
+    await click('gardening-chore-add-cancel');
+    expect(events.at(-1)).toBe('cancel');
+
+    const editTree = TestBed.runInInjectionContext(() =>
+      form(signal<ChoreDraft>(toChoreDraft(CADENCE.chores[1])), choreEditRules),
+    );
+    fixture.componentRef.setInput('choreForm', { key: 'odd', form: editTree });
+    await fixture.whenStable();
+    expect(q('gardening-chore-add')).toBeNull();
+    expect(q('gardening-chore-edit-odd')).not.toBeNull();
+    expect(q('gardening-chore-edit-odd-key')).toBeNull();
+    expect(q('gardening-cadence-chore-add')).not.toBeNull();
+    expect((q('gardening-cadence-chore-edit-odd') as HTMLButtonElement).disabled).toBe(true);
+    expect(q('gardening-chore-edit-odd')!.textContent).toContain('sampled');
+
+    fixture.componentRef.setInput('vm', { ...VM, revision: VM.revision + 1 });
+    await fixture.whenStable();
+    expect(q('gardening-chore-edit-odd')).not.toBeNull();
+
+    await click('gardening-chore-edit-odd-save');
+    expect(events.at(-1)).toBe('save');
   });
 
   it('asks its container to start an edit, and renders the edit form exactly while handed a field tree', async () => {
@@ -182,22 +204,8 @@ describe('FleetCadencePanel', () => {
     expect(q('gardening-cadence-edit')).not.toBeNull();
   });
 
-  it('ends the edit when a chore form opens', async () => {
-    const { fixture, click } = await mount();
-    let cancelled = 0;
-    fixture.componentInstance.cancelEdit.subscribe(() => cancelled++);
-    const tree = TestBed.runInInjectionContext(() => form(signal<CadenceDraft>(toDraft(CADENCE)), cadenceEditRules));
-    fixture.componentRef.setInput('editForm', tree);
-    await fixture.whenStable();
-
-    await click('gardening-cadence-chore-add');
-    expect(cancelled).toBe(1);
-  });
-
-  it('disables every save and remove while an edit is in flight', async () => {
-    const { click, q } = await mount({ editPending: true });
+  it('disables every remove while an edit is in flight', async () => {
+    const { q } = await mount({ editPending: true });
     expect((q('gardening-cadence-chore-remove-nightly') as HTMLButtonElement).disabled).toBe(true);
-    await click('gardening-cadence-chore-add');
-    expect((q('gardening-chore-add-save') as HTMLButtonElement).disabled).toBe(true);
   });
 });

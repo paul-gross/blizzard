@@ -1,7 +1,7 @@
 import { asyncState, type AsyncStateQuery, type CadenceErrandView, formatAbsolute } from 'fleet';
 
-import { type Cadence, type CadenceAttention, type Chore, vocabularyText } from '../core/cadence.domain';
-import { toChoreDraft } from '../core/cadence.translate';
+import { type Cadence, type CadenceAttention, type Chore, type ChoreDraft, vocabularyText } from '../core/cadence.domain';
+import type { ChoresBaseline } from './chore.service';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
 import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';
 import { attentionReasonLabel, choreModeLabel, errandStateLook } from './cadence-vocabulary';
@@ -55,7 +55,7 @@ export function choreRows(cadence: Cadence, errands: readonly CadenceErrandView[
     mode: choreModeLabel(vocabularyText(chore.mode)),
     promote: chore.promote,
     note: chore.note,
-    draft: toChoreDraft(chore),
+    heldMode: vocabularyText(chore.mode),
     errands: (errands ?? []).filter((e) => e.chore === chore.key).map(errandRow),
     errandsState: asyncState(query, !(errands ?? []).some((e) => e.chore === chore.key)),
   }));
@@ -86,4 +86,30 @@ export function cadencePanelVm(
 /** The edit's field tree while an edit is under way — while it holds a baseline — else `null`. */
 export function whileEditing<T>(baseline: unknown, tree: T): T | null {
   return baseline === null ? null : tree;
+}
+
+/** One chore add or edit under way: what it started from, and the key of the chore it edits (`null` for an add). */
+export interface ChoreSession {
+  readonly baseline: ChoresBaseline;
+  readonly key: string | null;
+}
+
+/** The chore form the panel renders for `session` — its add tree for an add, its edit tree for an edit — else `null`. */
+export function choreFormVm<T>(
+  session: ChoreSession | null,
+  addTree: T,
+  editTree: T,
+): { readonly key: string | null; readonly form: T } | null {
+  if (session === null) return null;
+  return { key: session.key, form: session.key === null ? addTree : editTree };
+}
+
+/** The chore keyed `key` in `baseline`, `null` when it holds none. */
+export function baselineChore(baseline: ChoresBaseline, key: string): Chore | null {
+  return baseline.draft.find((chore) => chore.key === key) ?? null;
+}
+
+/** What a refused chore removal says on the panel line: the form line, else the first field's message, else `fallback`. */
+export function removalRefusal(outcome: { form: string | null; fields: Partial<Record<keyof ChoreDraft, string>> }, fallback: string): string {
+  return outcome.form ?? Object.values(outcome.fields)[0] ?? fallback;
 }

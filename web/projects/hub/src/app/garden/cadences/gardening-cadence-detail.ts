@@ -17,14 +17,25 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { cadenceLifecycleMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubCadenceErrandsQuery, injectHubCadencesQuery } from '../core/cadences.query';
-import { type Cadence, type CadenceDraft, type ChoreDraft, EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
-import { choresAdding, choresRemoving, choresReplacing, toEditBaseline } from '../core/cadence.translate';
+import { type Cadence, type CadenceDraft, type ChoreDraft, EMPTY_CADENCE_DRAFT, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
+import { toChoreDraft, toChoresBaseline, toEditBaseline } from '../core/cadence.translate';
 import { cadenceEditRules } from './cadence.form';
+import { choreAddRules, choreEditRules } from './chore.form';
+import { type ChoresBaseline, injectChoreService } from './chore.service';
 import { injectCadenceService } from './cadence.service';
-import { type CadenceEditVars, injectEditCadenceMutation } from './cadence-edit.mutations';
+import type { CadenceEditVars } from './cadence-edit.mutations';
 import { type CadenceLifecycleVars, injectCadenceLifecycleMutation } from './cadence-lifecycle.mutations';
-import { type CadencePanelVm, type ChoreEditEvent, FleetCadencePanel } from './cadence-panel';
-import { cadenceBySlug, cadenceOverrideRetired, cadencePanelVm, whileEditing } from './gardening-cadence-detail.model';
+import { type CadencePanelVm, FleetCadencePanel } from './cadence-panel';
+import {
+  baselineChore,
+  cadenceBySlug,
+  cadenceOverrideRetired,
+  cadencePanelVm,
+  type ChoreSession,
+  choreFormVm,
+  removalRefusal,
+  whileEditing,
+} from './gardening-cadence-detail.model';
 
 /**
  * The selected cadence's detail — the right-hand child of `/gardening/cadences`. Mounted by both of that route's
@@ -38,8 +49,10 @@ import { cadenceBySlug, cadenceOverrideRetired, cadencePanelVm, whileEditing } f
  * its draft, and Save sends the working draft against that baseline, so a refresh of the read changes neither. A
  * refused save keeps both; Cancel, or selecting another cadence, ends the edit, and the next starts from a fresh read.
  *
- * A chore add, edit, or remove, and a retire or enable, is sent against the revision the cadence now reads at. A chore
- * change sends the whole chore list, rebuilt from the served chores with the one change.
+ * It owns one chore session the same way: a chore add or edit captures the chores and revision it started from, and
+ * Save sends the whole chore list rebuilt from that capture, so a cadence changed since is refused, not merged. A
+ * remove captures them when its confirm opens. The chore form, the remove confirm, and the cadence edit are open one
+ * at a time. A retire or enable is sent against the revision the cadence now reads at.
  */
 @Component({
   selector: 'app-gardening-cadence-detail',
@@ -54,7 +67,7 @@ export class GardeningCadenceDetail {
 
   private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly editMutation = injectEditCadenceMutation();
+  private readonly choreService = injectChoreService();
   private readonly cadenceService = injectCadenceService();
   private readonly lifecycleMutation = injectCadenceLifecycleMutation();
 
@@ -104,6 +117,7 @@ export class GardeningCadenceDetail {
     const cadence = this.selected();
     if (cadence === null) return;
     const baseline = toEditBaseline(cadence);
+    this.endForms();
     this.editTree().reset({ ...baseline.draft });
     this.editBaseline.set(baseline);
   }
@@ -119,19 +133,76 @@ export class GardeningCadenceDetail {
     this.editBaseline.set(null);
   }
 
-  protected onAddChore(draft: ChoreDraft): void {
-    const cadence = this.selected();
-    if (cadence !== null) this.send({ chores: choresAdding(cadence.chores, draft) }, 'Add chore failed.');
+  /** The chore add or edit under way — `null` while none is. */
+  private readonly choreSession = signal<ChoreSession | null>(null);
+  private readonly choreDraft = signal<ChoreDraft>(EMPTY_CHORE_DRAFT);
+  private readonly addTree = form(this.choreDraft, choreAddRules);
+  private readonly choreEditTree = form(this.choreDraft, choreEditRules);
+  /** The chore removal awaiting confirmation: its key and the chores and revision it captured. */
+  private readonly removal = signal<{ readonly key: string; readonly baseline: ChoresBaseline } | null>(null);
+
+  /** The chore form's field tree while a chore add or edit is under way. */
+  protected readonly choreForm = computed(() => choreFormVm(this.choreSession(), this.addTree, this.choreEditTree));
+  protected readonly removing = computed(() => this.removal()?.key ?? null);
+
+  protected onStartAddChore(): void {
+    this.beginChore(null, EMPTY_CHORE_DRAFT);
   }
 
-  protected onEditChore(event: ChoreEditEvent): void {
+  protected onStartEditChore(key: string): void {
     const cadence = this.selected();
-    if (cadence !== null) this.send({ chores: choresReplacing(cadence.chores, event.key, event.draft) }, 'Save chore failed.');
+    const chore = cadence === null ? null : baselineChore(toChoresBaseline(cadence), key);
+    if (chore !== null) this.beginChore(key, toChoreDraft(chore));
   }
 
-  protected onRemoveChore(key: string): void {
+  protected async onSaveChore(): Promise<void> {
+    const session = this.choreSession();
+    if (session === null) return;
+    const { baseline, key } = session;
+    const saved = await submitForm(key === null ? this.addTree : this.choreEditTree, (draft) =>
+      key === null ? this.choreService.add(baseline, draft) : this.choreService.edit(baseline, key, draft),
+    );
+    if (saved && this.choreSession() === session) this.choreSession.set(null);
+  }
+
+  protected onCancelChore(): void {
+    this.choreSession.set(null);
+  }
+
+  protected onStartRemoveChore(key: string): void {
     const cadence = this.selected();
-    if (cadence !== null) this.send({ chores: choresRemoving(cadence.chores, key) }, 'Remove chore failed.');
+    if (cadence === null) return;
+    this.endForms();
+    this.actionError.set(null);
+    this.removal.set({ key, baseline: toChoresBaseline(cadence) });
+  }
+
+  protected async onConfirmRemoveChore(): Promise<void> {
+    const removal = this.removal();
+    if (removal === null) return;
+    this.removal.set(null);
+    const outcome = await this.choreService.remove(removal.baseline, removal.key);
+    if (!outcome.ok) this.actionError.set(removalRefusal(outcome, 'Remove chore failed.'));
+  }
+
+  protected onCancelRemoveChore(): void {
+    this.removal.set(null);
+  }
+
+  private beginChore(key: string | null, draft: ChoreDraft): void {
+    const cadence = this.selected();
+    if (cadence === null) return;
+    this.endForms();
+    this.actionError.set(null);
+    (key === null ? this.addTree : this.choreEditTree)().reset({ ...draft });
+    this.choreSession.set({ baseline: toChoresBaseline(cadence), key });
+  }
+
+  /** Ends every form and confirm under way, so one is open at a time. */
+  private endForms(): void {
+    this.editBaseline.set(null);
+    this.choreSession.set(null);
+    this.removal.set(null);
   }
 
   protected onRetire(): void {
@@ -143,21 +214,11 @@ export class GardeningCadenceDetail {
   }
 
   constructor() {
-    // Selecting another cadence ends the edit.
+    // Selecting another cadence ends every form.
     effect(() => {
       this.cadenceSlug();
-      untracked(() => this.editBaseline.set(null));
+      untracked(() => this.endForms());
     });
-  }
-
-  private send(body: CadenceEditVars['body'], fallback: string): void {
-    const cadence = this.selected();
-    if (cadence === null) return;
-    this.actionError.set(null);
-    this.editMutation.mutate(
-      { cadenceId: cadence.id, revision: cadence.revision, body },
-      { onError: (error: unknown) => this.actionError.set(errorMessage(error, fallback)) },
-    );
   }
 
   private lifecycle(retired: boolean, fallback: string): void {

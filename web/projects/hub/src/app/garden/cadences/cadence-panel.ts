@@ -51,8 +51,8 @@ export interface ChorePanelVm {
   readonly mode: string;
   readonly promote: boolean;
   readonly note: string | null;
-  /** The chore as its edit form opens. */
-  readonly draft: ChoreDraft;
+  /** The mode the chore holds, as the hub spelled it — offered by its edit form even when this build does not know it. */
+  readonly heldMode: string;
   readonly errands: readonly ErrandRowVm[];
   readonly errandsState: KitAsyncStateValue;
 }
@@ -81,22 +81,11 @@ export interface CadencePanelVm {
   readonly chores: readonly ChorePanelVm[];
 }
 
-/** A chore edit: the chore's key as served, and its new draft. */
-export interface ChoreEditEvent {
-  readonly key: string;
-  readonly draft: ChoreDraft;
+/** The chore form the panel renders: the chore's key as served, or `null` while a chore is being added, and its tree. */
+export interface ChoreFormVm {
+  readonly key: string | null;
+  readonly form: FieldTree<ChoreDraft>;
 }
-
-/** Which chore form is open, on which cadence, at which revision — a chore form reading back a new revision has saved,
- * and closes. */
-interface OpenForm {
-  readonly cadenceId: string;
-  readonly revision: number;
-  readonly form: 'add-chore' | { readonly chore: string };
-}
-
-/** The empty chore a new one opens on. */
-const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full', promote: true, note: '' };
 
 /**
  * The gardening cadence panel — a header with the cadence's name, slug and lifecycle, and Edit and Retire (or
@@ -104,10 +93,10 @@ const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full
  * over each scope, each chore editable and removable, and a chore added at the foot. Presentational: it renders the
  * view model it is handed and emits each gesture; the caller sends it.
  *
- * A chore form stays open until the cadence reads back at a new revision, so a refused save leaves it open beside its
- * error. The cadence's own edit is its container's: the panel renders the edit form exactly while it is handed
- * {@link editForm}, so a refresh of the read never closes it. One form is open at a time — starting the edit closes a
- * chore form, and opening a chore form ends the edit.
+ * The cadence edit and a chore add or edit are its container's: the panel renders the edit form exactly while it is
+ * handed {@link editForm}, a chore form exactly while it is handed {@link choreForm}, and the remove confirm exactly
+ * while it is handed {@link removing}, so a refresh of the read never closes one and a refused save leaves it open
+ * beside its error.
  */
 @Component({
   selector: 'app-cadence-panel',
@@ -137,7 +126,11 @@ export class FleetCadencePanel {
   readonly canEdit = input(false);
   /** The cadence edit's field tree while an edit is under way, `null` otherwise. */
   readonly editForm = input<FieldTree<CadenceDraft> | null>(null);
-  /** Set on a failed chore edit, retire, or enable; rendered beside the controls that raise it. */
+  /** The chore form under way — adding, or editing one chore — `null` otherwise. */
+  readonly choreForm = input<ChoreFormVm | null>(null);
+  /** The key of the chore whose removal awaits confirmation, `null` otherwise. */
+  readonly removing = input<string | null>(null);
+  /** Set on a failed retire, enable, or chore removal; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
   /** Whether an edit of this cadence is in flight — disables every save and remove. */
   readonly editPending = input(false);
@@ -148,16 +141,17 @@ export class FleetCadencePanel {
   readonly startEdit = output<void>();
   readonly saveEdit = output<void>();
   readonly cancelEdit = output<void>();
-  readonly addChore = output<ChoreDraft>();
-  readonly editChore = output<ChoreEditEvent>();
-  readonly removeChore = output<string>();
+  readonly startAddChore = output<void>();
+  readonly startEditChore = output<string>();
+  readonly saveChore = output<void>();
+  readonly cancelChore = output<void>();
+  readonly startRemoveChore = output<string>();
+  readonly confirmRemoveChore = output<void>();
+  readonly cancelRemoveChore = output<void>();
   readonly retire = output<void>();
   readonly enable = output<void>();
 
   protected readonly lifecycleTone = lifecycleTone;
-  protected readonly newChore = NEW_CHORE;
-
-  private readonly open = signal<OpenForm | null>(null);
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;
@@ -166,27 +160,6 @@ export class FleetCadencePanel {
     readonly variant: 'primary' | 'danger';
     readonly run: () => void;
   } | null>(null);
-
-  /** Whether `form` is open on `panel` as it now reads. */
-  protected isOpen(panel: CadencePanelVm, form: 'add-chore' | string): boolean {
-    const open = this.open();
-    if (open === null || open.cadenceId !== panel.cadenceId || open.revision !== panel.revision) return false;
-    return typeof open.form === 'string' ? open.form === form : open.form.chore === form;
-  }
-
-  protected openForm(panel: CadencePanelVm, form: OpenForm['form']): void {
-    if (this.editForm() !== null) this.cancelEdit.emit();
-    this.open.set({ cadenceId: panel.cadenceId, revision: panel.revision, form });
-  }
-
-  protected onStartEdit(): void {
-    this.open.set(null);
-    this.startEdit.emit();
-  }
-
-  protected closeForm(): void {
-    this.open.set(null);
-  }
 
   /** The record's facts — its rhythm and its next moments. */
   protected factRows(moments: TemplateRef<unknown>, rhythm: string): readonly KitFact[] {
@@ -216,16 +189,6 @@ export class FleetCadencePanel {
     });
   }
 
-  protected onRemoveChore(panel: CadencePanelVm, key: string): void {
-    this.confirm({
-      heading: `Remove chore ${key}`,
-      message: `Remove chore ${key} from cadence ${panel.slug}? Its errands go with it; the runs it minted stay.`,
-      confirmLabel: 'Remove',
-      variant: 'danger',
-      run: () => this.removeChore.emit(key),
-    });
-  }
-
   private confirm(prompt: NonNullable<ReturnType<typeof this.pendingConfirm>>): void {
     this.pendingConfirm.set(prompt);
   }
@@ -238,5 +201,10 @@ export class FleetCadencePanel {
 
   protected onCancelled(): void {
     this.pendingConfirm.set(null);
+  }
+
+  /** The panel's removal prompt for the chore keyed `key`. */
+  protected removeMessage(panel: CadencePanelVm, key: string): string {
+    return `Remove chore ${key} from cadence ${panel.slug}? Its errands go with it; the runs it minted stay.`;
   }
 }

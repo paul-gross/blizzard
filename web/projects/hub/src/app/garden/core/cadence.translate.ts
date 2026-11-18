@@ -198,7 +198,7 @@ export function toChoreDraft(chore: Chore): ChoreDraft {
     mode: vocabularyText(chore.mode),
     promote: chore.promote,
     note: chore.note ?? '',
-    urgency: chore.urgency,
+    urgency: chore.urgency ?? '',
   };
 }
 
@@ -217,6 +217,38 @@ export function choreDraftDocument(draft: ChoreDraft): ChoreDocument {
   };
 }
 
+/** What a chore add, edit, or remove starts from: the cadence's id, the revision it was read at, and its chores, all
+ * from that one read. */
+export function toChoresBaseline(cadence: Cadence): EditBaseline<readonly Chore[]> {
+  return { id: cadence.id, revision: cadence.revision, draft: [...cadence.chores] };
+}
+
+/**
+ * How the hub's refusals reach the chore at `index` of the chore list sent: its own fields (and its scope entries) to
+ * the draft field, and anything else — another chore, the list, a conflict — to the form line.
+ */
+export function choreRefusals(index: number): RefusalMap<ChoreDraft> {
+  const prefix = `chores[${index}].`;
+  return {
+    field: (path) => {
+      if (!path.startsWith(prefix)) return null;
+      const field = path.slice(prefix.length).replace(/\[\d+\]$/, '');
+      return Object.hasOwn(CHORE_REFUSAL_FIELDS, field) ? CHORE_REFUSAL_FIELDS[field] : null;
+    },
+    kinds: {},
+  };
+}
+
+const CHORE_REFUSAL_FIELDS: Readonly<Record<string, keyof ChoreDraft>> = {
+  key: 'key',
+  routine: 'routine',
+  scopes: 'scopes',
+  mode: 'mode',
+  promote: 'promote',
+  note: 'note',
+  urgency: 'urgency',
+};
+
 /** The whole chore list with `draft` added at its end. */
 export function choresAdding(chores: readonly Chore[], draft: ChoreDraft): ChoreDocument[] {
   return [...chores.map(choreDocument), choreDraftDocument(draft)];
@@ -224,7 +256,7 @@ export function choresAdding(chores: readonly Chore[], draft: ChoreDraft): Chore
 
 /** The whole chore list with the chore keyed `key` replaced, in place, by `draft`. */
 export function choresReplacing(chores: readonly Chore[], key: string, draft: ChoreDraft): ChoreDocument[] {
-  return chores.map((chore) => (chore.key === key ? choreDraftDocument(draft) : choreDocument(chore)));
+  return chores.map((chore) => (chore.key === key ? { ...choreDraftDocument(draft), key } : choreDocument(chore)));
 }
 
 /** The whole chore list without the chore keyed `key`. */
