@@ -11,6 +11,8 @@
     "structural-gate": "node scripts/structural-gate.js",
     "bundle-check": "node scripts/bundle-check.js",
     "shell-sweep": "node scripts/shell-sweep.js",
+    "typecheck": "npm run build && npm run typecheck:fleet",
+    "typecheck:fleet": "tsc --noEmit -p projects/fleet/tsconfig.lib.json && tsc --noEmit -p projects/fleet/tsconfig.spec.json",
     "build": "npm run build:hub && npm run build:runner",
     "build:hub": "ng build hub",
     "build:runner": "ng build runner",
