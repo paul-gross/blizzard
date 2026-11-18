@@ -10,10 +10,16 @@ import { Directive, effect, inject, input, output } from '@angular/core';
 @Directive({
   selector: '[fleetKitChipGroup]',
   hostDirectives: [{ directive: Listbox, inputs: ['disabled', 'orientation', 'selectionMode'] }],
+  host: { '(click)': 'endClick()' },
 })
 export class KitChipGroup {
   private readonly listbox = inject(Listbox<unknown>);
   private syncing = false;
+  // Focus can select before click reaches the listbox; count both as one pick,
+  // while still reporting clicks on an already-selected option.
+  private pointerEmitted = false;
+  private pointerActive = false;
+  private suppressClickSelection = false;
   readonly value = input<unknown>(null);
   readonly hasSelection = input(true);
   readonly valueChange = output<unknown>();
@@ -26,7 +32,24 @@ export class KitChipGroup {
       this.syncing = false;
     });
     this.listbox.value.subscribe((values) => {
-      if (!this.syncing && values.length) this.valueChange.emit(values[0]);
+      if (!this.syncing && !this.suppressClickSelection && values.length) {
+        if (this.pointerActive) this.pointerEmitted = true;
+        this.valueChange.emit(values[0]);
+      }
     });
   }
+
+  pointerDown(): void {
+    this.pointerEmitted = false;
+    this.pointerActive = true;
+  }
+
+  pointerClick(value: unknown): void {
+    if (!this.pointerActive || !this.pointerEmitted) this.valueChange.emit(value);
+    this.pointerEmitted = false;
+    this.pointerActive = false;
+    this.suppressClickSelection = true;
+  }
+
+  protected endClick(): void { this.suppressClickSelection = false; }
 }

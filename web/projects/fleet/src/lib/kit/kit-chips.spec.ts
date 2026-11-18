@@ -87,6 +87,23 @@ describe('KitChips', () => {
     expect(fixture.componentInstance.choices).toEqual(['a', 'a']);
   });
 
+  it('emits once for each pointer pick including focus and repicking', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');
+    options[0].focus();
+    for (let i = 0; i < 2; i++) {
+      options[1].dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      options[1].focus();
+      options[1].dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+      options[1].click();
+      await fixture.whenStable();
+    }
+    expect(fixture.componentInstance.choices).toEqual(['b', 'b']);
+  });
+
   it('emits keyboard changes even when returning to the controlled value', async () => {
     const fixture = TestBed.createComponent(TestHost);
     fixture.componentInstance.options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];

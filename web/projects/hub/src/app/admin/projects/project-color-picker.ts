@@ -33,16 +33,8 @@ export class ProjectColorPicker {
   protected readonly customOpen = computed(() => this.isCustom() || this.customRequested());
 
   protected readonly selectedColor = computed(() => this.customOpen() ? null : this.current());
-  private pointerPicking = false;
-
-  protected pointerPick(color: string | null): void {
-    this.pointerPicking = true;
-    this.select(color);
-    queueMicrotask(() => (this.pointerPicking = false));
-  }
-
   protected selectionChanged(value: unknown): void {
-    if (!this.pointerPicking && (typeof value === 'string' || value === null)) this.select(value);
+    if (typeof value === 'string' || value === null) this.select(value);
   }
 
   private select(color: string | null): void {

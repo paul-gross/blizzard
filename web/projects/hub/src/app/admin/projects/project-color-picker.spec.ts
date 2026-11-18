@@ -36,6 +36,18 @@ describe('ProjectColorPicker', () => {
     expect(chosen).toEqual(['pink']);
   });
 
+  it('emits once when a pointer focuses and picks a palette color after a custom color', async () => {
+    const fixture = await mount(false, '#ff8800');
+    const chosen: string[] = [];
+    fixture.componentInstance.choose.subscribe((color) => chosen.push(color));
+    const option = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-color-pink"]')!.closest<HTMLElement>('[role=option]')!;
+    option.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    option.focus();
+    option.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    option.click();
+    expect(chosen).toEqual(['pink']);
+  });
+
   it('selects Custom and seeds the input with the color when the current color is a hex', async () => {
     const fixture = await mount(false, '#ff8800');
     const root: HTMLElement = fixture.nativeElement;

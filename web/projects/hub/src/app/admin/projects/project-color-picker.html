@@ -6,7 +6,6 @@
       [label]="color"
       [disabled]="disabled()"
       [testid]="'project-color-' + color"
-      (click)="pointerPick(color)"
     >
       <fleet-kit-swatch class="chip-swatch" [color]="color" />{{ color }}
     </fleet-kit-chip>
@@ -17,7 +16,6 @@
     label="Custom"
     [disabled]="disabled()"
     testid="project-color-custom"
-    (click)="pointerPick(null)"
   >
     Custom
   </fleet-kit-chip>

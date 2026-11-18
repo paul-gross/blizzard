@@ -443,6 +443,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk-dock/chunk-detail-view-provenance.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/core/auth/tenant-picker.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/admin/projects/chip-pointer.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/tracks/step-drawer-view.shell-sweep.spec.ts' },

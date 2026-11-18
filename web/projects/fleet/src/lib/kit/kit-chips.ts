@@ -67,22 +67,11 @@ export class KitChips {
 
   readonly ariaLabel = input('Choices');
 
-  private pointerPicking = false;
-
-  protected pointerPick(option: KitChipOption): void {
-    this.pointerPicking = true;
-    this.pick(option);
-    queueMicrotask(() => (this.pointerPicking = false));
-  }
-
   protected selectionChanged(value: unknown): void {
-    if (!this.pointerPicking && !this.disabled() && typeof value === 'string') this.choose.emit(value);
+    if (!this.disabled() && typeof value === 'string') this.choose.emit(value);
   }
 
   /** Emits the clicked option's `value`. */
   readonly choose = output<string>();
 
-  protected pick(option: KitChipOption): void {
-    if (!this.disabled() && !option.disabled) this.choose.emit(option.value);
-  }
 }
