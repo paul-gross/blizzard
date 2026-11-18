@@ -25,6 +25,8 @@ Tailwind, no chart library, and no prettier** (eslint owns formatting).
 | install                   | `npm ci`                          | Install pinned dependencies.                                                             |
 | `npm run lint`            | `ng lint`                         | eslint over every project (no prettier).                                                 |
 | `npm run test`            | `ng test …`                       | The vitest unit/component tier, all three projects.                                      |
+| `npm run typecheck`       | `npm run build && …`              | Build both apps, then type-check `fleet`'s library and specs (`typecheck:fleet`).        |
+| `npm run typecheck:fleet` | `tsc --noEmit …`                  | Type-check `fleet`'s library and spec configs, including code no app imports yet.        |
 | `npm run build`           | `ng build hub && ng build runner` | Build both apps into `../src/blizzard/static/{hub,runner}` for the wheel embed.          |
 | `npm run generate:client` | `openapi-ts -f …`                 | Regenerate the two API clients and the stub operation tables.                            |
 | `npm run storybook`       | `ng run fleet:storybook …`        | Serve the component workshop.                                                            |
