@@ -4,14 +4,17 @@ import { fn } from 'storybook/test';
 import { KitToolbar, KitToolbarWidget } from './kit-toolbar';
 import { KitChip } from './kit-chips';
 
-const meta: Meta<KitToolbar> = {
+type ToolbarArgs = KitToolbar & { disabled: boolean; orientation: 'horizontal' | 'vertical'; invoked: () => void };
+
+const meta: Meta<ToolbarArgs> = {
   title: 'Kit/Toolbar',
   component: KitToolbar,
   decorators: [moduleMetadata({ imports: [KitToolbar, KitToolbarWidget, KitChip] })],
-  args: {},
-  render: () => ({ props: { invoked: fn() }, template: `
+  args: { disabled: false, orientation: 'horizontal', invoked: fn() },
+  argTypes: { orientation: { control: 'select', options: ['horizontal', 'vertical'] } },
+  render: (args) => ({ props: args, template: `
     <button type="button">Before toolbar</button>
-    <div fleetKitToolbar aria-label="Actions" style="max-width: 16rem">
+    <div fleetKitToolbar [disabled]="disabled" [orientation]="orientation" aria-label="Actions" style="max-width: 16rem">
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Accept</fleet-kit-chip>
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Decline</fleet-kit-chip>
       <fleet-kit-chip fleetKitToolbarWidget (invoked)="invoked()">Defer</fleet-kit-chip>
@@ -23,5 +26,7 @@ const meta: Meta<KitToolbar> = {
   ` }),
 };
 export default meta;
-type Story = StoryObj<KitToolbar>;
+type Story = StoryObj<ToolbarArgs>;
 export const Actions: Story = {};
+export const Disabled: Story = { args: { disabled: true } };
+export const Vertical: Story = { args: { orientation: 'vertical' } };

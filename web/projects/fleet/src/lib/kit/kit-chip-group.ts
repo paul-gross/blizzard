@@ -27,9 +27,13 @@ export class KitChipGroup {
   constructor() {
     effect(() => {
       const value = this.value();
-      this.syncing = true;
-      this.listbox.value.set(this.hasSelection() ? [value] : []);
-      this.syncing = false;
+      const hasSelection = this.hasSelection();
+      const selected = this.listbox.value();
+      if (hasSelection ? selected.length !== 1 || selected[0] !== value : selected.length !== 0) {
+        this.syncing = true;
+        this.listbox.value.set(hasSelection ? [value] : []);
+        this.syncing = false;
+      }
     });
     this.listbox.value.subscribe((values) => {
       if (!this.syncing && !this.suppressClickSelection && values.length) {

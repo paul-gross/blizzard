@@ -64,7 +64,5 @@ export type {
   QuestionView,
   RunnerRegistryView,
 } from './lib/api/hub/types.gen';
-export { KitToolbar, KitToolbarWidget } from './lib/kit/kit-toolbar';
-
 export { KitChipGroup } from './lib/kit/kit-chip-group';
 export { KitChipOptionDirective } from './lib/kit/kit-chip-option';

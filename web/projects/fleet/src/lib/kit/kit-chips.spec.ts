@@ -161,4 +161,43 @@ describe('KitChips', () => {
     expect(fixture.componentInstance.choices).toEqual(['b', 'a']);
   });
 
+  it('blocks a disabled generated option but allows an enabled option', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');
+    expect(options[1].getAttribute('aria-disabled')).toBe('true');
+
+    options[1].dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    options[1].click();
+    options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await fixture.whenStable();
+    expect(fixture.componentInstance.choices).toEqual([]);
+
+    options[0].click();
+    expect(fixture.componentInstance.choices).toEqual(['a']);
+  });
+
+  it('blocks generated options while the group is disabled and allows them again when enabled', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.options.set([{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]);
+    fixture.componentInstance.selected.set('a');
+    fixture.componentInstance.disabled.set(true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const options = el.querySelectorAll<HTMLElement>('[role=option]');
+    expect(el.querySelector('[role=listbox]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(options[1].getAttribute('aria-disabled')).toBe('true');
+
+    options[1].dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    options[1].click();
+    options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await fixture.whenStable();
+    expect(fixture.componentInstance.choices).toEqual([]);
+
+    fixture.componentInstance.disabled.set(false);
+    await fixture.whenStable();
+    options[1].click();
+    expect(fixture.componentInstance.choices).toEqual(['b']);
+  });
+
 });
