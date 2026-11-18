@@ -81,9 +81,8 @@ export class KitSelect implements FormValueControl<string> {
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('triggerEl');
 
   /** The matched option's label, else the raw value (a stale URL value matches no option), else empty. */
-  protected readonly shown = computed<string | null>(() =>
-    this.formField ? this.value() : (this.selectedValue() ?? (this.value() || null)),
-  );
+  /** The value on show: the bound field's when a `[formField]` binds this select, else the caller's `selectedValue`. */
+  protected readonly shown = computed<string | null>(() => (this.formField ? this.value() : this.selectedValue()));
   protected readonly selectedLabel = computed(() => {
     const value = this.shown();
     return this.options().find((o) => o.value === value)?.label ?? value ?? '';
@@ -94,7 +93,11 @@ export class KitSelect implements FormValueControl<string> {
     const selected = this.selectedLabel();
     return selected ? `${name}: ${selected}` : name;
   });
-  protected readonly selection = computed(() => [this.shown()].filter((v): v is string => v !== null));
+  /** The listbox selection: the shown value, only while it is among the options (the listbox rejects any other). */
+  protected readonly selection = computed(() => {
+    const value = this.shown();
+    return value !== null && this.options().some((o) => o.value === value) ? [value] : [];
+  });
 
   /** Focuses the trigger button. */
   focus(options?: FocusOptions): void {
