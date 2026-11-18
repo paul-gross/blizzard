@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
+import { EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
 import { FleetCadenceForm } from './cadence-form';
-import { EMPTY_CADENCE_DRAFT } from './gardening-cadences-page.model';
 
 const meta: Meta<FleetCadenceForm> = {
   title: 'Hub garden/Cadence form',

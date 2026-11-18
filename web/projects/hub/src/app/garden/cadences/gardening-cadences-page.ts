@@ -8,7 +8,6 @@ import {
   KitMasterDetail,
   KitPanel,
   type KitAsyncStateValue,
-  type CadenceView,
   ViewportService,
 } from 'fleet';
 
@@ -18,16 +17,12 @@ import { injectLensedProject } from '../../core/lensed-project';
 import { ProjectLens } from '../../core/project-lens';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectHubCadencesQuery } from '../core/cadences.query';
-import { type CadenceDraft, FleetCadenceForm } from './cadence-form';
+import { type Cadence, type CadenceDraft, EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
+import { toCreateRequest } from '../core/cadence.translate';
+import { FleetCadenceForm } from './cadence-form';
 import { injectCreateCadenceMutation } from './cadence-edit.mutations';
 import { FleetCadenceList, type CadenceRowVm } from './cadence-list';
-import {
-  EMPTY_CADENCE_DRAFT,
-  cadenceRows,
-  createCadenceRequest,
-  flagOffLine,
-  presentCadenceSlug,
-} from './gardening-cadences-page.model';
+import { cadenceRows, flagOffLine, presentCadenceSlug } from './gardening-cadences-page.model';
 
 /**
  * The `/gardening/cadences` sub-tab — the project's cadences, beside a `<router-outlet>` holding whichever cadence the
@@ -60,7 +55,7 @@ export class GardeningCadencesPage {
   private readonly project = injectLensedProject();
 
   protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
-  private readonly cadences = computed<readonly CadenceView[]>(() => this.cadencesQuery.data() ?? []);
+  private readonly cadences = computed<readonly Cadence[]>(() => this.cadencesQuery.data() ?? []);
 
   /** The line saying cadences mint nothing — `null` while the `cadences` flag is on. */
   protected readonly flagOffLine = computed(() => flagOffLine(this.flags.on('cadences')));
@@ -106,7 +101,7 @@ export class GardeningCadencesPage {
 
   protected onCreate(draft: CadenceDraft): void {
     this.createError.set(null);
-    this.createMutation.mutate(createCadenceRequest(draft), {
+    this.createMutation.mutate(toCreateRequest(draft), {
       onSuccess: (cadence) => {
         this.creating.set(false);
         this.selectCadence(cadence.slug);

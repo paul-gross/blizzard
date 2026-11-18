@@ -16,8 +16,9 @@ import {
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { type CadenceDraft, FleetCadenceForm } from './cadence-form';
-import { type ChoreDraft, FleetChoreForm } from './chore-form';
+import type { CadenceDraft, ChoreDraft } from '../core/cadence.domain';
+import { FleetCadenceForm } from './cadence-form';
+import { FleetChoreForm } from './chore-form';
 
 /** One thing stopping the cadence's errands: the chore (`null` for the whole cadence), the scope, and why. */
 export interface AttentionVm {

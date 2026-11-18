@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type CadenceView, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import { provideFlags } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
@@ -53,11 +53,11 @@ describe('GardeningCadencesPage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function render(opts: { cadences?: CadenceView[]; flagOn?: boolean; create?: () => unknown } = {}) {
+  async function render(opts: { cadences?: readonly unknown[]; flagOn?: boolean; create?: () => unknown } = {}) {
     stub = stubHubClient({
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/flags': () => ({ flags: { cadences: opts.flagOn ?? false }, overridden: [] }),
-      'GET /api/projects/{project}/cadences': () => opts.cadences ?? [EVENING],
+      'GET /api/projects/{project}/cadences': () => (opts.cadences ?? [EVENING]) as never,
       'POST /api/projects/{project}/cadences': (opts.create ?? (() => gardenCadenceView({ slug: 'weekly' }))) as never,
     });
     await TestBed.configureTestingModule({

@@ -1,44 +1,31 @@
-import { type ChoreView, formatAbsolute } from 'fleet';
-import {
-  gardenCadenceAttentionView,
-  gardenCadenceErrandView,
-  gardenCadenceView,
-  gardenChoreView,
-  gardenErrandRunView,
-} from 'fleet/testing';
+import { formatAbsolute } from 'fleet';
+import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
+import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
 import {
   cadenceBySlug,
-  cadenceDraftOf,
   cadenceOverrideRetired,
   cadencePanelVm,
-  choreDraftOf,
   choreScopesText,
-  choresAdding,
-  choresRemoving,
-  choresReplacing,
-  draftDocument,
-  editCadenceRequest,
   errandRow,
-  spacingInput,
 } from './gardening-cadence-detail.model';
 
-const NIGHTLY = gardenChoreView();
-/** A chore whose mode this build does not know — it must travel back verbatim. */
-const ODD = gardenChoreView({
-  chore_id: 'chr_2',
+const NIGHTLY = gardenChore();
+/** A chore whose mode this build does not know — it renders raw. */
+const ODD = gardenChore({
+  id: 'chr_2',
   key: 'odd',
   routine: 'docs',
   scopes: ['web', 'hub'],
-  mode: 'sampled' as ChoreView['mode'],
+  mode: { unlisted: 'sampled' },
   promote: false,
   note: 'keep',
 });
 
 describe('cadenceBySlug', () => {
   it('resolves a slug against the list', () => {
-    const cadences = [gardenCadenceView({ slug: 'evening' })];
+    const cadences = [gardenCadence({ slug: 'evening' })];
     expect(cadenceBySlug('evening', cadences)?.slug).toBe('evening');
     expect(cadenceBySlug('gone', cadences)).toBeNull();
     expect(cadenceBySlug(null, cadences)).toBeNull();
@@ -47,8 +34,8 @@ describe('cadenceBySlug', () => {
 
 describe('cadenceOverrideRetired', () => {
   it('reads the pending direction for this cadence only', () => {
-    const cadence = gardenCadenceView({ slug: 'evening' });
-    expect(cadenceOverrideRetired(cadence, [{ cadenceId: cadence.cadence_id, revision: 1, retired: true }])).toBe(true);
+    const cadence = gardenCadence({ slug: 'evening' });
+    expect(cadenceOverrideRetired(cadence, [{ cadenceId: cadence.id, revision: 1, retired: true }])).toBe(true);
     expect(cadenceOverrideRetired(cadence, [{ cadenceId: 'cad_other', revision: 1, retired: true }])).toBeNull();
     expect(cadenceOverrideRetired(null, [])).toBeNull();
   });
@@ -72,7 +59,7 @@ describe('errandRow', () => {
           state: 'stopped',
           due_at: null,
           last_run: run,
-          attention: [gardenCadenceAttentionView()],
+          attention: [{ chore: 'nightly', scope: 'gone', reason: 'scope_unknown' }],
         }),
       ),
     ).toEqual({
@@ -94,22 +81,22 @@ describe('errandRow', () => {
 });
 
 describe('cadencePanelVm', () => {
-  const cadence = gardenCadenceView({
+  const cadence = gardenCadence({
     slug: 'evening',
     chores: [NIGHTLY, ODD],
-    attention: [gardenCadenceAttentionView(), gardenCadenceAttentionView({ chore: null, scope: null, reason: 'no_chores' })],
+    attention: [gardenCadenceAttention(), gardenCadenceAttention({ chore: null, scope: null, reason: 'no_chores' })],
   });
 
   it('lists all five moments as full local text, earliest first', () => {
     const vm = cadencePanelVm(cadence, null, undefined)!;
     expect(vm.nextMoments).toHaveLength(5);
-    expect(vm.nextMoments.map((m) => m.iso)).toEqual(cadence.next_moments);
-    expect(vm.nextMoments[0].text).toBe(formatAbsolute(cadence.next_moments[0]));
+    expect(vm.nextMoments.map((m) => m.iso)).toEqual(cadence.nextMoments);
+    expect(vm.nextMoments[0].text).toBe(formatAbsolute(cadence.nextMoments[0]));
   });
 
   it('lists what needs attention, an unknown reason raw', () => {
     const vm = cadencePanelVm(
-      { ...cadence, attention: [...cadence.attention, gardenCadenceAttentionView({ reason: 'mystery' as never })] },
+      { ...cadence, attention: [...cadence.attention, gardenCadenceAttention({ reason: { unlisted: 'mystery' } })] },
       null,
       undefined,
     )!;
@@ -148,74 +135,18 @@ describe('cadencePanelVm', () => {
     expect(vm.renderedRetired).toBe(true);
   });
 
-  it('is null with no cadence', () => {
-    expect(cadencePanelVm(null, null, undefined)).toBeNull();
-  });
-});
-
-describe('the cadence edit form', () => {
-  it('opens on the cadence’s own rhythm, its spacing as the hub reads it', () => {
-    expect(cadenceDraftOf(gardenCadenceView({ slug: 'evening', anchor: 'finished' }))).toEqual({
+  it('opens the edit form on the cadence’s own draft', () => {
+    expect(cadencePanelVm(cadence, null, undefined)!.draft).toEqual({
       slug: 'evening',
       name: 'evening',
       cron: '0 20 * * *',
       zone: 'America/Chicago',
       spacing: '10d',
-      anchor: 'finished',
+      anchor: 'unstated',
     });
-    expect(spacingInput(360)).toBe('6h');
-    expect(spacingInput(90)).toBe('90m');
-    expect(spacingInput(null)).toBe('');
   });
 
-  it('sends the whole rhythm, a blank part clearing it', () => {
-    expect(
-      editCadenceRequest({ slug: 'evening', name: ' Evening ', cron: '', zone: '', spacing: '', anchor: '' }),
-    ).toEqual({ name: 'Evening', schedule: null, spacing: null, anchor: null });
-    expect(
-      editCadenceRequest({ slug: 'evening', name: 'e', cron: '0 21 * * *', zone: 'UTC', spacing: '2d', anchor: 'started' }),
-    ).toEqual({ name: 'e', schedule: { cron: '0 21 * * *', zone: 'UTC' }, spacing: '2d', anchor: 'started' });
-  });
-
-  it('leaves a stored anchor this build does not know as stored when the form is blank', () => {
-    const held = gardenCadenceView({ slug: 'evening', anchor: 'sometime' as never });
-    const draft = cadenceDraftOf(held);
-    expect(draft.anchor).toBe('');
-    expect(editCadenceRequest(draft, held)).not.toHaveProperty('anchor');
-  });
-});
-
-describe('the whole chore list', () => {
-  const served = [NIGHTLY, ODD];
-  const nightlyDoc = { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: null, urgency: null };
-  const oddDoc = { key: 'odd', routine: 'docs', scopes: ['web', 'hub'], mode: 'sampled', promote: false, note: 'keep', urgency: null };
-
-  it('adds a chore at the end, carrying the others verbatim, an unknown mode included', () => {
-    expect(
-      choresAdding(served, { key: 'weekly', routine: 'deep', scopes: 'a, b c', mode: 'delta', promote: false, note: '' }),
-    ).toEqual([nightlyDoc, oddDoc, { key: 'weekly', routine: 'deep', scopes: ['a', 'b', 'c'], mode: 'delta', promote: false, note: null, urgency: null }]);
-  });
-
-  it('replaces one chore in place', () => {
-    expect(choresReplacing(served, 'nightly', { ...choreDraftOf(NIGHTLY), promote: false })).toEqual([
-      { ...nightlyDoc, promote: false },
-      oddDoc,
-    ]);
-  });
-
-  it('removes one chore', () => {
-    expect(choresRemoving(served, 'nightly')).toEqual([oddDoc]);
-  });
-
-  it('round-trips a served chore through its draft unchanged', () => {
-    expect(draftDocument(choreDraftOf(ODD))).toEqual(oddDoc);
-    expect(draftDocument(choreDraftOf(gardenChoreView({ scopes: null })))).toEqual({ ...nightlyDoc, scopes: null });
-  });
-
-  it('preserves urgency both for the edited chore and untouched chores', () => {
-    const urgent = gardenChoreView({ urgency: 'critical' });
-    expect(draftDocument(choreDraftOf(urgent)).urgency).toBe('critical');
-    expect(choresAdding([urgent], choreDraftOf(NIGHTLY))[0].urgency).toBe('critical');
-    expect(draftDocument({ ...choreDraftOf(urgent), urgency: '' }).urgency).toBeNull();
+  it('is null with no cadence', () => {
+    expect(cadencePanelVm(null, null, undefined)).toBeNull();
   });
 });

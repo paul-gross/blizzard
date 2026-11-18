@@ -1,23 +1,12 @@
 import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
 
-import { type CadenceAnchor, type KitChipOption, KitButton, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
+import { type KitChipOption, KitButton, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
-import { CADENCE_ANCHORS, knownAnchor } from './cadence-vocabulary';
+import { CADENCE_ANCHORS, type CadenceDraft } from '../core/cadence.domain';
 
-/** A cadence as its form states it, every field as typed. A blank field is left unstated. */
-export interface CadenceDraft {
-  readonly slug: string;
-  readonly name: string;
-  readonly cron: string;
-  readonly zone: string;
-  /** A whole number and `m`, `h`, or `d` — `10d`. */
-  readonly spacing: string;
-  /** `scheduled`, `started`, `finished`, or blank. */
-  readonly anchor: CadenceAnchor | '';
-}
 
 const ANCHOR_OPTIONS: readonly KitChipOption[] = [
-  { value: '', label: 'unstated (started)' },
+  { value: 'unstated', label: 'unstated (started)' },
   ...CADENCE_ANCHORS.map((anchor) => ({ value: anchor, label: anchor })),
 ];
 
@@ -54,7 +43,7 @@ export class FleetCadenceForm {
   }
 
   protected setAnchor(value: string): void {
-    this.draft.update((draft) => ({ ...draft, anchor: knownAnchor(value) }));
+    this.draft.update((draft) => ({ ...draft, anchor: CADENCE_ANCHORS.find((anchor) => anchor === value) ?? 'unstated' }));
   }
 
   protected save(): void {

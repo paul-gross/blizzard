@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { type CadenceDraft, FleetCadenceForm } from './cadence-form';
-import { EMPTY_CADENCE_DRAFT } from './gardening-cadences-page.model';
+import { type CadenceDraft, EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
+import { FleetCadenceForm } from './cadence-form';
 
 describe('FleetCadenceForm', () => {
   async function mount(creating: boolean, initial: CadenceDraft = EMPTY_CADENCE_DRAFT) {
@@ -41,7 +41,7 @@ describe('FleetCadenceForm', () => {
   });
 
   it('fixes the slug on an edit, opening on the cadence’s own values', async () => {
-    const initial: CadenceDraft = { slug: 'evening', name: 'Evening', cron: '0 20 * * *', zone: 'UTC', spacing: '', anchor: '' };
+    const initial: CadenceDraft = { slug: 'evening', name: 'Evening', cron: '0 20 * * *', zone: 'UTC', spacing: '', anchor: 'unstated' };
     const { q, saved } = await mount(false, initial);
 
     expect(q('slug')).toBeNull();

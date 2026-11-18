@@ -2,8 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
-  type CadenceEditRequest,
-  type CadenceView,
   errorMessage,
   injectPendingMutationVariables,
   isPendingFor,
@@ -16,20 +14,12 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { cadenceLifecycleMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubCadenceErrandsQuery, injectHubCadencesQuery } from '../core/cadences.query';
-import type { CadenceDraft } from './cadence-form';
+import type { Cadence, CadenceDraft, ChoreDraft } from '../core/cadence.domain';
+import { choresAdding, choresRemoving, choresReplacing, toDraft, toEditRequest } from '../core/cadence.translate';
 import { type CadenceEditVars, injectEditCadenceMutation } from './cadence-edit.mutations';
 import { type CadenceLifecycleVars, injectCadenceLifecycleMutation } from './cadence-lifecycle.mutations';
 import { type CadencePanelVm, type ChoreEditEvent, FleetCadencePanel } from './cadence-panel';
-import type { ChoreDraft } from './chore-form';
-import {
-  cadenceBySlug,
-  cadenceOverrideRetired,
-  cadencePanelVm,
-  choresAdding,
-  choresRemoving,
-  choresReplacing,
-  editCadenceRequest,
-} from './gardening-cadence-detail.model';
+import { cadenceBySlug, cadenceOverrideRetired, cadencePanelVm } from './gardening-cadence-detail.model';
 
 /**
  * The selected cadence's detail — the right-hand child of `/gardening/cadences`. Mounted by both of that route's
@@ -65,11 +55,11 @@ export class GardeningCadenceDetail {
     initialValue: null,
   });
 
-  private readonly selected = computed<CadenceView | null>(() =>
+  private readonly selected = computed<Cadence | null>(() =>
     cadenceBySlug(this.cadenceSlug(), this.cadencesQuery.data() ?? []),
   );
 
-  private readonly errandsQuery = injectHubCadenceErrandsQuery(() => this.selected()?.cadence_id ?? null);
+  private readonly errandsQuery = injectHubCadenceErrandsQuery(() => this.selected()?.id ?? null);
 
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
@@ -85,15 +75,16 @@ export class GardeningCadenceDetail {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly editPending = computed(() =>
-    isPendingFor(this.pendingEdits(), (v) => v.cadenceId === this.selected()?.cadence_id),
+    isPendingFor(this.pendingEdits(), (v) => v.cadenceId === this.selected()?.id),
   );
 
   protected readonly lifecyclePending = computed(() =>
-    isPendingFor(this.pendingLifecycle(), (v) => v.cadenceId === this.selected()?.cadence_id),
+    isPendingFor(this.pendingLifecycle(), (v) => v.cadenceId === this.selected()?.id),
   );
 
   protected onEdit(draft: CadenceDraft): void {
-    this.send(editCadenceRequest(draft, this.selected() ?? undefined), 'Save failed.');
+    const cadence = this.selected();
+    if (cadence !== null) this.send(toEditRequest(toDraft(cadence), draft), 'Save failed.');
   }
 
   protected onAddChore(draft: ChoreDraft): void {
@@ -119,12 +110,12 @@ export class GardeningCadenceDetail {
     this.lifecycle(false, 'Enable failed.');
   }
 
-  private send(body: CadenceEditRequest, fallback: string): void {
+  private send(body: CadenceEditVars['body'], fallback: string): void {
     const cadence = this.selected();
     if (cadence === null) return;
     this.actionError.set(null);
     this.editMutation.mutate(
-      { cadenceId: cadence.cadence_id, revision: cadence.revision, body },
+      { cadenceId: cadence.id, revision: cadence.revision, body },
       { onError: (error: unknown) => this.actionError.set(errorMessage(error, fallback)) },
     );
   }
@@ -134,7 +125,7 @@ export class GardeningCadenceDetail {
     if (cadence === null) return;
     this.actionError.set(null);
     this.lifecycleMutation.mutate(
-      { cadenceId: cadence.cadence_id, revision: cadence.revision, retired },
+      { cadenceId: cadence.id, revision: cadence.revision, retired },
       { onError: (error: unknown) => this.actionError.set(errorMessage(error, fallback)) },
     );
   }
