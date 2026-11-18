@@ -405,6 +405,21 @@ describe('GraphExplorerList', () => {
     expect(emitted).toEqual(['gr_build_v2', 'gr_build_v1']);
   });
 
+  it('collapses an open group on a second Enter on its header', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+    fixture.componentInstance.selectGraph.subscribe((id: string) => fixture.componentRef.setInput('selectedGraphId', id));
+    const header = el.querySelector<HTMLElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')!;
+    const lineage = () => el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]');
+    header.focus();
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await fixture.whenStable();
+    expect(lineage()).toBeTruthy();
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await fixture.whenStable();
+    expect(lineage()).toBeNull();
+  });
+
   it("renders a lineage row's badge on fleet-kit-badge, colored by lifecycle tone", async () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;

@@ -39,6 +39,7 @@ export class KitSelectList<V = unknown> {
   /** True from a click or key press on the list until Aria has published its selection. */
   private userInput = false;
   private lastPushed: V | null | undefined;
+  private readonly element = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private hadFocus = false;
   private focusedValue: V | undefined;
 
@@ -125,7 +126,8 @@ export class KitSelectList<V = unknown> {
       return;
     }
     this.lastPushed = want;
-    if (this.userInput) return;
+    // While focus is inside the list the roving stop follows focus, not the selection.
+    if (this.userInput || this.element.contains(document.activeElement)) return;
     // Aria moves its roving Tab stop only on keys and focus (its public `gotoIndex` focuses the
     // row), so a selection that came from outside (a route refresh, Back, a deep link) would leave
     // the stop on another row. Set the active item directly: no focus, no scroll.
