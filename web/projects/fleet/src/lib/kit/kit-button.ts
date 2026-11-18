@@ -18,6 +18,8 @@ export class KitButton {
   /** `default` is the compact action chrome; `cta` is the larger, more emphatic
    * call-to-action treatment; `icon` is a fixed 30px square for a lone glyph. */
   readonly size = input<'default' | 'cta' | 'icon'>('default');
+  /** The native `type`; `submit` makes it a form's submit button. */
+  readonly type = input<'button' | 'submit'>('button');
   readonly disabled = input(false);
   readonly ariaLabel = input<string | null>(null);
   readonly title = input<string | null>(null);

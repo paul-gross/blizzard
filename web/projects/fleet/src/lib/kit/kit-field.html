@@ -1,0 +1,13 @@
+<div class="label-row">
+  <span class="label" [id]="labelId">{{ label() }}</span>
+  @if (required()) {
+  <span class="req" aria-hidden="true">*</span>
+  <span class="sr-only"> (required)</span>
+  }
+</div>
+<ng-content />
+@if (hint(); as text) {
+<p class="hint">{{ text }}</p>
+} @for (message of messages(); track $index) {
+<fleet-kit-error-line [message]="message" />
+}

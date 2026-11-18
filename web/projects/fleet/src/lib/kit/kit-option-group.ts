@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, model, output } from '@angular/core';
 import type { FormValueControl } from '@angular/forms/signals';
 
+import { KIT_FIELD_LABEL } from './kit-field-label';
+
 /**
  * A native radio group: the `role="radiogroup"` host that projects {@link KitOption}s. Every radio shares one native
  * `name` — the bound field's, else a generated id — so arrow-key navigation is the browser's own model for same-name
@@ -14,11 +16,13 @@ import type { FormValueControl } from '@angular/forms/signals';
   host: {
     role: 'radiogroup',
     '[attr.aria-label]': 'ariaLabel()',
+    '[attr.aria-labelledby]': 'ariaLabel() ? null : (fieldLabel?.labelId ?? null)',
     '(focusout)': 'onFocusOut($event)',
   },
 })
 export class KitOptionGroup implements FormValueControl<string> {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly fieldLabel = inject(KIT_FIELD_LABEL, { optional: true });
 
   /** The checked option's `value`. */
   readonly value = model('');
