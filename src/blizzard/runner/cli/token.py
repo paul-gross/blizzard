@@ -6,7 +6,6 @@ at its next identity check; a stopped host seals it in the store under the store
 from __future__ import annotations
 
 import os
-from http import HTTPStatus
 from pathlib import Path
 
 import click
@@ -79,12 +78,11 @@ def _set_on_running_host(directory: str, door: Door, runner: str | None, value: 
         _, answer = daemon.decode_answer(daemon.get_from_host("/api/host/runners"), TypeAdapter(HostRunnerListResponse))
         target = _selected(answer.items, runner, daemon.where)
         response = daemon.send_to_host("put", f"/api/host/runners/{target.runner_id}/token", json_body={"token": value})
-    if response.status_code != HTTPStatus.NO_CONTENT:
+    if not response.is_success:
         refusal = refusal_of(response)
         detail = f": {refusal.message}" if refusal.message else ""
-        raise click.ClickException(
-            f"{_VERB}: the host refused runner {target.name}'s token ({response.status_code}){detail}"
-        )
+        kind = f" ({refusal.type})" if refusal.type else ""
+        raise click.ClickException(f"{_VERB}: the host refused runner {target.name}'s token{kind}{detail}")
     when = "its next start" if target.state == "halted" else "its next identity check"
     click.echo(f"runner {target.name} ({target.runner_id}): hub token set in the host store; it takes effect at {when}")
 
