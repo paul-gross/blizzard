@@ -170,3 +170,58 @@ def test_competing_writers_and_coherent_snapshot(tmp_path: Path) -> None:
             event.remove(base.engine, "after_cursor_execute", pause)
     assert settings.snapshot().revision == 2
     assert settings.snapshot().entries == {"agents": Entry(9)}
+
+
+def _identified(tmp_path: Path, clock: object) -> tuple[RunnerSettingsStore, RunnerSettingsStore]:
+    base = make_store(f"sqlite:///{tmp_path / 'rollback.db'}")
+    now = datetime(2026, 11, 1, tzinfo=UTC)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(base.connections.bound_runner_id(), "one", now)
+    )
+    return RunnerSettingsStore(base.connections, clock), RunnerSettingsStore(base.connections, FixedClock(now))  # type: ignore[arg-type]
+
+
+def test_a_failed_audit_insert_rolls_back_revision_and_entries(tmp_path: Path) -> None:
+    class AuditFails:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def now(self) -> datetime:
+            self.calls += 1
+            if self.calls > 1:
+                raise RuntimeError("audit failed")
+            return datetime(2026, 11, 1, tzinfo=UTC)
+
+    failing, healthy = _identified(tmp_path, AuditFails())
+    with pytest.raises(RuntimeError, match="audit failed"):
+        failing.write(Change("edit", sets={"agents": 2}), if_match=0, validate=_valid, door="cli", actor="test")
+    assert healthy.snapshot().revision == 0
+    assert not healthy.snapshot().entries
+    assert healthy.changes(limit=3) == ()
+
+
+def test_a_moving_write_records_its_provenance(tmp_path: Path) -> None:
+    _, settings = _identified(tmp_path, FixedClock(datetime(2026, 11, 1, tzinfo=UTC)))
+    settings.write(
+        Change("edit", sets={"agents": 2}), if_match=0, validate=_valid, door="api", actor="me", apply_id="apply_1"
+    )
+    (change,) = settings.changes(limit=3)
+    assert (change.door, change.actor, change.apply_id, change.revision) == ("api", "me", "apply_1", 1)
+
+
+def test_two_concurrent_seeds_yield_one_revision_per_key(tmp_path: Path) -> None:
+    from blizzard.foundation.config_keys import ConfigView
+
+    _, settings = _identified(tmp_path, FixedClock(datetime(2026, 11, 1, tzinfo=UTC)))
+    file = ConfigView.unchecked({"agents": 3, "worker": {"path": ["a"]}})
+    barrier = Barrier(2)
+
+    def seed(_: int) -> None:
+        barrier.wait(timeout=5)
+        settings.seed(file, ["agents", "worker.path"], validate=_valid)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(seed, (1, 2)))
+    assert settings.snapshot().entries == {"agents": Entry(3), "worker.path": Entry(["a"])}
+    assert settings.snapshot().revision == 2
+    assert [c.revision for c in settings.changes(limit=5)] == [2, 1]
