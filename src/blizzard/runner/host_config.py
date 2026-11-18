@@ -90,6 +90,7 @@ from blizzard.runner.host_layout import (
     HostLayout,
     migrate_remedy,
 )
+from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, StoredToken, StoredTokenState
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.public_origins import PublicOrigins
@@ -201,8 +202,10 @@ class HostConfigError(ConfigError):
 
 
 class TokenSource(StrEnum):
-    """Where a token resolved from, in the order it is looked for."""
+    """Where a token resolved from, in the order it is looked for — the host store, for a runner's token, before
+    the deprecated sources the seed imports from."""
 
+    STORE = "host store"
     ENVIRONMENT = "environment"
     HOST_FILE = "host file"
     DOTENV = ".env"
@@ -217,9 +220,9 @@ class ResolvedToken:
     value: str = field(default="", repr=False)
     source: TokenSource = TokenSource.NONE
 
-    def rereads_dotenv(self) -> bool:
-        """Whether a corrected ``.env`` takes effect without a restart: only when ``.env`` was the source."""
-        return self.source is TokenSource.DOTENV
+    def importing(self) -> StoredToken:
+        """The stored-token outcome the seed's import of this token would leave a runner with no row."""
+        return StoredToken.opened(self.value, FIRST_REVISION) if self.value else StoredToken.absent()
 
 
 def resolve_token(
@@ -256,12 +259,12 @@ class RunnerEntry:
 @domain_model
 @dataclass(frozen=True)
 class BuiltRunner:
-    """A runner whose entry projected cleanly: its hub id, the config every reader takes, and where its
-    token resolved from, which decides whether the held token re-reads ``.env``."""
+    """A runner whose entry projected cleanly: its hub id, the config every reader takes, and its stored-token
+    outcome, which the held token starts from."""
 
     id: str
     config: RunnerConfig
-    token: ResolvedToken
+    token: StoredToken = field(default_factory=StoredToken.absent)
 
 
 @domain_model
@@ -371,14 +374,16 @@ class HostConfig:
         return tuple(resolve(entry) for entry in HOST_REGISTRY.paths)
 
     def projections(self, environ: Mapping[str, str] | None = None) -> tuple[BuiltRunner | HaltedRunner, ...]:
-        """Each ``[[runner]]`` as a built runner or a halted one, in file order. Tokens resolve from
-        ``environ`` (the process environment by default), then the host file, then the directory's ``.env``."""
+        """Each ``[[runner]]`` as a built runner or a halted one, in file order, with no store read: each token is
+        the one the seed would import, from ``environ`` (the process environment by default), then the host file,
+        then the directory's ``.env``."""
         source = os.environ if environ is None else environ
-        return tuple(self.project(entry, source) for entry in self.runners)
+        return tuple(self.project(entry, self.token_for(entry, source).importing(), source) for entry in self.runners)
 
     def token_for(self, entry: RunnerEntry, environ: Mapping[str, str] | None = None) -> ResolvedToken:
-        """The token ``entry`` presents, resolved from ``environ`` (the process environment by default), the host
-        file's ``[hub_tokens]``, then the directory's ``.env``."""
+        """The token the seed imports for ``entry`` when it holds no row, resolved from ``environ`` (the process
+        environment by default), the host file's ``[hub_tokens]``, then the directory's ``.env`` — each deprecated,
+        and read by nothing once the runner's token is sealed."""
         return resolve_token(
             hub_token_variable(entry.name),
             environ=os.environ if environ is None else environ,
@@ -423,23 +428,25 @@ class HostConfig:
             f"(provider {subscription.provider!r}) is never sampled"
         ]
 
-    def project(self, entry: RunnerEntry, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
-        """Project one entry using the supplied token environment."""
+    def project(self, entry: RunnerEntry, token: StoredToken, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
+        """Project one entry over its stored-token outcome. A runner with no row halts; one whose row does not open
+        is built with no token, so it refuses at its first identity check rather than registering under none.
+        ``environ`` is read only for the hint a leftover unsuffixed token variable calls for."""
         errors = self.runner_problems(entry)
         if entry.id is None:
             errors.append("has no id")
-        variable = hub_token_variable(entry.name)
-        token = self.token_for(entry, environ)
-        if not token.value:
+        if token.state is StoredTokenState.ABSENT:
+            variable = hub_token_variable(entry.name)
             errors.append(
-                f"has no hub token: set {variable}, a [hub_tokens] entry, or {variable} in {ENV_FILENAME} "
-                "(`blizzard runner init` adds the runner; for one `blizzard hub runner list` already shows, "
-                "`blizzard hub runner enroll <id>` prints the line to put there)"
+                f"has no hub token: set it with `blizzard runner token set --runner {entry.name}` "
+                f"(deprecated: {variable}, a [hub_tokens] entry, or {variable} in {ENV_FILENAME}, which the next "
+                "start imports) — `blizzard runner init` adds the runner; for one `blizzard hub runner list` already "
+                "shows, `blizzard hub runner enroll <id>` prints its token"
                 + self._unsuffixed_token_hint(variable, environ)
             )
         if errors or entry.id is None or entry.own is None:
             return HaltedRunner(entry.name, entry.id, tuple(errors))
-        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token), token)
+        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token.value), token)
 
     def _unsuffixed_token_hint(self, variable: str, environ: Mapping[str, str]) -> str:
         """The rename a leftover unsuffixed ``BZ_HUB_TOKEN`` calls for, or nothing when none is held: a pre-host
@@ -522,13 +529,13 @@ class HostConfig:
         errors = self.runner_problems(entry)
         if errors or entry.own is None:
             raise HostConfigError(tuple(f"runner {entry.name}: {error}" for error in errors))
-        return self.config_for_runner(entry, entry.own, self.token_for(entry, environ))
+        return self.config_for_runner(entry, entry.own, self.token_for(entry, environ).value)
 
     def config_for_runner(
         self,
         entry: RunnerEntry,
         own: RunnerConfig,
-        token: ResolvedToken,
+        hub_token: str,
     ) -> RunnerConfig:
         declared = {subscription.slug: subscription for subscription in self.subscriptions}
         chosen = (declared[entry.subscription],) if entry.subscription is not None else ()
@@ -536,7 +543,7 @@ class HostConfig:
             self._shared(own),
             name=entry.name,
             runner_id=entry.id,
-            hub_token=token.value,
+            hub_token=hub_token,
             projects=tuple(binding.project for binding in entry.bindings),
             bindings=entry.bindings,
             agents=own.agents,

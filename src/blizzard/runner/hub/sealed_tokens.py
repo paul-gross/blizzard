@@ -8,13 +8,14 @@ apart from any hub secret's under a shared key. The rules and ports live here; t
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.secrets.sealing import ISecretCipher, SealedSecret, SealedValue
+from blizzard.foundation.secrets.sealing import ISecretCipher, SealedSecret, SealedValue, SecretUnreadable
 from blizzard.foundation.secrets.value import SecretValue
 
 SEALED_NAME_PREFIX = "runner-hub-token/"
@@ -59,6 +60,41 @@ class OpenedHubToken:
     revision: int
 
 
+class StoredTokenState(StrEnum):
+    """What a runner's token row holds for the process that reads it."""
+
+    #: The row opens under the host's key.
+    OPENED = "opened"
+    #: The row exists but does not open under the host's key: the runner refuses until its token is set again.
+    UNREADABLE = "unreadable"
+    #: The runner holds no row.
+    ABSENT = "absent"
+
+
+@domain_model
+@dataclass(frozen=True)
+class StoredToken:
+    """A runner's stored-token outcome: the opened value and its revision, the key generation a row that does not
+    open names, or no row at all."""
+
+    state: StoredTokenState
+    value: str = field(default="", repr=False)
+    revision: int | None = None
+    key_id: str | None = None
+
+    @classmethod
+    def opened(cls, value: str, revision: int) -> StoredToken:
+        return cls(StoredTokenState.OPENED, value, revision)
+
+    @classmethod
+    def unreadable(cls, key_id: str, revision: int) -> StoredToken:
+        return cls(StoredTokenState.UNREADABLE, revision=revision, key_id=key_id)
+
+    @classmethod
+    def absent(cls) -> StoredToken:
+        return cls(StoredTokenState.ABSENT)
+
+
 class IReadHubTokenRepository(Protocol):
     def sealed(self, runner_id: str) -> SealedHubToken | None: ...
 
@@ -91,6 +127,22 @@ class HubTokens:
             return None
         return OpenedHubToken(self._cipher.open(row.secret()), row.revision)
 
+    def stored(self, runner_id: str) -> StoredToken:
+        """The runner's stored-token outcome; never raises for a row that does not open."""
+        row = self._repository.sealed(runner_id)
+        if row is None:
+            return StoredToken.absent()
+        try:
+            value = self._cipher.open(row.secret())
+        except SecretUnreadable as exc:
+            return StoredToken.unreadable(exc.key_id, row.revision)
+        return StoredToken.opened(value.expose(), row.revision)
+
+    def revision(self, runner_id: str) -> int | None:
+        """The revision the runner's row is at, or ``None`` when it holds none — one primary-key read."""
+        row = self._repository.sealed(runner_id)
+        return None if row is None else row.revision
+
     def seal_if_absent(self, runner_id: str, token: SecretValue) -> bool:
         """Seal ``token`` as the runner's first row, unless it holds one; whether it was sealed."""
         sealed = self._cipher.seal(token, name=sealed_name(runner_id), revision=FIRST_REVISION)
@@ -107,3 +159,17 @@ class HubTokens:
             return self._cipher.seal(token, name=sealed_name(runner_id), revision=revision)
 
         return self._repository.replace(runner_id, seal, at=self._clock.now())
+
+
+class RunnerHubTokenSource:
+    """One runner's row as the held token reads it at each identity check."""
+
+    def __init__(self, tokens: HubTokens, runner_id: str) -> None:
+        self._tokens = tokens
+        self._runner_id = runner_id
+
+    def revision(self) -> int | None:
+        return self._tokens.revision(self._runner_id)
+
+    def open(self) -> OpenedHubToken | None:
+        return self._tokens.open(self._runner_id)

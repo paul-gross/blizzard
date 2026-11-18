@@ -53,7 +53,9 @@ def test_a_valid_host_checks_clean_resolving_each_token_to_its_id(tmp_path: Path
     result = _check(fake_init_hub, root)
 
     assert result.exit_code == 0, result.output
-    assert "runner runner-local (rn_init1): its token (.env) resolves to its id" in result.output
+    assert (
+        "runner runner-local (rn_init1): its token (which the next start imports) resolves to its id" in result.output
+    )
     assert "host ok" in result.output
     _nothing_started(root)
     assert (layout.lock_path.stat().st_mtime_ns if layout.lock_path.exists() else None) == lock_before

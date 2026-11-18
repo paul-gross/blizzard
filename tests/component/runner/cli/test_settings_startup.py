@@ -26,7 +26,7 @@ from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from tests.support.config_inputs import load_host_config
-from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
+from tests.support.host_files import TEST_RUNNER_ID, UnresolvableSettings, write_minimal_host
 from tests.support.runner_fakes import FakeHub, make_store, migrated_store_at
 from tests.support.runner_mint import new_mint
 
@@ -165,13 +165,13 @@ def test_snapshot_resolution_failure_reports_revision_and_recovers(
             actor="test",
         )
         revision = settings.snapshot().revision
-        dotenv = tmp_path / ".env"
-        dotenv.mkdir()
+        unresolvable = UnresolvableSettings(monkeypatch)
+        unresolvable.hold()
         assert stepper._context() is first  # pyright: ignore[reportPrivateUsage]
         assert stepper.failed_revision == revision
         assert stepper.settings_failure is not None
         assert stepper.settings_failure[0] == revision
-        dotenv.rmdir()
+        unresolvable.release()
         assert stepper._context().config.agents == 2  # pyright: ignore[reportPrivateUsage]
         assert stepper.settings_failure is None
     finally:

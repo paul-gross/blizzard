@@ -18,7 +18,7 @@ from blizzard.foundation.config_keys import OPEN_TABLE, ConfigRegistry
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.hub.config_keys import HUB_REGISTRY, WORK_SOURCE_RECORDS
 from blizzard.runner.cli import runner
-from blizzard.runner.config_keys import HOST_REGISTRY
+from blizzard.runner.config_keys import HOST_REGISTRY, SEALED_HUB_TOKEN_RECORDS
 from blizzard.runner.harness.wiring import HarnessSections, declared, first_bindings
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.config_contract import document_from_registry
@@ -41,7 +41,7 @@ def test_flags_is_one_open_table_with_no_keys_beneath_it(name: str, registry: Co
 
 
 #: The record kinds a deprecated key may name as its home; any other text that is not a key or a file is refused.
-_RECORD_KINDS = frozenset({WORK_SOURCE_RECORDS})
+_RECORD_KINDS = frozenset({WORK_SOURCE_RECORDS, SEALED_HUB_TOKEN_RECORDS})
 
 
 @pytest.mark.parametrize(("name", "registry"), CONFIGS, ids=[name for name, _ in CONFIGS])

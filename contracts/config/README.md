@@ -10,9 +10,9 @@ either is deliberate.
   `blizzard-runner` verbs that write it (`written_by`; empty when the contract names no writer), and the permission bits
   the daemon enforces on it (`mode`, a four-digit octal string such as `"0600"`; `null` when it enforces none). Then
   `env`: the env file that holds the daemon's tokens — its `file`, `mode`, whether it is rewritten `atomic`ally, and its
-  `variables`, each with a `name_rule` (`prefix`, `upper_case`, `replace_pattern`, `replacement`) that derives a name
-  such as `BZ_HUB_TOKEN_<NAME>` from a runner's name, or `null` for a fixed name such as `BZ_HOST_TOKEN`. `env` is
-  `null` for a daemon that declares none. Never edited by hand.
+  `variables`, each `deprecated` with what `replaced_by` it, and with a `name_rule` (`prefix`, `upper_case`,
+  `replace_pattern`, `replacement`) that derives a name such as `BZ_HUB_TOKEN_<NAME>` from a runner's name, or `null`
+  for a fixed name such as `BZ_HOST_TOKEN`. `env` is `null` for a daemon that declares none. Never edited by hand.
 
 Each key also states its `lifetime` — when a change to its value takes effect — as one of four values: `pass` (read at
 the start of each pass of the loop that uses it, so the next pass takes a change), `session` (handed to a worker when

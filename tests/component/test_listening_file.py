@@ -23,7 +23,7 @@ from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.harness_shared import build_identity_env
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.listeners import AdoptedTcp, Uds
 from blizzard.runner.loop_wiring import LoopWiring
@@ -157,7 +157,7 @@ def test_a_host_composed_on_a_bound_port_zero_derives_every_runner_url_from_the_
         host_config = dataclasses.replace(host_config_of(config), port=port)
         (projection,) = host_config.projections({"BZ_HUB_TOKEN_RUNNER_LOCAL": "token"})
         assert isinstance(projection, BuiltRunner)
-        built = BuiltRunner(projection.id or FIXTURE_RUNNER_ID, projection.config, ResolvedToken())
+        built = BuiltRunner(projection.id or FIXTURE_RUNNER_ID, projection.config)
         host = build_host_process(host_config, [built], tcp_socket=sock)
         try:
             (runner,) = host.runners

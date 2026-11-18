@@ -120,6 +120,9 @@ class EnvVariable:
     name: str
     holds: str
     name_rule: VariableNameRule | None = None
+    deprecated: bool = False
+    #: What replaces a deprecated variable.
+    replaced_by: str | None = None
 
 
 @domain_model

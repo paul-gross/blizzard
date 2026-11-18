@@ -41,6 +41,7 @@ from blizzard.foundation.platform_tracing.handle import (
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -93,7 +94,6 @@ from blizzard.runner.host_config import (
     BuiltRunner,
     HaltedRunner,
     HostConfig,
-    ResolvedToken,
     read_legacy_document,
 )
 from blizzard.runner.host_file import (
@@ -104,6 +104,7 @@ from blizzard.runner.host_file import (
     string_literal,
     with_runner_values,
 )
+from blizzard.runner.host_keys import host_key_provider
 from blizzard.runner.host_layout import (
     HOST_CONFIG_FILENAME,
     HostLayout,
@@ -113,7 +114,7 @@ from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettin
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
-from blizzard.runner.hub.held_token import HubTokenHolder
+from blizzard.runner.hub.held_token import HubTokenHolder, IHubTokenSource
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityHolder
 from blizzard.runner.hub.host_registration import HostRegistration, HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.hub_version import HubVersionHolder
@@ -126,6 +127,7 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClient, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.sealed_tokens import HubTokens, RunnerHubTokenSource, StoredToken, StoredTokenState
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
@@ -391,7 +393,7 @@ class RunnerProcess:
     identity_verdict: IdentityVerdictHolder
     #: Forgets this runner's identity row once its own token is refused as retired — the host tick's.
     retirement: RetiredRunnerWatch
-    #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
+    #: The token every runner->hub client presents — taken up again from the store whenever its row's revision moves.
     hub_token: HubTokenHolder
     #: The one client this runner's identity reads go through, under ``hub_token``; closed with the runner.
     identity_client: httpx2.Client
@@ -646,11 +648,49 @@ def build_runner_received_telemetry(
     )
 
 
-def held_hub_token(config: RunnerConfig, token: ResolvedToken | None = None) -> HubTokenHolder:
-    """The token the runner started with, re-read from its ``.env`` only when ``token`` says ``.env`` was where it came
-    from. Without a resolution the token is held as it is."""
-    file = HubTokenFile.of(config.root, config.token_env) if token is not None and token.rereads_dotenv() else None
-    return HubTokenHolder(config.hub_token, file=file)
+def held_hub_token(
+    config: RunnerConfig, token: StoredToken | None = None, source: IHubTokenSource | None = None
+) -> HubTokenHolder:
+    """The token the runner started with — its stored-token outcome, else the row ``source`` holds now, else
+    ``config``'s token — taken up again from ``source`` whenever the row's revision moves."""
+    if token is not None and token.state is not StoredTokenState.ABSENT:
+        return HubTokenHolder.of(token, source)
+    held = HubTokenHolder(config.hub_token, source=source)
+    held.refresh()
+    return held
+
+
+def build_hub_tokens(
+    engine: Engine, root: Path, *, environ: Mapping[str, str], clock: IClock, mint: bool, runner_id: str | None = None
+) -> HubTokens | None:
+    """The host's sealed runner tokens under its key, or ``None`` when ``mint`` is off and the host holds no key yet.
+    ``mint`` mints the key directory's first generation when no key exists; a malformed key variable raises
+    :class:`ConfigError`."""
+    keys = host_key_provider(environ, HostLayout(root), mint=mint)
+    if keys is None:
+        return None
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    return HubTokens(HostHubTokenStore(RunnerStoreConnections(engine, errors, runner_id)), secret_cipher(keys), clock)
+
+
+def stored_hub_token(
+    engine: Engine, root: Path, runner_id: str, *, environ: Mapping[str, str], clock: IClock
+) -> StoredToken:
+    """``runner_id``'s stored-token outcome, read without minting the host's key: a row with no key to open it is
+    unreadable. A malformed key variable raises :class:`ConfigError`."""
+    tokens = build_hub_tokens(engine, root, environ=environ, clock=clock, mint=False)
+    if tokens is not None:
+        return tokens.stored(runner_id)
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    row = HostHubTokenStore(RunnerStoreConnections(engine, errors)).sealed(runner_id)
+    return StoredToken.absent() if row is None else StoredToken.unreadable(row.sealed.key_id, row.revision)
+
+
+def _hub_token_source(
+    host: HostProcess, root: Path, runner_id: str, environ: Mapping[str, str]
+) -> IHubTokenSource | None:
+    tokens = build_hub_tokens(host.engine, root, environ=environ, clock=host.clock, mint=False, runner_id=runner_id)
+    return None if tokens is None else RunnerHubTokenSource(tokens, runner_id)
 
 
 def build_host_process(
@@ -769,13 +809,13 @@ def build_runner_process(
     received_telemetry: IReceivedTelemetryExport | None = None,
     identity: RunnerIdentityHolder | None = None,
     runner_id: str | None = None,
-    token: ResolvedToken | None = None,
+    token: StoredToken | None = None,
     host_token: str = "",
     monotonic_clock: IMonotonicClock | None = None,
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
-    ``token`` is where its hub token resolved from, and ``host_token`` the host's own credential, so a runner of a
+    ``token`` is its stored-token outcome, and ``host_token`` the host's own credential, so a runner of a
     registered host leaves its roster to the host. The other arguments are :func:`build_host_process`'s."""
     graph = _build_host_graph(
         config,
@@ -1022,9 +1062,9 @@ def host_report(
 
 
 def _identity_remedy(config: RunnerConfig, runner_id: str) -> str:
-    """What restores a runner whose token resolves to another runner than the one configured."""
+    """What restores a runner whose token resolves to another runner than the one configured, or is refused."""
     return (
-        f"set {config.token_env} to the token of runner {runner_id}, "
+        f"set the token of runner {runner_id} with `blizzard runner token set --runner {config.name}`, "
         f"or correct `[[runner]] id` in {HostLayout(config.root).config_path}"
     )
 
@@ -1059,7 +1099,7 @@ def _build_runner(
     trace_exporter: ITraceExporter | None,
     identity: RunnerIdentityHolder | None,
     runner_id: str | None,
-    token: ResolvedToken | None,
+    token: StoredToken | None,
     closes_host: bool,
 ) -> RunnerProcess:
     """Compose one runner and its harness-set builder over ``host``'s engine.
@@ -1289,7 +1329,7 @@ def _build_runner(
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=replay_tracing
         )
-        hub_token = held_hub_token(config, token)
+        hub_token = held_hub_token(config, token, _hub_token_source(host, config.root, runner_id, runner_environ))
         # This runner's own identity client: the host tick's watch reads on its thread, so no loop or app client is
         # shared. The held token is read per request; the runner closes the client with itself.
         identity_client = httpx2.Client(

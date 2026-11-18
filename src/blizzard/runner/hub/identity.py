@@ -261,7 +261,7 @@ class IdentityVerdictHolder:
         return self.verdict().state is IdentityState.MATCHED
 
     def token_refusing(self) -> bool:
-        """Whether the token's own verdict refuses — what a corrected ``.env`` token can lift."""
+        """Whether the token's own verdict refuses — what setting the runner's token again can lift."""
         with self._lock:
             return self._token.refusing()
 

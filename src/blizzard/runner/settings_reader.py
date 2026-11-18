@@ -141,7 +141,8 @@ class RunnerSettingsReader:
         if errors or entry.own is None:
             raise ValueError("; ".join(errors))
         effective = host if host is not None else self._host_at(None)
-        return effective.config_for_runner(entry, entry.own, self.host.token_for(self.entry))
+        # The token is the held token's, opened from the store — never a settings input.
+        return effective.config_for_runner(entry, entry.own, "")
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
         unknown = {

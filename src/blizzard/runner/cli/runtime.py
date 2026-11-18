@@ -30,7 +30,7 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
-from blizzard.foundation.clock import IClock, SystemMonotonicClock
+from blizzard.foundation.clock import IClock, SystemMonotonicClock, resolve_clock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
@@ -60,10 +60,12 @@ from blizzard.runner.composition import (
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
+    build_hub_tokens,
     build_identity_service,
     build_read_stores,
     build_runner_process,
     build_settings_stores,
+    stored_hub_token,
 )
 from blizzard.runner.config import (
     DEFAULT_RUNNER_NAME,
@@ -132,9 +134,11 @@ from blizzard.runner.hub.host_bootstrap import (
     HostTokenNotWritten,
     JoinedHost,
 )
-from blizzard.runner.hub.identity import judged
+from blizzard.runner.hub.identity import IRunnerIdentityStore, judged
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.sealed_tokens import HubTokens, StoredToken, StoredTokenState
+from blizzard.runner.hub.token_seed import RUNNER_SEEDED, import_hub_token
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStoreKind,
@@ -160,6 +164,7 @@ from blizzard.runner.runtime import (
     reset_command,
     runner_store_migrations,
 )
+from blizzard.runner.settings.ports import IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -353,7 +358,7 @@ def register_host(
     """Keep the host the held host token names, or add one named after the first ``[[runner]]`` and write its
     token; any stop exits non-zero with no host added."""
     held_token = config.host_token
-    held = HeldToken(held_token.value, from_process_env=not held_token.rereads_dotenv()) if held_token.value else None
+    held = _held(held_token)
     token_file = HubTokenFile.of(config.root, HOST_TOKEN_VARIABLE)
     hub = config.hub_url
     name = config.runners[0].name if config.runners else DEFAULT_RUNNER_NAME
@@ -383,7 +388,7 @@ def register_host(
         click.echo(f"registered {where} at {hub}{again}; its token is in {token_file.path} as {HOST_TOKEN_VARIABLE}")
     else:
         click.echo(f"{where} keeps its token for {hub}")
-        if held_token.rereads_dotenv():
+        if held_token.source is TokenSource.DOTENV:
             _restrict(token_file)
     return host
 
@@ -393,7 +398,7 @@ def _adoptable(config: HostConfig, collaborators: InitCollaborators, rerun: _Rer
     one is. A token the hub refuses, or a read that fails, adopts nothing — the runner's own join reports it."""
     adopt: list[str] = []
     for entry in config.runners:
-        token = config.token_for(entry)
+        token = held_runner_token(config, entry)
         if not token.value:
             continue
         try:
@@ -486,7 +491,7 @@ def _host_add_refused(exc: HostAddRefused, name: str, hub: str, rerun: _Rerun) -
 def _refuse_tokenless(config: HostConfig, entry: RunnerEntry, store: _RuntimeStore, rerun: _Rerun) -> None:
     """Stop before reaching the hub when ``entry`` holds no token and init would add another runner in place of
     the one it may not replace."""
-    token = config.token_for(entry)
+    token = held_runner_token(config, entry)
     held = _held(token)
     try:
         refuse_tokenless(
@@ -511,7 +516,7 @@ def _join_runner(
 ) -> None:
     """Join ``entry``'s runner to the hub under the host, then write its id into the host file and its identity
     row into the store."""
-    token = config.token_for(entry)
+    token = held_runner_token(config, entry)
     with collaborators.join_with(config.hub_url, token.value) as (identity, _admin):
         joined = _join_hub(
             config,
@@ -725,7 +730,7 @@ def _join_hub(
 
 def _held(token: ResolvedToken) -> HeldToken | None:
     """The token ``token`` resolves to, as joining holds it, or ``None`` when it resolves to none."""
-    return HeldToken(token.value, from_process_env=not token.rereads_dotenv()) if token.value else None
+    return HeldToken(token.value, from_process_env=token.source is not TokenSource.DOTENV) if token.value else None
 
 
 def _joining_of(
@@ -738,14 +743,16 @@ def _joining_of(
         hub_url=config.hub_url,
         name=entry.name,
         token_env=token_env,
-        overridden_by=None if token.rereads_dotenv() else _source_words(token, token_env),
+        overridden_by=None if token.source is TokenSource.DOTENV else _source_words(token, token_env, entry.name),
         host_id=host_id,
     )
     return joining, HubTokenFile.of(config.root, token_env)
 
 
-def _source_words(token: ResolvedToken, token_env: str) -> str:
+def _source_words(token: ResolvedToken, token_env: str, name: str) -> str:
     """Where a token that overrides ``.env`` came from."""
+    if token.source is TokenSource.STORE:
+        return f"the host store, set with `blizzard runner token set --runner {name}`"
     if token.source is TokenSource.HOST_FILE:
         return f"[hub_tokens] in {HOST_CONFIG_FILENAME}"
     return f"${token_env}"
@@ -1039,7 +1046,9 @@ def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
 
 
 def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
-    """Seed and resolve identified runners only after the store guard has passed, each against the host's record."""
+    """Seed and resolve identified runners only after the store guard has passed: each runner's token is imported into
+    the store first, then its settings are seeded, then it is projected over its stored token. Mints the host's key
+    when it holds none."""
     engine = create_engine_from_url(config.db_url)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
@@ -1048,44 +1057,114 @@ def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[li
             config,
             build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))),
         )
+        with click_exception_on(ConfigError):
+            tokens = build_hub_tokens(
+                engine, config.root, environ=os.environ, clock=resolve_clock(os.environ), mint=True
+            )
+        assert tokens is not None
         for entry in runners:
             assert entry.id is not None
+            stored = _import_token(config, entry, tokens)
             identity, settings = build_settings_stores(
                 engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
             )
-            if identity.runner_identity() is None:
-                # An adopted runner first obtains its identity from registration.
-                # Use its authored configuration until that happens; do not persist
-                # settings without the identity that owns them.
-                reader = RunnerSettingsReader(config, entry, settings, host_settings=host_settings)
-                try:
-                    resolved = reader.preview_seed()
-                    projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
-                    if isinstance(projection, HaltedRunner):
-                        halted.append(projection)
-                    else:
-                        ready.append(replace(projection, config=resolved))
-                except (SettingsInvalid, ValueError) as exc:
-                    halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
-                continue
-            assert entry.authored is not None
-            reader = RunnerSettingsReader(config, entry, settings, host_settings=host_settings)
-            try:
-                settings.seed(
-                    entry.authored, (*reader.keys, *reader.aliases), validate=reader.validate, aliases=reader.aliases
-                )
-                _, resolved = reader.snapshot()
-            except (SettingsInvalid, ValueError) as exc:
-                halted.append(HaltedRunner(entry.name, entry.id, (str(exc),)))
-                continue
-            projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
+            projection = _seed_runner(config, entry, stored, identity, settings, host_settings)
             if isinstance(projection, HaltedRunner):
                 halted.append(projection)
             else:
-                ready.append(replace(projection, config=resolved))
+                ready.append(projection)
+            RUNNER_SEEDED.reached()
     finally:
         engine.dispose()
     return ready, halted
+
+
+def _import_token(config: HostConfig, entry: RunnerEntry, tokens: HubTokens) -> StoredToken:
+    """Seed step 6 for one runner: its deprecated sources' token sealed unless it holds a row, warning when its row
+    does not open or a deprecated source still holds a token the host no longer reads."""
+    assert entry.id is not None
+    resolved = config.token_for(entry)
+    outcome = import_hub_token(tokens, entry.id, resolved.value)
+    stored = outcome.stored
+    remedy = f"set it with `blizzard runner token set --runner {entry.name}`"
+    if stored.state is StoredTokenState.UNREADABLE:
+        click.echo(
+            f"warning: runner {entry.name} ({entry.id}): its hub token in the host store does not open under the "
+            f"host's key (generation {stored.key_id}), so it refuses until its token is set again; {remedy}"
+        )
+    elif stored.state is StoredTokenState.OPENED and not outcome.imported and resolved.value:
+        click.echo(
+            f"warning: runner {entry.name} ({entry.id}): its hub token is sealed in the host store, so the token "
+            f"{_deprecated_source(resolved, entry)} still holds is no longer read; to change it, {remedy}, then "
+            "remove it there"
+        )
+    return stored
+
+
+def _deprecated_source(token: ResolvedToken, entry: RunnerEntry) -> str:
+    """The deprecated source ``token`` came from, in words."""
+    variable = hub_token_variable(entry.name)
+    if token.source is TokenSource.ENVIRONMENT:
+        return f"${variable}"
+    if token.source is TokenSource.HOST_FILE:
+        return f"[hub_tokens] in {HOST_CONFIG_FILENAME}"
+    return f"{variable} in .env"
+
+
+def _seed_runner(
+    config: HostConfig,
+    entry: RunnerEntry,
+    stored: StoredToken,
+    identity: IRunnerIdentityStore,
+    settings: IWriteRunnerSettings,
+    host_settings: HostSettingsReader,
+) -> BuiltRunner | HaltedRunner:
+    """One runner's settings seeded, then the runner projected over its stored token."""
+    assert entry.id is not None
+    reader = RunnerSettingsReader(config, entry, settings, host_settings=host_settings)
+    try:
+        if identity.runner_identity() is None:
+            # An adopted runner first obtains its identity from registration. Use its authored configuration until
+            # that happens; do not persist settings without the identity that owns them.
+            resolved = reader.preview_seed()
+        else:
+            assert entry.authored is not None
+            settings.seed(
+                entry.authored, (*reader.keys, *reader.aliases), validate=reader.validate, aliases=reader.aliases
+            )
+            _, resolved = reader.snapshot()
+    except (SettingsInvalid, ValueError) as exc:
+        return HaltedRunner(entry.name, entry.id, (str(exc),))
+    projection = config.project(replace(entry, own=resolved, errors=()), stored, os.environ)
+    if isinstance(projection, HaltedRunner):
+        return projection
+    return replace(projection, config=replace(resolved, hub_token=stored.value))
+
+
+def held_runner_token(config: HostConfig, entry: RunnerEntry) -> ResolvedToken:
+    """The token ``entry``'s runner holds: its stored row's, else what its deprecated sources hold. A row that does
+    not open stops the verb, naming the remedy, rather than reading as no token. Never mints the host's key."""
+    if entry.id is not None:
+        stored = _stored_token(config, entry.id)
+        if stored.state is StoredTokenState.OPENED:
+            return ResolvedToken(stored.value, TokenSource.STORE)
+        if stored.state is StoredTokenState.UNREADABLE:
+            raise click.ClickException(
+                f"runner {entry.name} ({entry.id}): its hub token in the host store does not open under the host's "
+                f"key (generation {stored.key_id}); set it again with "
+                f"`blizzard runner token set --runner {entry.name}`, or supply the key it was sealed under"
+            )
+    return config.token_for(entry)
+
+
+def _stored_token(config: HostConfig, runner_id: str) -> StoredToken:
+    """``runner_id``'s stored-token outcome, read without minting the host's key."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with click_exception_on(ConfigError):
+            return stored_hub_token(engine, config.root, runner_id, environ=os.environ, clock=resolve_clock(os.environ))
+    finally:
+        engine.dispose()
 
 
 def start(
@@ -1194,6 +1273,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
             if not any(key.startswith("tools.") for key in stored_keys):
                 problems.append(f"host: {config.tool_profile_conflict}")
         for entry in config.runners:
+            sealed = False
             if entry.id is not None and current:
                 problem = foreign_store_reason(
                     named,
@@ -1213,18 +1293,31 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
                 except (SettingsInvalid, ValueError) as exc:
                     problems.append(HaltedRunner(entry.name, entry.id, (str(exc),)).describe())
                     continue
-                projection = config.project(replace(entry, own=resolved, errors=()), os.environ)
+                # A preview: the row when there is one, otherwise what the seed would import — nothing is written.
+                with click_exception_on(ConfigError):
+                    stored = stored_hub_token(
+                        engine, config.root, entry.id, environ=os.environ, clock=resolve_clock(os.environ)
+                    )
+                sealed = stored.state is not StoredTokenState.ABSENT
+                if not sealed:
+                    stored = config.token_for(entry).importing()
+                projection = config.project(replace(entry, own=resolved, errors=()), stored, os.environ)
             else:
-                projection = config.project(entry, os.environ)
+                projection = config.project(entry, config.token_for(entry).importing(), os.environ)
             if isinstance(projection, HaltedRunner):
                 problems.append(projection.describe())
                 continue
+            if projection.token.state is StoredTokenState.UNREADABLE:
+                problems.append(
+                    f"runner {projection.config.name} ({projection.id}): its hub token in the host store does not "
+                    f"open under the host's key (generation {projection.token.key_id}); set it again with "
+                    f"`blizzard runner token set --runner {projection.config.name}`"
+                )
+                continue
             problem = _resolve_token(collaborators, config.hub_url, projection)
             if problem is None:
-                click.echo(
-                    f"runner {projection.config.name} ({projection.id}): its token ({projection.token.source}) "
-                    "resolves to its id"
-                )
+                where = "sealed in the host store" if sealed else "which the next start imports"
+                click.echo(f"runner {projection.config.name} ({projection.id}): its token ({where}) resolves to its id")
             else:
                 problems.append(f"runner {projection.config.name} ({projection.id}): {problem}")
     finally:
@@ -1238,7 +1331,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
 def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltRunner) -> str | None:
     """Why ``built``'s token does not resolve to its id at the hub, or ``None`` when it does."""
     try:
-        with collaborators.identity_for(hub_url, built.token.value) as (identity, _admin):
+        with collaborators.identity_for(hub_url, built.config.hub_token) as (identity, _admin):
             answer = identity.identity()
     except HubClientError as exc:
         return f"cannot resolve its token at the hub {hub_url}: {exc}"

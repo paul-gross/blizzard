@@ -1,4 +1,4 @@
-"""The ``.env`` file driver behind ``ITokenWriter`` and ``IHubTokenFile``: reads, rewrites, and
+"""The ``.env`` file driver behind ``ITokenWriter``: reads, rewrites, and
 restricts the token's file."""
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from pathlib import Path
 
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.hub.bootstrap import ITokenWriter
-from blizzard.runner.hub.held_token import IHubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME, assigned_token, with_token, without_token
 
 _OTHERS_ACCESS = stat.S_IRWXG | stat.S_IRWXO
@@ -82,6 +81,3 @@ class HubTokenFile:
 
 
 _token_writer_conforms: type[ITokenWriter] = HubTokenFile
-
-
-_hub_token_file_conforms: type[IHubTokenFile] = HubTokenFile

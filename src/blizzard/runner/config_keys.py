@@ -126,6 +126,11 @@ _WORKSPACE_HOME: tuple[tuple[str, str, Lifetime | None], ...] = (
 )
 
 
+#: The record kind that replaces every deprecated source of a runner's hub token: its token row in the host store,
+#: set through the API or `blizzard runner token set`.
+SEALED_HUB_TOKEN_RECORDS = "sealed runner hub token records"
+
+
 def _prefixed(prefix: str, keys: Iterable[ConfigKey]) -> tuple[ConfigKey, ...]:
     return tuple(
         replace(
@@ -155,7 +160,7 @@ _HOST_KEYS = (
     ConfigKey("session_secret_env", STRING, default=DEFAULT_SESSION_SECRET_ENV, lifetime=Lifetime.BOOT),
     ConfigKey("host_token", STRING, lifetime=Lifetime.BOOT, env=HOST_TOKEN_VARIABLE),
     ConfigKey("tick_seconds", NUMBER, default=DEFAULT_TICK_SECONDS, lifetime=Lifetime.PASS),
-    ConfigKey("hub_tokens", OPEN_TABLE, lifetime=Lifetime.BOOT),
+    ConfigKey("hub_tokens", OPEN_TABLE, deprecated=True, replaced_by=SEALED_HUB_TOKEN_RECORDS, lifetime=Lifetime.BOOT),
     ConfigKey("flags", OPEN_TABLE, lifetime=Lifetime.BOOT),
     ConfigKey("auth", TABLE),
     ConfigKey("auth.superuser", STRING, lifetime=Lifetime.BOOT),
@@ -288,7 +293,7 @@ HOST_REGISTRY = ConfigRegistry(
         DurablePath(HOST_CONFIG_FILENAME, "the host's configuration"),
         DurablePath(
             ENV_FILENAME,
-            "the hub tokens the host reads when the environment holds none",
+            "the host token, and runner hub tokens the next start imports into the host store",
             written_by=("add", "host", "ingest", "init"),
             mode=ENV_FILE_MODE,
         ),
@@ -342,8 +347,10 @@ HOST_REGISTRY = ConfigRegistry(
             EnvVariable(HOST_TOKEN_VARIABLE, "the host's one host token"),
             EnvVariable(
                 f"{HUB_TOKEN_VARIABLE_PREFIX}<NAME>",
-                "one runner's hub token, by runner name",
+                "one runner's hub token, by runner name, imported into the host store by the next start",
                 VariableNameRule(HUB_TOKEN_VARIABLE_PREFIX, True, NAME_REPLACE_PATTERN, NAME_REPLACEMENT),
+                deprecated=True,
+                replaced_by=SEALED_HUB_TOKEN_RECORDS,
             ),
         ),
     ),

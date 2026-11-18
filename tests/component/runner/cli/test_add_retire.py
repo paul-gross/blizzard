@@ -34,6 +34,7 @@ from blizzard.runner.loop_wiring import LoopWiring, RunnerStepper
 from blizzard.runner.store.schema import lease_spawns, runner_setting_changes
 from tests.support.child_launch import wait_for_exit
 from tests.support.config_inputs import load_host_config
+from tests.support.host_files import UnresolvableSettings
 from tests.support.runner_add_retire import (
     _HUB,  # pyright: ignore[reportPrivateUsage]
     _registered,  # pyright: ignore[reportPrivateUsage]
@@ -528,8 +529,7 @@ def test_spawn_after_failed_settings_rebuild_records_last_applied_revision(
         )
         failed = settings.snapshot().revision
         assert failed > applied
-        (root / ".env").unlink()
-        (root / ".env").mkdir()
+        UnresolvableSettings(monkeypatch).hold()
 
         stepper.tick_once()
 

@@ -545,8 +545,8 @@ def usage_limit_mark(
 
 
 def fixed_hub_token(token: str = FAKE_RUNNER_TOKEN) -> HubTokenHolder:
-    """A held token the process environment supplied — never re-read, as a test's context needs."""
-    return HubTokenHolder(token, file=None)
+    """A held token with no stored row behind it — never replaced, as a test's context needs."""
+    return HubTokenHolder(token)
 
 
 def registered_identity(runner_id: str = "r1", runner_name: str = "runner-local") -> RunnerIdentityHolder:

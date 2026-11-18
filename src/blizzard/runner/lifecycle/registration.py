@@ -30,7 +30,6 @@ from blizzard.runner.hub.client import (
     RunnerVersionRefused,
     SubscriptionDeclaration,
 )
-from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
@@ -117,8 +116,6 @@ class RegistrationContext(GateContext, Protocol):
     @property
     def identity_verdict(self) -> IdentityVerdictHolder: ...
     @property
-    def hub_token(self) -> HubTokenHolder: ...
-    @property
     def hub_version(self) -> HubVersionHolder: ...
     @property
     def config(self) -> RegistrationConfig: ...
@@ -171,14 +168,14 @@ class Registration:
             )
         except RunnerVersionRefused as refused:
             was = ctx.identity_verdict.refuse_version(refused.refusal.detail)
-            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            log_transition(ctx.identity_verdict, was)
             return
         except HubClientError:
             return  # hub unreachable — the last identity and the last-mirrored brake hold
         ctx.hub_version.hold(reply)
         if ctx.identity_verdict.version_refused():
             was = ctx.identity_verdict.admit_version()
-            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            log_transition(ctx.identity_verdict, was)
         now = ctx.clock.now()
         stored = ctx.stores.identity.runner_identity()
         state = judged(ctx.config.runner_id, reply.runner_id)
@@ -189,7 +186,7 @@ class Registration:
                 token_runner_id=reply.runner_id,
                 checked_at=now,
             )
-            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            log_transition(ctx.identity_verdict, was)
             return  # the reply names another runner: its brake is not this runner's
         tenant_id, tenant_name = answered_tenant(stored, reply.tenant_id, reply.tenant_name)
         identity = RunnerIdentity(
@@ -220,7 +217,7 @@ class Registration:
                 token_runner_id=reply.runner_id,
                 checked_at=now,
             )
-            log_transition(ctx.identity_verdict, was, token_fixed=ctx.hub_token.fixed())
+            log_transition(ctx.identity_verdict, was)
         try:
             paused = ctx.hub.fetch_runner_paused(reply.runner_id)
         except HubClientError:

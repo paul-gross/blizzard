@@ -311,7 +311,7 @@ def test_status_names_both_runners_and_the_reset_command_while_refusing(tmp_path
     refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
     assert "token belongs to runner rn_other" in refusing
     assert "not the configured rn_store" in refusing
-    assert "BZ_HUB_TOKEN_RUNNER_LOCAL" in refusing and "`[[runner]] id`" in refusing
+    assert "`blizzard runner token set --runner runner-local`" in refusing and "`[[runner]] id`" in refusing
     assert "store reset" not in refusing
 
 

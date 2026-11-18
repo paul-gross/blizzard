@@ -254,6 +254,7 @@ from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptReposi
 from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.sealed_tokens import IReadHubTokenRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
@@ -1065,6 +1066,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHostSettings, "snapshot_with_provenance"): lambda w: w.host_read.settings.snapshot_with_provenance(),
     (IReadHostSettings, "changes"): lambda w: w.host_read.settings.changes(limit=10, record_kind="host"),
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
+    (IReadHubTokenRepository, "sealed"): lambda w: w.host_read.hub_tokens.sealed("rn_x"),
     (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
         w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
     ),

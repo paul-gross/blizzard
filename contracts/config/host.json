@@ -6,19 +6,23 @@
     "mode": "0600",
     "variables": [
       {
+        "deprecated": false,
         "holds": "the host's one host token",
         "name": "BZ_HOST_TOKEN",
-        "name_rule": null
+        "name_rule": null,
+        "replaced_by": null
       },
       {
-        "holds": "one runner's hub token, by runner name",
+        "deprecated": true,
+        "holds": "one runner's hub token, by runner name, imported into the host store by the next start",
         "name": "BZ_HUB_TOKEN_<NAME>",
         "name_rule": {
           "prefix": "BZ_HUB_TOKEN_",
           "replace_pattern": "[^A-Z0-9]",
           "replacement": "_",
           "upper_case": true
-        }
+        },
+        "replaced_by": "sealed runner hub token records"
       }
     ]
   },
@@ -225,11 +229,11 @@
     },
     {
       "default": null,
-      "deprecated": false,
+      "deprecated": true,
       "env": null,
       "lifetime": "boot",
       "path": "hub_tokens",
-      "replaced_by": null,
+      "replaced_by": "sealed runner hub token records",
       "required": false,
       "type": "open table"
     },
@@ -1818,7 +1822,7 @@
   ],
   "paths": [
     {
-      "holds": "the hub tokens the host reads when the environment holds none",
+      "holds": "the host token, and runner hub tokens the next start imports into the host store",
       "mode": "0600",
       "path": ".env",
       "written_by": [
