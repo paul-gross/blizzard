@@ -8,7 +8,7 @@ const meta: Meta<KitToolbarWidget> = {
   component: KitToolbarWidget,
   decorators: [moduleMetadata({ imports: [KitToolbar, KitToolbarWidget] })],
   args: { invoked: fn() },
-  render: (args) => ({ props: args, template: `<div fleetKitToolbar aria-label="Actions"><span fleetKitToolbarWidget (invoked)="invoked()">Accept</span><span fleetKitToolbarWidget [disabled]="true">Unavailable</span></div>` }),
+  render: (args) => ({ props: args, template: `<div fleetKitToolbar aria-label="Actions"><span fleetKitToolbarWidget (invoked)="invoked()">Accept</span><span fleetKitToolbarWidget [disabled]="true" (invoked)="invoked()">Unavailable</span></div>` }),
 };
 export default meta;
 type Story = StoryObj<KitToolbarWidget>;
