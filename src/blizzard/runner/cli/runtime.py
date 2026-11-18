@@ -792,7 +792,10 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
     place = (
         f"replace it where init found it ({joining.overridden_by}), which overrides {token_file.path}"
         if joining.overridden_by is not None
-        else f"put it in {token_file.path} as {token_env}"
+        else (
+            f"put it in {token_file.path} as {token_env} (read only when the host store holds no token for the runner; "
+            f"otherwise set it with `blizzard runner token set --runner {joining.name}`)"
+        )
     )
     match exc.stop:
         case BootstrapStop.UNKNOWN_TOKEN:

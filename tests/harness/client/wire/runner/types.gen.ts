@@ -2678,6 +2678,44 @@ export type HubConnectivityView = {
 };
 
 /**
+ * HubTokenProblem
+ */
+export type HubTokenProblem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
+ * HubTokenWrite
+ *
+ * The runner's new hub bearer token.
+ */
+export type HubTokenWrite = {
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
  * IdentityState
  *
  * Whether this process may work as the configured runner: its token's own verdict, and — on a registered
@@ -5283,6 +5321,48 @@ export type ListRunnersApiHostRunnersGetResponses = {
 };
 
 export type ListRunnersApiHostRunnersGetResponse = ListRunnersApiHostRunnersGetResponses[keyof ListRunnersApiHostRunnersGetResponses];
+
+export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutData = {
+    body: HubTokenWrite;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/host/runners/{runner_id}/token';
+};
+
+export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * No runner of this host has the id
+     */
+    404: HubTokenProblem;
+    /**
+     * The hub refused the runner's token as retired
+     */
+    409: HubTokenProblem;
+    /**
+     * A blank token
+     */
+    422: HubTokenProblem;
+};
+
+export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutError = SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors[keyof SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors];
+
+export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutResponse = SetRunnerTokenApiHostRunnersRunnerIdTokenPutResponses[keyof SetRunnerTokenApiHostRunnersRunnerIdTokenPutResponses];
 
 export type GetHostSettingsApiHostSettingsGetData = {
     body?: never;
