@@ -113,6 +113,25 @@ describe('KitChips', () => {
     expect(fixture.componentInstance.choices).toEqual(['new-1']);
   });
 
+  it('clears an existing selection when the controlled value becomes empty or null', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    const selectedOptions = () => (fixture.nativeElement as HTMLElement).querySelectorAll('[role=option][aria-selected="true"]');
+    expect(selectedOptions()).toHaveLength(1);
+
+    fixture.componentInstance.selected.set('');
+    await fixture.whenStable();
+    expect(selectedOptions()).toHaveLength(0);
+
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    fixture.componentInstance.selected.set(null);
+    await fixture.whenStable();
+    expect(selectedOptions()).toHaveLength(0);
+    expect(fixture.componentInstance.choices).toEqual([]);
+  });
+
   it('emits once for each pointer pick including focus and repicking', async () => {
     const fixture = TestBed.createComponent(TestHost);
     fixture.componentInstance.options.set([{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]);
