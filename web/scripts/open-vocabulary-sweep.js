@@ -275,7 +275,7 @@ function inRecordScope(rel, inExemptUnit) {
   if (!rel.endsWith(".ts") || rel.endsWith(".spec.ts") || rel.endsWith(".stories.ts") || rel.startsWith(GENERATED_API_DIR)) {
     return false;
   }
-  return rel.endsWith(".translate.ts") || inExemptUnit(rel);
+  return rel.endsWith(".translate.ts") || rel.endsWith(".query.ts") || rel.endsWith(".mutations.ts") || inExemptUnit(rel);
 }
 
 /** Prove the template-switch sweep catches a bare `@switch`, nested or not, and passes one with
@@ -357,12 +357,11 @@ function assertVocabularyRecordDetectorWorks() {
   // The scope pin: translators and files in still-exempt units are held; a migrated unit's files, specs,
   // stories, and the generated client are not.
   const exempt = (/** @type {string} */ rel) => rel.startsWith("hub/src/app/events/");
-  for (const rel of ["hub/src/app/events/events-view.ts", "hub/src/app/admin/admin.translate.ts", "fleet/src/lib/testing/builders/chunk.translate.ts"]) {
+  for (const rel of ["hub/src/app/events/events-view.ts", "hub/src/app/admin/admin.translate.ts", "hub/src/app/admin/admin.query.ts", "hub/src/app/admin/admin.mutations.ts", "fleet/src/lib/testing/builders/chunk.translate.ts"]) {
     if (!inRecordScope(rel, exempt)) throw new Error(`vocabulary-record sweep scoped out \`${rel}\``);
   }
   for (const rel of [
     "hub/src/app/admin/admin-view.ts",
-    "hub/src/app/admin/admin.query.ts",
     "hub/src/app/events/events-view.spec.ts",
     "hub/src/app/admin/admin.translate.spec.ts",
     "hub/src/app/events/events.stories.ts",
