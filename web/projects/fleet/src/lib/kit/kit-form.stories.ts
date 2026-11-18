@@ -10,7 +10,6 @@ import { FormChromeHost } from './kit-form-chrome.story-host';
 const meta: Meta = {
   component: KitForm,
   title: 'Kit/Form',
-  component: KitForm,
   decorators: [moduleMetadata({ imports: [FormChromeHost] })],
 };
 export default meta;
