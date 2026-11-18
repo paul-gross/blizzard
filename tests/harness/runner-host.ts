@@ -181,15 +181,24 @@ export interface RunnerHost extends OriginReads {
   logTail(): string;
   /** The whole host log, across restarts. */
   log(): string;
-  /** The hub tokens enrollment issued, read now from the host's `.env` by the names the host contract declares. */
+  /**
+   * The hub tokens enrollment issued: each read from the host's `.env` under the variable the host contract derives
+   * for the runner's current name, else the one the handle recorded for it at a rename. The host itself reads a
+   * runner's token from its sealed store once its first boot has imported it, so this is what was issued, not what
+   * the store holds after a `runner token set`.
+   */
   hubTokens(): HostHubTokens;
-  /** Empties the stopped host's `.env`, as a host no hub added holds no token; the next boot reads none. Throws when the host is running. */
+  /**
+   * Empties the stopped host's `.env` and the tokens the handle recorded, as a host no hub added holds no token. It
+   * holds only before the host's first boot: from then on the store holds each runner's sealed token, which this does
+   * not clear. Throws when the host is running.
+   */
   clearHubTokens(): void;
   /**
-   * The operator's rename on the stopped host: the runner `from` is named `to` in the host file, its token moves to the
-   * variable the host contract derives for `to`, and its `runners/<name>` directory, when there is one, follows. The
-   * handle's `runners` and `hubTokens()` follow the new name, under the same id. Throws when the host is running, or
-   * names no runner `from` or one already named `to`.
+   * The operator's rename on the stopped host: the runner `from` is named `to` in the host file, and its
+   * `runners/<name>` directory, when there is one, follows. Its `.env` line is left as it is — the store holds its token
+   * under its id — and the handle records that token under `to`. The handle's `runners` and `hubTokens()` follow the
+   * new name, under the same id. Throws when the host is running, or names no runner `from` or one already named `to`.
    */
   renameRunner(from: string, to: string): void;
   /** Deletes the stopped host's store, `data/host.db` and its sidecars; the next boot builds it anew. Throws when the host is running. */
@@ -678,6 +687,8 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       }
 
       const entries = runnerEntries(readHostFile(dir));
+      /** Each renamed runner's issued token, under its new name: a rename moves no `.env` line. */
+      const renamedTokens: Record<string, string | undefined> = {};
 
       // The default runner's root, which the mock worker reads as `BZ_TRANSCRIPTS_ROOT`; a `runnerEnv` naming it wins.
       const transcriptsRoot = (): string => {
@@ -739,10 +750,14 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
         },
         logTail: () => logTail(logPath),
         log: () => (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''),
-        hubTokens: () => readHubTokens(dir, entries.map((entry) => entry.name)),
+        hubTokens() {
+          const read = readHubTokens(dir, entries.map((entry) => entry.name));
+          return { host: read.host, runners: Object.fromEntries(Object.entries(read.runners).map(([name, token]) => [name, token ?? renamedTokens[name]])) };
+        },
         clearHubTokens() {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before clearHubTokens()');
           fs.writeFileSync(path.join(dir, hostEnvContract().file), '');
+          for (const name of Object.keys(renamedTokens)) delete renamedTokens[name];
         },
         renameRunner(from, to) {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before renameRunner()');
@@ -750,16 +765,11 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           const renamed = ((file.runner ?? []) as TomlTable[]).find((entry) => entry.name === from);
           if (renamed === undefined) throw new Error(`the host file names no runner ${from}`);
           if (entries.some((entry) => entry.name === to)) throw new Error(`the host already has a runner named ${to}`);
+          const held = readHubTokens(dir, [from]).runners[from] ?? renamedTokens[from];
           renamed.name = to;
           fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
-          const envFile = hostPath(dir, hostEnvContract().file);
-          if (fs.existsSync(envFile)) {
-            const moved = fs
-              .readFileSync(envFile, 'utf8')
-              .split('\n')
-              .map((line) => (line.trim().startsWith(`${runnerTokenVariable(from)}=`) ? line.replace(runnerTokenVariable(from), runnerTokenVariable(to)) : line));
-            fs.writeFileSync(envFile, moved.join('\n'));
-          }
+          delete renamedTokens[from];
+          renamedTokens[to] = held;
           const own = hostPath(dir, 'runners');
           if (fs.existsSync(path.join(own, from))) fs.renameSync(path.join(own, from), path.join(own, to));
           const entry = entries.find((candidate) => candidate.name === from);

@@ -59,7 +59,7 @@ test.describe('at fresh-tenant', () => {
   test('a file rename preserves the stored name until settings change it', async ({ runnerHost, api }) => {
     const id = runnerHost.runners[NAME]!.id;
     await runnerHost.stop();
-    // Renaming a runner is editing its name and its token variable's name together.
+    // Renaming a runner is editing its name alone: the host store holds its token under its id.
     runnerHost.renameRunner(NAME, 'renamed-runner');
     await runnerHost.restart();
     expect((await runnerHost.step()).outcome).toBe('completed');

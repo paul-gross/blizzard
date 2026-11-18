@@ -15,6 +15,10 @@ The host serves one origin. What belongs to the host answers at the root:
   reasons), `workspaces`, `environments` (grouped by workspace, each held one naming its runner and project), and
   `subscriptions` (each naming the runners that spend it); and `workspaces/{workspace_id}/prompt`, the runtime
   workspace-prompt override (`GET`, `PUT`, `DELETE`), which answers `404` for a workspace the host does not declare; and
+  `PUT /api/host/runners/{runner_id}/token`, which seals a runner's hub token in the host's store and answers `204`, or
+  `404 runner_unknown` for an id no `[[runner]]` of the host names, `409 runner_retired` for a runner whose hub refused
+  its token as retired, and `422 token_blank` for a blank value — it needs superuser authority, never echoes the token,
+  and backs `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)); and
   `POST /api/host/ticks`, which runs one pass of the host's own work and answers once it has finished
   ([Stepping a host](./control-verbs.md#stepping-a-host)); and `GET /api/host/invariants`, which checks the runner
   store's invariants across every runner on the host

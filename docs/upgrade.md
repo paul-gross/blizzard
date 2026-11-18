@@ -63,6 +63,26 @@ values.
 The host record arrives in the same `blizzard runner migrate` as the runner settings above. Rolling back cannot apply
 host settings changes made only in the new store: restore the pre-upgrade store and file together.
 
+### Runner hub tokens move into the host store
+
+Stop the host, back up its store, host file and `.env` together, and migrate the store with the new release's
+`blizzard runner migrate --dir <host-directory>` before starting it; startup does not migrate it. The first start then
+seals each identified runner's hub token in the host store, under the host's key: from `BZ_HUB_TOKEN_<NAME>` in the
+process environment, the host file's `[hub_tokens]`, or `BZ_HUB_TOKEN_<NAME>` in `.env`, the first that holds one. An
+offline `blizzard runner tick` imports the same way. After that, edits to those sources are no longer read: the host
+warns at start while one still holds a token, and a token changes only through `blizzard runner token set`
+([runner-auth.md](./deployment/runner-auth.md#the-hosts-token-store)). The sources stay readable, for that import only,
+until they are removed.
+
+The first sealing verb mints the host's key into `data/secret-keys/` in the host directory. Back that directory up with
+the store, or supply the key as `BZ_HOST_SECRET_KEY` from your own secret management before the first start: without the
+key, each runner refuses until its token is set again ([The host's key](./deployment/runner-auth.md#the-hosts-key)).
+
+To roll back, restore the pre-upgrade backup, or downgrade the store ([rollback](./rollback.md)), which drops the token
+table. `.env` and the other sources still hold every token they held before the upgrade, but a token set with
+`runner token set` or moved in by `runner ingest` since then lives only in the store: put it back in `.env` as
+`BZ_HUB_TOKEN_<NAME>` before rolling back, or enroll the runner again with `blizzard hub runner enroll <id>` afterwards.
+
 ## Upgrading to 0.4.0
 
 ### Store baseline at 0.2.0
@@ -311,7 +331,8 @@ One release keys every runner by an id the hub mints, and retires `runner_auth_m
   enrolled token resolves to its runner's new id, so no runner re-enrolls. Operator verbs and `/api/runners/{id}` take
   the `rn_` id, which `hub runner list` shows beside each name, so a script that passed an old id passes the new one.
 - **A runner that held no token** — one a `warn` hub admitted — keeps its history under its new id, but is refused until
-  `blizzard hub runner enroll <id>` mints its token. Put the line `enroll` prints in the runner's runtime-dir `.env`.
+  `blizzard hub runner enroll <id>` mints its token. Put the token `enroll` prints in the runner's runtime-dir `.env`
+  under the variable it names.
 - **The name is the runner's own.** A pre-host `blizzard-runner.toml` that declares a `runner_id` and no `name` reads
   that value as the name, and [graduation](#host-graduation-boundary) carries it into the host file's `name`; a runner
   renames itself by changing `name` and restarting ([remote-runner.md](./remote-runner.md#point-it-at-the-hub)).
