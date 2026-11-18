@@ -107,6 +107,8 @@ class SecretStore:
             row = conn.execute(self._store.select(secrets, *_METADATA).where(secrets.c.name == name)).one()
             if moved == 1:
                 append_change(conn, change)
+            # Projects the retired fact into the returned metadata; the write refuses on the revision alone.
+            # ast-grep-ignore: bzh:store-refuses-stale
             retired = name in self._retired_among(conn, [name])
         if moved != 1:
             raise SecretRevisionConflict(name, current=row.revision)

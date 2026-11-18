@@ -1,0 +1,39 @@
+id: bzh:store-refuses-stale
+valid:
+  # A read filters by a status helper; only writes and guards are in reach.
+  - |
+    def list_open(self):
+        with self._store.read("list_open") as conn:
+            return [r for r in conn.execute(select(t).where(t.c.id.not_in(retired_ids(conn))))]
+  # A write whose helper is not status-family.
+  - |
+    def rename(self, name):
+        with self._store.write("rename") as conn:
+            conn.execute(self._store.update(t).values(name=name))
+            return helper(conn)
+  # A dict.update beside a status helper is not a store write.
+  - |
+    def merge(self, base):
+        out = {}
+        out.update(base)
+        return out, retired_ids(base)
+invalid:
+  # A write that refuses on a terminal fact.
+  - |
+    def advance(self, chunk_id):
+        with self._store.write("advance") as conn:
+            if chunk_is_terminal(conn, chunk_id):
+                raise Refused(chunk_id)
+            conn.execute(self._store.update(t).values(x=1))
+  # A guard helper that consults a status helper through a method.
+  - |
+    def fence(self, conn, key):
+        if self.is_retired(conn, key):
+            raise Refused(key)
+  # An insert that checks live holders first.
+  - |
+    def claim(self, key):
+        with self._store.write("claim") as conn:
+            if live_holders(conn, key):
+                raise Refused(key)
+            conn.execute(self._store.insert(t).values(k=key))

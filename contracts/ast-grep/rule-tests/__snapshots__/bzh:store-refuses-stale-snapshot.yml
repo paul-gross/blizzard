@@ -1,0 +1,92 @@
+id: bzh:store-refuses-stale
+snapshots:
+  ? |
+    def advance(self, chunk_id):
+        with self._store.write("advance") as conn:
+            if chunk_is_terminal(conn, chunk_id):
+                raise Refused(chunk_id)
+            conn.execute(self._store.update(t).values(x=1))
+  : labels:
+    - source: chunk_is_terminal(conn, chunk_id)
+      style: primary
+      start: 87
+      end: 120
+    - source: chunk_is_terminal
+      style: secondary
+      start: 87
+      end: 104
+    - source: self._store.write("advance")
+      style: secondary
+      start: 38
+      end: 66
+    - source: self._store.write("advance") as conn
+      style: secondary
+      start: 38
+      end: 74
+    - source: |-
+        with self._store.write("advance") as conn:
+                if chunk_is_terminal(conn, chunk_id):
+                    raise Refused(chunk_id)
+                conn.execute(self._store.update(t).values(x=1))
+      style: secondary
+      start: 33
+      end: 213
+  ? |
+    def claim(self, key):
+        with self._store.write("claim") as conn:
+            if live_holders(conn, key):
+                raise Refused(key)
+            conn.execute(self._store.insert(t).values(k=key))
+  : labels:
+    - source: live_holders(conn, key)
+      style: primary
+      start: 78
+      end: 101
+    - source: live_holders
+      style: secondary
+      start: 78
+      end: 90
+    - source: self._store.write("claim")
+      style: secondary
+      start: 31
+      end: 57
+    - source: self._store.write("claim") as conn
+      style: secondary
+      start: 31
+      end: 65
+    - source: |-
+        with self._store.write("claim") as conn:
+                if live_holders(conn, key):
+                    raise Refused(key)
+                conn.execute(self._store.insert(t).values(k=key))
+      style: secondary
+      start: 26
+      end: 191
+  ? |
+    def fence(self, conn, key):
+        if self.is_retired(conn, key):
+            raise Refused(key)
+  : labels:
+    - source: self.is_retired(conn, key)
+      style: primary
+      start: 35
+      end: 61
+    - source: is_retired
+      style: secondary
+      start: 40
+      end: 50
+    - source: self.is_retired
+      style: secondary
+      start: 35
+      end: 50
+    - source: fence
+      style: secondary
+      start: 4
+      end: 9
+    - source: |-
+        def fence(self, conn, key):
+            if self.is_retired(conn, key):
+                raise Refused(key)
+      style: secondary
+      start: 0
+      end: 89
