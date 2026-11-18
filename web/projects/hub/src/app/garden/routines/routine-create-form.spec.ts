@@ -2,7 +2,7 @@ import { Component, input, provideZonelessChangeDetection, signal } from '@angul
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { EMPTY_ROUTINE_CREATE_DRAFT, type RoutineCreateDraft } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';
 import { routineCreateRules } from './routine.form';
@@ -13,7 +13,7 @@ import { routineCreateRules } from './routine.form';
   template: `<app-routine-create-form [form]="f" [urgencies]="urgencies()" (save)="saves = saves + 1" (cancel)="cancels = cancels + 1" />`,
 })
 class Host {
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   readonly draft = signal<RoutineCreateDraft>(EMPTY_ROUTINE_CREATE_DRAFT);
   readonly f = form(this.draft, routineCreateRules);
   saves = 0;
@@ -25,8 +25,8 @@ describe('RoutineCreateForm urgency', () => {
     await TestBed.configureTestingModule({ imports: [Host], providers: [provideZonelessChangeDetection()] }).compileComponents();
     const fixture = TestBed.createComponent(Host);
     fixture.componentRef.setInput('urgencies', [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;

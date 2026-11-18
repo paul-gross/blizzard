@@ -4,7 +4,7 @@ import { apply, form } from '@angular/forms/signals';
 import { asyncStateOf, createRefusalState, type hubApi, type RoutineBaselineView, type RoutineRunResponse, type ScopeView, submitForm } from 'fleet';
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 import { injectHubRoutineScopesQuery } from '../core/routines.query';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubScopesQuery } from '../core/scopes.query';
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { runRules } from './run.form';
@@ -37,8 +37,8 @@ import { baselineForScope, liveRelatedScopes, orderScopesBySwept, sweptScopeSlug
   templateUrl: './gardening-run-dialog.html',
 })
 export class GardeningRunDialog {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
-  readonly effectiveUrgency = input<hubApi.UrgencyRef | null>(null);
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
+  readonly effectiveUrgency = input<UrgencyReference | null>(null);
   readonly routineId = input.required<string>();
   readonly routineName = input.required<string>();
 

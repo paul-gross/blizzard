@@ -1,3 +1,4 @@
+import type { Urgency } from 'fleet';
 import type { hubApi } from 'fleet';
 import { claimUrgencyIcons, nextClaimSummary, prerequisiteIds, prerequisiteStatuses } from './runner-next-claim.model';
 
@@ -29,11 +30,11 @@ describe('claimUrgencyIcons', () => {
     const ref = (urgency_id: string) => ({ urgency: { urgency_id, slug: urgency_id } });
     const data = { next: ref('a'), passed: [ref('b')], held_at: [ref('a')], if_holding: ref('c'), without_repository_targets: null } as hubApi.NextClaimResponse;
     const values = [
-      { urgency_id: 'a', icon: { digest: 'da' }, default: false, emoji: null },
-      { urgency_id: 'b', icon: { digest: 'db' }, default: false, emoji: null },
-      { urgency_id: 'c', icon: { digest: 'dc' }, default: true, emoji: null },
-      { urgency_id: 'unused', icon: { digest: 'du' }, default: false, emoji: null },
-    ] as hubApi.UrgencyView[];
+      { id: 'a', icon: { digest: 'da' }, default: false, emoji: null },
+      { id: 'b', icon: { digest: 'db' }, default: false, emoji: null },
+      { id: 'c', icon: { digest: 'dc' }, default: true, emoji: null },
+      { id: 'unused', icon: { digest: 'du' }, default: false, emoji: null },
+    ] as Urgency[];
     expect(claimUrgencyIcons(data, values)).toEqual([{ key: 'a', digest: 'da' }, { key: 'b', digest: 'db' }]);
   });
 });
@@ -44,7 +45,7 @@ describe('the no-target alternative', () => {
   const response = { next: null, passed: [], held_at: [], if_holding: null, without_repository_targets: alternative } as unknown as hubApi.NextClaimResponse;
   it('resolves prerequisites and urgency icons for its entries too', () => {
     expect(prerequisiteIds(response)).toEqual(['ch_c']);
-    const values = [{ urgency_id: 'z', icon: { digest: 'dz' }, default: false, emoji: null }, { urgency_id: 'y', icon: { digest: 'dy' }, default: false, emoji: null }] as hubApi.UrgencyView[];
+    const values = [{ id: 'z', icon: { digest: 'dz' }, default: false, emoji: null }, { id: 'y', icon: { digest: 'dy' }, default: false, emoji: null }] as Urgency[];
     expect(claimUrgencyIcons(response, values)).toEqual([{ key: 'z', digest: 'dz' }, { key: 'y', digest: 'dy' }]);
   });
   it('is skipped when null or absent', () => {

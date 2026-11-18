@@ -1,9 +1,9 @@
 import { type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, injectPendingMutationVariables, KitMasterDetail, ViewportService, type UrgencyPositionRequest, type UrgencyView } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, KitMasterDetail, ViewportService, type UrgencyPositionRequest, type Urgency } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
 import { type ConfigFormValues } from '../config-edit.model';
@@ -19,7 +19,7 @@ import { UrgenciesList } from './urgencies-list';
   templateUrl: './urgencies-page.html', styleUrls: ['../config-page-host.css', './urgencies-page.css'],
 })
 export class UrgenciesPage {
-  private readonly query = injectUrgenciesQuery();
+  private readonly query = injectDomainUrgenciesQuery();
   protected readonly settings = injectSettingsQuery();
   private readonly me = injectMeQuery();
   private readonly filters = injectQueryFilters();
@@ -60,7 +60,7 @@ export class UrgenciesPage {
     this.actionError.set(null);
     this.defaultMutation.mutate({ key, revision: settings.revision }, { onError: (e) => this.actionError.set(errorMessage(e, 'Default change failed.')) });
   }
-  protected onDrop(event: CdkDragDrop<readonly UrgencyView[]>): void {
+  protected onDrop(event: CdkDragDrop<readonly Urgency[]>): void {
     if (!this.canEdit() || this.lifecycle() !== 'active' || this.pending()) return;
     const body = urgencyPosition(this.rows(), event.previousIndex, event.currentIndex);
     if (!body) return;

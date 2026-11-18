@@ -1,5 +1,5 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 
 import { RoutineCreateFormStoryHost } from './routine-create-form.story-host';
 
@@ -8,8 +8,8 @@ const meta: Meta = {
   decorators: [moduleMetadata({ imports: [RoutineCreateFormStoryHost] })],
   args: {
     urgencies: [
-      { urgency_id: 'u1', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u2', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'u1', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u2', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ],
   },
 };

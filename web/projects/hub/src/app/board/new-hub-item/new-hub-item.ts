@@ -4,7 +4,7 @@ import { createRefusalState, submitForm } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { EMPTY_NEW_HUB_ITEM_DRAFT, type NewHubItemDraft, startingDraft } from './new-hub-item.domain';
 import { newHubItemRules } from './new-hub-item.form';
 import { projectOptions, urgencyOptions } from './new-hub-item.model';
@@ -22,7 +22,7 @@ export class NewHubItem {
   private readonly me = injectMeQuery();
   protected readonly lens = inject(ProjectLens);
   private readonly projects = injectProjectsQuery();
-  private readonly urgencies = injectUrgenciesQuery();
+  private readonly urgencies = injectDomainUrgenciesQuery();
   private readonly service = injectNewHubItemService();
   protected readonly allowed = computed(() => hasPermission(this.me.data(), 'chunk:control'));
   protected readonly projectOptions = computed(() => projectOptions(this.projects.data() ?? []));
@@ -36,7 +36,7 @@ export class NewHubItem {
 
   protected start(): void {
     if (this.form().submitting()) return;
-    const urgency = this.urgencies.data()?.find((u) => u.default && !u.retired)?.urgency_id ?? null;
+    const urgency = this.urgencies.data()?.find((u) => u.default && !u.retired)?.id ?? null;
     this.refusal.clear();
     this.form().reset(startingDraft(this.lens.slug(), urgency));
     this.open.set(true);

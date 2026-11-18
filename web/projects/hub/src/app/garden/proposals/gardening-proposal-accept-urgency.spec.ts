@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gardening-proposal-accept-dialog-view';
 
 describe('proposal accept urgency', () => {
@@ -10,8 +10,8 @@ describe('proposal accept urgency', () => {
     fixture.componentRef.setInput('proposalTitle', 'Proposal');
     fixture.componentRef.setInput('proposalBody', 'Body');
     fixture.componentRef.setInput('urgencies', [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;

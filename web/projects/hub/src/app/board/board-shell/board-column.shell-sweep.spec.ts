@@ -1,6 +1,6 @@
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
@@ -50,8 +50,8 @@ async function render(column: Lane, reorderControls: boolean, canReorder: boolea
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardColumn);
   fixture.componentRef.setInput('column', column);
-  fixture.componentRef.setInput('cards', [urgency ? { ...CARD, urgency: { urgency_id: 'u', slug: 'urgent' }, workLines: [{ label: 'hub:1', title: 'Urgent work' }] } : CARD]);
-  fixture.componentRef.setInput('urgencies', urgency ? [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView] : []);
+  fixture.componentRef.setInput('cards', [urgency ? { ...CARD, urgency: { id: 'u', slug: 'urgent' }, workLines: [{ label: 'hub:1', title: 'Urgent work' }] } : CARD]);
+  fixture.componentRef.setInput('urgencies', urgency ? [{ id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', color: 'red', icon: null } as Urgency] : []);
   fixture.componentRef.setInput('reorderControls', reorderControls);
   fixture.componentRef.setInput('canReorder', canReorder);
   fixture.componentRef.setInput('count', count);

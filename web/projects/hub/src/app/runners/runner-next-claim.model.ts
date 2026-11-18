@@ -1,4 +1,4 @@
-import type { hubApi } from 'fleet';
+import type { hubApi, Urgency } from 'fleet';
 
 /** Presentation of the hub's bounded walk, without making a claimability judgment. */
 export function nextClaimSummary(next: hubApi.NextClaimResponse | hubApi.NextClaimScenario) {
@@ -26,8 +26,8 @@ export function prerequisiteStatuses(results: readonly { data?: hubApi.ChunkDeta
   return Object.fromEntries(results.filter((result) => result.data && !result.isError).map((result) => [result.data!.chunk_id, result.data!.status]));
 }
 
-export function claimUrgencyIcons(next: hubApi.NextClaimResponse | undefined, urgencies: readonly hubApi.UrgencyView[] | undefined): { key: string; digest: string }[] {
+export function claimUrgencyIcons(next: hubApi.NextClaimResponse | undefined, urgencies: readonly Urgency[] | undefined): { key: string; digest: string }[] {
   const ids = new Set(scenarios(next).flatMap((scenario) => [scenario.next, scenario.if_holding, ...scenario.passed, ...scenario.held_at]).map((entry) => entry?.urgency?.urgency_id));
-  return (urgencies ?? []).filter((item) => ids.has(item.urgency_id) && !item.default && !item.emoji && item.icon)
-    .map((item) => ({ key: item.urgency_id, digest: item.icon!.digest }));
+  return (urgencies ?? []).filter((item) => ids.has(item.id) && !item.default && !item.emoji && item.icon)
+    .map((item) => ({ key: item.id, digest: item.icon!.digest }));
 }

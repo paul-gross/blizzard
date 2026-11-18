@@ -1,4 +1,5 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type UrgencyRef, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { fromUrgencyRef } from '../../core/urgency.translate';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type UrgencyReference, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -42,7 +43,7 @@ export interface GlanceRow extends RowWork {
   /** The raw `nd_` id of the node it stands on, `''` when none. */
   readonly nodeId: string;
   readonly terminal: boolean;
-  readonly urgency?: UrgencyRef | null;
+  readonly urgency?: UrgencyReference | null;
   /** The chunk's graph's name, `null` when unresolvable. */
   readonly graphName: string | null;
   /** The chunk's progress through its graph — the strip its card carries. */
@@ -104,7 +105,7 @@ export function glanceListGroups(
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       nodeId: chunk.current_node_id ?? '',
       terminal: chunk.terminal ?? false,
-      urgency: chunk.urgency,
+      urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
       graphName: chunk.graph_name,
       graphProgress: chunk.graph_progress,
       runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,

@@ -1,9 +1,10 @@
+import { fromUrgencyRef } from '../core/urgency.translate';
 import { withPendingUrgencies } from './chunks/urgency.model';
 import { injectHubChunkControl } from './chunks/hub-chunk-control';
 import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../core/mutation-keys';
 import { injectUrgencyIconUrls } from '../core/urgency-icon.query';
-import { injectUrgenciesQuery } from '../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { bannerUrgencyIcons } from '../core/urgencies.model';
 import { boardDonePolicy } from '../core/board-done-policy.model';
 import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
@@ -84,7 +85,7 @@ export class BoardPage {
   protected readonly laneSkeletons = laneSkeletonCounts(this.skeletonRandom);
   protected readonly listSkeletons = listSkeletonCount(this.skeletonRandom);
 
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
@@ -260,7 +261,7 @@ export class BoardPage {
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** The image marks the board's banners show, read once per digest. */
-  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks(), this.urgenciesQuery.data()));
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.boardChunks().map((chunk) => ({ terminal: chunk.terminal, urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null })), this.urgenciesQuery.data()));
 
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));

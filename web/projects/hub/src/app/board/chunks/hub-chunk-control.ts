@@ -1,4 +1,4 @@
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { injectChunkUrgencyMutation, type ChunkUrgencyVars } from './urgency.mutations';
 import { computed } from '@angular/core';
@@ -31,7 +31,7 @@ export interface HubChunkControlReporting {
  */
 export function injectHubChunkControl(reporting: HubChunkControlReporting): ChunkControl {
   const meQuery = injectMeQuery();
-  const urgencies = injectUrgenciesQuery();
+  const urgencies = injectDomainUrgenciesQuery();
   const urgencyMutation = injectChunkUrgencyMutation();
   const pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   const detachMutation = injectDetachChunkMutation();

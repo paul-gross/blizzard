@@ -1,7 +1,7 @@
 import { signal, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { KitAsyncStateValue, UrgencyView } from 'fleet';
+import type { KitAsyncStateValue, Urgency } from 'fleet';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
 
@@ -92,10 +92,10 @@ describe('GlanceView', () => {
   });
 
   it('shows non-default urgency only on unfinished cards without changing row order', async () => {
-    const urgent = { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView;
-    const normal = { ...urgent, urgency_id: 'n', name: 'Normal', default: true } as UrgencyView;
-    const ref = { urgency_id: 'u', slug: 'urgent' };
-    const fixture = render({ live: [row({ chunkId: 'a', urgency: ref }), row({ chunkId: 'b', urgency: { urgency_id: 'n', slug: 'normal' } })], done: [row({ chunkId: 'c', terminal: true, urgency: ref })] });
+    const urgent = { id: 'u', name: 'Urgent', slug: 'urgent', default: false, emoji: '🔥', color: 'red', icon: null } as Urgency;
+    const normal = { ...urgent, id: 'n', name: 'Normal', default: true } as Urgency;
+    const ref = { id: 'u', slug: 'urgent' };
+    const fixture = render({ live: [row({ chunkId: 'a', urgency: ref }), row({ chunkId: 'b', urgency: { id: 'n', slug: 'normal' } })], done: [row({ chunkId: 'c', terminal: true, urgency: ref })] });
     fixture.componentRef.setInput('urgencies', [urgent, normal]);
     await fixture.whenStable();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-card"]')];
@@ -104,8 +104,8 @@ describe('GlanceView', () => {
   });
 
   it("shows the image mark of a row's (pending) urgency from the icon URL map", async () => {
-    const imaged = { urgency_id: 'p', name: 'Pending', slug: 'pending', default: false, emoji: null, color: 'red', icon: { digest: 'd', media_type: 'image/png' } } as UrgencyView;
-    const fixture = render({ live: [row({ chunkId: 'a', urgency: { urgency_id: 'p', slug: 'pending' } })] });
+    const imaged = { id: 'p', name: 'Pending', slug: 'pending', default: false, emoji: null, color: 'red', icon: { digest: 'd', mediaType: 'image/png' } } as Urgency;
+    const fixture = render({ live: [row({ chunkId: 'a', urgency: { id: 'p', slug: 'pending' } })] });
     fixture.componentRef.setInput('urgencies', [imaged]);
     fixture.componentRef.setInput('urgencyIconUrls', { p: 'blob:pending' });
     await fixture.whenStable();

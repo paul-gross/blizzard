@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { ChunkCard, ChunkUrgency, type UrgencyView } from 'fleet';
+import { ChunkCard, ChunkUrgency, type Urgency } from 'fleet';
 import { chunkControlStub } from 'fleet/testing';
 import { type BoardCard, boardCardView } from './board-card-view.model';
 
@@ -50,7 +50,7 @@ class UrgencyCardHost {
   readonly detail = { chunk_id: CARD.chunkId, terminal: false, urgency: { urgency_id: 'urgent', slug: 'urgent' } };
   readonly selections: string[] = [];
   readonly control = { ...chunkControlStub(), urgency: {
-    values: signal([{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 1, color: 'red', emoji: '🔥', icon: null } as UrgencyView]),
+    values: signal([{ id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 1, color: 'red', emoji: '🔥', icon: null } as Urgency]),
     pending: () => null,
     set: vi.fn(),
   } };

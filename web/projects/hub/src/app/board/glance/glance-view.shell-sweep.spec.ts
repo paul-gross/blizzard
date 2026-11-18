@@ -226,13 +226,13 @@ it('aligns the urgency mark with the lane gutter at phone width', async () => {
   fixture.componentRef.setInput('listState', 'ready');
   fixture.componentRef.setInput('spendState', 'ready');
   fixture.componentRef.setInput('urgencies', [
-    { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, retired: false, color: '#000000', emoji: '🔥', icon: null },
-    { urgency_id: 'normal', name: 'Normal', slug: 'normal', default: true, retired: false, color: 'red', emoji: null, icon: null },
+    { id: 'u', name: 'Urgent', slug: 'urgent', default: false, retired: false, color: '#000000', emoji: '🔥', icon: null },
+    { id: 'normal', name: 'Normal', slug: 'normal', default: true, retired: false, color: 'red', emoji: null, icon: null },
   ]);
   fixture.componentRef.setInput('list', {
-    live: [row('ch_urgent', { urgency: { urgency_id: 'u', slug: 'urgent' } }), row('ch_normal', { urgency: { urgency_id: 'normal', slug: 'normal' } })],
+    live: [row('ch_urgent', { urgency: { id: 'u', slug: 'urgent' } }), row('ch_normal', { urgency: { id: 'normal', slug: 'normal' } })],
     ready: [], backlog: [],
-    done: [row('ch_terminal', { terminal: true, urgency: { urgency_id: 'u', slug: 'urgent' } })],
+    done: [row('ch_terminal', { terminal: true, urgency: { id: 'u', slug: 'urgent' } })],
   });
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

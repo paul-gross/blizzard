@@ -1,6 +1,7 @@
+import { fromUrgencyRef } from '../../core/urgency.translate';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type UrgencyView, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
+import { type Urgency, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabContent, KitTabGroup, KitTabPanel, KitTabs, type KitTabOption } from 'fleet';
 import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
@@ -40,7 +41,7 @@ export class BoardShell {
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
 
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** Each banner urgency's image-mark URL by urgency id, read by the page. */
   readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   readonly chunkControl = input<ChunkControl | null>(null);
@@ -167,7 +168,7 @@ export class BoardShell {
         shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
         terminal: chunk.terminal ?? false,
-        urgency: chunk.urgency,
+        urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null,
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',

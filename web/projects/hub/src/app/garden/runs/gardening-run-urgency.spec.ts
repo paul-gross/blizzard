@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { ScopeView, UrgencyView } from 'fleet';
+import type { ScopeView, Urgency } from 'fleet';
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { runRules } from './run.form';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
@@ -24,10 +24,10 @@ describe('routine run urgency', () => {
     const tree = runForm();
     fixture.componentRef.setInput('form', tree);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('effectiveUrgency', { urgency_id: 'u', slug: 'urgent' });
+    fixture.componentRef.setInput('effectiveUrgency', { id: 'u', slug: 'urgent' });
     fixture.componentRef.setInput('urgencies', [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
@@ -50,7 +50,7 @@ describe('routine run urgency', () => {
     fixture.componentRef.setInput('sweptSlugs', new Set());
     fixture.componentRef.setInput('form', runForm());
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('effectiveUrgency', { urgency_id: 'u', slug: 'urgent' });
+    fixture.componentRef.setInput('effectiveUrgency', { id: 'u', slug: 'urgent' });
     await fixture.whenStable();
     const trigger = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="run-urgency"]')!;
     expect(trigger.textContent).toContain('Routine default (urgent)');

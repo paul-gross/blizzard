@@ -19,7 +19,7 @@ import {
   KitForm,
   KitSelect,
   KitTextInput,
-  type UrgencyView,
+  type Urgency,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
@@ -180,7 +180,7 @@ export interface RoutinePanelVm {
   styleUrl: './routine-panel.css',
 })
 export class FleetRoutinePanel {
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   readonly urgenciesReady = input(false);
   readonly defaultUrgency = input<string | null>(null);
   /** The inline edit's field tree while a field is open, `null` otherwise. */
@@ -208,7 +208,7 @@ export class FleetRoutinePanel {
   }
   protected urgencyValue(): string {
     const value = this.defaultUrgency() ?? '';
-    return this.urgencies().find((u) => u.urgency_id === value)?.slug ?? value;
+    return this.urgencies().find((u) => u.id === value)?.slug ?? value;
   }
 
   readonly vm = input<RoutinePanelVm | null>(null);

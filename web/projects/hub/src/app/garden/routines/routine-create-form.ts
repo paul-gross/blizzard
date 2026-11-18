@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
-import { KitField, KitForm, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
+import { KitField, KitForm, KitSelect, KitTextInput, type Urgency } from 'fleet';
 
 import { urgencyOptions } from '../../core/urgency-options.model';
 import type { RoutineCreateDraft } from '../core/routine.domain';
@@ -18,7 +18,7 @@ import type { RoutineCreateDraft } from '../core/routine.domain';
 })
 export class RoutineCreateForm {
   readonly form = input.required<FieldTree<RoutineCreateDraft>>();
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** The prefix every field's test id carries. */
   readonly testid = input('gardening-routine-create');
 

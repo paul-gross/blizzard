@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitButton, KitDialog, KitErrorLine, KitSelect, type KitAsyncStateValue, type UrgencyView } from 'fleet';
+import { KitButton, KitDialog, KitErrorLine, KitSelect, type KitAsyncStateValue, type Urgency } from 'fleet';
 import type { ConfigActionsVm } from '../config-actions.model';
 import type { ConfigFormValues } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
@@ -21,7 +21,7 @@ export class UrgencyDetailView {
   readonly busy = input(false);
   readonly actionError = input<string | null>(null);
   readonly mobile = input(false);
-  readonly record = input<UrgencyView | undefined>();
+  readonly record = input<Urgency | undefined>();
   readonly editInitial = input<ConfigFormValues | null>(null);
   readonly editOpen = input(false);
   readonly editError = input<string | null>(null);

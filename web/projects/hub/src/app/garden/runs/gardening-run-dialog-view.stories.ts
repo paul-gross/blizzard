@@ -1,5 +1,5 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import type { RoutineBaselineView, ScopeView, UrgencyView } from 'fleet';
+import type { RoutineBaselineView, ScopeView, Urgency } from 'fleet';
 
 import { RunDialogStoryHost } from './gardening-run-dialog-view.story-host';
 
@@ -22,8 +22,8 @@ const host = (attrs = ''): Story => ({
       { slug: 'hub', description: 'Hub' } as ScopeView,
     ],
     urgencies: [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ],
     draft: { scope: 'web' },
   },

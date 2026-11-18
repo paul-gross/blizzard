@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import type { ChunkDetail, UrgencyView } from '../../api/hub';
+import type { ChunkDetail } from '../../api/hub';
+import type { Urgency } from '../../core/urgency';
 import { isHexColor, legibleOnDark, projectColorValue } from '../../kit/kit-swatch-color';
 import type { ChunkControl } from './chunk-control';
 
@@ -14,11 +15,11 @@ export class ChunkUrgency {
   readonly control = input<ChunkControl | null>(null);
   readonly banner = input(false);
   readonly bannerLayout = input<'desktop' | 'mobile'>('desktop');
-  readonly resolvedUrgency = input<UrgencyView | null>(null);
+  readonly resolvedUrgency = input<Urgency | null>(null);
   /** The banner's image mark, read by the host; shown only in banner mode when the urgency has no emoji. */
   readonly iconUrl = input<string | null>(null);
   protected urgencyColor(color: string): string {
     return isHexColor(color) ? legibleOnDark(color) : projectColorValue(color);
   }
-  protected readonly selected = computed(() => this.control()?.urgency?.values().find((u) => u.urgency_id === this.detail().urgency?.urgency_id) ?? this.resolvedUrgency());
+  protected readonly selected = computed(() => this.control()?.urgency?.values().find((u) => u.id === this.detail().urgency?.urgency_id) ?? this.resolvedUrgency());
 }

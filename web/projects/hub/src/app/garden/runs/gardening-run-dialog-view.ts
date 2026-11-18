@@ -17,7 +17,7 @@ import {
   type RoutineBaselineView,
   type RoutineRunResponse,
   type ScopeView,
-  type UrgencyView,
+  type Urgency,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
@@ -59,9 +59,9 @@ import { GardeningRunScopeField } from './gardening-run-scope-field';
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
   readonly form = input.required<FieldTree<RunDraft>>();
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** The urgency a run of the routine mints at when it names none; `null` when the hub could not resolve one. */
-  readonly effectiveUrgency = input<{ urgency_id: string; slug: string } | null>(null);
+  readonly effectiveUrgency = input<{ id: string; slug: string } | null>(null);
 
   /** Every non-retired scope, previously-swept-by-this-routine first;
    * rendered in the order given. */
@@ -91,7 +91,7 @@ export class GardeningRunDialogView {
 
   protected readonly urgencyOptions = computed(() => {
     const ref = this.effectiveUrgency();
-    const name = ref === null ? null : (this.urgencies().find((u) => u.urgency_id === ref.urgency_id)?.name ?? ref.slug);
+    const name = ref === null ? null : (this.urgencies().find((u) => u.id === ref.id)?.name ?? ref.slug);
     return urgencyOptions(this.urgencies(), { key: 'slug', retired: 'exclude', inherit: { label: 'Routine default', name } });
   });
 

@@ -36,7 +36,8 @@ import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
+import { fromUrgencyRef } from '../../core/urgency.translate';
 
 /**
  * The selected routine's own detail — the right-hand child of
@@ -68,7 +69,8 @@ import { injectUrgenciesQuery } from '../../core/urgencies.query';
   styleUrl: '../core/gardening-detail-host.css',
 })
 export class GardeningRoutineDetail {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly fromUrgencyRef = fromUrgencyRef;
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
   private readonly routinesQuery = injectHubRoutinesDomainQuery();

@@ -1,6 +1,6 @@
 import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitButton, KitChips, KitErrorLine, KitSelect, KitSelectList, KitSelectRow, type KitAsyncStateValue, type UrgencyView } from 'fleet';
+import { KitAsyncState, KitButton, KitChips, KitErrorLine, KitSelect, KitSelectList, KitSelectRow, type KitAsyncStateValue, type Urgency } from 'fleet';
 import { UrgencyPill } from '../../core/urgency-pill';
 import { LIFECYCLE_FILTER_OPTIONS, type LifecycleFilter } from '../config-filter.model';
 import { ConfigFormDialog } from '../config-form-dialog';
@@ -22,7 +22,7 @@ export class UrgenciesList {
   readonly error = input<string | null>(null);
   readonly lifecycle = input.required<LifecycleFilter>();
   readonly state = input.required<KitAsyncStateValue>();
-  readonly rows = input.required<readonly UrgencyView[]>();
+  readonly rows = input.required<readonly Urgency[]>();
   readonly selected = input<string | null>(null);
   readonly createOpen = input(false);
   readonly createError = input<string | null>(null);
@@ -33,7 +33,7 @@ export class UrgenciesList {
   readonly changeDefault = output<string>();
   readonly filter = output<string>();
   readonly pick = output<string>();
-  readonly reorder = output<CdkDragDrop<readonly UrgencyView[]>>();
+  readonly reorder = output<CdkDragDrop<readonly Urgency[]>>();
   protected readonly options = LIFECYCLE_FILTER_OPTIONS;
   protected readonly fields = URGENCY_FIELDS;
 }

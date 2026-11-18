@@ -2,12 +2,12 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { chunkControlStub, chunkDetail } from 'fleet/testing';
-import type { UrgencyView } from '../../api/hub';
+import type { Urgency } from '../../core/urgency';
 import { legibleOnDark, projectColorValue } from '../../kit/kit-swatch-color';
 import { ChunkUrgency } from './chunk-urgency';
 
-const normal = { urgency_id: 'normal', slug: 'normal', name: 'Normal', default: true, retired: false, place: 2, color: 'blue', emoji: null, icon: null } as UrgencyView;
-const urgent = { ...normal, urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, emoji: '🔥' } as UrgencyView;
+const normal = { id: 'normal', slug: 'normal', name: 'Normal', default: true, retired: false, place: 2, color: 'blue', emoji: null, icon: null } as Urgency;
+const urgent = { ...normal, id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, emoji: '🔥' } as Urgency;
 
 describe('ChunkUrgency', () => {
   beforeEach(() => TestBed.configureTestingModule({
@@ -58,7 +58,7 @@ describe('ChunkUrgency', () => {
   it('renders the iconUrl input only in banner mode with no emoji', async () => {
     const fixture = await mount('urgent');
     fixture.componentRef.setInput('control', null);
-    fixture.componentRef.setInput('resolvedUrgency', { ...urgent, emoji: null, icon: { digest: 'd', media_type: 'image/png' } });
+    fixture.componentRef.setInput('resolvedUrgency', { ...urgent, emoji: null, icon: { digest: 'd', mediaType: 'image/png' } });
     fixture.componentRef.setInput('iconUrl', 'blob:icon');
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
@@ -71,7 +71,7 @@ describe('ChunkUrgency', () => {
   it('renders no image by default', async () => {
     const fixture = await mount('urgent');
     fixture.componentRef.setInput('control', null);
-    fixture.componentRef.setInput('resolvedUrgency', { ...urgent, emoji: null, icon: { digest: 'd', media_type: 'image/png' } });
+    fixture.componentRef.setInput('resolvedUrgency', { ...urgent, emoji: null, icon: { digest: 'd', mediaType: 'image/png' } });
     fixture.componentRef.setInput('banner', true);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;

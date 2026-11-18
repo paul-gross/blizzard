@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine, KitSelect, type UrgencyView } from 'fleet';
+import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine, KitSelect, type Urgency } from 'fleet';
 import { urgencyOptions } from '../../core/urgency-options.model';
 
 /** What the view asks the container to submit — `mintWorkItem` mirrors the CLI's
@@ -42,7 +42,7 @@ type AcceptMode = 'mint' | 'decline';
 export class GardeningProposalAcceptDialogView {
   readonly proposalTitle = input.required<string>();
   readonly proposalBody = input.required<string>();
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
 
   readonly submitting = input(false);
   readonly submitError = input<string | null>(null);

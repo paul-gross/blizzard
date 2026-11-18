@@ -1,5 +1,5 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 
 import { ChoreFormStoryHost } from './chore-form.story-host';
 
@@ -16,7 +16,7 @@ const host = (attrs: string): Story => ({
 });
 
 const NIGHTLY = { key: 'nightly', routine: 'nightly', scopes: 'web, hub', mode: 'delta', promote: false, note: 'docs only' };
-const URGENT = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView;
+const URGENT = { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency;
 
 export const Add: Story = host('');
 export const AddPhone: Story = { ...Add, globals: { viewport: { value: 'phone-sm', isRotated: false } } };

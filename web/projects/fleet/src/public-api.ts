@@ -341,3 +341,4 @@ export { changesApiAdminSettingsChangesGet, getSettingsApiAdminSettingsGet, patc
 export type { HubSettingRow, HubSettingsChange } from './lib/api/hub/types.gen';
 
 export { createWorkItemApiWorkSourcesSourceItemsPost, type WorkItemCreateResponse } from './lib/api/hub';
+export type { Urgency, UrgencyReference } from './lib/core/urgency';

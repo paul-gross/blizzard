@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { type hubApi, type UrgencyView } from 'fleet';
+import { type hubApi, type Urgency } from 'fleet';
 import { APP_SCOPE, type InAppLink } from 'fleet/shell';
 import { RunnerNextClaimView } from './runner-next-claim-view';
 
@@ -37,8 +37,8 @@ describe('RunnerNextClaimView', () => {
   });
   it('shows each passed, held and alternative urgency, including unresolved slugs', async () => {
     const fixture = TestBed.createComponent(RunnerNextClaimView);
-    const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false } as UrgencyView;
-    const standard = { ...urgent, urgency_id: 's', name: 'Standard', default: true } as UrgencyView;
+    const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false } as Urgency;
+    const standard = { ...urgent, id: 's', name: 'Standard', default: true } as Urgency;
     fixture.componentRef.setInput('runnerId', 'rn_1');
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('urgencies', [urgent, standard]);

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
+import { KitCheckbox, KitField, KitForm, KitOption, KitOptionGroup, KitSelect, KitTextInput, type Urgency } from 'fleet';
 
 import type { ChoreDraft } from '../core/cadence.domain';
 import { urgencyOptions } from '../../core/urgency-options.model';
@@ -23,7 +23,7 @@ export class FleetChoreForm {
   readonly form = input.required<FieldTree<ChoreDraft>>();
   /** Whether the form adds a chore — only then is the key typed; a chore keeps its key once written. */
   readonly adding = input(false);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** The mode the chore held when the form opened — kept on offer after another is picked. */
   readonly heldMode = input<string | null>(null);
   readonly testid = input('gardening-chore-form');

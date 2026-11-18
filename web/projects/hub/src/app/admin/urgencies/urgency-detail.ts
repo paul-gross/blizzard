@@ -4,14 +4,14 @@ import { ActivatedRoute } from '@angular/router';
 import { asyncState, errorMessage, RecordKind, restingAsyncState, ViewportService } from 'fleet';
 import { map } from 'rxjs';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { type ConfigFormValues } from '../config-edit.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { urgencyEdit, urgencyOptions } from './urgencies.model';
 import { injectEditUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';
 import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyFormValues, urgencyRecordVm } from './urgency-detail.model';
-import { injectUrgencyQuery } from './urgencies.query';
+import { injectDomainUrgencyQuery } from './urgencies.query';
 import { injectUrgencyIconDataUrl } from '../../core/urgency-icon.query';
 import { UrgencyDetailView } from './urgency-detail-view';
 
@@ -21,14 +21,14 @@ export class UrgencyDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly viewport = inject(ViewportService);
   private readonly me = injectMeQuery();
-  private readonly all = injectUrgenciesQuery();
+  private readonly all = injectDomainUrgenciesQuery();
   private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), { initialValue: null });
-  private readonly query = injectUrgencyQuery(() => this.key());
+  private readonly query = injectDomainUrgencyQuery(() => this.key());
   private readonly image = injectUrgencyIconDataUrl(() => {
     const u = this.query.data();
-    return u?.icon ? { key: u.urgency_id, digest: u.icon.digest } : null;
+    return u?.icon ? { key: u.id, digest: u.icon.digest } : null;
   });
-  private readonly history = injectConfigHistoryQuery(RecordKind.URGENCY, () => this.query.data()?.urgency_id ?? null);
+  private readonly history = injectConfigHistoryQuery(RecordKind.URGENCY, () => this.query.data()?.id ?? null);
   protected readonly editMutation = injectEditUrgencyMutation();
   private readonly lifecycleMutation = injectUrgencyLifecycleMutation();
   protected readonly editOpen = signal(false);
@@ -44,7 +44,7 @@ export class UrgencyDetail {
     this.viewport.mode(), hasPermission(this.me.data(), 'config:edit'), hasPermission(this.me.data(), 'chunk:control'),
     this.query.data(), this.shown(),
   ));
-  protected readonly destinations = computed(() => urgencyDestinations(this.all.data() ?? [], this.query.data()?.urgency_id));
+  protected readonly destinations = computed(() => urgencyDestinations(this.all.data() ?? [], this.query.data()?.id));
   protected readonly destinationOptions = computed(() => urgencyOptions(this.destinations()));
   protected readonly busy = computed(() => this.lifecycleMutation.isPending());
   protected readonly state = computed(() => restingAsyncState(this.key() === null, this.query, this.vm() === null));
@@ -57,14 +57,14 @@ export class UrgencyDetail {
   protected onEdit(): void {
     const record = this.query.data(); const shown = this.shown();
     if (!record || !shown || !this.actions()?.edit) return;
-    this.editRevision.set({ key: record.urgency_id, revision: record.revision, shown });
+    this.editRevision.set({ key: record.id, revision: record.revision, shown });
     this.editError.set(null); this.editOpen.set(true);
   }
   protected onSave(values: ConfigFormValues): void {
     const record = this.query.data(); const snapshot = this.editRevision();
-    if (!record || !snapshot || snapshot.key !== record.urgency_id || !this.actions()?.edit) return;
+    if (!record || !snapshot || snapshot.key !== record.id || !this.actions()?.edit) return;
     this.editError.set(null);
-    this.editMutation.mutate({ key: record.urgency_id, revision: snapshot.revision, body: urgencyEdit(snapshot.shown, values) }, {
+    this.editMutation.mutate({ key: record.id, revision: snapshot.revision, body: urgencyEdit(snapshot.shown, values) }, {
       onSuccess: () => this.editOpen.set(false), onError: (e) => this.editError.set(errorMessage(e, 'Save failed.')),
     });
   }
@@ -72,8 +72,8 @@ export class UrgencyDetail {
     const record = this.query.data(); const actions = this.actions();
     if (!record || !actions || this.busy() || (verb === 'retire' && actions.retireBlocked)) return;
     if (verb === 'retire') {
-      this.retireRevision.set({ key: record.urgency_id, revision: record.revision, openChunks: record.open_chunks });
-      this.destination.set(this.destinations().find((u) => u.default)?.urgency_id ?? '');
+      this.retireRevision.set({ key: record.id, revision: record.revision, openChunks: record.openChunks });
+      this.destination.set(this.destinations().find((u) => u.default)?.id ?? '');
       this.actionError.set(null);
       this.retireOpen.set(true);
     } else this.submitLifecycle(false);
@@ -82,10 +82,10 @@ export class UrgencyDetail {
     const record = this.query.data(); const actions = this.actions();
     if (!record || !actions || this.busy() || (retired && actions.retireBlocked)) return;
     const snapshot = this.retireOpen() ? this.retireRevision() : null;
-    if (snapshot && snapshot.key !== record.urgency_id) return;
-    if (retired && (snapshot?.openChunks ?? record.open_chunks) > 0 && !this.destinations().some((u) => u.urgency_id === this.destination())) return;
+    if (snapshot && snapshot.key !== record.id) return;
+    if (retired && (snapshot?.openChunks ?? record.openChunks) > 0 && !this.destinations().some((u) => u.id === this.destination())) return;
     this.actionError.set(null);
-    this.lifecycleMutation.mutate({ key: record.urgency_id, revision: snapshot?.revision ?? record.revision, retired, ...(retired && (snapshot?.openChunks ?? record.open_chunks) > 0 ? { moveTo: this.destination() } : {}) }, {
+    this.lifecycleMutation.mutate({ key: record.id, revision: snapshot?.revision ?? record.revision, retired, ...(retired && (snapshot?.openChunks ?? record.openChunks) > 0 ? { moveTo: this.destination() } : {}) }, {
       onSuccess: () => this.retireOpen.set(false), onError: (e) => this.actionError.set(errorMessage(e, 'Lifecycle change failed.')),
     });
   }

@@ -1,5 +1,5 @@
 import { stubHubClient, type RequestClientStub } from 'fleet/testing';
-import { readUrgencies, urgenciesQueryOptions } from './urgencies.query';
+import { domainUrgenciesQueryOptions, readUrgencies } from './urgencies.query';
 import { readUrgencyIcon } from './urgency-icon.query';
 
 describe('urgency reads', () => {
@@ -9,7 +9,11 @@ describe('urgency reads', () => {
     stub = stubHubClient({ 'GET /api/urgencies': () => ({ urgencies: [] }) });
     await expect(readUrgencies()).resolves.toEqual([]);
     expect(new URLSearchParams(stub.requests[0].search).get('retired')).toBe('true');
-    expect(urgenciesQueryOptions()).toMatchObject({ refetchInterval: 15000, refetchOnWindowFocus: true, refetchOnReconnect: true });
+    expect(domainUrgenciesQueryOptions()).toMatchObject({ refetchInterval: 15000, refetchOnWindowFocus: true, refetchOnReconnect: true });
+  });
+  it('projects the list', () => {
+    const domain = domainUrgenciesQueryOptions();
+    expect(domain.select([])).toEqual([]);
   });
   it('rejects non-image responses from the icon operation', async () => {
     stub = stubHubClient({ 'GET /api/urgencies/{key}/icon': () => ({ invalid: true }) });

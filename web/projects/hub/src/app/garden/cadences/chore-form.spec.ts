@@ -2,13 +2,13 @@ import { Component, input, provideZonelessChangeDetection, signal } from '@angul
 import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { choreAddRules, choreEditRules } from './chore.form';
 import { FleetChoreForm } from './chore-form';
 
 const DRAFT: ChoreDraft = { ...EMPTY_CHORE_DRAFT, key: 'nightly', routine: 'nightly' };
-const URGENT = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView;
+const URGENT = { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency;
 
 @Component({
   selector: 'app-test-chore-form-host',
@@ -24,7 +24,7 @@ const URGENT = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false
 })
 class Host {
   readonly adding = input(false);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   readonly heldMode = input<string | null>(null);
   readonly draft = signal<ChoreDraft>(EMPTY_CHORE_DRAFT);
   readonly addTree = form(this.draft, choreAddRules);
