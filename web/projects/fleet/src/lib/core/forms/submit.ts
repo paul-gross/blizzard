@@ -61,8 +61,13 @@ export type RefusalState<D> = ReturnType<typeof createRefusalState<D>>;
 export async function submitForm<D>(
   form: FieldTree<D>,
   save: (draft: D) => Promise<SaveOutcome<D>>,
-  options: { ignoreLocalErrors?: boolean; refusalState: RefusalState<D>; isCurrent?: () => boolean },
+  options?: { ignoreLocalErrors?: boolean; refusalState: RefusalState<D>; isCurrent?: () => boolean },
 ): Promise<boolean> {
+  if (!options) {
+    const ok = await submit(form, async () => toFormErrors(await save(form().value()), form));
+    if (!ok) form().errorSummary().find((error) => error.fieldTree !== form)?.fieldTree().focusBoundControl();
+    return ok;
+  }
   if (form().submitting()) return false;
   options.refusalState.clear();
   let locallyInvalid = false;

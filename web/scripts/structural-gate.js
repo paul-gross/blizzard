@@ -1031,6 +1031,7 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'runner/src/app/shell',
 ];
 
+const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
 const DOMAIN_BOUNDARY_STRICT_SCOPES = ['hub/src/app/admin/projects'];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
