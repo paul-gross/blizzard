@@ -30,6 +30,8 @@ export class KitForm {
   readonly cancelLabel = input('Cancel');
   /** Holds Save off for a reason the form's own state does not carry (nothing changed yet, a file still being read). ORed with `submitting()`. */
   readonly saveDisabled = input(false);
+  /** The prefix of the form's own test ids: `<testid>-save`, `<testid>-cancel`, and `<testid>-line`. */
+  readonly testid = input('kit-form');
 
   readonly save = output<void>();
   // Named `cancel` as the forms spec declares; a view binds `(cancel)`, which on this component is this output.

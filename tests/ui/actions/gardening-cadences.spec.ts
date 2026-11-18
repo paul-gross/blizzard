@@ -102,3 +102,63 @@ test('test_gardening_cadences_browser', async ({ api, clock, page, project, wide
   await page.reload();
   await expect(panel.getByTestId('gardening-cadence-panel-moment')).toHaveText(after.map((t) => new RegExp(t)));
 });
+
+test('test_gardening_cadence_form_refusals_browser', async ({ api, page, project, wideViewport }) => {
+  const taken = await api.post(`/api/projects/${project.slug}/cadences`, {
+    data: { slug: 'evening', schedule: { cron: '0 20 * * *', zone: 'UTC' } },
+  });
+  expect(taken.status, JSON.stringify(taken.body)).toBe(201);
+  const cadenceId = (taken.body as Wire.CadenceView).cadence_id;
+
+  const posts: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().includes('/cadences')) posts.push(request.url());
+  });
+  const field = (testid: string) => page.locator('fleet-kit-field', { has: page.getByTestId(testid) });
+
+  await page.setViewportSize(wideViewport);
+  await page.goto(`/p/${project.slug}/gardening/cadences/evening`);
+  await expect(page.getByTestId('gardening-cadence-panel')).toBeVisible();
+
+  // A zone with no cron is refused on the board, and nothing is sent.
+  await page.getByTestId('gardening-cadence-new').click();
+  await expect(field('gardening-cadence-create-slug')).toContainText('*');
+  await page.getByTestId('gardening-cadence-create-slug').fill('evening');
+  await page.getByTestId('gardening-cadence-create-zone').fill('UTC');
+  await page.getByTestId('gardening-cadence-create-save').click();
+  await expect(field('gardening-cadence-create-zone')).toContainText('A schedule needs both a cron and a zone');
+  expect(posts).toHaveLength(0);
+
+  // A slug the project already holds is the hub's to refuse, and the refusal lands on the slug.
+  await page.getByTestId('gardening-cadence-create-cron').fill('0 21 * * *');
+  await page.getByTestId('gardening-cadence-create-save').click();
+  await expect(field('gardening-cadence-create-slug')).toContainText('evening');
+  await expect(page.getByTestId('gardening-cadence-create-slug')).toBeFocused();
+  await expect(page.getByTestId('gardening-cadence-create-slug')).toHaveValue('evening');
+  await expect(page.getByTestId('gardening-cadence-create-cron')).toHaveValue('0 21 * * *');
+  expect(posts).toHaveLength(1);
+  await page.getByTestId('gardening-cadence-create-cancel').click();
+
+  // An edit raced by another write is refused at the form, keeping what was typed; the other write stands.
+  await page.getByTestId('gardening-cadence-panel-edit').click();
+  await page.getByTestId('gardening-cadence-edit-name').fill('Evening sweep');
+  const raced = await api.patch(`/api/cadences/${cadenceId}`, { data: { spacing: '1d' } });
+  expect(raced.status, JSON.stringify(raced.body)).toBe(200);
+  await page.getByTestId('gardening-cadence-edit-save').click();
+  await expect(page.getByTestId('gardening-cadence-edit-line')).toBeVisible();
+  await expect(page.getByTestId('gardening-cadence-edit-name')).toHaveValue('Evening sweep');
+  const held = await api.get(`/api/projects/${project.slug}/cadences`);
+  const stored = (held.body as Wire.CadenceView[]).find((c) => c.slug === 'evening')!;
+  expect(stored.name).toBe('evening');
+  expect(stored.spacing_minutes).toBe(24 * 60);
+
+  // Cancel, then Edit again, starts from the fresh read and saves cleanly.
+  await page.getByTestId('gardening-cadence-edit-cancel').click();
+  await page.getByTestId('gardening-cadence-panel-edit').click();
+  await page.getByTestId('gardening-cadence-edit-name').fill('Evening sweep');
+  await page.getByTestId('gardening-cadence-edit-save').click();
+  await expect(page.getByTestId('gardening-cadence-edit')).toHaveCount(0);
+  await expect(page.getByTestId('gardening-cadence-row-evening')).toContainText('Evening sweep');
+  const saved = await api.get(`/api/projects/${project.slug}/cadences`);
+  expect((saved.body as Wire.CadenceView[]).find((c) => c.slug === 'evening')!.name).toBe('Evening sweep');
+});

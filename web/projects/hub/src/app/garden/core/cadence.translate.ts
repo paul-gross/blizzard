@@ -9,7 +9,9 @@ import {
   type CadenceView,
   type ChoreDocument,
   type ChoreView,
+  type EditBaseline,
   openLookup,
+  type RefusalMap,
   RunMode,
 } from 'fleet';
 
@@ -116,6 +118,27 @@ export function toDraft(cadence: Cadence): CadenceDraft {
     anchor: cadence.anchor === null || typeof cadence.anchor !== 'string' ? 'unstated' : cadence.anchor,
   };
 }
+
+/** What an edit of `cadence` starts from: its id, the revision it was read at, and its draft, all from that one read. */
+export function toEditBaseline(cadence: Cadence): EditBaseline<CadenceDraft> {
+  return { id: cadence.id, revision: cadence.revision, draft: toDraft(cadence) };
+}
+
+const REFUSAL_FIELDS: Readonly<Record<string, keyof CadenceDraft>> = {
+  slug: 'slug',
+  name: 'name',
+  'schedule.cron': 'cron',
+  'schedule.zone': 'zone',
+  schedule: 'cron',
+  spacing: 'spacing',
+  anchor: 'anchor',
+};
+
+/** How the hub's cadence refusals reach the draft: a field path to its field, and a slug already taken to the slug. */
+export const CADENCE_REFUSALS: RefusalMap<CadenceDraft> = {
+  field: (path) => (Object.hasOwn(REFUSAL_FIELDS, path) ? REFUSAL_FIELDS[path] : null),
+  kinds: { 'urn:blizzard:problem:cadence-slug-taken': 'slug' },
+};
 
 function scheduleOf(draft: CadenceDraft): { cron: string | null; zone: string | null } | null {
   const cron = draft.cron.trim();

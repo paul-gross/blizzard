@@ -1,25 +1,37 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
-import { fn } from 'storybook/test';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
-import { EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
-import { FleetCadenceForm } from './cadence-form';
+import { CadenceFormStoryHost } from './cadence-form.story-host';
 
-const meta: Meta<FleetCadenceForm> = {
+const meta: Meta = {
   title: 'Hub garden/Cadence form',
-  component: FleetCadenceForm,
-  args: { initial: EMPTY_CADENCE_DRAFT, creating: true, pending: false, error: null, saved: fn(), cancelled: fn() },
+  decorators: [moduleMetadata({ imports: [CadenceFormStoryHost] })],
 };
 export default meta;
 
-type Story = StoryObj<FleetCadenceForm>;
+type Story = StoryObj;
 
-export const Create: Story = {};
-export const CreatePhone: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
+const host = (attrs: string): Story => ({
+  render: (args) => ({ props: args, template: `<app-story-cadence-form ${attrs} />` }),
+});
+
+const EVENING = { slug: 'evening', name: 'Evening sweep', cron: '0 20 * * *', zone: 'America/Chicago', spacing: '10d', anchor: 'finished' };
+
+export const Create: Story = host('');
+export const CreatePhone: Story = { ...Create, globals: { viewport: { value: 'phone-sm', isRotated: false } } };
 export const Edit: Story = {
-  args: {
-    creating: false,
-    initial: { slug: 'evening', name: 'Evening sweep', cron: '0 20 * * *', zone: 'America/Chicago', spacing: '10d', anchor: 'finished' },
-  },
+  ...host('[creating]="false" [draft]="draft"'),
+  args: { draft: EVENING },
 };
-export const Refused: Story = { args: { error: 'schedule: a cron expression has five fields, got "0 20 * *"' } };
-export const Pending: Story = { args: { pending: true } };
+export const RuleErrors: Story = {
+  ...host('[draft]="draft" [touched]="true"'),
+  args: { draft: { slug: '', cron: '0 20 * *', spacing: '10', anchor: 'finished' } },
+};
+export const RuleErrorsPhone: Story = { ...RuleErrors, globals: { viewport: { value: 'phone', isRotated: false } } };
+export const SlugTaken: Story = {
+  ...host('[draft]="draft" slugError="the project already holds slug evening"'),
+  args: { draft: { slug: 'evening', spacing: '1d' } },
+};
+export const Conflict: Story = {
+  ...host('[creating]="false" [draft]="draft" formError="the cadence changed since it was read"'),
+  args: { draft: { ...EVENING, cron: '0 21 * * *' } },
+};

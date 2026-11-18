@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
+import type { FieldTree } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -78,8 +79,6 @@ export interface CadencePanelVm {
   readonly nextMoments: readonly MomentVm[];
   readonly attention: readonly AttentionVm[];
   readonly chores: readonly ChorePanelVm[];
-  /** The cadence as its edit form opens. */
-  readonly draft: CadenceDraft;
 }
 
 /** A chore edit: the chore's key as served, and its new draft. */
@@ -88,11 +87,12 @@ export interface ChoreEditEvent {
   readonly draft: ChoreDraft;
 }
 
-/** Which form is open, on which cadence, at which revision — a form reading back a new revision has saved, and closes. */
+/** Which chore form is open, on which cadence, at which revision — a chore form reading back a new revision has saved,
+ * and closes. */
 interface OpenForm {
   readonly cadenceId: string;
   readonly revision: number;
-  readonly form: 'cadence' | 'add-chore' | { readonly chore: string };
+  readonly form: 'add-chore' | { readonly chore: string };
 }
 
 /** The empty chore a new one opens on. */
@@ -104,7 +104,10 @@ const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full
  * over each scope, each chore editable and removable, and a chore added at the foot. Presentational: it renders the
  * view model it is handed and emits each gesture; the caller sends it.
  *
- * A form stays open until the cadence reads back at a new revision, so a refused save leaves it open beside its error.
+ * A chore form stays open until the cadence reads back at a new revision, so a refused save leaves it open beside its
+ * error. The cadence's own edit is its container's: the panel renders the edit form exactly while it is handed
+ * {@link editForm}, so a refresh of the read never closes it. One form is open at a time — starting the edit closes a
+ * chore form, and opening a chore form ends the edit.
  */
 @Component({
   selector: 'app-cadence-panel',
@@ -132,14 +135,19 @@ export class FleetCadencePanel {
 
   /** Whether the current identity may author cadences (`graph:edit`); withholds every control when `false`. */
   readonly canEdit = input(false);
-  /** Set on a failed edit, retire, or enable; rendered beside the controls that raise it. */
+  /** The cadence edit's field tree while an edit is under way, `null` otherwise. */
+  readonly editForm = input<FieldTree<CadenceDraft> | null>(null);
+  /** Set on a failed chore edit, retire, or enable; rendered beside the controls that raise it. */
   readonly actionError = input<string | null>(null);
   /** Whether an edit of this cadence is in flight — disables every save and remove. */
   readonly editPending = input(false);
   /** Whether a retire or enable of this cadence is in flight. */
   readonly lifecyclePending = input(false);
 
-  readonly edit = output<CadenceDraft>();
+  /** Edit pressed: the container captures the baseline and hands back {@link editForm}. */
+  readonly startEdit = output<void>();
+  readonly saveEdit = output<void>();
+  readonly cancelEdit = output<void>();
   readonly addChore = output<ChoreDraft>();
   readonly editChore = output<ChoreEditEvent>();
   readonly removeChore = output<string>();
@@ -160,14 +168,20 @@ export class FleetCadencePanel {
   } | null>(null);
 
   /** Whether `form` is open on `panel` as it now reads. */
-  protected isOpen(panel: CadencePanelVm, form: 'cadence' | 'add-chore' | string): boolean {
+  protected isOpen(panel: CadencePanelVm, form: 'add-chore' | string): boolean {
     const open = this.open();
     if (open === null || open.cadenceId !== panel.cadenceId || open.revision !== panel.revision) return false;
     return typeof open.form === 'string' ? open.form === form : open.form.chore === form;
   }
 
   protected openForm(panel: CadencePanelVm, form: OpenForm['form']): void {
+    if (this.editForm() !== null) this.cancelEdit.emit();
     this.open.set({ cadenceId: panel.cadenceId, revision: panel.revision, form });
+  }
+
+  protected onStartEdit(): void {
+    this.open.set(null);
+    this.startEdit.emit();
   }
 
   protected closeForm(): void {

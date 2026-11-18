@@ -1,9 +1,10 @@
-import { CadenceAnchor as WireCadenceAnchor, type ChoreView } from 'fleet';
+import { CadenceAnchor as WireCadenceAnchor, type ChoreView, readRefusal } from 'fleet';
 import { gardenCadenceAttentionView, gardenCadenceView, gardenChoreView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { CADENCE_ANCHORS, EMPTY_CADENCE_DRAFT } from './cadence.domain';
 import {
+  CADENCE_REFUSALS,
   choreDocument,
   choreDraftDocument,
   choresAdding,
@@ -14,6 +15,7 @@ import {
   toChoreDraft,
   toCreateRequest,
   toDraft,
+  toEditBaseline,
   toEditRequest,
 } from './cadence.translate';
 
@@ -233,5 +235,48 @@ describe('the whole chore list', () => {
   it('clears a blank urgency on the edited chore only', () => {
     expect(choreDraftDocument({ ...toChoreDraft(ODD), urgency: '' }).urgency).toBeNull();
     expect(choresAdding([ODD], toChoreDraft(NIGHTLY))[0].urgency).toBe('someday');
+  });
+});
+
+describe('toEditBaseline', () => {
+  it('captures the id, the revision, and the draft from one read', () => {
+    const cadence = fromCadenceView(gardenCadenceView({ cadence_id: 'cad_9', revision: 4, slug: 'evening' }));
+    expect(toEditBaseline(cadence)).toEqual({ id: 'cad_9', revision: 4, draft: toDraft(cadence) });
+  });
+});
+
+describe('CADENCE_REFUSALS', () => {
+  const entry = (loc: (string | number)[], msg = 'bad') => ({ detail: [{ loc, msg, type: 'value_error' }] });
+
+  it.each([
+    [['body', 'schedule', 'cron'], 'cron'],
+    [['body', 'schedule.cron'], 'cron'],
+    [['body', 'schedule', 'zone'], 'zone'],
+    [['body', 'schedule'], 'cron'],
+    [['body', 'spacing'], 'spacing'],
+    [['body', 'anchor'], 'anchor'],
+    [['body', 'slug'], 'slug'],
+    [['body', 'name'], 'name'],
+  ])('lands a refusal at %j on the %s field', (loc, field) => {
+    expect(readRefusal(entry(loc), CADENCE_REFUSALS)).toEqual({ ok: false, fields: { [field]: 'bad' }, form: null });
+  });
+
+  it('sends a path no field owns, or an inherited key, to the form line', () => {
+    expect(readRefusal(entry(['body', 'chores']), CADENCE_REFUSALS)).toEqual({ ok: false, fields: {}, form: 'chores: bad' });
+    expect(CADENCE_REFUSALS.field('constructor')).toBeNull();
+  });
+
+  it('lands a slug already taken on the slug field', () => {
+    const taken = { type: 'urn:blizzard:problem:cadence-slug-taken', status: 422, detail: 'the project already holds slug evening' };
+    expect(readRefusal(taken, CADENCE_REFUSALS)).toEqual({
+      ok: false,
+      fields: { slug: 'the project already holds slug evening' },
+      form: null,
+    });
+  });
+
+  it('keeps a revision conflict on the form line', () => {
+    const conflict = { type: 'urn:blizzard:problem:revision-conflict', status: 409, detail: 'the cadence changed since it was read' };
+    expect(readRefusal(conflict, CADENCE_REFUSALS)).toEqual({ ok: false, fields: {}, form: 'the cadence changed since it was read' });
   });
 });

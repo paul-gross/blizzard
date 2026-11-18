@@ -3,21 +3,21 @@
     <ng-content />
   </div>
   @for (message of messages(); track $index) {
-  <fleet-kit-error-line [message]="message" testid="kit-form-line" />
+  <fleet-kit-error-line [message]="message" [testid]="testid() + '-line'" />
   }
   <div class="actions">
     <fleet-kit-button
       type="submit"
       variant="primary"
       [disabled]="submitting() || saveDisabled()"
-      testid="kit-form-save"
+      [testid]="testid() + '-save'"
       >{{ saveLabel() }}</fleet-kit-button
     >
     <fleet-kit-button
       type="button"
       [disabled]="submitting()"
       (click)="cancel.emit()"
-      testid="kit-form-cancel"
+      [testid]="testid() + '-cancel'"
       >{{ cancelLabel() }}</fleet-kit-button
     >
   </div>

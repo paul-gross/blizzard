@@ -9,6 +9,7 @@ import {
   cadencePanelVm,
   choreScopesText,
   errandRow,
+  whileEditing,
 } from './gardening-cadence-detail.model';
 
 const NIGHTLY = gardenChore();
@@ -135,18 +136,15 @@ describe('cadencePanelVm', () => {
     expect(vm.renderedRetired).toBe(true);
   });
 
-  it('opens the edit form on the cadence’s own draft', () => {
-    expect(cadencePanelVm(cadence, null, undefined)!.draft).toEqual({
-      slug: 'evening',
-      name: 'evening',
-      cron: '0 20 * * *',
-      zone: 'America/Chicago',
-      spacing: '10d',
-      anchor: 'unstated',
-    });
-  });
-
   it('is null with no cadence', () => {
     expect(cadencePanelVm(null, null, undefined)).toBeNull();
+  });
+});
+
+describe('whileEditing', () => {
+  it('hands out the tree only while a baseline is held', () => {
+    const tree = { field: 'tree' };
+    expect(whileEditing(null, tree)).toBeNull();
+    expect(whileEditing({ id: 'cad_evening', revision: 1 }, tree)).toBe(tree);
   });
 });

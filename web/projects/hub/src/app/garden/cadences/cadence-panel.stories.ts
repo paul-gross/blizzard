@@ -1,10 +1,11 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 import { gardenCadenceErrandView, gardenErrandRunView } from 'fleet/testing';
 import { fn } from 'storybook/test';
 
 import { gardenCadence, gardenCadenceAttention, gardenChore } from '../core/cadence.builders';
 
 import { FleetCadencePanel } from './cadence-panel';
+import { CadencePanelEditingStoryHost } from './cadence-panel.story-host';
 import { cadencePanelVm } from './gardening-cadence-detail.model';
 
 const CADENCE = gardenCadence({
@@ -43,7 +44,10 @@ const meta: Meta<FleetCadencePanel> = {
     actionError: null,
     editPending: false,
     lifecyclePending: false,
-    edit: fn(),
+    editForm: null,
+    startEdit: fn(),
+    saveEdit: fn(),
+    cancelEdit: fn(),
     addChore: fn(),
     editChore: fn(),
     removeChore: fn(),
@@ -68,3 +72,8 @@ export const Retired: Story = {
 export const NoChores: Story = { args: { vm: cadencePanelVm({ ...CADENCE, chores: [], attention: [gardenCadenceAttention({ chore: null, scope: null, reason: 'no_chores' })] }, null, []) } };
 export const Refused: Story = { args: { actionError: 'the cadence changed since it was read — reload it and try again' } };
 export const NothingSelected: Story = { args: { vm: null, state: 'empty' } };
+export const Editing: Story = {
+  decorators: [moduleMetadata({ imports: [CadencePanelEditingStoryHost] })],
+  render: () => ({ props: { vm: VM }, template: '<app-story-cadence-panel-editing [vm]="vm" />' }),
+};
+export const EditingPhone: Story = { ...Editing, globals: { viewport: { value: 'phone', isRotated: false } } };

@@ -1,7 +1,7 @@
 import { asyncState, type AsyncStateQuery, type CadenceErrandView, formatAbsolute } from 'fleet';
 
 import { type Cadence, type CadenceAttention, type Chore, vocabularyText } from '../core/cadence.domain';
-import { toChoreDraft, toDraft } from '../core/cadence.translate';
+import { toChoreDraft } from '../core/cadence.translate';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
 import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';
 import { attentionReasonLabel, choreModeLabel, errandStateLook } from './cadence-vocabulary';
@@ -80,6 +80,10 @@ export function cadencePanelVm(
     nextMoments: cadence.nextMoments.map((iso) => ({ iso, text: formatAbsolute(iso) })),
     attention: cadence.attention.map(attentionVm),
     chores: choreRows(cadence, errands, query),
-    draft: toDraft(cadence),
   };
+}
+
+/** The edit's field tree while an edit is under way — while it holds a baseline — else `null`. */
+export function whileEditing<T>(baseline: unknown, tree: T): T | null {
+  return baseline === null ? null : tree;
 }

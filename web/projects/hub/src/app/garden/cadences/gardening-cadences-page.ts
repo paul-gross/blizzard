@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
 import {
   asyncState,
-  errorMessage,
   FlagStore,
   KitButton,
   KitMasterDetail,
   KitPanel,
   type KitAsyncStateValue,
+  submitForm,
   ViewportService,
 } from 'fleet';
 
@@ -18,9 +19,9 @@ import { ProjectLens } from '../../core/project-lens';
 import { injectChildRouteParam } from '../../core/route-state';
 import { injectHubCadencesQuery } from '../core/cadences.query';
 import { type Cadence, type CadenceDraft, EMPTY_CADENCE_DRAFT } from '../core/cadence.domain';
-import { toCreateRequest } from '../core/cadence.translate';
+import { cadenceCreateRules } from './cadence.form';
+import { injectCadenceService } from './cadence.service';
 import { FleetCadenceForm } from './cadence-form';
-import { injectCreateCadenceMutation } from './cadence-edit.mutations';
 import { FleetCadenceList, type CadenceRowVm } from './cadence-list';
 import { cadenceRows, flagOffLine, presentCadenceSlug } from './gardening-cadences-page.model';
 
@@ -31,8 +32,8 @@ import { cadenceRows, flagOffLine, presentCadenceSlug } from './gardening-cadenc
  * While the `cadences` flag is off the list says the cadences mint nothing; the tab and its records stay, since the
  * hub serves and edits them either way.
  *
- * A container: it injects the cadence query and the create mutation, and forwards plain view models to the
- * presentational {@link FleetCadenceList} and {@link FleetCadenceForm}.
+ * A container: it injects the cadence query and the cadence service, owns the create draft and its form, and forwards
+ * plain view models and the field tree to the presentational {@link FleetCadenceList} and {@link FleetCadenceForm}.
  */
 @Component({
   selector: 'app-gardening-cadences-page',
@@ -51,7 +52,7 @@ export class GardeningCadencesPage {
 
   private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly createMutation = injectCreateCadenceMutation();
+  private readonly cadenceService = injectCadenceService();
   private readonly project = injectLensedProject();
 
   protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
@@ -77,10 +78,8 @@ export class GardeningCadencesPage {
 
   /** Whether the create form is open. */
   protected readonly creating = signal(false);
-  protected readonly emptyDraft = EMPTY_CADENCE_DRAFT;
-  protected readonly createPending = computed(() => this.createMutation.isPending());
-  /** Set on a refused create; cleared at the next attempt. */
-  protected readonly createError = signal<string | null>(null);
+  private readonly createDraft = signal<CadenceDraft>(EMPTY_CADENCE_DRAFT);
+  protected readonly createForm = form(this.createDraft, cadenceCreateRules);
 
   protected selectCadence(slug: string): void {
     void this.router.navigate(this.lens.link(['/gardening', 'cadences', slug]), { queryParamsHandling: 'preserve' });
@@ -91,7 +90,7 @@ export class GardeningCadencesPage {
   }
 
   protected openCreate(): void {
-    this.createError.set(null);
+    this.createForm().reset({ ...EMPTY_CADENCE_DRAFT });
     this.creating.set(true);
   }
 
@@ -99,15 +98,13 @@ export class GardeningCadencesPage {
     this.creating.set(false);
   }
 
-  protected onCreate(draft: CadenceDraft): void {
-    this.createError.set(null);
-    this.createMutation.mutate(toCreateRequest(draft), {
-      onSuccess: (cadence) => {
-        this.creating.set(false);
-        this.selectCadence(cadence.slug);
-      },
-      onError: (error: unknown) => this.createError.set(errorMessage(error, 'Create failed.')),
-    });
+  /** Saves the create draft; once it settles, closes the form and opens the created cadence. */
+  protected async onCreate(): Promise<void> {
+    const slug = this.createDraft().slug.trim();
+    if (await submitForm(this.createForm, (draft) => this.cadenceService.create(draft))) {
+      this.creating.set(false);
+      this.selectCadence(slug);
+    }
   }
 
   constructor() {
