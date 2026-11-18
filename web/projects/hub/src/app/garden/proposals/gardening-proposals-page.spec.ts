@@ -232,7 +232,7 @@ describe('GardeningProposalsPage', () => {
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/proposals/gp_3?show=all&class=fix-the-source');
-    expect(el.querySelector('[data-testid="gardening-proposal-filter-all"]')?.getAttribute('aria-pressed')).toBe(
+    expect(el.querySelector('[data-testid="gardening-proposal-filter-all"]')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe(
       'true',
     );
     await openFilter(fixture, el, 'gardening-proposal-class-filter');

@@ -1,12 +1,13 @@
-<div class="row">
+<div class="row" fleetKitChipGroup orientation="horizontal" [selectionMode]="selectedValue() === null ? 'explicit' : 'follow'" [attr.aria-label]="ariaLabel()" [disabled]="disabled()" [value]="selectedValue()" [hasSelection]="selectedValue() !== null" (valueChange)="selectionChanged($event)">
   @for (option of options(); track option.value) {
     <fleet-kit-chip
-      [selected]="option.value === selectedValue()"
-      [action]="action()"
+      fleetKitChipOption
+      [value]="option.value"
+      [label]="option.label"
       [disabled]="disabled() || !!option.disabled"
       [title]="option.title ?? null"
       [testid]="option.testid ?? null"
-      (click)="pick(option)"
+      (click)="pointerPick(option)"
     >
       {{ option.label }}
     </fleet-kit-chip>

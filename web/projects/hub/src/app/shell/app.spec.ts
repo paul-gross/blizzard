@@ -431,8 +431,8 @@ describe('hub App', () => {
       const el = fixture.nativeElement as HTMLElement;
       const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
 
-      expect(chip('all')?.getAttribute('aria-pressed')).toBe('false');
-      expect(chip('blizzard')?.getAttribute('aria-pressed')).toBe('true');
+      expect(chip('all')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('false');
+      expect(chip('blizzard')?.closest('[role=option]')?.getAttribute('aria-selected')).toBe('true');
       expect(authStub.forRoute('/api/projects', 'GET')).toHaveLength(1);
 
       chip('zeta')!.click();

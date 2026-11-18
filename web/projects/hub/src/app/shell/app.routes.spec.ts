@@ -584,7 +584,7 @@ describe('the views under the project lens', () => {
     expect(
       desktop.el
         .querySelector('[data-testid="project-lens-blizzard"]')
-        ?.getAttribute('aria-pressed'),
+        ?.closest('[role=option]')?.getAttribute('aria-selected'),
     ).toBe('true');
   });
 

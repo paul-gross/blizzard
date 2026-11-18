@@ -11,14 +11,14 @@ const OPTIONS: KitChipOption[] = [
 @Component({
   selector: 'fleet-test-host',
   imports: [KitChips],
-  template: `<fleet-kit-chips [options]="options" [selectedValue]="selected()" [action]="action()" [disabled]="disabled()" (choose)="chosen = $event" />`,
+  template: `<fleet-kit-chips [options]="options" [selectedValue]="selected()" [disabled]="disabled()" (choose)="chosen = $event; choices.push($event)" />`,
 })
 class TestHost {
   options = OPTIONS;
   readonly selected = signal<string | null>(null);
-  readonly action = signal(false);
   readonly disabled = signal(false);
   chosen: string | null = null;
+  choices: string[] = [];
 }
 
 describe('KitChips', () => {
@@ -47,13 +47,14 @@ describe('KitChips', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const chips = el.querySelectorAll('.chip');
+    const options = el.querySelectorAll('[role=option]');
     expect(chips[0].classList.contains('selected')).toBe(true);
     expect(chips[1].classList.contains('selected')).toBe(false);
     // Selection is conveyed to assistive tech, not just visually.
-    expect(chips[0].getAttribute('aria-pressed')).toBe('true');
-    expect(chips[1].getAttribute('aria-pressed')).toBe('false');
+    expect(options[0].getAttribute('aria-selected')).toBe('true');
+    expect(options[1].getAttribute('aria-selected')).toBe('false');
 
-    (chips[0] as HTMLButtonElement).click();
+    (options[0] as HTMLElement).click();
     expect(fixture.componentInstance.chosen).toBe('a');
   });
 
@@ -75,25 +76,27 @@ describe('KitChips', () => {
     expect(el.querySelector('[data-testid="chip-b"]')?.textContent?.trim()).toBe('Option B');
   });
 
-  it('renders one-shot actions without pressed state and blocks disabled choices', async () => {
+  it('preserves no selection and emits every pointer pick even without a controlled update', async () => {
     const fixture = TestBed.createComponent(TestHost);
-    fixture.componentInstance.action.set(true);
+    await fixture.whenStable();
+    const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');
+    expect(options[0].getAttribute('aria-selected')).toBe('false');
+    options[0].click();
+    await fixture.whenStable();
+    options[0].click();
+    expect(fixture.componentInstance.choices).toEqual(['a', 'a']);
+  });
+
+  it('emits keyboard changes even when returning to the controlled value', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
     fixture.componentInstance.selected.set('a');
     await fixture.whenStable();
-    const chips = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.chip');
-    expect(chips[0].hasAttribute('aria-pressed')).toBe(false);
-    expect(chips[0].classList.contains('selected')).toBe(false);
-    expect(chips[1].disabled).toBe(true);
-    chips[1].click();
-    expect(fixture.componentInstance.chosen).toBeNull();
-    chips[0].click();
-    expect(fixture.componentInstance.chosen).toBe('a');
-
-    fixture.componentInstance.chosen = null;
-    fixture.componentInstance.disabled.set(true);
-    await fixture.whenStable();
-    chips[0].click();
-    expect(chips[0].disabled).toBe(true);
-    expect(fixture.componentInstance.chosen).toBeNull();
+    const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');
+    options[0].focus();
+    options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(fixture.componentInstance.choices).toEqual(['b', 'a']);
   });
+
 });

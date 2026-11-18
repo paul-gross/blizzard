@@ -11,8 +11,11 @@ test('tracks shows real chunk graph progress while switching layouts', async ({ 
       prompt: "verdict('pass', 'built')\n", choices: { pass: { description: 'Built', to: 'review' } },
     }, retries: { max: 1, exhausted: 'escalate' } },
     review: { executor: 'runner', prompt: 'pass\n', judgement: {
-      prompt: "verdict('pass', 'reviewed')\n", choices: { pass: { description: 'Reviewed', to: 'done' } },
+      prompt: "verdict('pass', 'reviewed')\n", choices: { pass: { description: 'Reviewed', to: 'gate' } },
     }, retries: { max: 1, exhausted: 'escalate' } },
+    gate: { executor: 'runner', judgement: { by: 'human', choices: {
+      approve: { description: 'Approve', to: 'done' }, reject: { description: 'Retry', to: 'build' },
+    } } },
   } };
   expect((await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify(graph) } })).status).toBe(201);
   const id = (await issue('Tracks progress real flow', { repository: repo })).chunk.chunk_id;
@@ -40,6 +43,17 @@ test('tracks shows real chunk graph progress while switching layouts', async ({ 
   await page.getByTestId('board-layout-tracks').click();
   await expect(page).toHaveURL(/layout=tracks/);
   await expect(page.getByTestId('tracks')).toBeVisible();
+  // Generated choices have the same selection-follows-focus model as projected chips.
+  const spans = page.getByRole('listbox', { name: 'Track span' });
+  const selected = spans.getByRole('option', { selected: true });
+  await expect(selected).toHaveCount(1);
+  await selected.focus();
+  await page.keyboard.press('ArrowRight');
+  const focused = spans.locator('[role="option"]:focus');
+  await expect(focused).toHaveCount(1);
+  await expect(focused).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Tab');
+  await expect(spans.locator(':focus')).toHaveCount(0);
   const strip = page.getByTestId('tracks-present').getByTestId('node-strip');
   await expect(strip).toBeVisible();
   await expect(strip.locator('.block')).toHaveCount(chunk.graph_progress.length);
@@ -47,5 +61,62 @@ test('tracks shows real chunk graph progress while switching layouts', async ({ 
     await expect(strip.locator('.block').nth(index)).toHaveAttribute('title', `${node.name} · ${node.state}`);
   }
   await page.getByTestId('board-layout-board').click();
-  await expect(page.locator(`[data-testid="chunk-card"][data-chunk="${id}"]`)).toBeVisible();
+  const card = page.locator(`[data-testid="chunk-card"][data-chunk="${id}"]`);
+  await expect(card).toBeVisible();
+  await card.click();
+  const toolbar = page.getByRole('toolbar', { name: 'Answers for Choose a direction' });
+  const one = toolbar.getByRole('button', { name: 'one', exact: true });
+  const two = toolbar.getByRole('button', { name: 'two', exact: true });
+  await expect(toolbar.getByRole('option')).toHaveCount(0);
+  await one.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(two).toBeFocused();
+  await expect(two).not.toHaveAttribute('aria-selected');
+  let answerRequests = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/api\/questions\/[^/]+\/answers$/.test(new URL(request.url()).pathname)) answerRequests++;
+  });
+  const response = page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/questions\/[^/]+\/answers$/.test(new URL(r.url()).pathname));
+  await page.keyboard.press('Space');
+  expect((await response).ok()).toBe(true);
+  await expect(page.getByTestId('open-question')).toHaveCount(0);
+  await expect.poll(async () => (await api.get('/api/questions')).body.length).toBe(0);
+  expect(answerRequests).toBe(1);
+
+  // The resumed worker reaches a real human gate. Hold the resolution in flight to exercise the pending guard.
+  expect(await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body.status,
+    (s) => ['waiting_on_human', 'done', 'needs_human', 'stopped'].includes(s))).toBe('waiting_on_human');
+  const decision = page.getByRole('toolbar', { name: 'Choices for gate gate' });
+  const approve = decision.getByRole('button', { name: 'approve', exact: true });
+  const reject = decision.getByRole('button', { name: 'reject', exact: true });
+  await expect(approve).toBeVisible();
+  await expect(decision.getByRole('option')).toHaveCount(0);
+  await approve.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(reject).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(approve).toBeFocused();
+  let resolutions = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/decisions/*/resolutions', async (route) => {
+    resolutions++;
+    await held;
+    await route.continue();
+  });
+  const resolved = page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/decisions\/[^/]+\/resolutions$/.test(new URL(r.url()).pathname));
+  try {
+    await page.keyboard.press('Enter');
+    await expect(approve).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await approve.click({ force: true });
+    expect(resolutions).toBe(1);
+  } finally {
+    release();
+  }
+  expect((await resolved).ok()).toBe(true);
+  await expect.poll(async () => (await api.get('/api/decisions')).body.decisions.length).toBe(0);
+  expect((await api.get(`/api/chunks/${id}`)).body.decision.resolved_choice).toBe('approve');
+  expect(resolutions).toBe(1);
 });

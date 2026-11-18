@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitChip, KitSwatch } from 'fleet/shell';
+import { KitChip, KitChipGroup, KitChipOptionDirective, KitSwatch } from 'fleet/shell';
 import { KitGlyph } from 'fleet/runner-shell';
 
 import type { FilterChoice } from './panel-filters.model';
@@ -15,7 +15,7 @@ import type { FilterChoice } from './panel-filters.model';
 @Component({
   selector: 'app-filter-chips',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip, KitGlyph, KitSwatch],
+  imports: [KitChip, KitChipGroup, KitChipOptionDirective, KitGlyph, KitSwatch],
   templateUrl: './filter-chips.html',
   styleUrl: './filter-chips.css',
   host: { '[class.compact]': 'compact()' },
@@ -38,7 +38,12 @@ export class FilterChips {
   /** The value chosen, `null` for All. */
   readonly choose = output<string | null>();
 
-  protected onChoose(choice: FilterChoice): void {
-    if (!choice.disabled && choice.value !== this.current()) this.choose.emit(choice.value);
+  protected hasCurrent(): boolean {
+    return this.choices().some((choice) => choice.value === this.current());
+  }
+
+  protected onChoose(value: unknown): void {
+    const choice = this.choices().find((item) => item.value === value);
+    if (choice && !choice.disabled && choice.value !== this.current()) this.choose.emit(choice.value);
   }
 }

@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { Option } from '@angular/aria/listbox';
+import { NgTemplateOutlet } from '@angular/common';
+import { KitChipGroup } from './kit-chip-group';
+import { KitChipOptionDirective } from './kit-chip-option';
+import { KitToolbarWidget } from './kit-toolbar';
 
 /** One selectable option in a {@link KitChips} row. */
 export interface KitChipOption {
@@ -24,13 +29,14 @@ export interface KitChipOption {
 @Component({
   selector: 'fleet-kit-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
   templateUrl: './kit-chip.html',
   styleUrl: './kit-chip.css',
 })
 export class KitChip {
+  protected readonly option = inject(Option, { optional: true, self: true });
+  protected readonly toolbarWidget = inject(KitToolbarWidget, { optional: true, self: true });
   readonly selected = input(false);
-  /** One-shot action chrome omits toggle semantics. */
-  readonly action = input(false);
   readonly disabled = input(false);
   readonly title = input<string | null>(null);
   readonly testid = input<string | null>(null);
@@ -50,15 +56,28 @@ export class KitChip {
 @Component({
   selector: 'fleet-kit-chips',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitChip],
+  imports: [KitChip, KitChipGroup, KitChipOptionDirective],
   templateUrl: './kit-chips.html',
   styleUrl: './kit-chips.css',
 })
 export class KitChips {
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
-  readonly action = input(false);
   readonly disabled = input(false);
+
+  readonly ariaLabel = input('Choices');
+
+  private pointerPicking = false;
+
+  protected pointerPick(option: KitChipOption): void {
+    this.pointerPicking = true;
+    this.pick(option);
+    queueMicrotask(() => (this.pointerPicking = false));
+  }
+
+  protected selectionChanged(value: unknown): void {
+    if (!this.pointerPicking && !this.disabled() && typeof value === 'string') this.choose.emit(value);
+  }
 
   /** Emits the clicked option's `value`. */
   readonly choose = output<string>();

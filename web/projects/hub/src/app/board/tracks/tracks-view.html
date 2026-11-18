@@ -1,6 +1,6 @@
 <div class="tk" data-testid="tracks">
   <div class="tk-bar">
-    <fleet-kit-chips [options]="spanChips" [selectedValue]="span()" (choose)="chooseSpan.emit($event)" />
+    <fleet-kit-chips ariaLabel="Track span" [options]="spanChips" [selectedValue]="span()" (choose)="chooseSpan.emit($event)" />
     @if (live()) {
       <span class="tk-follow"><i class="tk-live-mark"></i>following now</span>
     } @else {

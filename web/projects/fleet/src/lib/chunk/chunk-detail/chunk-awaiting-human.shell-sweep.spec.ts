@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, decisionView, questionView } from 'fleet/testing';
@@ -59,6 +59,57 @@ async function mount(imposedBy: string | null, resolution: Partial<NonNullable<C
 }
 
 describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
+  it('navigates and invokes question and decision toolbars once at phone width', async () => {
+    await page.viewport(390, 800);
+    await TestBed.configureTestingModule({
+      imports: [ChunkAwaitingHuman], providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...detail(null),
+      questions: [questionView({ question_id: 'q1', question: 'Choose an answer', answered: false, options: ['yes', 'no'] })],
+    });
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('canResolve', true);
+    const answers: string[] = [];
+    const decisions: string[] = [];
+    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event.answer));
+    fixture.componentInstance.resolveDecision.subscribe((event) => decisions.push(event.choice));
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      const toolbars = root.querySelectorAll<HTMLElement>('[role="toolbar"]');
+      expect(toolbars.length).toBe(2);
+      for (const toolbar of toolbars) {
+        expect(toolbar.querySelector('[aria-selected]')).toBeNull();
+        expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+      }
+      const question = root.querySelectorAll<HTMLElement>('[data-testid="question-option"]');
+      question[0].focus();
+      await userEvent.keyboard('{ArrowRight}');
+      expect(document.activeElement).toBe(question[1]);
+      expect(answers).toEqual([]);
+      await userEvent.keyboard('{Enter}');
+      expect(answers).toEqual(['no']);
+      const choices = root.querySelectorAll<HTMLElement>('[data-testid="decision-choice"]');
+      choices[0].focus();
+      await userEvent.keyboard('{ArrowRight}');
+      expect(document.activeElement).toBe(choices[1]);
+      expect(decisions).toEqual([]);
+      await userEvent.keyboard(' ');
+      expect(decisions).toEqual(['reject']);
+      fixture.componentRef.setInput('resolvePending', true);
+      fixture.componentRef.setInput('pendingAnswerQuestionIds', ['q1']);
+      await fixture.whenStable();
+      question[0].click();
+      choices[0].click();
+      expect(answers).toEqual(['no']);
+      expect(decisions).toEqual(['reject']);
+    } finally {
+      root.remove();
+    }
+  });
   it.each([320, 390])('preserves question and answer lines and indentation without overflow at %ipx', async (width) => {
     await page.viewport(width, 800);
     await TestBed.configureTestingModule({

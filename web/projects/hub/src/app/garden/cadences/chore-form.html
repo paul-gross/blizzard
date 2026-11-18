@@ -39,7 +39,7 @@
   <div class="chf-row">
     <div class="chf-field">
       <span class="chf-label">Mode</span>
-      <fleet-kit-chips [options]="modeOptions()" [selectedValue]="d.mode" (choose)="set('mode', $event)" />
+      <fleet-kit-chips ariaLabel="Chore mode" [options]="modeOptions()" [selectedValue]="d.mode" (choose)="set('mode', $event)" />
     </div>
     <div class="chf-field">
       <span class="chf-label">Promote</span>
