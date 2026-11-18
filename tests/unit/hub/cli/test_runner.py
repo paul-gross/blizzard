@@ -61,8 +61,17 @@ def test_add_posts_the_name_and_prints_the_id_and_the_token_once() -> None:
     assert calls[0]["url"] == f"{HUB_URL}/api/runners"
     assert calls[0]["json"] == {"name": "r-claude"}
     assert f"added runner {_ADDED['runner_id']} (r-claude) — never connected" in result.output
-    assert "BZ_HUB_TOKEN_R_CLAUDE=sekrit-token" in result.output.splitlines()
+    assert "sekrit-token" in result.output.splitlines()
     assert result.output.count("sekrit-token") == 1
+
+
+def test_add_names_the_token_set_verb_and_the_dotenv_variable_for_an_older_host() -> None:
+    bound, _ = _stub("post", _respond(201, _ADDED))
+
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude"], env=ENV)
+
+    assert "`blizzard runner token set --runner r-claude`" in result.output
+    assert ".env instead, as BZ_HUB_TOKEN_R_CLAUDE" in result.output
 
 
 @pytest.mark.parametrize(
@@ -74,7 +83,7 @@ def test_add_prints_the_variable_its_runners_name_derives(name: str, variable: s
 
     result = bound.runner.invoke(hub_group, ["runner", "add", name], env=ENV)
 
-    assert f"{variable}=sekrit-token" in result.output.splitlines()
+    assert f"as {variable})" in result.output
 
 
 def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds() -> None:
@@ -92,8 +101,9 @@ def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds() -> No
     assert result.exit_code == 0, result.output
     assert posted[0]["url"] == f"{HUB_URL}/api/runners/{runner_id}/enrollments"
     assert read[0]["url"] == f"{HUB_URL}/api/runners/{runner_id}"
-    assert "BZ_HUB_TOKEN_R_CHATGPT=rotated" in result.output.splitlines()
-    assert "BZ_HUB_TOKEN=rotated" not in result.output.splitlines()
+    assert "`blizzard runner token set --runner r-chatgpt`" in result.output
+    assert "rotated" in result.output.splitlines()
+    assert "as BZ_HUB_TOKEN_R_CHATGPT)" in result.output
 
 
 def test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read() -> None:

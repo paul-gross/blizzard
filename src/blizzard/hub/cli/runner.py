@@ -98,13 +98,16 @@ def _scenario_lines(scenario: dict[str, Any]) -> Iterator[str]:
         yield f"  ... and {remainder} more passed"
 
 
-def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
-    """A freshly minted bearer token, printed once as the line a host directory's ``.env`` takes: the variable is
-    derived from the runner's name."""
+def _token_lines(runner_name: str, token: str) -> tuple[str, str, str]:
+    """A freshly minted bearer token, printed once on a line of its own for ``blizzard runner token set`` to read on
+    stdin, which seals it in the host store; a host from before that store reads it from its ``.env`` instead, under
+    the variable the runner's name derives."""
     return (
-        "bearer token, shown only once — put this line in the host directory's .env "
-        "(the variable follows the host file's [[runner]] name):",
-        f"{hub_token_variable(runner_name)}={token}",
+        "bearer token, shown only once — on the runner's host, pipe it on stdin to "
+        f"`blizzard runner token set --runner {runner_name}`:",
+        token,
+        "(a host from before the sealed token store reads it from its directory's .env instead, as "
+        f"{hub_token_variable(runner_name)})",
     )
 
 
