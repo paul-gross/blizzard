@@ -4,13 +4,19 @@
   emptyText="No findings in this bucket."
   emptyTestid="gardening-findings-empty"
 >
-  <ul class="fl-list" data-testid="gardening-findings-list">
+  <div
+    class="fl-list"
+    data-testid="gardening-findings-list"
+    fleetKitSelectList
+    ariaLabel="Findings"
+    [value]="selectedId()"
+    (valueChange)="findingPick.emit($event)"
+  >
     @for (row of rows(); track row.findingId) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.findingId === selectedId()"
+          [value]="row.findingId"
+          [label]="row.summary"
           [testid]="'gardening-finding-row-' + row.findingId"
-          (picked)="findingPick.emit(row.findingId)"
         >
           <div class="fl-body" [class.fl-body--gone]="isGone(row)" [style.--fl-gone-tone]="isGone(row) ? stateColor(row) : null" [class.fl-body--exited]="isExited(row)">
             <p class="fl-summary">{{ row.summary }}</p>
@@ -72,7 +78,6 @@
             </p>
           </div>
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

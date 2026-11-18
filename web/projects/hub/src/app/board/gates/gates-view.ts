@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 
-import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import {
+  type DecisionView,
+  compactRef,
+  runnerDisplayName,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitPanel,
+  KitSelectList,
+  KitSelectRow,
+} from 'fleet';
 
 /**
  * The open-gates rail's presentational half — one row per open decision,
@@ -14,7 +28,7 @@ import { type DecisionView, compactRef, runnerDisplayName, KitAsyncState, type K
 @Component({
   selector: 'app-gates-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitSelectRow],
+  imports: [KitAsyncState, KitPanel, KitSelectList, KitSelectRow],
   templateUrl: './gates-view.html',
   styleUrl: './gates-view.css',
 })

@@ -1,8 +1,24 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone, toneColor } from 'fleet';
-import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
+import {
+  compactRef,
+  type hubApi,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitSelectList,
+  KitSelectRow,
+  FleetWhen,
+  type Tone,
+  toneColor,
+} from 'fleet';
+import {
+  findingSeverityTone,
+  findingStateTone,
+  isFindingExited,
+  isFindingGoneFlagged,
+} from './finding-state';
 import { AppLink } from 'fleet/shell';
 
 /** One row of the findings triage bucket list, pared to what a 320px
@@ -57,7 +73,15 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
 @Component({
   selector: 'app-finding-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen, RouterLink, AppLink],
+  imports: [
+    KitAsyncState,
+    KitBadge,
+    KitSelectList,
+    KitSelectRow,
+    FleetWhen,
+    RouterLink,
+    AppLink,
+  ],
   templateUrl: './finding-list.html',
   styleUrl: './finding-list.css',
 })

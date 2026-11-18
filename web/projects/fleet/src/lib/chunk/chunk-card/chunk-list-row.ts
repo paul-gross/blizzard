@@ -2,7 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import { shortCommitHash } from '../../core/commit-hash';
 import { FleetWhen } from '../../core/when-display';
-import { KitBadge, KitSelectRow, KitSkeleton, projectTint, toneColor } from '../../kit';
+import {
+  KitBadge,
+  KitCardOpen,
+  KitSkeleton,
+  projectTint,
+  toneColor,
+} from '../../kit';
 import { type ChunkCardView, foldTitles } from './chunk-card.model';
 
 /**
@@ -21,7 +27,7 @@ import { type ChunkCardView, foldTitles } from './chunk-card.model';
 @Component({
   selector: 'fleet-chunk-list-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitSelectRow, KitSkeleton],
+  imports: [FleetWhen, KitBadge, KitCardOpen, KitSkeleton],
   templateUrl: './chunk-list-row.html',
   styleUrl: './chunk-list-row.css',
 })

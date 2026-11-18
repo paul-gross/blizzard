@@ -54,7 +54,10 @@ describe('GatesPanel', () => {
     let selected: string | undefined;
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
 
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="rail-gate"]')?.click();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('[data-testid="rail-gate"]')
+      ?.click();
+    await fixture.whenStable();
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 

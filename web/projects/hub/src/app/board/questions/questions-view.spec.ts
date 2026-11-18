@@ -47,14 +47,18 @@ describe('QuestionsPanelView', () => {
     expect(first.querySelector('[data-testid="rail-question-options"]')?.textContent).toContain('rest · graphql');
   });
 
-  it("names each row's button after its chunk and the question it answers", async () => {
+  it('names each row after its chunk and the question it answers', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('questions', QUESTIONS);
     await fixture.whenStable();
-    const button = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="rail-question"] button');
+    const row = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="rail-question"]',
+    );
 
-    expect(button?.getAttribute('aria-label')).toBe('Open chunk C-3YJ9 to answer its question');
+    expect(row?.getAttribute('aria-label')).toBe(
+      'Open chunk C-3YJ9 to answer its question',
+    );
   });
 
   it("names each ask's runner by its name, its host apart where known, and a runner with no name by its compact id", async () => {
@@ -90,6 +94,30 @@ describe('QuestionsPanelView', () => {
     expect(second.querySelector('[data-testid="rail-question-options"]')).toBeNull();
   });
 
+  it('opens the focused ask on Enter, in a rail with no selected row', async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('questions', QUESTIONS);
+    let selected: string | undefined;
+    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const row = el.querySelector<HTMLElement>('[data-testid="rail-question"]')!;
+
+    expect(
+      el.querySelector('[role="listbox"]')?.getAttribute('aria-label'),
+    ).toBe('Open questions');
+    expect(
+      el.querySelector('[role="option"][aria-selected="true"]'),
+    ).toBeNull();
+    row.focus();
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+  });
+
   it('emits selectChunk when an ask is activated', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'ready');
@@ -99,7 +127,8 @@ describe('QuestionsPanelView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="rail-question"]')?.click();
+    el.querySelector<HTMLElement>('[data-testid="rail-question"]')?.click();
+    await fixture.whenStable();
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 

@@ -39,11 +39,6 @@
   text-transform: uppercase;
   margin-bottom: 4px;
 }
-.seg-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .seg-line {
   display: flex;
   justify-content: space-between;

@@ -16,15 +16,46 @@
       emptyText="NO HOSTS OR RUNNERS REGISTERED"
       emptyTestid="fleet-empty"
     >
+      <div
+        fleetKitSelectList
+        class="rows"
+        ariaLabel="Fleet"
+        [value]="selectedId()"
+        (valueChange)="pick.emit($event)"
+      >
       @for (card of list().hosts; track card.id) {
         <ng-container *ngTemplateOutlet="listCard; context: { $implicit: card }" />
       }
       @if (list().hostless.length > 0) {
-        <h3 class="hostless" data-testid="fleet-hostless-heading">No host</h3>
+        <div role="group" aria-labelledby="fleet-hostless-heading">
+        <h3 class="hostless" id="fleet-hostless-heading" data-testid="fleet-hostless-heading">No host</h3>
         @for (card of list().hostless; track card.id) {
           <ng-container *ngTemplateOutlet="listCard; context: { $implicit: card }" />
         }
+        </div>
       }
+        <ng-template #listCard let-card>
+          <fleet-kit-select-row
+            bare
+            [value]="card.id"
+            [label]="card.name"
+            class="card"
+            [class.dim]="!card.online"
+            [testid]="'fleet-card-' + card.id"
+          >
+            <span class="line1">
+              <app-status-light class="dot" [light]="card.light" />
+              <span class="name" data-testid="fleet-card-name">{{ card.name }}</span>
+              <span class="agents" data-testid="fleet-card-agents">
+                @if (card.agents !== null) {
+                  <b>{{ card.agents }}</b> {{ card.agents === 1 ? 'agent' : 'agents' }}
+                }
+              </span>
+            </span>
+            <span class="ref" data-testid="fleet-card-ref">{{ card.ref }}</span>
+          </fleet-kit-select-row>
+        </ng-template>
+      </div>
     </fleet-kit-async-state>
   </fleet-kit-panel>
   <fleet-kit-panel
@@ -64,25 +95,3 @@
     }
   </fleet-kit-panel>
 </fleet-kit-master-detail>
-<ng-template #listCard let-card>
-  <fleet-kit-select-row
-    bare
-    class="card"
-    [class.selected]="card.id === selectedId()"
-    [class.dim]="!card.online"
-    [selected]="card.id === selectedId()"
-    [testid]="'fleet-card-' + card.id"
-    (picked)="pick.emit(card.id)"
-  >
-    <span class="line1">
-      <app-status-light class="dot" [light]="card.light" />
-      <span class="name" data-testid="fleet-card-name">{{ card.name }}</span>
-      <span class="agents" data-testid="fleet-card-agents">
-        @if (card.agents !== null) {
-          <b>{{ card.agents }}</b> {{ card.agents === 1 ? 'agent' : 'agents' }}
-        }
-      </span>
-    </span>
-    <span class="ref" data-testid="fleet-card-ref">{{ card.ref }}</span>
-  </fleet-kit-select-row>
-</ng-template>

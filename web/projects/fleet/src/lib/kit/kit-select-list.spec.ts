@@ -70,6 +70,15 @@ describe('KitSelectList', () => {
     expect(host.opened).toEqual(['alpha', 'alpha', 'bravo']);
   });
 
+  it('re-opens the same row repeatedly when the consumer keeps no value', async () => {
+    const { fixture, row, host } = await setup();
+    row('alpha').click();
+    await fixture.whenStable();
+    row('alpha').click();
+    await fixture.whenStable();
+    expect(host.opened).toEqual(['alpha', 'alpha']);
+  });
+
   it('moves the highlight with the arrow keys without opening', async () => {
     const { fixture, row, host } = await setup();
     host.value.set('alpha');

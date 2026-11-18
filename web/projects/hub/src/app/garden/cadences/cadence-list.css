@@ -4,11 +4,6 @@
   font-size: var(--fs-base);
   color: var(--text);
 }
-.cd-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .cd-top {
   display: flex;
   align-items: baseline;

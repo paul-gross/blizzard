@@ -280,14 +280,14 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
         await fixture.whenStable();
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const popup = document.body.querySelector<HTMLElement>('[role="listbox"]')!;
+        const popup = document.body.querySelector<HTMLElement>('[role="listbox"]:not([aria-label="Findings"])')!;
         expect(popup).not.toBeNull();
         const box = popup.getBoundingClientRect();
         expect(box.left, `${width}px: the popup runs off the left edge`).toBeGreaterThanOrEqual(0);
         expect(box.right, `${width}px: the popup runs off the right edge`).toBeLessThanOrEqual(width);
         expect(popup.scrollHeight, `${width}px: the popup does not scroll vertically`).toBeGreaterThan(popup.clientHeight);
       } finally {
-        document.body.querySelector<HTMLElement>('[role="listbox"]')?.remove();
+        document.body.querySelector<HTMLElement>('[role="listbox"]:not([aria-label="Findings"])')?.remove();
         root.remove();
         stub.restore();
         await page.viewport(1280, 800);

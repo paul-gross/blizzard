@@ -44,7 +44,7 @@ describe('GraphExplorerList', () => {
 
     expect(el.querySelector('[data-testid="graph-explorer-lineage"]')).toBeNull();
 
-    const buildToggle = el.querySelector<HTMLButtonElement>(
+    const buildToggle = el.querySelector<HTMLElement>(
       '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
     );
     buildToggle?.click();
@@ -52,11 +52,15 @@ describe('GraphExplorerList', () => {
 
     const rows = el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]');
     expect(rows).toHaveLength(2);
-    // The row's own testid lands on the selectable `fleet-kit-select-row` button
+    // The row's own testid lands on the `fleet-kit-select-row` option
     // (`kit-select-row.ts`'s own contract); `data-graph-id` rides its wrapping
-    // `<li>` one level up, `run-list.ts`'s `data-name` shape on the group `<li>`.
-    expect(rows[0].closest('[data-graph-id]')?.getAttribute('data-graph-id')).toBe('gr_build_v2');
-    expect(rows[1].closest('[data-graph-id]')?.getAttribute('data-graph-id')).toBe('gr_build_v1');
+    // element one level up, `run-list.ts`'s `data-name` shape on the group wrapper.
+    expect(
+      rows[0].closest('[data-graph-id]')?.getAttribute('data-graph-id'),
+    ).toBe('gr_build_v2');
+    expect(
+      rows[1].closest('[data-graph-id]')?.getAttribute('data-graph-id'),
+    ).toBe('gr_build_v1');
 
     // Compact ref, not the long id.
     expect(rows[0].querySelector('[data-testid="graph-explorer-graph-id"]')?.textContent?.trim()).toBe('G-d_v2');
@@ -78,16 +82,19 @@ describe('GraphExplorerList', () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     const emitted: string[] = [];
     fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
 
-    // The clickable element is the row's `fleet-kit-select-row` button, nested
-    // inside the `<li data-graph-id>` wrapper — clicking the wrapper itself would
-    // not reach it (it is a descendant, not the wrapper's own listener target).
-    el.querySelector<HTMLButtonElement>('[data-graph-id="gr_build_v1"] [data-testid="graph-explorer-row"]')?.click();
+    // The clickable element is the row's `fleet-kit-select-row` option, nested
+    // inside the `data-graph-id` wrapper.
+    el.querySelector<HTMLElement>(
+      '[data-graph-id="gr_build_v1"] [data-testid="graph-explorer-row"]',
+    )?.click();
     await fixture.whenStable();
 
     expect(emitted).toEqual(['gr_build_v1']);
@@ -100,7 +107,9 @@ describe('GraphExplorerList', () => {
     const emitted: string[] = [];
     fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     // The effective version — the id the header already displayed — not the newest row.
@@ -118,7 +127,9 @@ describe('GraphExplorerList', () => {
     const emitted: string[] = [];
     fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     expect(emitted).toEqual(['gr_build_v2']);
@@ -131,7 +142,7 @@ describe('GraphExplorerList', () => {
     const emitted: string[] = [];
     fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
 
-    const toggle = el.querySelector<HTMLButtonElement>(
+    const toggle = el.querySelector<HTMLElement>(
       '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
     );
     toggle?.click();
@@ -153,7 +164,7 @@ describe('GraphExplorerList', () => {
   it('reveals a deep-linked version even in a group the operator had collapsed', async () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
-    const toggle = el.querySelector<HTMLButtonElement>(
+    const toggle = el.querySelector<HTMLElement>(
       '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
     );
 
@@ -181,11 +192,15 @@ describe('GraphExplorerList', () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
     fixture.componentRef.setInput('selectedGraphId', 'gr_build_v2');
     await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     // A selection landing elsewhere is no statement about this group — it stays shut.
@@ -215,9 +230,13 @@ describe('GraphExplorerList', () => {
 
     // Retired versions are filtered out by default, so the badge is only reachable
     // with the filter on.
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-explorer-show-retired"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="graph-explorer-show-retired"]',
+    )?.click();
     await fixture.whenStable();
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     const rows = el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]');
@@ -235,15 +254,27 @@ describe('GraphExplorerList', () => {
     const fixture = await mount(graphs);
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
-    expect(el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-group-count"]')?.textContent?.trim()).toBe(
-      '(1)',
-    );
+    expect(
+      el.querySelectorAll(
+        '[data-name="build"] [data-testid="graph-explorer-row"]',
+      ),
+    ).toHaveLength(1);
+    expect(
+      el
+        .querySelector(
+          '[data-name="build"] [data-testid="graph-explorer-group-count"]',
+        )
+        ?.textContent?.trim(),
+    ).toBe('(1)');
 
-    el.querySelector<HTMLButtonElement>('[data-testid="graph-explorer-show-retired"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="graph-explorer-show-retired"]',
+    )?.click();
     await fixture.whenStable();
 
     expect(el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]')).toHaveLength(2);
@@ -302,30 +333,85 @@ describe('GraphExplorerList', () => {
     // One selectable row per group header, before any expansion.
     expect(el.querySelectorAll('fleet-kit-select-row')).toHaveLength(2);
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     // Expanding a group adds one `fleet-kit-select-row` per lineage row underneath it.
     expect(el.querySelectorAll('fleet-kit-select-row')).toHaveLength(4);
   });
 
-  it("selects the group header's own row when its effective version is the one open", async () => {
+  it('highlights the group header when its effective version is the one open, without selecting it', async () => {
     const fixture = await mount(GRAPHS, 'gr_build_v2');
     const el = fixture.nativeElement as HTMLElement;
 
-    const header = el.querySelector('[data-name="build"] [data-testid="graph-explorer-group-toggle"]');
-    expect(header?.classList).toContain('selected');
+    const header = el.querySelector(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    );
+    expect(header?.classList).toContain('ge-group-open');
+    // The version row is the selected option; the header only carries the highlight.
+    expect(header?.getAttribute('aria-selected')).toBe('false');
+    const open = el.querySelector(
+      '[data-graph-id="gr_build_v2"] [data-testid="graph-explorer-row"]',
+    );
+    expect(open?.getAttribute('aria-selected')).toBe('true');
 
-    // A group whose effective version is *not* the open one shows no selected chrome.
-    const otherHeader = el.querySelector('[data-name="review"] [data-testid="graph-explorer-group-toggle"]');
-    expect(otherHeader?.classList).not.toContain('selected');
+    // A group whose effective version is *not* the open one shows no highlight.
+    const otherHeader = el.querySelector(
+      '[data-name="review"] [data-testid="graph-explorer-group-toggle"]',
+    );
+    expect(otherHeader?.classList).not.toContain('ge-group-open');
+  });
+
+  it('toggles a group on Enter on its header, and opens a version on Enter on its row', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+    const key = (target: Element, name: string) =>
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: name, bubbles: true }),
+      );
+
+    const emitted: string[] = [];
+    fixture.componentInstance.selectGraph.subscribe((id: string) => {
+      emitted.push(id);
+      fixture.componentRef.setInput('selectedGraphId', id);
+    });
+
+    const header = el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )!;
+    header.focus();
+    key(header, 'Enter');
+    await fixture.whenStable();
+    expect(
+      el.querySelector(
+        '[data-name="build"] [data-testid="graph-explorer-lineage"]',
+      ),
+    ).toBeTruthy();
+    expect(emitted).toEqual(['gr_build_v2']);
+
+    // Step down through the list onto the superseded version, then open it.
+    const v1 = el.querySelector<HTMLElement>(
+      '[data-graph-id="gr_build_v1"] [data-testid="graph-explorer-row"]',
+    )!;
+    for (let step = 0; step < 4 && document.activeElement !== v1; step++) {
+      key(header, 'ArrowDown');
+      await fixture.whenStable();
+    }
+    expect(document.activeElement).toBe(v1);
+    key(v1, 'Enter');
+    await fixture.whenStable();
+    expect(emitted).toEqual(['gr_build_v2', 'gr_build_v1']);
   });
 
   it("renders a lineage row's badge on fleet-kit-badge, colored by lifecycle tone", async () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    )?.click();
     await fixture.whenStable();
 
     const badge = el.querySelector('[data-testid="graph-explorer-badge"]');

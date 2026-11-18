@@ -21,6 +21,5 @@ export class KitCardOpen {
   readonly ariaLabel = input<string | null>(null);
   /** Whether this card is the one currently open (`aria-current`). */
   readonly current = input(false, { transform: booleanAttribute });
-  readonly title = input<string | null>(null);
   readonly opened = output<void>();
 }

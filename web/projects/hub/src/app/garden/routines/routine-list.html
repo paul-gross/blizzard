@@ -5,13 +5,19 @@
   loadingTestid="gardening-routines-loading"
   emptyTestid="gardening-routines-empty"
 >
-  <ul class="rt-list" data-testid="gardening-routines-list">
+  <div
+    class="rt-list"
+    data-testid="gardening-routines-list"
+    fleetKitSelectList
+    ariaLabel="Routines"
+    [value]="selectedSlug()"
+    (valueChange)="pick($event)"
+  >
     @for (row of rows(); track row.routineId) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.slug === selectedSlug()"
+          [value]="row.slug"
+          [label]="row.name"
           [testid]="'gardening-routine-row-' + row.slug"
-          (picked)="pick(row.slug)"
         >
           <span class="rt-top">
             <span class="rt-name">{{ row.name }}</span>
@@ -31,7 +37,6 @@
             <fleet-kit-badge class="rt-flag" [tone]="lifecycleTone(true)">retired</fleet-kit-badge>
           }
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

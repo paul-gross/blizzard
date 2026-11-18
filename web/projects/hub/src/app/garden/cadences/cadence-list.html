@@ -5,13 +5,19 @@
   loadingTestid="gardening-cadences-loading"
   emptyTestid="gardening-cadences-empty"
 >
-  <ul class="cd-list" data-testid="gardening-cadences-list">
+  <div
+    class="cd-list"
+    data-testid="gardening-cadences-list"
+    fleetKitSelectList
+    ariaLabel="Cadences"
+    [value]="selectedSlug()"
+    (valueChange)="pick($event)"
+  >
     @for (row of rows(); track row.slug) {
-      <li>
         <fleet-kit-select-row
-          [selected]="row.slug === selectedSlug()"
+          [value]="row.slug"
+          [label]="row.name"
           [testid]="'gardening-cadence-row-' + row.slug"
-          (picked)="pick(row.slug)"
         >
           <div class="cd-top">
             <span class="cd-name">{{ row.name }}</span>
@@ -37,7 +43,6 @@
             }
           </div>
         </fleet-kit-select-row>
-      </li>
     }
-  </ul>
+  </div>
 </fleet-kit-async-state>

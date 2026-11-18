@@ -105,13 +105,17 @@ export class KitSelectList<V = unknown> {
   private onAriaValue(aria: readonly V[]): void {
     if (!this.userInput) return;
     const consumer = this.value();
-    const acted = this.listbox._pattern.inputs.activeItem()?.value();
-    if (aria.length === 1 && aria[0] !== consumer) {
-      this.valueChange.emit(aria[0]);
-    } else if (aria.length === 0 && consumer !== null && acted === consumer) {
-      // Aria's explicit toggle deselected the open row: re-open it and keep the value.
-      this.valueChange.emit(consumer);
-      this.listbox.value.set([consumer]);
-    }
+    const acted =
+      aria.length === 1
+        ? aria[0]
+        : this.listbox._pattern.inputs.activeItem()?.value();
+    if (acted === undefined || (aria.length === 1 && acted === consumer))
+      return;
+    // The person opened `acted` (a toggle on the row that is already open deselects it, and still
+    // opens it again). The consumer decides what is selected, so snap Aria back to its value.
+    this.valueChange.emit(acted);
+    const restore = consumer === null ? [] : [consumer];
+    if (aria.length !== restore.length || aria[0] !== restore[0])
+      this.listbox.value.set(restore);
   }
 }

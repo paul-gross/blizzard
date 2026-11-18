@@ -45,8 +45,7 @@ async function render(card: BoardCard, gated = false, canControl = false) {
 /** `n` titled work items, "Item 1" … "Item n", each under its label `hub#1` … `hub#n`. */
 const items = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `hub#${i + 1}`, title: `Item ${i + 1}` }));
 
-const titlesOf = (el: HTMLElement) =>
-  [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
+const titlesOf = (el: HTMLElement) => [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
 
 describe('ChunkCard work item titles', () => {
   const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null };
@@ -68,7 +67,9 @@ describe('ChunkCard work item titles', () => {
         { label: 'hub#2', title: 'Second' },
       ],
     });
-    const order = [...el.querySelectorAll('[data-testid="work-ref-chip"], [data-testid="chunk-title"]')].map((node) => node.textContent?.trim());
+    const order = [...el.querySelectorAll('[data-testid="work-ref-chip"], [data-testid="chunk-title"]')].map((node) =>
+      node.textContent?.trim(),
+    );
     expect(order).toEqual(['hub#1', 'First', 'hub#2', 'Second']);
   });
 
@@ -80,7 +81,10 @@ describe('ChunkCard work item titles', () => {
   });
 
   it('names a read item with no title by its label alone, with no skeleton', async () => {
-    const el = await render({ ...RUNNING, workLines: [{ label: 'hub#7', title: null }] });
+    const el = await render({
+      ...RUNNING,
+      workLines: [{ label: 'hub#7', title: null }],
+    });
     expect(el.querySelector('[data-testid="work-ref-chip"]')?.textContent?.trim()).toBe('hub#7');
     expect(titlesOf(el)).toEqual([]);
     expect(el.querySelector('[data-testid="chunk-title-skeleton"]')).toBeNull();
@@ -88,7 +92,12 @@ describe('ChunkCard work item titles', () => {
 
   it('keeps the same step row titled or not — the step, then the id', async () => {
     for (const itemsRead of [false, true]) {
-      const el = await render({ ...RUNNING, shortId: 'C-QQFM', workLines: items(1), itemsRead });
+      const el = await render({
+        ...RUNNING,
+        shortId: 'C-QQFM',
+        workLines: items(1),
+        itemsRead,
+      });
       const row = el.querySelector('[data-testid="chunk-node"]')!.parentElement!;
       expect(row.firstElementChild?.getAttribute('data-testid')).toBe('chunk-node');
       expect(row.lastElementChild?.textContent?.trim()).toBe('C-QQFM');
@@ -128,7 +137,11 @@ describe('ChunkCard work item titles', () => {
   });
 
   it('keeps the status word where it says more than the lane', async () => {
-    const el = await render({ ...RUNNING, status: 'paused', workLines: items(1) });
+    const el = await render({
+      ...RUNNING,
+      status: 'paused',
+      workLines: items(1),
+    });
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
   });
 });
@@ -195,16 +208,8 @@ describe('ChunkCard work-ref chips (issue #176)', () => {
     });
 
     const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
-    expect(Array.from(chips).map((c) => c.textContent?.trim())).toEqual([
-      'blizzard#146',
-      'blizzard#164',
-      'widget#9',
-    ]);
-    expect(Array.from(chips).map((c) => c.getAttribute('title'))).toEqual([
-      'blizzard#146',
-      'blizzard#164',
-      'widget#9',
-    ]);
+    expect(Array.from(chips).map((c) => c.textContent?.trim())).toEqual(['blizzard#146', 'blizzard#164', 'widget#9']);
+    expect(Array.from(chips).map((c) => c.getAttribute('title'))).toEqual(['blizzard#146', 'blizzard#164', 'widget#9']);
   });
 
   it('renders exactly one chip for a single pointer label', async () => {
@@ -287,9 +292,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
     });
 
     expect(el.querySelector('[data-testid="chunk-blocked-by-state"]')).toBeNull();
-    expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      'blocked by 2 chunks',
-    );
+    expect(el.querySelector('[data-testid="chunk-blocked-by"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by 2 chunks');
   });
 
   it('counts the prerequisites instead of naming the first when more than one is unmet', async () => {
@@ -385,7 +388,7 @@ describe('ChunkCard open control', () => {
   it("names the focusable button 'Open chunk <id>'", async () => {
     const el = await render({ ...BASE, shortId: 'C-OPEN' });
 
-    const button = el.querySelector('fleet-kit-select-row button');
+    const button = el.querySelector('fleet-kit-card-open .row');
     expect(button?.getAttribute('aria-label')).toBe('Open chunk C-OPEN');
   });
 
@@ -395,7 +398,7 @@ describe('ChunkCard open control', () => {
     const selected = vi.fn();
     fixture.componentInstance.selectChunk.subscribe(selected);
 
-    el.querySelector<HTMLElement>('fleet-kit-select-row button')!.click();
+    el.querySelector<HTMLElement>('fleet-kit-card-open .row')!.click();
     el.querySelector<HTMLElement>('[data-testid="chunk-title"]')!.click();
     el.querySelector<HTMLElement>('[data-testid="chunk-id"]')!.click();
 

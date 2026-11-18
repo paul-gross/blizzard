@@ -1,6 +1,17 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, type hubApi, STATUS_TONE, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen } from 'fleet';
+import {
+  type ChunkStatus,
+  type hubApi,
+  STATUS_TONE,
+  compactRef,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBadge,
+  KitSelectList,
+  KitSelectRow,
+  FleetWhen,
+} from 'fleet';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */
@@ -58,7 +69,7 @@ export interface RunListRowVm {
 @Component({
   selector: 'app-run-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitSelectList, KitSelectRow, FleetWhen],
   templateUrl: './run-list.html',
   styleUrl: './run-list.css',
 })

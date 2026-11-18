@@ -16,13 +16,21 @@
       emptyText="NO OPEN GATES"
       emptyTestid="gates-empty"
     >
+      <div
+        fleetKitSelectList
+        class="rows"
+        ariaLabel="Open gates"
+        [value]="null"
+        (valueChange)="selectChunk.emit($any($event))"
+      >
       @for (gate of gates(); track gate.decision_id) {
         <fleet-kit-select-row
+          [value]="gate.chunk_id"
+          [label]="shortId(gate.chunk_id)"
           class="gg"
-          data-testid="rail-gate"
+          testid="rail-gate"
           [ariaLabel]="'Open chunk ' + shortId(gate.chunk_id) + ' to resolve its gate'"
           [attr.data-chunk]="gate.chunk_id"
-          (click)="selectChunk.emit(gate.chunk_id)"
         >
           <span class="h">
             <span class="cid" data-testid="rail-gate-chunk">{{ shortId(gate.chunk_id) }}</span>
@@ -34,5 +42,6 @@
           }
         </fleet-kit-select-row>
       }
+      </div>
     </fleet-kit-async-state>
 </fleet-kit-panel>

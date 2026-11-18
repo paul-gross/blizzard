@@ -54,15 +54,20 @@
         emptyText="No segments."
       />
       } @else {
-      <ul class="seg-list">
+      <div
+        class="seg-list"
+        fleetKitSelectList
+        ariaLabel="Segments"
+        [value]="segmentId()"
+        (valueChange)="pickSegment.emit($event)"
+      >
         @for (seg of step.segments; track seg.segment_id) {
-         <li>
            <fleet-kit-select-row
              class="seg-item"
-             [selected]="seg.segment_id === segmentId()"
              testid="transcript-segment-item"
              [attr.data-segment-id]="seg.segment_id"
-             (picked)="pickSegment.emit(seg.segment_id)"
+             [value]="seg.segment_id"
+             [label]="'Segment ' + seg.spawn_generation"
           >
             <span class="seg-line">
               <span>Segment {{ seg.spawn_generation }}</span>
@@ -80,9 +85,8 @@
               }
             </span>
            </fleet-kit-select-row>
-        </li>
         }
-      </ul>
+      </div>
       }
     </div>
     }

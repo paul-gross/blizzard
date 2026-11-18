@@ -9,7 +9,7 @@ import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**
  * A selected board card draws one selection edge — the outer `.card`'s — and none inside
- * it: the kit select row under `bare` carries no padding, border or background of its own,
+ * it: the kit card open button carries no padding, border or background of its own,
  * the card's PR links sit inside the card surface, and the content's inset from the card
  * edge is the card's own padding alone, at 800px, 390px and 320px
  * (`bzh:narrow-viewport-tier-rule`). Under a real browser — see
@@ -89,7 +89,9 @@ describe('board card selected state shell sweep (web:shell-sweep)', () => {
       expect(root.querySelector('.banner-label')?.textContent).toBe('Urgent');
       await page.getByTestId('chunk-id').click();
       expect(fixture.componentInstance.selections).toEqual([CARD.chunkId]);
-      const open = root.querySelector<HTMLButtonElement>('fleet-kit-select-row button')!;
+      const open = root.querySelector<HTMLButtonElement>(
+        'fleet-kit-card-open .row',
+      )!;
       open.focus();
       await userEvent.keyboard('{Enter}');
       expect(fixture.componentInstance.selections).toEqual([CARD.chunkId, CARD.chunkId]);
@@ -112,8 +114,12 @@ describe('board card selected state shell sweep (web:shell-sweep)', () => {
       await page.viewport(width, 600);
 
       try {
-        const card = root.querySelector<HTMLElement>('[data-testid="chunk-card"]')!;
-        const button = root.querySelector<HTMLElement>('fleet-kit-select-row button')!;
+        const card = root.querySelector<HTMLElement>(
+          '[data-testid="chunk-card"]',
+        )!;
+        const button = root.querySelector<HTMLElement>(
+          'fleet-kit-card-open .row',
+        )!;
         const cardStyle = getComputedStyle(card);
         const buttonStyle = getComputedStyle(button);
 

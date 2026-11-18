@@ -1,6 +1,17 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import {
+  type QuestionView,
+  compactRef,
+  runnerBoardParts,
+  runnerTitle,
+  type RunnerBoardParts,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitPanel,
+  KitSelectList,
+  KitSelectRow,
+} from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -15,7 +26,7 @@ import { type QuestionView, compactRef, runnerBoardParts, runnerTitle, type Runn
 @Component({
   selector: 'app-questions-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitSelectRow],
+  imports: [KitAsyncState, KitPanel, KitSelectList, KitSelectRow],
   templateUrl: './questions-view.html',
   styleUrl: './questions-view.css',
 })

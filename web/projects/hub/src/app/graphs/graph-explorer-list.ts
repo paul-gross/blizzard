@@ -1,6 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 
-import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, type Tone, FleetWhen } from 'fleet';
+import {
+  type GraphLifecycle,
+  type GraphSummaryView,
+  compactRef,
+  KitBadge,
+  KitChip,
+  KitSelectList,
+  KitSelectRow,
+  type Tone,
+  FleetWhen,
+} from 'fleet';
 
 import { graphLifecycleTone } from '../core/lifecycle-tone';
 
@@ -13,6 +30,9 @@ interface GraphGroup {
   /** The one version in the group with `effective: true`. */
   readonly effective: GraphSummaryView;
 }
+
+/** Marks a header row's option value apart from a version's `graph_id`. */
+const GROUP_PREFIX = 'group:';
 
 /** One group's operator-set expansion state, stamped with the selection that was
  * current when it was set — see {@link GraphExplorerList.isExpanded} for how the
@@ -32,9 +52,11 @@ interface ExpansionOverride {
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list.
  *
- * Built on `fleet-kit-select-row` at both levels: a group's header row is
- * selected when its effective version is the one open, and each lineage row
- * underneath is a stepped-down row. Every row is two lines — a headline and a
+ * One `fleetKitSelectList` holds both levels: a group's header row is an option
+ * valued `group:<name>` (opening it runs {@link toggle}), and each lineage row
+ * underneath is a stepped-down option valued by its `graph_id`. The header is never
+ * the selected option; it keeps the selected chrome through `.ge-group-open` while
+ * its effective version is the one open. Every row is two lines — a headline and a
  * meta line with a right-aligned trailing element.
  *
  * Retired versions are **filtered out by default** ({@link showRetired}), toggled by a
@@ -51,7 +73,7 @@ interface ExpansionOverride {
 @Component({
   selector: 'app-graph-explorer-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitBadge, KitChip, KitSelectRow],
+  imports: [FleetWhen, KitBadge, KitChip, KitSelectList, KitSelectRow],
   templateUrl: './graph-explorer-list.html',
   styleUrl: './graph-explorer-list.css',
 })
@@ -110,6 +132,22 @@ export class GraphExplorerList {
       effective: versions.find((v) => v.effective) ?? versions[0],
     }));
   });
+
+  /** The option value of a group's header row. */
+  protected groupValue(group: GraphGroup): string {
+    return GROUP_PREFIX + group.name;
+  }
+
+  /** The list opened a row: a header toggles its group, a version opens its graph. */
+  protected open(value: string): void {
+    if (value.startsWith(GROUP_PREFIX)) {
+      const name = value.slice(GROUP_PREFIX.length);
+      const group = this.groups().find((g) => g.name === name);
+      if (group !== undefined) this.toggle(group);
+      return;
+    }
+    this.selectGraph.emit(value);
+  }
 
   /** A header click expands the group **and** opens its effective version
    * — the header already displays that id, so requiring a second click on the version

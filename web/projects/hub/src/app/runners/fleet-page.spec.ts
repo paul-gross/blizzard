@@ -119,11 +119,58 @@ describe('FleetPage', () => {
   it('navigates to /fleet/<id> when a card is picked', async () => {
     const { harness, el } = await open('/fleet/hs_h1');
 
-    el.querySelector<HTMLButtonElement>('[data-testid="fleet-card-rn_solo"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="fleet-card-rn_solo"]',
+    )?.click();
     await settle(harness.fixture);
 
     expect(TestBed.inject(Router).url).toBe('/fleet/rn_solo');
     expect(el.querySelector('[data-testid="fleet-runner-detail"]')).not.toBeNull();
+  });
+
+  it('holds both host groups in one list, the hostless rows in a group named by its heading', async () => {
+    const { el } = await open('/fleet/hs_h1');
+    const lists = el.querySelectorAll('[role="listbox"]');
+    const group = el.querySelector('[role="group"]');
+
+    expect(lists).toHaveLength(1);
+    expect(lists[0].getAttribute('aria-label')).toBe('Fleet');
+    expect(
+      lists[0].contains(el.querySelector('[data-testid="fleet-card-hs_h1"]')),
+    ).toBe(true);
+    expect(
+      group?.contains(el.querySelector('[data-testid="fleet-card-rn_solo"]')),
+    ).toBe(true);
+    expect(
+      el.querySelector(`#${group?.getAttribute('aria-labelledby')}`)
+        ?.textContent,
+    ).toContain('No host');
+  });
+
+  it('selects the card the route names; the arrow keys move without opening, and Enter opens', async () => {
+    const { harness, el } = await open('/fleet/hs_h1');
+    const host = el.querySelector<HTMLElement>(
+      '[data-testid="fleet-card-hs_h1"]',
+    )!;
+    const solo = el.querySelector<HTMLElement>(
+      '[data-testid="fleet-card-rn_solo"]',
+    )!;
+
+    expect(host.getAttribute('aria-selected')).toBe('true');
+    expect(solo.getAttribute('aria-selected')).toBe('false');
+    host.focus();
+    host.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    );
+    await settle(harness.fixture);
+    expect(TestBed.inject(Router).url).toBe('/fleet/hs_h1');
+    solo.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await settle(harness.fixture);
+
+    expect(TestBed.inject(Router).url).toBe('/fleet/rn_solo');
+    expect(solo.getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders a not-found rest state, keeping the list, for an unknown id', async () => {

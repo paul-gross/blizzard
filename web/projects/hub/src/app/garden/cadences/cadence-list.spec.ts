@@ -70,12 +70,54 @@ describe('FleetCadenceList', () => {
     expect(el.querySelector('[data-testid="gardening-cadence-next-off"]')).toBeNull();
   });
 
+  it('marks the route-backed selectedSlug row as the selected option', async () => {
+    const { el } = await mount();
+
+    expect(
+      el
+        .querySelector('[data-testid="gardening-cadence-row-evening"]')
+        ?.getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      el
+        .querySelector('[data-testid="gardening-cadence-row-off"]')
+        ?.getAttribute('aria-selected'),
+    ).toBe('false');
+  });
+
   it('emits the picked slug', async () => {
     const { fixture, el } = await mount();
     const picked: string[] = [];
     fixture.componentInstance.cadencePick.subscribe((slug) => picked.push(slug));
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-cadence-row-off"]')!.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="gardening-cadence-row-off"]',
+    )!.click();
+    await fixture.whenStable();
+
+    expect(picked).toEqual(['off']);
+  });
+
+  it('emits the picked slug on Enter', async () => {
+    const { fixture, el } = await mount();
+    const picked: string[] = [];
+    fixture.componentInstance.cadencePick.subscribe((slug) =>
+      picked.push(slug),
+    );
+
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="gardening-cadence-row-off"]',
+    )!;
+    // Highlight moves to the second row without opening it; Enter opens it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(picked).toEqual([]);
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
 
     expect(picked).toEqual(['off']);
   });

@@ -4,11 +4,6 @@
   font-size: var(--fs-base);
   color: var(--text);
 }
-.fl-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .fl-body {
   display: flex;
   flex-direction: column;

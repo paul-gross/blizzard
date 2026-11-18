@@ -55,14 +55,13 @@
     [attr.title]="row.chunk.projectName"
     [attr.aria-current]="row.chunk.chunkId === selectedId() ? 'true' : null"
   >
-    <fleet-kit-select-row
+    <fleet-kit-card-open
       class="row-open"
-      bare
       testid="delivery-row-open"
       [attr.title]="row.bounce?.title"
       [ariaLabel]="'Select chunk ' + row.chunk.shortId"
-      [selected]="row.chunk.chunkId === selectedId()"
-      (picked)="picked.emit(row.chunk.chunkId)"
+      [current]="row.chunk.chunkId === selectedId()"
+      (opened)="picked.emit(row.chunk.chunkId)"
     />
     <fleet-lane-icon class="lane" data-testid="delivery-lane-icon" [lane]="row.icon.lane" [status]="row.icon.status" />
     <span class="when">

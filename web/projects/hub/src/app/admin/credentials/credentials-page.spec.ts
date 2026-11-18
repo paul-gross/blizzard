@@ -74,8 +74,14 @@ describe('CredentialsPage', () => {
     return { harness, el: harness.routeNativeElement as HTMLElement, router: TestBed.inject(Router) };
   }
 
-  const testid = (root: ParentNode, id: string) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-  const options = () => Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+  const testid = (root: ParentNode, id: string) =>
+    root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const options = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[role="option"]:not(fleet-kit-select-row)',
+      ),
+    );
 
   async function pick(harness: RouterTestingHarness, field: string, label: string): Promise<void> {
     testid(document, `admin-credentials-create-field-${field}`)!.click();

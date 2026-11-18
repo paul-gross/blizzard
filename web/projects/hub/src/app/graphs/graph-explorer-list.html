@@ -10,13 +10,21 @@
     }
   </fleet-kit-chip>
 </div>
-<ul class="groups" data-testid="graph-explorer-groups">
+<div
+  class="groups"
+  data-testid="graph-explorer-groups"
+  fleetKitSelectList
+  ariaLabel="Graphs"
+  [value]="selectedGraphId()"
+  (valueChange)="open($event)"
+>
   @for (group of groups(); track group.name) {
-    <li class="group" data-testid="graph-explorer-group" [attr.data-name]="group.name">
+    <div class="group" role="none" data-testid="graph-explorer-group" [attr.data-name]="group.name">
       <fleet-kit-select-row
-        [selected]="group.effective.graph_id === selectedGraphId()"
+        [value]="groupValue(group)"
+        [label]="group.name"
+        [class.ge-group-open]="group.effective.graph_id === selectedGraphId()"
         [testid]="'graph-explorer-group-toggle'"
-        (picked)="toggle(group)"
       >
         <div class="ge-group-body">
           <p class="ge-name">{{ group.name }}</p>
@@ -35,13 +43,13 @@
         </div>
       </fleet-kit-select-row>
       @if (isExpanded(group)) {
-        <ol class="lineage" data-testid="graph-explorer-lineage">
+        <div class="lineage" role="none" data-testid="graph-explorer-lineage">
           @for (version of group.versions; track version.graph_id) {
-            <li class="row-item" [attr.data-graph-id]="version.graph_id">
+            <div class="row-item" role="none" [attr.data-graph-id]="version.graph_id">
               <fleet-kit-select-row
-                [selected]="version.graph_id === selectedGraphId()"
+                [value]="version.graph_id"
+                [label]="version.graph_id"
                 [testid]="'graph-explorer-row'"
-                (picked)="selectGraph.emit(version.graph_id)"
               >
                 <div class="ge-row-body">
                   <div class="ge-row-line">
@@ -61,10 +69,10 @@
                   </div>
                 </div>
               </fleet-kit-select-row>
-            </li>
+            </div>
           }
-        </ol>
+        </div>
       }
-    </li>
+    </div>
   }
-</ul>
+</div>

@@ -8,7 +8,7 @@ import { GraphExplorerList } from './graph-explorer-list';
 /**
  * The graph explorer's two row levels, rebuilt on `KitSelectRow` — a real layout claim
  * jsdom cannot make. Both levels now render their content projected into another
- * component's button, so the row's own `.ge-group-line`/`.ge-row-line` flex rows are laid
+ * component's option chrome, so the row's own `.ge-group-line`/`.ge-row-line` flex rows are laid
  * out inside a box this file does not own; whether a long graph name, its version count,
  * and its right-anchored short id still fit one line without pushing past the list's own
  * edge is a question only a real layout answers.

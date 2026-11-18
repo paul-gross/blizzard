@@ -114,14 +114,22 @@ export class ChunkPage {
       if (request === null) return;
 
       const root = this.element.nativeElement as HTMLElement;
-      const target = request.kind === 'detail'
-        ? root.querySelector<HTMLElement>(`[data-testid="${request.testid}"]`)
-        : request.kind === 'list'
-          ? Array.from(root.querySelectorAll<HTMLElement>(`[${request.attribute}]`)).find(
-              (row) => row.getAttribute(request.attribute) === request.value,
-            ) ?? root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`)
-          : root.querySelector<HTMLElement>(`[data-testid="tab-${this.tab()}"]`);
-      (target?.matches('fleet-kit-select-row') ? target.querySelector<HTMLElement>('button') : target)?.focus();
+      const target =
+        request.kind === 'detail'
+          ? root.querySelector<HTMLElement>(`[data-testid="${request.testid}"]`)
+          : request.kind === 'list'
+            ? (Array.from(
+                root.querySelectorAll<HTMLElement>(`[${request.attribute}]`),
+              ).find(
+                (row) => row.getAttribute(request.attribute) === request.value,
+              ) ??
+              root.querySelector<HTMLElement>(
+                `[data-testid="tab-${this.tab()}"]`,
+              ))
+            : root.querySelector<HTMLElement>(
+                `[data-testid="tab-${this.tab()}"]`,
+              );
+      target?.focus();
       this.focusRequest = null;
     });
   }

@@ -1,8 +1,8 @@
-<!-- The open control is the kit's select row, stretched under the whole card, so the PR links
+<!-- The open control is the kit's card open button, stretched under the whole card, so the PR links
      and the fold between its rows stay controls of their own rather than nesting inside a
      button. The rows sit over it and keep their hover text, so a click landing on them is
      forwarded to the same open. -->
-<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- The select row beneath is the card's focusable, keyboard-operable open control; this only forwards a pointer click that lands on the rows over it. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- The card open button beneath is the card's focusable, keyboard-operable open control; this only forwards a pointer click that lands on the rows over it. -->
 <div
   class="card"
   data-testid="chunk-card"
@@ -16,7 +16,7 @@
   [attr.aria-current]="selected() ? 'true' : null"
   (click)="open($event)"
 >
-  <fleet-kit-select-row class="card-open" bare [ariaLabel]="'Open chunk ' + card().shortId" [selected]="selected()" />
+  <fleet-kit-card-open class="card-open" [ariaLabel]="'Open chunk ' + card().shortId" [current]="selected()" />
   <div class="urgency-slot"><ng-content select="[chunkCardUrgency]" /></div>
   <!-- Each work item is its work-ref label over its title, the title held by a one-line
        skeleton until it is read. The labels are plain text, not links: the detail panel owns

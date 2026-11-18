@@ -113,12 +113,16 @@ describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#401 
       await fixture.whenStable();
 
       // The escalation tint rides `.rl-body`, the projected content inside
-      // `fleet-kit-select-row`'s own encapsulated `<button>` — that button's own
+      // `fleet-kit-select-row`'s own inner `.row` element — that element's own
       // background is where *selection* paints (`kit-select-row.css`'s own
       // `.selected`), so the two backgrounds are compared where each is actually
-      // drawn rather than both read off the outer button.
-      const normalBody = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_1"] .rl-body')!;
-      const escalatedBody = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_2"] .rl-body')!;
+      // drawn rather than both read off the row's chrome.
+      const normalBody = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-run-row-ch_1"] .rl-body',
+      )!;
+      const escalatedBody = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-run-row-ch_2"] .rl-body',
+      )!;
       const normalBg = getComputedStyle(normalBody).backgroundColor;
       const escalatedBg = getComputedStyle(escalatedBody).backgroundColor;
       expect(escalatedBg, 'the escalated row’s body must not share the normal row’s computed background').not.toBe(
@@ -127,8 +131,12 @@ describe('FleetRunList escalated row shell sweep (web:shell-sweep, blizzard#401 
 
       // The left edge belongs to selection unconditionally — an escalated row that
       // is not selected must not claim it, unlike the row's own tint.
-      const normalRow = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_1"]')!;
-      const escalatedRow = root.querySelector<HTMLElement>('[data-testid="gardening-run-row-ch_2"]')!;
+      const normalRow = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-run-row-ch_1"] > .row',
+      )!;
+      const escalatedRow = root.querySelector<HTMLElement>(
+        '[data-testid="gardening-run-row-ch_2"] > .row',
+      )!;
       expect(
         getComputedStyle(escalatedRow).borderLeftColor,
         'an unselected escalated row must not claim the selection edge',

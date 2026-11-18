@@ -1,6 +1,26 @@
-import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitButton, KitChips, KitErrorLine, KitSelect, KitSelectRow, type KitAsyncStateValue, type UrgencyView } from 'fleet';
+import {
+  CdkDrag,
+  CdkDragHandle,
+  CdkDropList,
+  type CdkDragDrop,
+} from '@angular/cdk/drag-drop';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
+import {
+  KitAsyncState,
+  KitButton,
+  KitChips,
+  KitErrorLine,
+  KitSelect,
+  KitSelectList,
+  KitSelectRow,
+  type KitAsyncStateValue,
+  type UrgencyView,
+} from 'fleet';
 import { UrgencyPill } from '../../core/urgency-pill';
 import { LIFECYCLE_FILTER_OPTIONS, type LifecycleFilter } from '../config-filter.model';
 import { ConfigFormDialog } from '../config-form-dialog';
@@ -8,9 +28,24 @@ import type { ConfigFormValues } from '../config-edit.model';
 import { URGENCY_FIELDS } from './urgencies.model';
 
 @Component({
-  selector: 'app-urgencies-list', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkDrag, CdkDragHandle, CdkDropList, ConfigFormDialog, KitAsyncState, KitButton, KitChips, KitErrorLine, KitSelect, KitSelectRow, UrgencyPill],
-  templateUrl: './urgencies-list.html', styleUrl: './urgencies-page.css',
+  selector: 'app-urgencies-list',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    CdkDrag,
+    CdkDragHandle,
+    CdkDropList,
+    ConfigFormDialog,
+    KitAsyncState,
+    KitButton,
+    KitChips,
+    KitErrorLine,
+    KitSelect,
+    KitSelectList,
+    KitSelectRow,
+    UrgencyPill,
+  ],
+  templateUrl: './urgencies-list.html',
+  styleUrl: './urgencies-page.css',
 })
 export class UrgenciesList {
   readonly canEdit = input.required<boolean>();

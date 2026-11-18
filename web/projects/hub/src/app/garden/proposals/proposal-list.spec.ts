@@ -123,7 +123,33 @@ describe('FleetProposalList', () => {
     let emitted: string | undefined;
     fixture.componentInstance.proposalPick.subscribe((id) => (emitted = id));
 
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-proposal-row-gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y3"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="gardening-proposal-row-gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y3"]',
+    )!.click();
+    await fixture.whenStable();
+
+    expect(emitted).toBe('gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y3');
+  });
+
+  it('emits proposalPick with the row id on Enter', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted: string | undefined;
+    fixture.componentInstance.proposalPick.subscribe((id) => (emitted = id));
+
+    const row = el.querySelector<HTMLElement>(
+      '[data-testid="gardening-proposal-row-gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y3"]',
+    )!;
+    // Highlight moves to the second row without opening it; Enter opens it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+    );
+    await fixture.whenStable();
+    expect(emitted).toBeUndefined();
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await fixture.whenStable();
 
     expect(emitted).toBe('gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y3');
   });

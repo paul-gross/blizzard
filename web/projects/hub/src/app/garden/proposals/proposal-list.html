@@ -5,13 +5,19 @@
     emptyText="No active proposals."
     emptyTestid="gardening-proposals-empty"
   >
-    <ul class="pl-list" data-testid="gardening-proposals-list">
+    <div
+      class="pl-list"
+      data-testid="gardening-proposals-list"
+      fleetKitSelectList
+      ariaLabel="Proposals"
+      [value]="selectedId()"
+      (valueChange)="pick($event)"
+    >
       @for (row of rows(); track row.proposalId) {
-        <li>
           <fleet-kit-select-row
-            [selected]="row.proposalId === selectedId()"
+            [value]="row.proposalId"
+            [label]="row.title"
             [testid]="'gardening-proposal-row-' + row.proposalId"
-            (picked)="pick(row.proposalId)"
           >
             <span class="pl-title">{{ row.title }}</span>
             <span class="pl-meta">
@@ -23,8 +29,7 @@
             </span>
             <span class="pl-created"><fleet-when [iso]="row.createdAt" /></span>
           </fleet-kit-select-row>
-        </li>
       }
-    </ul>
+    </div>
   </fleet-kit-async-state>
 </fleet-kit-panel>
