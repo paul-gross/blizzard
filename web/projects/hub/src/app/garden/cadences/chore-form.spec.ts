@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { UrgencyView } from 'fleet';
-import { type ChoreDraft, FleetChoreForm } from './chore-form';
+import type { ChoreDraft } from '../core/cadence.domain';
+import { FleetChoreForm } from './chore-form';
 
 const DRAFT: ChoreDraft = { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: '' };
 

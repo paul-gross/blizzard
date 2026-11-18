@@ -30,10 +30,12 @@ describe('GardeningCadenceDetail', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function render(opts: { url?: string; patch?: () => unknown; errands?: () => unknown } = {}) {
+  async function render(
+    opts: { url?: string; patch?: () => unknown; errands?: () => unknown; cadences?: () => unknown[] } = {},
+  ) {
     stub = stubHubClient({
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
-      'GET /api/projects/{project}/cadences': () => [EVENING],
+      'GET /api/projects/{project}/cadences': (opts.cadences ?? (() => [EVENING])) as never,
       'GET /api/cadences/{cadence_id}/errands': (opts.errands ?? (() => [
         gardenCadenceErrandView({ scope: 'blizzard' }),
         gardenCadenceErrandView({ chore: 'odd', scope: 'web', state: 'due' }),
@@ -53,6 +55,7 @@ describe('GardeningCadenceDetail', () => {
         { provide: HUB_PROJECT_FILTER, useValue: signal('acme').asReadonly() },
       ],
     }).compileComponents();
+    const queryClient = TestBed.inject(QueryClient);
     const fixture = TestBed.createComponent(TestCadenceDetailHost);
     await TestBed.inject(Router).navigateByUrl(opts.url ?? '/gardening/cadences/evening');
     await settle(fixture, 12);
@@ -62,7 +65,13 @@ describe('GardeningCadenceDetail', () => {
       q(testid)!.click();
       await settle(fixture, 12);
     };
-    return { fixture, el, q, click };
+    const type = async (testid: string, value: string) => {
+      const input = q(testid) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle(fixture, 12);
+    };
+    return { fixture, el, q, click, type, queryClient };
   }
 
   it('rests on its own empty state with nothing selected', async () => {
@@ -122,5 +131,88 @@ describe('GardeningCadenceDetail', () => {
 
     const [call] = stub.forRoute('/api/cadences/cad_evening/retire', 'POST');
     expect(call.headers['if-match']).toBe('7');
+  });
+
+  describe('the cadence edit', () => {
+    let read: typeof EVENING;
+    const cadences = () => [read];
+    beforeEach(() => (read = EVENING));
+
+    it('saves only what changed against the revision it started from, after a refresh moved the read', async () => {
+      const { click, type, q, queryClient, fixture } = await render({ cadences });
+
+      await click('gardening-cadence-panel-edit');
+      await type('gardening-cadence-edit-name', 'Evening sweep');
+      read = { ...EVENING, revision: 8 };
+      await queryClient.invalidateQueries({ queryKey: ['hub', 'cadences'] });
+      await settle(fixture, 12);
+      expect((q('gardening-cadence-edit-name') as HTMLInputElement).value).toBe('Evening sweep');
+
+      await click('gardening-cadence-edit-save');
+
+      const calls = stub.forRoute('/api/cadences/cad_evening', 'PATCH');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].headers['if-match']).toBe('7');
+      expect(calls[0].body).toEqual({ name: 'Evening sweep' });
+      expect(q('gardening-cadence-edit')).toBeNull();
+    });
+
+    it('keeps the form and the typed draft on a revision conflict, sending once, and restarts from a fresh read', async () => {
+      let conflict = true;
+      const { click, type, q } = await render({
+        cadences,
+        patch: () =>
+          conflict
+            ? stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'the cadence changed since it was read' })
+            : EVENING,
+      });
+
+      await click('gardening-cadence-panel-edit');
+      await type('gardening-cadence-edit-cron', '0 21 * * *');
+      read = { ...EVENING, revision: 8 };
+      await click('gardening-cadence-edit-save');
+
+      expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(1);
+      expect(q('gardening-cadence-edit-line')?.textContent).toContain('the cadence changed since it was read');
+      expect((q('gardening-cadence-edit-cron') as HTMLInputElement).value).toBe('0 21 * * *');
+      expect(q('gardening-cadence-panel-error')?.textContent ?? '').not.toContain('changed since');
+
+      conflict = false;
+      await click('gardening-cadence-edit-cancel');
+      expect(q('gardening-cadence-edit')).toBeNull();
+      await click('gardening-cadence-panel-edit');
+      expect((q('gardening-cadence-edit-cron') as HTMLInputElement).value).toBe('0 20 * * *');
+      await type('gardening-cadence-edit-cron', '0 21 * * *');
+      await click('gardening-cadence-edit-save');
+
+      const calls = stub.forRoute('/api/cadences/cad_evening', 'PATCH');
+      expect(calls).toHaveLength(2);
+      expect(calls[1].headers['if-match']).toBe('8');
+      expect(calls[1].body).toEqual({ schedule: { cron: '0 21 * * *', zone: 'America/Chicago' } });
+      expect(q('gardening-cadence-edit')).toBeNull();
+    });
+
+    it('refuses an invalid edit inline, sending nothing', async () => {
+      const { click, type, q } = await render();
+
+      await click('gardening-cadence-panel-edit');
+      await type('gardening-cadence-edit-zone', '');
+      await click('gardening-cadence-edit-save');
+
+      expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(0);
+      expect(q('gardening-cadence-edit-zone')!.closest('fleet-kit-field')!.textContent).toContain(
+        'A schedule needs both a cron and a zone',
+      );
+    });
+
+    it('ends when a chore form opens', async () => {
+      const { click, q } = await render();
+
+      await click('gardening-cadence-panel-edit');
+      await click('gardening-cadence-chore-add');
+
+      expect(q('gardening-cadence-edit')).toBeNull();
+      expect(q('gardening-chore-add-key')).not.toBeNull();
+    });
   });
 });

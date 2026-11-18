@@ -43,6 +43,7 @@ describe('cadences queries', () => {
     await settle(fixture);
 
     expect(fixture.componentInstance.cadences.data()?.map((c) => c.slug)).toEqual(['evening']);
+    expect(fixture.componentInstance.cadences.data()?.[0].id).toBe('cad_evening');
     const calls = stub.forRoute('/api/projects/acme/cadences', 'GET');
     expect(calls).toHaveLength(1);
     expect(calls[0].search).toBe('?include_retired=true');

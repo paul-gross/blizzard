@@ -1,5 +1,6 @@
-import { type CadenceView, type GardenProposalView, type ProjectView, type RoutineView } from 'fleet';
+import { type GardenProposalView, type ProjectView, type RoutineView } from 'fleet';
 
+import type { Cadence } from '../core/cadence.domain';
 import { lensedUrl } from '../../core/project-lens';
 import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from '../core/garden-project';
 import { isGardenProposalWaiting } from '../proposals/gardening-proposals-page.model';
@@ -20,12 +21,12 @@ function countLabel(count: number, singular: string): string {
 
 export function doorwayCards(
   projects: readonly ProjectView[],
-  cadences: readonly CadenceView[],
+  cadences: readonly Cadence[],
   routines: readonly RoutineView[],
   proposals: readonly GardenProposalView[],
 ): readonly DoorwayCard[] {
   return [...projects].sort((a, b) => a.name.localeCompare(b.name)).map((project) => {
-    const cadenceCount = cadences.filter((item) => item.project_id === project.project_id).length;
+    const cadenceCount = cadences.filter((item) => item.projectId === project.project_id).length;
     const routineCount = routines.filter((item) => item.project_id === project.project_id).length;
     const proposalCount = proposals.filter((item) => item.project_id === project.project_id && isGardenProposalWaiting(item)).length;
     const counts = [
