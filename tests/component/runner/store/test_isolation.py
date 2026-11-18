@@ -77,7 +77,7 @@ from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
-from blizzard.runner.transfer.rows import IWriteHostIngestRepository
+from blizzard.runner.transfer.rows import IWriteCarriedHubTokenRepository, IWriteHostIngestRepository
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageAttemptRepository,
@@ -629,6 +629,7 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHubTokenRepository, "seal_if_absent"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHubTokenRepository, "replace"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHubTokenRepository, "drop"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteCarriedHubTokenRepository, "seal_carried_locked"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY
     + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",

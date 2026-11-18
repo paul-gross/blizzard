@@ -12,8 +12,7 @@ import threading
 from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.secrets.sealing import SecretUnreadable
-from blizzard.runner.hub.sealed_tokens import OpenedHubToken, RunnerHubTokenSource, StoredToken, StoredTokenState
+from blizzard.runner.hub.sealed_tokens import RunnerHubTokenSource, StoredToken, StoredTokenState
 
 
 class IHubTokenSource(Protocol):
@@ -23,9 +22,8 @@ class IHubTokenSource(Protocol):
         """The revision the row is at, or ``None`` when the runner holds no row."""
         ...
 
-    def open(self) -> OpenedHubToken | None:
-        """The row's token and its revision, ``None`` when there is no row; raises :class:`SecretUnreadable` when
-        the row does not open under the host's key."""
+    def stored(self) -> StoredToken:
+        """The row's stored-token outcome under the host's key."""
         ...
 
 
@@ -90,18 +88,17 @@ class HubTokenHolder:
         with self._lock:
             if revision is None or (revision == self._revision and self._unreadable_key is None):
                 return TokenRefresh.UNCHANGED
-        try:
-            opened = self._source.open()
-        except SecretUnreadable as exc:
+        stored = self._source.stored()
+        if stored.state is StoredTokenState.UNREADABLE:
             with self._lock:
-                self._unreadable_key = exc.key_id
+                self._unreadable_key = stored.key_id
                 self._token = ""
             return TokenRefresh.UNREADABLE
-        if opened is None:
+        if stored.state is StoredTokenState.ABSENT:
             return TokenRefresh.UNCHANGED
         with self._lock:
-            self._token = opened.value.expose()
-            self._revision = opened.revision
+            self._token = stored.value
+            self._revision = stored.revision
             self._unreadable_key = None
         return TokenRefresh.SWITCHED
 

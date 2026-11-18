@@ -201,13 +201,14 @@ class FakeRunnerStores:
         workspace_ids: Mapping[str, str] | None = None,
         bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
+        hub_token: SealedValue | None = None,
     ) -> None:
         assert ingest is not None
         self.stores.journal.append(("copy_runner", ingest.source))
         self.stores.named[destination_url] = (*self.stores.named.get(destination_url, ()), self.runner_id)
         self.stores.ingests[destination_url] = ingest
-        if ingest.hub_token is not None and destination_url not in self.stores.hub_tokens:
-            self.stores.hub_tokens[destination_url] = SealedHubToken(self.runner_id, 1, ingest.hub_token, T0)
+        if hub_token is not None and destination_url not in self.stores.hub_tokens:
+            self.stores.hub_tokens[destination_url] = SealedHubToken(self.runner_id, 1, hub_token, T0)
 
     def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
         self.stores.journal.append(("remove_runner_rows", url))

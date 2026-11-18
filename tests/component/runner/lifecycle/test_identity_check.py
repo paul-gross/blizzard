@@ -22,8 +22,6 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_version import VersionRefusalReason
-from blizzard.foundation.secrets.sealing import SecretUnreadable
-from blizzard.foundation.secrets.value import SecretValue
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -39,7 +37,7 @@ from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.hub_version import HubVersion
 from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
-from blizzard.runner.hub.sealed_tokens import OpenedHubToken, StoredToken
+from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
@@ -608,10 +606,10 @@ class _Row:
     def revision(self) -> int | None:
         return self.at
 
-    def open(self) -> OpenedHubToken | None:
+    def stored(self) -> StoredToken:
         if self.unreadable is not None:
-            raise SecretUnreadable("runner-hub-token/r1", key_id=self.unreadable)
-        return OpenedHubToken(SecretValue(self.token), self.at)
+            return StoredToken.unreadable(self.unreadable, self.at)
+        return StoredToken.opened(self.token, self.at)
 
 
 class _CountingHub(FakeHub):

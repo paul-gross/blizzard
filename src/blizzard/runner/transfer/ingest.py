@@ -18,7 +18,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
-from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue, SecretUnreadable
+from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
 from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
 from blizzard.runner.config_table import ConfigError
@@ -26,7 +26,7 @@ from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, 
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
-from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, sealed_name
+from blizzard.runner.hub.sealed_tokens import StoredTokenState, seal_token, token_set_command, unreadable_token
 from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
@@ -349,7 +349,6 @@ class RunnerIngest:
                     source=str(source.path),
                     source_alive_at=view.last_alive_at,
                     ingested_at=self.clock.now(),
-                    hub_token=self._sealed_here(runner_id, offered) if offered else None,
                 )
                 try:
                     runner.copy_runner(
@@ -358,6 +357,7 @@ class RunnerIngest:
                         workspace_ids=plan.workspace_ids,
                         bound_workspaces=tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
                         ingest=ingest,
+                        hub_token=self._sealed_here(runner_id, offered) if offered else None,
                     )
                 except WorkspacePromptConflict as exc:
                     raise WorkspaceConflict(f"{exc}; nothing was changed") from exc
@@ -536,10 +536,9 @@ class RunnerIngest:
         if row is None:
             return self.tokens.held(root, source.token_variable(entry.name))
         for cipher in self.ciphers.source_ciphers(root):
-            try:
-                return cipher.open(row.secret()).expose()
-            except SecretUnreadable:
-                continue
+            stored = row.stored(cipher)
+            if stored.state is StoredTokenState.OPENED:
+                return stored.value
         raise SourceTokenUnreadable(
             f"the source's sealed hub token for runner {entry.name} does not open under the source's key "
             f"(generation {row.sealed.key_id}): set its token on the source first with `blizzard runner token set "
@@ -552,16 +551,13 @@ class RunnerIngest:
         row = runner.sealed_hub_token(self.host.db_url)
         if row is None:
             return self.tokens.held(self.host.root, variable)
-        cipher = self.ciphers.cipher(self.host.root)
-        try:
-            if cipher is None:
-                raise SecretUnreadable(row.secret().name, key_id=row.sealed.key_id)
-            return cipher.open(row.secret()).expose()
-        except SecretUnreadable as exc:
+        stored = row.stored(self.ciphers.cipher(self.host.root))
+        if stored.state is StoredTokenState.UNREADABLE:
             raise TokenConflict(
-                f"this host holds a sealed hub token for runner {entry.name} that does not open under its key "
-                f"(generation {exc.key_id}): set it with `blizzard runner token set --runner {entry.name}`, then re-run"
-            ) from exc
+                f"runner {entry.name}: {unreadable_token(stored.key_id)}; set it again with "
+                f"{token_set_command(entry.name)}, then re-run"
+            )
+        return stored.value
 
     def _sealed_here(self, runner_id: str, token: str) -> SealedValue:
         """``token`` sealed under this host's key as the runner's first revision, minting the key if it holds none."""
@@ -571,7 +567,7 @@ class RunnerIngest:
             )
         except ConfigError as exc:
             raise TokenConflict(f"{exc}; nothing was changed") from exc
-        return cipher.seal(SecretValue(token), name=sealed_name(runner_id), revision=FIRST_REVISION)
+        return seal_token(cipher, runner_id, SecretValue(token))
 
     def _refuse_conflicts(
         self,

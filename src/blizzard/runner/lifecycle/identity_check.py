@@ -56,6 +56,7 @@ from blizzard.runner.hub.identity import (
     answered_tenant,
     judged,
 )
+from blizzard.runner.hub.sealed_tokens import unreadable_token
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -244,7 +245,7 @@ class IdentityCheck:
         if (key_id := ctx.hub_token.unreadable_key()) is not None:
             was = ctx.identity_verdict.refuse(
                 store_runner_id=ctx.config.runner_id,
-                reason=f"its hub token in the host store does not open under the host's key (generation {key_id})",
+                reason=unreadable_token(key_id),
                 checked_at=ctx.clock.now(),
             )
             log_transition(ctx.identity_verdict, was)

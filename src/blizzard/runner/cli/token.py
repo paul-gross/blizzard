@@ -22,7 +22,7 @@ from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import host_answers
 from blizzard.runner.cli.store_guard import store_write_guard
-from blizzard.runner.composition import build_hub_tokens
+from blizzard.runner.composition import build_sealing_hub_tokens
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_keys import key_source
 from blizzard.runner.host_layout import HostLayout
@@ -124,10 +124,9 @@ def _set_on_stopped_host(ctx: click.Context, directory: str, door: Door, runner:
         engine = create_engine_from_url(config.db_url)
         try:
             with click_exception_on(ConfigError):
-                tokens = build_hub_tokens(engine, config.root, environ=os.environ, clock=clock, mint=True)
-            assert tokens is not None
+                tokens = build_sealing_hub_tokens(engine, config.root, environ=os.environ, clock=clock)
             with click_exception_on(SecretValueBlank):
-                revision = tokens.replace(entry.id, value, retired=False)
+                revision = tokens.replace(entry.id, value, verdict=None)
         finally:
             engine.dispose()
     click.echo(

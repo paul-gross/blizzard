@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
 from blizzard.auth_core import Role
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.app import build_hosted_app
@@ -76,7 +77,9 @@ def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HostConfig:
 
 @contextmanager
 def _served(config: HostConfig) -> Generator[tuple[TestClient, RunnerProcess]]:
-    ready, halted = seed_runners(config, [entry for entry in config.runners if entry.id is not None])
+    ready, halted = seed_runners(
+        config, [entry for entry in config.runners if entry.id is not None], clock=SystemClock()
+    )
     assert [item.id for item in halted] == [_HALTED]
     graph = build_host_process(config, ready, halted=halted)
     hosted = build_hosted_app(ready[0].config, host=graph)
@@ -127,7 +130,7 @@ def test_a_lost_key_leaves_the_runner_refusing_until_its_token_is_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _host(tmp_path, monkeypatch)
-    seed_runners(config, [entry for entry in config.runners if entry.id is not None])
+    seed_runners(config, [entry for entry in config.runners if entry.id is not None], clock=SystemClock())
     shutil.rmtree(tmp_path / "data" / "secret-keys")
     with _served(load_host_config(tmp_path)) as (client, runner):
         _check(runner)

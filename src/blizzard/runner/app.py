@@ -76,12 +76,12 @@ from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
 from blizzard.runner.api.host_settings import router as host_settings_router
 from blizzard.runner.api.hub_proxy import UpstreamRefusal, relay_upstream_refusal
-from blizzard.runner.api.hub_token import HubTokenProblem
 from blizzard.runner.api.hub_token import router as hub_token_router
 from blizzard.runner.api.invariants import router as host_invariants_router
 from blizzard.runner.api.invocation_usage import router as invocation_usage_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
+from blizzard.runner.api.problems import RunnerProblem
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
@@ -616,7 +616,7 @@ def create_app(
     # — the only browser-facing surface this daemon serves.
     Frontend.embedded("runner", app_name="blizzard-runner", is_api_path=is_api_path).mount(app)
     install_schema_components(
-        app, (*RUNNER_SCHEMA_COMPONENTS.models, SettingsProblem, HubTokenProblem), RUNNER_SCHEMA_COMPONENTS.enums
+        app, (*RUNNER_SCHEMA_COMPONENTS.models, SettingsProblem, RunnerProblem), RUNNER_SCHEMA_COMPONENTS.enums
     )
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)

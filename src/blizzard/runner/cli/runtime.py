@@ -30,7 +30,7 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
-from blizzard.foundation.clock import IClock, SystemMonotonicClock, resolve_clock
+from blizzard.foundation.clock import IClock, SystemMonotonicClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
@@ -60,10 +60,10 @@ from blizzard.runner.composition import (
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
-    build_hub_tokens,
     build_identity_service,
     build_read_stores,
     build_runner_process,
+    build_sealing_hub_tokens,
     build_settings_stores,
     stored_hub_token,
 )
@@ -137,7 +137,13 @@ from blizzard.runner.hub.host_bootstrap import (
 from blizzard.runner.hub.identity import IRunnerIdentityStore, judged
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.hub.sealed_tokens import HubTokens, StoredToken, StoredTokenState
+from blizzard.runner.hub.sealed_tokens import (
+    HubTokens,
+    StoredToken,
+    StoredTokenState,
+    token_set_command,
+    unreadable_token,
+)
 from blizzard.runner.hub.token_seed import RUNNER_SEEDED, import_hub_token
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.identity_check import (
@@ -753,11 +759,13 @@ def _joining_of(
 
 
 def _source_words(token: ResolvedToken, token_env: str, name: str) -> str:
-    """Where a token that overrides ``.env`` came from."""
+    """Where ``token`` came from, in words."""
     if token.source is TokenSource.STORE:
-        return f"the host store, set with `blizzard runner token set --runner {name}`"
+        return f"the host store, set with {token_set_command(name)}"
     if token.source is TokenSource.HOST_FILE:
         return f"[hub_tokens] in {HOST_CONFIG_FILENAME}"
+    if token.source is TokenSource.DOTENV:
+        return f"{token_env} in .env"
     return f"${token_env}"
 
 
@@ -1010,7 +1018,7 @@ def host(
                 if entry.id is not None and entry.id in foreign
             ]
             config = seed_host(config, os.environ)
-            seeded, seed_halted = seed_runners(config, kept)
+            seeded, seed_halted = seed_runners(config, kept, clock=CliCollaborators.of(ctx).wall_clock)
             halted += seed_halted
             start(
                 config,
@@ -1057,7 +1065,9 @@ def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
     return effective
 
 
-def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
+def seed_runners(
+    config: HostConfig, runners: Sequence[RunnerEntry], *, clock: IClock
+) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
     """Seed and resolve identified runners only after the store guard has passed: each runner's token is imported into
     the store first, then its settings are seeded, then it is projected over its stored token. Mints the host's key
     when it holds none."""
@@ -1070,10 +1080,7 @@ def seed_runners(config: HostConfig, runners: Sequence[RunnerEntry]) -> tuple[li
             build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))),
         )
         with click_exception_on(ConfigError):
-            tokens = build_hub_tokens(
-                engine, config.root, environ=os.environ, clock=resolve_clock(os.environ), mint=True
-            )
-        assert tokens is not None
+            tokens = build_sealing_hub_tokens(engine, config.root, environ=os.environ, clock=clock)
         for entry in runners:
             assert entry.id is not None
             stored = _import_token(config, entry, tokens)
@@ -1098,29 +1105,19 @@ def _import_token(config: HostConfig, entry: RunnerEntry, tokens: HubTokens) -> 
     resolved = config.token_for(entry)
     outcome = import_hub_token(tokens, entry.id, resolved.value)
     stored = outcome.stored
-    remedy = f"set it with `blizzard runner token set --runner {entry.name}`"
+    remedy = f"set it with {token_set_command(entry.name)}"
     if stored.state is StoredTokenState.UNREADABLE:
         click.echo(
-            f"warning: runner {entry.name} ({entry.id}): its hub token in the host store does not open under the "
-            f"host's key (generation {stored.key_id}), so it refuses until its token is set again; {remedy}"
+            f"warning: runner {entry.name} ({entry.id}): {unreadable_token(stored.key_id)}, so it refuses until its "
+            f"token is set again; {remedy}"
         )
     elif stored.state is StoredTokenState.OPENED and not outcome.imported and resolved.value:
         click.echo(
             f"warning: runner {entry.name} ({entry.id}): its hub token is sealed in the host store, so the token "
-            f"{_deprecated_source(resolved, entry)} still holds is no longer read; to change it, {remedy}, then "
-            "remove it there"
+            f"{_source_words(resolved, hub_token_variable(entry.name), entry.name)} still holds is no longer read; "
+            f"to change it, {remedy}, then remove it there"
         )
     return stored
-
-
-def _deprecated_source(token: ResolvedToken, entry: RunnerEntry) -> str:
-    """The deprecated source ``token`` came from, in words."""
-    variable = hub_token_variable(entry.name)
-    if token.source is TokenSource.ENVIRONMENT:
-        return f"${variable}"
-    if token.source is TokenSource.HOST_FILE:
-        return f"[hub_tokens] in {HOST_CONFIG_FILENAME}"
-    return f"{variable} in .env"
 
 
 def _seed_runner(
@@ -1162,9 +1159,8 @@ def held_runner_token(config: HostConfig, entry: RunnerEntry) -> ResolvedToken:
             return ResolvedToken(stored.value, TokenSource.STORE)
         if stored.state is StoredTokenState.UNREADABLE:
             raise click.ClickException(
-                f"runner {entry.name} ({entry.id}): its hub token in the host store does not open under the host's "
-                f"key (generation {stored.key_id}); set it again with "
-                f"`blizzard runner token set --runner {entry.name}`, or supply the key it was sealed under"
+                f"runner {entry.name} ({entry.id}): {unreadable_token(stored.key_id)}; set it again with "
+                f"{token_set_command(entry.name)}, or supply the key it was sealed under"
             )
     return config.token_for(entry)
 
@@ -1174,7 +1170,7 @@ def _stored_token(config: HostConfig, runner_id: str) -> StoredToken:
     engine = create_engine_from_url(config.db_url)
     try:
         with click_exception_on(ConfigError):
-            return stored_hub_token(engine, config.root, runner_id, environ=os.environ, clock=resolve_clock(os.environ))
+            return stored_hub_token(engine, config.root, runner_id, environ=os.environ)
     finally:
         engine.dispose()
 
@@ -1307,9 +1303,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
                     continue
                 # A preview: the row when there is one, otherwise what the seed would import — nothing is written.
                 with click_exception_on(ConfigError):
-                    stored = stored_hub_token(
-                        engine, config.root, entry.id, environ=os.environ, clock=resolve_clock(os.environ)
-                    )
+                    stored = stored_hub_token(engine, config.root, entry.id, environ=os.environ)
                 sealed = stored.state is not StoredTokenState.ABSENT
                 if not sealed:
                     stored = config.token_for(entry).importing()
@@ -1321,9 +1315,8 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
                 continue
             if projection.token.state is StoredTokenState.UNREADABLE:
                 problems.append(
-                    f"runner {projection.config.name} ({projection.id}): its hub token in the host store does not "
-                    f"open under the host's key (generation {projection.token.key_id}); set it again with "
-                    f"`blizzard runner token set --runner {projection.config.name}`"
+                    f"runner {projection.config.name} ({projection.id}): {unreadable_token(projection.token.key_id)}; "
+                    f"set it again with {token_set_command(projection.config.name)}"
                 )
                 continue
             problem = _resolve_token(collaborators, config.hub_url, projection)
@@ -1668,7 +1661,9 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        seeded, seed_halted = seed_runners(config, [item for item in config.runners if item.id is not None])
+        seeded, seed_halted = seed_runners(
+            config, [item for item in config.runners if item.id is not None], clock=CliCollaborators.of(ctx).wall_clock
+        )
         seed_halted += [item for item in config.projections() if isinstance(item, HaltedRunner) and item.id is None]
         if seed_halted:
             raise click.ClickException("\n".join(item.describe() for item in seed_halted))

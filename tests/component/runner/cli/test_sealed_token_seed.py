@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
@@ -53,7 +54,7 @@ def _stored(config: HostConfig) -> dict[str, StoredToken]:
 
 
 def _seeded(config: HostConfig) -> dict[str, BuiltRunner]:
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert halted == []
     return {built.id: built for built in ready}
 

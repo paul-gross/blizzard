@@ -4885,39 +4885,6 @@
         "title": "HubConnectivityView",
         "type": "object"
       },
-      "HubTokenProblem": {
-        "properties": {
-          "code": {
-            "title": "Code",
-            "type": "string"
-          },
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "integer"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "status",
-          "detail",
-          "code"
-        ],
-        "title": "HubTokenProblem",
-        "type": "object"
-      },
       "HubTokenWrite": {
         "description": "The runner's new hub bearer token.",
         "properties": {
@@ -6830,6 +6797,39 @@
         ],
         "title": "RunnerEventType",
         "type": "string"
+      },
+      "RunnerProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "title": "RunnerProblem",
+        "type": "object"
       },
       "RunnerStatusView": {
         "description": "``GET /api/runner`` \u2014 identity, pause states, capacities, hub connectivity, last tick.",
@@ -9509,7 +9509,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HubTokenProblem"
+                  "$ref": "#/components/schemas/RunnerProblem"
                 }
               }
             },
@@ -9519,7 +9519,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HubTokenProblem"
+                  "$ref": "#/components/schemas/RunnerProblem"
                 }
               }
             },
@@ -9529,7 +9529,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HubTokenProblem"
+                  "$ref": "#/components/schemas/RunnerProblem"
                 }
               }
             },

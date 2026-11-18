@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.hub.sealed_tokens import SealedHubToken
 from blizzard.runner.transfer.rows import HostIngest
@@ -78,9 +79,11 @@ class IRunnerBoundStores(IRunnerBoundReads, Protocol):
         workspace_ids: Mapping[str, str] | None = None,
         bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
+        hub_token: SealedValue | None = None,
     ) -> None:
         """Copy the runner's rows from the store at ``source_url`` into the one at ``destination_url``, in one
-        destination transaction; the source is only read (:meth:`IRunnerTransfer.copy_runner`)."""
+        destination transaction, with ``ingest``'s record and ``hub_token``'s seal; the source is only read
+        (:meth:`IRunnerTransfer.copy_runner`)."""
         ...
 
     def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:

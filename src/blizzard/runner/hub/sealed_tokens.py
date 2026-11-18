@@ -29,6 +29,38 @@ def sealed_name(runner_id: str) -> str:
     return f"{SEALED_NAME_PREFIX}{runner_id}"
 
 
+def seal_token(
+    cipher: ISecretCipher, runner_id: str, token: SecretValue, *, revision: int = FIRST_REVISION
+) -> SealedValue:
+    """``token`` sealed as the runner's row at ``revision``."""
+    return cipher.seal(token, name=sealed_name(runner_id), revision=revision)
+
+
+class ITokenVerdict(Protocol):
+    """A runner's held identity verdict, as far as replacing its token reads it."""
+
+    def token_retired(self) -> bool:
+        """Whether the hub last refused the runner's token as retired."""
+        ...
+
+
+def token_set_command(runner_name: str) -> str:
+    """The verb that seals a runner's token again, as an operator types it."""
+    return f"`blizzard runner token set --runner {runner_name}`"
+
+
+def unreadable_token(key_id: str | None) -> str:
+    """Why a runner refuses whose row does not open: the key generation it names."""
+    return f"its hub token in the host store does not open under the host's key (generation {key_id})"
+
+
+def refuse_retired(runner_id: str, verdict: ITokenVerdict | None) -> None:
+    """Refuse replacing the token of a runner whose held ``verdict`` is its hub's refusal of it as retired
+    (:class:`HubTokenRetired`); a runner holding no verdict is not refused."""
+    if verdict is not None and verdict.token_retired():
+        raise HubTokenRetired(runner_id)
+
+
 class HubTokenRetired(Exception):
     """The hub refused the runner's token as retired: a retired runner's token is never replaced."""
 
@@ -50,14 +82,16 @@ class SealedHubToken:
     def secret(self) -> SealedSecret:
         return SealedSecret(sealed_name(self.runner_id), self.revision, self.sealed)
 
-
-@domain_model
-@dataclass(frozen=True)
-class OpenedHubToken:
-    """A runner's token opened from its row, with the revision it was sealed at."""
-
-    value: SecretValue
-    revision: int
+    def stored(self, cipher: ISecretCipher | None) -> StoredToken:
+        """The row opened under ``cipher``; unreadable when it does not open, or with no cipher, a host holding no
+        key."""
+        if cipher is None:
+            return StoredToken.unreadable(self.sealed.key_id, self.revision)
+        try:
+            value = cipher.open(self.secret())
+        except SecretUnreadable as exc:
+            return StoredToken.unreadable(exc.key_id, self.revision)
+        return StoredToken.opened(value.expose(), self.revision)
 
 
 class StoredTokenState(StrEnum):
@@ -94,6 +128,11 @@ class StoredToken:
     def absent(cls) -> StoredToken:
         return cls(StoredTokenState.ABSENT)
 
+    @classmethod
+    def of(cls, row: SealedHubToken | None, cipher: ISecretCipher | None) -> StoredToken:
+        """The outcome of reading ``row`` under ``cipher``; absent with no row."""
+        return cls.absent() if row is None else row.stored(cipher)
+
 
 class IReadHubTokenRepository(Protocol):
     def sealed(self, runner_id: str) -> SealedHubToken | None: ...
@@ -129,24 +168,9 @@ class HubTokens:
         self._cipher = cipher
         self._clock = clock
 
-    def open(self, runner_id: str) -> OpenedHubToken | None:
-        """The runner's token, or ``None`` when it holds no row; :class:`SecretUnreadable` when its row does not
-        open under the host's key."""
-        row = self._repository.sealed(runner_id)
-        if row is None:
-            return None
-        return OpenedHubToken(self._cipher.open(row.secret()), row.revision)
-
     def stored(self, runner_id: str) -> StoredToken:
         """The runner's stored-token outcome; never raises for a row that does not open."""
-        row = self._repository.sealed(runner_id)
-        if row is None:
-            return StoredToken.absent()
-        try:
-            value = self._cipher.open(row.secret())
-        except SecretUnreadable as exc:
-            return StoredToken.unreadable(exc.key_id, row.revision)
-        return StoredToken.opened(value.expose(), row.revision)
+        return StoredToken.of(self._repository.sealed(runner_id), self._cipher)
 
     def revision(self, runner_id: str) -> int | None:
         """The revision the runner's row is at, or ``None`` when it holds none — one primary-key read."""
@@ -155,18 +179,17 @@ class HubTokens:
 
     def seal_if_absent(self, runner_id: str, token: SecretValue) -> bool:
         """Seal ``token`` as the runner's first row, unless it holds one; whether it was sealed."""
-        sealed = self._cipher.seal(token, name=sealed_name(runner_id), revision=FIRST_REVISION)
+        sealed = seal_token(self._cipher, runner_id, token)
         return self._repository.seal_if_absent(runner_id, sealed, at=self._clock.now())
 
-    def replace(self, runner_id: str, raw: str, *, retired: bool) -> int:
+    def replace(self, runner_id: str, raw: str, *, verdict: ITokenVerdict | None) -> int:
         """Seal ``raw`` at the runner's next revision; the revision written. :class:`SecretValueBlank` for a blank
-        value, :class:`HubTokenRetired` for a runner its hub refused as retired."""
+        value, :class:`HubTokenRetired` when the runner's held ``verdict`` refuses it (:func:`refuse_retired`)."""
         token = SecretValue.entered(raw)
-        if retired:
-            raise HubTokenRetired(runner_id)
+        refuse_retired(runner_id, verdict)
 
         def seal(revision: int) -> SealedValue:
-            return self._cipher.seal(token, name=sealed_name(runner_id), revision=revision)
+            return seal_token(self._cipher, runner_id, token, revision=revision)
 
         return self._repository.replace(runner_id, seal, at=self._clock.now())
 
@@ -181,5 +204,5 @@ class RunnerHubTokenSource:
     def revision(self) -> int | None:
         return self._tokens.revision(self._runner_id)
 
-    def open(self) -> OpenedHubToken | None:
-        return self._tokens.open(self._runner_id)
+    def stored(self) -> StoredToken:
+        return self._tokens.stored(self._runner_id)

@@ -97,7 +97,7 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_rep
         assert runner.retirement.forget_if_retired() is True
         runner.stores.identity.record_runner_identity(record)
         with host_hub_tokens(config.root, config.db_url) as tokens:
-            tokens.replace("rn_b", "new", retired=False)
+            tokens.replace("rn_b", "new", verdict=None)
         runner.hub_token.refresh()
         assert runner.retirement.forget_if_retired() is True
         assert seen == ["Bearer old", "Bearer new"]

@@ -32,8 +32,8 @@ from blizzard.runner.composition import (
     DotenvTokenFiles,
     RunnerBoundStoreFiles,
     build_host_stores,
-    build_hub_tokens,
     build_runner_ingest,
+    build_sealing_hub_tokens,
     build_stores,
     stored_hub_token,
 )
@@ -140,7 +140,7 @@ def _stored(root: Path) -> StoredToken:
     """The moving runner's stored-token outcome on the host at ``root``, under that host's own key."""
     engine = _engine(root)
     try:
-        return stored_hub_token(engine, root, MOVING_ID, environ={}, clock=SystemClock())
+        return stored_hub_token(engine, root, MOVING_ID, environ={})
     finally:
         engine.dispose()
 
@@ -148,8 +148,8 @@ def _stored(root: Path) -> StoredToken:
 def _seal(root: Path, token: str) -> None:
     """The moving runner's token sealed in the store of the host at ``root``, under that host's own key."""
     engine = _engine(root)
-    tokens = build_hub_tokens(engine, root, environ={}, clock=SystemClock(), mint=True)
-    assert tokens is not None and tokens.seal_if_absent(MOVING_ID, SecretValue(token))
+    tokens = build_sealing_hub_tokens(engine, root, environ={}, clock=SystemClock())
+    assert tokens.seal_if_absent(MOVING_ID, SecretValue(token))
     engine.dispose()
 
 
@@ -230,7 +230,7 @@ def test_ingest_of_a_reset_archive_takes_the_runner_back_and_moves_the_archive_a
     assert contents(here, "runner_identity", runner_id=MOVING_ID) == []
     # An archive carrying a token row of its own, sealed under a key no host here holds, still needs none.
     with host_hub_tokens(tmp_path / "elsewhere", f"sqlite:///{archive}") as tokens:
-        tokens.replace(MOVING_ID, "archived-token", retired=False)
+        tokens.replace(MOVING_ID, "archived-token", verdict=None)
 
     result = _ingest(fake_init_hub, hosts, source=archive)
 

@@ -182,7 +182,7 @@ def test_init_after_a_hub_reset_with_a_sealed_token_stops_naming_token_set(
     replaces."""
     root, env_bytes = _joined(tmp_path, fake_init_hub)
     with host_hub_tokens(root, load_runner_config(root).db_url) as tokens:
-        tokens.replace("rn_init1", "init-token-1", retired=False)
+        tokens.replace("rn_init1", "init-token-1", verdict=None)
     fake_init_hub.admin.added.clear()
     result = _init(fake_init_hub, root, "--allow-readd")
     assert result.exit_code != 0

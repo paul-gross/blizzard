@@ -16,8 +16,10 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, IWriteHubTokenRepository, SealedHubToken
+from blizzard.runner.store.internal.row_transfer import handle_of
 from blizzard.runner.store.schema import runner_hub_tokens
 from blizzard.runner.store.scoped import RunnerStoreConnections
+from blizzard.runner.transfer.rows import IRunnerTransferHandle, IWriteCarriedHubTokenRepository
 
 _log = get_logger("blizzard.runner.store")
 
@@ -43,7 +45,7 @@ class HostHubTokenStore:
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         try:
             with self._store.begin() as conn:
-                if not seal_if_absent_locked(conn, runner_id, sealed, at=at):
+                if not _seal_if_absent_locked(conn, runner_id, sealed, at=at):
                     return False
         except IntegrityError:
             return False
@@ -91,6 +93,12 @@ class HostHubTokenStore:
             )
             return revision, sealed
 
+    def seal_carried_locked(self, handle: IRunnerTransferHandle, sealed: SealedValue, *, at: datetime) -> bool:
+        copy = handle_of(handle)
+        carried = _seal_if_absent_locked(copy.destination, copy.runner_id, sealed, at=at)
+        _log.info("runner hub token carried", runner_id=copy.runner_id, sealed=carried, key_id=sealed.key_id)
+        return carried
+
     def drop(self, runner_id: str) -> bool:
         with self._store.begin() as conn:
             if runner_hub_tokens.name not in inspect(conn).get_table_names():
@@ -103,7 +111,7 @@ class HostHubTokenStore:
         return dropped
 
 
-def seal_if_absent_locked(conn: Connection, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
+def _seal_if_absent_locked(conn: Connection, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
     """Insert the runner's row at :data:`FIRST_REVISION` on ``conn``'s open transaction unless one exists; whether it
     was inserted."""
     if _held(conn, runner_id) is not None:
@@ -139,3 +147,4 @@ def _sealed_columns(sealed: SealedValue) -> dict[str, Any]:
 
 
 _host_hub_token_store_conforms: type[IWriteHubTokenRepository] = HostHubTokenStore
+_carried_hub_token_store_conforms: type[IWriteCarriedHubTokenRepository] = HostHubTokenStore

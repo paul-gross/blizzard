@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
@@ -37,7 +38,7 @@ def test_live_budget_agrees_with_host_and_runner_status(tmp_path: Path, monkeypa
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     hosted = build_hosted_app(config.host_view(), host)
@@ -96,7 +97,7 @@ def test_status_retains_pass_gate_through_pending_and_failed_rebuild(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     hosted = build_hosted_app(config.host_view(), host)
@@ -167,7 +168,7 @@ def test_live_spend_windows_reach_ceiling_and_budget_consumers(tmp_path: Path, m
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]
@@ -234,7 +235,7 @@ def test_live_schedule_changes_gate_answer_on_next_pass(tmp_path: Path, monkeypa
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]
@@ -283,7 +284,7 @@ def test_live_throttle_levers_and_release_policies_change_at_pass_boundary(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]

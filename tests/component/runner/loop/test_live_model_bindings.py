@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
@@ -29,7 +30,7 @@ def test_live_model_policy_reaches_resolution_and_keeps_old_set(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]

@@ -53,7 +53,7 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
     RunnerIdentityStore(sibling.connections).record_runner_identity(
         RunnerIdentity("rn_sibling", "sibling", datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert len(ready) == 2 and not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -122,7 +122,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     seams = runner_seams(app)
     seams.settings_reader = reader
     seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
@@ -317,7 +317,7 @@ def test_settings_human_roles_and_worker_credential(
     seams = runner_seams(app)
     seams.settings_reader = reader
     seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
@@ -392,7 +392,7 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
     app = create_runner_app(
         host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])

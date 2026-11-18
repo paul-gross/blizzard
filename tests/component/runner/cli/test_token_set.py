@@ -16,6 +16,7 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import seed_runners
@@ -120,7 +121,7 @@ def test_a_stopped_host_refuses_a_store_its_runner_is_foreign_to(
 
 @contextmanager
 def _serving(config: HostConfig) -> Generator[None]:
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(config, ready)
     served = replace(ready[0].config, port=0)

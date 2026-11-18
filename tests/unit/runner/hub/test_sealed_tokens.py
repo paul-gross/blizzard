@@ -14,12 +14,18 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
-from blizzard.foundation.secrets.sealing import SealedValue, SecretUnreadable
+from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.secrets.value import SecretValue, SecretValueBlank
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY, host_key_provider, sealing_key_provider
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.sealed_tokens import HubTokenRetired, HubTokens, SealedHubToken, sealed_name
+from blizzard.runner.hub.sealed_tokens import (
+    HubTokenRetired,
+    HubTokens,
+    SealedHubToken,
+    StoredToken,
+    StoredTokenState,
+)
 
 _AT = datetime(2026, 11, 18, tzinfo=UTC)
 _KEY = base64.b64encode(bytes(range(32))).decode()
@@ -63,39 +69,48 @@ def _tokens(tmp_path: Path) -> tuple[HubTokens, _Rows]:
 def test_a_sealed_token_opens_only_under_its_runner_and_revision(tmp_path: Path) -> None:
     tokens, rows = _tokens(tmp_path)
     assert tokens.seal_if_absent("rn_a", SecretValue("tok-a"))
-    opened = tokens.open("rn_a")
-    assert opened is not None
-    assert (opened.value.expose(), opened.revision) == ("tok-a", 1)
+    assert tokens.stored("rn_a") == StoredToken.opened("tok-a", 1)
 
     rows.rows["rn_b"] = dataclasses.replace(rows.rows["rn_a"], runner_id="rn_b")
-    with pytest.raises(SecretUnreadable) as moved:
-        tokens.open("rn_b")
-    assert moved.value.name == sealed_name("rn_b")
+    assert tokens.stored("rn_b").state is StoredTokenState.UNREADABLE
 
     rows.rows["rn_a"] = dataclasses.replace(rows.rows["rn_a"], revision=2)
-    with pytest.raises(SecretUnreadable):
-        tokens.open("rn_a")
+    assert tokens.stored("rn_a").state is StoredTokenState.UNREADABLE
+
+
+def test_a_row_with_no_cipher_to_open_it_is_unreadable(tmp_path: Path) -> None:
+    tokens, rows = _tokens(tmp_path)
+    assert tokens.seal_if_absent("rn_a", SecretValue("tok-a"))
+    row = rows.rows["rn_a"]
+    assert StoredToken.of(row, None) == StoredToken.unreadable(row.sealed.key_id, 1)
+    assert StoredToken.of(None, None) == StoredToken.absent()
 
 
 def test_seal_if_absent_never_overwrites(tmp_path: Path) -> None:
     tokens, _ = _tokens(tmp_path)
     assert tokens.seal_if_absent("rn_a", SecretValue("first"))
     assert not tokens.seal_if_absent("rn_a", SecretValue("second"))
-    opened = tokens.open("rn_a")
-    assert opened is not None and opened.value.expose() == "first"
+    assert tokens.stored("rn_a") == StoredToken.opened("first", 1)
+
+
+class _Verdict:
+    def __init__(self, *, retired: bool) -> None:
+        self._retired = retired
+
+    def token_retired(self) -> bool:
+        return self._retired
 
 
 def test_replace_seals_at_the_next_revision_and_refuses_blank_and_retired(tmp_path: Path) -> None:
     tokens, rows = _tokens(tmp_path)
-    assert tokens.open("rn_a") is None
-    assert tokens.replace("rn_a", "one", retired=False) == 1
-    assert tokens.replace("rn_a", "two", retired=False) == 2
-    opened = tokens.open("rn_a")
-    assert opened is not None and (opened.value.expose(), opened.revision) == ("two", 2)
+    assert tokens.stored("rn_a") == StoredToken.absent()
+    assert tokens.replace("rn_a", "one", verdict=None) == 1
+    assert tokens.replace("rn_a", "two", verdict=_Verdict(retired=False)) == 2
+    assert tokens.stored("rn_a") == StoredToken.opened("two", 2)
     with pytest.raises(SecretValueBlank):
-        tokens.replace("rn_a", "  ", retired=False)
+        tokens.replace("rn_a", "  ", verdict=None)
     with pytest.raises(HubTokenRetired):
-        tokens.replace("rn_a", "three", retired=True)
+        tokens.replace("rn_a", "three", verdict=_Verdict(retired=True))
     assert rows.rows["rn_a"].revision == 2
 
 

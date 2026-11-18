@@ -49,7 +49,7 @@ def test_legacy_seed_is_durable_and_canonical_edits_override_it(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert ready and not halted
     settings = RunnerSettingsStore(base.connections, SystemClock())
     alias = legacy.split(" = ")[0]
@@ -75,7 +75,7 @@ def test_legacy_seed_is_durable_and_canonical_edits_override_it(
     )
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner=legacy.replace(value, "changed") + "\n")
     reloaded = load_host_config(tmp_path)
-    ready, halted = seed_runners(reloaded, list(reloaded.runners))
+    ready, halted = seed_runners(reloaded, list(reloaded.runners), clock=SystemClock())
     assert ready and not halted
     assert settings.snapshot().entries[canonical] == Entry(None, at_default=True)
     section = ready[0].config.harness_sections.of(CLAUDE_CODE_HARNESS_ID)
@@ -94,7 +94,7 @@ def test_live_settings_rebuild_and_failed_prompt_retry(tmp_path: Path, monkeypat
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     try:
@@ -147,7 +147,7 @@ def test_snapshot_resolution_failure_reports_revision_and_recovers(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -191,7 +191,7 @@ def test_recovery_read_failure_keeps_context_and_set_atomic(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, _ = seed_runners(host, list(host.runners))
+    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -280,7 +280,7 @@ def test_disabled_session_recovers_when_binary_becomes_available(
         spawned_at=now,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-b"),
     )
-    ready, _ = seed_runners(host, list(host.runners))
+    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -333,7 +333,7 @@ def test_recovery_retry_preserves_enabled_opencode_version_hold(
         spawned_at=now,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-a"),
     )
-    ready, _ = seed_runners(host, list(host.runners))
+    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -404,7 +404,7 @@ def test_recovery_retries_unchanged_binary_version_after_transient_failure(
         spawned_at=now,
         session=SessionReference("opencode", "session-a"),
     )
-    ready, _ = seed_runners(host, list(host.runners))
+    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
     clock = ManualMonotonicClock()
     graph = build_host_process(host, ready, monotonic_clock=clock)
     runner = graph.runners[0]
@@ -453,7 +453,7 @@ def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebu
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -518,7 +518,7 @@ def test_stored_launch_settings_reach_replacement_harness_without_mutating_old_s
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -555,7 +555,7 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     entry = host.runners[0]
     assert entry.own is not None
     base = make_store(url, TEST_RUNNER_ID)
-    ready, halted = seed_runners(host, [entry])
+    ready, halted = seed_runners(host, [entry], clock=SystemClock())
     assert ready and not halted and ready[0].config.agents == 3
     settings = RunnerSettingsStore(base.connections, SystemClock())
     assert settings.snapshot().entries == {}
@@ -573,14 +573,14 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
         assert settings.snapshot().entries["agents"] == Entry(3)
     finally:
         graph.close()
-    ready, halted = seed_runners(host, [entry])
+    ready, halted = seed_runners(host, [entry], clock=SystemClock())
     assert not halted and ready[0].config.agents == 3
     settings = RunnerSettingsStore(base.connections, SystemClock())
     snapshot = settings.snapshot()
     assert snapshot.entries["agents"] == Entry(3)
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\n')
     edited = load_host_config(tmp_path)
-    ready, halted = seed_runners(edited, list(edited.runners))
+    ready, halted = seed_runners(edited, list(edited.runners), clock=SystemClock())
     assert not halted and ready[0].config.agents == 3
     settings.write(
         Change("edit", unsets=frozenset({"agents"})),
@@ -591,7 +591,7 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     )
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\n')
     edited = load_host_config(tmp_path)
-    ready, halted = seed_runners(edited, list(edited.runners))
+    ready, halted = seed_runners(edited, list(edited.runners), clock=SystemClock())
     assert not halted and ready[0].config.agents == 0
     assert settings.snapshot().entries["agents"] == Entry(None, at_default=True)
 
@@ -605,16 +605,16 @@ def test_invalid_initial_seed_and_boot_binding_are_refused(tmp_path: Path, monke
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not ready and "agents" in halted[0].errors[0]
     assert not RunnerSettingsStore(base.connections, SystemClock()).snapshot().entries
 
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
     host = load_host_config(tmp_path)
-    assert seed_runners(host, list(host.runners))[0]
+    assert seed_runners(host, list(host.runners), clock=SystemClock())[0]
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\nsubscription = "missing"\n')
     host = load_host_config(tmp_path)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not ready and "subscription" in halted[0].errors[0]
 
 
@@ -631,7 +631,7 @@ def test_seed_validates_related_authored_settings_as_one_configuration(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     assert ready[0].config.throttle is not None
     assert ready[0].config.throttle.budget is not None
@@ -660,7 +660,7 @@ def test_stored_worker_profiles_may_diverge_without_changing_host_tools(
         RunnerIdentityStore(base.connections).record_runner_identity(
             RunnerIdentity(entry.id, entry.name, datetime.now(UTC))
         )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert len(ready) == 2 and not halted
     for entry, path in zip(host.runners, ("/stored-one", "/stored-two"), strict=True):
         assert entry.id is not None
@@ -673,7 +673,7 @@ def test_stored_worker_profiles_may_diverge_without_changing_host_tools(
             actor="test",
         )
     reloaded = load_host_config(tmp_path)
-    ready, halted = seed_runners(reloaded, list(reloaded.runners))
+    ready, halted = seed_runners(reloaded, list(reloaded.runners), clock=SystemClock())
     assert not halted
     assert [runner.config.worker_path_prepend for runner in ready] == [("/stored-one",), ("/stored-two",)]
     assert reloaded.host_view().worker_path_prepend == ("/file",)

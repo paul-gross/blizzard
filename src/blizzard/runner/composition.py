@@ -42,7 +42,7 @@ from blizzard.foundation.platform_tracing.handle import (
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.secrets.factories import secret_cipher
-from blizzard.foundation.secrets.sealing import ISecretCipher
+from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -130,6 +130,7 @@ from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClie
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.sealed_tokens import (
     HubTokens,
+    IWriteHubTokenRepository,
     RunnerHubTokenSource,
     SealedHubToken,
     StoredToken,
@@ -669,42 +670,34 @@ def held_hub_token(
     return held
 
 
+def _hub_token_store(engine: Engine) -> HostHubTokenStore:
+    return HostHubTokenStore(
+        RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+    )
+
+
 def build_hub_tokens(
-    engine: Engine, root: Path, *, environ: Mapping[str, str], clock: IClock, mint: bool, runner_id: str | None = None
+    repository: IWriteHubTokenRepository, root: Path, *, environ: Mapping[str, str], clock: IClock
 ) -> HubTokens | None:
-    """The host's sealed runner tokens under its key, or ``None`` when ``mint`` is off and the host holds no key yet.
-    ``mint`` mints the key directory's first generation when no key exists, and refuses as
-    :func:`~blizzard.runner.host_keys.sealing_key_provider` does; a malformed key variable raises
-    :class:`ConfigError`."""
-    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    store = HostHubTokenStore(RunnerStoreConnections(engine, errors, runner_id))
-    if mint:
-        keys = sealing_key_provider(environ, HostLayout(root), sealed_under=store.key_ids())
-    elif (held := host_key_provider(environ, HostLayout(root), mint=False)) is not None:
-        keys = held
-    else:
-        return None
+    """The host's sealed runner tokens under its key, never minted: ``None`` when the host holds no key yet. A
+    malformed key variable raises :class:`ConfigError`."""
+    keys = host_key_provider(environ, HostLayout(root), mint=False)
+    return None if keys is None else HubTokens(repository, secret_cipher(keys), clock)
+
+
+def build_sealing_hub_tokens(engine: Engine, root: Path, *, environ: Mapping[str, str], clock: IClock) -> HubTokens:
+    """The host's sealed runner tokens under the key it seals under, its first generation minted when it holds none;
+    refuses as :func:`~blizzard.runner.host_keys.sealing_key_provider` does."""
+    store = _hub_token_store(engine)
+    keys = sealing_key_provider(environ, HostLayout(root), sealed_under=store.key_ids())
     return HubTokens(store, secret_cipher(keys), clock)
 
 
-def stored_hub_token(
-    engine: Engine, root: Path, runner_id: str, *, environ: Mapping[str, str], clock: IClock
-) -> StoredToken:
+def stored_hub_token(engine: Engine, root: Path, runner_id: str, *, environ: Mapping[str, str]) -> StoredToken:
     """``runner_id``'s stored-token outcome, read without minting the host's key: a row with no key to open it is
     unreadable. A malformed key variable raises :class:`ConfigError`."""
-    tokens = build_hub_tokens(engine, root, environ=environ, clock=clock, mint=False)
-    if tokens is not None:
-        return tokens.stored(runner_id)
-    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    row = HostHubTokenStore(RunnerStoreConnections(engine, errors)).sealed(runner_id)
-    return StoredToken.absent() if row is None else StoredToken.unreadable(row.sealed.key_id, row.revision)
-
-
-def _hub_token_source(
-    host: HostProcess, root: Path, runner_id: str, environ: Mapping[str, str]
-) -> IHubTokenSource | None:
-    tokens = build_hub_tokens(host.engine, root, environ=environ, clock=host.clock, mint=False, runner_id=runner_id)
-    return None if tokens is None else RunnerHubTokenSource(tokens, runner_id)
+    keys = host_key_provider(environ, HostLayout(root), mint=False)
+    return StoredToken.of(_hub_token_store(engine).sealed(runner_id), None if keys is None else secret_cipher(keys))
 
 
 def build_host_process(
@@ -978,7 +971,7 @@ def _build_host_graph(
             children=children,
             invariants=HostInvariantCheck(RunnerInvariants(host_stores.runner_audit, process)),
             hub_tokens=build_hub_tokens(
-                engine, config.root, environ=os.environ if environ is None else environ, clock=clock, mint=False
+                host_stores.hub_tokens, config.root, environ=os.environ if environ is None else environ, clock=clock
             ),
             telemetry_receiver=TelemetryReceiver(
                 platform_tracing=platform_tracing,
@@ -1346,7 +1339,9 @@ def _build_runner(
         trace_replay = LeaseTraceReplay(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=replay_tracing
         )
-        hub_token = held_hub_token(config, token, _hub_token_source(host, config.root, runner_id, runner_environ))
+        hub_token = held_hub_token(
+            config, token, None if host.hub_tokens is None else RunnerHubTokenSource(host.hub_tokens, runner_id)
+        )
         # This runner's own identity client: the host tick's watch reads on its thread, so no loop or app client is
         # shared. The held token is read per request; the runner closes the client with itself.
         identity_client = httpx2.Client(
@@ -1509,7 +1504,10 @@ def build_runner_transfer(
     to it, and the destination's host member running the host half on the copy's transaction."""
     into = RunnerStoreConnections(destination, errors, runner_id)
     return RunnerTransferStore(
-        RunnerStoreConnections(source, errors, runner_id), into, _build_host_stores(into, clock).host_ingests
+        RunnerStoreConnections(source, errors, runner_id),
+        into,
+        _build_host_stores(into, clock).host_ingests,
+        HostHubTokenStore(into),
     )
 
 
@@ -1571,11 +1569,14 @@ class RunnerBoundStoreFiles:
         workspace_ids: Mapping[str, str] | None = None,
         bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
+        hub_token: SealedValue | None = None,
     ) -> None:
         with _engine(source_url) as source, _engine(destination_url) as destination:
             build_runner_transfer(
                 source, destination, errors=self.files.errors, runner_id=self.runner_id, clock=self.files.clock
-            ).copy_runner(workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest)
+            ).copy_runner(
+                workspace_ids=workspace_ids, bound_workspaces=bound_workspaces, ingest=ingest, hub_token=hub_token
+            )
 
     def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
         with _engine(url) as engine:

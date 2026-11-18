@@ -24,7 +24,6 @@ import httpx2
 import pytest
 from sqlalchemy import Engine, Row, insert, select
 
-from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.secrets.value import SecretValue
@@ -4314,7 +4313,7 @@ def _sealed_token(root: Path, moving_id: str) -> str | None:
     config = load_host_config(root)
     engine = create_engine_from_url(config.db_url)
     try:
-        stored = stored_hub_token(engine, config.root, moving_id, environ=os.environ, clock=SystemClock())
+        stored = stored_hub_token(engine, config.root, moving_id, environ=os.environ)
     finally:
         engine.dispose()
     assert stored.state is not StoredTokenState.UNREADABLE, f"{root.name}'s token row does not open"
@@ -4457,8 +4456,9 @@ def _seed_rows(root: Path) -> dict[str, tuple[int, str] | None]:
     with host_hub_tokens(config.root, config.db_url) as tokens:
         for entry in config.runners:
             assert entry.id is not None
-            opened = tokens.open(entry.id)
-            rows[entry.name] = None if opened is None else (opened.revision, opened.value.expose())
+            stored = tokens.stored(entry.id)
+            assert stored.state is not StoredTokenState.UNREADABLE
+            rows[entry.name] = None if stored.revision is None else (stored.revision, stored.value)
     return rows
 
 

@@ -330,8 +330,11 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "board or SSE stream carries."
     ),
     "seal_if_absent": Silent(
-        "the host's token import at start, and a transfer's re-seal — a runner's sealed hub token, which no runner's "
-        "board or SSE stream carries."
+        "the host's token import at start — a runner's sealed hub token, which no runner's board or SSE stream carries."
+    ),
+    "seal_carried_locked": Silent(
+        "a runner transfer's copy, offline, with no daemon running — the moving runner's sealed hub token, which no "
+        "runner's board or SSE stream carries."
     ),
     "replace": Silent(
         "a runner's token replacement by its operator — a runner's sealed hub token, which no runner's board or SSE "

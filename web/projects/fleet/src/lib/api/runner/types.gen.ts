@@ -2864,32 +2864,6 @@ export type HubConnectivityView = {
 };
 
 /**
- * HubTokenProblem
- */
-export type HubTokenProblem = {
-    /**
-     * Code
-     */
-    code: string;
-    /**
-     * Detail
-     */
-    detail: string;
-    /**
-     * Status
-     */
-    status: number;
-    /**
-     * Title
-     */
-    title: string;
-    /**
-     * Type
-     */
-    type: string;
-};
-
-/**
  * HubTokenWrite
  *
  * The runner's new hub bearer token.
@@ -4115,6 +4089,32 @@ export const RunnerEventType = {
  * Every runner SSE frame kind — the ``event:`` name a frame carries.
  */
 export type RunnerEventType = typeof RunnerEventType[keyof typeof RunnerEventType];
+
+/**
+ * RunnerProblem
+ */
+export type RunnerProblem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: string;
+};
 
 /**
  * RunnerStatusView
@@ -5731,15 +5731,15 @@ export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors = {
     /**
      * No runner of this host has the id
      */
-    404: HubTokenProblem;
+    404: RunnerProblem;
     /**
      * The hub refused the runner's token as retired
      */
-    409: HubTokenProblem;
+    409: RunnerProblem;
     /**
      * A blank token
      */
-    422: HubTokenProblem;
+    422: RunnerProblem;
 };
 
 export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutError = SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors[keyof SetRunnerTokenApiHostRunnersRunnerIdTokenPutErrors];

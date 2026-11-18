@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.composition import build_host_process
@@ -78,7 +79,7 @@ def test_store_edits_reach_next_launch_and_preserve_running_owner(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime(2026, 7, 13, tzinfo=UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -178,7 +179,7 @@ def test_opencode_store_edits_reach_new_child(tmp_path: Path, monkeypatch: pytes
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime(2026, 7, 13, tzinfo=UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -236,7 +237,7 @@ def test_prompt_and_transcript_root_edits_reach_session_consumers(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime(2026, 7, 13, tzinfo=UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -316,7 +317,7 @@ def test_live_bundle_enabled_and_auth_changes_reach_consumers(tmp_path: Path, mo
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime(2026, 7, 13, tzinfo=UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready, selections={TEST_RUNNER_ID: first_bindings()}, publish_bundles=True)
     runner = graph.runners[0]
