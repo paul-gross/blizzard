@@ -18,7 +18,7 @@
         <div cdkDrag [cdkDragDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" class="urgency-item">
           @if (canEdit() && lifecycle() === 'active') { <span cdkDragHandle class="drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span> }
           <fleet-kit-select-row class="urgency-row" [value]="urgency.urgency_id" [label]="urgency.slug">
-            <app-urgency-pill [urgency]="urgency" /> {{ urgency.slug }} · {{ urgency.open_chunks }} open
+            <app-urgency-pill [urgency]="urgency" [focusable]="false" /> {{ urgency.slug }} · {{ urgency.open_chunks }} open
             @if (urgency.default) { · default } @if (urgency.retired) { · retired }
           </fleet-kit-select-row>
         </div>

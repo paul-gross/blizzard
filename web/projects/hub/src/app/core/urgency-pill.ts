@@ -11,6 +11,8 @@ import { injectUrgencyIconUrl } from './urgency-icon.query';
 })
 export class UrgencyPill {
   readonly urgency = input.required<UrgencyView>();
+  /** False inside a listbox row, where a focusable pill would add a Tab stop. */
+  readonly focusable = input(true);
   protected readonly iconUrl = injectUrgencyIconUrl(() => {
     const urgency = this.urgency();
     return !urgency.emoji && urgency.icon ? { key: urgency.urgency_id, digest: urgency.icon.digest } : null;

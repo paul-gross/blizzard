@@ -15,7 +15,7 @@ const meta: Meta<KitSelectList> = {
   render: (args) => ({
     props: { ...args, rows: FEW },
     template: `
-      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="width: 320px">
+      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
         @for (row of rows; track row) {
           <fleet-kit-select-row [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
         }
@@ -33,7 +33,7 @@ export const Overflowing: Story = {
   render: (args) => ({
     props: { ...args, rows: MANY },
     template: `
-      <div style="width: 320px; height: 240px; overflow: auto">
+      <div style="max-width: 320px; height: 240px; overflow: auto">
         <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)">
           @for (row of rows; track row) {
             <fleet-kit-select-row [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
@@ -45,14 +45,14 @@ export const Overflowing: Story = {
 export const Empty: Story = {
   render: (args) => ({
     props: args,
-    template: `<div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" style="width: 320px"></div>`,
+    template: `<div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" style="max-width: 320px"></div>`,
   }),
 };
 export const DisabledRows: Story = {
   render: (args) => ({
     props: { ...args, rows: FEW },
     template: `
-      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="width: 320px">
+      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
         @for (row of rows; track row; let i = $index) {
           <fleet-kit-select-row [value]="row" [label]="row" [disabled]="i % 2 === 1">{{ row }}</fleet-kit-select-row>
         }
@@ -63,7 +63,8 @@ export const Bare: Story = {
   render: (args) => ({
     props: { ...args, rows: FEW },
     template: `
-      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="width: 320px">
+      <style>fleet-kit-select-row:focus-visible { outline: 1px solid var(--cyan); outline-offset: -2px; }</style>
+      <div fleetKitSelectList [ariaLabel]="ariaLabel" [value]="value" (valueChange)="valueChange($event)" style="max-width: 320px">
         @for (row of rows; track row) {
           <fleet-kit-select-row bare [value]="row" [label]="row">{{ row }}</fleet-kit-select-row>
         }

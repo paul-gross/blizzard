@@ -115,6 +115,6 @@ describe('KitSelectList', () => {
     host.rows.set([]);
     await fixture.whenStable();
     expect(el.querySelectorAll('[role="option"]')).toHaveLength(0);
-    expect(el.querySelectorAll('[tabindex="0"]').length).toBeLessThanOrEqual(1);
+    expect(el.querySelectorAll('[tabindex="0"]')).toHaveLength(0);
   });
 });

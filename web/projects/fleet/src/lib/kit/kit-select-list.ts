@@ -39,6 +39,8 @@ export class KitSelectList<V = unknown> {
   /** True from a click or key press on the list until Aria has published its selection. */
   private userInput = false;
   private lastPushed: V | null | undefined;
+  private hadFocus = false;
+  private focusedValue: V | undefined;
 
   constructor() {
     // A host directive's inputs cannot be bound from the host's own metadata, so the list's fixed
@@ -59,8 +61,21 @@ export class KitSelectList<V = unknown> {
       afterNextRender({ read: () => (this.userInput = false) }, { injector });
     };
     for (const type of ['click', 'keydown']) host.addEventListener(type, begin, true);
+    // Focus on a row that a re-render destroys falls to <body> with no focusout, so remember that
+    // focus was inside the list and which row held it, and hand it back to the same value.
+    const focusIn = () => {
+      this.hadFocus = true;
+      this.focusedValue = this.listbox._pattern.inputs.activeItem()?.value();
+    };
+    const focusOut = (event: FocusEvent) => {
+      if (!host.contains(event.relatedTarget as Node | null)) this.hadFocus = false;
+    };
+    host.addEventListener('focusin', focusIn);
+    host.addEventListener('focusout', focusOut);
     inject(DestroyRef).onDestroy(() => {
       for (const type of ['click', 'keydown']) host.removeEventListener(type, begin, true);
+      host.removeEventListener('focusin', focusIn);
+      host.removeEventListener('focusout', focusOut);
     });
 
     // Aria writes `value` itself (pruning, explicit toggles); read it through its model's changes.
@@ -75,9 +90,25 @@ export class KitSelectList<V = unknown> {
       write: () => {
         const want = this.value();
         this.rowsVersion();
-        untracked(() => this.push(want));
+        untracked(() => {
+          this.push(want);
+          this.restoreFocus();
+          // Aria leaves an empty list tabbable; an empty list owns no Tab stop.
+          if (this.listbox._pattern.inputs.items().length === 0) host.removeAttribute('tabindex');
+        });
       },
     });
+  }
+
+  /** Give focus back to the row that held it when a re-render destroyed that row's element. */
+  private restoreFocus(): void {
+    if (!this.hadFocus || this.focusedValue === undefined) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    const row = this.listbox._pattern.inputs.items().find((item) => item.value() === this.focusedValue);
+    if (row === undefined) return;
+    this.listbox._pattern.inputs.activeItem.set(row);
+    row.element()?.focus({ preventScroll: true });
   }
 
   private rowsVersion(): unknown {
