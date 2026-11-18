@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -31,6 +32,35 @@ from tests.support.opencode_adapter import preamble as opencode_preamble
 from tests.support.opencode_binary import worker_binary
 from tests.support.runner_fakes import make_envelope, make_store
 
+CAPTURE_WORKER = """#!/usr/bin/python3
+import json, os, pathlib, sys, time
+root = pathlib.Path.cwd()
+staged = root / "capture.json.tmp"
+staged.write_text(json.dumps({"binary": sys.argv[0], "argv": sys.argv[1:], "probe": os.environ.get("SESSION_EDIT_PROBE"), "path": os.environ.get("PATH"), "shell": os.environ.get("CLAUDE_CODE_SHELL")}))
+staged.replace(root / "capture.json")
+while not (root / "release").exists():
+    time.sleep(0.01)
+"""
+
+
+def test_capture_worker_publishes_only_complete_json(tmp_path: Path) -> None:
+    script = CAPTURE_WORKER.replace(
+        'staged.replace(root / "capture.json")',
+        'assert json.loads(staged.read_text())["argv"] == ["argument"]\n'
+        'assert not (root / "capture.json").exists()\n'
+        'staged.replace(root / "capture.json")',
+    )
+    assert script != CAPTURE_WORKER
+    binary = tmp_path / "worker"
+    binary.write_text(script)
+    binary.chmod(0o755)
+    (tmp_path / "release").touch()
+
+    subprocess.run([str(binary), "argument"], cwd=tmp_path, check=True, timeout=10)
+
+    assert json.loads((tmp_path / "capture.json").read_text())["argv"] == ["argument"]
+    assert not (tmp_path / "capture.json.tmp").exists()
+
 
 def test_store_edits_reach_next_launch_and_preserve_running_owner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -38,15 +68,8 @@ def test_store_edits_reach_next_launch_and_preserve_running_owner(
     monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
     monkeypatch.setenv("SESSION_EDIT_PROBE", "passed")
     old_bin, new_bin = tmp_path / "old-bin", tmp_path / "new-bin"
-    script = """#!/usr/bin/python3
-import json, os, pathlib, sys, time
-root = pathlib.Path.cwd()
-(root / "capture.json").write_text(json.dumps({"binary": sys.argv[0], "argv": sys.argv[1:], "probe": os.environ.get("SESSION_EDIT_PROBE"), "path": os.environ.get("PATH"), "shell": os.environ.get("CLAUDE_CODE_SHELL")}))
-while not (root / "release").exists():
-    time.sleep(0.01)
-"""
     for binary in (old_bin, new_bin):
-        binary.write_text(script)
+        binary.write_text(CAPTURE_WORKER)
         binary.chmod(0o755)
     url = f"sqlite:///{tmp_path / 'runner.db'}"
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner=f'[runner.claude_code]\nbinary = "{old_bin}"\n')
