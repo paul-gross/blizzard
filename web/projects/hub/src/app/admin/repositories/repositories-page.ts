@@ -20,7 +20,7 @@ import type { ConfigRowVm } from '../config-record-list';
 import { honourForge, repositoryFieldViews, repositoryRows } from './repositories.model';
 import { injectLandingPolicyChoicesQuery, injectRepositoryListQuery } from './repositories.query';
 import { EMPTY_REPOSITORY_DRAFT, type RepositoryDraft } from './repository.domain';
-import { repositoryCreateRules } from './repository.form';
+import { repositoryRules } from './repository.form';
 import { injectRepositoryService } from './repository.service';
 import { ProjectLens } from '../../core/project-lens';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
@@ -93,7 +93,7 @@ export class RepositoriesPage {
   private readonly landingPoliciesQuery = injectLandingPolicyChoicesQuery();
   protected readonly createOpen = signal(false);
   private readonly draft = signal<RepositoryDraft>({ ...EMPTY_REPOSITORY_DRAFT });
-  protected readonly createForm = form(this.draft, repositoryCreateRules);
+  protected readonly createForm = form(this.draft, repositoryRules);
   /** The forge the create form names — its detail says which policies it can honour. */
   private readonly honourQuery = injectForgeHonourQuery(() => honourForge(this.createOpen(), this.draft()));
   protected readonly fields = computed(() =>

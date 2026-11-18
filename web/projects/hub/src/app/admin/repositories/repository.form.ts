@@ -1,13 +1,14 @@
-import { apply, disabled, hidden, required, schema, validate } from '@angular/forms/signals';
+import { disabled, hidden, required, schema, validate } from '@angular/forms/signals';
 
 import { draftParks, PARK_TIMEOUT_MESSAGE, readParkTimeoutHours, type RepositoryDraft } from './repository.domain';
 
 /**
- * The rules both repository forms judge a draft by, the hub's own written again here. Forge, owner, repository, base
+ * The rules both repository forms judge a draft by (the slug may be renamed on edit, so it is required in both), the
+ * hub's own written again here. Forge, owner, repository, base
  * branch, and credential are required; name and landing policy are not. The park timeout is hidden unless the policy
  * parks, disabled while the default is chosen, and otherwise whole hours from 1.
  */
-const repositoryRules = schema<RepositoryDraft>((p) => {
+export const repositoryRules = schema<RepositoryDraft>((p) => {
   required(p.slug);
   required(p.forge);
   required(p.owner);
@@ -23,14 +24,4 @@ const repositoryRules = schema<RepositoryDraft>((p) => {
       ? null
       : { kind: 'hours', message: PARK_TIMEOUT_MESSAGE },
   );
-});
-
-/** A new repository's rules. */
-export const repositoryCreateRules = schema<RepositoryDraft>((p) => {
-  apply(p, repositoryRules);
-});
-
-/** A repository edit's rules; the slug may be renamed, so it stays required. */
-export const repositoryEditRules = schema<RepositoryDraft>((p) => {
-  apply(p, repositoryRules);
 });

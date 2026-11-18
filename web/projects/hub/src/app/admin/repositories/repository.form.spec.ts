@@ -4,9 +4,9 @@ import { form } from '@angular/forms/signals';
 
 import { repositoryDraft } from './repository.builders';
 import { EMPTY_REPOSITORY_DRAFT, PARK_TIMEOUT_MESSAGE, type RepositoryDraft } from './repository.domain';
-import { repositoryCreateRules, repositoryEditRules } from './repository.form';
+import { repositoryRules } from './repository.form';
 
-function tree(draft: RepositoryDraft, rules = repositoryCreateRules) {
+function tree(draft: RepositoryDraft, rules = repositoryRules) {
   TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   return TestBed.runInInjectionContext(() => form(signal(draft), rules));
 }
@@ -39,7 +39,7 @@ describe('repository rules', () => {
   });
 
   it('keeps the slug required on edit, where it may be renamed', () => {
-    expect(tree(repositoryDraft({ slug: '' }), repositoryEditRules).slug().valid()).toBe(false);
+    expect(tree(repositoryDraft({ slug: '' }), repositoryRules).slug().valid()).toBe(false);
   });
 
   describe('park timeout', () => {

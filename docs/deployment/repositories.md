@@ -114,8 +114,7 @@ other required fields, and checks each field as it is typed, so a save it cannot
 before anything reaches the hub; a refusal from the hub, such as a slug or an owner and repository already taken, lands
 on its field too, and an edit saved over a change someone else made since it opened is refused with the typed values
 kept. The park timeout appears only for `park`, as a choice between the default and a stated whole number of hours, one
-or more. A repository's
-detail shows its landing policy, and for `park` its timeout, or `default` when none is set. A
+or more. A repository's detail shows its landing policy, and for `park` its timeout, or `default` when none is set. A
 [configuration document](./config-documents.md) names the forge by its slug in `forge`.
 
 ## Checking forge addresses before the forge migration

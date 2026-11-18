@@ -27,7 +27,7 @@ import { credentialCheckTarget } from '../credentials/credentials.model';
 import { honourForge, repositoryFieldViews, repositoryRecordVm } from './repositories.model';
 import { injectLandingPolicyChoicesQuery, injectRepositoryRecordQuery } from './repositories.query';
 import { EMPTY_REPOSITORY_DRAFT, REPOSITORY_RECORD_KIND, type RepositoryDraft } from './repository.domain';
-import { repositoryEditRules } from './repository.form';
+import { repositoryRules } from './repository.form';
 import { injectRepositoryService } from './repository.service';
 import { toEditBaseline } from './repository.translate';
 import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
@@ -82,7 +82,7 @@ export class RepositoryDetail {
   /** What the open edit started from, captured from one read; `null` while no edit is open. */
   private readonly baseline = signal<EditBaseline<RepositoryDraft> | null>(null);
   private readonly draft = signal<RepositoryDraft>({ ...EMPTY_REPOSITORY_DRAFT });
-  protected readonly editForm = form(this.draft, repositoryEditRules);
+  protected readonly editForm = form(this.draft, repositoryRules);
   protected readonly editBaseline = computed(() => this.baseline()?.draft ?? null);
   /** The forge the edit form names — its detail says which policies it can honour. */
   private readonly honourQuery = injectForgeHonourQuery(() => honourForge(this.baseline() !== null, this.draft()));
