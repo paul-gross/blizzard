@@ -60,7 +60,7 @@ const rules = schema<Draft>((p) => {
     <fleet-kit-form
       [form]="f"
       (save)="save()"
-      (cancelled)="cancels = cancels + 1"
+      (cancel)="cancels = cancels + 1"
     >
       <fleet-kit-field label="Slug" [field]="f.slug" hint="Lowercase">
         <fleet-kit-text-input [formField]="f.slug" />

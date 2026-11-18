@@ -30,8 +30,9 @@ export class KitForm {
   readonly cancelLabel = input('Cancel');
 
   readonly save = output<void>();
-  /** Named `cancelled`, not `cancel` — `@angular-eslint/no-output-native` forbids the dialog's native event name. */
-  readonly cancelled = output<void>();
+  // Named `cancel` as the forms spec declares; a view binds `(cancel)`, which on this component is this output.
+  // eslint-disable-next-line @angular-eslint/no-output-native
+  readonly cancel = output<void>();
 
   protected readonly submitting = computed(() => this.form()().submitting());
 

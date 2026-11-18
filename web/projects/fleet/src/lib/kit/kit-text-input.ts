@@ -61,8 +61,7 @@ export class KitTextInput implements FormValueControl<string> {
 
   protected readonly fieldLabel = inject(KIT_FIELD_LABEL, { optional: true });
 
-  private readonly native =
-    viewChild<ElementRef<HTMLInputElement | HTMLTextAreaElement>>('native');
+  private readonly native = viewChild<ElementRef<HTMLInputElement | HTMLTextAreaElement>>('native');
 
   /** Focuses whichever native element renders — the `<textarea>` when `multiline`. */
   focus(options?: FocusOptions): void {
@@ -70,8 +69,6 @@ export class KitTextInput implements FormValueControl<string> {
   }
 
   protected onInput(event: Event): void {
-    this.value.set(
-      (event.target as HTMLInputElement | HTMLTextAreaElement).value,
-    );
+    this.value.set((event.target as HTMLInputElement | HTMLTextAreaElement).value);
   }
 }
