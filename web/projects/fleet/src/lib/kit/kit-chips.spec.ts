@@ -11,10 +11,10 @@ const OPTIONS: KitChipOption[] = [
 @Component({
   selector: 'fleet-test-host',
   imports: [KitChips],
-  template: `<fleet-kit-chips [options]="options" [selectedValue]="selected()" [disabled]="disabled()" (choose)="chosen = $event; choices.push($event)" />`,
+  template: `<fleet-kit-chips [options]="options()" [selectedValue]="selected()" [disabled]="disabled()" (choose)="chosen = $event; choices.push($event)" />`,
 })
 class TestHost {
-  options = OPTIONS;
+  readonly options = signal<readonly KitChipOption[]>(OPTIONS);
   readonly selected = signal<string | null>(null);
   readonly disabled = signal(false);
   chosen: string | null = null;
@@ -87,9 +87,35 @@ describe('KitChips', () => {
     expect(fixture.componentInstance.choices).toEqual(['a', 'a']);
   });
 
+  it('does not select an option when the controlled value is missing or removed', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.selected.set('missing');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const selectedOptions = () => el.querySelectorAll('[role=option][aria-selected="true"]');
+    expect(selectedOptions()).toHaveLength(0);
+
+    fixture.componentInstance.selected.set('a');
+    await fixture.whenStable();
+    expect(selectedOptions()).toHaveLength(1);
+
+    fixture.componentInstance.options.set(Array.from({ length: 15 }, (_, i) => ({ value: `new-${i}`, label: `New ${i}` })));
+    await fixture.whenStable();
+    expect(selectedOptions()).toHaveLength(0);
+    expect(fixture.componentInstance.choices).toEqual([]);
+    const options = el.querySelectorAll<HTMLElement>('[role=option]');
+    options[0].focus();
+    options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await fixture.whenStable();
+    expect(selectedOptions()).toHaveLength(0);
+    expect(fixture.componentInstance.choices).toEqual([]);
+    options[1].click();
+    expect(fixture.componentInstance.choices).toEqual(['new-1']);
+  });
+
   it('emits once for each pointer pick including focus and repicking', async () => {
     const fixture = TestBed.createComponent(TestHost);
-    fixture.componentInstance.options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
+    fixture.componentInstance.options.set([{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]);
     fixture.componentInstance.selected.set('a');
     await fixture.whenStable();
     const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');
@@ -106,7 +132,7 @@ describe('KitChips', () => {
 
   it('emits keyboard changes even when returning to the controlled value', async () => {
     const fixture = TestBed.createComponent(TestHost);
-    fixture.componentInstance.options = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
+    fixture.componentInstance.options.set([{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]);
     fixture.componentInstance.selected.set('a');
     await fixture.whenStable();
     const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[role=option]');

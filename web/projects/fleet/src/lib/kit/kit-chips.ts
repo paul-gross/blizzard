@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { Option } from '@angular/aria/listbox';
 import { NgTemplateOutlet } from '@angular/common';
 import { KitChipGroup } from './kit-chip-group';
@@ -64,6 +64,9 @@ export class KitChips {
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
   readonly disabled = input(false);
+  protected readonly hasSelection = computed(() =>
+    this.selectedValue() !== null && this.options().some((option) => option.value === this.selectedValue()),
+  );
 
   readonly ariaLabel = input('Choices');
 
