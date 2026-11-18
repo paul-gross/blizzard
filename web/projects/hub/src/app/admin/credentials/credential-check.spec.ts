@@ -1,12 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { CredentialCheckRequest, CredentialCheckView } from 'fleet';
+import type { CredentialCheckScope } from './credential.domain';
 import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { CredentialCheck } from './credential-check';
 
-const ANSWER: CredentialCheckView = {
+const ANSWER = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
   not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null,
   uses: [{ kind: 'repository', id: 'repo_c', slug: 'core', reached: true, operations: [{ operation: 'access', outcome: 'proven', detail: null, diagnostic: null }] }],
@@ -20,7 +20,7 @@ describe('CredentialCheck', () => {
     stub?.restore();
   });
 
-  async function mount(scope?: CredentialCheckRequest) {
+  async function mount(scope?: CredentialCheckScope) {
     stub = stubHubClient({ 'POST /api/credentials/{credential}/checks': () => answer() as never });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient({ defaultOptions: { mutations: { retry: false } } }))],

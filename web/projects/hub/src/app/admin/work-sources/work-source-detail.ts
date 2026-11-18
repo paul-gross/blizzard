@@ -30,7 +30,7 @@ import { toEditBaseline, WORK_SOURCE_RECORD_KIND } from './work-source.translate
 import { workSourceActions, workSourceCliName, workSourceFieldViews, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
 import { credentialCheckTarget, credentialOptions } from '../credentials/credentials.model';
-import { injectCredentialsQuery } from '../credentials/credentials.query';
+import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { forgeOptions } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
 
@@ -78,11 +78,11 @@ export class WorkSourceDetail {
   private readonly lifecycleMutation = injectWorkSourceLifecycleMutation();
 
   private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly credentialsQuery = injectCredentialsQuery(() => false);
+  private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   protected readonly fields = computed(() =>
     workSourceFieldViews(
       forgeOptions(this.forgesQuery.data() ?? []),
-      credentialOptions(this.credentialsQuery.data()?.credentials ?? []),
+      credentialOptions(this.credentialsQuery.data() ?? []),
     ),
   );
 

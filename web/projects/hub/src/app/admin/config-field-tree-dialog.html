@@ -93,6 +93,7 @@
         }
       </fleet-kit-field>
     }
+    <ng-content select="[additional-fields]" />
     @if (hint(); as note) {
       <p class="form-note" [attr.data-testid]="testidPrefix() + '-hint'">{{ note }}</p>
     }

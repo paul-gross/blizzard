@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   credentialDocument,
   credentialSummary,
@@ -17,7 +17,7 @@ import {
 import { CredentialDetail } from './credential-detail';
 import { CredentialsPage } from './credentials-page';
 
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 const LIST = {
   credentials: [credentialSummary({ referrer_count: 2 })],
   bindings: [
@@ -84,14 +84,14 @@ describe('CredentialsPage', () => {
     );
 
   async function pick(harness: RouterTestingHarness, field: string, label: string): Promise<void> {
-    testid(document, `admin-credentials-create-field-${field}`)!.click();
+    testid(document, `admin-credentials-create-${field.startsWith('setting-') ? field : 'field-' + field}`)!.click();
     await settle(harness.fixture);
     options().find((option) => option.textContent?.includes(label))!.click();
     await settle(harness.fixture);
   }
 
   async function type(harness: RouterTestingHarness, field: string, value: string): Promise<void> {
-    const host = testid(document, `admin-credentials-create-field-${field}`)!;
+    const host = testid(document, `admin-credentials-create-${field.startsWith('setting-') ? field : 'field-' + field}`)!;
     const input = host.querySelector('input') ?? (host as HTMLInputElement);
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -132,8 +132,8 @@ describe('CredentialsPage', () => {
     await pick(harness, 'forge', 'github');
     await pick(harness, 'binding', 'github.token');
     await type(harness, 'secret', 'gh-ci-token');
-    await pick(harness, 'setting.github.token.variant', 'fine-grained');
-    testid(document, 'admin-credentials-create-submit')!.click();
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({

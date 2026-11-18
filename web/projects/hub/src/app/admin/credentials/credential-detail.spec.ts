@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { CredentialCheckView, CredentialDocument, MeResponse } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   configChangesPage,
   configChangeView,
@@ -20,7 +20,7 @@ import {
 import { CredentialDetail } from './credential-detail';
 
 const BINDINGS = [{ name: 'github.token', forge_kind: 'github', settings: [{ key: 'variant', kind: 'choice' as const, choices: ['classic', 'fine-grained'] }] }];
-const IN_USE: CredentialDocument = credentialDocument({
+const IN_USE = credentialDocument({
   revision: 3,
   settings: { variant: 'classic' },
   referrers: [
@@ -37,20 +37,22 @@ const HISTORY = configChangesPage({
     }),
   ],
 });
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 
-const CHECK: CredentialCheckView = {
+const CHECK = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
   not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
 };
 
 describe('CredentialDetail', () => {
   let stub: RequestClientStub;
-  let record: CredentialDocument = IN_USE;
-  let me: MeResponse = EDITOR;
+  let record = IN_USE;
+  let me = EDITOR;
+  let conflict = false;
   afterEach(() => {
     record = IN_USE;
     me = EDITOR;
+    conflict = false;
     stub?.restore();
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
@@ -61,7 +63,9 @@ describe('CredentialDetail', () => {
       'GET /api/forges': () => ({ forges: [forgeDetail()] }),
       'GET /api/credentials': () => ({ credentials: [credentialSummary()], bindings: BINDINGS, forge_bindings: [{ forge_id: 'frg_g', bindings: ['github.token'] }] }),
       'GET /api/credentials/{credential}': () => record,
-      'PATCH /api/credentials/{credential}': () => credentialSummary({ revision: 4 }),
+      'PATCH /api/credentials/{credential}': () => conflict
+        ? stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'The credential changed since it was read.' })
+        : credentialSummary({ revision: 4 }),
       'POST /api/credentials/{credential}/retire': () =>
         record.referrers.length > 0
           ? stubError(409, {
@@ -108,20 +112,84 @@ describe('CredentialDetail', () => {
   });
 
   it('edits the variant by id at the shown revision, sending the whole settings', async () => {
+    record = { ...IN_USE, settings: { variant: 'classic', future: { enabled: true } } };
     const { harness, el } = await open('/admin/credentials/cred_g');
     testid(el, 'admin-credential-edit')!.click();
     await settle(harness.fixture);
-    testid(document, 'admin-credential-edit-field-setting.github.token.variant')!.click();
+    testid(document, 'admin-credential-edit-setting-github.token-variant')!.click();
     await settle(harness.fixture);
     Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((o) => o.textContent?.includes('fine-grained'))!.click();
     await settle(harness.fixture);
-    testid(document, 'admin-credential-edit-submit')!.click();
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
 
     const patch = stub.forRoute('/api/credentials/cred_g', 'PATCH');
     expect(patch).toHaveLength(1);
-    expect(patch[0].body).toEqual({ settings: { variant: 'fine-grained' } });
+    expect(patch[0].body).toEqual({ settings: { variant: 'fine-grained', future: { enabled: true } } });
     expect(patch[0].headers['if-match']).toBe('3');
+  });
+
+  it('keeps its captured revision and draft across a refreshed record', async () => {
+    const { harness, el } = await open('/admin/credentials/cred_g');
+    testid(el, 'admin-credential-edit')!.click();
+    await settle(harness.fixture);
+    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-credential-edit-field-name"]')!;
+    input.value = 'Updated name';
+    input.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    record = { ...IN_USE, name: 'Remote name', revision: 8 };
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(harness.fixture);
+    expect(input.value).toBe('Updated name');
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    const patches = stub.forRoute('/api/credentials/cred_g', 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(patches[0].headers['if-match']).toBe('3');
+    expect(patches[0].body).toEqual({ name: 'Updated name' });
+  });
+
+  it('retains a stale draft without retry and captures the new revision on restart', async () => {
+    conflict = true;
+    const { harness, el } = await open('/admin/credentials/cred_g');
+    testid(el, 'admin-credential-edit')!.click();
+    await settle(harness.fixture);
+    const field = () => document.querySelector<HTMLInputElement>('[data-testid="admin-credential-edit-field-name"]')!;
+    field().value = 'Typed name';
+    field().dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    record = { ...IN_USE, name: 'Remote name', revision: 8 };
+    await TestBed.inject(QueryClient).refetchQueries();
+    await settle(harness.fixture);
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials/cred_g', 'PATCH')).toHaveLength(1);
+    expect(stub.forRoute('/api/credentials/cred_g', 'PATCH')[0].headers['if-match']).toBe('3');
+    expect(field().value).toBe('Typed name');
+    expect(testid(document, 'kit-form-line')?.textContent).toContain('changed since it was read');
+    testid(document, 'kit-form-cancel')!.click();
+    await settle(harness.fixture);
+    testid(el, 'admin-credential-edit')!.click();
+    await settle(harness.fixture);
+    expect(field().value).toBe('Remote name');
+    field().value = 'New draft';
+    field().dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    conflict = false;
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    const patches = stub.forRoute('/api/credentials/cred_g', 'PATCH');
+    expect(patches).toHaveLength(2);
+    expect(patches[1].headers['if-match']).toBe('8');
+    expect(patches[1].body).toEqual({ name: 'New draft' });
+  });
+
+  it('hides edit controls on mobile', async () => {
+    const { harness, el } = await open('/admin/credentials/cred_g');
+    TestBed.inject(ViewportService).setOverride('mobile');
+    await settle(harness.fixture);
+    expect(testid(el, 'admin-credential-edit')).toBeNull();
+    expect(testid(el, 'admin-credential-retire')).toBeNull();
   });
 
   it('surfaces the credential_in_use refusal when retiring a credential records still name', async () => {
@@ -169,5 +237,7 @@ describe('CredentialDetail', () => {
     const { el } = await open('/admin/credentials/cred_g');
     expect(testid(el, 'admin-credential-detail')).not.toBeNull();
     expect(testid(el, 'credential-check-run')).toBeNull();
+    expect(testid(el, 'admin-credential-edit')).toBeNull();
+    expect(testid(el, 'admin-credential-retire')).toBeNull();
   });
 });

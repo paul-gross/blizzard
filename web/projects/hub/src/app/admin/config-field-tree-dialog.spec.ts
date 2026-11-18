@@ -1,13 +1,40 @@
-import { type Type, provideZonelessChangeDetection } from '@angular/core';
+import { Component, computed, type Type, provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { form } from '@angular/forms/signals';
-import { type SaveOutcome, submitForm } from 'fleet';
+import { form, FormField, required, schema } from '@angular/forms/signals';
+import { KitField, KitTextInput, type SaveOutcome, submitForm } from 'fleet';
 
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
 import type { ConfigFieldView } from './config-field-tree.model';
 
 import { SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
+
+interface ProjectedDraft { name: string; setting: { value: string } }
+
+@Component({
+  imports: [ConfigFieldTreeDialog, FormField, KitField, KitTextInput],
+  template: `
+    <app-config-field-tree-dialog heading="Edit" mode="edit" [form]="f" [fields]="fields"
+      [baseline]="baseline" [presentationDiff]="diff()" submitLabel="Save" testidPrefix="projected" (save)="save()">
+      <div additional-fields>
+        <fleet-kit-field label="Setting" [field]="f.setting.value">
+          <fleet-kit-text-input [formField]="f.setting.value" testid="setting" />
+        </fleet-kit-field>
+      </div>
+    </app-config-field-tree-dialog>`,
+})
+class ProjectedDialogHost {
+  readonly baseline: ProjectedDraft = { name: 'name', setting: { value: 'before' } };
+  readonly fields: readonly ConfigFieldView<ProjectedDraft>[] = [{ key: 'name', label: 'Name', kind: 'text' }];
+  readonly f = form(signal<ProjectedDraft>({ name: 'name', setting: { value: 'before' } }),
+    schema<ProjectedDraft>((p) => required(p.setting.value)));
+  readonly diff = computed(() => {
+    const value = this.f.setting.value().value();
+    return value === 'before' ? [] : [{ field: 'Setting', old: 'before', new: value, old_label: null, new_label: null }];
+  });
+  saved: ProjectedDraft[] = [];
+  async save() { await submitForm(this.f, async (draft) => { this.saved.push(draft); return { ok: true }; }); }
+}
 
 async function mount<T>(host: Type<T>, inputs: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({ imports: [host], providers: [provideZonelessChangeDetection()] }).compileComponents();
@@ -138,6 +165,22 @@ describe('ConfigFieldTreeDialog', () => {
   });
 
   describe('edit draft', () => {
+    it('projects nested fields into the form and uses the supplied diff for save hold and submission', async () => {
+      const { host, q, type, submit } = await mount(ProjectedDialogHost);
+      expect(q<HTMLButtonElement>('kit-form-save')!.disabled).toBe(true);
+      await type('projected-field-name', 'changed');
+      expect(q<HTMLButtonElement>('kit-form-save')!.disabled).toBe(true);
+      await type('setting', '');
+      expect(q('projected-diff')!.textContent).toContain('Setting');
+      await submit();
+      expect(host.saved).toEqual([]);
+      expect(document.body.textContent).toContain('Required');
+      await type('setting', 'after');
+      await submit();
+      expect(host.saved).toEqual([{ name: 'changed', setting: { value: 'after' } }]);
+      await type('setting', 'before');
+      expect(q<HTMLButtonElement>('kit-form-save')!.disabled).toBe(true);
+    });
     it('holds Save with "Nothing yet." until an edit, then names the change with labels', async () => {
       const { host, q, type, submit } = await mount(UrgencyDialogHost);
       const save = () => q<HTMLButtonElement>('kit-form-save')!.disabled;

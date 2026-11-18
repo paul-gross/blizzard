@@ -6,12 +6,12 @@ import {
   enableCredentialApiCredentialsCredentialEnablePost,
   patchCredentialApiCredentialsCredentialPatch,
   retireCredentialApiCredentialsCredentialRetirePost,
-  type CredentialCheckView,
   type CredentialCreateRequest,
   type CredentialPatchRequest,
 } from 'fleet';
 
-import type { CredentialCheckTarget } from './credentials.model';
+import type { CredentialCheckTarget } from './credential.domain';
+import { fromCredentialCheck } from './credential.translate';
 import { hubConfigKey } from '../../core/query-keys';
 
 export interface CredentialEditVars {
@@ -68,12 +68,12 @@ export function injectCredentialLifecycleMutation() {
  * stores nothing, so no cached read goes stale and none is invalidated. */
 export function injectCheckCredentialMutation() {
   return injectMutation(() => ({
-    mutationFn: async (target: CredentialCheckTarget): Promise<CredentialCheckView> => {
+    mutationFn: async (target: CredentialCheckTarget) => {
       const { data, error } = await checkCredentialApiCredentialsCredentialChecksPost({
         path: { credential: target.credentialId }, body: target.scope, throwOnError: false,
       });
       if (error) throw error;
-      return data;
+      return fromCredentialCheck(data);
     },
   }));
 }
