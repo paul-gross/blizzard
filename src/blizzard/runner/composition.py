@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import tzinfo
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -63,6 +63,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.binding_selection import BindingSelection, CachedVersionProbe
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import BinaryVersionCache, HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.declaration import IVersionSelectedDeclaration
 from blizzard.runner.harness.harness_set import HarnessAssemblyInputs, HarnessAssemblyKey, HarnessSet, HarnessSets
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -79,6 +80,7 @@ from blizzard.runner.harness.wiring import (
     combined_telemetry_plan,
     configured_tiers,
     declared_telemetry_names,
+    harness_families,
     publish_harness_bundle,
     select_harness_bindings,
 )
@@ -115,6 +117,7 @@ from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import (
     ICurrentRunnerIdentity,
     IdentityVerdictHolder,
+    IRunnerIdentityStore,
     RunnerIdentityHolder,
 )
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
@@ -136,6 +139,8 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
+from blizzard.runner.settings.ports import IWriteRunnerSettings
+from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -172,6 +177,7 @@ from blizzard.runner.store.internal.projects_answer_store import ServedProjectsS
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
+from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
@@ -373,6 +379,8 @@ class RunnerProcess:
     hub_version: HubVersionHolder = field(default_factory=HubVersionHolder)
     #: Whether closing this runner closes the host it was built over — the host-of-one a standalone build makes.
     closes_host: bool = False
+    settings_reader: RunnerSettingsReader | None = None
+    harness_key: Callable[[RunnerConfig], HarnessAssemblyKey] | None = None
 
     @property
     def harnesses(self) -> HarnessRegistry:
@@ -663,21 +671,37 @@ def build_host_process(
     )
     try:
         for built in runners:
+            entry = next((entry for entry in host.runners if entry.id == built.id), None)
+            runner = _build_runner(
+                built.config,
+                graph,
+                bundle=(bundles or {}).get(built.id),
+                selection=(selections or {}).get(built.id),
+                publish_bundle=publish_bundles,
+                environ=environ,
+                trace_exporter=trace_exporter,
+                identity=None,
+                runner_id=built.id,
+                token=built.token,
+                closes_host=False,
+            )
+            if entry is not None:
+                identity_store = runner.stores.identity
+                runner = replace(
+                    runner,
+                    settings_reader=RunnerSettingsReader(
+                        host,
+                        entry,
+                        runner.stores.settings,
+                        deferred_seed=runner.stores.settings if identity_store.runner_identity() is None else None,
+                        identity_present=lambda identity_store=identity_store: (
+                            identity_store.runner_identity() is not None
+                        ),
+                    ),
+                )
             graph.runners = (
                 *graph.runners,
-                _build_runner(
-                    built.config,
-                    graph,
-                    bundle=(bundles or {}).get(built.id),
-                    selection=(selections or {}).get(built.id),
-                    publish_bundle=publish_bundles,
-                    environ=environ,
-                    trace_exporter=trace_exporter,
-                    identity=None,
-                    runner_id=built.id,
-                    token=built.token,
-                    closes_host=False,
-                ),
+                runner,
             )
         graph.halted = tuple(halted)
         graph.readiness = HostReadiness(
@@ -969,7 +993,7 @@ def harness_assembly_key(inputs: HarnessAssemblyInputs) -> HarnessAssemblyKey:
     return HarnessAssemblyKey(
         values=(inputs,),
         binary_identities=tuple(
-            (section.harness_id, identities.identify(section.binary)) for section in inputs.sections if section.enabled
+            (section.harness_id, identities.identify(section.binary)) for section in inputs.sections
         ),
         bundle_source_identity=(
             bundle_source_identity(
@@ -1011,7 +1035,7 @@ def _build_runner(
         ready = host.readiness.evaluate().ready
         connections = RunnerStoreConnections(host.engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
         connections.bind(runner_id)
-        stores = _build_stores(connections)
+        stores = _build_stores(connections, host.clock)
         clock = host.clock
         registered = stores.identity.runner_identity() if ready else None
         if registered is not None:
@@ -1029,13 +1053,14 @@ def _build_runner(
             runner_id=runner_id,
             telemetry_enabled=config.tracing.harness_telemetry and platform_tracing.enabled,
             runner_environ=tuple(sorted(runner_environ.items())),
+            spawn_roots=bound_spawn_roots(config, host.workspaces),
             publish=publish_bundle,
             bundle=bundle,
         )
         version_env = assembly_inputs.worker_env.tool()
         binary_versions = BinaryVersionCache(ToolBinaryIdentity(version_env))
 
-        def assemble(key: HarnessAssemblyKey) -> HarnessSet:
+        def assemble(key: HarnessAssemblyKey, *, recovering: bool = False) -> HarnessSet:
             nonlocal version_env, binary_versions
             inputs = cast(HarnessAssemblyInputs, key.values[0])
             sections = HarnessSections(inputs.sections)
@@ -1053,9 +1078,58 @@ def _build_runner(
                 version_env = tool_env
                 binary_versions = binary_versions.with_identities(ToolBinaryIdentity(tool_env))
             versions = CachedVersionProbe(VersionProbe(host.children, tool_env), binary_versions)
-            chosen = selection or select_harness_bindings(
-                sections, worker_env=inputs.worker_env, children=host.children, versions=versions
+            held_selection = harness_sets.current.selection if key.preserve_selection and not recovering else None
+            chosen = (
+                held_selection
+                or (None if recovering else selection)
+                or select_harness_bindings(
+                    sections, worker_env=inputs.worker_env, children=host.children, versions=versions
+                )
             )
+            recovery_sections: tuple[Any, ...] = ()
+            pending_recovery: set[str] = set()
+            if not recovering and ready:
+                active_ids = {
+                    lease.harness_id
+                    for lease in stores.lease_record.list_active_leases()
+                    if lease.session_id is not None and lease.harness_id is not None
+                }
+                recovery_ids: set[str] = set()
+                families = harness_families()
+                for section in sections:
+                    if (
+                        section.enabled
+                        or section.harness_id not in active_ids
+                        or not versions.binary_present(section.binary)
+                    ):
+                        continue
+                    family = families[section.harness_id]
+                    if len(family) > 1:
+                        raw = versions.observe_version(section.binary)
+                        if not any(cast(IVersionSelectedDeclaration[Any], item).admits_version(raw) for item in family):
+                            pending_recovery.add(section.harness_id)
+                            binary_versions.forget(section.binary)
+                            continue
+                    recovery_ids.add(section.harness_id)
+                if recovery_ids:
+                    recovery_sections = tuple(
+                        replace(cast(Any, section), enabled=True) if section.harness_id in recovery_ids else section
+                        for section in sections
+                    )
+                    recovery_selection = select_harness_bindings(
+                        HarnessSections(recovery_sections),
+                        worker_env=inputs.worker_env,
+                        children=host.children,
+                        versions=versions,
+                    )
+                    chosen = BindingSelection(
+                        {
+                            harness_id: recovery_selection.of(harness_id) if harness_id in recovery_ids else declaration
+                            for harness_id, declaration in chosen.chosen.items()
+                        }
+                    )
+            if key.retry_unresolved and frozenset(pending_recovery) == harness_sets.current.pending_recovery:
+                return harness_sets.current
             snapshot = inputs.bundle
             if inputs.publish and inputs.config_dir is not None and snapshot is None:
                 snapshot = publish_harness_bundle(
@@ -1082,7 +1156,7 @@ def _build_runner(
                 children=host.children,
                 clock=clock,
                 monotonic_clock=host.monotonic_clock,
-                spawn_roots=bound_spawn_roots(config, host.workspaces),
+                spawn_roots=inputs.spawn_roots,
                 corpus=corpus,
                 bundle=snapshot,
                 harness_telemetry_enabled=inputs.telemetry_enabled,
@@ -1109,10 +1183,43 @@ def _build_runner(
                     if section.enabled and chosen.of(section.harness_id).service_version
                 ),
             )
-            return HarnessSet(chosen, snapshot, harnesses, probes, health, plan, capability_versions)
+            selected_set = HarnessSet(
+                chosen,
+                snapshot,
+                harnesses,
+                probes,
+                health,
+                plan,
+                capability_versions,
+                recovery_only=recovering,
+                pending_recovery=frozenset(pending_recovery),
+            )
+            if recovery_sections:
+                recovery_key = replace(
+                    key, values=(replace(inputs, sections=recovery_sections, publish=False, bundle=snapshot),)
+                )
+                selected_set = replace(selected_set, recovery=assemble(recovery_key, recovering=True))
+            return selected_set
 
         harness_sets = HarnessSets(assemble)
         harness_sets.select(harness_assembly_key(assembly_inputs))
+
+        def key_for(current: RunnerConfig) -> HarnessAssemblyKey:
+            settings = replace(current.harness_settings(tracing), runner_id=runner_id)
+            return harness_assembly_key(
+                replace(
+                    assembly_inputs,
+                    root=settings.root,
+                    autonomy=settings.autonomy,
+                    config_dir=settings.config_dir,
+                    worker_env=settings.worker_env,
+                    transcripts_root=settings.transcripts_root,
+                    sections=settings.sections.sections,
+                    telemetry_enabled=current.tracing.harness_telemetry and platform_tracing.enabled,
+                    spawn_roots=bound_spawn_roots(current, host.workspaces),
+                )
+            )
+
         exporter = (
             host.bounded_trace_exporter(trace_exporter)
             if tracing.enabled() and trace_exporter is not None
@@ -1166,6 +1273,7 @@ def _build_runner(
             events=RunnerEventPublisher.over(host.events, runner_id),
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
+            harness_key=key_for,
         )
     except BaseException:
         try:
@@ -1184,13 +1292,21 @@ def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
     )
 
 
+def build_settings_stores(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str
+) -> tuple[IRunnerIdentityStore, IWriteRunnerSettings]:
+    """Construct the runner-bound identity and settings adapters for the CLI edge."""
+    connections = RunnerStoreConnections(engine, errors, runner_id)
+    return RunnerIdentityStore(connections), RunnerSettingsStore(connections, SystemClock())
+
+
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerStores:
     """Construct and wire every extracted concept-store adapter over a migrated engine, bound to ``runner_id`` (or
     unbound, ``None``)."""
     return _build_stores(RunnerStoreConnections(engine, errors, runner_id))
 
 
-def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
+def _build_stores(connections: RunnerStoreConnections, clock: IClock | None = None) -> RunnerStores:
     return RunnerStores(
         lease_record=LeaseRecordStore(connections),
         session=LeaseSessionStore(connections),
@@ -1204,6 +1320,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         asks=AskStore(connections),
         pause=PauseStore(connections),
         identity=RunnerIdentityStore(connections),
+        settings=RunnerSettingsStore(connections, clock or SystemClock()),
         served_projects=ServedProjectsStore(connections),
         takeover=TakeoverStore(connections),
         requeue=RequeueStore(connections),

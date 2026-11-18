@@ -14,6 +14,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 import httpx2
 import pytest
@@ -42,6 +43,7 @@ from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerHandle, W
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
@@ -512,13 +514,18 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
     assert app.state.event_broker is broker
 
 
-def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_app(tmp_path: Path) -> None:
-    """``HostedApp.harness_health`` is the instance ``app.state`` carries."""
+def test_hosted_app_reads_health_from_its_initial_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The served read seam initially delegates to the exposed boot cache."""
     write_minimal_host(tmp_path)
 
     hosted = build_hosted_app(load_runner_config(tmp_path))
 
-    assert runner_seams(hosted.app).harness_health is hosted.harness_health
+    try:
+        result = Mock()
+        monkeypatch.setattr(hosted.harness_health, "get", Mock(return_value=result))
+        assert runner_seams(hosted.app).harness_health.get(CLAUDE_CODE_HARNESS_ID) is result
+    finally:
+        hosted.close()
 
 
 def test_a_host_of_one_create_app_hands_the_injected_monotonic_clock_to_the_runner_seams(
@@ -658,7 +665,7 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         assert hosted.app.state.workspace_registry is ctx.workspaces is graph.workspaces
         assert runner_seams(hosted.app).harnesses is ctx.harnesses is graph.harnesses
-        assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
+        assert ctx.harness_health is graph.health is hosted.harness_health
         assert hosted.app.state.event_broker is graph.host.events
         assert ctx.events is graph.events
         assert runner_seams(hosted.app).events is graph.events
@@ -667,6 +674,28 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
         assert hosted.resume.process is ctx.process is graph.process
         assert ctx.stores is graph.stores
+    finally:
+        hosted.close()
+        graph.close()
+
+
+def test_hosted_health_reads_the_current_harness_set(tmp_path: Path) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    hosted = build_hosted_app(config, process_graph=graph)
+    try:
+        served_health = runner_seams(hosted.app).harness_health
+        original = graph.harness_sets.current
+        first, second = (Mock(spec=type(graph.health)) for _ in range(2))
+        for cache, version in ((first, "first"), (second, "second")):
+            cache.get.return_value = version
+            cache.displayed_version.return_value = version
+            cache.admitted_range.return_value = version
+        for cache, version in ((first, "first"), (second, "second")):
+            graph.harness_sets.publish(HarnessAssemblyKey((version,)), replace(original, health=cache))
+            assert served_health.get(CLAUDE_CODE_HARNESS_ID) == version
+            assert served_health.displayed_version(CLAUDE_CODE_HARNESS_ID) == version
+            assert served_health.admitted_range(CLAUDE_CODE_HARNESS_ID) == version
     finally:
         hosted.close()
         graph.close()

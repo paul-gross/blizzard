@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 import httpx2
 
@@ -27,7 +27,14 @@ from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTR
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
-from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, JudgeInvocation, WorkerInvocation
+from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyInputs,
+    HarnessAssemblyKey,
+    HarnessSet,
+    IInvocationHarnesses,
+    JudgeInvocation,
+    WorkerInvocation,
+)
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
@@ -57,6 +64,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import HostStores, RunnerStores
+from blizzard.runner.throttle.gate import GateReadConfig
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
     TranscriptBackfillReport,
@@ -269,7 +277,14 @@ class LoopWiring:
 
         ``process`` runs the tick over a caller-owned graph, which this call neither builds nor closes;
         without one, the tick builds and closes its own."""
-        self.with_context(tick, process=process)
+        graph = process or build_runner_process(self.config, events=self.events, bundle=self.bundle)
+        stepper = RunnerStepper(self.config, process_graph=graph)
+        try:
+            stepper.tick_once()
+        finally:
+            stepper.close()
+            if process is None:
+                graph.close()
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,
@@ -309,6 +324,8 @@ class UsageRegistryLookup:
             return self.fallback
         key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
         owner = self.owners.find(key)
+        if owner is None and judge:
+            owner = self.owners.find(WorkerInvocation(lease_id, generation))
         return owner.registry if owner is not None else self.owners.current.registry
 
 
@@ -392,6 +409,9 @@ class ResumeMarking:
         ).run()
 
 
+_RECOVERY_RETRY_SECONDS = 30.0
+
+
 class RunnerStepper:
     """Own the timeout-keyed loop context and retire clients only when both passes are idle.
 
@@ -414,10 +434,19 @@ class RunnerStepper:
         self._client: httpx2.Client | None = None
         self._ctx: LoopContext | None = None
         self._ctx_harness_set: HarnessSet | None = None
+        self._ctx_harness_key: HarnessAssemblyKey | None = None
         self._timeout = timeout
         self._client_timeout: float | None = None
         self._retired: list[httpx2.Client] = []
         self._closed = False
+        self._revision: int | None = None
+        self.failed_revision: int | None = None
+        self.settings_in_force_revision: int | None = None
+        self.settings_in_force_since: str | None = None
+        self.settings_failure: tuple[int, str, str] | None = None
+        self._logged_failure: int | None = None
+        self._trace_interval = config.tracing.sweep_seconds
+        self._next_recovery_retry = 0.0
 
     @property
     def wiring(self) -> LoopWiring:
@@ -425,6 +454,12 @@ class RunnerStepper:
 
     def traces(self) -> bool:
         return self._graph.trace_sweep is not None
+
+    def tick_once(self) -> None:
+        """Run a synchronous tick without a trace sweep, propagating failures."""
+        with self._tick_lock.hold():
+            self._ensure_open()
+            self._tick()
 
     def request(self) -> PassResult:
         try:
@@ -511,45 +546,160 @@ class RunnerStepper:
 
     def _sweep_traces(self) -> None:
         if self._graph.trace_sweep is not None:
-            self._graph.trace_sweep.sweep()
+            reader = self._graph.settings_reader
+            config = reader.snapshot()[1] if reader is not None else self._graph.config
+            self._trace_interval = config.tracing.sweep_seconds
+            self._graph.trace_sweep.sweep(config.tracing)
+
+    def trace_interval(self) -> float:
+        return self._trace_interval
+
+    def settings_status(self, read: Callable[[], _T]) -> tuple[_T, int | None, str | None, tuple[int, str, str] | None]:
+        """Read the store and the tick's published state without interleaving a rebuild."""
+        with self._build:
+            return read(), self.settings_in_force_revision, self.settings_in_force_since, self.settings_failure
+
+    def gate_config(self, fallback: GateReadConfig) -> GateReadConfig:
+        """Read the last successfully built pass configuration as one snapshot."""
+        with self._build:
+            if self._ctx is None:
+                return fallback
+            config = self._ctx.config
+            return GateReadConfig(config.subscription, config.throttle, config.host_zone)
+
+    def capacity_config(
+        self, fallback: tuple[tuple[BindingDeclaration, ...], int]
+    ) -> tuple[tuple[BindingDeclaration, ...], int]:
+        """Project the same successfully built snapshot used by the tick."""
+        with self._build:
+            if self._ctx is None:
+                return fallback
+            config = self._ctx.config
+            return config.bindings or (), config.agents
 
     def _context(self) -> LoopContext:
         with self._build:
             if self._closed:
                 raise RuntimeError("runner stepper is closed")
             timeout = self._timeout()
-            selected = self._graph.harness_sets.current
-            if self._ctx is None or self._client_timeout != timeout:
-                config = self._wiring.config
-                client = httpx2.Client(
-                    base_url=config.hub_url, timeout=timeout, auth=HeldTokenAuth(self._graph.hub_token)
+            reader = self._graph.settings_reader
+            revision = None
+            client: httpx2.Client | None = None
+            new_client = False
+            try:
+                if reader is not None:
+                    snapshot = reader.snapshot_record()
+                    revision = snapshot.revision
+                    config = reader.resolve_for_read(snapshot.entries)
+                else:
+                    config = self._wiring.config
+                wiring = LoopWiring.of(config, broker=self._graph.host.events)
+                key = (
+                    self._graph.harness_key(config)
+                    if reader is not None and self._graph.harness_key is not None
+                    else None
                 )
-                try:
-                    self._graph.platform_tracing.instrument_client(client)
-                    ctx = self._wiring.context(
-                        HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
+                previous = self._ctx_harness_key
+                if (
+                    key is not None
+                    and previous is not None
+                    and key.values == previous.values
+                    and key.bundle_source_identity == previous.bundle_source_identity
+                ):
+                    inputs = cast(HarnessAssemblyInputs, key.values[0])
+                    enabled = {section.harness_id for section in inputs.sections if section.enabled}
+                    old_identities = dict(cast(tuple[tuple[str, object], ...], previous.binary_identities))
+                    identities = tuple(
+                        (harness_id, old_identities.get(harness_id, identity) if harness_id in enabled else identity)
+                        for harness_id, identity in cast(tuple[tuple[str, object], ...], key.binary_identities)
                     )
-                except BaseException:
-                    client.close()
-                    raise
-                if self._client is not None:
-                    self._retired.append(self._client)
-                self._client = client
-                self._client_timeout = timeout
-                self._ctx = ctx
-                self._ctx_harness_set = selected
-            elif self._ctx_harness_set is not selected:
-                self._ctx = replace(
-                    self._ctx,
-                    harnesses=selected.registry,
-                    harness_selector=HarnessSelector(harnesses=selected.registry, health=selected.health),
-                    sessions=replace(self._ctx.sessions, harnesses=selected.registry),
-                    usage=replace(self._ctx.usage, harnesses=selected.registry),
-                    harness_versions=selected.versions,
-                    harness_health=selected.health,
-                    capabilities=None,
+                    key = replace(key, binary_identities=identities, preserve_selection=True)
+                selected = (
+                    self._graph.harness_sets.prepare(key) if key is not None else self._graph.harness_sets.current
                 )
-                self._ctx_harness_set = selected
+                now = self._graph.host.monotonic_clock.monotonic()
+                if (
+                    key is not None
+                    and selected is self._ctx_harness_set
+                    and selected.pending_recovery
+                    and now >= self._next_recovery_retry
+                ):
+                    self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
+                    active_ids = {
+                        lease.harness_id
+                        for lease in self._graph.stores.lease_record.list_active_leases()
+                        if lease.session_id is not None
+                    }
+                    if not selected.pending_recovery.isdisjoint(active_ids):
+                        selected = self._graph.harness_sets.retry_recovery(key)
+                if (
+                    self._ctx is not None
+                    and self._client_timeout == timeout
+                    and self._revision == revision
+                    and self._ctx_harness_set is selected
+                ):
+                    self.failed_revision = None
+                    self.settings_failure = None
+                    return self._ctx
+                leases = [
+                    lease
+                    for lease in self._graph.stores.lease_record.list_active_leases()
+                    if lease.session_id is not None and lease.harness_id is not None
+                ]
+                generations = self._graph.stores.liveness.lease_generations([lease.lease_id for lease in leases])
+                if self._client is not None and self._client_timeout == timeout:
+                    client = self._client
+                else:
+                    client = httpx2.Client(
+                        base_url=config.hub_url, timeout=timeout, auth=HeldTokenAuth(self._graph.hub_token)
+                    )
+                    new_client = True
+                    self._graph.platform_tracing.instrument_client(client)
+                ctx = wiring.context(
+                    HttpHubClient(client), self._graph, tracer=self._graph.tracer, harness_set=selected
+                )
+                ctx = replace(ctx, config=replace(ctx.config, runner_settings_revision=revision))
+                if self._ctx is not None:
+                    ctx = replace(ctx, retention_passes=self._ctx.retention_passes)
+            except Exception as exc:
+                if new_client and client is not None:
+                    client.close()
+                self.failed_revision = revision
+                if revision is not None and (self.settings_failure is None or self.settings_failure[0] != revision):
+                    from blizzard.foundation.store.utc import iso_utc
+
+                    self.settings_failure = (revision, str(exc), iso_utc(self._graph.host.clock.now()))
+                if self._ctx is None or reader is None:
+                    raise
+                if self._logged_failure != revision:
+                    _log.error("runner settings rebuild failed", revision=revision, detail=str(exc))
+                    self._logged_failure = revision
+                return self._ctx
+            if key is not None:
+                self._graph.harness_sets.publish(key, selected)
+            for lease in leases:
+                assert lease.harness_id is not None
+                self._graph.harness_sets.recover(
+                    WorkerInvocation(lease.lease_id, generations.get(lease.lease_id, 0)), lease.harness_id, selected
+                )
+            if self._client is not None and self._client is not client:
+                self._retired.append(self._client)
+            self._client = client
+            self._client_timeout = timeout
+            self._ctx = ctx
+            self._ctx_harness_set = selected
+            self._ctx_harness_key = key
+            self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
+            self._wiring = wiring
+            self._revision = revision
+            if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
+                from blizzard.foundation.store.utc import iso_utc
+
+                self.settings_in_force_revision = revision
+                self.settings_in_force_since = iso_utc(self._graph.host.clock.now())
+            self.settings_failure = None
+            self.failed_revision = None
+            self._logged_failure = None
             return self._ctx
 
 

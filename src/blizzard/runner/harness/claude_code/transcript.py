@@ -255,6 +255,10 @@ class ClaudeCodeTranscriptSource:
         # could legitimately appear later), so it is re-globbed on every call.
         self._resolved: OrderedDict[tuple[str, str | None], Path] = OrderedDict()
 
+    def at_root(self, root: str) -> ClaudeCodeTranscriptSource:
+        """Reconstitute a source at the invocation's recorded projects root."""
+        return ClaudeCodeTranscriptSource(root, self._errors)
+
     @staticmethod
     def mangle_cwd(cwd: str) -> str:
         """Claude Code's project-directory name for the absolute spawn cwd ``cwd``.

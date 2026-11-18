@@ -18,6 +18,8 @@ const OTHER_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD';
 const R2_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYNR2R2';
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: CHUNK,
   graph_id: 'gr_1',

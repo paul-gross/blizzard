@@ -16,7 +16,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.observation import ExecutionLiveness
-from blizzard.runner.leases.liveness import ExecutionEvidence, IWriteLeaseLivenessRepository, LeaseLivenessFacts
+from blizzard.runner.leases.liveness import (
+    ExecutionEvidence,
+    IWriteLeaseLivenessRepository,
+    LeaseLivenessFacts,
+    SpawnSettings,
+)
 from blizzard.runner.leases.model import ParkResume
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final, insert_outbox_row
 from blizzard.runner.store.schema import (
@@ -283,6 +288,48 @@ class LeaseLivenessStore:
                     result[str(row.lease_id)] = row.harness_version
         return result
 
+    def spawn_settings(self, lease_id: str, generation: int) -> SpawnSettings | None:
+        stmt = (
+            self._store.select(
+                lease_spawns,
+                lease_spawns.c.host_settings_revision,
+                lease_spawns.c.runner_settings_revision,
+                lease_spawns.c.transcripts_root,
+            )
+            .where(lease_spawns.c.lease_id == lease_id)
+            .order_by(lease_spawns.c.id)
+            .offset(generation - 1)
+            .limit(1)
+        )
+        with self._store.connect() as conn:
+            row = conn.execute(stmt).one_or_none()
+        return SpawnSettings(*row) if row is not None else None
+
+    def latest_spawn_settings(self, lease_ids: Sequence[str]) -> dict[str, SpawnSettings]:
+        result: dict[str, SpawnSettings] = {}
+        if not lease_ids:
+            return result
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                newest = (
+                    self._store.select(lease_spawns, func.max(lease_spawns.c.id).label("id"))
+                    .where(lease_spawns.c.lease_id.in_(batch))
+                    .group_by(lease_spawns.c.lease_id)
+                    .subquery()
+                )
+                stmt = self._store.select(
+                    lease_spawns,
+                    lease_spawns.c.lease_id,
+                    lease_spawns.c.host_settings_revision,
+                    lease_spawns.c.runner_settings_revision,
+                    lease_spawns.c.transcripts_root,
+                ).join(newest, lease_spawns.c.id == newest.c.id)
+                for row in conn.execute(stmt):
+                    result[str(row.lease_id)] = SpawnSettings(
+                        row.host_settings_revision, row.runner_settings_revision, row.transcripts_root
+                    )
+        return result
+
     # --- writes -------------------------------------------------------------
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
@@ -320,6 +367,9 @@ class LeaseLivenessStore:
         pgid: int | None = None,
         spawn_cwd: str | None = None,
         park_resume: ParkResume | None = None,
+        host_settings_revision: int | None = None,
+        runner_settings_revision: int | None = None,
+        transcripts_root: str | None = None,
     ) -> int | None:
         seq: int | None = None
         with self._store.begin() as conn:
@@ -344,6 +394,9 @@ class LeaseLivenessStore:
                     spawned_at=spawned_at,
                     harness_id=session.harness_id,
                     harness_version=harness_version,
+                    host_settings_revision=host_settings_revision,
+                    runner_settings_revision=runner_settings_revision,
+                    transcripts_root=transcripts_root,
                     pid=pid,
                     process_start_time=process_start_time,
                     pgid=pgid,
@@ -402,6 +455,9 @@ class LeaseLivenessStore:
         pgid: int | None,
         spawned_at: datetime,
         harness_id: str,
+        host_settings_revision: int | None = None,
+        runner_settings_revision: int | None = None,
+        transcripts_root: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -414,6 +470,9 @@ class LeaseLivenessStore:
                     lease_id=lease_id,
                     spawned_at=spawned_at,
                     harness_id=harness_id,
+                    host_settings_revision=host_settings_revision,
+                    runner_settings_revision=runner_settings_revision,
+                    transcripts_root=transcripts_root,
                     pid=pid,
                     process_start_time=process_start_time,
                     pgid=pgid,

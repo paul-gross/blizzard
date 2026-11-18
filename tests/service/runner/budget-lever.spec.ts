@@ -1,4 +1,4 @@
-import { BILLED_ZERO_VAR, expect, PRICES, pricedChunk, pricedProfile, runnerTest as test, stepUntil } from '../../harness/fixtures';
+import { BILLED_ZERO_VAR, expect, PRICES, pricedChunk, pricedProfile, runnerTest as test, seedSyntheticSpend, stepUntil } from '../../harness/fixtures';
 import type { Clock, RunnerHost, RunnerHosts } from '../../harness/fixtures';
 
 // A dollar budget throttles a runner below its ceiling: one stepped host, one runner spending a priced worker's estimate
@@ -71,6 +71,24 @@ test('test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on
   await stepUntil(host, declining, (levers) => levers.length === 0, { stallPasses: PASSES });
 });
 
+test('a live budget edit admits waiting work on the next passes', async ({ mockHub, runnerHosts }) => {
+  const host = await pricedHost(runnerHosts, false);
+  const runner = host.runners[RUNNER]!;
+  const fleet = mockHub.fleetOf(host, RUNNER);
+  const declining = async () => ((await fleet.get(`/api/fleet/runners/${runner.runnerId}`)).body.declining as { lever: string }[]).map((entry) => entry.lever);
+  await host.stepHost();
+  const first = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
+  const spent = await stepUntil(host, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === first), (lease) => lease !== undefined, { stallPasses: PASSES });
+  await stepUntil(host, async () => (await runner.leases()).body.items.find((item) => item.lease_id === spent!.lease_id)?.state, (state) => state === 'closed', { stallPasses: PASSES });
+  const second = (await mockHub.seed.chunk(pricedChunk({ review: false }))).body.chunk_id;
+  await stepUntil(host, declining, (levers) => levers.includes('budget'), { stallPasses: PASSES });
+  expect((await runner.leases()).body.items.filter((item) => item.chunk_id === second)).toEqual([]);
+
+  await host.reconfigure({ runner: [{ name: RUNNER, throttle: { budget: { usd: 100 } } }] });
+  await stepUntil(host, async () => (await runner.leases()).body.items.some((item) => item.chunk_id === second), Boolean, { stallPasses: PASSES });
+  await stepUntil(host, declining, (levers) => !levers.includes('budget'), { stallPasses: PASSES });
+});
+
 test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped', async ({ mockHub, runnerHosts, clock }) => {
   const host = await pricedHost(runnerHosts, true);
   const runner = host.runners[RUNNER]!;
@@ -96,4 +114,27 @@ test('test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_trip
   expect(status.throttle?.state).toBe('braked');
   expect(await leasesOf('review')).toEqual([]);
   expect(await leasesOf('build')).toHaveLength(1);
+});
+
+test('a live budget edit agrees across host, hub and claim enforcement', async ({ mockHub, runnerHosts }) => {
+  const host = await runnerHosts.create();
+  const runner = host.runners[RUNNER]!;
+  const fleet = mockHub.fleetOf(host, RUNNER);
+  seedSyntheticSpend(host, runner.id, 7);
+  for (const [budget, declined] of [[5, true], [10, false]] as const) {
+    const edit = await host.cli(['settings', 'set', 'throttle.budget.usd', String(budget), '--runner', runner.id]);
+    expect(edit.code, edit.stderr).toBe(0);
+    await mockHub.captured.reset();
+    expect((await host.step()).outcome).toBe('completed');
+    const peeks = (await mockHub.captured.read()).body.requests.filter((request) => request.path === '/api/fleet/queue/peek');
+    expect(peeks.length > 0).toBe(!declined);
+    const local = (await host.api.runners()).body.items.find((item) => item.runner_id === runner.id)!.throttle;
+    const detail = (await runner.status()).body.throttle;
+    expect(local).toEqual(detail);
+    expect(local?.state).toBe(declined ? 'declining' : 'admitting');
+    expect(local?.declining).toEqual(declined ? ['budget'] : []);
+    expect(local?.levers.find((lever) => lever.name === 'budget')?.reading).toBe(`$7.00 of $${budget.toFixed(2)} over the trailing 24h`);
+    const hub = (await fleet.get(`/api/fleet/runners/${runner.id}`)).body;
+    expect((hub.declining as { lever: string }[]).map((item) => item.lever)).toEqual(declined ? ['budget'] : []);
+  }
 });

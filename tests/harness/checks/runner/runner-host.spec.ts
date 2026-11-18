@@ -98,7 +98,7 @@ for (const present of [false, true]) {
       runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode', worker_config_path: config } }],
     } });
     if (present) expect(fs.readFileSync(config, 'utf8')).toBe('existing custom config\n');
-    else expect(JSON.parse(fs.readFileSync(config, 'utf8')).plugin).toContain(`file://${plugin}`);
+    else expect(JSON.parse(fs.readFileSync(config, 'utf8')).plugin).toContain(`file://${fs.realpathSync(plugin)}`);
     expect(fs.statSync(plugin).size).toBeGreaterThan(0);
   });
 }

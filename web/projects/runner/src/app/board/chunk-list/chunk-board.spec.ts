@@ -9,6 +9,8 @@ import type { PanelLease } from '../../core/panel-reads.model';
 import { type BoardLayout, ChunkBoard } from './chunk-board';
 
 const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_1',
   chunk_id: 'ch_1',
   graph_id: 'gr_1',

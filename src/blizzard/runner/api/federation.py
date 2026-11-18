@@ -12,9 +12,10 @@ from typing import Annotated, Literal, Protocol
 from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
+from blizzard.auth_core import Role
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.platform_tracing.attributes import annotate_caller
@@ -232,6 +233,31 @@ def require_human_session(request: Request) -> RunnerSession:
 
 def require_human_api(request: Request) -> RunnerSession:
     return HumanLane(request).demand_api()
+
+
+class SuperuserRequired(Exception):
+    """The authenticated human lacks superuser authority."""
+
+
+def superuser_required_response(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        media_type="application/problem+json",
+        content={
+            "type": "urn:blizzard:problem:superuser-required",
+            "title": "superuser required",
+            "status": 403,
+            "detail": "superuser required",
+            "code": "superuser_required",
+        },
+    )
+
+
+def require_superuser(session: Annotated[RunnerSession, Depends(require_human_api)]) -> RunnerSession:
+    """Require human superuser authority without changing the other human-lane gates."""
+    if session.role is not Role.SUPERUSER:
+        raise SuperuserRequired
+    return session
 
 
 def _callback_url(request: Request, settings: FederationSettings) -> str:

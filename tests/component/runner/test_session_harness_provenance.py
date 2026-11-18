@@ -216,3 +216,52 @@ def test_identified_spawn_freezes_the_spawn_cwd_onto_its_segment(tmp_path: Path)
 
     (segment,) = store.transcript_segments_for_chunk("chunk_1")
     assert segment.spawn_cwd == "/ws"
+
+
+def test_spawn_settings_are_generation_scoped_and_survive_identification(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_a",
+                chunk_id="chunk_1",
+                graph_id="graph_1",
+                node_id="node_1",
+                node_name="build",
+                epoch=1,
+                retries_max=1,
+                created_at=_NOW,
+            )
+        )
+    )
+    store.record_provisional_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="1",
+        pgid=None,
+        spawned_at=_NOW,
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        runner_settings_revision=4,
+        transcripts_root="/old",
+    )
+    store.record_identified_spawn(
+        "lease_a",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        identified_at=_NOW,
+    )
+    store.record_spawn(
+        "lease_a",
+        pid=2,
+        process_start_time="2",
+        spawned_at=_NOW,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        runner_settings_revision=5,
+        transcripts_root="/new",
+    )
+    first = store.spawn_settings("lease_a", 1)
+    latest = store.latest_spawn_settings(["lease_a", "missing"])
+    assert first is not None and (first.runner_revision, first.transcripts_root) == (4, "/old")
+    assert latest["lease_a"].runner_revision == 5
+    assert latest["lease_a"].host_revision is None
+    assert latest["lease_a"].transcripts_root == "/new"
+    assert "missing" not in latest

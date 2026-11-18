@@ -499,9 +499,8 @@ test('test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api
   expect((await runner.leaseTranscript('no-such-lease')).status).toBe(404);
 
   // A recorded owner the host no longer binds is a refusal naming it, never a read through another harness.
-  await runnerHost.stop();
-  runnerHost.reconfigure({ runner: [{ name: RUNNER, claude_code: { enabled: false }, opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] });
-  await runnerHost.restart();
+  await runnerHost.reconfigure({ runner: [{ name: RUNNER, claude_code: { enabled: false }, opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] });
+  await runnerHost.step();
   const unknownOwner = await runner.expecting(503).leaseTranscript(lease.lease_id);
   expect(unknownOwner.status).toBe(503);
   expect((unknownOwner.body as unknown as { detail: string }).detail).toContain("unknown coding harness 'claude_code'");

@@ -31,7 +31,7 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, IRootedTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import BindingDeclaration, IHubClient, ITokenIdentityReader
 from blizzard.runner.hub.flags import FlagsHolder
@@ -67,6 +67,8 @@ class LoopConfig:
     runner_name: str
     #: The hub-minted id the host file configures: the runner its store is bound to and its token must resolve to.
     runner_id: str
+    #: Revision of the runner settings snapshot held by this pass.
+    runner_settings_revision: int | None = None
     #: This runner's own browser-reachable base URL; empty registers no
     #: federation identity.
     public_url: str = ""
@@ -76,11 +78,11 @@ class LoopConfig:
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back.
     local_api_url: str = "http://127.0.0.1:8431"
-    #: The operator's override of the baked-in blizzard preamble, resolved
-    #: once at ``host`` startup. Empty means unset; there is no runtime override.
+    #: The operator's override of the baked-in blizzard preamble for this context.
+    #: Empty means unset; a later settings snapshot can rebuild the context.
     runner_prompt: str = ""
     #: Node NAMES this runner imposes a human gate on — matched across all graphs and read
-    #: at context build, so a config edit needs a restart, not just a new tick.
+    #: at context build from the pass settings snapshot.
     gates: tuple[str, ...] = ()
     #: The projects this runner serves, by id or slug, declared at every registration; ``None`` declares
     #: none, so the hub keeps the declaration it holds. Read at context build, like :attr:`gates`.
@@ -256,7 +258,11 @@ class LoopContext:
             if owner is not None
             else (self.harness_sets.current.registry if self.harness_sets else self.harnesses)
         )
-        return registry.transcript_source(session.harness_id)
+        source = registry.transcript_source(session.harness_id)
+        stamp = self.stores.liveness.spawn_settings(lease_id, generation)
+        if stamp is not None and stamp.transcripts_root and isinstance(source, IRootedTranscriptSource):
+            return source.at_root(stamp.transcripts_root)
+        return source
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
         owner = self.harness_sets.worker_for_lease(lease_id) if self.harness_sets else None
@@ -270,7 +276,16 @@ class LoopContext:
         return self.harnesses_for_lease(lease_id)
 
     def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource:
-        return self.harnesses_for_lease(lease_id).transcript_source(session.harness_id)
+        stamp = self.stores.liveness.latest_spawn_settings([lease_id]).get(lease_id)
+        return self.lease_transcript_source_at_root(lease_id, session, stamp.transcripts_root if stamp else None)
+
+    def lease_transcript_source_at_root(
+        self, lease_id: str, session: SessionReference, root: str | None
+    ) -> IHarnessTranscriptSource:
+        source = self.harnesses_for_lease(lease_id).transcript_source(session.harness_id)
+        if root and isinstance(source, IRootedTranscriptSource):
+            return source.at_root(root)
+        return source
 
     def resolve_boundary_start(
         self, session: SessionReference, workdir: str | None, workspace_id: str | None, *, lease_id: str | None = None

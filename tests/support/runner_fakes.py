@@ -142,6 +142,7 @@ from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
+from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
@@ -390,7 +391,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
     )
 
 
-def make_stores(store: IWriteRunnerStore) -> RunnerStores:
+def make_stores(store: SqlAlchemyRunnerStore) -> RunnerStores:
     """The :class:`RunnerStores` bundle over one flat store — every field the same object,
     since :class:`SqlAlchemyRunnerStore` structurally satisfies every concept Protocol."""
     return RunnerStores(
@@ -406,6 +407,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         asks=store,
         pause=store,
         identity=store,
+        settings=RunnerSettingsStore(store.connections, SystemClock()),
         served_projects=store,
         takeover=store,
         requeue=store,

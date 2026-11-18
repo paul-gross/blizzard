@@ -22,7 +22,7 @@ async function adopt(host: RunnerHost): Promise<void> {
   // The first boot publishes the host's URL; the restart pinned to it declares that URL as its public origin.
   await host.restart();
   await host.stop();
-  host.reconfigure({ public_url: host.url });
+  await host.reconfigure({ public_url: host.url });
   await host.restart();
   // The pass answers once the hub has answered the runner's registration, which is what offers sign-in.
   await host.step();
@@ -132,7 +132,7 @@ test.describe('a registered host of two runners', () => {
   test('test_one_sign_in_at_a_registered_host_reaches_both_runners_pages', async ({ page, api, idp, runnerHost }) => {
     await runnerHost.restart();
     await runnerHost.stop();
-    runnerHost.reconfigure({ public_url: runnerHost.url });
+    await runnerHost.reconfigure({ public_url: runnerHost.url });
     await runnerHost.restart();
     // The host signs in as itself only once the hub has answered its report.
     await runnerHost.stepHost();

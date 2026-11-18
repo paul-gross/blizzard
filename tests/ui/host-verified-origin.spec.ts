@@ -10,7 +10,7 @@ test('host detail links the first matching hostname without health probes', asyn
   const other = 'http://example.invalid:1';
   await runnerHost.restart();
   await runnerHost.stop();
-  runnerHost.reconfigure({ public_url: [other, matching, runnerHost.url] });
+  await runnerHost.reconfigure({ public_url: [other, matching, runnerHost.url] });
   await runnerHost.restart();
   await runnerHost.stepHost();
 

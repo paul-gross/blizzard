@@ -22,6 +22,7 @@ from tests.support.flag_registry import (
     _fixture,  # pyright: ignore[reportPrivateUsage]
 )
 from tests.support.host_files import write_minimal_host
+from tests.support.runner_fakes import migrated_store_at
 from tests.support.scaffolding import build_hub
 
 
@@ -59,6 +60,7 @@ def test_a_hub_answers_its_own_scopes_and_lists_the_applied_overrides(
 def test_a_host_over_the_packaged_registry_answers_an_empty_map_and_keeps_its_health(tmp_path: Path) -> None:
     write_minimal_host(tmp_path)
     config = load_host_config(tmp_path, port=0)
+    migrated_store_at(config.db_url)
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
     host = build_host_process(config, built)
     hosted = build_hosted_app(config.host_view(), host)
@@ -77,6 +79,7 @@ def test_a_host_answers_its_runner_flags_and_warns_once_per_ignored_key(
     flags = "[flags]\nrunner-thing = false\nhub-thing = true\nfleet-thing = true\nold-thing = true\nmistyped = true\n"
     write_minimal_host(tmp_path, top=flags)
     config = load_host_config(tmp_path, port=0, flag_registry=_fixture())
+    migrated_store_at(config.db_url)
     built = [p for p in config.projections(_TOKEN) if isinstance(p, BuiltRunner)]
     host = build_host_process(config, built)
     hosted = build_hosted_app(config.host_view(), host)

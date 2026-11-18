@@ -10,22 +10,37 @@ sqlite) runner store with fakes at the seams."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import pytest
+
+import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.settings_record.vocabulary import Change
+from blizzard.foundation.sweep_passes import SweepPassOutcome
+from blizzard.runner.cli.runtime import seed_runners
+from blizzard.runner.composition import build_host_process
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError, WorktreeTarget
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.client import BindingDeclaration, ClaimRequest, QueueEntry, RouteClaimOutcome
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.hub.client import BindingDeclaration, ClaimRequest, HubClientError, QueueEntry, RouteClaimOutcome
+from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.routing import RoutingConflict
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
+from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -37,6 +52,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    record_usage,
     registered_identity,
 )
 from tests.support.runner_mint import new_mint
@@ -81,6 +97,7 @@ def _ctx(
     *,
     agents: int = 2,
     workspaces: IWorkspaces | None = None,
+    runner_id: str = FIXTURE_RUNNER_ID,
 ) -> LoopContext:
     return make_context(
         store,
@@ -89,7 +106,7 @@ def _ctx(
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=bindings, agents=agents),
+        config=LoopConfig(runner_name="r1", runner_id=runner_id, bindings=bindings, agents=agents),
         workspaces=workspaces or _workspaces(),
     )
 
@@ -169,6 +186,205 @@ def test_open_leases_are_counted_against_the_one_runner_count(tmp_path: Path) ->
     Fill(_ctx(store, hub, _bindings(), agents=2)).run()
     assert _peeked_projects(hub) == [["pr_a", "pr_b"]]
     assert [c.chunk_id for c in hub.claims] == ["ch_b"]
+
+
+def test_live_capacity_reduction_keeps_existing_holds_and_resumes_claiming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    host = load_host_config(tmp_path)
+    store = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(store.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
+    )
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    reader = runner.settings_reader
+    assert reader is not None
+    hub = _Hub(default_runner_id=TEST_RUNNER_ID)
+    hub.queue = [_entry("ch_new", "pr_b")]
+    _hold_open_lease(store, "ch_running", workspace_id="ws_a", project_id="pr_a")
+    try:
+        old = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"agents": 1}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        reduced = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        assert old.config.agents == 3
+        ctx = _ctx(store, hub, _bindings(), agents=reduced.config.agents, runner_id=TEST_RUNNER_ID)
+        Fill(ctx).run()
+        assert not hub.claims and not hub.peek_queue_requests
+        assert [row.chunk_id for row in store.held_bindings()] == ["ch_running"]
+        settings.write(
+            Change("edit", sets={"agents": 2}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        increased = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        Fill(replace(ctx, config=replace(ctx.config, agents=increased.config.agents))).run()
+        assert [claim.chunk_id for claim in hub.claims] == ["ch_new"]
+        assert {row.chunk_id for row in store.held_bindings()} == {"ch_running", "ch_new"}
+    finally:
+        stepper.close()
+        graph.close()
+
+
+def test_live_budget_edit_gates_claims_at_the_next_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 1\n")
+    host = load_host_config(tmp_path)
+    store = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(store.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
+    )
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    reader = runner.settings_reader
+    assert reader is not None
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    hub = _Hub(default_runner_id=TEST_RUNNER_ID)
+    hub.queue = [_entry("ch_new", "pr_b")]
+    record_usage(
+        store,
+        lease_id="lease_old",
+        chunk_id="ch_old",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=UsageSample("spawn", "model", 0, 0, 0, 0, 7.0),
+        recorded_at=_NOW,
+    )
+    try:
+        before = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        settings = runner.stores.settings
+        settings.write(
+            Change("edit", sets={"throttle.budget.usd": 5, "throttle.budget.window_hours": 12}),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+        after = stepper._context()  # pyright: ignore[reportPrivateUsage]
+        ctx = _ctx(store, hub, _bindings(), agents=1, runner_id=TEST_RUNNER_ID)
+        Fill(replace(ctx, config=replace(ctx.config, throttle=after.config.throttle))).run()
+        assert not hub.peek_queue_requests and not hub.claims
+        Fill(replace(ctx, config=replace(ctx.config, throttle=before.config.throttle))).run()
+        assert [claim.chunk_id for claim in hub.claims] == ["ch_new"]
+    finally:
+        stepper.close()
+        graph.close()
+
+
+@pytest.mark.parametrize("during_tick", [False, True])
+def test_stepper_live_budget_and_queue_policy_survive_hub_outage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, during_tick: bool
+) -> None:
+    """The actual pass snapshot drives FILL, including an edit while that pass is in progress."""
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'runner.db'}"
+    write_minimal_host(
+        tmp_path,
+        top=f'db_url = "{url}"',
+        projects='[{project = "pr_a", workspace = "workspace-local"}]',
+    )
+    host = load_host_config(tmp_path)
+    store = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(store.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
+    )
+    ready, halted = seed_runners(host, list(host.runners))
+    assert not halted
+    graph = build_host_process(host, ready)
+    runner = graph.runners[0]
+    reader = runner.settings_reader
+    assert reader is not None
+    settings = runner.stores.settings
+
+    class Hub(_Hub):
+        offline = False
+        outages = 0
+
+        def peek_queue(self, *args: Any, **kwargs: Any) -> list[QueueEntry]:
+            if self.offline:
+                self.outages += 1
+                raise HubClientError("offline")
+            return super().peek_queue(*args, **kwargs)
+
+    hub = Hub(default_runner_id=TEST_RUNNER_ID)
+    workspaces = WorkspaceRegistry(
+        [WorkspaceEntry("workspace-local", FakeProvider({"a1": "/root-a/a1"}), spawn_root="/root-a")]
+    )
+    fake = _ctx(
+        store, hub, (BindingDeclaration("pr_a", "workspace-local"),), workspaces=workspaces, runner_id=TEST_RUNNER_ID
+    )
+    record_usage(
+        store,
+        lease_id="lease_old",
+        chunk_id="ch_old",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=UsageSample("spawn", "model", 0, 0, 0, 0, 7.0),
+        recorded_at=_NOW,
+    )
+
+    def edit(values: dict[str, object]) -> None:
+        settings.write(
+            Change("edit", sets=values),
+            if_match=settings.snapshot().revision,
+            validate=reader.validate,
+            door="api",
+            actor="test",
+        )
+
+    calls = 0
+
+    def fill(ctx: LoopContext) -> None:
+        nonlocal calls
+        calls += 1
+        Fill(replace(fake, config=ctx.config)).run()
+        if calls == 1 and during_tick:
+            edit({"throttle.budget.usd": 5, "throttle.budget.window_hours": 12, "queue.strict": True})
+            Fill(replace(fake, config=ctx.config)).run()
+
+    monkeypatch.setattr(loop_wiring, "tick", fill)
+    stepper = RunnerStepper(runner.config, process_graph=runner)
+    try:
+        assert stepper.request().outcome is SweepPassOutcome.COMPLETED
+        initial_peeks = 2 if during_tick else 1
+        assert len(hub.peek_queue_requests) == initial_peeks
+        if not during_tick:
+            edit({"throttle.budget.usd": 5, "throttle.budget.window_hours": 12, "queue.strict": True})
+        assert stepper.request().outcome is SweepPassOutcome.COMPLETED
+        assert len(hub.peek_queue_requests) == initial_peeks  # budget blocks the next pass
+        edit({"throttle.budget.usd": 10})
+        hub.offline = True
+        assert stepper.request().outcome is SweepPassOutcome.COMPLETED
+        assert hub.outages == 1
+        assert len(hub.peek_queue_requests) == initial_peeks
+        hub.offline = False
+        assert stepper.request().outcome is SweepPassOutcome.COMPLETED
+        assert len(hub.peek_queue_requests) == initial_peeks + 1
+        assert all(request.policy.value == "pass-over" for request in hub.peek_queue_requests[:-1])
+        assert hub.peek_queue_requests[-1].policy.value == "hold"
+    finally:
+        stepper.close()
+        graph.close()
 
 
 def test_a_held_row_of_unknown_workspace_counts_against_the_runner_count(tmp_path: Path) -> None:

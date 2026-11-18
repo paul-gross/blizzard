@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -19,12 +20,20 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
+from blizzard.runner.harness.harness_set import (
+    HarnessAssemblyInputs,
+    HarnessAssemblyKey,
+    HarnessSet,
+    HarnessSets,
+    WorkerInvocation,
+)
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
+from blizzard.runner.loop_wiring import UsageRegistryLookup
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.support.runner_fakes import (
@@ -85,6 +94,78 @@ def _assert_escalated_once_with_no_takeover(store: SqlAlchemyRunnerStore, chunk_
     assert payload["cause"] == "owner-unresolvable"
     assert payload["detail"].startswith("recorded harness owner ")
     assert " is unknown " in payload["detail"] or " is unavailable " in payload["detail"]
+
+
+@pytest.mark.parametrize("wake", ["nudge", "answer", "unpause"])
+def test_disabled_owner_defers_wake_without_consuming_it_until_recovered(tmp_path: Path, wake: str) -> None:
+    store = _store(tmp_path)
+    store.record_mint(new_mint(NewLease("lease_a", "ch_a", "gr_a", "nd_build", "build", 1, 2, _NOW)))
+    session = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a")
+    store.record_spawn("lease_a", pid=100, process_start_time="start-100", session=session, spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_a", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    hub = FakeHub()
+    hub.envelopes["ch_a"] = make_envelope(
+        "ch_a", "build", node_id="nd_build", choices=_CHOICES, produces=["artifact-x"]
+    )
+    hub.chunks["ch_a"] = ChunkState(chunk_id="ch_a", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1")
+    if wake == "answer":
+        store.record_ask(
+            lease_id="lease_a",
+            chunk_id="ch_a",
+            question_id="qn_1",
+            question="Which API?",
+            options=[],
+            session=session,
+            asked_at=_NOW,
+        )
+        store.record_park(lease_id="lease_a", chunk_id="ch_a", question_id="qn_1", parked_at=_NOW)
+        hub.questions["qn_1"] = replace(_answered_question(), chunk_id="ch_a")
+    elif wake == "unpause":
+        store.record_pause_park(lease_id="lease_a", chunk_id="ch_a", parked_at=_NOW)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict=None
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None, recovery_only=True)
+    missing = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=None, versions=None)
+    available = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    inputs = Mock(spec=HarnessAssemblyInputs, sections=(ClaudeCodeSection(enabled=False),))
+    sets = HarnessSets(Mock(side_effect=[missing, available]))
+    sets.select(HarnessAssemblyKey((inputs,), ("missing",)))
+    ctx = replace(
+        ctx,
+        harness_sets=sets,
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
+
+    Advance(ctx).run()
+    assert store.active_lease("lease_a") is not None
+    assert not store.open_escalations()
+    assert not store.nudge_fired("lease_a", 1)
+    assert harness.resumed == [] and harness.judged == []
+    if wake == "answer":
+        assert store.open_park("lease_a") is not None
+    elif wake == "unpause":
+        assert "lease_a" in store.open_pause_parks()
+
+    sets.select(HarnessAssemblyKey((inputs,), ("available",)))
+    sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, available)
+    Advance(ctx).run()
+    assert len(harness.resumed) == 1
+    assert store.lease_generation("lease_a") == 2
+    if wake == "nudge":
+        assert store.nudge_fired("lease_a", 1)
+    elif wake == "answer":
+        assert store.open_park("lease_a") is None
+    else:
+        assert "lease_a" not in store.open_pause_parks()
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Hashable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -35,6 +35,7 @@ class HarnessAssemblyInputs:
     runner_id: str
     telemetry_enabled: bool
     runner_environ: tuple[tuple[str, str], ...] = field(repr=False)
+    spawn_roots: tuple[str, ...] = ()
     publish: bool = False
     bundle: BundleSnapshot | None = None
 
@@ -51,6 +52,9 @@ class HarnessAssemblyKey:
     values: tuple[object, ...]
     binary_identities: tuple[object, ...] = ()
     bundle_source_identity: object = None
+    #: A recovery-only rebuild keeps the current enabled bindings, rather than reselecting them.
+    preserve_selection: bool = field(default=False, compare=False)
+    retry_unresolved: bool = field(default=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,9 @@ class HarnessSet:
     health: HarnessHealthCache
     telemetry: HarnessTelemetryPlan
     versions: HarnessVersionCache
+    recovery: HarnessSet | None = None
+    recovery_only: bool = False
+    pending_recovery: frozenset[str] = frozenset()
 
 
 class IInvocationHarnesses(Protocol):
@@ -86,6 +93,8 @@ class IInvocationHarnesses(Protocol):
     def release(self, invocation: Hashable) -> None: ...
 
     def find(self, invocation: Hashable) -> HarnessSet | None: ...
+
+    def awaiting_recovery(self, invocation: WorkerInvocation, harness_id: str) -> bool: ...
 
     def worker_for_lease(self, lease_id: str) -> HarnessSet | None: ...
 
@@ -125,10 +134,29 @@ class HarnessSets:
         self._retained: dict[Hashable, HarnessSet] = {}
 
     def select(self, key: HarnessAssemblyKey) -> HarnessSet:
+        selected = self.prepare(key)
+        self.publish(key, selected)
+        return selected
+
+    def prepare(self, key: HarnessAssemblyKey) -> HarnessSet:
+        """Build without changing the owner used by running or new invocations."""
         if self._current is None or key != self._key:
-            selected = self._build(key)
-            self._key, self._current = key, selected
+            built = self._build(key)
+            if self._current is not None and key.preserve_selection:
+                return replace(self._current, recovery=built.recovery, pending_recovery=built.pending_recovery)
+            return built
         return self._current
+
+    def retry_recovery(self, key: HarnessAssemblyKey) -> HarnessSet:
+        """Retry unresolved recovery without replacing the enabled runtime."""
+        current = self.current
+        built = self._build(replace(key, preserve_selection=True, retry_unresolved=True))
+        if built.pending_recovery == current.pending_recovery:
+            return current
+        return replace(current, recovery=built.recovery, pending_recovery=built.pending_recovery)
+
+    def publish(self, key: HarnessAssemblyKey, selected: HarnessSet) -> None:
+        self._key, self._current = key, selected
 
     @property
     def current(self) -> HarnessSet:
@@ -145,6 +173,22 @@ class HarnessSets:
             raise ValueError("invocation already retained")
         self._retained[invocation] = selected
         return selected
+
+    def recover(self, invocation: WorkerInvocation, harness_id: str, selected: HarnessSet) -> None:
+        """Anchor a durable session to its available startup binding, without changing admission."""
+        if invocation in self._retained:
+            return
+        owner = selected if harness_id in selected.registry.known_harnesses else selected.recovery
+        if owner is not None and harness_id in owner.registry.known_harnesses:
+            self._retained[invocation] = owner
+
+    def awaiting_recovery(self, invocation: WorkerInvocation, harness_id: str) -> bool:
+        if self.find(invocation) is not None or harness_id in self.current.registry.known_harnesses:
+            return False
+        inputs = self._key.values[0] if self._key is not None and self._key.values else None
+        return isinstance(inputs, HarnessAssemblyInputs) and any(
+            section.harness_id == harness_id and not section.enabled for section in inputs.sections
+        )
 
     def retain_for(self, invocation: Hashable, source: Hashable) -> HarnessSet:
         """Retain the source invocation's set, or the current set after restart."""

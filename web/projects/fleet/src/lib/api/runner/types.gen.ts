@@ -486,6 +486,58 @@ export type CapacitiesView = {
 };
 
 /**
+ * ChangeView
+ */
+export type ChangeView = {
+    /**
+     * Actor
+     */
+    actor: string;
+    /**
+     * Apply Id
+     */
+    apply_id: string | null;
+    /**
+     * Diff
+     */
+    diff: Array<FieldChangeView>;
+    /**
+     * Door
+     */
+    door: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Op
+     */
+    op: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * ChangesPage
+ */
+export type ChangesPage = {
+    /**
+     * Changes
+     */
+    changes: Array<ChangeView>;
+    /**
+     * Next Before
+     */
+    next_before: number | null;
+};
+
+/**
  * CheckResult
  *
  * One deterministic check's runner-executed outcome: the command and whether it passed.
@@ -1295,6 +1347,20 @@ export type DecisionView = {
     transitioned: boolean;
 };
 
+/**
+ * EntryView
+ */
+export type EntryView = {
+    /**
+     * At Default
+     */
+    at_default: boolean;
+    /**
+     * Value
+     */
+    value: unknown;
+};
+
 export const EnvironmentChangeCause = { BOUND: 'bound', RELEASED: 'released' } as const;
 
 export type EnvironmentChangeCause = typeof EnvironmentChangeCause[keyof typeof EnvironmentChangeCause];
@@ -1541,6 +1607,36 @@ export type FactView = {
      * Seq
      */
     seq: number;
+};
+
+/**
+ * FailureView
+ */
+export type FailureView = {
+    /**
+     * Error
+     */
+    error: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Since
+     */
+    since: string;
+};
+
+/**
+ * FieldChangeView
+ */
+export type FieldChangeView = {
+    /**
+     * Key
+     */
+    key: string;
+    new: EntryView;
+    old: EntryView | null;
 };
 
 /**
@@ -2760,6 +2856,21 @@ export type IdentityVerdictView = {
 };
 
 /**
+ * InForce
+ */
+export type InForce = {
+    failed: FailureView | null;
+    /**
+     * Revision
+     */
+    revision: number | null;
+    /**
+     * Since
+     */
+    since: string | null;
+};
+
+/**
  * IntendedMigrationView
  *
  * A chunk's standing migration intent — editable at any non-terminal status and
@@ -3099,6 +3210,10 @@ export type LeaseView = {
      */
     harness_version: string | null;
     /**
+     * Host Settings Revision
+     */
+    host_settings_revision: number | null;
+    /**
      * Last Heartbeat At
      */
     last_heartbeat_at: string | null;
@@ -3132,6 +3247,10 @@ export type LeaseView = {
      */
     resolved_model: string | null;
     /**
+     * Runner Settings Revision
+     */
+    runner_settings_revision: number | null;
+    /**
      * Session Id
      */
     session_id: string | null;
@@ -3148,6 +3267,25 @@ export type LeaseView = {
      */
     workdir: string | null;
 };
+
+/**
+ * Lifetime
+ *
+ * When a change to a key's value reaches the daemon reading it.
+ */
+export const Lifetime = {
+    PASS: 'pass',
+    SESSION: 'session',
+    BOOT: 'boot',
+    IMMUTABLE: 'immutable'
+} as const;
+
+/**
+ * Lifetime
+ *
+ * When a change to a key's value reaches the daemon reading it.
+ */
+export type Lifetime = typeof Lifetime[keyof typeof Lifetime];
 
 /**
  * MigrationMode
@@ -4229,6 +4367,124 @@ export type SessionEndResponse = {
      * Recorded
      */
     recorded: boolean;
+};
+
+/**
+ * SettingError
+ */
+export type SettingError = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * SettingRow
+ */
+export type SettingRow = {
+    /**
+     * Key
+     */
+    key: string;
+    lifetime: Lifetime;
+    /**
+     * Revision
+     */
+    revision: number | null;
+    /**
+     * Source
+     */
+    source: 'entry' | 'default';
+    /**
+     * Value
+     */
+    value: unknown;
+    /**
+     * Written At
+     */
+    written_at: string | null;
+    /**
+     * Written By
+     */
+    written_by: string | null;
+};
+
+/**
+ * SettingsProblem
+ */
+export type SettingsProblem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Current
+     */
+    current: number | null;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: Array<SettingError> | null;
+    /**
+     * Key
+     */
+    key: string | null;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
+ * SettingsView
+ */
+export type SettingsView = {
+    in_force: InForce;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Settings
+     */
+    settings: Array<SettingRow>;
+    /**
+     * Settings Error
+     */
+    settings_error: string | null;
+};
+
+/**
+ * SettingsWrite
+ */
+export type SettingsWrite = {
+    /**
+     * Set
+     */
+    set?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Unset
+     */
+    unset?: Array<string>;
 };
 
 /**
@@ -7965,6 +8221,125 @@ export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses = {
 };
 
 export type GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponse = GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses[keyof GetSelftestRunnersRunnerIdApiSelftestsSelftestIdGetResponses];
+
+export type GetSettingsRunnersRunnerIdApiSettingsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/settings';
+};
+
+export type GetSettingsRunnersRunnerIdApiSettingsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSettingsRunnersRunnerIdApiSettingsGetError = GetSettingsRunnersRunnerIdApiSettingsGetErrors[keyof GetSettingsRunnersRunnerIdApiSettingsGetErrors];
+
+export type GetSettingsRunnersRunnerIdApiSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type GetSettingsRunnersRunnerIdApiSettingsGetResponse = GetSettingsRunnersRunnerIdApiSettingsGetResponses[keyof GetSettingsRunnersRunnerIdApiSettingsGetResponses];
+
+export type PatchSettingsRunnersRunnerIdApiSettingsPatchData = {
+    body: SettingsWrite;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: string | null;
+    };
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/settings';
+};
+
+export type PatchSettingsRunnersRunnerIdApiSettingsPatchErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * Settings revision conflict
+     */
+    409: SettingsProblem;
+    /**
+     * Invalid settings edit or request
+     */
+    422: HttpValidationError | SettingsProblem;
+};
+
+export type PatchSettingsRunnersRunnerIdApiSettingsPatchError = PatchSettingsRunnersRunnerIdApiSettingsPatchErrors[keyof PatchSettingsRunnersRunnerIdApiSettingsPatchErrors];
+
+export type PatchSettingsRunnersRunnerIdApiSettingsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type PatchSettingsRunnersRunnerIdApiSettingsPatchResponse = PatchSettingsRunnersRunnerIdApiSettingsPatchResponses[keyof PatchSettingsRunnersRunnerIdApiSettingsPatchResponses];
+
+export type SettingsChangesRunnersRunnerIdApiSettingsChangesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Before
+         */
+        before?: number | null;
+    };
+    url: '/runners/{runner_id}/api/settings/changes';
+};
+
+export type SettingsChangesRunnersRunnerIdApiSettingsChangesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SettingsChangesRunnersRunnerIdApiSettingsChangesGetError = SettingsChangesRunnersRunnerIdApiSettingsChangesGetErrors[keyof SettingsChangesRunnersRunnerIdApiSettingsChangesGetErrors];
+
+export type SettingsChangesRunnersRunnerIdApiSettingsChangesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChangesPage;
+};
+
+export type SettingsChangesRunnersRunnerIdApiSettingsChangesGetResponse = SettingsChangesRunnersRunnerIdApiSettingsChangesGetResponses[keyof SettingsChangesRunnersRunnerIdApiSettingsChangesGetResponses];
 
 export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetData = {
     body?: never;

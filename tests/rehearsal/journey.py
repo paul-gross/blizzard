@@ -30,7 +30,15 @@ from tests.rehearsal.comparison import (
     row_losses,
     view_mismatches,
 )
-from tests.rehearsal.installation import Host, Hub, Leg, baseline_daemon_port, point_mock_harness, shape_host_file
+from tests.rehearsal.installation import (
+    FENCE_VAR,
+    Host,
+    Hub,
+    Leg,
+    baseline_daemon_port,
+    point_mock_harness,
+    shape_host_file,
+)
 from tests.rehearsal.stores import (
     baseline_contract,
     baseline_openapi,
@@ -375,6 +383,44 @@ class Rehearsal:
         self.work.start(self.candidate, self.hub.url)
         client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
         self._await_landed(client, self.ingest(client, "the candidate runner"), step)
+        self._rehearse_seeded_settings(step)
+
+    def _rehearse_seeded_settings(self, step: str) -> None:
+        """The first candidate boot seeds the authored file once; an unset remains authoritative."""
+        host_file = self.work.dir / "blizzard-host.toml"
+        original = host_file.read_text()
+        with httpx2.Client(base_url=f"http://127.0.0.1:{self.work.port}", timeout=30.0) as api:
+            runners = api.get("/api/host/runners")
+            assert runners.status_code == 200, runners.text
+            runner_id = runners.json()["items"][0]["runner_id"]
+            route = f"/runners/{runner_id}/api/settings"
+
+            def settings() -> dict[str, Any]:
+                response = api.get(route)
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            def entry(view: dict[str, Any]) -> dict[str, Any]:
+                return next(row for row in view["settings"] if row["key"] == "worker.env_passthrough")
+
+            seeded = settings()
+            assert entry(seeded)["source"] == "entry"
+            assert entry(seeded)["value"] == [FENCE_VAR]
+            response = api.patch(
+                route, headers={"If-Match": str(seeded["revision"])}, json={"unset": ["worker.env_passthrough"]}
+            )
+            assert response.status_code == 200, response.text
+            self.work.stop()
+            try:
+                host_file.write_text(
+                    original.replace(f'env_passthrough = ["{FENCE_VAR}"]', 'env_passthrough = ["EDITED_AFTER_SEED"]')
+                )
+                self.work.start(self.candidate, self.hub.url)
+                after = entry(settings())
+                assert after["source"] == "default", (step, after)
+                assert after["value"] == [], (step, after)
+            finally:
+                host_file.write_text(original)
 
     # ------------------------------------------------------------------ the store walk
 

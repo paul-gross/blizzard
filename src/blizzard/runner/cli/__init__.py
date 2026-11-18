@@ -29,6 +29,7 @@ _COMMANDS = {
     "pm-items": f"{_CLI}.worker:pm_items",
     "chunk": f"{_CLI}.worker:chunk_group",
     "prompt": f"{_CLI}.prompt:prompt_group",
+    "settings": f"{_CLI}.settings:settings_group",
     "harness": f"{_CLI}.harness:harness_group",
     "transcript": f"{_CLI}.transcript:transcript_group",
     "artifact": f"{_CLI}.artifact:artifact_group",

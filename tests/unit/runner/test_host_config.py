@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner import config as runner_config
 from blizzard.runner.config import ConfigError
 from blizzard.runner.host_config import (
@@ -23,6 +24,8 @@ from blizzard.runner.host_config import (
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
 from blizzard.runner.loop.mode import LoopMode
+from blizzard.runner.settings.ports import SettingsSnapshot
+from blizzard.runner.settings_reader import RunnerSettingsReader
 from tests.support.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 
 _TOKEN = {"BZ_HUB_TOKEN_R_ONE": "tok-one"}
@@ -753,6 +756,34 @@ def test_disagreeing_runners_with_no_tools_table_are_refused_naming_tools(tmp_pa
     other = '[runner.worker]\npath_prepend = ["/opt/other"]\n'
 
     assert "[tools]" in _refusal(tmp_path, _two_runners(_XPS_WORKER, other))
+
+
+def test_stored_runner_profiles_do_not_change_the_file_derived_host_profile(tmp_path: Path) -> None:
+    host = load_host_config(_write(tmp_path / "host", _two_runners(_XPS_WORKER, _XPS_WORKER)))
+
+    from tests.support.runner_settings import SnapshotSettingsStore
+
+    class SnapshotSource(SnapshotSettingsStore):
+        def __init__(self, path: str) -> None:
+            self.path = path
+
+        def snapshot(self) -> SettingsSnapshot:
+            return SettingsSnapshot(
+                1,
+                {
+                    "agents": Entry(1),
+                    "projects": Entry([{"project": "p", "workspace": "ws"}]),
+                    "worker.path_prepend": Entry([self.path]),
+                },
+            )
+
+    resolved = [
+        RunnerSettingsReader(host, entry, SnapshotSource(path)).snapshot()[1]
+        for entry, path in zip(host.runners, ("/stored-one", "/stored-two"), strict=True)
+    ]
+    assert [runner.worker_path_prepend for runner in resolved] == [("/stored-one",), ("/stored-two",)]
+    assert host.host_view().worker_path_prepend == ("/opt/shims",)
+    assert host.host_view().worker_env_passthrough == ("SSH_AUTH_SOCK",)
 
 
 def test_a_host_with_no_runner_and_no_tools_table_has_an_empty_tool_profile(tmp_path: Path) -> None:

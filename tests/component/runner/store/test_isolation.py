@@ -26,7 +26,9 @@ import pytest
 import sqlalchemy as sa
 
 import blizzard.runner as runner_pkg
+from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.repository import BindingCompletion, IWriteEnvironmentRepository
@@ -58,6 +60,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IWriteDaemonLivenessReposi
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IWriteCheckRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
+from blizzard.runner.settings.ports import IWriteRunnerSettings
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
@@ -268,6 +271,16 @@ def _engage_under_lock(w: RunnerWorld) -> None:
 
 
 WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
+    (IWriteRunnerSettings, "seed"): lambda w: w.stores.settings.seed(
+        ConfigView.unchecked({"agents": 2}), ("agents",), validate=lambda _: {}
+    ),
+    (IWriteRunnerSettings, "write"): lambda w: w.stores.settings.write(
+        Change("edit", sets={"agents": 3}),
+        if_match=w.stores.settings.snapshot().revision,
+        validate=lambda _: {},
+        door="cli",
+        actor="test",
+    ),
     (IWriteLeaseRecordRepository, "record_mint"): _new_mint,
     (IWriteLeaseRecordRepository, "record_closure"): lambda w: w.stores.lease_record.record_closure(
         lease_id=w.lease_2,

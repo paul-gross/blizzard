@@ -181,9 +181,9 @@ class _HostRunning(Exception):
 @click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
 @click.pass_context
 def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
-    """Retire one of this registered host's runners at its hub, forget its identity here, and remove its
-    `[[runner]]` from the host file. With the host stopped, this forgets the identity; a running host forgets it itself
-    when it halts the runner at its next tick.
+    """Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.
+    Its identity is retained with settings and history; otherwise the stopped host forgets it immediately and a
+    running host forgets it when it halts the runner at its next tick.
 
     Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
     releases them."""

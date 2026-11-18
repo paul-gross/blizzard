@@ -40,6 +40,8 @@ class _CommonFields(TypedDict):
     resolved_model: str | None
     resolved_effort: str | None
     harness_version: str | None
+    host_settings_revision: int | None
+    runner_settings_revision: int | None
     git_commits: list[LeaseGitCommitView]
 
 
@@ -63,6 +65,8 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "resolved_model": lease.resolved_model,
         "resolved_effort": lease.resolved_effort,
         "harness_version": activity.stamps.harness_version,
+        "host_settings_revision": activity.stamps.host_settings_revision,
+        "runner_settings_revision": activity.stamps.runner_settings_revision,
         "git_commits": [
             LeaseGitCommitView(
                 environment_id=commit.environment_id,

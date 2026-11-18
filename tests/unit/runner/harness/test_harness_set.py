@@ -49,6 +49,19 @@ def test_retained_invocations_keep_their_original_set() -> None:
     assert sets.lookup("new-process") is second
 
 
+def test_prepared_set_is_not_published_until_context_is_ready() -> None:
+    first, second = Mock(), Mock()
+    sets = HarnessSets(Mock(side_effect=[first, second]))
+    sets.select(HarnessAssemblyKey((1,)))
+    key = HarnessAssemblyKey((2,))
+    candidate = sets.prepare(key)
+    assert sets.current is first
+    assert sets.retain("before") is first
+    sets.publish(key, candidate)
+    assert sets.retain("after") is second
+    assert sets.lookup("before") is first
+
+
 def test_provisional_ownership_moves_to_process_even_after_replacement() -> None:
     first, second = Mock(), Mock()
     sets = HarnessSets(Mock(side_effect=[first, second]))

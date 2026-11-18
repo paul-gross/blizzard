@@ -58,6 +58,8 @@ function lease(runnerChunk: string, projectId: string, leaseId: string): runnerA
     resolved_model: null,
     resolved_effort: null,
     harness_version: null,
+    host_settings_revision: null,
+    runner_settings_revision: null,
     git_commits: [],
     harness_id: null,
     project_id: projectId,

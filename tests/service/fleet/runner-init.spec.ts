@@ -56,7 +56,7 @@ test.describe('at fresh-tenant', () => {
     });
   });
 
-  test('test_a_runner_renamed_in_its_config_shows_the_new_name_under_the_same_id_after_a_restart', async ({ runnerHost, api }) => {
+  test('a file rename preserves the stored name until settings change it', async ({ runnerHost, api }) => {
     const id = runnerHost.runners[NAME]!.id;
     await runnerHost.stop();
     // Renaming a runner is editing its name and its token variable's name together.
@@ -65,9 +65,13 @@ test.describe('at fresh-tenant', () => {
     expect((await runnerHost.step()).outcome).toBe('completed');
 
     const renamed = runnerHost.runners['renamed-runner']!;
-    expect((await api.get(`/api/runners/${id}`)).body.runner_name).toBe('renamed-runner');
+    expect((await api.get(`/api/runners/${id}`)).body.runner_name).toBe(NAME);
     const status = (await renamed.status()).body;
-    expect([status.runner_id, status.runner_name]).toEqual([id, 'renamed-runner']);
+    expect([status.runner_id, status.runner_name]).toEqual([id, NAME]);
+    const edit = await runnerHost.cli(['settings', 'set', 'name', '"renamed-runner"', '--runner', id]);
+    expect(edit.code, edit.stdout + edit.stderr).toBe(0);
+    expect((await runnerHost.step()).outcome).toBe('completed');
+    expect((await api.get(`/api/runners/${id}`)).body.runner_name).toBe('renamed-runner');
     expect(await runnerIds(api)).toEqual([id]);
   });
 

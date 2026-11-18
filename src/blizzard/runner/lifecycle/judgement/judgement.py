@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
@@ -14,7 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
-from blizzard.runner.harness.harness_set import JudgeInvocation, WorkerInvocation
+from blizzard.runner.harness.harness_set import HarnessSet, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     IHarnessLifecycleAndVerdictRegistry,
@@ -222,6 +222,8 @@ class Judgement:
         elicited, no attempt failed, and no `checks:` run."""
         lease = self.lease
         dormant = DormantSession(self.ctx, lease)
+        if dormant.awaiting_recovery():
+            return
         dormant.drain_before_resume()
         _log.warning(
             "resuming premature exit for unattached produces names",
@@ -271,6 +273,11 @@ class Judgement:
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
         lease = self.lease
         observed = ElicitationExit(elicitation, self.ctx.clock.now(), alive=_elicitation_alive(self.ctx, elicitation))
+        owners = getattr(self.ctx, "harness_sets", None)
+        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+        worker = WorkerInvocation(lease.lease_id, generation)
+        if not observed.alive and owners is not None and owners.awaiting_recovery(worker, self.session.harness_id):
+            return
         outcome = observed.decide()
         if outcome is CollectOutcome.WAIT:
             return
@@ -284,7 +291,6 @@ class Judgement:
         # typically writes its own signal to the session transcript, not this elicitation's captured stdout,
         # so neither an empty `output` nor a long-unobserved exit may fall through to failing or relaunching —
         # exactly what a usage-limit park exists to avoid.
-        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         lines = self.ctx.usage.judge_transcript_lines(lease, self.bindings, generation=generation)
         limit = classify_judge_usage_limit(self.ctx, lease, output, lines)
         backing_off = False
@@ -306,6 +312,12 @@ class Judgement:
         outcome = observed.decide(
             usage_limited=usage_limited, overload_backing_off=backing_off, output_present=output_present
         )
+        if outcome is CollectOutcome.FAIL_STALE and output_present and owners is not None:
+            owner = owners.find(worker)
+            if owner is not None and owner.recovery_only is True:
+                harness = self._resolve_harness(self.session, via="collect")
+                if harness is not None and harness.has_usable_output(output):
+                    outcome = CollectOutcome.JUDGE
         if outcome is CollectOutcome.READ_HARNESS:
             harness = self._resolve_harness(self.session, via="collect")
             if harness is None:
@@ -499,21 +511,22 @@ class Judgement:
         settings = harness.launch_settings(
             lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
         )
+        observe_version = harness.observe_version
+        launch_set: HarnessSet | None = None
         if owners is not None:
             worker = WorkerInvocation(lease.lease_id, generation)
+            launch_set = self._launch_set()
+            if launch_set is None:
+                return
             if owners.find(worker) is None:
                 # Restart cannot restore the previous in-memory owner. Anchor the
                 # session to the newly composed set before its first judge.
                 owners.retain(worker)
-            try:
-                current_harness = owners.current.registry.lifecycle_and_verdict(session.harness_id)
-            except (UnknownHarnessError, UnavailableHarnessError):
-                # A replacement between admission and launch must not silently
-                # substitute the retained set's stale launch values.
-                return
+            current_harness = launch_set.registry.lifecycle_and_verdict(session.harness_id)
             current_settings = current_harness.launch_settings(
                 lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
             )
+            observe_version = current_harness.observe_version
             owners.retire_judge(lease.lease_id, generation)
             selected = owners.retain_for(key, worker)
             try:
@@ -525,10 +538,13 @@ class Judgement:
             except BaseException:
                 owners.release(key)
                 raise
+        stamp = self.ctx.stores.liveness.spawn_settings(lease.lease_id, generation)
+        if stamp is not None and stamp.transcripts_root:
+            settings = replace(settings, transcript_root=stamp.transcripts_root)
         try:
             handle, _ = Spawner(self.ctx).launching(
                 session.harness_id,
-                harness.observe_version,
+                observe_version,
                 lambda: harness.judge(
                     SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
                     session.session_id,
@@ -538,7 +554,7 @@ class Judgement:
                     chunk_id=lease.chunk_id,
                     session_settings=settings,
                 ),
-                selected=owners.lookup(key) if owners is not None else None,
+                selected=launch_set if owners is not None else None,
             )
         except BaseException:
             if owners is not None:
@@ -580,17 +596,33 @@ class Judgement:
         owners = getattr(self.ctx, "harness_sets", None)
         if owners is None:
             return True
+        return self._launch_set() is not None
+
+    def _launch_set(self) -> HarnessSet | None:
+        owners = self.ctx.harness_sets
+        assert owners is not None
         try:
             owners.current.registry.lifecycle_and_verdict(self.session.harness_id)
-        except (UnknownHarnessError, UnavailableHarnessError) as exc:
-            _log.warning(
-                "judge deferred: current launch settings unavailable",
-                lease_id=self.lease.lease_id,
-                harness_id=self.session.harness_id,
-                detail=str(exc),
+            return owners.current
+        except UnknownHarnessError as exc:
+            detail = str(exc)
+            generation = (
+                self.generation
+                if self.generation is not None
+                else self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
             )
-            return False
-        return True
+            retained = owners.find(WorkerInvocation(self.lease.lease_id, generation))
+            if retained is not None:
+                return retained
+        except UnavailableHarnessError as exc:
+            detail = str(exc)
+        _log.warning(
+            "judge deferred: current launch settings unavailable",
+            lease_id=self.lease.lease_id,
+            harness_id=self.session.harness_id,
+            detail=detail,
+        )
+        return None
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —

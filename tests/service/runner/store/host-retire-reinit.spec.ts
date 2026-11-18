@@ -1,12 +1,36 @@
-import { expect, runnerTest as test } from '../../harness/fixtures';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { expect, runnerTest as test } from '../../../harness/fixtures';
 
 // The subject is what a freshly initialized runner host looks like, so `init` runs for real.
 test.use({ coldInit: true });
 
+test('a newly added runner serves settings after its first tick without reinitializing', async ({ mockHub, runnerHost }) => {
+  test.slow();
+  const first = runnerHost.runners['runner-local']!;
+  const added = await runnerHost.cli(['add', 'r2', '--project', 'default']);
+  expect(added.code, added.stdout + added.stderr).toBe(0);
+  const record = await mockHub.fleetOf(runnerHost).get('/api/fleet/host');
+  expect(record.status).toBe(200);
+  const runners = record.body.runners as { runner_id: string }[];
+  const r2 = runners.find((runner) => runner.runner_id !== first.id)!.runner_id;
+
+  await runnerHost.restart();
+  expect((await runnerHost.socketApi.stepRunner(r2)).outcome).toBe('completed');
+  const settings = await runnerHost.api.runner(r2).settings();
+  expect(settings.status).toBe(200);
+  expect(settings.body.settings.find((row) => row.key === 'projects')).toMatchObject({
+    value: [{ project: 'default', workspace: 'workspace-local' }],
+    source: 'entry',
+    written_by: 'seed',
+  });
+});
+
 // A runner added to a registered host with no hub session, and retired from it, on real `blizzard-runner` processes and a
 // test-owned mock hub: `runner add` holds no session, yet the mock holds the runner under the host and the host runs it
 // after a restart; `runner retire` halts it on the running host at its next tick and removes its entry, after which
-// `init` runs again and a restarted host serves the runner that remains. Every wait is a completed step.
+// a retained identity refuses `init` until archived, then a restarted host serves the runner that remains.
 
 test('test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_within_a_tick', async ({ mockHub, runnerHost }) => {
   // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
@@ -24,7 +48,6 @@ test('test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_w
   expect(ids).toContain(first.id);
   const r2 = ids.find((id) => id !== first.id)!;
 
-  // `init` run again writes r2's identity row, so the retire below leaves a store its host still starts.
   await runnerHost.stop();
   const rejoined = await runnerHost.cli(init);
   expect(rejoined.code, rejoined.stdout + rejoined.stderr).toBe(0);
@@ -42,6 +65,21 @@ test('test_runner_add_with_no_session_runs_after_a_restart_and_retire_halts_it_w
   expect((await first.status()).body.identity?.state).toBe('matched');
 
   await runnerHost.stop();
+  const refused = await runnerHost.cli(init);
+  expect(refused.code, refused.stdout + refused.stderr).not.toBe(0);
+  expect(refused.stdout + refused.stderr).toContain(r2);
+  const archived = await runnerHost.cli(['store', 'reset', runnerHost.dir, '--runner', r2]);
+  expect(archived.code, archived.stdout + archived.stderr).toBe(0);
+  const dataDir = path.join(runnerHost.dir, 'data');
+  const archives = fs.readdirSync(dataDir).filter((name) => name.startsWith(`host.db.${r2}.`));
+  expect(archives).toHaveLength(1);
+  const archive = new DatabaseSync(path.join(dataDir, archives[0]!), { readOnly: true });
+  try {
+    expect(archive.prepare('SELECT runner_id FROM runner_identity').all().map((row) => row.runner_id)).toEqual([r2]);
+    expect(archive.prepare('SELECT runner_id FROM runner_settings').all().map((row) => row.runner_id)).toEqual([r2]);
+  } finally {
+    archive.close();
+  }
   const again = await runnerHost.cli(init);
   expect(again.code, again.stdout + again.stderr).toBe(0);
   await runnerHost.restart();

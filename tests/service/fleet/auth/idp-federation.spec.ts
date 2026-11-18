@@ -15,7 +15,7 @@ test.use({ isolation: 'fresh-hub', runnerStarted: false });
 async function boot(runnerHost: RunnerHost): Promise<void> {
   await runnerHost.restart();
   await runnerHost.stop();
-  runnerHost.reconfigure({ public_url: runnerHost.url });
+  await runnerHost.reconfigure({ public_url: runnerHost.url });
   await runnerHost.restart();
 }
 

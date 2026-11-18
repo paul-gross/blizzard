@@ -6,6 +6,7 @@ belongs here, at the composition root's own wiring, never inside ``src/blizzard/
 from __future__ import annotations
 
 from blizzard.runner.harness.registry import IHarnessTranscriptSourceRegistry
+from blizzard.runner.harness.transcript import IRootedTranscriptSource
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, ITranscriptRepositoryResolver
 
@@ -15,11 +16,15 @@ class HarnessTranscriptRepositories:
     :class:`IHarnessTranscriptSourceRegistry` — resolving an owner projects its raw transcript source
     through :class:`ProjectedTranscriptRepository` fresh on every call."""
 
-    def __init__(self, harnesses: IHarnessTranscriptSourceRegistry) -> None:
+    def __init__(self, harnesses: IHarnessTranscriptSourceRegistry, root: str | None = None) -> None:
         self._harnesses = harnesses
+        self._root = root
 
     def transcript_repository(self, harness_id: str) -> IReadTranscriptRepository:
-        return ProjectedTranscriptRepository(self._harnesses.transcript_source(harness_id))
+        source = self._harnesses.transcript_source(harness_id)
+        if self._root and isinstance(source, IRootedTranscriptSource):
+            source = source.at_root(self._root)
+        return ProjectedTranscriptRepository(source)
 
 
 # Typecheck-time Protocol/adapter conformance sentinel

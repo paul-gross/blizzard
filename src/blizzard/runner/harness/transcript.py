@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 import structlog
 
@@ -162,6 +162,13 @@ class TranscriptErrorFactory:
         harness-composed structured detail, kept out of the signature so this factory names no
         harness's storage layout."""
         self._log.debug("transcript not found", session_id=session_id, **fields)
+
+
+@runtime_checkable
+class IRootedTranscriptSource(Protocol):
+    """A file-backed source that can locate an invocation at its recorded root."""
+
+    def at_root(self, root: str) -> IHarnessTranscriptSource: ...
 
 
 class IHarnessTranscriptSource(Protocol):

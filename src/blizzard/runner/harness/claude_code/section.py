@@ -41,7 +41,7 @@ class ClaudeCodeSection:
 
     #: `harness_binary` or `[claude_code].binary` — mock-claude-code in tests, `claude` in prod.
     binary: str = DEFAULT_HARNESS_BINARY
-    #: `[claude_code].enabled` — false leaves Claude Code unbound, unprobed, and unadvertised.
+    #: `[claude_code].enabled` — false excludes Claude Code from new work and advertisement.
     enabled: bool = True
     #: Legacy `--permission-mode` override: `None` lets autonomy map, empty passes no flag.
     permission_mode: str | None = None
@@ -67,6 +67,15 @@ class ClaudeCodeSection:
 
     def autonomy_override(self) -> str | None:
         return "legacy harness_permission_mode" if self.permission_mode is not None else None
+
+    def settings_values(self) -> dict[str, object]:
+        return {
+            "claude_code.enabled": self.enabled,
+            "claude_code.binary": self.binary,
+            "models.supported": self.supported_models,
+            "models.aliases": dict(self.model_aliases),
+            "effort.aliases": dict(self.effort_aliases),
+        }
 
     def root_toml(self) -> str:
         settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'

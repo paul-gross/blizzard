@@ -38,7 +38,7 @@ class OpenCodeSection:
 
     #: OpenCode's own binary path, independent of Claude Code's.
     binary: str = DEFAULT_OPENCODE_BINARY
-    #: `[opencode].enabled` — false leaves OpenCode unbound, unprobed, and unadvertised.
+    #: `[opencode].enabled` — false excludes OpenCode from new work and advertisement.
     enabled: bool = True
     #: `[opencode.models].supported` — `provider/model` names or glob patterns this binding accepts; `None` takes
     #: the adapter's built-in vocabulary, an explicit empty tuple means no native names.
@@ -62,6 +62,17 @@ class OpenCodeSection:
 
     def autonomy_override(self) -> str | None:
         return None
+
+    def settings_values(self) -> dict[str, object]:
+        return {
+            "opencode.enabled": self.enabled,
+            "opencode.binary": self.binary,
+            "opencode.auth_path": self.auth_path,
+            "opencode.worker_config_path": self.worker_config_path,
+            "opencode.models.supported": self.supported_models,
+            "opencode.models.aliases": dict(self.model_aliases),
+            "opencode.effort.aliases": dict(self.effort_aliases),
+        }
 
     def worker_config_at(self, root: Path) -> Path:
         """The worker config's path, defaulting to the one ``runner init`` scaffolds under ``root``."""

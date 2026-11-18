@@ -1058,6 +1058,8 @@ def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_laun
         pgid: int | None,
         spawned_at: datetime,
         harness_id: str,
+        runner_settings_revision: int | None = None,
+        transcripts_root: str | None = None,
     ) -> None:
         raise RuntimeError("durable write failed")
 

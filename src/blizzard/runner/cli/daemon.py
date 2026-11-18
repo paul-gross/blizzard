@@ -130,15 +130,21 @@ class RunnerDaemon:
     def patch(self, path: str, *, json_body: object | None = None) -> Response:
         return self._call("patch", self.runner_path(path), json_body=json_body)
 
-    def send(self, method: str, path: str, *, json_body: object | None = None) -> Response:
+    def send(
+        self, method: str, path: str, *, json_body: object | None = None, headers: dict[str, str] | None = None
+    ) -> Response:
         """``method`` on the runner's own ``path``, whatever it answers."""
-        return self.send_to_host(method, self.runner_path(path), json_body=json_body)
+        return self.send_to_host(method, self.runner_path(path), json_body=json_body, headers=headers)
 
-    def send_to_host(self, method: str, path: str, *, json_body: object | None = None) -> Response:
+    def send_to_host(
+        self, method: str, path: str, *, json_body: object | None = None, headers: dict[str, str] | None = None
+    ) -> Response:
         """``method`` on the host's own ``path``, at its root, whatever it answers."""
         kwargs: dict[str, object] = {}
         if json_body is not None:
             kwargs["json"] = json_body
+        if headers is not None:
+            kwargs["headers"] = headers
         return getattr(self.client, method)(path, **kwargs)
 
     def get_from_host(self, path: str) -> Response:

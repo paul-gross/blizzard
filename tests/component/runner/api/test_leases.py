@@ -101,6 +101,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         process_start_time="start-100",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+        runner_settings_revision=7,
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     beat_at = _NOW + timedelta(minutes=1)
@@ -140,6 +141,8 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "resolved_model": None,
         "resolved_effort": None,
         "harness_version": None,
+        "host_settings_revision": None,
+        "runner_settings_revision": 7,
         "git_commits": [],
     }
 

@@ -62,7 +62,7 @@ class HarnessSection(Protocol):
 
     @property
     def enabled(self) -> bool:
-        """False leaves the binding unbound, unprobed, and unadvertised."""
+        """False excludes the binding from new work and advertisement; active sessions may require recovery."""
         ...
 
     @property
@@ -81,6 +81,10 @@ class HarnessSection(Protocol):
 
     def table_toml(self) -> str:
         """The section's own tables, emitted after the shared ones."""
+        ...
+
+    def settings_values(self) -> dict[str, object]:
+        """Parsed values keyed by their runner settings record paths."""
         ...
 
 

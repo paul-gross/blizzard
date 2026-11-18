@@ -249,6 +249,8 @@ class RunnerEntry:
     own: RunnerConfig | None = None
     #: The runner errors found reading the entry; :meth:`HostConfig.projections` adds the host-dependent ones.
     errors: tuple[str, ...] = ()
+    #: The actual file table, separate from parsed defaults, for per-key settings seeding.
+    authored: ConfigView | None = field(default=None, repr=False, compare=False)
 
 
 @domain_model
@@ -366,7 +368,7 @@ class HostConfig:
         """Each ``[[runner]]`` as a built runner or a halted one, in file order. Tokens resolve from
         ``environ`` (the process environment by default), then the host file, then the directory's ``.env``."""
         source = os.environ if environ is None else environ
-        return tuple(self._project(entry, source) for entry in self.runners)
+        return tuple(self.project(entry, source) for entry in self.runners)
 
     def token_for(self, entry: RunnerEntry, environ: Mapping[str, str] | None = None) -> ResolvedToken:
         """The token ``entry`` presents, resolved from ``environ`` (the process environment by default), the host
@@ -378,7 +380,7 @@ class HostConfig:
             dotenv_text=_dotenv_text(self.root),
         )
 
-    def _problems(self, entry: RunnerEntry) -> list[str]:
+    def runner_problems(self, entry: RunnerEntry) -> list[str]:
         """The runner errors only the host's declarations show."""
         errors = list(entry.errors)
         declared = {subscription.slug for subscription in self.subscriptions}
@@ -415,8 +417,9 @@ class HostConfig:
             f"(provider {subscription.provider!r}) is never sampled"
         ]
 
-    def _project(self, entry: RunnerEntry, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
-        errors = self._problems(entry)
+    def project(self, entry: RunnerEntry, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
+        """Project one entry using the supplied token environment."""
+        errors = self.runner_problems(entry)
         if entry.id is None:
             errors.append("has no id")
         variable = hub_token_variable(entry.name)
@@ -430,7 +433,7 @@ class HostConfig:
             )
         if errors or entry.id is None or entry.own is None:
             return HaltedRunner(entry.name, entry.id, tuple(errors))
-        return BuiltRunner(entry.id, self._config_for(entry, entry.own, token), token)
+        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token), token)
 
     def _unsuffixed_token_hint(self, variable: str, environ: Mapping[str, str]) -> str:
         """The rename a leftover unsuffixed ``BZ_HUB_TOKEN`` calls for, or nothing when none is held: a pre-host
@@ -510,12 +513,12 @@ class HostConfig:
         """The config of the runner :meth:`sole_runner` picks, for an offline verb: projected whether or not it has
         joined its hub — no id, no token — and refused only for the errors its own entry holds."""
         entry = self.sole_runner(runner)
-        errors = self._problems(entry)
+        errors = self.runner_problems(entry)
         if errors or entry.own is None:
             raise HostConfigError(tuple(f"runner {entry.name}: {error}" for error in errors))
-        return self._config_for(entry, entry.own, self.token_for(entry, environ))
+        return self.config_for_runner(entry, entry.own, self.token_for(entry, environ))
 
-    def _config_for(
+    def config_for_runner(
         self,
         entry: RunnerEntry,
         own: RunnerConfig,
@@ -1147,11 +1150,11 @@ def _runner_entries(
         if not isinstance(name, str) or not name.strip():
             errors.add(f"[[runner]] #{position} has no name")
             continue
-        entries.append(_runner_entry(entry, name.strip(), root=root, db_url=db_url, path=path))
+        entries.append(parse_runner_entry(entry, name.strip(), root=root, db_url=db_url, path=path))
     return tuple(entries)
 
 
-def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: Path) -> RunnerEntry:
+def parse_runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: Path) -> RunnerEntry:
     problems = _Errors()
     identity = raw.get("id")
     if "id" in raw and (not isinstance(identity, str) or not identity.strip()):
@@ -1178,6 +1181,7 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
         bindings=bindings,
         own=own,
         errors=tuple(problems.found),
+        authored=raw,
     )
 
 

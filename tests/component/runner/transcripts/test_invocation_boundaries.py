@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -320,6 +321,65 @@ def test_a_resumed_existing_session_spawn_with_an_unreadable_tail_marks_it_unrea
     assert boundary is not None
     assert boundary.start_position is None
     assert boundary.start_unreadable is True
+
+
+def test_node_resume_reads_and_stamps_prior_launch_root(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    session = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-prior")
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_prior",
+                chunk_id="ch_prior",
+                graph_id="gr_1",
+                node_id="nd_prior",
+                node_name="prior",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+                resolved_model="old-model",
+            )
+        )
+    )
+    store.record_spawn(
+        "lease_prior", pid=99, process_start_time="old", session=session, spawned_at=_NOW, transcripts_root="/old/root"
+    )
+    tail = TranscriptPosition(token='{"main": 777, "sidecars": {}}')
+
+    class RootedSource(FakeTranscriptSource):
+        def at_root(self, root: str) -> FakeTranscriptSource:
+            assert root == "/old/root"
+            return FakeTranscriptSource(tail_positions_by_session={"sess-prior": tail})
+
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-prior", pid=100, process_start_time="new", pgid=100),
+        verdict="pass",
+        transcript_source=RootedSource(),
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+    with patch.object(harness, "spawn", wraps=harness.spawn) as spawn:
+        Spawner(ctx).spawn(
+            "ch_1",
+            make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES),
+            [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+            via="test",
+            resume_from=session,
+        )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    boundary = ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "resume")
+    assert boundary is not None and boundary.start_position == tail.token
+    assert spawn.call_args.kwargs["session_settings"].transcript_root == "/old/root"
+    assert harness.spawn_model_effort == [("old-model", None)]
+    stamp = ctx.stores.liveness.latest_spawn_settings([lease.lease_id])[lease.lease_id]
+    assert stamp.transcripts_root == "/old/root"
 
 
 def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_boundary(

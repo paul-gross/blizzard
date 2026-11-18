@@ -151,7 +151,7 @@ class _TraceSweep:
     def __init__(self) -> None:
         self.sweeps = 0
 
-    def sweep(self) -> None:
+    def sweep(self, config: Any = None) -> None:
         self.sweeps += 1
 
 
@@ -169,7 +169,7 @@ def test_a_requested_runner_pass_runs_one_trace_sweep_after_its_tick_when_tracin
     with loop_graph(config) as graph:
         traced = dataclasses.replace(graph, trace_sweep=sweep)
         stepper = RunnerStepper(config, process_graph=traced)
-        sweep.sweep = lambda: order.append("sweep")
+        sweep.sweep = lambda config=None: order.append("sweep")
         try:
             assert stepper.traces()
             assert stepper.request().outcome is SweepPassOutcome.COMPLETED
@@ -379,6 +379,9 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     config = _config(tmp_path)
     built = [BuiltRunner(FIXTURE_RUNNER_ID, config, ResolvedToken())]
     host = build_host_process(host_config_of(config), built)
+    # This synthetic BuiltRunner bypasses the normal file seed; keep its supplied
+    # config rather than resolving an unseeded settings record.
+    host.runners = (dataclasses.replace(host.runners[0], settings_reader=None),)
     registration = _Registration()
     host.host_tick = HostTick(registration=cast(Any, registration))
 
@@ -425,7 +428,7 @@ def test_a_requested_pass_whose_tick_and_trace_sweep_both_raise_answers_both_mes
         raise RuntimeError("tick broke")
 
     class _Failing:
-        def sweep(self) -> None:
+        def sweep(self, config: Any = None) -> None:
             raise RuntimeError("sweep broke")
 
     monkeypatch.setattr(loop_wiring, "tick", boom)
@@ -512,3 +515,43 @@ def test_retirement_after_trace_waits_for_tick_borrowing_old_client(
             stepper.close()
         assert not tick_thread.is_alive()
         assert old.is_closed and new.is_closed
+
+
+def test_trace_sweep_uses_its_own_snapshot_until_it_finishes(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    first = dataclasses.replace(config, tracing=dataclasses.replace(config.tracing, batch_limit=11, sweep_seconds=7))
+    second = dataclasses.replace(config, tracing=dataclasses.replace(config.tracing, batch_limit=22, sweep_seconds=9))
+    current = [first]
+    entered, release = threading.Event(), threading.Event()
+    observed: list[int] = []
+
+    class Reader:
+        def snapshot(self) -> tuple[None, RunnerConfig]:
+            return None, current[0]
+
+    class Sweep:
+        def sweep(self, tracing: Any) -> None:
+            observed.append(tracing.batch_limit)
+            entered.set()
+            assert release.wait(10)
+            observed.append(tracing.batch_limit)
+
+    with loop_graph(config) as graph:
+        traced = dataclasses.replace(graph, settings_reader=cast(Any, Reader()), trace_sweep=cast(Any, Sweep()))
+        stepper = RunnerStepper(config, process_graph=traced)
+        thread = threading.Thread(target=stepper.timed_trace_sweep)
+        thread.start()
+        try:
+            assert entered.wait(10)
+            current[0] = second
+            release.set()
+            thread.join(10)
+            assert observed == [11, 11]
+            assert stepper.trace_interval() == 7
+            stepper.timed_trace_sweep()
+            assert observed == [11, 11, 22, 22]
+            assert stepper.trace_interval() == 9
+        finally:
+            release.set()
+            thread.join(10)
+            stepper.close()

@@ -9,6 +9,8 @@ import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelMobile } from './app-panel-mobile';
 
 const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',

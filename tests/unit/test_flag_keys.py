@@ -25,6 +25,7 @@ from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import BuiltRunner, HostConfig, HostConfigError
 from tests.support.config_inputs import load_host_config, load_hub_config
 from tests.support.host_files import write_minimal_host
+from tests.support.runner_fakes import migrated_store_at
 
 _FLAGS = FlagRegistry.parse(
     """
@@ -120,6 +121,7 @@ def test_a_host_key_with_its_flag_off_loads_as_its_default_with_a_warning_and_co
     assert config.hub_url == DEFAULT_HUB_URL
     assert config.warnings == ("hub_url is ignored while the flag runner-thing is off",)
     assert [(h.key, h.flag) for h in config.held_keys] == [("hub_url", "runner-thing")]
+    migrated_store_at(config.db_url)
     built = [p for p in config.projections({"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}) if isinstance(p, BuiltRunner)]
     with structlog.testing.capture_logs() as logs:
         host = build_host_process(config, built)

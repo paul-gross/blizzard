@@ -41,6 +41,9 @@ owns what that assumption still costs.
 
 ### Configuring what workers do
 
+[Runner settings](./deployment/runner-settings.md) explains live runner settings, their lifetimes, and first-start
+seeding.
+
 | File                                                                             | When to read                                                                                                                                                                                          |
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`deployment/projects.md`](./deployment/projects.md)                             | You are dividing a tenant's work into projects: slugs and former slugs, the `default` project, links to work sources and repositories, `--project`, the runner's `projects` key, and the board's lens |

@@ -76,20 +76,25 @@ test('a captured request carries its parsed JSON body', async ({ mockHub, runner
   expect(register?.body).toEqual(expect.objectContaining({ version: expect.any(String) }));
 });
 
-test('reconfigure refuses an undeclared key or a running host, and a sound overlay survives a restart', async ({ runnerHost }) => {
-  expect(() => runnerHost.reconfigure({ runner: [{ name: 'runner-local', agents: 2n }] })).toThrow(/stop\(\) it before reconfigure/);
+test('reconfigure sends live edits to settings and keeps boot edits stopped-only', async ({ runnerHost }) => {
+  const runner = runnerHost.runners['runner-local']!;
+  const file = runnerHost.hostFile();
+  const before = (await runner.settings()).body;
+  await runnerHost.reconfigure({ runner: [{ name: 'runner-local', agents: 2n }] });
+  const after = (await runner.settings()).body;
+  expect(after.revision).toBeGreaterThan(before.revision);
+  expect(after.settings.find((setting) => setting.key === 'agents')?.value).toBe(2);
+  expect(runnerHost.hostFile()).toBe(file);
+  expect((await runner.settingsChanges()).body.changes.length).toBeGreaterThan(0);
+  await expect(runnerHost.reconfigure({ public_url: runnerHost.url })).rejects.toThrow(/stop\(\)/);
+  await expect(runnerHost.reconfigure({ nonsense_key: 'x' })).rejects.toThrow(/nonsense_key: not a key the host declares/);
+  await expect(runnerHost.reconfigure({ port: 1n })).rejects.toThrow(/port: the CLI or the fixture owns it/);
   await runnerHost.stop();
-  expect(() => runnerHost.reconfigure({ nonsense_key: 'x' })).toThrow(/nonsense_key: not a key the host declares/);
-  expect(() => runnerHost.reconfigure({ port: 1n })).toThrow(/port: the CLI or the fixture owns it/);
-  const moved = path.join(path.dirname(runnerHost.dir), 'transcripts-moved');
-  runnerHost.reconfigure({ runner: [{ name: 'runner-local', agents: 2n, transcripts_root: moved }] });
-
+  await expect(runnerHost.reconfigure({ runner: [{ name: 'runner-local', agents: 3n }] })).rejects.toThrow(/running host/);
+  await runnerHost.reconfigure({ public_url: runnerHost.url });
   await runnerHost.restart();
+  expect((await runner.settings()).body.settings.find((setting) => setting.key === 'agents')?.value).toBe(2);
   expect((await runnerHost.step()).outcome).toBe('completed');
-  const runners = (await runnerHost.api.runners()).body.items;
-  expect(runners.find((item) => item.name === 'runner-local')).toBeDefined();
-  expect(fs.readFileSync(path.join(runnerHost.dir, 'blizzard-host.toml'), 'utf8')).toMatch(/agents = 2/);
-  expect(runnerHost.transcriptsRoot).toBe(moved);
 });
 
 test('the whole host log reads from its first line, and holds the tail', async ({ runnerHost }) => {
@@ -159,7 +164,8 @@ test('renameRunner and removeStore refuse a running host; stopped, a rename keep
   expect(runnerHost.hubTokens().runners).toEqual({ renamed: token });
   await runnerHost.restart();
   expect((await runnerHost.step()).outcome).toBe('completed');
-  expect((await runnerHost.runners.renamed?.status())?.body.runner_name).toBe('renamed');
+  // The file rename moves the boot identity/token, but the already seeded display name remains authoritative.
+  expect((await runnerHost.runners.renamed?.status())?.body.runner_name).toBe('runner-local');
   await runnerHost.stop();
   const store = path.join(runnerHost.dir, 'data', 'host.db');
   expect(fs.existsSync(store)).toBe(true);

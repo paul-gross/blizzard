@@ -389,7 +389,11 @@ def classify_imported_mappings(source: str, root: Path) -> dict[tuple[int, int],
             return (dict_return(node.left) and isinstance(node.right, ast.Constant) and node.right.value is None) or (
                 dict_return(node.right) and isinstance(node.left, ast.Constant) and node.left.value is None
             )
-        return isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "dict"
+        return (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in {"dict", "Mapping"}
+        )
 
     result: dict[tuple[int, int], str] = {}
     for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)):
@@ -399,6 +403,16 @@ def classify_imported_mappings(source: str, root: Path) -> dict[tuple[int, int],
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store | ast.Del):
                 writes.setdefault(node.id, []).append(node)
         mappings = {name for name, annotation in args.items() if dict_return(annotation) and name not in writes}
+        typed = {name: annotation for name, annotation in args.items() if name not in writes}
+        for declaration in ast.walk(function):
+            if not isinstance(declaration, ast.AnnAssign) or not isinstance(declaration.target, ast.Name):
+                continue
+            name = declaration.target.id
+            expected = 2 if declaration.value is None else 1
+            if len(writes.get(name, [])) == expected:
+                typed[name] = declaration.annotation
+                if dict_return(declaration.annotation):
+                    mappings.add(name)
         # A declared local protocol method is not itself an HTTP transport.
         # Resolve the imported class and method, rather than guessing from `.get`.
         for node in ast.walk(function):
@@ -466,6 +480,26 @@ def classify_imported_mappings(source: str, root: Path) -> dict[tuple[int, int],
                 and node.func.value.id in mappings
             ):
                 result[(node.lineno, node.col_offset)] = "imported mapping return annotation"
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Attribute)
+            ):
+                receiver = node.func.value
+                receiver_name = receiver.value
+                if not isinstance(receiver_name, ast.Name):
+                    continue
+                annotation = typed.get(receiver_name.id)
+                cls = imports.get(annotation.id) if isinstance(annotation, ast.Name) else None
+                if isinstance(cls, ast.ClassDef) and any(
+                    isinstance(field, ast.AnnAssign)
+                    and isinstance(field.target, ast.Name)
+                    and field.target.id == receiver.attr
+                    and dict_return(field.annotation)
+                    for field in cls.body
+                ):
+                    result[(node.lineno, node.col_offset)] = "imported mapping field annotation"
     return result
 
 

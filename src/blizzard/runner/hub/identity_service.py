@@ -35,9 +35,9 @@ class RunnerIdentityService:
         anything else."""
         self._recorder.record_runner_identity(joined.identity_at(self._clock.now()))
 
-    def forget(self) -> None:
-        """Delete the bound runner's row — one transaction, idempotent."""
-        self._forgetter.forget_runner_identity()
+    def forget(self) -> bool:
+        """Forget the bound runner's row if it has no retained settings or history."""
+        return self._forgetter.forget_runner_identity()
 
 
 class RetiredRunnerWatch:
@@ -68,6 +68,7 @@ class RetiredRunnerWatch:
             return False
         if not proves_retired(answer, self._runner_id):
             return False
-        self._forgetter.forget_runner_identity()
+        if not self._forgetter.forget_runner_identity():
+            return False
         _log.info("forgot the identity row of a runner the hub retired", runner_id=self._runner_id)
         return True

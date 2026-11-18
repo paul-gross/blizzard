@@ -28,6 +28,9 @@ KEYED = frozenset(t.name for t in schema.metadata.sorted_tables if t.info["scope
     "takeover_entries",
     "binding_targets",
     "execution_observations",
+    "runner_settings",
+    "runner_setting_entries",
+    "runner_setting_changes",
 }
 
 _ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")

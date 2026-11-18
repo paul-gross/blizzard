@@ -64,6 +64,8 @@ if TYPE_CHECKING:
     # `src/blizzard/runner/api/federation.py` resolves its own collaborators through this module.
     from blizzard.runner.api.federation import FederationSettings
     from blizzard.runner.loop_wiring import RunnerStepper
+    from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
+    from blizzard.runner.settings_reader import RunnerSettingsReader
 
 _STORE = "runner store"
 
@@ -237,6 +239,14 @@ class RunnerWiring:
                 detail=f"no active lease or open takeover for lease {lease_id}",
             )
         return WorkerLease(lease=reference, active=False)
+
+    def settings_service(self) -> RunnerSettingsReader:
+        service: RunnerSettingsReader | None = self._seam("settings_reader")
+        return service if service is not None else self._refuse("runner settings")
+
+    def settings_authoring(self) -> RunnerSettingsAuthoring:
+        service: RunnerSettingsAuthoring | None = self._seam("settings_authoring")
+        return service if service is not None else self._refuse("runner settings authoring")
 
     def stepper(self) -> RunnerStepper:
         stepper: RunnerStepper | None = self._seam("stepper")

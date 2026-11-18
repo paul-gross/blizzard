@@ -17,6 +17,8 @@ const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
 function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
   return {
+    host_settings_revision: null,
+    runner_settings_revision: null,
     lease_id: 'ls_01KXKVVF1J3D6H6VYZ3XYN3AB1',
     chunk_id: 'ch_1',
     graph_id: 'gr_1',

@@ -31,7 +31,7 @@ test.describe('an adopted runner', () => {
     // The first boot publishes the host's URL; the restart pinned to it declares that URL as the host's public one.
     await host.restart();
     await host.stop();
-    host.reconfigure({ public_url: host.url });
+    await host.reconfigure({ public_url: host.url });
     await host.restart();
     // A stepped host registers its adopted runner on a pass; the pass answers once the hub has.
     await host.step();

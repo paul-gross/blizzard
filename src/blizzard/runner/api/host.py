@@ -105,7 +105,10 @@ def list_runners(request: Request) -> HostRunnerListResponse:
                     local_reason=summary.pause.local_reason,
                 ),
                 throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
-                bindings=bindings,
+                bindings=[
+                    HostRunnerBindingView(project=b.project, workspace_id=b.workspace_id, agents=b.agents)
+                    for b in summary.capacities.bindings
+                ],
                 agents_in_use=summary.capacities.used,
                 max_agents=summary.capacities.agents,
             )

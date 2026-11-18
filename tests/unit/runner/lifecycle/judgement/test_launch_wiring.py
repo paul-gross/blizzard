@@ -226,10 +226,10 @@ def test_judge_launch_uses_worker_location_and_current_settings_then_retains_its
 
     settings = launch.call_args.kwargs["session_settings"]
     assert (settings.binary, settings.bundle_path, settings.transcript_root, settings.config_dir) == (
-        "old-binary",
-        "old-bundle",
+        "new-binary",
+        "new-bundle",
         "old-transcripts",
-        "old-config",
+        "new-config",
     )
     assert settings.environment.variables == {"HOME": "old-home", "PATH": "new-path"}
     assert (settings.environment.shell, settings.permission_override) == ("new-shell", "current-permission")

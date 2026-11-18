@@ -17,6 +17,8 @@ import { MachineDetailView } from './chunk-detail-view';
  * (`web/scripts/shell-sweep.js`).
  */
 const LEASE: runnerApi.LeaseView = {
+  host_settings_revision: null,
+  runner_settings_revision: null,
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNNEW1',
   chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   graph_id: 'gr_1',
