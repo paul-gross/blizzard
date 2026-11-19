@@ -1,36 +1,37 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitErrorLine, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
+import { KitField, KitForm, KitSelect, KitTextInput, type UrgencyView } from 'fleet';
+
 import { urgencyOptions } from '../../core/urgency-options.model';
+import type { RoutineCreateDraft } from '../core/routine.domain';
 
-export interface RoutineCreateDraft {
-  readonly slug: string;
-  readonly name: string;
-  readonly graph: string;
-  readonly scope: string;
-  readonly urgency: string;
-}
-
+/**
+ * A new routine as a form. Presentational: it renders the field tree it is handed, and its container owns the draft,
+ * the rules, and the save.
+ */
 @Component({
   selector: 'app-routine-create-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitErrorLine, KitSelect, KitTextInput],
+  imports: [FormField, KitField, KitForm, KitSelect, KitTextInput],
   templateUrl: './routine-create-form.html',
   styleUrl: './routine-create-form.css',
 })
 export class RoutineCreateForm {
+  readonly form = input.required<FieldTree<RoutineCreateDraft>>();
   readonly urgencies = input<readonly UrgencyView[]>([]);
-  readonly pending = input(false);
-  readonly error = input<string | null>(null);
-  readonly saved = output<RoutineCreateDraft>();
-  readonly cancelled = output<void>();
-  protected readonly draft = signal<RoutineCreateDraft>({ slug: '', name: '', graph: '', scope: '', urgency: '' });
+  /** The prefix every field's test id carries. */
+  readonly testid = input('gardening-routine-create');
+
+  readonly save = output<void>();
+  // Named `cancel` as the forms spec declares, matching the kit form it forwards.
+  // eslint-disable-next-line @angular-eslint/no-output-native
+  readonly cancel = output<void>();
+
   protected readonly options = computed(() =>
     urgencyOptions(this.urgencies(), {
       key: 'slug',
       retired: 'exclude',
       inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
-    }));
-  protected set(field: keyof RoutineCreateDraft, value: string): void {
-    this.draft.update((draft) => ({ ...draft, [field]: value }));
-  }
+    }),
+  );
 }

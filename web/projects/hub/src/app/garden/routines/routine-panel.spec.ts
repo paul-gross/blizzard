@@ -1,9 +1,12 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 
 import type { UrgencyView } from 'fleet';
+import type { RoutineEditDraft } from '../core/routine.domain';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
+import { routineEditRules } from './routine.form';
 
 const VM: RoutinePanelVm = {
   record: {
@@ -52,7 +55,7 @@ describe('FleetRoutinePanel', () => {
     canEdit?: boolean;
     actionError?: string | null;
     lifecyclePending?: boolean;
-    editPending?: boolean;
+    editable?: boolean;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetRoutinePanel],
@@ -66,7 +69,7 @@ describe('FleetRoutinePanel', () => {
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
     fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
     fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
-    fixture.componentRef.setInput('editPending', inputs.editPending ?? false);
+    fixture.componentRef.setInput('editable', inputs.editable ?? inputs.canEdit ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -502,46 +505,86 @@ describe('FleetRoutinePanel', () => {
     expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
 
     fixture.componentRef.setInput('canEdit', true);
+    fixture.componentRef.setInput('editable', true);
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="gardening-routine-record"] [data-testid="gardening-routine-panel-edit"]')).toBeTruthy();
   });
 
-  it('opens the graph in place, emits the typed graph, and closes once the new graph reads back', async () => {
+  const editTree = (draft: Partial<RoutineEditDraft> = {}) =>
+    TestBed.runInInjectionContext(() => form(signal<RoutineEditDraft>({ graph: 'garden-routine', urgency: '', ...draft }), routineEditRules));
+
+  it('offers no Edit control, and shows the urgency read-only, for a routine that is not editable', async () => {
+    const fixture = await mount({ canEdit: true, editable: false });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-urgency-select"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+  });
+
+  it('asks to open the graph when Edit is pressed, and shows no field until a form is handed in', async () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
-    let emitted: string | null = null;
-    fixture.componentInstance.editGraph.subscribe((g) => (emitted = g));
-    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+    let started = 0;
+    fixture.componentInstance.startEditGraph.subscribe(() => started++);
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+
+    expect(started).toBe(1);
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+  });
+
+  it('renders the graph field over the handed tree and emits save and cancel', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    const tree = editTree();
+    fixture.componentRef.setInput('editForm', tree);
+    fixture.componentRef.setInput('editField', 'graph');
     await fixture.whenStable();
+    let saves = 0;
+    let cancels = 0;
+    fixture.componentInstance.saveEdit.subscribe(() => saves++);
+    fixture.componentInstance.cancelEdit.subscribe(() => cancels++);
+
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
     expect(input.value).toBe('garden-routine');
     input.value = 'garden-delta';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')!.click();
-
-    expect(emitted).toBe('garden-delta');
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]'), 'open until it reads back').toBeTruthy();
+    expect(tree().value().graph).toBe('garden-delta');
 
-    fixture.componentRef.setInput('vm', { ...VM, record: { ...VM.record, graphName: 'garden-delta' } });
-    await fixture.whenStable();
-    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
-  });
-
-  it('closes the editor on Cancel, and disables Set while the edit is pending', async () => {
-    const fixture = await mount({ canEdit: true, editPending: true });
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
-    await fixture.whenStable();
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')?.disabled).toBe(true);
-
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')!.click();
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-cancel"]')!.click();
-    await fixture.whenStable();
-    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+    expect([saves, cancels]).toEqual([1, 1]);
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')?.hasAttribute('disabled')).toBe(true);
   });
+
+  it('shows the required-graph error on the field once it is touched', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    const tree = editTree({ graph: '' });
+    fixture.componentRef.setInput('editForm', tree);
+    fixture.componentRef.setInput('editField', 'graph');
+    tree.graph().markAsTouched();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph"]')?.textContent?.toLowerCase()).toContain('required');
+  });
+
+  it('shows a form-level refusal on the form line', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    const tree = editTree();
+    fixture.componentRef.setInput('editForm', tree);
+    fixture.componentRef.setInput('editField', 'graph');
+    await fixture.whenStable();
+    const { submit } = await import('@angular/forms/signals');
+    await submit(tree, async () => [{ kind: 'hub', fieldTree: tree, message: 'the routine changed since it was read' }]);
+    tree().markAsTouched();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-line"]')?.textContent).toContain('changed since it was read');
+  });
+
   it('renders read-only urgency as a labelled fact', async () => {
     const fixture = await mount({});
     const fact = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-routine-urgency"]')!;
@@ -551,7 +594,7 @@ describe('FleetRoutinePanel', () => {
     expect(fact.querySelector('fleet-kit-select')).toBeNull();
   });
 
-  it('edits the routine default and leaves the draft open on refusal', async () => {
+  it('opens the urgency edit on the chosen urgency, and renders it as a form once handed one', async () => {
     const fixture = await mount({ canEdit: true });
     fixture.componentRef.setInput('urgenciesReady', true);
     fixture.componentRef.setInput('urgencies', [
@@ -561,19 +604,20 @@ describe('FleetRoutinePanel', () => {
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     const values: string[] = [];
-    fixture.componentInstance.editUrgency.subscribe((v) => values.push(v));
+    fixture.componentInstance.startEditUrgency.subscribe((v) => values.push(v));
     const trigger = root.querySelector<HTMLElement>('[data-testid="gardening-routine-urgency-select"]')!;
     expect(trigger.textContent).toContain('Tenant default (Normal)');
     trigger.click();
     await fixture.whenStable();
     [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!.click();
     await fixture.whenStable();
-    root.querySelector<HTMLElement>('[data-testid="gardening-routine-urgency-save"]')!.click();
     expect(values).toEqual(['urgent']);
-    expect(root.querySelector('[data-testid="gardening-routine-urgency-save"]')).not.toBeNull();
-    fixture.componentRef.setInput('defaultUrgency', 'urgent');
+
+    fixture.componentRef.setInput('editForm', editTree({ urgency: 'urgent' }));
+    fixture.componentRef.setInput('editField', 'urgency');
     await fixture.whenStable();
-    expect(root.querySelector('[data-testid="gardening-routine-urgency-save"]')).toBeNull();
+    expect(root.querySelector('[data-testid="gardening-routine-urgency-edit-save"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="gardening-routine-urgency-select"]')?.textContent).toContain('Urgent');
     fixture.destroy();
   });
 

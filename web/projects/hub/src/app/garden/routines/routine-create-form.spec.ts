@@ -1,31 +1,46 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, input, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { UrgencyView } from 'fleet';
-import { RoutineCreateForm, type RoutineCreateDraft } from './routine-create-form';
+import { form } from '@angular/forms/signals';
 
-describe('routine create form urgency', () => {
-  it('starts at the tenant default and emits an explicit selection', async () => {
-    await TestBed.configureTestingModule({ imports: [RoutineCreateForm], providers: [provideZonelessChangeDetection()] }).compileComponents();
-    const fixture = TestBed.createComponent(RoutineCreateForm);
+import type { UrgencyView } from 'fleet';
+import { EMPTY_ROUTINE_CREATE_DRAFT, type RoutineCreateDraft } from '../core/routine.domain';
+import { RoutineCreateForm } from './routine-create-form';
+import { routineCreateRules } from './routine.form';
+
+@Component({
+  selector: 'app-test-routine-create-form-host',
+  imports: [RoutineCreateForm],
+  template: `<app-routine-create-form [form]="f" [urgencies]="urgencies()" (save)="saves = saves + 1" (cancel)="cancels = cancels + 1" />`,
+})
+class Host {
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly draft = signal<RoutineCreateDraft>(EMPTY_ROUTINE_CREATE_DRAFT);
+  readonly f = form(this.draft, routineCreateRules);
+  saves = 0;
+  cancels = 0;
+}
+
+describe('RoutineCreateForm urgency', () => {
+  it('starts at the tenant default and writes an explicit selection into the draft', async () => {
+    await TestBed.configureTestingModule({ imports: [Host], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(Host);
     fixture.componentRef.setInput('urgencies', [
       { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
       { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
-    const values: RoutineCreateDraft[] = [];
-    fixture.componentInstance.saved.subscribe((value) => values.push(value));
-    const trigger = root.querySelector<HTMLElement>('[data-testid="routine-create-urgency"]')!;
+    const trigger = root.querySelector<HTMLElement>('[data-testid="gardening-routine-create-urgency"]')!;
     expect(trigger.textContent).toContain('Tenant default (Normal)');
-    root.querySelector<HTMLElement>('[data-testid="routine-create-save"]')!.click();
-    expect(values[0].urgency).toBe('');
+    expect(fixture.componentInstance.draft().urgency).toBe('');
     trigger.click();
     await fixture.whenStable();
     const urgent = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!;
     urgent.click();
     await fixture.whenStable();
-    root.querySelector<HTMLElement>('[data-testid="routine-create-save"]')!.click();
-    expect(values[1].urgency).toBe('urgent');
+    expect(fixture.componentInstance.draft().urgency).toBe('urgent');
+    root.querySelector<HTMLElement>('[data-testid="gardening-routine-create-save"]')!.click();
+    expect(fixture.componentInstance.saves).toBe(1);
     fixture.destroy();
   });
 });

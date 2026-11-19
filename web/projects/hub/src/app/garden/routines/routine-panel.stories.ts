@@ -1,7 +1,8 @@
 import type { UrgencyView } from 'fleet';
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
+import { RoutinePanelEditingStoryHost } from './routine-panel.story-host';
 
 const VM: RoutinePanelVm = {
   record: { slug: 'nightly', name: 'Nightly', graphName: 'garden', defaultScopeSlug: 'blizzard', modelEffort: 'sonnet · medium' },
@@ -23,5 +24,30 @@ export const RelatedScopesPending: Story = { args: { vm: { ...VM, relatedScopes:
 export const RelatedScopesError: Story = { args: { vm: { ...VM, relatedScopes: null }, relatedScopesState: 'error' } };
 export const RelatedScopesEmpty: Story = { args: { vm: { ...VM, relatedScopes: [] }, relatedScopesState: 'empty' } };
 
-export const DefaultUrgency: Story = { args: { canEdit: true, urgenciesReady: true, defaultUrgency: null,
+export const DefaultUrgency: Story = { args: { canEdit: true, editable: true, urgenciesReady: true, defaultUrgency: null,
   urgencies: [{ urgency_id: 'u', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView] } };
+
+const URGENCIES = [
+  { urgency_id: 'u1', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
+  { urgency_id: 'u2', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+];
+
+const editing = (attrs: string, args: Record<string, unknown> = {}): Story => ({
+  decorators: [moduleMetadata({ imports: [RoutinePanelEditingStoryHost] })],
+  args,
+  render: (a) => ({
+    props: { ...a, vm: VM, urgencies: URGENCIES },
+    template: `<app-story-routine-panel-editing [vm]="vm" [urgencies]="urgencies" ${attrs} />`,
+  }),
+});
+
+export const EditingGraph: Story = editing('');
+export const EditingGraphPhone: Story = { ...EditingGraph, globals: { viewport: { value: 'phone', isRotated: false } } };
+export const EditingGraphFieldError: Story = editing('[draft]="draft" fieldError="no graph is named that"', { draft: { graph: 'no-such-graph' } });
+export const EditingGraphBlank: Story = editing('[draft]="draft" fieldError="a graph name is required"', { draft: { graph: '' } });
+export const EditingUrgency: Story = editing('field="urgency" [draft]="draft"', { draft: { urgency: 'urgent' } });
+export const EditingConflict: Story = editing(
+  '[draft]="draft" formError="the routine changed since it was read — reload it and try again"',
+  { draft: { graph: 'garden-delta' } },
+);
+export const EditingConflictPhone: Story = { ...EditingConflict, globals: { viewport: { value: 'phone', isRotated: false } } };

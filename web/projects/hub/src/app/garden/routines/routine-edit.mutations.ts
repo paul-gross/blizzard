@@ -1,21 +1,20 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { editRoutineApiRoutinesRoutineIdPatch } from 'fleet';
+import { editRoutineApiRoutinesRoutineIdPatch, type hubApi } from 'fleet';
 import { editRoutineMutationKey } from '../../core/mutation-keys';
 import { hubRoutinesKey } from '../../core/query-keys';
 
-/** Change a routine’s graph or default urgency without touching its other fields. */
+/** An edit of one routine, sent against the revision it was read at. */
 export interface RoutineEditVars {
   readonly routineId: string;
-  readonly graphName?: string;
-  readonly defaultUrgency?: string | null;
+  readonly revision: number;
+  readonly body: hubApi.RoutineEditRequest;
 }
 
 /**
- * `PATCH /api/routines/{routine_id}` with the stated fields — through the generated client
- * (bzh:generated-client), `injectEditScopeMutation`'s own shape. On settling it re-reads the
- * routine list, the detail's only routine read.
+ * `PATCH /api/routines/{routine_id}` with `If-Match: <revision>`, so an edit made against a stale read is refused with
+ * a 409 rather than overwriting a concurrent one. On settling it re-reads the routine list.
  */
 export function injectEditRoutineMutation() {
   const queryClient = inject(QueryClient);
@@ -24,7 +23,8 @@ export function injectEditRoutineMutation() {
     mutationFn: async (vars: RoutineEditVars): Promise<void> => {
       const { error } = await editRoutineApiRoutinesRoutineIdPatch({
         path: { routine_id: vars.routineId },
-        body: { ...(vars.graphName !== undefined ? { graph_name: vars.graphName } : {}), ...(vars.defaultUrgency !== undefined ? { default_urgency: vars.defaultUrgency } : {}) },
+        headers: { 'if-match': vars.revision },
+        body: vars.body,
         throwOnError: false,
       });
       if (error) throw error;

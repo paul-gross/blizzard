@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, type TemplateRef, input, output, signal } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -13,15 +14,21 @@ import {
   KitFactList,
   KitPanel,
   KitProseBlock,
-  KitTextInput,
   KitErrorLine,
+  KitField,
+  KitForm,
   KitSelect,
+  KitTextInput,
   type UrgencyView,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { urgencyOptions } from '../../core/urgency-options.model';
+import type { RoutineEditDraft } from '../core/routine.domain';
+
+/** Which inline field of the routine is open for editing. */
+export type RoutineEditField = 'graph' | 'urgency';
 
 /** The routine's own record — its graph alone is editable here. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
@@ -159,8 +166,8 @@ export interface RoutinePanelVm {
  * definition, so the Strategy panel reads the same whether or not a run is currently
  * offered.
  *
- * Edit opens the graph in place; Set emits the new graph name, and the editor closes
- * once the new graph reads back — `FleetScopePanel`'s own description editor.
+ * Edit opens the graph in place, and a chosen default urgency opens its own field. Presentational: both render the
+ * field tree the container hands in, and Save and Cancel are the container's to answer.
  *
  * Retire/enable confirm before emitting — `FleetScopePanel`'s own confirm-then-emit
  * pattern.
@@ -168,7 +175,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, KitSelect, AppLink, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, FormField, KitConfirmDialog, KitErrorLine, KitFactList, KitField, KitForm, KitPanel, KitProseBlock, KitSelect, KitTextInput, AppLink, RouterLink],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
@@ -176,27 +183,31 @@ export class FleetRoutinePanel {
   readonly urgencies = input<readonly UrgencyView[]>([]);
   readonly urgenciesReady = input(false);
   readonly defaultUrgency = input<string | null>(null);
-  readonly editUrgency = output<string>();
-  protected readonly urgencyDraft = signal<{ slug: string; original: string | null; value: string } | null>(null);
+  /** The inline edit's field tree while a field is open, `null` otherwise. */
+  readonly editForm = input<FieldTree<RoutineEditDraft> | null>(null);
+  /** Which inline field {@link editForm} is open on. */
+  readonly editField = input<RoutineEditField | null>(null);
+  /** Whether the routine offers an inline edit — withheld when it has no revision to guard one with. */
+  readonly editable = input(false);
+  /** The Graph's Edit pressed: the container captures the baseline and hands back {@link editForm}. */
+  readonly startEditGraph = output<void>();
+  /** A default urgency chosen while none is open: the container opens the urgency edit on it. */
+  readonly startEditUrgency = output<string>();
+  readonly saveEdit = output<void>();
+  readonly cancelEdit = output<void>();
+  /** A retire or enable confirmation opened: the container captures the revision it will act on. */
+  readonly confirmOpened = output<void>();
   protected readonly urgencyOptions = computed(() =>
     urgencyOptions(this.urgencies(), {
       key: 'slug',
       retired: { current: this.defaultUrgency() },
       inherit: { label: 'Tenant default', name: this.urgencies().find((u) => u.default)?.name ?? null },
     }));
-  protected urgencyEditing(): boolean {
-    const draft = this.urgencyDraft();
-    return draft !== null && draft.slug === this.vm()?.record.slug && draft.original === this.defaultUrgency();
-  }
-  protected chooseUrgency(value: string): void {
-    const panel = this.vm();
-    if (panel) this.urgencyDraft.set({ slug: panel.record.slug, original: this.defaultUrgency(), value });
-  }
   protected urgencyLabel(): string {
     return this.urgencyOptions().find((o) => o.value === this.urgencyValue())?.label ?? this.urgencyValue();
   }
   protected urgencyValue(): string {
-    const value = (this.urgencyEditing() ? this.urgencyDraft()?.value : this.defaultUrgency()) ?? '';
+    const value = this.defaultUrgency() ?? '';
     return this.urgencies().find((u) => u.urgency_id === value)?.slug ?? value;
   }
 
@@ -220,11 +231,7 @@ export class FleetRoutinePanel {
    * state. */
   readonly lifecyclePending = input(false);
 
-  /** Whether the graph edit is in flight — disables the Set button. */
-  readonly editPending = input(false);
-
   readonly run = output<void>();
-  readonly editGraph = output<string>();
   readonly retire = output<string>();
   readonly enable = output<string>();
 
@@ -238,35 +245,6 @@ export class FleetRoutinePanel {
     readonly variant: 'primary' | 'danger';
     readonly run: () => void;
   } | null>(null);
-
-  /** The routine whose graph is open for editing, with the graph it opened on, and the draft typed so far — `null`
-   * while none is. Keyed by slug so a pick of another routine never carries an open editor across, and by the graph
-   * so a saved edit, reading back a new one, closes the editor while a failed one leaves it open beside its error. */
-  private readonly editing = signal<{ readonly slug: string; readonly original: string; readonly value: string } | null>(
-    null,
-  );
-
-  protected isEditing(panel: RoutinePanelVm): boolean {
-    const editing = this.editing();
-    return editing?.slug === panel.record.slug && editing.original === panel.record.graphName;
-  }
-
-  protected startEditing(panel: RoutinePanelVm): void {
-    const { slug, graphName } = panel.record;
-    this.editing.set({ slug, original: graphName, value: graphName });
-  }
-
-  protected stopEditing(): void {
-    this.editing.set(null);
-  }
-
-  protected graphDraft(panel: RoutinePanelVm): string {
-    return this.isEditing(panel) ? (this.editing()?.value ?? panel.record.graphName) : panel.record.graphName;
-  }
-
-  protected updateGraphDraft(panel: RoutinePanelVm, value: string): void {
-    this.editing.set({ slug: panel.record.slug, original: panel.record.graphName, value });
-  }
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
    * shape) — a method, not a stored computed, since it depends on the selected
@@ -304,6 +282,7 @@ export class FleetRoutinePanel {
     const record = this.vm()?.record;
     if (record === undefined) return;
     const { slug, name } = record;
+    this.confirmOpened.emit();
     this.pendingConfirm.set({
       heading: `Retire routine ${name}`,
       message: `Retire routine ${name}? It stops offering a run; its runs, findings, proposals, and closures stay live, queryable, and attributable.`,
@@ -318,6 +297,7 @@ export class FleetRoutinePanel {
     const record = this.vm()?.record;
     if (record === undefined) return;
     const { slug, name } = record;
+    this.confirmOpened.emit();
     this.pendingConfirm.set({
       heading: `Re-enable routine ${name}`,
       message: `Re-enable routine ${name}? It resumes offering a run.`,

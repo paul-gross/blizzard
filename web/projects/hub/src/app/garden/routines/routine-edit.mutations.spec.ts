@@ -26,17 +26,25 @@ describe('injectEditRoutineMutation', () => {
   it('patches the graph onto the routine', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());
 
-    await mutation.mutateAsync({ routineId: 'rt_1', graphName: 'garden-delta' });
+    await mutation.mutateAsync({ routineId: 'rt_1', revision: 3, body: { graph_name: 'garden-delta' } });
 
     const calls = stub.forRoute('/api/routines/rt_1', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
   });
 
+  it('sends the revision it was given as If-Match', async () => {
+    const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());
+
+    await mutation.mutateAsync({ routineId: 'rt_1', revision: 7, body: { graph_name: 'garden-delta' } });
+
+    expect(stub.forRoute('/api/routines/rt_1', 'PATCH')[0].headers['if-match']).toBe('7');
+  });
+
   it('sets or clears the routine default without changing the graph', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());
-    await mutation.mutateAsync({ routineId: 'rt_1', defaultUrgency: 'urgent' });
-    await mutation.mutateAsync({ routineId: 'rt_1', defaultUrgency: null });
+    await mutation.mutateAsync({ routineId: 'rt_1', revision: 3, body: { default_urgency: 'urgent' } });
+    await mutation.mutateAsync({ routineId: 'rt_1', revision: 3, body: { default_urgency: null } });
     const calls = stub.forRoute('/api/routines/rt_1', 'PATCH');
     expect(calls[0].body).toEqual({ default_urgency: 'urgent' });
     expect(calls[1].body).toEqual({ default_urgency: null });
@@ -46,7 +54,7 @@ describe('injectEditRoutineMutation', () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());
 
-    await mutation.mutateAsync({ routineId: 'rt_1', graphName: 'garden-delta' });
+    await mutation.mutateAsync({ routineId: 'rt_1', revision: 3, body: { graph_name: 'garden-delta' } });
 
     const keys = invalidateSpy.mock.calls.map((call) => (call[0] as { queryKey: readonly unknown[] }).queryKey);
     expect(keys).toContainEqual(['hub', 'routines']);

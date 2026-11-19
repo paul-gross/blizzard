@@ -13,7 +13,7 @@ describe('injectRoutineLifecycleMutation', () => {
   beforeEach(() => {
     stub = stubHubClient({
       'POST /api/routines/{routine_id}/retire': (_request, { routine_id }) =>
-        gardenRoutineView({ routine_id, name: 'nightly', retired: true }),
+        gardenRoutineView({ routine_id, name: 'nightly', revision: 4, retired: true }),
       'POST /api/routines/{routine_id}/enable': (_request, { routine_id }) => gardenRoutineView({ routine_id, name: 'nightly' }),
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -27,7 +27,7 @@ describe('injectRoutineLifecycleMutation', () => {
   it('routes to the retire verb when retired=true, with `by: operator`', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectRoutineLifecycleMutation());
 
-    await mutation.mutateAsync({ routineId: 'rtn_1', retired: true });
+    await mutation.mutateAsync({ routineId: 'rtn_1', revision: 4, retired: true });
 
     const calls = stub.forRoute('/api/routines/rtn_1/retire', 'POST');
     expect(calls).toHaveLength(1);
@@ -38,7 +38,7 @@ describe('injectRoutineLifecycleMutation', () => {
   it('routes to the enable verb when retired=false', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectRoutineLifecycleMutation());
 
-    await mutation.mutateAsync({ routineId: 'rtn_1', retired: false });
+    await mutation.mutateAsync({ routineId: 'rtn_1', revision: 4, retired: false });
 
     const calls = stub.forRoute('/api/routines/rtn_1/enable', 'POST');
     expect(calls).toHaveLength(1);
@@ -46,11 +46,21 @@ describe('injectRoutineLifecycleMutation', () => {
     expect(stub.forRoute('/api/routines/rtn_1/retire', 'POST')).toHaveLength(0);
   });
 
+  it('sends the revision captured at confirmation as If-Match, and none when the routine has none', async () => {
+    const mutation = TestBed.runInInjectionContext(() => injectRoutineLifecycleMutation());
+
+    await mutation.mutateAsync({ routineId: 'rtn_1', revision: 4, retired: true });
+    await mutation.mutateAsync({ routineId: 'rtn_2', revision: null, retired: true });
+
+    expect(stub.forRoute('/api/routines/rtn_1/retire', 'POST')[0].headers['if-match']).toBe('4');
+    expect(stub.forRoute('/api/routines/rtn_2/retire', 'POST')[0].headers['if-match']).toBeUndefined();
+  });
+
   it('invalidates the routine list on success', async () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectRoutineLifecycleMutation());
 
-    await mutation.mutateAsync({ routineId: 'rtn_1', retired: true });
+    await mutation.mutateAsync({ routineId: 'rtn_1', revision: 4, retired: true });
 
     const keys = invalidateSpy.mock.calls.map((call) => (call[0] as { queryKey: readonly unknown[] }).queryKey);
     expect(keys).toContainEqual(['hub', 'routines']);

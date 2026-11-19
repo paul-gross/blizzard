@@ -29,13 +29,15 @@
                  must never flip which verb the next click would fire
                  (`scope-panel.html`'s own control-choice comment). -->
             @if (canEdit()) {
-              <fleet-kit-button
-                testid="gardening-routine-panel-edit"
-                [disabled]="isEditing(panel)"
-                (click)="startEditing(panel)"
-              >
-                Edit
-              </fleet-kit-button>
+              @if (editable()) {
+                <fleet-kit-button
+                  testid="gardening-routine-panel-edit"
+                  [disabled]="editField() === 'graph'"
+                  (click)="startEditGraph.emit()"
+                >
+                  Edit
+                </fleet-kit-button>
+              }
               @if (panel.retired) {
                 <fleet-kit-button
                   testid="gardening-routine-panel-enable"
@@ -60,15 +62,38 @@
 
         <fleet-kit-error-line [message]="actionError()" testid="gardening-routine-panel-error" />
 
-        @if (canEdit()) {
-        <div class="rp-edit" data-testid="gardening-routine-urgency">
-          <span>Default urgency</span>
-          <fleet-kit-select ariaLabel="Default urgency" [options]="urgencyOptions()" [selectedValue]="urgencyValue()" [disabled]="!canEdit() || !urgenciesReady() || editPending()" (choose)="chooseUrgency($event)" testid="gardening-routine-urgency-select" />
-          @if (urgencyEditing()) {
-            <fleet-kit-button variant="primary" [disabled]="editPending()" (click)="editUrgency.emit(urgencyValue())" testid="gardening-routine-urgency-save">Set</fleet-kit-button>
-            <fleet-kit-button (click)="urgencyDraft.set(null)" testid="gardening-routine-urgency-cancel">Cancel</fleet-kit-button>
-          }
-        </div>
+        @if (editable()) {
+          <div class="rp-urgency-edit" data-testid="gardening-routine-urgency">
+            @if (editField() === 'urgency' && editForm(); as edit) {
+              <fleet-kit-form
+                data-testid="gardening-routine-urgency-edit"
+                testid="gardening-routine-urgency-edit"
+                [form]="edit"
+                saveLabel="Set"
+                (save)="saveEdit.emit()"
+                (cancel)="cancelEdit.emit()"
+              >
+                <fleet-kit-field label="Default urgency" [field]="edit.urgency">
+                  <fleet-kit-select
+                    [formField]="edit.urgency"
+                    [options]="urgencyOptions()"
+                    ariaLabel="Default urgency"
+                    testid="gardening-routine-urgency-select"
+                  />
+                </fleet-kit-field>
+              </fleet-kit-form>
+            } @else {
+              <span>Default urgency</span>
+              <fleet-kit-select
+                ariaLabel="Default urgency"
+                [options]="urgencyOptions()"
+                [selectedValue]="urgencyValue()"
+                [disabled]="!urgenciesReady() || editField() !== null"
+                (choose)="startEditUrgency.emit($event)"
+                testid="gardening-routine-urgency-select"
+              />
+            }
+          </div>
         } @else {
           <dl class="rp-urgency" data-testid="gardening-routine-urgency">
             <dt>Default urgency</dt>
@@ -85,27 +110,23 @@
         }
 
         <ng-template #graphValue>
-          @if (isEditing(panel)) {
-            <span class="rp-edit">
-              <fleet-kit-text-input
-                class="rp-edit-input"
-                [value]="graphDraft(panel)"
-                testid="gardening-routine-panel-graph-input"
-                [ariaLabel]="'Set graph for routine ' + panel.record.name"
-                (valueChange)="updateGraphDraft(panel, $event)"
-              />
-              <fleet-kit-button
-                variant="primary"
-                testid="gardening-routine-panel-graph-submit"
-                [disabled]="editPending()"
-                (click)="editGraph.emit(graphDraft(panel))"
-              >
-                Set
-              </fleet-kit-button>
-              <fleet-kit-button testid="gardening-routine-panel-graph-cancel" (click)="stopEditing()">
-                Cancel
-              </fleet-kit-button>
-            </span>
+          @if (editField() === 'graph' && editForm(); as edit) {
+            <fleet-kit-form
+              data-testid="gardening-routine-panel-graph"
+              testid="gardening-routine-panel-graph"
+              [form]="edit"
+              saveLabel="Set"
+              (save)="saveEdit.emit()"
+              (cancel)="cancelEdit.emit()"
+            >
+              <fleet-kit-field label="Graph" [field]="edit.graph">
+                <fleet-kit-text-input
+                  [formField]="edit.graph"
+                  testid="gardening-routine-panel-graph-input"
+                  [ariaLabel]="'Set graph for routine ' + panel.record.name"
+                />
+              </fleet-kit-field>
+            </fleet-kit-form>
           } @else {
             {{ panel.record.graphName }} <span class="rp-dim">· tenant-wide library</span>
           }

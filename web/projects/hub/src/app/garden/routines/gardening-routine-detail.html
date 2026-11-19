@@ -6,13 +6,18 @@
   [canEdit]="canEdit()"
   [actionError]="lifecycleActionError()"
   [lifecyclePending]="lifecyclePending()"
-  [editPending]="editPending()"
+  [editable]="editable()"
+  [editForm]="editForm()"
+  [editField]="editField()"
   [urgencies]="urgenciesQuery.data() ?? []"
   [urgenciesReady]="urgenciesQuery.isSuccess()"
-  [defaultUrgency]="selectedRoutine()?.default_urgency ?? null"
+  [defaultUrgency]="selectedRoutine()?.defaultUrgency ?? null"
   (run)="run()"
-  (editGraph)="onEditGraph($event)"
-  (editUrgency)="onEditUrgency($event)"
+  (startEditGraph)="onStartEditGraph()"
+  (startEditUrgency)="onStartEditUrgency($event)"
+  (saveEdit)="onSaveEdit()"
+  (cancelEdit)="onCancelEdit()"
+  (confirmOpened)="onConfirmOpened()"
   (retire)="onRetireRoutine($event)"
   (enable)="onEnableRoutine($event)"
 />
@@ -23,9 +28,9 @@
 
 @if (runningRoutine(); as routine) {
   <app-gardening-run-dialog
-    [routineId]="routine.routine_id"
+    [routineId]="routine.id"
     [routineName]="routine.name"
-    [effectiveUrgency]="routine.effective_urgency"
+    [effectiveUrgency]="runUrgency()"
     (closed)="closeDialog()"
   />
 }
