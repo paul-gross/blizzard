@@ -12,6 +12,8 @@ import {
   type RoutineView,
   type TrendView,
 } from 'fleet';
+import type { ScopeRoutine } from './scope.domain';
+import { fromRoutineView } from './scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';
 import {
   lensedKey,
@@ -30,8 +32,18 @@ import {
  * SSE event of their own, `injectHubGraphsQuery`'s own standing.
  */
 export function injectHubRoutinesQuery() {
+  return injectQuery(routinesQueryOptions());
+}
+
+/** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesQuery}. */
+export function injectHubScopeRoutinesDomainQuery() {
+  const read = routinesQueryOptions();
+  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(fromRoutineView) }));
+}
+
+function routinesQueryOptions() {
   const project = injectProjectFilter();
-  return injectQuery(() => {
+  return () => {
     const lens = project();
     return {
       queryKey: lensedKey(hubRoutinesKey, lens),
@@ -48,7 +60,7 @@ export function injectHubRoutinesQuery() {
         return data ?? [];
       },
     };
-  });
+  };
 }
 
 /**

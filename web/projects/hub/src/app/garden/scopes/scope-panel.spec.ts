@@ -1,8 +1,10 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form, submit } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
+import { SCOPE_DESCRIPTION_RULES } from './scope.form';
 
 const VM: ScopePanelVm = {
   slug: 'blizzard',
@@ -14,18 +16,25 @@ const VM: ScopePanelVm = {
 };
 
 describe('FleetScopePanel', () => {
+  const draft = signal({ description: VM.description });
+  let descriptionForm: ReturnType<typeof makeForm>;
+  const makeForm = () => form(draft, SCOPE_DESCRIPTION_RULES);
+
   async function mount(inputs: {
     vm?: ScopePanelVm | null;
     state?: 'loading' | 'error' | 'empty' | 'ready';
     canEdit?: boolean;
     actionError?: string | null;
     editPending?: boolean;
+    editing?: boolean;
     lifecyclePending?: boolean;
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetScopePanel],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
+    draft.set({ description: VM.description });
+    descriptionForm = TestBed.runInInjectionContext(makeForm);
     const fixture = TestBed.createComponent(FleetScopePanel);
     fixture.componentRef.setInput('vm', inputs.vm === undefined ? VM : inputs.vm);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
@@ -33,13 +42,16 @@ describe('FleetScopePanel', () => {
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
     fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
     fixture.componentRef.setInput('editPending', inputs.editPending ?? false);
+    fixture.componentRef.setInput('editing', inputs.editing ?? false);
+    fixture.componentRef.setInput('descriptionForm', descriptionForm);
     fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
     await fixture.whenStable();
     return fixture;
   }
 
+  /** What the container does on `editStart`: open the editor on the form. */
   async function openEditor(fixture: Awaited<ReturnType<typeof mount>>) {
-    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')?.click();
+    fixture.componentRef.setInput('editing', true);
     await fixture.whenStable();
   }
 
@@ -103,59 +115,63 @@ describe('FleetScopePanel', () => {
     expect(el.querySelector('[data-testid="gardening-scope-panel-retire"]')).toBeNull();
   });
 
-  it('emits editDescription with the trimmed value on Set', async () => {
+  it('emits editStart on Edit, and the editor opens once the container says so', async () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
-    let emitted: { slug: string; description: string } | undefined;
-    fixture.componentInstance.editDescription.subscribe((e) => (emitted = e));
-    await openEditor(fixture);
+    let started = 0;
+    fixture.componentInstance.editStart.subscribe(() => started++);
 
-    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
-    input.value = '  updated description  ';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')?.click();
 
-    expect(emitted).toEqual({ slug: 'blizzard', description: 'updated description' });
-    await fixture.whenStable();
-    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]'), 'open until it reads back').toBeTruthy();
-
-    fixture.componentRef.setInput('vm', { ...VM, description: 'updated description' });
-    await fixture.whenStable();
+    expect(started).toBe(1);
     expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeNull();
   });
 
-  it('drops an unsaved draft when another scope is picked and the first is returned to', async () => {
-    const fixture = await mount({ canEdit: true });
+  it('binds the editor to the description draft, and emits saveDescription on Set', async () => {
+    const fixture = await mount({ canEdit: true, editing: true });
     const el = fixture.nativeElement as HTMLElement;
-    const input = () => el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]');
-    await openEditor(fixture);
-    input()!.value = 'half-typed';
-    input()!.dispatchEvent(new Event('input', { bubbles: true }));
-    await fixture.whenStable();
+    let saves = 0;
+    fixture.componentInstance.saveDescription.subscribe(() => saves++);
 
-    fixture.componentRef.setInput('vm', { ...VM, slug: 'other', description: 'other description' });
-    await fixture.whenStable();
-    fixture.componentRef.setInput('vm', VM);
-    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
+    expect(input.value).toBe(VM.description);
+    input.value = 'updated description';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
 
-    expect(input()).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-scope-panel-description"]')?.textContent).toContain(VM.description);
-    await openEditor(fixture);
-    expect(input()!.value).toBe(VM.description);
+    expect(draft().description).toBe('updated description');
+    expect(saves).toBe(1);
   });
 
-  it('drops an unsaved draft on Cancel', async () => {
-    const fixture = await mount({ canEdit: true });
-    const el = fixture.nativeElement as HTMLElement;
-    const input = () => el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]');
-    await openEditor(fixture);
-    input()!.value = 'half-typed';
-    input()!.dispatchEvent(new Event('input', { bubbles: true }));
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-cancel"]')?.click();
-    await fixture.whenStable();
-    await openEditor(fixture);
+  it('emits editCancel on Cancel', async () => {
+    const fixture = await mount({ canEdit: true, editing: true });
+    let cancels = 0;
+    fixture.componentInstance.editCancel.subscribe(() => cancels++);
 
-    expect(input()!.value).toBe(VM.description);
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-cancel"]')
+      ?.click();
+
+    expect(cancels).toBe(1);
+  });
+
+  it('shows a blank description as an error at the field once the form is submitted', async () => {
+    const fixture = await mount({ canEdit: true, editing: true });
+    const el = fixture.nativeElement as HTMLElement;
+    draft.set({ description: '   ' });
+    await submit(descriptionForm, async () => undefined);
+    await fixture.whenStable();
+
+    expect(el.querySelector('.edit-field')?.textContent).toContain('Enter a description');
+  });
+
+  it('shows a refusal no field owns on the form line', async () => {
+    const fixture = await mount({ canEdit: true, editing: true });
+    const el = fixture.nativeElement as HTMLElement;
+    await submit(descriptionForm, async () => [{ kind: 'hub', fieldTree: descriptionForm, message: 'Set description failed.' }]);
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-edit-error"]')?.textContent).toContain('Set description failed.');
   });
 
   it('disables Set while the edit mutation is pending, re-enabling once it settles', async () => {

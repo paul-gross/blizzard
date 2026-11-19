@@ -1,49 +1,13 @@
-import type { RoutineView, ScopeView } from 'fleet';
+import type { Scope, ScopeRoutine } from '../core/scope.domain';
 import { describe, expect, it } from 'vitest';
 
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 
-const BLIZZARD: ScopeView = {
-  slug: 'blizzard',
-  description: 'The whole repo',
-  created_at: '2026-01-01T00:00:00Z',
-  retired: false,
-  revision: null,
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
-const DOCS: ScopeView = {
-  slug: 'docs',
-  description: 'Docs only',
-  created_at: '2026-01-01T00:00:00Z',
-  retired: false,
-  revision: null,
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
+const BLIZZARD: Scope = { slug: 'blizzard', description: 'The whole repo', retired: false, projectId: null, projectName: null };
+const DOCS: Scope = { slug: 'docs', description: 'Docs only', retired: false, projectId: null, projectName: null };
 
-const NIGHTLY: RoutineView = {
-  routine_id: 'rtn_1',
-  slug: 'nightly',
-  name: 'Nightly sweep',
-  graph_name: 'garden-routine',
-  default_scope_slug: 'blizzard',
-  created_at: '2026-01-01T00:00:00Z',
-  default_model: [],
-  default_effort: null,
-  default_harnesses: [],
-  default_urgency: null,
-  effective_urgency: null,
-  kept_by: [],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-  retired: false,
-  revision: null,
-};
-const WEEKLY: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep', default_scope_slug: 'docs' };
+const NIGHTLY: ScopeRoutine = { routineId: 'rtn_1', slug: 'nightly', name: 'Nightly sweep', defaultScopeSlug: 'blizzard' };
+const WEEKLY: ScopeRoutine = { routineId: 'rtn_2', slug: 'weekly', name: 'Weekly sweep', defaultScopeSlug: 'docs' };
 
 describe('scopeBySlug', () => {
   it('answers null on the bare child route', () => {
@@ -117,10 +81,6 @@ describe('scopePanelVm', () => {
     });
   });
 
-  it('reads an unset retired flag as false', () => {
-    expect(scopePanelVm(BLIZZARD, null, null, null)?.retired).toBe(false);
-  });
-
   it('renders a pending override over the real retired flag', () => {
     const vm = scopePanelVm(BLIZZARD, true, null, null);
     expect(vm?.retired).toBe(false);
@@ -129,8 +89,13 @@ describe('scopePanelVm', () => {
 });
 
 describe('sameSlugProjects', () => {
-  const scope = (slug: string, project_id: string | null, project_name: string | null) =>
-    ({ slug, description: '', created_at: '2026-01-01T00:00:00Z', project_id, project_name }) as ScopeView;
+  const scope = (slug: string, projectId: string | null, projectName: string | null): Scope => ({
+    slug,
+    description: '',
+    retired: false,
+    projectId,
+    projectName,
+  });
   const HUB_API = scope('hub-api', 'p_b', 'blizzard');
 
   it('names every other project holding a scope of the same slug, by name', () => {

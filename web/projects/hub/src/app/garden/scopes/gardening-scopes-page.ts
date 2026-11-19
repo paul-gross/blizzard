@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { FLEET_CLOCK, asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, type ScopeView, ViewportService } from 'fleet';
+import { FLEET_CLOCK, asyncState, KitMasterDetail, KitPanel, type KitAsyncStateValue, ViewportService } from 'fleet';
 import { FleetScopeList, type ScopeRowVm } from './scope-list';
-import { injectHubScopesQuery } from '../core/scopes.query';
+import { injectHubDomainScopesQuery } from '../core/scopes.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentScopeSlug, scopeRows } from './gardening-scopes-page.model';
@@ -10,7 +10,8 @@ import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
 import { defaultRoutineWindow } from '../core/routine-window';
-import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import type { Scope } from '../core/scope.domain';
+import { injectHubScopeSweepsQuery } from '../runs/garden-runs.query';
 
 /**
  * The `/gardening/scopes` sub-tab (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
@@ -41,14 +42,14 @@ export class GardeningScopesPage {
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
 
-  private readonly scopesQuery = injectHubScopesQuery();
+  private readonly scopesQuery = injectHubDomainScopesQuery();
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly runsQuery = injectHubScopeSweepsQuery(() => this.window.since);
   private readonly project = injectLensedProject();
 
   /** The project every scope listed here belongs to: its name once read, its slug until then. */
   protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
-  private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
+  private readonly scopes = computed<readonly Scope[]>(() => this.scopesQuery.data() ?? []);
 
   /** The `scopeSlug` the active detail child names — the selection lives on that
    * child's route, not this one's (`route-state.ts`). A scope has no id of its own;

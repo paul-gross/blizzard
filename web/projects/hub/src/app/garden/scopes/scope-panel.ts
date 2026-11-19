@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, type TemplateRef, effect, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, signal } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -10,13 +11,15 @@ import {
   KitConfirmDialog,
   type KitFact,
   KitFactList,
-  KitTextInput,
   KitErrorLine,
+  KitField,
+  KitTextInput,
 } from 'fleet';
 import { AppLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import type { ScopeDescriptionEditEvent, ScopeSweptVm } from './scope-list';
+import type { ScopeDescriptionDraft } from '../core/scope.domain';
+import type { ScopeSweptVm } from './scope-list';
 
 /** One routine related to the selected scope — `isDefault` marks whether this scope
  * is that routine's own default, `RelatedScopeVm`'s own shape (`routine-panel.ts`). */
@@ -59,12 +62,13 @@ export interface ScopePanelVm {
  * project holding a scope of the same slug. Presentational only: it renders exactly the view model it is handed and
  * injects no query.
  *
- * Edit opens the description in place; Set emits the edit, and the editor closes once the new description reads back. Retire and re-enable confirm, then emit.
+ * Edit opens the description in place on the form it is handed; Set emits a save, and the container closes the editor
+ * once the hub accepts it, or answers a refusal as errors on the field. Retire and re-enable confirm, then emit.
  */
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, AppLink, RouterLink, KitErrorLine],
+  imports: [FleetWhen, FormField, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitErrorLine, KitField, KitFactList, KitTextInput, AppLink, RouterLink],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })
@@ -90,47 +94,27 @@ export class FleetScopePanel {
   /** Whether the edit-description mutation is in flight — disables the Set button. */
   readonly editPending = input(false);
 
+  /** Whether the description is open for editing in place. */
+  readonly editing = input(false);
+
+  /** The description's draft; the container owns it, its rules, and a hub refusal, which arrive as errors on the tree. */
+  readonly descriptionForm = input.required<FieldTree<ScopeDescriptionDraft>>();
+
   /** Whether the retire/enable mutation is in flight — disables both Re-enable and
    * Retire, since only one is ever shown for this scope's current lifecycle state. */
   readonly lifecyclePending = input(false);
 
-  readonly editDescription = output<ScopeDescriptionEditEvent>();
+  /** Edit pressed — the container opens the draft on the scope's description. */
+  readonly editStart = output<void>();
+  /** Cancel pressed on the open editor. */
+  readonly editCancel = output<void>();
+  /** Set pressed — the container validates and saves the draft. */
+  readonly saveDescription = output<void>();
   readonly retire = output<string>();
   readonly enable = output<string>();
 
   /** The lifecycle badge's tone, from the hub's one lifecycle owner. */
   protected readonly lifecycleTone = lifecycleTone;
-
-  /** The scope whose description is open for editing, with the description it opened on and the draft typed so far —
-   * `null` while none is. Keyed by slug so a pick of another scope never carries an open editor, or its draft, across,
-   * and by the description so a saved edit, reading back a new one, closes the editor while a failed one leaves it open
-   * beside its error. */
-  private readonly editing = signal<{
-    readonly slug: string;
-    readonly original: string;
-    readonly value: string;
-  } | null>(null);
-
-  /** Picking another scope closes the editor and drops its draft, so coming back finds the saved description. */
-  private readonly closeOnPick = effect(() => {
-    const slug = this.vm()?.slug;
-    untracked(() => {
-      if (this.editing()?.slug !== slug) this.editing.set(null);
-    });
-  });
-
-  protected isEditing(panel: ScopePanelVm): boolean {
-    const editing = this.editing();
-    return editing?.slug === panel.slug && editing.original === panel.description;
-  }
-
-  protected startEditing(panel: ScopePanelVm): void {
-    this.editing.set({ slug: panel.slug, original: panel.description, value: panel.description });
-  }
-
-  protected stopEditing(): void {
-    this.editing.set(null);
-  }
 
   /** The record's facts — the description and the last sweep, each markup rendered from the view's own templates. */
   protected factRows(description: TemplateRef<unknown>, lastSwept: TemplateRef<unknown>): readonly KitFact[] {
@@ -140,13 +124,12 @@ export class FleetScopePanel {
     ];
   }
 
-  protected descriptionValue(panel: ScopePanelVm): string {
-    return this.isEditing(panel) ? (this.editing()?.value ?? panel.description) : panel.description;
-  }
-
-  protected updateDescription(panel: ScopePanelVm, value: string): void {
-    this.editing.set({ slug: panel.slug, original: panel.description, value });
-  }
+  /** What the hub refused the edit with that no field owns. */
+  protected readonly formErrors = computed(() =>
+    this.descriptionForm()()
+      .errors()
+      .map((error) => error.message || 'Set description failed.'),
+  );
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;
@@ -155,15 +138,6 @@ export class FleetScopePanel {
     readonly variant: 'primary' | 'danger';
     readonly run: () => void;
   } | null>(null);
-
-  /** Emit a description edit — no-op on a blank value (`FleetScopeList`'s own
-   * guard). */
-  protected submitDescription(description: string): void {
-    const trimmed = description.trim();
-    const slug = this.vm()?.slug;
-    if (!trimmed || slug === undefined) return;
-    this.editDescription.emit({ slug, description: trimmed });
-  }
 
   /** Open a confirmation, and emit `retire` once the operator confirms. */
   protected onRetire(): void {

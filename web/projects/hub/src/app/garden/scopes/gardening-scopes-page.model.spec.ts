@@ -1,29 +1,11 @@
-import type { RunRowView, ScopeView } from 'fleet';
+import type { Scope, ScopeSweep } from '../core/scope.domain';
 import { describe, expect, it } from 'vitest';
 
 import { defaultRoutineWindow } from '../core/routine-window';
 import { notSweptLabel, presentScopeSlug, scopeRows, scopeSwept } from './gardening-scopes-page.model';
 
-const BLIZZARD: ScopeView = {
-  slug: 'blizzard',
-  description: 'The whole repo',
-  created_at: '2026-01-01T00:00:00Z',
-  retired: false,
-  revision: null,
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
-const DOCS: ScopeView = {
-  slug: 'docs',
-  description: 'Docs only',
-  created_at: '2026-01-01T00:00:00Z',
-  retired: true,
-  revision: null,
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-};
+const BLIZZARD: Scope = { slug: 'blizzard', description: 'The whole repo', retired: false, projectId: null, projectName: null };
+const DOCS: Scope = { slug: 'docs', description: 'Docs only', retired: true, projectId: null, projectName: null };
 
 describe('presentScopeSlug', () => {
   it('answers null on the bare child route', () => {
@@ -39,27 +21,14 @@ describe('presentScopeSlug', () => {
   });
 });
 
-function run(scope_slug: string, minted_at: string): RunRowView {
-  return {
-    chunk_id: `c-${scope_slug}-${minted_at}`,
-    cadence: null,
-    delivered: [],
-    escalation: null,
-    minted_at,
-    mode: 'delta',
-    outcome: 'done',
-    routine_name: 'garden-weekly',
-    scope_slug,
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-  };
+function run(scopeSlug: string, mintedAt: string): ScopeSweep {
+  return { scopeSlug, mintedAt };
 }
 
 const WINDOW = defaultRoutineWindow(Date.parse('2026-03-10T00:00:00Z'));
 
 describe('scopeRows', () => {
-  it('maps each scope, an unset retired flag reading false', () => {
+  it('maps each scope', () => {
     expect(scopeRows([BLIZZARD, DOCS], [], WINDOW)).toEqual([
       { slug: 'blizzard', description: 'The whole repo', retired: false, swept: { at: null, notSwept: 'not in 28 days' } },
       { slug: 'docs', description: 'Docs only', retired: true, swept: { at: null, notSwept: 'not in 28 days' } },

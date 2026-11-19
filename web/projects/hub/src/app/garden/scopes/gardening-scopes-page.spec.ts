@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type ScopeView, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import { gardenScopeView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 
 import { GardeningScopesPage } from './gardening-scopes-page';
@@ -51,7 +51,7 @@ describe('GardeningScopesPage', () => {
 
   afterEach(() => stub?.restore());
 
-  async function render(opts: { scopes?: ScopeView[]; url?: string; mobile?: boolean } = {}) {
+  async function render(opts: { scopes?: ReturnType<typeof gardenScopeView>[]; url?: string; mobile?: boolean } = {}) {
     const scopes = opts.scopes ?? [SCOPE];
     stub = stubHubClient({
       'GET /api/scopes': () => scopes,

@@ -52,7 +52,7 @@
   flex-wrap: wrap;
   gap: 4px;
 }
-.edit-input {
+.edit-field {
   flex: 1;
   min-width: 0;
 }
