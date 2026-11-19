@@ -147,6 +147,7 @@ describe('MembersTable', () => {
     fixture.componentInstance.changeRole.subscribe((event) => emitted.push(event));
     const select = row(el, 'usr_unknown')!.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')!;
     expect(select.getAttribute('aria-label')).toContain('future');
+    expect(select.closest('fleet-kit-select')?.getAttribute('title')).toBe('future');
     select.click();
     await fixture.whenStable();
     document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="future"]')!.click();

@@ -32,6 +32,9 @@ td {
   margin-left: 6px;
   white-space: nowrap;
 }
+.role-select {
+  max-width: min(200px, calc(100vw - 48px));
+}
 .actions {
   text-align: right;
   white-space: nowrap;

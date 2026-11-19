@@ -40,7 +40,7 @@ const MEMBERS: readonly Member[] = [
     username: LONG,
     displayName: LONG,
     email: `${LONG}@example.com`,
-    role: 'guest',
+    role: { unlisted: LONG },
     hubAdmin: true,
     createdAt: '2026-07-21T00:00:00Z',
     identities: [{ providerName: 'github', handle: LONG }],
@@ -99,6 +99,31 @@ async function sweep(width: number) {
       expect(box.left, `${testid} is outside the screen at ${width}px`).toBeGreaterThanOrEqual(0);
       expect(box.right, `${testid} is outside the screen at ${width}px`).toBeLessThanOrEqual(width);
     }
+    const select = root.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')!;
+    expect(select.getAttribute('aria-label')).toContain(LONG);
+    select.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (width <= 390) {
+      scroller.scrollLeft += select.getBoundingClientRect().left - (width - select.getBoundingClientRect().width) / 2;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(Math.abs(select.getBoundingClientRect().left - (width - select.getBoundingClientRect().width) / 2)).toBeLessThan(1);
+    }
+    select.click();
+    await fixture.whenStable();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const popup = document.querySelector<HTMLElement>('[role="listbox"]')!;
+    const option = [...popup.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent?.trim() === LONG)!;
+    const bounds = option.getBoundingClientRect();
+    const popupBounds = popup.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+    expect(bounds.top).toBeGreaterThanOrEqual(popupBounds.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(popupBounds.bottom);
+    expect(popupBounds.left).toBeGreaterThanOrEqual(0);
+    expect(popupBounds.right).toBeLessThanOrEqual(width);
+    expect(option.scrollWidth).toBeLessThanOrEqual(option.clientWidth);
+    expect(option.scrollHeight).toBeLessThanOrEqual(option.clientHeight);
+    expect(bounds.height).toBeGreaterThan(30);
+    select.click();
   } finally {
     root.remove();
     window.removeEventListener('error', onError);
@@ -115,7 +140,7 @@ describe('members table shell sweep (web:shell-sweep)', () => {
 });
 
 const SELF = MEMBERS[0];
-const ASSIGNABLE: Member = { ...MEMBERS[1], userId: 'usr_grace', username: 'grace', displayName: 'Grace', email: null, identities: [] };
+const ASSIGNABLE: Member = { ...MEMBERS[1], userId: 'usr_grace', username: 'grace', displayName: 'Grace', email: null, identities: [], role: 'guest' };
 const PENDING: Member = { ...ASSIGNABLE, userId: 'usr_otto', username: 'otto', displayName: 'Otto' };
 
 describe('members table keyboard sweep (web:shell-sweep)', () => {

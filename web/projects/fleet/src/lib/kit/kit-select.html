@@ -28,12 +28,14 @@
   [cdkConnectedOverlayOrigin]="origin"
   [cdkConnectedOverlayOpen]="open()"
   [cdkConnectedOverlayMinWidth]="origin.elementRef.nativeElement.offsetWidth"
+  [cdkConnectedOverlayPush]="wrapOptions()"
   (attach)="focusActive()"
   (backdropClick)="close()"
   (detach)="close()"
 >
   <div
     class="popup"
+    [class.wrap-options]="wrapOptions()"
     cdkListbox
     [id]="listboxId"
     [attr.aria-label]="ariaLabel()"

@@ -63,6 +63,9 @@ export class KitSelect implements FormValueControl<string> {
   readonly selectedValue = input<string | null>(null);
   readonly disabled = input(false);
 
+  /** Wrap popup labels and keep the wider popup in the viewport, for values that must remain readable in full. */
+  readonly wrapOptions = input(false);
+
   /** Names the listbox, and the trigger (with the selection) when no {@link label} is set. */
   readonly ariaLabel = input.required<string>();
 

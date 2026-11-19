@@ -40,6 +40,9 @@
                 @if (canChangeRole(member)) {
                   <fleet-kit-select
                     #roleSelect
+                    class="role-select"
+                    [attr.title]="roleLabel(member.role)"
+                    [wrapOptions]="true"
                     fleetKitGridWidget
                     #roleWidget="fleetKitGridWidget"
                     [gridFocusTarget]="roleSelect.controlElement()"
