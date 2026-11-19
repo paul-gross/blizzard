@@ -28,6 +28,7 @@ from blizzard.hub.composition import (
     build_hub_core,
     build_services,
     build_tenant_stores,
+    connections_for_engine,
 )
 from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.events.brokers import TenantBrokers
@@ -53,7 +54,7 @@ _SECOND = TenantId("ten_SECOND")
 
 def _core(tmp_path: Path) -> tuple[HubCore, Engine]:
     _, engine = migrate_to(tmp_path, "head")
-    return build_hub_core(engine, clock=FixedClock(_AT)), engine
+    return build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT)), engine
 
 
 def _add_tenant(engine: Engine, tenant: TenantId) -> None:
@@ -196,7 +197,7 @@ def test_racing_opens_of_one_tenant_share_one_set_of_stores(tmp_path: Path) -> N
 def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> None:
     migrate_to(tmp_path, "head")
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
-    core = build_hub_core(engine, clock=FixedClock(_AT))
+    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT))
     tenant = default_tenant(engine)
     seen: list[Mapping[str, Any]] = []
 

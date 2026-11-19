@@ -10,8 +10,7 @@ from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core
+from blizzard.hub.composition import build_hub_core, open_hub_store
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
 
@@ -21,9 +20,9 @@ def system_event_log_opener(clock: IClock) -> Callable[[HubConfig], AbstractCont
 
     @contextmanager
     def open_event_log(config: HubConfig) -> Generator[HubEventLogService, None, None]:
-        engine = create_engine_from_url(config.db_url)
+        engine, connections = open_hub_store(config.db_url)
         try:
-            yield build_hub_core(engine, clock=clock).hub_event_log
+            yield build_hub_core(connections, clock=clock).hub_event_log
         finally:
             engine.dispose()
 

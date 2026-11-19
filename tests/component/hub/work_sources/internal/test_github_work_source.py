@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
-from blizzard.hub.composition import TenantStores, build_hub_core, build_live_config
+from blizzard.hub.composition import TenantStores, build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
@@ -80,7 +80,7 @@ def _registry_world(
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    core = build_hub_core(engine, clock=clock)
+    core = build_hub_core(connections_for_engine(engine), clock=clock)
     stores = core.open(StoreScope(default_tenant(engine)))
     authoring = config_authoring(engine, keys=keys, clock=clock)
     for secret, value in (tokens or {"gh": "token"}).items():
@@ -331,7 +331,7 @@ def test_a_source_whose_credential_builds_no_authorization_raises_work_source_er
     engine = migrate_to(tmp_path, "head")[1]
     clock = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
     keys = hub_key_provider({}, data_dir=tmp_path / "data")
-    stores = build_hub_core(engine, clock=clock).open(StoreScope(default_tenant(engine)))
+    stores = build_hub_core(connections_for_engine(engine), clock=clock).open(StoreScope(default_tenant(engine)))
     authoring = config_authoring(engine, keys=keys, clock=clock)
     authoring.create_secret(SecretName.parse("gh"), "token", OP)
     record = authoring.create_work_source("one", None, _github("acme/one").fields(seed_forge(engine)), OP)

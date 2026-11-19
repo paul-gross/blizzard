@@ -14,13 +14,16 @@ from sqlalchemy import Engine
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
+from blizzard.foundation.platform_tracing import handle as tracing_handle
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing, IPlatformTracing
 from blizzard.hub import app as hub_app
+from blizzard.hub import composition as hub_composition
 from blizzard.hub.cli import runtime as hub_cli
 from blizzard.hub.composition import HubSettingsGraph, TenantCache
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.store.errors import HubStoreConnections
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.open_file_guard import inspect
 
@@ -155,7 +158,7 @@ def test_failed_sweep_joins_other_sweeps_before_disposal(tmp_path: Path, monkeyp
 
 def test_failed_construction_releases_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = init_hub(tmp_path / "hub")
-    original = hub_app.open_hub_engine
+    original = hub_composition.open_hub_engine
     connections: list[sqlite3.Connection] = []
     paths: set[Path] = set()
 
@@ -172,7 +175,7 @@ def test_failed_construction_releases_engine(tmp_path: Path, monkeypatch: pytest
     def fail(*args: object, **kwargs: object) -> None:
         raise RuntimeError("construction failed")
 
-    monkeypatch.setattr(hub_app, "open_hub_engine", open_engine)
+    monkeypatch.setattr(hub_composition, "open_hub_engine", open_engine)
     monkeypatch.setattr(hub_app, "build_hub_core", fail)
     with pytest.raises(RuntimeError, match="construction failed"):
         build_hosted_hub_app(config)
@@ -202,8 +205,10 @@ def test_failed_construction_shuts_down_only_owned_tracing(
     def fail(*args: object, **kwargs: object) -> None:
         raise RuntimeError("construction failed")
 
-    monkeypatch.setattr(hub_app, "build_platform_tracing", build_tracing)
-    monkeypatch.setattr(hub_app, "open_hub_engine" if fail_open else "build_hub_core", fail)
+    monkeypatch.setattr(tracing_handle, "build_platform_tracing", build_tracing)
+    monkeypatch.setattr(
+        hub_composition if fail_open else hub_app, "open_hub_engine" if fail_open else "build_hub_core", fail
+    )
     with pytest.raises(RuntimeError, match="construction failed"):
         build_hosted_hub_app(config, platform_tracing=tracing if caller_owned else None)
     assert tracing.shutdown_timeouts == ([] if caller_owned else [hub_app.PLATFORM_TRACING_SHUTDOWN_SECONDS])
@@ -213,7 +218,7 @@ def test_late_construction_failure_stops_services_before_disposal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = init_hub(tmp_path / "hub")
-    original_open = hub_app.open_hub_engine
+    original_open = hub_composition.open_hub_engine
     original_stop = ActionLoop.stop
     connections: list[sqlite3.Connection] = []
     stopped: list[bool] = []
@@ -231,7 +236,7 @@ def test_late_construction_failure_stops_services_before_disposal(
     def fail(*args: object, **kwargs: object) -> None:
         raise RuntimeError("late construction failure")
 
-    monkeypatch.setattr(hub_app, "open_hub_engine", open_engine)
+    monkeypatch.setattr(hub_composition, "open_hub_engine", open_engine)
     monkeypatch.setattr(ActionLoop, "stop", stop)
     monkeypatch.setattr(hub_app, "create_app", fail)
     with pytest.raises(RuntimeError, match="late construction failure"):
@@ -244,20 +249,37 @@ def test_cli_failure_before_lifespan_closes_hosted_resources(tmp_path: Path, mon
     root = tmp_path / "hub"
     init_hub(root)
     original_build = hub_cli.build_hosted_app
-    connections: list[sqlite3.Connection] = []
+    pooled_connections: list[sqlite3.Connection] = []
     stopped: list[bool] = []
     original_stop = ActionLoop.stop
 
     def build(
-        config: HubConfig, *, version_window: VersionWindow, settings: HubSettingsGraph, clock: IClock
+        config: HubConfig,
+        *,
+        version_window: VersionWindow,
+        settings: HubSettingsGraph,
+        clock: IClock,
+        engine: Engine,
+        connections: HubStoreConnections,
+        platform_tracing: IPlatformTracing,
+        oauth_http_client: httpx2.Client | None = None,
     ) -> FastAPI:
-        app = original_build(config, version_window=version_window, settings=settings, clock=clock)
-        connections.append(_pooled_connection(app.state.engine))
+        app = original_build(
+            config,
+            version_window=version_window,
+            settings=settings,
+            clock=clock,
+            engine=engine,
+            connections=connections,
+            platform_tracing=platform_tracing,
+            oauth_http_client=oauth_http_client,
+        )
+        pooled_connections.append(_pooled_connection(app.state.engine))
         app.state.services.action_loop.start()
         return app
 
     def stop(loop: ActionLoop) -> None:
-        connections[0].execute("SELECT 1")
+        pooled_connections[0].execute("SELECT 1")
         original_stop(loop)
         stopped.append(True)
 
@@ -271,7 +293,7 @@ def test_cli_failure_before_lifespan_closes_hosted_resources(tmp_path: Path, mon
     assert isinstance(result.exception, RuntimeError)
     assert str(result.exception) == "server construction failed"
     assert stopped == [True]
-    _assert_closed(connections[0])
+    _assert_closed(pooled_connections[0])
 
 
 def test_borrowed_oauth_client_remains_open(tmp_path: Path) -> None:

@@ -18,7 +18,7 @@ from blizzard.foundation.clock import FixedClock, ManualMonotonicClock
 from blizzard.foundation.credential_check import CheckOutcome
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_core, build_live_config
+from blizzard.hub.composition import build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.credential_resolution import CredentialChoice
@@ -121,7 +121,9 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = build_hub_core(self.engine, clock=clock).open(StoreScope(default_tenant(self.engine)))
+        self.stores = build_hub_core(connections_for_engine(self.engine), clock=clock).open(
+            StoreScope(default_tenant(self.engine))
+        )
         self.authoring = config_authoring(self.engine, keys=keys, clock=clock)
         forge_id = seed_forge(self.engine, "http://forge.fixture")
         forge = self.stores.forge_records.get(forge_id)

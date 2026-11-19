@@ -682,7 +682,7 @@ def test_the_hub_guard_installs_once_on_every_engine(monkeypatch: pytest.MonkeyP
 _HUB_PROCESS = textwrap.dedent(
     """
     import sqlalchemy as sa
-    from blizzard.hub.app import open_hub_engine
+    from blizzard.hub.composition import open_hub_engine
     from blizzard.hub.store import schema
     from blizzard.hub.store.tenant_guard import UnscopedTenantStatement
 

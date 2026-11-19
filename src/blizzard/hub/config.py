@@ -85,7 +85,11 @@ def bootstrap_document(document: Mapping[str, object]) -> dict[str, object]:
     result = {key: document[key] for key in ("db_url", "host", "port", RENAMED_WORK_SOURCE_KEY) if key in document}
     tracing = document.get("tracing")
     if isinstance(tracing, dict):
-        result["tracing"] = {key: tracing[key] for key in RUNNER_ONLY_TRACING_KEYS if key in tracing}
+        result["tracing"] = {
+            key: tracing[key]
+            for key in (*RUNNER_ONLY_TRACING_KEYS, "platform", "platform_sample_ratio")
+            if key in tracing
+        }
     return result
 
 
