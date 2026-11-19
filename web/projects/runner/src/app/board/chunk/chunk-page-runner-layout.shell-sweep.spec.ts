@@ -64,13 +64,16 @@ const DETAIL: runnerApi.ChunkDetail = chunkDetail({
   landed_repos: [],
   work_refs: [workRefView({ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: null })],
   questions: [
-    questionView({ question_id: 'qn_open', chunk_id: CHUNK_ID, question: 'What next?', answered: false }),
+    questionView({ question_id: 'qn_open', chunk_id: CHUNK_ID, question: 'What next?', options: ['ship', 'hold'], answered: false }),
     questionView({ question_id: 'qn_answered', chunk_id: CHUNK_ID, question: 'Earlier question?', answered: true, answer: 'Yes' }),
   ],
   decision: decisionView({
     decision_id: 'de_01', chunk_id: CHUNK_ID, node_id: 'nd_review', node_name: 'review',
-    choices: [{ name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false }],
-    check_results: [], transitioned: false,
+    choices: [
+      { name: 'approve', description: 'Approve', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: 'Reject', requires_checks: false, would_override_red_checks: false },
+    ],
+    check_results: [{ command: 'npm test', passed: true }], transitioned: false,
   }),
   history: [
     transitionView({
@@ -200,12 +203,18 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
               expect(ordered[i].top, `${label}: section ${i} is not below its predecessor`)
                 .toBeGreaterThanOrEqual(ordered[i - 1].bottom);
             }
-            // The runner view is read-only even when live asks and gates are present.
-            expect(root.querySelector('[data-testid="answer-submit"]')).toBeNull();
-            expect(root.querySelector('[data-testid="decision-choice"]')).toBeNull();
+            // The runner view is read-only even when live asks and gates are present: their text, the trail, and
+            // the gate's metadata render, and no control does.
+            expect(root.querySelector('[data-testid="question-text"]')?.textContent).toContain('What next?');
+            expect(root.querySelector('[data-testid="answered-by"]')).not.toBeNull();
+            expect(root.querySelector('[data-testid="decision-checks"]')).not.toBeNull();
+            for (const id of ['answer-input', 'answer-submit', 'question-option', 'decision-note-input', 'decision-choice']) {
+              expect(root.querySelector(`[data-testid="${id}"]`), `${label}: ${id} rendered`).toBeNull();
+            }
           }
         }
       }
+      expect(stub.requests.filter((request) => request.method !== 'GET'), 'the read-only page sent a write').toEqual([]);
     } finally {
       root.remove();
       stub.restore();

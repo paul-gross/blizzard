@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail, WorkItemsState } from 'fleet';
-import { chunkControlStub, chunkDetail, decisionView, questionView, workItemEntry } from 'fleet/testing';
+import { chunkControlStub, chunkDetail, decisionView, questionView, recordingAwaitingHumanActions, workItemEntry } from 'fleet/testing';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
 const ISSUE_DETAIL: ChunkDetail = chunkDetail({
@@ -129,10 +129,8 @@ describe('ChunkDetailPanel', () => {
     fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     fixture.componentRef.setInput('canAnswer', true);
     fixture.componentRef.setInput('canResolve', true);
-    const answers: unknown[] = [];
-    const resolutions: unknown[] = [];
-    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event));
-    fixture.componentInstance.resolveDecision.subscribe((event) => resolutions.push(event));
+    const port = recordingAwaitingHumanActions();
+    fixture.componentRef.setInput('awaitingHumanActions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -149,8 +147,11 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')!.click();
     el.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')!.click();
-    expect(answers).toEqual([{ questionId: 'qn_01', answer: 'rest', chunkId: WAITING_QUESTION_DETAIL.chunk_id }]);
-    expect(resolutions).toEqual([{ decisionId: 'de_01', choice: 'approve', chunkId: WAITING_QUESTION_DETAIL.chunk_id }]);
+    await vi.waitFor(() => expect(port.resolves).toHaveLength(1));
+    expect(port.answers).toEqual([{ chunkId: WAITING_QUESTION_DETAIL.chunk_id, questionId: 'qn_01', draft: { answer: 'rest' } }]);
+    expect(port.resolves).toEqual([
+      { chunkId: WAITING_QUESTION_DETAIL.chunk_id, decisionId: 'de_01', choice: 'approve', draft: { note: '' } },
+    ]);
   });
 
   it('links the chunk longname to its dedicated page (issue #205)', async () => {
@@ -268,13 +269,13 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
   });
 
-  it('emits answerQuestion from the awaiting-human column', async () => {
+  it('saves an answer from the awaiting-human column through its port', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
     fixture.componentRef.setInput('renderedStatus', WAITING_QUESTION_DETAIL.status);
     fixture.componentRef.setInput('canAnswer', true);
-    let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
-    fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
+    const port = recordingAwaitingHumanActions();
+    fixture.componentRef.setInput('awaitingHumanActions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -283,8 +284,9 @@ describe('ChunkDetailPanel', () => {
     input.dispatchEvent(new Event('input'));
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await vi.waitFor(() => expect(port.answers).toHaveLength(1));
 
-    expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: WAITING_QUESTION_DETAIL.chunk_id });
+    expect(port.answers[0]).toEqual({ chunkId: WAITING_QUESTION_DETAIL.chunk_id, questionId: 'qn_01', draft: { answer: 'rest' } });
   });
 
   // --- The shared action-error notice -----------------------------

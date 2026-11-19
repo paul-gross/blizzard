@@ -1,0 +1,26 @@
+@let f = form();
+@if (question().options.length > 0) {
+  <div class="chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Answers for ' + question().question">
+    @for (option of question().options; track $index) {
+      <fleet-kit-chip fleetKitToolbarWidget data-testid="question-option" [disabled]="submitting()" (invoked)="pick.emit(option)">{{
+        option
+      }}</fleet-kit-chip>
+    }
+  </div>
+}
+<div class="answer-row">
+  <fleet-kit-field class="answer-field" label="Answer" [field]="f.answer">
+    <fleet-kit-text-input
+      testid="answer-input"
+      placeholder="Type an answer…"
+      [ariaLabel]="'Answer question ' + question().question_id"
+      [formField]="f.answer"
+    />
+  </fleet-kit-field>
+  <fleet-kit-button class="answer-submit" variant="primary" testid="answer-submit" [disabled]="submitting()" (click)="answer.emit()">
+    Answer
+  </fleet-kit-button>
+</div>
+@for (message of formErrors(); track $index) {
+  <fleet-kit-error-line [message]="message" testid="answer-form-error" />
+}

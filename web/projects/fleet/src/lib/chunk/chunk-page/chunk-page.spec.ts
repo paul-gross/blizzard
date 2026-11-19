@@ -12,6 +12,7 @@ import {
   chunkUsageView,
   decisionView,
   questionView,
+  recordingAwaitingHumanActions,
   settle,
   stubError,
   stubRunnerClient,
@@ -113,14 +114,11 @@ const ACTIONS: ChunkPageActions = {
   canAnswer: signal(false),
   canResolve: signal(false),
   canReadTranscripts: signal(true),
-  resolvePending: signal(false),
-  pendingAnswerQuestionIds: signal([]),
   actionError: signal(null),
   actionOutcome: signal(null),
   graphLinkBase: [],
   eventsLinkBase: [],
-  answer: () => undefined,
-  resolve: () => undefined,
+  awaitingHuman: recordingAwaitingHumanActions().actions,
 };
 
 const SEGMENT = transcriptSegmentIndexEntry({
@@ -431,7 +429,7 @@ describe('ChunkPage on a runner daemon', () => {
     expect(el.querySelector('[data-testid="chunk-efficiency"] .part')?.textContent).not.toContain('~');
   });
 
-  it('renders the open escalation through the shared awaiting-human section', async () => {
+  it('renders the open escalation beside the shared awaiting-human section', async () => {
     // The proxied aggregate carries `escalation`, so a needs_human chunk
     // reads the same on this route as on the hub board. Asserting the takeover command
     // itself, not just that the section mounts: an aggregate that dropped the field
@@ -450,7 +448,7 @@ describe('ChunkPage on a runner daemon', () => {
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    const escalation = el.querySelector('fleet-chunk-detail-awaiting-human [data-testid="escalation"]');
+    const escalation = el.querySelector('fleet-chunk-detail-escalation [data-testid="escalation"]');
     expect(escalation).not.toBeNull();
     expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain('claude --resume sess-new');
   });

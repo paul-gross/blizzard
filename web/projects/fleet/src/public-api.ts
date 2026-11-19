@@ -27,6 +27,7 @@ export * from './lib/core/now-signal';
 export * from './lib/core/clipboard';
 export * from './lib/shell/board-header';
 export * from './lib/chunk/chunk-detail';
+export * from './lib/chunk/awaiting-human';
 export * from './lib/chunk/chunk-artifacts-panel';
 export * from './lib/chunk/chunk-issue-list';
 export * from './lib/chunk/work-ref-link';

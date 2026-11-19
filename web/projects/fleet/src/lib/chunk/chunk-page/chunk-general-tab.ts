@@ -3,18 +3,17 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
+import { type AwaitingHumanFormActions, ChunkAwaitingHuman, toAwaitingHuman } from '../awaiting-human';
 import {
-  type AnswerQuestionEvent,
-  ChunkAwaitingHuman,
   ChunkFacts,
   ChunkIssuePane,
   ChunkTimeline,
   chunkGraphLabel,
-  type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
+import { ChunkEscalation } from '../chunk-detail/chunk-escalation';
 import { hasDelivery } from '../chunk-detail/has-delivery';
 import { AppLink } from '../../core/app-scope';
 
@@ -30,8 +29,7 @@ import { AppLink } from '../../core/app-scope';
  * history precedes the answered trail and decisions.
  *
  * Presentational only, `bzh:frontend-container-presentational`: inputs in,
- * the three operator-action outputs plus {@link pickStep} back out, no
- * injection. {@link canAnswer}, {@link canResolve}, and
+ * {@link pickStep} back out, no injection. {@link canAnswer}, {@link canResolve}, and
  * {@link graphLinkBase} default to read-only (off, unlinked), so a caller with no
  * actions opts into nothing; {@link issuePanePlacement} defaults to
  * {@link ChunkIssuePane}'s own `'center'`.
@@ -39,7 +37,7 @@ import { AppLink } from '../../core/app-scope';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, AppLink],
+  imports: [ChunkAwaitingHuman, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, AppLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
@@ -58,13 +56,9 @@ export class ChunkGeneralTab {
    * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
 
-  /** Whether the resolve-decision mutation is in flight, forwarded to
-   * {@link ChunkAwaitingHuman}. */
-  readonly resolvePending = input(false);
-
-  /** The ids of the questions an answer mutation is in flight for, forwarded to
-   * {@link ChunkAwaitingHuman}. */
-  readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
+  /** How the awaiting-human forms save, forwarded to {@link ChunkAwaitingHuman}; `null`
+   * (the default) renders them read-only. */
+  readonly awaitingHumanActions = input<AwaitingHumanFormActions | null>(null);
 
   /** The graphs view's own path segments, the node history panel's graph label links to — `null` (the default)
    * withholds the link. */
@@ -72,6 +66,9 @@ export class ChunkGeneralTab {
 
   /** The chunk page's own path segments, before the chunk id — each dependency neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
+
+  /** What the chunk waits on a human for, read once for every awaiting-human section. */
+  protected readonly awaitingHuman = computed(() => toAwaitingHuman(this.detail()));
 
   /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the node history label. */
   protected readonly graphLabel = computed(() => chunkGraphLabel(this.detail()));
@@ -88,12 +85,6 @@ export class ChunkGeneralTab {
   /** Whether General includes its node-history summary. Defaults to `true`; a caller
    * with its own dedicated node-history surface opts out. */
   readonly showNodeHistory = input(true);
-
-  /** Emitted when the operator answers an open question. */
-  readonly answerQuestion = output<AnswerQuestionEvent>();
-
-  /** Emitted when the operator resolves an open gate decision. */
-  readonly resolveDecision = output<ResolveDecisionEvent>();
 
   /** Emitted with a node's join key when the operator activates it in this tab's own
    * node-history summary — {@link ChunkTimeline.pickStep} forwarded straight through, a

@@ -22,13 +22,10 @@
         [control]="control"
         [canAnswer]="canAnswer()"
         [canResolve]="canResolve()"
+        [awaitingHumanActions]="awaitingHuman"
         [graphLinkBase]="graphLinkBase()"
-        [resolvePending]="resolvePending()"
-        [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
         [renderedStatus]="renderedStatus(d)"
         (dismiss)="dismiss.emit()"
-        (answerQuestion)="onAnswer($event)"
-        (resolveDecision)="onResolve($event)"
       />
     }
   </fleet-kit-async-state>

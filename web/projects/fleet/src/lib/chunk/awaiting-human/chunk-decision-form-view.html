@@ -1,0 +1,20 @@
+@let f = form();
+<fleet-kit-field class="note-field" label="Note" [field]="f.note">
+  <fleet-kit-text-input
+    testid="decision-note-input"
+    placeholder="Optional note for the next sessions…"
+    [ariaLabel]="'Note for gate ' + decision().node_name"
+    [formField]="f.note"
+  />
+</fleet-kit-field>
+@if (decision().choices.length > 0) {
+  <div class="decision-chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Choices for gate ' + decision().node_name">
+    @for (choice of decision().choices; track $index) {
+      <fleet-kit-chip fleetKitToolbarWidget data-testid="decision-choice" [title]="choice.description" [disabled]="submitting()"
+        (invoked)="choose.emit(choice.name)">{{ choice.name }}@if (choice.would_override_red_checks) { · overrides red checks }</fleet-kit-chip>
+    }
+  </div>
+}
+@for (message of formErrors(); track $index) {
+  <fleet-kit-error-line [message]="message" testid="decision-form-error" />
+}

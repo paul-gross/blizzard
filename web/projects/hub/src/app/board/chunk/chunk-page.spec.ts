@@ -619,10 +619,12 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
   });
 
-  it('still reports a genuine answer failure on the error channel', async () => {
+  it('reports a genuine answer failure on its question’s form line, keeping the typed answer', async () => {
     const el = await answerOnMobile(stubError(404, { detail: 'unknown question qn_77' }));
 
-    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="answer-form-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')?.value).toBe('graphql');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
   });
 
@@ -679,10 +681,11 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
   });
 
-  it('surfaces a resolve failure instead of swallowing it', async () => {
+  it('surfaces a resolve failure on the gate’s form line instead of swallowing it', async () => {
     const el = await resolveOnMobile(stubError(404, { detail: 'unknown decision dc_77' }));
 
-    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown decision');
+    expect(el.querySelector('[data-testid="decision-form-error"]')?.textContent).toContain('unknown decision');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
   });
 
@@ -738,7 +741,15 @@ describe('Chunk page neighbor hop under the project lens', () => {
             }
           : chunkDetail({ chunk_id: NEIGHBOR_ID }),
       'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
-      'POST /api/questions/{question_id}/answers': () => stubError(404, { detail: 'unknown question qn_9' }),
+      'POST /api/questions/{question_id}/answers': () =>
+        stubError(409, {
+          detail: 'question already answered',
+          won: false,
+          question_id: 'qn_9',
+          answer: 'rest',
+          answered_by: 'alice',
+          answered_at: '2026-07-16T11:21:00.000Z',
+        }),
     });
     TestBed.configureTestingModule({
       providers: [
@@ -756,7 +767,7 @@ describe('Chunk page neighbor hop under the project lens', () => {
 
   afterEach(() => stub.restore());
 
-  it('keeps the lens, clears the drill-down, and leaves the first chunk\'s action error behind', async () => {
+  it('keeps the lens, clears the drill-down, and leaves the first chunk\'s action notice behind', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/p/${SLUG}/board/chunk/${CHUNK_ID}?tab=general&artifact=a.1&step=s1&segment=seg&sidechain=side&from=sess-1`);
     await settle(harness.fixture);
@@ -768,13 +779,13 @@ describe('Chunk page neighbor hop under the project lens', () => {
     await settle(harness.fixture);
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
     await settle(harness.fixture);
-    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')?.textContent).toContain('alice answered first');
 
     el.querySelector<HTMLAnchorElement>('[data-testid="blocks-neighbor"]')!.click();
     await settle(harness.fixture);
 
     expect(TestBed.inject(Router).url).toBe(`/p/${SLUG}/board/chunk/${NEIGHBOR_ID}`);
     expect(el.querySelector('[data-testid="board-chunk-detail"]')?.textContent).toContain(NEIGHBOR_ID);
-    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent?.trim() ?? '').toBe('');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
   });
 });

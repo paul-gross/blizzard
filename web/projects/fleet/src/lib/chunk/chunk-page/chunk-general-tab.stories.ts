@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
 import { chunkDetail, decisionView, questionView, transitionView, workItemEntry } from '../../testing/builders/chunk.translate';
+import type { AwaitingHumanFormActions } from '../awaiting-human';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
 const HISTORY = [
@@ -16,6 +17,12 @@ const HISTORY = [
   }),
 ];
 
+/** Saves that always land, so the asks and the gate render their forms. */
+const ACTIONS: AwaitingHumanFormActions = {
+  answer: fn(async () => ({ ok: true as const })),
+  resolve: fn(async () => ({ ok: true as const })),
+};
+
 const meta: Meta<ChunkGeneralTab> = {
   title: 'Chunk/General tab',
   component: ChunkGeneralTab,
@@ -24,14 +31,11 @@ const meta: Meta<ChunkGeneralTab> = {
     workItems: { status: 'success', items: [workItemEntry()] },
     canAnswer: false,
     canResolve: false,
-    resolvePending: false,
-    pendingAnswerQuestionIds: [],
+    awaitingHumanActions: null,
     graphLinkBase: null,
     eventsLinkBase: null,
     issuePanePlacement: 'center',
     showNodeHistory: true,
-    answerQuestion: fn(),
-    resolveDecision: fn(),
     pickStep: fn(),
   },
 };
@@ -49,12 +53,14 @@ export const AwaitingQuestion: Story = {
   args: {
     detail: chunkDetail({ status: 'needs_human', history: HISTORY, questions: [questionView()] }),
     canAnswer: true,
+    awaitingHumanActions: ACTIONS,
   },
 };
 export const AwaitingDecision: Story = {
   args: {
     detail: chunkDetail({ status: 'needs_human', history: HISTORY, decision: decisionView() }),
     canResolve: true,
+    awaitingHumanActions: ACTIONS,
   },
 };
 export const ResolvedWithNote: Story = {
@@ -70,5 +76,6 @@ export const ResolvedWithNote: Story = {
       }),
     }),
     canResolve: true,
+    awaitingHumanActions: ACTIONS,
   },
 };

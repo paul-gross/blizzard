@@ -904,7 +904,7 @@ const FLEET_LAYERS = {
   chunk: ['api', 'core', 'kit', 'transcripts'],
   host: ['api', 'core', 'kit'],
   shell: ['api', 'core', 'kit'],
-  testing: ['api'],
+  testing: ['api', 'chunk'],
 };
 
 /** The authoritative hub roster under `bzh:frontend-package-layers` in blizzard-context's
@@ -1029,7 +1029,7 @@ const DOMAIN_BOUNDARY_EXEMPT = [
 ];
 
 const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
-const DOMAIN_BOUNDARY_STRICT_SCOPES = ['hub/src/app/admin/projects'];
+const DOMAIN_BOUNDARY_STRICT_SCOPES = ['hub/src/app/admin/projects', 'fleet/src/lib/chunk/awaiting-human'];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
  * @param {string} rel

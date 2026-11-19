@@ -1,47 +1,21 @@
-@if ((section() === 'all' || section() === 'asks') && openQuestions().length > 0) {
+@if (section() === 'asks' && state().open_questions.length > 0) {
   <div class="awaiting" data-testid="awaiting-human">
     <fleet-kit-section-head label="Asks" />
-    @for (q of openQuestions(); track q.question_id) {
+    @for (q of state().open_questions; track q.question_id) {
       <div class="ask" data-testid="open-question">
         <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
-        @if (canAnswer()) {
-          @if (q.options && q.options.length > 0) {
-            <div class="chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Answers for ' + q.question">
-              @for (option of q.options; track $index) {
-                <fleet-kit-chip fleetKitToolbarWidget data-testid="question-option"
-                  [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
-                  (invoked)="submitAnswer(q.question_id, option)">{{ option }}</fleet-kit-chip>
-              }
-            </div>
-          }
-          <div class="answer-row">
-            <fleet-kit-text-input
-              class="answer-input"
-              testid="answer-input"
-              placeholder="Type an answer…"
-              [ariaLabel]="'Answer question ' + q.question_id"
-              [value]="answerDraft(q.question_id)"
-              (valueChange)="onAnswerInput(q.question_id, $event)"
-            />
-            <fleet-kit-button
-              variant="primary"
-              testid="answer-submit"
-              [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
-              (click)="submitAnswer(q.question_id, answerDraft(q.question_id))"
-            >
-              Answer
-            </fleet-kit-button>
-          </div>
+        @if (canAnswer() && actions(); as actions) {
+          <fleet-chunk-question-form [chunkId]="state().chunk_id" [question]="q" [actions]="actions" />
         }
       </div>
     }
   </div>
 }
 
-@if ((section() === 'all' || section() === 'answered') && answeredQuestions().length > 0) {
+@if (section() === 'answered' && state().answered_trail.length > 0) {
   <div class="answered" data-testid="answered-questions">
     <fleet-kit-section-head label="Answered questions" />
-    @for (q of answeredQuestions(); track q.question_id) {
+    @for (q of state().answered_trail; track q.question_id) {
       <div class="trail" data-testid="answered-question">
         <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>
         <p class="trail-line" data-testid="answered-by">
@@ -56,10 +30,10 @@
   </div>
 }
 
-@if ((section() === 'all' || section() === 'decisions') && (openDecision() || resolvedDecision())) {
+@if (section() === 'decisions' && (state().live_decision || state().resolved_decision)) {
   <div class="awaiting" data-testid="awaiting-human">
     <fleet-kit-section-head label="Decisions" />
-    @if (openDecision(); as d) {
+    @if (state().live_decision; as d) {
       <div class="gate" data-testid="open-decision">
         <fleet-kit-section-head label="Gate">
           <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
@@ -84,27 +58,15 @@
             }
           </ul>
         }
-        @if (canResolve()) {
-          <fleet-kit-text-input
-            class="note-input"
-            testid="decision-note-input"
-            placeholder="Optional note for the next sessions…"
-            [ariaLabel]="'Note for gate ' + d.node_name"
-            [value]="noteDraft()"
-            (valueChange)="noteDraft.set($event)"
-          />
-          @if (d.choices && d.choices.length > 0) {
-            <div class="decision-chips" fleetKitToolbar orientation="horizontal" [attr.aria-label]="'Choices for gate ' + d.node_name">
-              @for (choice of d.choices; track $index) {
-                <fleet-kit-chip fleetKitToolbarWidget data-testid="decision-choice" [title]="choice.description"
-                  [disabled]="resolvePending()" (invoked)="resolve(d.decision_id, choice.name)">{{ choice.name }}@if (choice.would_override_red_checks) { · overrides red checks }</fleet-kit-chip>
-              }
-            </div>
+        @if (canResolve() && actions(); as actions) {
+          <!-- Keyed on the decision, so a different gate — another chunk in the same dock — gets a fresh form. -->
+          @for (gate of [d]; track gate.decision_id) {
+            <fleet-chunk-decision-form [chunkId]="state().chunk_id" [decision]="gate" [actions]="actions" />
           }
         }
       </div>
     }
-    @if (resolvedDecision(); as d) {
+    @if (state().resolved_decision; as d) {
       <div class="gate" data-testid="resolved-decision">
         <fleet-kit-section-head label="Gate">
           <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
@@ -119,8 +81,4 @@
       </div>
     }
   </div>
-}
-
-@if (section() === 'all' || section() === 'asks') {
-  <fleet-chunk-detail-escalation [detail]="detail()" />
 }

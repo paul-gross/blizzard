@@ -18,10 +18,12 @@
     <div class="d-body">
       <section class="d-sec" aria-label="Work item">
         <fleet-chunk-detail-awaiting-human
-          section="asks" [detail]="detail()" [canAnswer]="canAnswer()"
-          [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
-          (answerQuestion)="answerQuestion.emit($event)"
+          section="asks" [state]="awaitingHuman()" [canAnswer]="canAnswer()"
+          [actions]="awaitingHumanActions()"
         />
+        @if (detail().escalation) {
+          <fleet-chunk-detail-escalation [detail]="detail()" />
+        }
         @if (showDelivery()) {
           <fleet-kit-panel class="d-box" label="Delivery" [bodyScroll]="false">
             <fleet-chunk-delivery class="d-box-body" [detail]="detail()" />
@@ -31,10 +33,10 @@
           <fleet-chunk-detail-facts class="d-box-body" [detail]="detail()" [boardChunkIds]="boardChunkIds()" />
         </fleet-kit-panel>
         <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
-        <fleet-chunk-detail-awaiting-human section="answered" [detail]="detail()" />
+        <fleet-chunk-detail-awaiting-human section="answered" [state]="awaitingHuman()" />
         <fleet-chunk-detail-awaiting-human
-          section="decisions" [detail]="detail()" [canResolve]="canResolve()"
-          [resolvePending]="resolvePending()" (resolveDecision)="resolveDecision.emit($event)"
+          section="decisions" [state]="awaitingHuman()" [canResolve]="canResolve()"
+          [actions]="awaitingHumanActions()"
         />
       </section>
       <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">

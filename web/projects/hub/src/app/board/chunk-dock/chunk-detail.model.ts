@@ -19,10 +19,6 @@ export function pendingStatusOverride(
   return null;
 }
 
-/** The ids of the questions an answer mutation is in flight for. */
-export function pendingQuestionIds(pendingAnswers: readonly { readonly questionId: string }[]): readonly string[] {
-  return pendingAnswers.map((vars) => vars.questionId);
-}
 
 /** The open chunk's aggregate — `undefined` while the dock is closed, whatever a disabled query still holds. */
 export function openDetail(chunkId: string | null, data: ChunkDetail | undefined): ChunkDetail | undefined {

@@ -1,10 +1,30 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page, userEvent } from 'vitest/browser';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, decisionView, questionView } from 'fleet/testing';
+import { answeredQuestion, awaitingDecision, awaitingHuman, awaitingQuestion, recordingAwaitingHumanActions } from 'fleet/testing';
+import type { AwaitingDecision, AwaitingHuman, AwaitingHumanFormActions } from './awaiting-human.domain';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
+
+/** Every section of the composition over one state, as its composition sites place them. */
+@Component({
+  selector: 'fleet-awaiting-human-sweep-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ChunkAwaitingHuman],
+  template: `
+    @for (section of sections; track section) {
+      <fleet-chunk-detail-awaiting-human [section]="section" [state]="state()" [canAnswer]="canAnswer()"
+        [canResolve]="canResolve()" [actions]="actions()" />
+    }
+  `,
+})
+class AllSections {
+  protected readonly sections = ['asks', 'answered', 'decisions'] as const;
+  readonly state = input.required<AwaitingHuman>();
+  readonly canAnswer = input(false);
+  readonly canResolve = input(false);
+  readonly actions = input<AwaitingHumanFormActions | null>(recordingAwaitingHumanActions().actions);
+}
 
 /**
  * The Gate panel's origin line, note input and resolved line with its note — the tooled half of `web:shell-sweep`: a real
@@ -13,44 +33,33 @@ import { ChunkAwaitingHuman } from './chunk-awaiting-human';
  * (`bzh:narrow-viewport-tier-rule`). Excluded from the default `ng test fleet` run; run it
  * via `npm run shell-sweep`.
  */
-function detail(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}): ChunkDetail {
-  return chunkDetail({
+
+type Parts = NonNullable<Parameters<typeof awaitingHuman>[0]>;
+
+function detail(imposedBy: string | null, resolution: Partial<AwaitingDecision> = {}): Parts {
+  return {
     chunk_id: 'ch_01gate0000000000000000000000',
-    graph_id: 'gr_1',
-    status: 'waiting_on_human',
-    current_node_id: 'nd_gate',
-    latest_epoch: 1,
-    work_refs: [],
-    history: [],
-    artifacts: [],
-    decision: decisionView({
+    decision: awaitingDecision({
       decision_id: 'de_01',
-      chunk_id: 'ch_01gate0000000000000000000000',
-      node_id: 'nd_gate',
       node_name: 'approve-gate',
-      epoch: 1,
-      submitted_at: '2026-07-13T00:00:01Z',
       choices: [
-        { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
-        { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
+        { name: 'approve', description: 'Ship it.', would_override_red_checks: false },
+        { name: 'reject', description: 'Send it back.', would_override_red_checks: false },
       ],
       check_results: [],
-      transitioned: false,
       imposed_by_runner_id: imposedBy,
       ...resolution,
     }),
-    graph_name: null,
-    current_node_name: null,
-  });
+  };
 }
 
-async function mount(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}) {
+async function mount(imposedBy: string | null, resolution: Partial<AwaitingDecision> = {}) {
   await TestBed.configureTestingModule({
-    imports: [ChunkAwaitingHuman],
+    imports: [AllSections],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-  fixture.componentRef.setInput('detail', detail(imposedBy, resolution));
+  const fixture = TestBed.createComponent(AllSections);
+  fixture.componentRef.setInput('state', awaitingHuman(detail(imposedBy, resolution)));
   fixture.componentRef.setInput('canResolve', true);
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -62,19 +71,23 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
   it('navigates and invokes question and decision toolbars once at phone width', async () => {
     await page.viewport(390, 800);
     await TestBed.configureTestingModule({
-      imports: [ChunkAwaitingHuman], providers: [provideZonelessChangeDetection()],
+      imports: [AllSections], providers: [provideZonelessChangeDetection()],
     }).compileComponents();
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('detail', {
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman({
       ...detail(null),
-      questions: [questionView({ question_id: 'q1', question: 'Choose an answer', answered: false, options: ['yes', 'no'] })],
-    });
+      questions: [awaitingQuestion({ question_id: 'q1', question: 'Choose an answer', options: ['yes', 'no'] })],
+    }));
     fixture.componentRef.setInput('canAnswer', true);
     fixture.componentRef.setInput('canResolve', true);
-    const answers: string[] = [];
-    const decisions: string[] = [];
-    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event.answer));
-    fixture.componentInstance.resolveDecision.subscribe((event) => decisions.push(event.choice));
+    const pending: (() => void)[] = [];
+    const port = recordingAwaitingHumanActions({
+      answer: () => new Promise((resolve) => pending.push(() => resolve({ ok: true }))),
+      resolve: () => new Promise((resolve) => pending.push(() => resolve({ ok: true }))),
+    });
+    fixture.componentRef.setInput('actions', port.actions);
+    const answers = () => port.answers.map((call) => call.draft.answer);
+    const decisions = () => port.resolves.map((call) => call.choice);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
@@ -89,23 +102,22 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
       question[0].focus();
       await userEvent.keyboard('{ArrowRight}');
       expect(document.activeElement).toBe(question[1]);
-      expect(answers).toEqual([]);
+      expect(answers()).toEqual([]);
       await userEvent.keyboard('{Enter}');
-      expect(answers).toEqual(['no']);
+      await vi.waitFor(() => expect(answers()).toEqual(['no']));
       const choices = root.querySelectorAll<HTMLElement>('[data-testid="decision-choice"]');
       choices[0].focus();
       await userEvent.keyboard('{ArrowRight}');
       expect(document.activeElement).toBe(choices[1]);
-      expect(decisions).toEqual([]);
+      expect(decisions()).toEqual([]);
       await userEvent.keyboard(' ');
-      expect(decisions).toEqual(['reject']);
-      fixture.componentRef.setInput('resolvePending', true);
-      fixture.componentRef.setInput('pendingAnswerQuestionIds', ['q1']);
-      await fixture.whenStable();
+      await vi.waitFor(() => expect(decisions()).toEqual(['reject']));
+      // Both saves are still in flight, so neither toolbar sends again.
       question[0].click();
       choices[0].click();
-      expect(answers).toEqual(['no']);
-      expect(decisions).toEqual(['reject']);
+      expect(answers()).toEqual(['no']);
+      expect(decisions()).toEqual(['reject']);
+      for (const release of pending) release();
     } finally {
       root.remove();
     }
@@ -113,15 +125,15 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
   it.each([320, 390])('preserves question and answer lines and indentation without overflow at %ipx', async (width) => {
     await page.viewport(width, 800);
     await TestBed.configureTestingModule({
-      imports: [ChunkAwaitingHuman],
+      imports: [AllSections],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     const text = `first line\n  second line\n\n${'long-token-'.repeat(35)}`;
-    fixture.componentRef.setInput('detail', chunkDetail({
+    fixture.componentRef.setInput('state', awaitingHuman({
       questions: [
-        questionView({ question_id: 'q_open', question: text, answered: false }),
-        questionView({ question_id: 'q_answered', question: text, answered: true, answer: text }),
+        awaitingQuestion({ question_id: 'q_open', question: text }),
+        answeredQuestion({ question_id: 'q_answered', question: text, answer: text }),
       ],
     }));
     const root = fixture.nativeElement as HTMLElement;

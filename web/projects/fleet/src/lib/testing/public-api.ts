@@ -23,6 +23,8 @@ export {
 export { OPERATOR_ME_RESPONSE } from './auth-fixtures.translate';
 export { chunkControlStub, type ChunkControlStub, type ChunkControlVerb } from './chunk-control-stub';
 export { FIXTURE_NOW, fixtureInstant } from './builders/clock';
+export { awaitingHuman, awaitingQuestion, answeredQuestion, awaitingDecision, recordingAwaitingHumanActions } from './builders/awaiting-human';
+export type { AnswerCall, ResolveCall } from './builders/awaiting-human';
 export {
   chunkDetail,
   workRefView,

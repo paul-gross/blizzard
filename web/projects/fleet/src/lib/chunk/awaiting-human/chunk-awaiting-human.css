@@ -88,32 +88,8 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.note-input {
-  display: block;
-  margin: 6px 0 4px;
-}
 .gate-choice {
   color: var(--cyan);
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.decision-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  --text: var(--cyan);
-}
-.answer-row {
-  display: flex;
-  gap: 4px;
-  margin-top: 6px;
-}
-.answer-input {
-  flex: 1;
-  min-width: 0;
 }
 .gate-checks {
   list-style: none;

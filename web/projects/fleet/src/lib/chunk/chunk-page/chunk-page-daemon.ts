@@ -1,7 +1,7 @@
 import { InjectionToken, type Provider, type Signal } from '@angular/core';
 
 import type { ChunkControl } from '../chunk-detail/chunk-control';
-import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
+import type { AwaitingHumanFormActions } from '../awaiting-human';
 import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 
 /**
@@ -21,10 +21,6 @@ export interface ChunkPageActions {
   readonly canResolve: Signal<boolean>;
   /** Whether the identity may read the chunk's transcripts (`transcript:read`). */
   readonly canReadTranscripts: Signal<boolean>;
-  /** Whether a resolve is in flight, so a double tap cannot resolve the gate twice. */
-  readonly resolvePending: Signal<boolean>;
-  /** The questions an answer is in flight for, so a double tap cannot answer twice. */
-  readonly pendingAnswerQuestionIds: Signal<readonly string[]>;
   /** The last action's failure, or `null` — cleared on the next attempt. */
   readonly actionError: Signal<string | null>;
   /** The last action's non-failure outcome that still needs saying (a lost answer race
@@ -35,8 +31,8 @@ export interface ChunkPageActions {
   /** The events view's own path segments the chunk page links its own events to, as
    * `<base>?chunk=<id>` — a daemon serving no events feed provides no port, so no link. */
   readonly eventsLinkBase: readonly string[];
-  answer(event: AnswerQuestionEvent): void;
-  resolve(event: ResolveDecisionEvent): void;
+  /** How the page's awaiting-human forms save an answer or a gate resolution. */
+  readonly awaitingHuman: AwaitingHumanFormActions;
   /** The chunk-control actions behind the header's ⋮ menu; absent hides the menu. */
   readonly control?: ChunkControl;
 }

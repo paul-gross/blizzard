@@ -13,6 +13,7 @@ import {
   decisionView,
   OPERATOR_ME_RESPONSE,
   questionView,
+  recordingAwaitingHumanActions,
   settle,
   stubError,
   stubHubClient,
@@ -60,7 +61,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
         'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
         '1. Code trace: the mutation already invalidates both query keys.\n' +
         '2. Live browser test: the board updated within 500ms.\n\n' +
-        'The failing path is web/projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
+        'The failing path is web/projects/fleet/src/lib/chunk/awaiting-human/chunk-awaiting-human.spec.ts\n\n' +
         'How should I proceed?',
       options: [],
       epoch: 2,
@@ -147,10 +148,8 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
     const fixture = await render(SPLIT_DETAIL);
     fixture.componentRef.setInput('canAnswer', true);
     fixture.componentRef.setInput('canResolve', true);
-    const answers: unknown[] = [];
-    const decisions: unknown[] = [];
-    fixture.componentInstance.answerQuestion.subscribe((event) => answers.push(event));
-    fixture.componentInstance.resolveDecision.subscribe((event) => decisions.push(event));
+    const port = recordingAwaitingHumanActions();
+    fixture.componentRef.setInput('awaitingHumanActions', port.actions);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
@@ -168,8 +167,9 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep)', () => {
       await fixture.whenStable();
       root.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')!.click();
       root.querySelector<HTMLButtonElement>('[data-testid="decision-choice"]')!.click();
-      expect(answers).toEqual([{ questionId: 'qn_long', answer: 'proceed', chunkId: DETAIL.chunk_id }]);
-      expect(decisions).toEqual([{ decisionId: 'de_01', choice: 'approve', chunkId: DETAIL.chunk_id }]);
+      await vi.waitFor(() => expect(port.resolves).toHaveLength(1));
+      expect(port.answers).toEqual([{ chunkId: DETAIL.chunk_id, questionId: 'qn_long', draft: { answer: '  proceed  ' } }]);
+      expect(port.resolves).toEqual([{ chunkId: DETAIL.chunk_id, decisionId: 'de_01', choice: 'approve', draft: { note: '' } }]);
     } finally {
       root.remove();
     }
