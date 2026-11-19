@@ -31,7 +31,7 @@ from blizzard.runner.harness.harness_set import (
     HarnessAssemblyInputs,
     HarnessAssemblyKey,
     HarnessSet,
-    IInvocationHarnesses,
+    HarnessSets,
     WorkerInvocation,
 )
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -56,7 +56,7 @@ from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.session_reconcile import SessionReconcile
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.lifecycle.takeover import TakeoverRecovery
-from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription, lease_transcript_source
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
 from blizzard.runner.loop.tick import tick
@@ -231,6 +231,7 @@ class LoopWiring:
                 leases=stores.session,
                 harnesses=harnesses,
                 transcripts_wired=True,
+                transcript_for_lease=partial(lease_transcript_source, graph.harness_sets, stores.liveness),
             ),
             harness_selector=HarnessSelector(harnesses=harnesses, health=selected.health),
             env_release=EnvironmentRelease(
@@ -316,7 +317,7 @@ class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
 
 @dataclass(frozen=True)
 class UsageRegistryLookup:
-    owners: IInvocationHarnesses | None
+    owners: HarnessSets | None
     fallback: UsageRecorderHarnesses
 
     def __call__(self, lease_id: str, generation: int, judge: bool) -> UsageRecorderHarnesses:
@@ -329,7 +330,7 @@ class UsageRegistryLookup:
 class _OrphanScope:
     harnesses: IHarnessRegistry
     stores: RunnerStores
-    invocation_harnesses: IInvocationHarnesses | None = None
+    invocation_harnesses: HarnessSets | None = None
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
         if self.invocation_harnesses is None:
@@ -355,7 +356,7 @@ class ResumeMarking:
     harnesses: IHarnessRegistry
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
     sleep: Callable[[float], None] = time.sleep
-    invocation_harnesses: IInvocationHarnesses | None = None
+    invocation_harnesses: HarnessSets | None = None
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully, then drain their workers:

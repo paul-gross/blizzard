@@ -687,9 +687,8 @@ class DormantSession:
         assert session is not None
         try:
             owners = self.ctx.harness_sets
-            registry = owners.current.registry if owners is not None else self.ctx.harnesses
             try:
-                return registry.lifecycle(session.harness_id)
+                return self.ctx.harnesses.lifecycle(session.harness_id)
             except UnknownHarnessError:
                 retained = owners.worker_for_lease(lease.lease_id) if owners is not None else None
                 if retained is None:
@@ -791,7 +790,7 @@ class DormantSession:
         invocation = WorkerInvocation(lease.lease_id, generation)
         selected = None
         if owners is not None:
-            if session.harness_id not in owners.current.registry.known_harnesses and origin_owner is not None:
+            if session.harness_id not in self.ctx.harnesses.known_harnesses and origin_owner is not None:
                 selected = owners.retain_for(invocation, WorkerInvocation(lease.lease_id, generation - 1))
             else:
                 selected = owners.retain(invocation)

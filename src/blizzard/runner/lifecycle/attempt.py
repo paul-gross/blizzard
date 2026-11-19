@@ -769,9 +769,7 @@ class Attempt:
         if session is None:
             return None
         try:
-            owners = self.ctx.harness_sets
-            harnesses = owners.current.registry if owners is not None else self.ctx.harnesses
-            harnesses.lifecycle(session.harness_id)
+            self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             return session, exc
         return None

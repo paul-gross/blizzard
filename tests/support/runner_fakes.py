@@ -15,6 +15,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import structlog
@@ -55,6 +56,7 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.harness_set import HarnessSets
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
@@ -101,8 +103,8 @@ from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, IChec
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.routing import RoutedBinding
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
-from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
-from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription, lease_transcript_source
+from blizzard.runner.loop_wiring import LoopWiring, UsageRegistryLookup
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode, GraphArtifact, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
@@ -1907,6 +1909,25 @@ def make_context(
         harness_health=harness_health,
     )
     return context
+
+
+def with_harness_sets(ctx: LoopContext, sets: HarnessSets) -> LoopContext:
+    """``ctx`` owning ``sets``, its current-set members rebuilt from ``sets.current`` as the root rebuilds them."""
+    current = sets.current
+    return replace(
+        ctx,
+        harness_sets=sets,
+        harnesses=current.registry,
+        harness_selector=HarnessSelector(harnesses=current.registry, health=current.health),
+        harness_versions=current.versions,
+        harness_health=current.health,
+        sessions=replace(
+            ctx.sessions,
+            harnesses=current.registry,
+            transcript_for_lease=partial(lease_transcript_source, sets, ctx.stores.liveness),
+        ),
+        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
+    )
 
 
 def _default_harness_registry(harness: IHarnessAdapter | None) -> HarnessRegistry:

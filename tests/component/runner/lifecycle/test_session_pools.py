@@ -59,6 +59,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
     record_usage,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 
@@ -1010,14 +1011,14 @@ def test_pool_rotation_reads_retained_head_transcript_after_set_replacement(tmp_
     new_registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
     )
-    old = Mock(spec=HarnessSet, registry=old_registry)
-    new = Mock(spec=HarnessSet, registry=new_registry, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=old_registry)
+    new = Mock(spec=HarnessSet, health=None, registry=new_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_head", 1))
     sets.select(HarnessAssemblyKey((2,)))
     ctx = _ctx(store, FakeHub(), FakeProvider({"e1": "/ws/e1"}), old_harness, minutes=1)
-    ctx = replace(ctx, harness_sets=sets)
+    ctx = with_harness_sets(ctx, sets)
     envelope = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=100))
 
     _enter(ctx, envelope)
@@ -1137,11 +1138,11 @@ def _enter(ctx: LoopContext, envelope: Envelope) -> None:
 
 def test_spawn_retains_before_identity_and_close_releases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, ctx, _, _ = _rotation_rig(tmp_path)
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
-    new = Mock(spec=HarnessSet, registry=Mock())
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=Mock())
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets)
+    ctx = with_harness_sets(ctx, sets)
     await_identity = WorkerHandle.await_identity
 
     def replace_while_pending(handle: WorkerHandle, timeout: float) -> WorkerHandle:
@@ -1165,10 +1166,10 @@ def test_spawn_retains_before_identity_and_close_releases(tmp_path: Path, monkey
 def test_failed_identity_releases_provisional_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, ctx, default, _ = _rotation_rig(tmp_path)
     monkeypatch.setattr(default, "_identity_failures_remaining", 1)
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     sets = HarnessSets(Mock(return_value=old))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets)
+    ctx = with_harness_sets(ctx, sets)
 
     with pytest.raises(HarnessSpawnError):
         _enter(ctx, _bounded(SessionMode.RESUME, model=["blizzard:basic"]))
@@ -1179,10 +1180,10 @@ def test_failed_identity_releases_provisional_owner(tmp_path: Path, monkeypatch:
 
 def test_cancelled_identity_releases_provisional_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, ctx, _, _ = _rotation_rig(tmp_path)
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     sets = HarnessSets(Mock(return_value=old))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets)
+    ctx = with_harness_sets(ctx, sets)
 
     def cancel(_handle: WorkerHandle, _timeout: float) -> WorkerHandle:
         raise KeyboardInterrupt

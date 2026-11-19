@@ -14,7 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
-from blizzard.runner.harness.harness_set import HarnessSet, JudgeInvocation, WorkerInvocation
+from blizzard.runner.harness.harness_set import IOwnedHarnessSet, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     IHarnessLifecycleAndVerdictRegistry,
@@ -512,7 +512,7 @@ class Judgement:
             lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
         )
         observe_version = harness.observe_version
-        launch_set: HarnessSet | None = None
+        launch_set: IOwnedHarnessSet | None = None
         if owners is not None:
             worker = WorkerInvocation(lease.lease_id, generation)
             launch_set = self._launch_set()
@@ -598,11 +598,11 @@ class Judgement:
             return True
         return self._launch_set() is not None
 
-    def _launch_set(self) -> HarnessSet | None:
+    def _launch_set(self) -> IOwnedHarnessSet | None:
         owners = self.ctx.harness_sets
         assert owners is not None
         try:
-            owners.current.registry.lifecycle_and_verdict(self.session.harness_id)
+            self.ctx.harnesses.lifecycle_and_verdict(self.session.harness_id)
             return owners.current
         except UnknownHarnessError as exc:
             detail = str(exc)

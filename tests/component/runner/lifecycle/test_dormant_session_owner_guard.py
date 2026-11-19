@@ -33,7 +33,6 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
-from blizzard.runner.loop_wiring import UsageRegistryLookup
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.support.runner_fakes import (
@@ -45,6 +44,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 
@@ -133,17 +133,13 @@ def test_disabled_owner_defers_wake_without_consuming_it_until_recovered(tmp_pat
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
     )
-    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None, recovery_only=True)
-    missing = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=None, versions=None)
-    available = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    recovery = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None, recovery_only=True)
+    missing = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=None, versions=None)
+    available = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=recovery, versions=None)
     inputs = Mock(spec=HarnessAssemblyInputs, sections=(ClaudeCodeSection(enabled=False),))
     sets = HarnessSets(Mock(side_effect=[missing, available]))
     sets.select(HarnessAssemblyKey((inputs,), ("missing",)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     assert store.active_lease("lease_a") is not None

@@ -26,7 +26,7 @@ from blizzard.runner.harness.capability_snapshot import (
     TickCapabilities,
     capability_snapshot,
 )
-from blizzard.runner.harness.harness_set import IInvocationHarnesses
+from blizzard.runner.harness.harness_set import HarnessSets
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
@@ -65,7 +65,7 @@ DEFAULT_RETRIES_MAX = 2
 
 
 def lease_transcript_source(
-    owners: IInvocationHarnesses, liveness: IReadLeaseLivenessRepository, lease_id: str, session: SessionReference
+    owners: HarnessSets, liveness: IReadLeaseLivenessRepository, lease_id: str, session: SessionReference
 ) -> IHarnessTranscriptSource:
     """The lease's transcript source from its owning set, at the root its latest spawn stamped."""
     stamp = liveness.latest_spawn_settings([lease_id]).get(lease_id)
@@ -254,7 +254,7 @@ class LoopContext:
     #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
     retention_passes: RetentionPasses | None = None
     #: In-memory owners of launched invocations; absent on isolated loop callers.
-    harness_sets: IInvocationHarnesses | None = None
+    harness_sets: HarnessSets | None = None
 
     @property
     def free_environments(self) -> IWorkspaceFreeEnvironment:

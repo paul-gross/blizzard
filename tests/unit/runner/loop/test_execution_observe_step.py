@@ -6,7 +6,6 @@ Driven through a :class:`FakeHarness` whose scripted observation each test sets,
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -39,6 +38,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 from tests.support.takeover_unit import record_takeover_in_unit
@@ -451,7 +451,7 @@ def test_a_retained_lease_is_observed_through_its_retained_set_after_a_replaceme
     sets.select(HarnessAssemblyKey((2,)))
     clock.advance(_MINUTE)
 
-    ExecutionObserve(replace(ctx, harness_sets=sets)).run()
+    ExecutionObserve(with_harness_sets(ctx, sets)).run()
 
     assert [request.generation for request in retained.observation_requests] == [1]
     assert replacement.observation_requests == [] and composed.observation_requests == []
