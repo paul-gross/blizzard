@@ -6,3 +6,5 @@ export { runnerSubscriptionLines, runnerSubscriptionPaces } from './runner-host.
 export { SubscriptionBlocks } from './subscription-blocks';
 export { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
 export { GateBadgeGroup } from './gate-badge-group';
+
+export type { HostFact, SubscriptionUsage, RunnerSubscription } from '../core/host.domain';

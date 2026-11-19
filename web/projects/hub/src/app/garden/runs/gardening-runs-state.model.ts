@@ -1,4 +1,4 @@
-import type { RoutineView, RunRowView } from 'fleet';
+import type { LaneStatus, RoutineView, RunRowView } from 'fleet';
 import { routineDisplayName } from '../core/routine-display-name';
 import type { RunListCountsVm, RunListRowVm } from './run-list';
 
@@ -20,7 +20,7 @@ export function summedCounts(
 
 /** The run list's rows, one per run in the read's order, each routine read by its display name. */
 export function runListRows(
-  runs: readonly RunRowView[],
+  runs: readonly (RunRowView & { readonly laneStatus: LaneStatus })[],
   routines: readonly RoutineView[] | undefined,
 ): readonly RunListRowVm[] {
   return runs.map((row) => ({
@@ -29,7 +29,7 @@ export function runListRows(
     scopeSlug: row.scope_slug,
     mode: row.mode,
     mintedAt: row.minted_at,
-    outcome: row.outcome,
+    laneStatus: row.laneStatus,
     escalated: row.escalation !== null,
     counts: summedCounts(row.delivered),
   }));

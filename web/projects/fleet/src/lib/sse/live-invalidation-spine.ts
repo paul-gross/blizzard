@@ -25,6 +25,8 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
    * can reopen it on another URL. */
   streamUrl: string | (() => string);
   eventTypes: readonly TType[];
+  /** Optional boundary mapping, applied once before either consumer sees a frame. */
+  mapFrame?: (type: string, data: unknown) => { type: TType; data: TPayload } | null;
   registry: (type: TType) => (data: TPayload) => readonly (readonly unknown[])[];
   coalesceWindowMs: number;
   onFrame?: (type: TType, data: TPayload) => void;
@@ -101,8 +103,10 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
     this.current.set(handle);
 
     this.sub = handle.events.subscribe(({ type, data }) => {
-      onFrame?.(type as TType, data);
-      this.dispatch(type as TType, data);
+      const frame = this.opts.mapFrame ? this.opts.mapFrame(type, data) : { type: type as TType, data };
+      if (frame === null) return;
+      onFrame?.(frame.type, frame.data);
+      this.dispatch(frame.type, frame.data);
     });
 
     // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any

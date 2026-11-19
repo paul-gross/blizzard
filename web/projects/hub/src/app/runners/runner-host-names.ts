@@ -2,7 +2,7 @@ import { type Provider, computed } from '@angular/core';
 
 import { RUNNER_HOST_NAMES, RUNNER_NAMES } from 'fleet/shell';
 import { injectHubRunnersQuery } from '../core/runners.query';
-import { injectHubHostsQuery } from '../core/hosts.query';
+import { injectHostFactsQuery } from '../core/hosts.query';
 
 /** Each runner's host name by runner id, from the host registry's `runner_ids`. */
 export function hostNamesByRunner(
@@ -18,7 +18,7 @@ export function provideRunnerHostNames(): Provider[] {
     {
       provide: RUNNER_HOST_NAMES,
       useFactory: () => {
-        const hosts = injectHubHostsQuery();
+        const hosts = injectHostFactsQuery();
         return computed(() => hostNamesByRunner(hosts.data() ?? []));
       },
     },

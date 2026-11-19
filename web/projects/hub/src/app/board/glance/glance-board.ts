@@ -6,7 +6,7 @@ import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { bannerUrgencyIcons } from '../../core/urgencies.model';
 import { injectUrgencyIconUrls } from '../../core/urgency-icon.query';
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { asyncState, injectRunnerHostNames, type KitAsyncStateValue } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
@@ -60,7 +60,7 @@ export class GlanceBoard {
   protected readonly spendToday = this.spend.today;
   protected readonly spendYesterday = this.spend.yesterday;
 
-  private readonly chunks = computed<readonly ChunkSummary[]>(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
+  private readonly chunks = computed(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
   /** The image marks the glance banners show, read once per digest. */
   protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks(), this.urgenciesQuery.data()));
   protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));

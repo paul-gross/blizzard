@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 
 import { type KitAsyncStateValue, asyncState, injectNowSignal, injectRunnerHostNames, ViewportService } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
-import { injectHubHostsQuery } from '../core/hosts.query';
+import { injectHostFactsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';
 import { eventChunkIds, eventRunnerFleetIds, eventRunnerIds, eventRunnerNames } from './events-panel.model';
 import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
@@ -36,7 +36,7 @@ export class EventsPanel {
   protected readonly runnerHosts = injectRunnerHostNames();
   protected readonly now = injectNowSignal();
   protected readonly viewport = inject(ViewportService);
-  private readonly hostsQuery = injectHubHostsQuery();
+  private readonly hostsQuery = injectHostFactsQuery();
   protected readonly runnerFleetIds = computed(() => eventRunnerFleetIds(this.hostsQuery.data() ?? []));
 
   /** The active chunk filter, or `null` for "every chunk" — read from `?chunk=` and

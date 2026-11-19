@@ -3,6 +3,11 @@ import { formatWhen, RunnerConnection, type RunnerDecliningView, type RunnerRegi
 import { connectionState, hostLight, runnerLight, runnerStateBadges, runnerTitleState } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';
 
+it('shows an unrecognized connection label without claiming a known state', () => {
+  expect(connectionState(false, 'reconnecting')).toEqual({ label: 'reconnecting', tone: 'idle' });
+  expect(connectionState(true, 'reconnecting')).toEqual({ label: 'reconnecting', tone: 'idle' });
+});
+
 const REGISTRY: RunnerRegistryView = {
   agents: null,
   runner_id: '',
@@ -99,7 +104,7 @@ describe('runnerStateBadges', () => {
 
   it('reads an online runner as IDLE, or WORKING while it holds a chunk', () => {
     expect(labels(row())).toEqual(['IDLE']);
-    expect(labels(row({ claims: [{ chunkId: 'c', shortId: 'c', node: 'build', status: 'running' }] }))).toEqual(['WORKING']);
+    expect(labels(row({ claims: [{ chunkId: 'c', shortId: 'c', node: 'build', status: { kind: 'running' as const } }] }))).toEqual(['WORKING']);
   });
 
   describe('when a throttle says no', () => {

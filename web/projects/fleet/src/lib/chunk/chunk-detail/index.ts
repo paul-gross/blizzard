@@ -14,6 +14,7 @@ export { filterArtifactsByStep } from './filter-artifacts-by-step';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
+export type { FactsDetail } from './chunk-facts';
 export { chunkGraphLabel } from './graph-label';
 export { ChunkIssuePane } from './chunk-issue-pane';
 export { deriveWorkItemsState } from './work-items-state';

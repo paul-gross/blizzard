@@ -1,4 +1,5 @@
-import { type ChunkFlowPlaceView, type ChunkSummary, type FlowFactView, type FlowView, type hubApi, type RepositorySummary, STATUS_TONE, toneColor, type WorkItemsView } from 'fleet';
+import { type ChunkFlowPlaceView, type ChunkSummary, type FlowFactView, type FlowView, type hubApi, type RepositorySummary, domainStatusTone, toneColor, type WorkItemsView } from 'fleet';
+import { laneStatus } from 'fleet/shell';
 import { bounceView, chunkSummary, FIXTURE_NOW, fixtureInstant, landedRepoView, prView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -10,6 +11,7 @@ import {
   deliveredRecently,
   deliveryChunkIds,
   type DeliveryInputs,
+  type DeliveryChunk,
   deliveryList,
   deliveryState,
   deliveryWhen,
@@ -20,7 +22,10 @@ import {
 const MIN = 60;
 const HOUR = 60 * MIN;
 
-const chunk = (id: string, fields: Partial<ChunkSummary> = {}): ChunkSummary => chunkSummary({ chunk_id: id, graph_id: 'gr_1', status: 'running', ...fields });
+const chunk = (id: string, fields: Partial<ChunkSummary> = {}): DeliveryChunk => {
+  const summary = chunkSummary({ chunk_id: id, graph_id: 'gr_1', status: 'running', ...fields });
+  return { ...summary, laneStatus: laneStatus(summary.status) };
+};
 
 const flow = (id: string, repositoryId: string): FlowView =>
   ({ flow_id: id, repository_id: repositoryId, branch: 'master', resource: `res-${id}`, line: [], last_landing: null, last_verdict: null, repository_name: null, repository_slug: null, turn: null }) as FlowView;
@@ -79,7 +84,7 @@ const FLOWS = [flow('fl_a', 'rp_a'), flow('fl_b', 'rp_b')];
 const REPOSITORIES = [repository('rp_a', 'blizzard'), repository('rp_b', 'blizzard-context')];
 
 /** The page's reads over `chunks`, every flow's facts newest first. */
-function inputs(chunks: readonly ChunkSummary[], fields: Partial<Omit<DeliveryInputs, 'facts'>> & { facts?: readonly FlowFactView[] } = {}): DeliveryInputs {
+function inputs(chunks: readonly DeliveryChunk[], fields: Partial<Omit<DeliveryInputs, 'facts'>> & { facts?: readonly FlowFactView[] } = {}): DeliveryInputs {
   const facts = new Map<string, FlowFactView[]>();
   for (const each of [...(fields.facts ?? [])].sort((a, b) => b.at.localeCompare(a.at))) facts.set(each.flow_id, [...(facts.get(each.flow_id) ?? []), each]);
   return {
@@ -175,7 +180,7 @@ describe('a row\'s bounce', () => {
   it('drops the bounce once the chunk is back in line — resubmitted, the bounce is history — or has landed', () => {
     const placed = only(inputs([bounced(5, { flow_places: [place('fl_a', 1)] })]));
     expect(placed.bounce).toBeNull();
-    expect(placed.statusColor).toBe(toneColor(STATUS_TONE('running')));
+    expect(placed.statusColor).toBe(toneColor(domainStatusTone('running')));
     expect(only(inputs([bounced(5, { landed: true, status: 'done' })])).bounce).toBeNull();
   });
 
@@ -318,9 +323,20 @@ describe('a row\'s line, links, step and icon', () => {
   });
 
   it('keeps a human-waiting chunk\'s own icon, draws any other in flight as running, and a landed one as done', () => {
-    expect(only(inputs([chunk('ch_1', { status: 'needs_human', open_prs: [prView()] })])).icon).toEqual({ lane: 'needs', status: 'needs_human' });
-    expect(only(inputs([chunk('ch_1', { status: 'delivering', open_prs: [prView()] })])).icon).toEqual({ lane: 'running', status: 'running' });
-    expect(only(inputs([chunk('ch_1', { landed: true, status: 'done' })])).icon).toEqual({ lane: 'done', status: 'done' });
+    expect(only(inputs([chunk('ch_1', { status: 'needs_human', open_prs: [prView()] })])).icon).toEqual({ lane: 'needs', status: { kind: 'needs_human' } });
+    expect(only(inputs([chunk('ch_1', { status: 'delivering', open_prs: [prView()] })])).icon).toEqual({ lane: 'running', status: { kind: 'running' } });
+    expect(only(inputs([chunk('ch_1', { landed: true, status: 'done' })])).icon).toEqual({ lane: 'done', status: { kind: 'done' } });
+  });
+
+  it('uses the projected status for title reads, lane and tone, including unknown statuses', () => {
+    const projected = { ...chunk('ch_1', { status: 'ready', open_prs: [prView()] }), laneStatus: { kind: 'needs_human' } as const };
+    const row = only(inputs([projected]));
+    expect(row.icon).toEqual({ lane: 'needs', status: { kind: 'needs_human' } });
+    expect(row.statusColor).toBe(toneColor('needs'));
+    expect(deliveryChunkIds([{ ...projected, open_prs: [], laneStatus: { kind: 'running' } }], new Map())).toEqual(['ch_1']);
+    const unknown = only(inputs([{ ...projected, laneStatus: { kind: 'unknown', raw: 'future' } }]));
+    expect(unknown.icon).toEqual({ lane: 'running', status: { kind: 'running' } });
+    expect(unknown.statusColor).toBe(toneColor('idle'));
   });
 
   it('holds a title skeleton until the chunk\'s work items are read', () => {

@@ -3,8 +3,7 @@ import {
   type AsyncStateQuery,
   asyncStateOf,
   compactBounce,
-  type ChunkStatus,
-  chunkLane,
+  domainChunkLane,
   type ChunkSummary,
   compactRef,
   formatAbsolute,
@@ -17,7 +16,8 @@ import {
   projectTint,
   runnerBoardParts,
   shortCommitHash,
-  STATUS_TONE,
+  domainStatusTone,
+  type LaneStatus,
   toneColor,
   type Tone,
   type WorkItemsView,
@@ -53,7 +53,7 @@ export interface DeliveryInputs {
   readonly flows: readonly FlowView[];
   /** The tenant's repositories, which name each flow's repository. */
   readonly repositories: readonly RepositorySummary[];
-  readonly chunks: readonly ChunkSummary[];
+  readonly chunks: readonly DeliveryChunk[];
   /** Each flow's newest record facts, newest first, by flow id. */
   readonly facts: ReadonlyMap<string, readonly FlowFactView[]>;
   readonly workItems: ReadonlyMap<string, WorkItemsView>;
@@ -63,6 +63,8 @@ export interface DeliveryInputs {
   /** The clock the list is judged against — a coarse one, since only the bounce window reads it. */
   readonly now: number;
 }
+
+export type DeliveryChunk = ChunkSummary & { readonly laneStatus: LaneStatus };
 
 /** A row's date: the time, with the day above it for an instant before today. */
 export interface DeliveryWhen {
@@ -96,16 +98,16 @@ export interface DeliveryLink {
 /** What a row's lane icon draws: a lane key and the status it is colored by. */
 export interface DeliveryIcon {
   readonly lane: string;
-  readonly status: ChunkStatus;
+  readonly status: LaneStatus;
 }
 
 /** The lanes that wait on a human — an in-flight chunk there keeps its own icon. */
 const HUMAN_LANES: ReadonlySet<string> = new Set(['needs', 'waiting']);
 
 /** An in-flight chunk's icon: its own lane where that waits on a human, else the running lane's spinner. */
-function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
-  const lane = chunkLane(chunk);
-  return HUMAN_LANES.has(lane) ? { lane, status: chunk.status } : { lane: 'running', status: 'running' };
+function inFlightIcon(chunk: DeliveryChunk): DeliveryIcon {
+  const lane = domainChunkLane({ status: chunk.laneStatus, terminal: chunk.terminal });
+  return HUMAN_LANES.has(lane) ? { lane, status: chunk.laneStatus } : { lane: 'running', status: { kind: 'running' } };
 }
 
 /** The chunk's latest recorded bounce, as a row names it. */
@@ -163,7 +165,7 @@ export function flowIds(flows: readonly FlowView[]): readonly string[] {
 
 /** The chunk ids whose titles the page reads: every chunk that can hold a row — any delivery footprint, an awaited
  * merge, a fact on a flow, or a recorded bounce — and every running chunk, the next to reach a flow. */
-export function deliveryChunkIds(chunks: readonly ChunkSummary[], facts: DeliveryInputs['facts']): readonly string[] {
+export function deliveryChunkIds(chunks: readonly DeliveryChunk[], facts: DeliveryInputs['facts']): readonly string[] {
   const onFlow = new Set([...facts.values()].flat().map((fact) => fact.chunk_id));
   return chunks
     .filter(
@@ -174,7 +176,7 @@ export function deliveryChunkIds(chunks: readonly ChunkSummary[], facts: Deliver
         chunk.awaiting_external_merge ||
         onFlow.has(chunk.chunk_id) ||
         chunk.latest_bounce !== null ||
-        chunk.status === 'running',
+        chunk.laneStatus.kind === 'running',
     )
     .map((chunk) => chunk.chunk_id);
 }
@@ -279,7 +281,7 @@ function stepLine(chunk: ChunkSummary, inputs: DeliveryInputs): string | null {
   return [step, runner].filter((part) => part !== null).join(STEP_RUNNER_SEP) || null;
 }
 
-function inFlightRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow | null {
+function inFlightRow(chunk: DeliveryChunk, inputs: DeliveryInputs): DeliveryRow | null {
   const bounce = chunkBounce(chunk, inputs);
   const stage = chunkStage(chunk, inputs);
   if (stage < 0 && !bounce) return null;
@@ -292,7 +294,7 @@ function inFlightRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow |
     step: stepLine(chunk, inputs),
     links: chunk.open_prs.map(prLink),
     icon: inFlightIcon(chunk),
-    statusColor: toneColor(bounce ? 'stale' : STATUS_TONE(chunk.status)),
+    statusColor: toneColor(bounce ? 'stale' : domainStatusTone(chunk.laneStatus.kind)),
   };
 }
 
@@ -313,8 +315,8 @@ function landedRow(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryRow {
     line: null,
     step: stepLine(chunk, inputs),
     links: [...commits, ...chunk.closed_prs.map(prLink)],
-    icon: { lane: 'done', status: 'done' },
-    statusColor: toneColor(STATUS_TONE('done')),
+    icon: { lane: 'done', status: { kind: 'done' } },
+    statusColor: toneColor(domainStatusTone('done')),
   };
 }
 

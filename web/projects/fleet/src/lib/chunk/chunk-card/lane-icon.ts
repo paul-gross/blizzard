@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkStatus } from '../../api/hub';
-import { LANES, STATUS_TONE, UNKNOWN_LANE } from '../../core/chunk-lanes';
+import { LANES, STATUS_TONE, UNKNOWN_LANE, type LaneStatus } from '../../core/chunk-lanes';
 import { toneColor } from '../../kit/kit-badge';
 import { finishedWord } from './chunk-card.model';
 
@@ -22,8 +21,8 @@ const LANE_GLYPHS: Readonly<Record<string, LaneIconGlyph>> = {
 
 /** The drawing for a chunk in `lane` with `status`: the status's own where it has one, else
  * the lane's. An unknown lane falls back to BACKLOG's inert stack rather than drawing nothing. */
-export function laneIconGlyph(lane: string, status: ChunkStatus | null): LaneIconGlyph {
-  if (status === 'paused' || status === 'stopped') return status;
+export function laneIconGlyph(lane: string, status: LaneStatus | null): LaneIconGlyph {
+  if (status?.kind === 'paused' || status?.kind === 'stopped') return status.kind;
   return LANE_GLYPHS[lane] ?? 'notready';
 }
 
@@ -53,14 +52,15 @@ export class LaneIcon {
 
   /** The chunk's status — it picks a finer drawing than the lane's where it has one, and the
    * icon's color. */
-  readonly status = input.required<ChunkStatus>();
+  readonly status = input.required<LaneStatus>();
 
   protected readonly glyph = computed(() => laneIconGlyph(this.lane(), this.status()));
 
-  protected readonly color = computed(() => toneColor(STATUS_TONE(this.status())));
+  protected readonly color = computed(() => toneColor(STATUS_TONE(this.status().kind)));
 
   protected readonly label = computed(() => {
-    if (this.lane() === UNKNOWN_LANE) return this.status();
+    const status = this.status();
+    if (this.lane() === UNKNOWN_LANE) return status.kind === 'unknown' ? status.raw : status.kind;
     const glyph = this.glyph();
     if (glyph === 'paused') return 'Paused';
     if (glyph === 'stopped') return finishedWord('stopped');

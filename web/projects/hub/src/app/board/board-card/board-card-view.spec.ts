@@ -7,7 +7,7 @@ import { type BoardCard, boardCardView } from './board-card-view.model';
 const BASE: BoardCard = {
   chunkId: 'ch_01done0000000000000000000',
   shortId: 'C-0000',
-  status: 'done',
+  status: 'done', laneStatus: { kind: 'done' },
   terminal: true,
   promotable: false,
   node: 'done',
@@ -48,7 +48,7 @@ const items = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `hub#
 const titlesOf = (el: HTMLElement) => [...el.querySelectorAll('[data-testid="chunk-title"]')].map((title) => title.textContent?.trim());
 
 describe('ChunkCard work item titles', () => {
-  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', completedAt: null };
+  const RUNNING: BoardCard = { ...BASE, status: 'running', laneStatus: { kind: 'running' }, terminal: false, node: 'build', completedAt: null };
 
   it('keeps the work-ref chips once the title arrives, with the title beneath them', async () => {
     const el = await render({ ...RUNNING, workLines: [{ label: 'hub#7', title: 'Migrate the event log' }] });
@@ -139,7 +139,7 @@ describe('ChunkCard work item titles', () => {
   it('keeps the status word where it says more than the lane', async () => {
     const el = await render({
       ...RUNNING,
-      status: 'paused',
+      status: 'paused', laneStatus: { kind: 'paused' },
       workLines: items(1),
     });
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
@@ -164,14 +164,14 @@ describe('ChunkCard completion stamp (issue #173)', () => {
   });
 
   it('renders no timestamp outside the done lane', async () => {
-    const el = await render({ ...BASE, status: 'running', terminal: false, completedAt: null });
+    const el = await render({ ...BASE, status: 'running', laneStatus: { kind: 'running' }, terminal: false, completedAt: null });
 
     expect(el.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
   });
 
   it('renders no timestamp for a non-done-lane card even if it somehow carries a completedAt', async () => {
     // Defensive: the lane gates the render, not completedAt's own null-ness alone.
-    const el = await render({ ...BASE, status: 'running', terminal: false, completedAt: '2026-07-13T00:00:01+00:00' });
+    const el = await render({ ...BASE, status: 'running', laneStatus: { kind: 'running' }, terminal: false, completedAt: '2026-07-13T00:00:01+00:00' });
 
     expect(el.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
   });
@@ -186,14 +186,14 @@ describe('ChunkCard DONE-column layout (issue #215)', () => {
   });
 
   it('shows "stopped" in the step slot for a stopped chunk, not its last node name', async () => {
-    const el = await render({ ...BASE, status: 'stopped', node: 'deliver' });
+    const el = await render({ ...BASE, status: 'stopped', laneStatus: { kind: 'stopped' }, node: 'deliver' });
 
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('stopped');
     expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
   });
 
   it('still names the status for a non-done-lane card', async () => {
-    const el = await render({ ...BASE, status: 'paused', terminal: false, node: 'build', completedAt: null });
+    const el = await render({ ...BASE, status: 'paused', laneStatus: { kind: 'paused' }, terminal: false, node: 'build', completedAt: null });
 
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
@@ -255,13 +255,13 @@ describe('ChunkCard cost figure', () => {
 
 describe('ChunkCard blocked marking (issue #461)', () => {
   it('renders nothing when the card carries no blockedOn', async () => {
-    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: null, blockedCount: 0 });
+    const el = await render({ ...BASE, status: 'ready', laneStatus: { kind: 'ready' }, terminal: false, blockedOn: null, blockedCount: 0 });
 
     expect(el.querySelector('[data-testid="chunk-blocked-by"]')).toBeNull();
   });
 
   it('names the one prerequisite by its compact ref when exactly one is unmet', async () => {
-    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
+    const el = await render({ ...BASE, status: 'ready', laneStatus: { kind: 'ready' }, terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
     expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by C-0000');
@@ -270,7 +270,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
   it("qualifies a single blocker with that blocker's own state", async () => {
     const el = await render({
       ...BASE,
-      status: 'ready',
+      status: 'ready', laneStatus: { kind: 'ready' },
       terminal: false,
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 1,
@@ -284,7 +284,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
   it('withholds the state when several chunks block it — a count names no single state', async () => {
     const el = await render({
       ...BASE,
-      status: 'ready',
+      status: 'ready', laneStatus: { kind: 'ready' },
       terminal: false,
       blockedOn: 'ch_01prereq00000000000000000',
       blockedCount: 2,
@@ -296,7 +296,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
   });
 
   it('counts the prerequisites instead of naming the first when more than one is unmet', async () => {
-    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 2 });
+    const el = await render({ ...BASE, status: 'ready', laneStatus: { kind: 'ready' }, terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 2 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]');
     expect(marking?.textContent?.replace(/\s+/g, ' ').trim()).toBe('blocked by 2 chunks');
@@ -304,7 +304,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
   });
 
   it('references the prerequisite rather than reaching it — no link, no nested control', async () => {
-    const el = await render({ ...BASE, status: 'ready', terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
+    const el = await render({ ...BASE, status: 'ready', laneStatus: { kind: 'ready' }, terminal: false, blockedOn: 'ch_01prereq00000000000000000', blockedCount: 1 });
 
     const marking = el.querySelector('[data-testid="chunk-blocked-by"]')!;
     expect(marking.querySelector('a, button')).toBeNull();
@@ -314,7 +314,7 @@ describe('ChunkCard blocked marking (issue #461)', () => {
   it('keeps every other control and the status unaffected by carrying a blockedOn', async () => {
     const el = await render({
       ...BASE,
-      status: 'paused',
+      status: 'paused', laneStatus: { kind: 'paused' },
       terminal: false,
       node: 'build',
       blockedOn: 'ch_01prereq00000000000000000',
@@ -331,7 +331,7 @@ describe('ChunkCard delivery block', () => {
   const LANDED = { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' };
 
   it('shows only the open PR link on a delivering chunk, never a landed hash', async () => {
-    const el = await render({ ...BASE, status: 'delivering', terminal: false, node: 'deliver', openPrs: [PR], landedRepos: [LANDED] });
+    const el = await render({ ...BASE, status: 'delivering', laneStatus: { kind: 'delivering' }, terminal: false, node: 'deliver', openPrs: [PR], landedRepos: [LANDED] });
 
     expect(el.querySelector('[data-testid="card-pr-link"]')?.textContent).toContain('widget PR #42');
     expect(el.querySelector('[data-testid="card-landed-link"]')).toBeNull();
@@ -339,25 +339,25 @@ describe('ChunkCard delivery block', () => {
   });
 
   it('shows no delivery block on a landed done-lane chunk', async () => {
-    const el = await render({ ...BASE, status: 'done', landedRepos: [LANDED] });
+    const el = await render({ ...BASE, status: 'done', laneStatus: { kind: 'done' }, landedRepos: [LANDED] });
 
     expect(el.querySelector('[data-testid="card-delivery"]')).toBeNull();
   });
 
   it('shows no delivery block on a stopped chunk whose PR is still open', async () => {
-    const el = await render({ ...BASE, status: 'stopped', openPrs: [PR] });
+    const el = await render({ ...BASE, status: 'stopped', laneStatus: { kind: 'stopped' }, openPrs: [PR] });
 
     expect(el.querySelector('[data-testid="card-delivery"]')).toBeNull();
   });
 
   it('shows the open PR link in the needs-human lane', async () => {
-    const needs = await render({ ...BASE, status: 'needs_human', terminal: false, openPrs: [PR] });
+    const needs = await render({ ...BASE, status: 'needs_human', laneStatus: { kind: 'needs_human' }, terminal: false, openPrs: [PR] });
     expect(needs.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
   });
 });
 
 describe('ChunkCard gate marker', () => {
-  const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', terminal: false, node: 'approve-gate', completedAt: null };
+  const WAITING: BoardCard = { ...BASE, status: 'waiting_on_human', laneStatus: { kind: 'waiting_on_human' }, terminal: false, node: 'approve-gate', completedAt: null };
 
   it('marks a card `gate` when its chunk has an open decision, beside the unchanged status', async () => {
     const el = await render(WAITING, true);
@@ -377,7 +377,7 @@ describe('ChunkCard open control', () => {
   const PR = { repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' };
   const DELIVERING: BoardCard = {
     ...BASE,
-    status: 'delivering',
+    status: 'delivering', laneStatus: { kind: 'delivering' },
     terminal: false,
     promotable: true,
     completedAt: null,
@@ -421,7 +421,7 @@ describe('ChunkCard open control', () => {
 
 describe('ChunkCard backlog controls', () => {
   it('carries no Promote control, even on a promotable card under chunk control', async () => {
-    const el = await render({ ...BASE, status: 'not_ready', terminal: false, promotable: true, completedAt: null }, false, true);
+    const el = await render({ ...BASE, status: 'not_ready', laneStatus: { kind: 'not_ready' }, terminal: false, promotable: true, completedAt: null }, false, true);
 
     expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
   });
@@ -429,14 +429,14 @@ describe('ChunkCard backlog controls', () => {
 
 describe('ChunkCard done-lane membership', () => {
   it("renders the completion stamp off the hub's terminal flag, not the status value", async () => {
-    const flagged = await render({ ...BASE, status: 'running', terminal: true });
+    const flagged = await render({ ...BASE, status: 'running', laneStatus: { kind: 'running' }, terminal: true });
 
     expect(flagged.querySelector('[data-testid="chunk-done-at"]')).not.toBeNull();
     expect(flagged.querySelector('[data-testid="chunk-status"]')).toBeNull();
   });
 
   it('treats an unflagged done-status card as outside the done lane', async () => {
-    const unflagged = await render({ ...BASE, status: 'done', terminal: false });
+    const unflagged = await render({ ...BASE, status: 'done', laneStatus: { kind: 'done' }, terminal: false });
 
     expect(unflagged.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
     expect(unflagged.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('done');
@@ -470,7 +470,7 @@ describe('ChunkCard project tint', () => {
 });
 
 describe('boardCardView step label', () => {
-  const RUNNING: BoardCard = { ...BASE, status: 'running', terminal: false, node: 'build', nodeId: 'nd_build', completedAt: null };
+  const RUNNING: BoardCard = { ...BASE, status: 'running', laneStatus: { kind: 'running' }, terminal: false, node: 'build', nodeId: 'nd_build', completedAt: null };
   const HELD: BoardCard = { ...RUNNING, graphName: 'adv-dwf', runnerId: 'rn_1', runnerName: 'r-claude', hostName: 'xps' };
 
   it('names the step by graph/node when the hub names the graph, then the holding runner by host/runner', () => {
@@ -486,7 +486,7 @@ describe('boardCardView step label', () => {
 
   it('keeps the bare node when the hub names no graph, and a status word standing in for it bare', () => {
     expect(boardCardView(RUNNING).step).toBe('build');
-    expect(boardCardView({ ...RUNNING, status: 'stopped', terminal: true, graphName: 'adv-dwf' }).step).toBe('stopped');
+    expect(boardCardView({ ...RUNNING, status: 'stopped', laneStatus: { kind: 'stopped' }, terminal: true, graphName: 'adv-dwf' }).step).toBe('stopped');
   });
 
   it('writes the step once on the card, the holder never repeated ahead of it', async () => {

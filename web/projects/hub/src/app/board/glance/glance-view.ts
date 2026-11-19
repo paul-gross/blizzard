@@ -12,11 +12,11 @@ import {
   KitBadge,
   KitPanel,
   KitSkeleton,
-  STATUS_TONE,
+  domainStatusTone,
   projectTint,
   laneTone,
   toneColor,
-  type ChunkStatus,
+  type LaneStatus,
   formatCost,
   formatSeenTag,
   injectNowSignal,
@@ -150,7 +150,7 @@ export class GlanceView {
   }
 
   /** A chunk's status tone as a color — the card's left edge, as a desktop list row's. */
-  protected statusColor(status: ChunkStatus): string {
-    return toneColor(STATUS_TONE(status));
+  protected statusColor(status: LaneStatus): string {
+    return toneColor(domainStatusTone(status.kind));
   }
 }

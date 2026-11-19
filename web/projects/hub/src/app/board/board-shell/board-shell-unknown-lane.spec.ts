@@ -1,28 +1,27 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkCountsView, ChunkStatus, ChunkSummary } from 'fleet';
-import { chunkCountsView, chunkSummary } from 'fleet/testing';
+import type { ChunkStatus, LaneStatus } from 'fleet';
+import type { BoardChunk } from '../../core/chunks.model';
+import { boardChunk, boardCounts } from '../board.fixture';
 import { BoardShell } from './board-shell';
 
 /** A chunk whose status this build's generated vocabulary does not list, as a newer hub may send. */
 describe('BoardShell unknown status lane', () => {
-  const chunk = (suffix: string, status: string): ChunkSummary =>
-    chunkSummary({ chunk_id: `ch_01${suffix}`, graph_id: 'gr_1', status: status as ChunkStatus, current_node_id: 'nd_build' });
+  const chunk = (suffix: string, status: string, laneStatus: LaneStatus): BoardChunk =>
+    boardChunk({ chunk_id: `ch_01${suffix}`, graph_id: 'gr_1', status: status as ChunkStatus, laneStatus, current_node_id: 'nd_build' });
 
 
-  const COUNTS: ChunkCountsView = chunkCountsView({
+  const COUNTS = boardCounts({
     not_ready: 0,
     ready: 0,
     running: 1,
     delivering: 0,
     needs_human: 0,
     done: 0,
-    terminal: 0,
-    total: 1,
-  });
+  }, 0, 1);
 
-  const render = async (layout: 'board' | 'list', chunks: readonly ChunkSummary[]) => {
+  const render = async (layout: 'board' | 'list', chunks: readonly BoardChunk[]) => {
     await TestBed.configureTestingModule({
       imports: [BoardShell],
       providers: [provideZonelessChangeDetection()],
@@ -39,13 +38,13 @@ describe('BoardShell unknown status lane', () => {
   const columnKeys = (el: HTMLElement) => [...el.querySelectorAll('app-board-column')].map((col) => col.getAttribute('data-col'));
 
   it('opens no unknown lane while every chunk carries a status the board knows', async () => {
-    const el = await render('board', [chunk('run', 'running')]);
+    const el = await render('board', [chunk('run', 'running', { kind: 'running' })]);
 
     expect(columnKeys(el)).toEqual(['notready', 'ready', 'needs', 'running', 'done']);
   });
 
   it('seats a chunk with an unknown status in its own lane, headed and counted by its raw status', async () => {
-    const el = await render('board', [chunk('run', 'running'), chunk('rev', 'newer-status')]);
+    const el = await render('board', [chunk('run', 'running', { kind: 'running' }), chunk('rev', 'newer-status', { kind: 'unknown', raw: 'newer-status' })]);
 
     expect(columnKeys(el)).toEqual(['notready', 'ready', 'needs', 'running', 'done', 'unknown']);
     const lane = el.querySelector<HTMLElement>('app-board-column[data-col="unknown"]')!;
@@ -56,7 +55,7 @@ describe('BoardShell unknown status lane', () => {
   });
 
   it('lists a chunk with an unknown status too, its lane icon named by the raw status', async () => {
-    const el = await render('list', [chunk('run', 'running'), chunk('rev', 'newer-status')]);
+    const el = await render('list', [chunk('run', 'running', { kind: 'running' }), chunk('rev', 'newer-status', { kind: 'unknown', raw: 'newer-status' })]);
 
     const row = el.querySelector<HTMLElement>('[data-testid="list-row"][data-chunk="ch_01rev"]');
     expect(row).not.toBeNull();

@@ -93,6 +93,19 @@ describe('RunnerLiveUpdates', () => {
     return invalidate.mock.calls.map((call) => call[0]?.queryKey);
   }
 
+  it.each(['ask-changed', 'escalation-changed', 'takeover-changed', 'fact-changed'])(
+    'invalidates exactly the runner, chunk and host keys for %s',
+    (type) => {
+      const keys = emitAndCollect([[type, { runner_id: 'rn_1', chunk_id: 'ch_1' }]]);
+      expect(keys).toEqual([runnerDashboardKey('rn_1'), runnerChunkDetailKey('rn_1', 'ch_1'), hostKey]);
+    },
+  );
+
+  it('invalidates exactly the runner, leases and host keys for a chunkless lease', () => {
+    expect(emitAndCollect([['lease-changed', { runner_id: 'rn_1', chunk_id: null }]]))
+      .toEqual([runnerLeasesKey('rn_1'), runnerDashboardKey('rn_1'), hostKey]);
+  });
+
   it('invalidates the named runner’s leases, dashboard, and chunk, and the host, on lease-changed', () => {
     const keys = emitAndCollect([
       ['lease-changed', { runner_id: 'rn_1', lease_id: 'lease_1', chunk_id: 'ch_1', cause: 'transitioned' }],
@@ -129,6 +142,25 @@ describe('RunnerLiveUpdates', () => {
     const keys = emitAndCollect([['environment-changed', { chunk_id: 'ch_5', environment_id: 'env_1', cause: 'bound' }]]);
 
     expect(keys).toEqual([hostKey]);
+  });
+
+  it('invalidates terminal and deletion notifications without inspecting their cause', () => {
+    const keys = emitAndCollect([
+      ['lease-changed', { runner_id: 'rn_1', chunk_id: 'ch_1', cause: 'closed' }],
+      ['takeover-changed', { runner_id: 'rn_1', chunk_id: 'ch_2', cause: 'deleted' }],
+      ['environment-changed', { cause: 'deleted' }],
+    ]);
+    expect(keys).toContainEqual(runnerLeasesKey('rn_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_1'));
+    expect(keys).toContainEqual(runnerChunkDetailKey('rn_1', 'ch_2'));
+    expect(keys).toContainEqual(hostKey);
+  });
+
+  it('does not invalidate for malformed payloads', () => {
+    expect(emitAndCollect([
+      ['lease-changed', {}],
+      ['fact-changed', { runner_id: 'rn_1', chunk_id: 42 }],
+    ])).toEqual([]);
   });
 
   it('invalidates the named runner’s dashboard on a runner-wide fact-changed (chunk_id null) with no chunk key', () => {

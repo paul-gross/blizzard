@@ -19,6 +19,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01selectedcard0000000000000',
   shortId: 'C-3YJ9',
   status: 'running',
+  laneStatus: { kind: 'running' },
   terminal: false,
   promotable: false,
   node: 'build',

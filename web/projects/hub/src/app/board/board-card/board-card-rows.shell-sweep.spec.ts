@@ -16,6 +16,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01rowscard00000000000000000',
   shortId: 'C-ROWS',
   status: 'waiting_on_human',
+  laneStatus: { kind: 'waiting_on_human' },
   terminal: false,
   promotable: false,
   node: 'verify',

@@ -16,7 +16,7 @@ const row = (chunkId: string, fields: Partial<DeliveryRow> = {}): DeliveryRow =>
   line: null,
   step: null,
   links: [],
-  icon: { lane: 'running', status: 'running' },
+  icon: { lane: 'running', status: { kind: 'running' } },
   statusColor: '',
   ...fields,
 });
@@ -42,10 +42,10 @@ describe('DeliveryGlanceView', () => {
 
   it.each(['{}', ''])('keeps the recorded cause and full dated hover through the real list model without an envelope account: %s', async (envelope) => {
     const list = deliveryList({
-      chunks: [chunkSummary({
+      chunks: [{ ...chunkSummary({
         chunk_id: 'ch_timeout', graph_id: 'gr_build', status: 'needs_human', bounce_count: 1,
         latest_bounce: bounceView({ cause: 'poll-timeout', envelope, recorded_at: fixtureInstant(-60) }),
-      })],
+      }), laneStatus: { kind: 'needs_human' } }],
       flows: [], repositories: [], facts: new Map(), workItems: new Map(), projectColors: null, runnerHosts: new Map(), now: FIXTURE_NOW,
     });
     const { el } = await render('ready', list);

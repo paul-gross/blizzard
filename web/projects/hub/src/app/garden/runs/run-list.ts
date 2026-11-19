@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type ChunkStatus, type hubApi, STATUS_TONE, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
+import { type hubApi, type LaneStatus, domainStatusTone, compactRef, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectList, KitSelectRow, FleetWhen } from 'fleet';
 
 /** A run's finding counts, summed across every set it delivered — `null` when it
  * delivered none, so the row renders no triple rather than a misleading `+0`. */
@@ -19,7 +19,7 @@ interface CountLeg {
 /** One row of the run list — three fixed lines: routine/scope + outcome, mode +
  * chunk ref, minted time + counts. `escalated` folds `RunRowView.escalation`
  * non-`null` once here so the row's own tint never disagrees with what counts as
- * escalated; `outcome` is `RunRowView.outcome` verbatim, and is what makes a
+ * escalated; the status is what makes a
  * failed, running or escalated run legible without relying on that tint. */
 export interface RunListRowVm {
   readonly chunkId: string;
@@ -27,7 +27,7 @@ export interface RunListRowVm {
   readonly scopeSlug: string;
   readonly mode: hubApi.RunMode;
   readonly mintedAt: string;
-  readonly outcome: ChunkStatus;
+  readonly laneStatus: LaneStatus;
   readonly escalated: boolean;
   readonly counts: RunListCountsVm | null;
 }
@@ -38,7 +38,7 @@ export interface RunListRowVm {
  * red; the run-list shell sweep (`garden-runs.shell-sweep.spec.ts`) proves that
  * tint is a real computed style, not just a class name.
  *
- * The tint is never the only carrier. Every row states its `outcome` as badge text
+ * The tint is never the only carrier. Every row states its status as badge text
  * on the headline, so a run that failed, is still running, or needs a human is
  * distinguishable from a clean one by reading it — the tint is emphasis on top of a
  * word, not a substitute for one, and a reader who cannot resolve the colour loses
@@ -63,7 +63,7 @@ export interface RunListRowVm {
   styleUrl: './run-list.css',
 })
 export class FleetRunList {
-  protected readonly STATUS_TONE = STATUS_TONE;
+  protected readonly STATUS_TONE = domainStatusTone;
 
   readonly rows = input.required<readonly RunListRowVm[]>();
   readonly selectedChunkId = input<string | null>(null);

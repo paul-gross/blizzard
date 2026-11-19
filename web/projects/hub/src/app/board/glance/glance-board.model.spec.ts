@@ -1,5 +1,8 @@
+import { boardChunk } from '../board.fixture';
+import type { BoardChunk } from '../../core/chunks.model';
+import type { LaneStatus } from 'fleet';
+type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
 import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
-import { chunkSummary } from 'fleet/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
@@ -11,10 +14,11 @@ const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const ago = (ms: number): string => new Date(NOW - ms).toISOString();
 
-const chunk = (id: string, status: ChunkSummary['status'], fields: Partial<ChunkSummary> = {}): ChunkSummary => (chunkSummary({
+const chunk = (id: string, status: KnownLaneStatus, fields: Partial<ChunkSummary> = {}): BoardChunk => (boardChunk({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
+  laneStatus: { kind: status },
   current_node_id: 'nd_build',
   ...fields,
 }));
@@ -43,7 +47,7 @@ describe('liveRunners', () => {
 
 /** {@link glanceListGroups} with no asks, gates, ordering, hosts, or colors unless a case supplies them. */
 const groups = (
-  chunks: readonly ChunkSummary[],
+  chunks: readonly BoardChunk[],
   fields: {
     questions?: readonly QuestionView[];
     decisions?: readonly DecisionView[];
@@ -83,7 +87,7 @@ describe('glanceListGroups', () => {
   it('leads with needs, then waiting, then running, then an unknown status', () => {
     const list = groups([
       chunk('ch_run', 'running'),
-      chunk('ch_odd', 'mystery' as ChunkSummary['status']),
+      boardChunk({ chunk_id: 'ch_odd', graph_id: 'gr_1', status: 'mystery' as ChunkSummary['status'], laneStatus: { kind: 'unknown', raw: 'mystery' }, current_node_id: 'nd_build' }),
       chunk('ch_wait', 'waiting_on_human'),
       chunk('ch_needs', 'needs_human'),
       chunk('ch_deliver', 'delivering'),

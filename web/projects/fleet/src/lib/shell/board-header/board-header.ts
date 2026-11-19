@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkCountsView, FleetSpendView } from '../../api/hub';
-import { LANES, laneCounts } from '../../core/chunk-lanes';
+import type { FleetSpendView } from '../../api/hub';
+import { LANES, laneCounts, type LaneCounts } from '../../core/chunk-lanes';
 import { BrandMark } from '../../core/design/brand-mark';
 import { formatCost } from '../../core/cost-format';
 
@@ -84,7 +84,7 @@ export class BoardHeader {
   /** The all-time fleet counts the lane cells fold from — the hub's usage; ignored
    * once {@link stats} is given. `null` before the read resolves, when the cells are
    * withheld rather than shown as a misleading zero. */
-  readonly counts = input<ChunkCountsView | null>(null);
+  readonly counts = input<LaneCounts | null>(null);
 
   /** The fleet-wide spend-since read, or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */

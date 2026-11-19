@@ -15,7 +15,7 @@ const RUNNER_ID = 'rn_01M49GZR9G2S7PT1TB5ZT4E4AX';
 const CARD: BoardCard = {
   chunkId: 'ch_01running000000000000000',
   shortId: 'C-0001',
-  status: 'running',
+  status: 'running', laneStatus: { kind: 'running' },
   terminal: false,
   promotable: false,
   node: 'build',
@@ -67,13 +67,13 @@ describe('BoardList', () => {
 
   const rows = (el: HTMLElement) => [...el.querySelectorAll('[data-testid="list-row"]')].map((r) => r.getAttribute('data-chunk'));
 
-  const ready = (suffix: string) => entry('ready', card(suffix, { status: 'ready' }));
-  const backlog = (suffix: string) => entry('notready', card(suffix, { status: 'not_ready' }));
+  const ready = (suffix: string) => entry('ready', card(suffix, { status: 'ready', laneStatus: { kind: 'ready' } }));
+  const backlog = (suffix: string) => entry('notready', card(suffix, { status: 'not_ready', laneStatus: { kind: 'not_ready' } }));
   const LISTED = groups({
-    live: [entry('needs', card('n', { status: 'needs_human' })), entry('running', card('r'))],
+    live: [entry('needs', card('n', { status: 'needs_human', laneStatus: { kind: 'needs_human' } })), entry('running', card('r'))],
     ready: [ready('q1'), ready('q2')],
     backlog: [backlog('b1'), backlog('b2')],
-    done: [entry('done', card('d', { status: 'done', terminal: true }))],
+    done: [entry('done', card('d', { status: 'done', laneStatus: { kind: 'done' }, terminal: true }))],
   });
 
   it('places the non-default urgency after the id, omitting it on finished rows', async () => {
@@ -120,7 +120,7 @@ describe('BoardList', () => {
   });
 
   it("leads each row with its lane's icon", async () => {
-    const el = await render(groups({ live: [entry('needs', card('a', { status: 'needs_human' }))], done: [entry('done', card('b', { status: 'stopped', terminal: true }))] }));
+    const el = await render(groups({ live: [entry('needs', card('a', { status: 'needs_human', laneStatus: { kind: 'needs_human' } }))], done: [entry('done', card('b', { status: 'stopped', laneStatus: { kind: 'stopped' }, terminal: true }))] }));
 
     const glyphs = [...el.querySelectorAll('[data-testid="list-row-lane"]')].map((icon) => icon.getAttribute('data-glyph'));
     expect(glyphs).toEqual(['needs', 'stopped']);
@@ -200,7 +200,7 @@ describe('BoardList', () => {
       [...el.querySelectorAll('[data-testid="list-row-title"]')].map((t) => t.textContent?.trim());
 
     it('closes a finished row with when it completed, leaving the cost column to the cost', async () => {
-      const el = await render(groups({ done: [entry('done', card('a', { status: 'done', terminal: true, completedAt: '2026-07-13T00:00:01+00:00', costUsd: 1.5 }))] }));
+      const el = await render(groups({ done: [entry('done', card('a', { status: 'done', laneStatus: { kind: 'done' }, terminal: true, completedAt: '2026-07-13T00:00:01+00:00', costUsd: 1.5 }))] }));
 
       const finished = el.querySelector('[data-testid="list-row-finished"]')!;
       expect(finished.closest('.work')).not.toBeNull();

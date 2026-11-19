@@ -23,10 +23,10 @@
               <span class="rl-routine">{{ row.routineName }}/{{ row.scopeSlug }}</span>
               <fleet-kit-badge
                 class="rl-outcome"
-                [tone]="STATUS_TONE(row.outcome)"
+                [tone]="STATUS_TONE(row.laneStatus.kind)"
                 variant="soft"
                 [attr.data-testid]="'rl-outcome-' + row.chunkId"
-                >{{ row.outcome }}</fleet-kit-badge
+                >{{ row.laneStatus.kind === 'unknown' ? row.laneStatus.raw : row.laneStatus.kind }}</fleet-kit-badge
               >
             </div>
             <div class="rl-line rl-meta">

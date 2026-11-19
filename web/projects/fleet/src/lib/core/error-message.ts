@@ -1,14 +1,12 @@
-import type { Problem, ValidationEntry } from '../api/hub';
-
 /** Whether `value` reads as a refusal body: an object, whose members are all optional because a hub
  * before problem details sends only `detail`. */
-function isProblem(value: unknown): value is Problem {
+function isProblem(value: unknown): value is { detail?: unknown; title?: unknown } {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isValidationEntry(
   entry: unknown,
-): entry is ValidationEntry & { msg: string } {
+): entry is { loc?: unknown; msg: string } {
   return (
     typeof entry === 'object' &&
     entry !== null &&
@@ -88,7 +86,7 @@ export function problemType(error: unknown): string | undefined {
 
 /** What the operator is shown for a hub or runner refusal: the problem's `detail` — a string, a
  * coded object's `message`, or a validation list's field-named messages — else its `title`. It
- * reads the generated `Problem` and never the `type`: a type the board does not know is shown by
+ * reads the refusal's message and never the `type`: a type the board does not know is shown by
  * its message. `fallback` names the verb that failed, for the case where no body can be read. The
  * one owner of that read. */
 export function errorMessage(error: unknown, fallback: string): string {

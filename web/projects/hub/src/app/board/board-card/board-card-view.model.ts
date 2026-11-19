@@ -4,6 +4,7 @@ import {
   type UrgencyRef,
   type ChunkCardView,
   type ChunkStatus,
+  type LaneStatus,
   finishedWord,
   formatCost,
   type hubApi,
@@ -12,8 +13,8 @@ import {
   type PrView,
   runnerBoardParts,
   runnerTitle,
-  STATUS_LANE,
-  STATUS_TONE,
+  domainStatusLane,
+  domainStatusTone,
   stepLabel,
   type WorkLine,
   runnerBoardLabel,
@@ -26,6 +27,7 @@ export interface BoardCard {
   readonly chunkId: string;
   readonly shortId: string;
   readonly status: ChunkStatus;
+  readonly laneStatus: LaneStatus;
   /** The hub's `ChunkSummary.terminal` — the card sits in the DONE lane exactly when set. */
   readonly terminal: boolean;
   readonly urgency?: UrgencyRef | null;
@@ -89,7 +91,7 @@ export interface BoardCard {
  * WAIT/HUMAN, NEEDS HUMAN), and only when there is an open PR to link, a merge to await, or a place on a flow. Landed
  * commits never show here — the chunk detail owns the full history. */
 function showsDelivery(card: BoardCard): boolean {
-  const lane = STATUS_LANE(card.status);
+  const lane = domainStatusLane(card.laneStatus.kind);
   return (
     !card.terminal &&
     (lane === 'running' || lane === 'waiting' || lane === 'needs') &&
@@ -126,7 +128,7 @@ export function boardCardView(card: BoardCard, surface: BoardCardSurface = 'card
     chunkId: card.chunkId,
     shortId: card.shortId,
     status: card.status,
-    tone: STATUS_TONE(card.status),
+    tone: domainStatusTone(card.laneStatus.kind),
     statusWord: !card.terminal && cardShowsStatus(card.status) ? card.status : null,
     step,
     stepTitle: stepTitle(step, card.nodeId),

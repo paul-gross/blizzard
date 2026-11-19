@@ -32,8 +32,8 @@
   }
 </ng-template>
 <ng-template #edgeBody let-n>
-  @if (n.status) {
-    <fleet-lane-icon class="edge-icon" [lane]="lane(n.status)" [status]="n.status" />
+  @if (n.laneStatus) {
+    <fleet-lane-icon class="edge-icon" [lane]="lane(n.laneStatus)" [status]="n.laneStatus" />
   }
   <span class="edge-ref">{{ shortId(n.chunk_id) }}</span>
 </ng-template>

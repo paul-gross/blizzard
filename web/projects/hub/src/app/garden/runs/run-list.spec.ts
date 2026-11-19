@@ -11,7 +11,7 @@ const ROWS: readonly RunListRowVm[] = [
     scopeSlug: 'blizzard',
     mode: 'full',
     mintedAt: '2026-01-10T00:00:00Z',
-    outcome: 'done',
+    laneStatus: { kind: 'done' },
     escalated: false,
     counts: { added: 1, observed: 11, gone: 0 },
   },
@@ -21,7 +21,7 @@ const ROWS: readonly RunListRowVm[] = [
     scopeSlug: 'web',
     mode: 'delta',
     mintedAt: '2026-01-11T00:00:00Z',
-    outcome: 'needs_human',
+    laneStatus: { kind: 'needs_human' },
     escalated: true,
     counts: null,
   },
@@ -52,6 +52,11 @@ describe('FleetRunList', () => {
     const row = el.querySelector('[data-testid="gardening-run-row-ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9"]');
     expect(row?.textContent).toContain('nightly/blizzard');
     expect(row?.textContent).toContain('Full');
+  });
+
+  it('renders an unknown status by its original spelling', async () => {
+    const fixture = await mount({ rows: [{ ...ROWS[0], laneStatus: { kind: 'unknown', raw: 'future-status' } }] });
+    expect((fixture.nativeElement as HTMLElement).querySelector('.rl-outcome')?.textContent).toContain('future-status');
   });
 
   it('renders the mode capitalised and the chunk ref right-aligned with the full id in title', async () => {

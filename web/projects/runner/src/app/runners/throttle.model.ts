@@ -5,7 +5,7 @@ export function floorClearScope(
   subscription: string | null,
   runnerId: string,
   runners: readonly runnerApi.HostRunnerView[],
-  subscriptions: readonly runnerApi.HostSubscriptionView[],
+  subscriptions: readonly Pick<import('fleet').RunnerSubscription, 'slug' | 'spenders'>[],
 ): string | null {
   const names = new Map(runners.filter((runner) => runner.runner_id !== null).map((runner) => [runner.runner_id, runner.name]));
   if (subscription === null) return names.get(runnerId) ?? runnerId;

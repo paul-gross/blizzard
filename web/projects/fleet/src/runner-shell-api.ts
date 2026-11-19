@@ -8,12 +8,11 @@
 
 export { type StatCell } from './lib/shell/board-header/board-header';
 export { backoffDelay } from './lib/sse/sse.service';
+export { type RunnerStreamEvent } from './lib/sse/runner-stream.domain';
+export { translateRunnerStreamEvent } from './lib/sse/runner-stream.translate';
 export {
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
-  type RunnerEventPayload,
-  type RunnerEventPayloads,
-  type RunnerEventType,
 } from './lib/sse/runner-events';
 
 export { KitGlyph } from './lib/kit/kit-glyph';

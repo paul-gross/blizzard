@@ -241,7 +241,7 @@ export class ChunkPage {
   protected readonly projectColor = computed<string | null>(() =>
     chunkProjectColor(this.detail()?.project_id, this.daemon.projectColor?.bind(this.daemon)),
   );
-  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status ?? 'ready'));
+  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.laneStatus.kind ?? 'ready'));
   /** The daemon's chunk-control port, or `null` — the header hides its ⋮ menu. */
   protected readonly control = this.actions?.control ?? null;
 

@@ -14,6 +14,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01grip0000000000000000000',
   shortId: 'C-GRIP',
   status: 'ready',
+  laneStatus: { kind: 'ready' },
   terminal: false,
   promotable: false,
   node: 'build',

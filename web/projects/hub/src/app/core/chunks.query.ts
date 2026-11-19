@@ -1,7 +1,7 @@
 import type { hubApi } from 'fleet';
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { listChunksApiChunksGet, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { listChunksApiChunksGet, laneStatus, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { DRAIN_LIMIT, drainPages } from './paginated-read';
 import type { BoardChunksRead } from './chunks.model';
 import { hubBoardChunksKey, lensedKey } from './query-keys';
@@ -30,6 +30,10 @@ export function boardChunksQueryOptions(project: string | null) {
       );
       return { chunks: pages.flatMap((page) => page.chunks), pages };
     },
+    select: (read: BoardChunksRead) => ({
+      ...read,
+      chunks: read.chunks.map((chunk) => ({ ...chunk, laneStatus: laneStatus(chunk.status) })),
+    }),
   };
 }
 

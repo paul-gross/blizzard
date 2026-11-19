@@ -1,4 +1,5 @@
-import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type UrgencyRef, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, blockedLabel, domainChunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type LaneStatus, type UrgencyRef, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
+import type { BoardChunk } from '../../core/chunks.model';
 
 import type { RowWork, Vitals } from './glance-view';
 
@@ -36,6 +37,7 @@ export interface GlanceRow extends RowWork {
   /** The board lane it sits in — the card's icon. */
   readonly lane: string;
   readonly status: ChunkStatus;
+  readonly laneStatus: LaneStatus;
   /** `paused` or `stopped`, which the icon alone cannot tell from its lane on a touch screen; else `null`. */
   readonly statusWord: string | null;
   readonly node: string;
@@ -80,7 +82,7 @@ function byRank<T extends { readonly chunkId: string }>(rows: T[], order: readon
 /** Every chunk as a mobile list card, grouped and ordered as the desktop list orders its rows: READY by the
  * hub's queue, BACKLOG by its backlog. */
 export function glanceListGroups(
-  chunks: readonly ChunkSummary[],
+  chunks: readonly BoardChunk[],
   questions: readonly QuestionView[],
   decisions: readonly DecisionView[],
   readyOrder: readonly { readonly chunk_id: string }[],
@@ -94,12 +96,13 @@ export function glanceListGroups(
   const byLane = new Map<string, GlanceRow[]>();
   const doneAt = new Map<string, number>();
   for (const chunk of chunks) {
-    const lane = chunkLane(chunk);
+    const lane = domainChunkLane({ status: chunk.laneStatus, terminal: chunk.terminal });
     const row: GlanceRow = {
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
       lane,
       status: chunk.status,
+      laneStatus: chunk.laneStatus,
       statusWord: chunk.status === 'paused' || chunk.status === 'stopped' ? chunk.status : null,
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       nodeId: chunk.current_node_id ?? '',

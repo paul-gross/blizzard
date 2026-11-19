@@ -23,13 +23,13 @@
           class="lane"
           data-testid="list-row-lane"
           [lane]="entry.lane"
-          [status]="entry.card.status"
+          [status]="entry.card.laneStatus"
           (click)="selectChunk.emit(entry.card.chunkId)"
         />
         @if (showsNodeStrip(entry.card)) {
           <app-node-strip chunkRowProgress [progress]="entry.card.graphProgress" />
         }
-        <fleet-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.status" />
+        <fleet-lane-icon chunkRowFinishedIcon class="finished-icon" lane="done" [status]="entry.card.laneStatus" />
       </fleet-chunk-list-row>
     }
   </ng-template>

@@ -1,4 +1,5 @@
 import type * as runnerApi from '../api/runner';
+import type { RunnerSubscription } from '../core/host.domain';
 import { compactRef } from '../core/compact-ref';
 import {
   conditionLabel,
@@ -33,7 +34,7 @@ const UNREPORTED = {
   windows: [],
   windows_sampled_at: null,
   condition: null,
-} satisfies Omit<runnerApi.HostSubscriptionView, 'slug' | 'name' | 'provider'>;
+} satisfies Omit<RunnerSubscription, 'slug' | 'name' | 'provider'>;
 
 describe('heldForLabel', () => {
   it('renders blank for an unheld environment', () => {
@@ -164,7 +165,7 @@ describe('conditionLabel', () => {
   });
 
   it('reads a miss reason this build does not know raw', () => {
-    expect(conditionLabel(false, 'quota_exceeded' as runnerApi.SampleMissReason)).toBe('miss: quota_exceeded');
+    expect(conditionLabel(false, 'quota_exceeded')).toBe('miss: quota_exceeded');
   });
 });
 
@@ -192,8 +193,8 @@ describe('renewalLabel', () => {
   });
 
   it('reads a result or failure reason this build does not know raw', () => {
-    expect(renewalLabel('deferred' as runnerApi.RenewalResult, null, ATTEMPTED, NOW)).toBe('deferred -34s ago');
-    expect(renewalLabel('failed', 'revoked' as runnerApi.RenewalFailureReason, ATTEMPTED, NOW)).toBe('failed (revoked) -34s ago');
+    expect(renewalLabel('deferred', null, ATTEMPTED, NOW)).toBe('deferred -34s ago');
+    expect(renewalLabel('failed', 'revoked', ATTEMPTED, NOW)).toBe('failed (revoked) -34s ago');
   });
 });
 
@@ -202,7 +203,7 @@ describe('runnerSubscriptionPaces', () => {
   const UNPACED = { paceBars: [], condition: null, sampledAt: null, refreshedLabel: null, refreshedTag: null, freshness: null };
 
   it('carries a missed attempt with no windows as its sample line, a never-attempted one with no sample', () => {
-    const subs: runnerApi.HostSubscriptionView[] = [
+    const subs: RunnerSubscription[] = [
       {
         ...UNREPORTED,
         slug: 'claude-max',
@@ -273,17 +274,17 @@ describe('runnerSubscriptionPaces', () => {
     expect(pace).toMatchObject({ condition: 'credential_lapsed', missReason: 'credential_lapsed', sample: null });
   });
 
-  it('reads the wire condition, not the raw miss: a lapse-looking miss without the condition is not lapsed, and an unknown condition is not lapsed', () => {
+  it('reads the wire condition, not the raw miss, and preserves an unknown condition', () => {
     const [raw, unknown] = runnerSubscriptionPaces(
       [
         { ...UNREPORTED, slug: 'a', name: 'A', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
-        { ...UNREPORTED, slug: 'b', name: 'B', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'mystery' as runnerApi.SampleMissReason },
+        { ...UNREPORTED, slug: 'b', name: 'B', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'mystery' },
       ],
       NOW,
       runnerName,
     );
     expect(raw.condition).toBeNull();
-    expect(unknown.condition).toBeNull();
+    expect(unknown.condition).toBe('mystery');
   });
 });
 

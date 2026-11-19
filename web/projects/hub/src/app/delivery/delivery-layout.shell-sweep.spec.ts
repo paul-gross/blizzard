@@ -40,10 +40,10 @@ const deliveryBounces = Array.from({ length: 60 }, (_, index) => bounceView({
 class TestDeliveryGlancePage {
   readonly now = FIXTURE_NOW;
   readonly list = deliveryList({
-    chunks: [chunkSummary({
+    chunks: [{ ...chunkSummary({
       chunk_id: deliveryId, graph_id: 'gr_build', status: 'needs_human', bounce_count: 1,
       latest_bounce: bounceView({ cause: 'poll-timeout', envelope: '{}', recorded_at: fixtureInstant(-60) }),
-    })],
+    }), laneStatus: { kind: 'needs_human' } }],
     flows: [], repositories: [], facts: new Map(), workItems: new Map(), projectColors: null, runnerHosts: new Map(), now: FIXTURE_NOW,
   });
 }

@@ -1,4 +1,4 @@
-import type { ExternalSubscriptionUsageWindowView, SampleMissReason } from '../api/hub';
+import type { SampleMiss, UsageWindow } from '../core/host.domain';
 import { unlisted } from '../core/open-lookup';
 import type { Tone } from '../kit/tone';
 
@@ -74,7 +74,7 @@ export interface SubscriptionPace {
   readonly paceBars: readonly PaceBar[];
   /** `SampleMissReason.CREDENTIAL_LAPSED` when the newest reported miss outranks the newest sample;
    * `null` otherwise. */
-  readonly condition: SampleMissReason | null;
+  readonly condition: SampleMiss | null;
   /** The last good sample's raw instant, or `null` when the slug has never been
    * sampled — presence, not `paceBars.length`, is what tells a zero-window sample
    * apart from no sample at all. */
@@ -88,7 +88,7 @@ export interface SubscriptionPace {
    * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */
   readonly freshness: SubscriptionFreshness | null;
   /** The newest reported miss's own reason, or `null` when there is none. */
-  readonly missReason: SampleMissReason | null;
+  readonly missReason: SampleMiss | null;
   /** The subscription's provider, shown beside its name when set. */
   readonly provider?: string | null;
   /** The daemon's own sampling line; when set it renders in place of the pace bars. */
@@ -120,7 +120,7 @@ export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds:
 }
 
 /** A subscription's windows folded to pace bars against `nowMs`. */
-export function toPaceBars(nowMs: number, windows: readonly ExternalSubscriptionUsageWindowView[]): readonly PaceBar[] {
+export function toPaceBars(nowMs: number, windows: readonly UsageWindow[]): readonly PaceBar[] {
   return windows.map((w) => ({
     window: w.window,
     utilizationPct: w.utilization_pct,

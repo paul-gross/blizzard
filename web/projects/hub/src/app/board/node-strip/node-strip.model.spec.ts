@@ -20,18 +20,18 @@ describe('groupBlocks', () => {
 
 describe('showsNodeStrip', () => {
   it('shows only in the mid-graph lanes — running, waiting on a human, needing one', () => {
-    expect(showsNodeStrip({ status: 'running', terminal: false })).toBe(true);
-    expect(showsNodeStrip({ status: 'delivering', terminal: false })).toBe(true);
-    expect(showsNodeStrip({ status: 'waiting_on_human', terminal: false })).toBe(true);
-    expect(showsNodeStrip({ status: 'needs_human', terminal: false })).toBe(true);
-    expect(showsNodeStrip({ status: 'ready', terminal: false })).toBe(false);
-    expect(showsNodeStrip({ status: 'not_ready', terminal: false })).toBe(false);
-    expect(showsNodeStrip({ status: 'done', terminal: true })).toBe(false);
+    expect(showsNodeStrip({ laneStatus: { kind: 'running' }, terminal: false })).toBe(true);
+    expect(showsNodeStrip({ laneStatus: { kind: 'delivering' }, terminal: false })).toBe(true);
+    expect(showsNodeStrip({ laneStatus: { kind: 'waiting_on_human' }, terminal: false })).toBe(true);
+    expect(showsNodeStrip({ laneStatus: { kind: 'needs_human' }, terminal: false })).toBe(true);
+    expect(showsNodeStrip({ laneStatus: { kind: 'ready' }, terminal: false })).toBe(false);
+    expect(showsNodeStrip({ laneStatus: { kind: 'not_ready' }, terminal: false })).toBe(false);
+    expect(showsNodeStrip({ laneStatus: { kind: 'done' }, terminal: true })).toBe(false);
   });
 
   it('hides on a terminal chunk whatever lane its status reads as', () => {
-    expect(showsNodeStrip({ status: 'stopped', terminal: true })).toBe(false);
-    expect(showsNodeStrip({ status: 'running', terminal: true })).toBe(false);
+    expect(showsNodeStrip({ laneStatus: { kind: 'stopped' }, terminal: true })).toBe(false);
+    expect(showsNodeStrip({ laneStatus: { kind: 'running' }, terminal: true })).toBe(false);
   });
 });
 

@@ -86,7 +86,7 @@ const ROW: RunnerRow = {
   locally_paused: false,
   env_capacity: 4,
   used: 1,
-  claims: [{ chunkId: 'ch_01claim000000000000000000000', shortId: 'C-01CLAIM0000000000000000', node: 'build', status: 'running' }],
+  claims: [{ chunkId: 'ch_01claim000000000000000000000', shortId: 'C-01CLAIM0000000000000000', node: 'build', status: { kind: 'running' as const } }],
   subscriptionPaces: [],
 };
 
@@ -145,7 +145,7 @@ function nextClaimClient(): QueryClient {
     });
   }
   client.setQueryData(hubUrgenciesKey, []);
-  client.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
+  client.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: { kind: 'running' as const } });
   return client;
 }
 

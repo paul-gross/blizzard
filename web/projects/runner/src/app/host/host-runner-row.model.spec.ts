@@ -186,9 +186,9 @@ describe('hostRunnerRows', () => {
   it('lists the subscriptions the runner spends by name', () => {
     const row = one(RUNNER(), undefined, {
       subscriptions: [
-        { slug: 'max', name: 'Claude Max', spenders: ['rn_1'] },
-        { slug: 'pro', name: 'ChatGPT Pro', spenders: ['rn_2'] },
-      ] as runnerApi.HostSubscriptionView[],
+        { slug: 'max', name: 'Claude Max', provider: '', spenders: ['rn_1'], condition: null, miss_reason: null, ok: null, sampled_at: null, windows_sampled_at: null, windows: [], renewal_result: null, renewal_failure_reason: null, renewal_attempted_at: null },
+        { slug: 'pro', name: 'ChatGPT Pro', provider: '', spenders: ['rn_2'], condition: null, miss_reason: null, ok: null, sampled_at: null, windows_sampled_at: null, windows: [], renewal_result: null, renewal_failure_reason: null, renewal_attempted_at: null },
+      ],
     });
 
     expect(row.spends).toEqual(['Claude Max']);

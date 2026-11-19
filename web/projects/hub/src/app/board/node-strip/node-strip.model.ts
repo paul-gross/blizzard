@@ -1,4 +1,4 @@
-import { type ChunkStatus, hubApi, STATUS_LANE, type Tone, toneColor, toneDimColor } from 'fleet';
+import { type LaneStatus, hubApi, domainStatusLane, type Tone, toneColor, toneDimColor } from 'fleet';
 
 /** One drawn block: a node of the chunk's graph and how the chunk's visits left it — the hub's
  * `ChunkSummary.graph_progress` entry. */
@@ -47,8 +47,8 @@ export function groupBlocks(blocks: readonly NodeBlock[]): readonly (readonly No
 }
 
 /** Whether a chunk carries the strip: only in the lanes where it is mid-graph — RUNNING, WAIT/HUMAN, NEEDS HUMAN. */
-export function showsNodeStrip(chunk: { readonly status: ChunkStatus; readonly terminal: boolean }): boolean {
-  const lane = STATUS_LANE(chunk.status);
+export function showsNodeStrip(chunk: { readonly laneStatus: LaneStatus; readonly terminal: boolean }): boolean {
+  const lane = domainStatusLane(chunk.laneStatus.kind);
   return !chunk.terminal && (lane === 'running' || lane === 'waiting' || lane === 'needs');
 }
 

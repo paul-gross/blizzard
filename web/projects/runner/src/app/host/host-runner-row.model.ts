@@ -176,7 +176,7 @@ function summary(runner: runnerApi.HostRunnerView, health: readonly HostRunnerHa
 export interface HostRunnerReads {
   readonly dashboards: ReadonlyMap<string, runnerApi.DashboardView>;
   readonly projects: ReadonlyMap<string, readonly PanelProject[]>;
-  readonly subscriptions: readonly runnerApi.HostSubscriptionView[];
+  readonly subscriptions: readonly import('fleet').RunnerSubscription[];
   /** Every chunk across the runners, as the board folds them. */
   readonly chunks: readonly MachineChunkRow[];
   /** Whether the chunks are still loading, so no runner claims it holds none. */

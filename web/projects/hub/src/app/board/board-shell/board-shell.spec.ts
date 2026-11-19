@@ -1,24 +1,26 @@
+import { boardChunk } from '../board.fixture';
+import type { BoardChunk } from '../../core/chunks.model';
 import { CdkDrag, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { type ChunkSummary, compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
-import { chunkUsageTotalView, chunkSummary } from 'fleet/testing';
+import { compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
-const READY = (suffix: string): ChunkSummary => (chunkSummary({
+const READY = (suffix: string): BoardChunk => (boardChunk({
   chunk_id: `ch_01ready${suffix}`,
   graph_id: 'gr_1',
-  status: 'ready',
+  status: 'ready', laneStatus: { kind: 'ready' },
   current_node_id: 'nd_build',
   work_refs: [],
 }));
 
-const BACKLOG = (suffix: string): ChunkSummary => (chunkSummary({
+const BACKLOG = (suffix: string): BoardChunk => (boardChunk({
   chunk_id: `ch_01backlog${suffix}`,
   graph_id: 'gr_1',
-  status: 'not_ready',
+  status: 'not_ready', laneStatus: { kind: 'not_ready' },
   promotable: true,
   current_node_id: 'nd_build',
   work_refs: [],
@@ -38,7 +40,7 @@ describe('BoardShell', () => {
    * `canControl`/`canReorder` default `true` — this spec's baseline actor is
    * fully permissioned; a test asserting the withheld case sets its own `false`. */
   const render = async (
-    chunks: ChunkSummary[],
+    chunks: BoardChunk[],
     readyOrder: string[] = [],
     state: KitAsyncStateValue = 'ready',
     permissions: { canControl?: boolean; canReorder?: boolean } = {},
@@ -64,7 +66,7 @@ describe('BoardShell', () => {
   it('maps the delivery projection to independent card links without selecting the chunk', async () => {
     const fixture = await render([{
       ...READY('delivery'),
-      status: 'delivering',
+      status: 'delivering', laneStatus: { kind: 'delivering' },
       open_prs: [{ repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' }],
       landed_repos: [
         { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' },
@@ -88,7 +90,7 @@ describe('BoardShell', () => {
   });
 
   it('does not mistake an auto-merging PR for a human merge wait', async () => {
-    const fixture = await render([{ ...READY('auto'), status: 'delivering', open_prs: [{ repo: 'widget', number: 7, url: 'https://forge.example/widget/pull/7' }] }]);
+    const fixture = await render([{ ...READY('auto'), status: 'delivering', laneStatus: { kind: 'delivering' }, open_prs: [{ repo: 'widget', number: 7, url: 'https://forge.example/widget/pull/7' }] }]);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="card-merge-wait"]')).toBeNull();
@@ -156,9 +158,9 @@ describe('BoardShell', () => {
   });
 
   it('renders a not-ready chunk as a card in the backlog column, with no Promote control', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', promotable: true, current_node_id: 'nd_build', work_refs: [] }),
-      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', laneStatus: { kind: 'not_ready' }, promotable: true, current_node_id: 'nd_build', work_refs: [] }),
+      boardChunk({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -173,10 +175,10 @@ describe('BoardShell', () => {
   });
 
   it('renders one card per chunk, in its derived-status column, showing status + current node', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', work_refs: [] }),
-      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
-      chunkSummary({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, current_node_id: 'nd_build', work_refs: [] }),
+      boardChunk({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [] }),
+      boardChunk({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', laneStatus: { kind: 'done' }, current_node_id: 'done', work_refs: [] }),
     ];
     const el = (await render(chunks)).nativeElement as HTMLElement;
 
@@ -198,8 +200,8 @@ describe('BoardShell', () => {
   });
 
   it("places a card in DONE off the hub's terminal flag", async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01flagged000000000000000000', graph_id: 'gr_1', status: 'running', terminal: true, current_node_id: 'nd_build', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01flagged000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, terminal: true, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const el = (await render(chunks)).nativeElement as HTMLElement;
 
@@ -208,8 +210,8 @@ describe('BoardShell', () => {
   });
 
   it('renders a paused chunk in the HUMAN ATTENTION column', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', current_node_id: 'nd_build', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', laneStatus: { kind: 'paused' }, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -222,8 +224,8 @@ describe('BoardShell', () => {
   });
 
   it('emits the chunk id when a card is activated (fills the detail dock)', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -238,11 +240,11 @@ describe('BoardShell', () => {
   });
 
   it('renders the node name as the visible label with the full name and raw ULID in the tooltip', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({
+    const chunks: BoardChunk[] = [
+      boardChunk({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
-        status: 'running',
+        status: 'running', laneStatus: { kind: 'running' },
         current_node_id: 'nd_01KXHKVCWZ1000000000000000',
         current_node_name: 'review',
         work_refs: [],
@@ -260,11 +262,11 @@ describe('BoardShell', () => {
   });
 
   it('names each work item as plain text, one chip per line — a card carries no competing link', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({
+    const chunks: BoardChunk[] = [
+      boardChunk({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
-        status: 'running',
+        status: 'running', laneStatus: { kind: 'running' },
         current_node_id: 'nd_build',
         current_node_name: 'build',
         work_refs: [
@@ -290,14 +292,14 @@ describe('BoardShell', () => {
   });
 
   it('degrades to the short chunk id when a chunk has no labeled pointer', async () => {
-    const chunks: ChunkSummary[] = [
+    const chunks: BoardChunk[] = [
       // Zero pointers, and a pointer whose URL did not parse (null label) — no chips,
       // the short id carries the identity, and nothing errors.
-      chunkSummary({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] }),
-      chunkSummary({
+      boardChunk({ chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', laneStatus: { kind: 'done' }, current_node_id: 'done', work_refs: [] }),
+      boardChunk({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
-        status: 'running',
+        status: 'running', laneStatus: { kind: 'running' },
         current_node_id: 'nd_build',
         work_refs: [{ source: 'blizzard', ref: 'wiki', label: null, web_url: null }],
       }),
@@ -322,11 +324,11 @@ describe('BoardShell', () => {
   });
 
   it("shows the chunk's derived cost total as a badge on its card (issue #60)", async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({
+    const chunks: BoardChunk[] = [
+      boardChunk({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
-        status: 'running',
+        status: 'running', laneStatus: { kind: 'running' },
         current_node_id: 'nd_build',
         work_refs: [],
         cost: chunkUsageTotalView({
@@ -349,11 +351,11 @@ describe('BoardShell', () => {
   });
 
   it("marks a card's cost badge with the lower-bound suffix when the total is PARTIAL (issue #60)", async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({
+    const chunks: BoardChunk[] = [
+      boardChunk({
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
-        status: 'running',
+        status: 'running', laneStatus: { kind: 'running' },
         current_node_id: 'nd_build',
         work_refs: [],
         cost: chunkUsageTotalView({
@@ -376,8 +378,8 @@ describe('BoardShell', () => {
   });
 
   it('shows no cost badge for a chunk with zero, non-partial spend', async () => {
-    const chunks: ChunkSummary[] = [
-      chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
+    const chunks: BoardChunk[] = [
+      boardChunk({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [] }),
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -440,7 +442,7 @@ describe('BoardShell', () => {
       const el = (
         await render([
           A,
-          chunkSummary({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] }),
+          boardChunk({ chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [] }),
         ])
       ).nativeElement as HTMLElement;
 
@@ -592,8 +594,8 @@ describe('BoardShell', () => {
 
     it('carries the node strip in a mid-graph card\'s cost row, at its current node, and on no other card', async () => {
     const progress = [{ node_id: 'nd_build', name: 'build', state: 'current' as const }];
-    const running = chunkSummary({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [], graph_progress: progress });
-    const ready = chunkSummary({ ...READY('a'), graph_progress: progress });
+    const running = boardChunk({ chunk_id: 'ch_01running00000000000000000', graph_id: 'gr_1', status: 'running', laneStatus: { kind: 'running' }, current_node_id: 'nd_build', work_refs: [], graph_progress: progress });
+    const ready = boardChunk({ ...READY('a'), graph_progress: progress });
     const el = (await render([running, ready])).nativeElement as HTMLElement;
     const strips = [...el.querySelectorAll('[data-testid="node-strip"]')];
     expect(strips).toHaveLength(1);
@@ -666,10 +668,10 @@ describe('BoardShell', () => {
    * of the hub's dispatch order.
    */
   describe('the DONE lane', () => {
-    const done = (idSuffix: string, completedAt: string | null): ChunkSummary => (chunkSummary({
+    const done = (idSuffix: string, completedAt: string | null): BoardChunk => (boardChunk({
       chunk_id: `ch_01done${idSuffix}`,
       graph_id: 'gr_1',
-      status: 'done',
+      status: 'done', laneStatus: { kind: 'done' },
       current_node_id: 'done',
       work_refs: [],
       completed_at: completedAt,
@@ -715,7 +717,7 @@ describe('BoardShell', () => {
 
   describe('the blocked marking (issue #461)', () => {
     it("carries a chunk's blocked prerequisite onto its card", async () => {
-      const blocked: ChunkSummary = {
+      const blocked: BoardChunk = {
         ...READY('blocked00000000000000'),
         blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000', unmet_count: 1 },
       };
@@ -726,8 +728,8 @@ describe('BoardShell', () => {
     });
 
     it("names the blocker's own state, read off the board's own chunk list", async () => {
-      const prerequisite: ChunkSummary = { ...READY('prereq0000000000000000'), status: 'running' };
-      const blocked: ChunkSummary = {
+      const prerequisite: BoardChunk = { ...READY('prereq0000000000000000'), status: 'running', laneStatus: { kind: 'running' } };
+      const blocked: BoardChunk = {
         ...READY('blocked00000000000000'),
         blocked: { prerequisite_chunk_id: prerequisite.chunk_id, unmet_count: 1 },
       };
@@ -738,7 +740,7 @@ describe('BoardShell', () => {
     });
 
     it("carries the wire's unmet count onto the card, which counts rather than names", async () => {
-      const blocked: ChunkSummary = {
+      const blocked: BoardChunk = {
         ...READY('blocked00000000000000'),
         blocked: { prerequisite_chunk_id: 'ch_01prereq00000000000000000', unmet_count: 3 },
       };

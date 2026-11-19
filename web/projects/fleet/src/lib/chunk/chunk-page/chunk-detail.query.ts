@@ -7,6 +7,7 @@ import * as runnerApi from '../../api/runner';
 import { LIVE_COVERED_POLL_BACKSTOP_MS, RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from '../../core/polling';
 import { type DaemonTarget, targetKeyRoot } from '../../core/daemon-target/daemon-target';
 import { chunkDetailKey, chunkWorkItemsKey, type TranscriptPlane } from '../../core/query-keys';
+import { laneStatus } from '../../core/chunk-lanes.translate';
 
 /** Each plane's live-covered backstop — the interval its own live-update registry
  * leaves as insurance against a dropped frame. */
@@ -14,6 +15,20 @@ const POLL_BACKSTOP_MS: Record<TranscriptPlane, number> = {
   hub: LIVE_COVERED_POLL_BACKSTOP_MS,
   runner: RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS,
 };
+
+/** Project presentation statuses without changing the cached aggregate. */
+export function projectChunkDetail(detail: ChunkDetail) {
+  const project = (neighbor: hubApi.ChunkNeighborView) => ({ ...neighbor, laneStatus: neighbor.status === null ? null : laneStatus(neighbor.status) });
+  return {
+    ...detail,
+    laneStatus: laneStatus(detail.status),
+    neighborhood: detail.neighborhood && {
+      ...detail.neighborhood,
+      prerequisites: detail.neighborhood.prerequisites.map(project),
+      dependents: detail.neighborhood.dependents.map(project),
+    },
+  };
+}
 
 /** One chunk's aggregate through the target's own generated function — each plane calls
  * its own module (`bzh:generated-client`): the two specs declare the chunk-detail DTO
@@ -68,6 +83,7 @@ export function injectChunkDetailQuery(target: () => DaemonTarget | null, chunkI
       queryKey: chunkDetailKey(active === null ? '' : targetKeyRoot(active), id),
       enabled: id !== null && active !== null,
       queryFn: () => fetchChunkDetail(active!, id!),
+      select: projectChunkDetail,
       // Live updates stale this key; see the hub's EVENT_INVALIDATION_REGISTRY (hub/core/live/hub-live-updates.ts) and polling.ts.
       refetchInterval: POLL_BACKSTOP_MS[active?.plane ?? 'hub'],
     };

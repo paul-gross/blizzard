@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
-import { chunkDetail, decisionView, questionView, transitionView, workItemEntry } from '../../testing/builders/chunk.translate';
+import { chunkDetail as wireChunkDetail, decisionView, questionView, transitionView, workItemEntry } from '../../testing/builders/chunk.translate';
+import type { ChunkDetail } from '../../api/hub';
 import { ChunkGeneralTab } from './chunk-general-tab';
+
+const chunkDetail = (overrides: Partial<ChunkDetail> = {}) => ({
+  ...wireChunkDetail(overrides),
+  neighborhood: { prerequisites: [], dependents: [] },
+});
 
 const HISTORY = [
   transitionView({ from_node_id: null, to_node_id: 'nd_plan', to_node_name: 'plan', epoch: 1, recorded_at: '2026-10-19T11:40:00.000Z' }),

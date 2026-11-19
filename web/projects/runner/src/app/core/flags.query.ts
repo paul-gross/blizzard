@@ -8,6 +8,6 @@ export const runnerFlagsRead: FlagsRead = {
   queryFn: async () => {
     const { data, error } = await runnerApi.flagsApiFlagsGet({ throwOnError: false });
     if (error) throw error;
-    return data!;
+    return { flags: data!.flags, overridden: data!.overridden };
   },
 };

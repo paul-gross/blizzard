@@ -53,7 +53,7 @@
                 <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
                 <span class="node" [title]="claim.node">{{ claim.node }}</span>
                 <span class="sep">·</span>
-                <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
+                <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status.kind === 'unknown' ? claim.status.raw : claim.status.kind }}</fleet-kit-badge>
               </a>
             </li>
           }
