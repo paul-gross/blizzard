@@ -1,4 +1,5 @@
 import type { CredentialBindingView, CredentialCheckView, CredentialCreateRequest, CredentialDocument as WireDocument, CredentialListItem as WireListItem, CredentialPatchRequest, CredentialSummary, EditBaseline, ForgeBindingsView, RefusalMap } from 'fleet';
+import { openLookup } from 'fleet';
 import { type Credential, type CredentialBinding, type CredentialCheck, type CredentialDocument, type CredentialDraft, type CredentialForgeBindings, type CredentialListItem, type CredentialSettingKind, POSITIVE_INTEGER_MESSAGE, readPositiveInteger, settingDrafts } from './credential.domain';
 
 export function fromCredentialSummary(wire: CredentialSummary): Credential {
@@ -13,7 +14,16 @@ export function fromCredentialBinding(wire: CredentialBindingView): CredentialBi
   }) };
 }
 export function fromForgeBindings(wire: ForgeBindingsView): CredentialForgeBindings { return { forgeId: wire.forge_id, bindings: [...wire.bindings] }; }
-export function fromCredentialCheck(wire: CredentialCheckView): CredentialCheck { return { binding: wire.binding, credential: wire.credential, grantedPermissions: wire.granted_permissions, mint: wire.mint, notEvaluated: wire.not_evaluated, unreachedReason: wire.unreached_reason, uses: wire.uses, variant: wire.variant, variantContradicted: wire.variant_contradicted }; }
+const checkOutcome = openLookup<NonNullable<CredentialCheckView['mint']>['outcome'], import('./credential.domain').CredentialCheckOutcome>(
+  { proven: 'proven', granted: 'granted', unproven: 'unproven', refused: 'refused', unsupported: 'unsupported' }, (unlisted) => ({ unlisted }),
+);
+const checkUseKind = openLookup<CredentialCheckView['uses'][number]['kind'], import('./credential.domain').CredentialUseKind>(
+  { repository: 'repository', work_source: 'work_source' }, (unlisted) => ({ unlisted }),
+);
+function fromCheckOperation(wire: NonNullable<CredentialCheckView['mint']>): import('./credential.domain').CredentialCheckOperation {
+  return { ...wire, outcome: checkOutcome(wire.outcome) };
+}
+export function fromCredentialCheck(wire: CredentialCheckView): CredentialCheck { return { binding: wire.binding, credential: wire.credential, grantedPermissions: wire.granted_permissions, mint: wire.mint && fromCheckOperation(wire.mint), notEvaluated: wire.not_evaluated, unreachedReason: wire.unreached_reason, uses: wire.uses.map((use) => ({ ...use, kind: checkUseKind(use.kind), operations: use.operations.map(fromCheckOperation) })), variant: wire.variant, variantContradicted: wire.variant_contradicted }; }
 export function toDraft(record: Credential, bindings: readonly CredentialBinding[]): CredentialDraft {
   return { slug: record.slug, name: record.name, forge: record.forgeId, binding: record.binding, secret: record.secretName, settings: settingDrafts(bindings).map((entry) => {
     const value = record.settings[entry.key];
@@ -26,13 +36,15 @@ export function toEditBaseline(record: Credential, bindings: readonly Credential
   return { id: record.id, revision: record.revision, draft: toDraft(record, detached), storedSettings: structuredClone(record.settings), bindings: detached };
 }
 export type CredentialRequest<R> = { readonly ok: true; readonly request: R } | { readonly ok: false; readonly form: string };
-function settings(draft: CredentialDraft, stored: Readonly<Record<string, unknown>>, definitions: readonly CredentialBinding[]): CredentialRequest<Record<string, unknown>> {
+function settings(draft: CredentialDraft, stored: Readonly<Record<string, unknown>>, definitions: readonly CredentialBinding[], originalDraft?: CredentialDraft): CredentialRequest<Record<string, unknown>> {
   const binding = definitions.find((item) => item.name === draft.binding);
   if (!binding) return { ok: false, form: `Settings for binding ${draft.binding} are unavailable.` };
   const result = { ...stored };
   for (const definition of binding.settings) {
     const entry = draft.settings.find((item) => item.binding === binding.name && item.key === definition.key);
     if (!entry) continue;
+    const originalEntry = originalDraft?.settings.find((item) => item.binding === binding.name && item.key === definition.key);
+    if (originalEntry && entry.text === originalEntry.text) continue;
     const text = entry.text.trim();
     if (!text) {
       const original = stored[definition.key];
@@ -57,13 +69,9 @@ export function toEditRequest(before: CredentialEditBaseline, after: CredentialD
   const body: CredentialPatchRequest = {};
   for (const key of ['slug', 'name', 'secret'] as const) { const text = after[key].trim(); if (text !== before.draft[key].trim()) body[key] = text; }
   if (before.bindings.some((binding) => binding.name === before.draft.binding)) {
-    const previous = settings(before.draft, before.storedSettings, before.bindings);
-    const next = settings({ ...after, binding: before.draft.binding }, before.storedSettings, before.bindings);
+    const next = settings({ ...after, binding: before.draft.binding }, before.storedSettings, before.bindings, before.draft);
     if (!next.ok) return next;
-    // A stored value can predate the current schema. Let a valid edit repair it rather than
-    // rejecting the replacement because the captured value no longer passes today's rules.
-    const original = previous.ok ? previous.request : before.storedSettings;
-    if (JSON.stringify(original) !== JSON.stringify(next.request)) body.settings = next.request;
+    if (JSON.stringify(before.storedSettings) !== JSON.stringify(next.request)) body.settings = next.request;
   }
   return { ok: true, request: body };
 }

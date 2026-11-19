@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { form } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
 import { asyncState, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
@@ -48,6 +48,22 @@ export class CredentialsPage {
   protected readonly createOpen = signal(false);
   private readonly draft = signal<CredentialDraft>({ ...EMPTY_CREDENTIAL_DRAFT });
   protected readonly createForm = form(this.draft, credentialRules);
+
+  private readonly syncSettings = effect(() => {
+    const bindings = this.bindings();
+    if (!this.createOpen()) return;
+    untracked(() => this.draft.update((draft) => {
+      const definitions = settingDrafts(bindings);
+      const settings = draft.settings.map((setting) => {
+        const current = definitions.find((item) => item.binding === setting.binding && item.key === setting.key);
+        return current ? { ...setting, type: current.type } : setting;
+      });
+      for (const definition of definitions) {
+        if (!settings.some((setting) => setting.binding === definition.binding && setting.key === definition.key)) settings.push(definition);
+      }
+      return { ...draft, settings };
+    }));
+  });
 
   protected onFilter(value: string): void {
     this.filters.patch({ [LIFECYCLE_FILTER_PARAM]: lifecycleFilterParam(value) });

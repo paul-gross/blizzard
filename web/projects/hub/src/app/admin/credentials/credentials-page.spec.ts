@@ -16,6 +16,7 @@ import {
 
 import { CredentialDetail } from './credential-detail';
 import { CredentialsPage } from './credentials-page';
+import { hubConfigListKey } from '../../core/query-keys';
 
 const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 const LIST = {
@@ -43,11 +44,11 @@ describe('CredentialsPage', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string) {
+  async function open(url: string, credentials: () => typeof LIST | Promise<typeof LIST> = () => LIST) {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/forges': () => FORGES,
-      'GET /api/credentials': () => LIST,
+      'GET /api/credentials': credentials,
       'GET /api/credentials/{credential}': () => credentialDocument({ credential_id: 'cred_n', slug: 'gh-ci' }),
       'POST /api/credentials': () => credentialSummary({ credential_id: 'cred_n', slug: 'gh-ci' }),
     });
@@ -140,5 +141,34 @@ describe('CredentialsPage', () => {
       slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'gh-ci-token', settings: { variant: 'fine-grained' },
     });
     expect(router.url).toBe('/admin/credentials/cred_n');
+  });
+
+  it('reconciles delayed and refreshed settings without losing the create draft', async () => {
+    let resolve!: (value: typeof LIST) => void;
+    const pending = new Promise<typeof LIST>((done) => { resolve = done; });
+    const { harness, el } = await open('/admin/credentials', () => pending);
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'in-progress');
+    resolve(LIST);
+    await settle(harness.fixture);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    await pick(harness, 'forge', 'gitlab');
+
+    const client = TestBed.inject(QueryClient);
+    client.setQueryData(hubConfigListKey('credentials', false), {
+      ...LIST,
+      bindings: [LIST.bindings[1]],
+    });
+    await settle(harness.fixture);
+    client.setQueryData(hubConfigListKey('credentials', false), LIST);
+    await settle(harness.fixture);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    const slug = testid(document, 'admin-credentials-create-field-slug')!;
+    expect((slug.querySelector('input') ?? slug as HTMLInputElement).value).toBe('in-progress');
+    expect(testid(document, 'admin-credentials-create-setting-github.token-variant')!.textContent).toContain('fine-grained');
   });
 });

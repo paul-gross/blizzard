@@ -18,8 +18,10 @@ export interface CredentialReference { readonly kind: string; readonly key: stri
 export interface CredentialDocument extends Credential { readonly referrers: readonly CredentialReference[] }
 export interface CredentialCheckScope { readonly repositories?: string[] | null; readonly work_sources?: string[] | null }
 export interface CredentialCheckTarget { readonly credentialId: string; readonly scope: CredentialCheckScope }
-export interface CredentialCheckOperation { readonly operation: string; readonly outcome: string; readonly detail: string | null; readonly diagnostic: { readonly status: number; readonly endpoint: string; readonly message: string } | null }
-export interface CredentialCheckUse { readonly id: string; readonly kind: string; readonly slug: string; readonly reached: boolean; readonly operations: readonly CredentialCheckOperation[] }
+export type CredentialCheckOutcome = 'proven' | 'granted' | 'unproven' | 'refused' | 'unsupported' | { readonly unlisted: string };
+export type CredentialUseKind = 'repository' | 'work_source' | { readonly unlisted: string };
+export interface CredentialCheckOperation { readonly operation: string; readonly outcome: CredentialCheckOutcome; readonly detail: string | null; readonly diagnostic: { readonly status: number; readonly endpoint: string; readonly message: string } | null }
+export interface CredentialCheckUse { readonly id: string; readonly kind: CredentialUseKind; readonly slug: string; readonly reached: boolean; readonly operations: readonly CredentialCheckOperation[] }
 export interface CredentialCheck { readonly binding: string; readonly credential: string; readonly grantedPermissions: Readonly<Record<string, string>> | null; readonly mint: CredentialCheckOperation | null; readonly notEvaluated: string; readonly unreachedReason: string | null; readonly uses: readonly CredentialCheckUse[]; readonly variant: string | null; readonly variantContradicted: boolean }
 export const POSITIVE_INTEGER_MESSAGE = 'Enter a whole number from 1';
 export function readPositiveInteger(text: string): number | null { const n = readWholeNumber(text); return n !== null && n >= 1 ? n : null; }

@@ -103,7 +103,7 @@ describe('credential picker', () => {
     });
 
     it('says why no use was reached, and heads a use of a kind this build does not know as sent', () => {
-      const odd = { ...check.uses[0], kind: 'mailing_list' };
+      const odd = { ...check.uses[0], kind: { unlisted: 'mailing_list' } };
       const vm = credentialCheckVm({ ...check, unreachedReason: 'the installation could not be read: ReadTimeout', uses: [odd] });
       expect(vm.unreachedReason).toBe('the installation could not be read: ReadTimeout');
       expect(vm.uses[0].heading).toBe('mailing_list issues');

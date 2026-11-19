@@ -144,7 +144,7 @@ function checkUseNoun(kind: CredentialCheckUse['kind']): string {
     case 'work_source':
       return 'work source';
     default:
-      return kind;
+      return kind.unlisted;
   }
 }
 
@@ -152,7 +152,7 @@ function checkOperationVm(result: CredentialCheckOperation): CheckOperationVm {
   const diagnostic = result.diagnostic;
   return {
     operation: result.operation,
-    outcome: result.outcome,
+    outcome: typeof result.outcome === 'string' ? result.outcome : result.outcome.unlisted,
     tone: checkOutcomeTone(result.outcome),
     detail: result.detail,
     diagnostic: diagnostic && `${diagnostic.status} ${diagnostic.endpoint}: ${diagnostic.message}`,
@@ -166,7 +166,7 @@ export function credentialCheckVm(check: CredentialCheck): CredentialCheckVm {
     identity: check.variant ? `${check.binding} · ${check.variant}` : check.binding,
     variantWarning: check.variantContradicted ? 'The declared variant disagrees with the token itself.' : null,
     uses: check.uses.map((use) => ({
-      key: `${use.kind}:${use.id}`,
+      key: `${typeof use.kind === 'string' ? use.kind : use.kind.unlisted}:${use.id}`,
       heading: `${checkUseNoun(use.kind)} ${use.slug}`,
       reached: use.reached,
       operations: use.operations.map(checkOperationVm),
