@@ -83,3 +83,38 @@ export function toCreateRequest(draft: RoutineCreateDraft): hubApi.RoutineCreate
     default_urgency: draft.urgency || null,
   };
 }
+
+const EDIT_REFUSAL_FIELDS: Readonly<Record<string, keyof RoutineEditDraft>> = {
+  graph_name: 'graph',
+  default_urgency: 'urgency',
+};
+
+/** The one field an edit from `before` to `after` changes, or `null` when it changes none or several. */
+function changedField(before: RoutineEditDraft, after: RoutineEditDraft): keyof RoutineEditDraft | null {
+  const graph = after.graph.trim() !== before.graph.trim();
+  const urgency = after.urgency !== before.urgency;
+  if (graph === urgency) return null;
+  return graph ? 'graph' : 'urgency';
+}
+
+/**
+ * How the hub's routine-edit refusals reach the draft: each validation entry to its own field. A definition the hub
+ * cannot resolve names no field, so it lands on the one field the edit changed — the open one.
+ */
+export function routineEditRefusals(before: RoutineEditDraft, after: RoutineEditDraft): RefusalMap<RoutineEditDraft> {
+  const changed = changedField(before, after);
+  return {
+    field: (path) => (Object.hasOwn(EDIT_REFUSAL_FIELDS, path) ? EDIT_REFUSAL_FIELDS[path] : null),
+    kinds: changed === null ? {} : { 'urn:blizzard:problem:routine-definition-invalid': changed },
+  };
+}
+
+/** The edit body `after` states against the draft it started from: only the fields that changed. A graph goes trimmed;
+ * a blank urgency is the tenant default, `null`. */
+export function toEditRequest(before: RoutineEditDraft, after: RoutineEditDraft): hubApi.RoutineEditRequest {
+  const graph = after.graph.trim();
+  return {
+    ...(graph !== before.graph.trim() ? { graph_name: graph } : {}),
+    ...(after.urgency !== before.urgency ? { default_urgency: after.urgency || null } : {}),
+  };
+}

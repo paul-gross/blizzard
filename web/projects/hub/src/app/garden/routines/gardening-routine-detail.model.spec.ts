@@ -23,9 +23,9 @@ import {
   proposalCountsRows,
   relatedScopeRows,
   routineBySlug,
-  routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
+  whileEditing,
   routinePanelState,
   routinePanelVm,
   strategySteps,
@@ -204,16 +204,16 @@ describe('routineEffectiveGraph', () => {
 
 describe('routineOverrideRetired', () => {
   it('answers null with no routine', () => {
-    expect(routineOverrideRetired(null, [{ routineId: 'rtn_1', retired: true }])).toBeNull();
+    expect(routineOverrideRetired(null, [{ routineId: 'rtn_1', revision: 2, retired: true }])).toBeNull();
   });
 
   it('answers null when nothing is pending for the routine', () => {
-    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_2', retired: true }])).toBeNull();
+    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_2', revision: 2, retired: true }])).toBeNull();
   });
 
   it("answers the pending mutation's retired flag", () => {
-    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_1', retired: true }])).toBe(true);
-    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_1', retired: false }])).toBe(false);
+    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_1', revision: 2, retired: true }])).toBe(true);
+    expect(routineOverrideRetired(ROUTINE, [{ routineId: 'rtn_1', revision: 2, retired: false }])).toBe(false);
   });
 });
 
@@ -468,14 +468,9 @@ describe('routineRecentRuns', () => {
   });
 });
 
-describe('routineGraphEdit', () => {
-  it('sets the trimmed graph onto the routine', () => {
-    expect(routineGraphEdit(ROUTINE, '  garden-delta  ')).toEqual({ routineId: 'rtn_1', graphName: 'garden-delta' });
-  });
-
-  it('is null with no routine, on a blank graph, or on the graph the routine already runs', () => {
-    expect(routineGraphEdit(null, 'garden-delta')).toBeNull();
-    expect(routineGraphEdit(ROUTINE, '   ')).toBeNull();
-    expect(routineGraphEdit(ROUTINE, ' garden-routine ')).toBeNull();
+describe('whileEditing', () => {
+  it('answers the value only while a baseline is held', () => {
+    expect(whileEditing({ id: 'rtn_1' }, 'graph')).toBe('graph');
+    expect(whileEditing(null, 'graph')).toBeNull();
   });
 });

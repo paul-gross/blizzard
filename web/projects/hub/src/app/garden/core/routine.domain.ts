@@ -38,11 +38,14 @@ export interface Routine {
   readonly createdAt: string;
 }
 
-/** The fields a routine's inline edits state, as typed: the graph's name, and the urgency id (`''` is the tenant default). */
+/** The fields a routine's inline edits state, as typed: the graph's name, and the urgency slug (`''` is the tenant default). */
 export interface RoutineEditDraft {
   readonly graph: string;
   readonly urgency: string;
 }
+
+/** The empty edit draft — what the inline edit's field tree holds while no field is open. */
+export const EMPTY_ROUTINE_EDIT_DRAFT: RoutineEditDraft = { graph: '', urgency: '' };
 
 /** The fields a routine create states, as typed: `urgency` is an urgency slug, `''` for the tenant default. */
 export interface RoutineCreateDraft {

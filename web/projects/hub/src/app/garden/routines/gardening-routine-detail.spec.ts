@@ -477,21 +477,169 @@ describe('GardeningRoutineDetail', () => {
     );
   });
 
-  it('submits an edited graph through PATCH /api/routines/{id}', async () => {
-    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
+  const open = async (testid: string, el: HTMLElement, fixture: { whenStable(): Promise<unknown> }) => {
+    el.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!.click();
+    await fixture.whenStable();
+  };
+  const typeGraph = async (el: HTMLElement, fixture: { whenStable(): Promise<unknown> }, value: string) => {
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await fixture.whenStable();
+  };
+
+  it('submits an edited graph through PATCH /api/routines/{id}, against the revision it was read at', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineSlug: 'nightly' },
+      routes: { 'PATCH /api/routines/{routine_id}': () => ({ ...ROUTINE, graph_name: 'garden-delta' }) },
+    });
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
-    await fixture.whenStable();
-    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
-    input.value = 'garden-delta';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-submit"]')?.click();
+    await open('gardening-routine-panel-edit', el, fixture);
+    await typeGraph(el, fixture, ' garden-delta ');
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')?.click();
     await settle(fixture);
 
     const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
+    expect(calls[0].headers['if-match']).toBe('1');
+  });
+
+  it('shows the required error and sends nothing for a blank graph', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    await open('gardening-routine-panel-edit', el, fixture);
+    await typeGraph(el, fixture, '');
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/routines/rtn_1', 'PATCH')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph"]')?.textContent?.toLowerCase()).toContain('required');
+  });
+
+  it('closes the field and sends nothing for a save that changes nothing', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineSlug: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    await open('gardening-routine-panel-edit', el, fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/routines/rtn_1', 'PATCH')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
+  });
+
+  it('lands a refusal on the graph field and keeps what was typed', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineSlug: 'nightly' },
+      routes: {
+        'PATCH /api/routines/{routine_id}': () =>
+          stubError(422, { type: 'urn:blizzard:problem:routine-definition-invalid', detail: 'no graph is named nope' }),
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    await open('gardening-routine-panel-edit', el, fixture);
+    await typeGraph(el, fixture, 'nope');
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')?.click();
+    await settle(fixture);
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!;
+    expect(input.value).toBe('nope');
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph"]')?.textContent).toContain('no graph is named nope');
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('keeps the baseline across a refetch: a stale edit is refused at form level, with the original revision, once', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineSlug: 'nightly' },
+      routes: {
+        'PATCH /api/routines/{routine_id}': () =>
+          stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'the routine changed since it was read' }),
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    await open('gardening-routine-panel-edit', el, fixture);
+    await typeGraph(el, fixture, 'garden-delta');
+    await TestBed.inject(QueryClient).invalidateQueries({ queryKey: ['hub', 'routines'] });
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-graph-save"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers['if-match']).toBe('1');
+    expect(el.querySelector('[data-testid="gardening-routine-panel-graph-line"]')?.textContent).toContain('changed since it was read');
+    expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-routine-panel-graph-input"]')!.value).toBe('garden-delta');
+  });
+
+  it('edits the default urgency, sending only that field', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineSlug: 'nightly' },
+      routes: {
+        'GET /api/urgencies': () =>
+          ({
+            urgencies: [
+              { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false },
+              { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false },
+            ],
+          }) as never,
+        'PATCH /api/routines/{routine_id}': () => ({ ...ROUTINE, default_urgency: 'urgent' }),
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    await settle(fixture);
+
+    await open('gardening-routine-urgency-select', el, fixture);
+    [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-urgency-edit-save"]')!.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ default_urgency: 'urgent' });
+    expect(calls[0].headers['if-match']).toBe('1');
+  });
+
+  it('offers no Edit for a routine the hub serves no revision for', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      routines: [{ ...ROUTINE, revision: null }],
+      params: { routineSlug: 'nightly' },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-edit"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+  });
+
+  it('retires against the revision captured when the confirmation opened, not the one read at confirm', async () => {
+    let revision = 1;
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineSlug: 'nightly' },
+      routes: {
+        'GET /api/routines': () => [{ ...ROUTINE, revision }],
+        'POST /api/routines/{routine_id}/retire': () => ({ ...ROUTINE, retired: true }),
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    await open('gardening-routine-panel-retire', el, fixture);
+    revision = 2;
+    await TestBed.inject(QueryClient).invalidateQueries({ queryKey: ['hub', 'routines'] });
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/routines/rtn_1/retire', 'POST')[0].headers['if-match']).toBe('1');
   });
 
   it('withholds Edit from an identity without graph:edit', async () => {

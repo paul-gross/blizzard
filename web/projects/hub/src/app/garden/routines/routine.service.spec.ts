@@ -6,6 +6,8 @@ import { vi } from 'vitest';
 import { gardenRoutineView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 import { EMPTY_ROUTINE_CREATE_DRAFT } from '../core/routine.domain';
+import { toEditBaseline } from '../core/routine.translate';
+import { gardenRoutine } from '../core/routine.builders';
 import { injectRoutineService } from './routine.service';
 
 const DRAFT = { ...EMPTY_ROUTINE_CREATE_DRAFT, slug: 'nightly', graph: 'garden', scope: 'web' };
@@ -97,5 +99,62 @@ describe('injectRoutineService', () => {
     release();
     await saved;
     expect(done).toBe(true);
+  });
+
+  describe('edit', () => {
+    const baseline = toEditBaseline(gardenRoutine({ slug: 'nightly', id: 'rtn_1', revision: 3 }))!;
+
+    it('sends only the changed fields against the baseline revision, and answers ok', async () => {
+      const service = configure({ 'PATCH /api/routines/{routine_id}': () => gardenRoutineView({ routine_id: 'rtn_1', name: 'n' }) });
+
+      expect(await service.edit(baseline, { ...baseline.draft, graph: ' garden-delta ' })).toEqual({ ok: true });
+
+      const calls = stub.forRoute('/api/routines/rtn_1', 'PATCH');
+      expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
+      expect(calls[0].headers['if-match']).toBe('3');
+    });
+
+    it('sends nothing for a save that changes nothing', async () => {
+      const service = configure({});
+
+      expect(await service.edit(baseline, { ...baseline.draft })).toEqual({ ok: true });
+      expect(stub.forRoute('/api/routines/rtn_1', 'PATCH')).toHaveLength(0);
+    });
+
+    it('answers a config-field entry on its field and an unresolved graph on the changed field', async () => {
+      const service = configure({
+        'PATCH /api/routines/{routine_id}': () =>
+          stubError(422, { type: 'urn:blizzard:problem:routine-definition-invalid', detail: 'no graph is named nope' }),
+      });
+
+      expect(await service.edit(baseline, { ...baseline.draft, graph: 'nope' })).toEqual({
+        ok: false,
+        fields: { graph: 'no graph is named nope' },
+        form: null,
+      });
+    });
+
+    it('answers a revision conflict at form level, keeping the baseline and never retrying', async () => {
+      const service = configure({
+        'PATCH /api/routines/{routine_id}': () =>
+          stubError(409, { type: 'urn:blizzard:problem:revision-conflict', detail: 'the routine changed since it was read' }),
+      });
+      const before = structuredClone(baseline);
+
+      const outcome = await service.edit(baseline, { ...baseline.draft, graph: 'garden-delta' });
+
+      expect(outcome).toEqual({ ok: false, fields: {}, form: 'the routine changed since it was read' });
+      expect(stub.forRoute('/api/routines/rtn_1', 'PATCH')).toHaveLength(1);
+      expect(baseline).toEqual(before);
+    });
+
+    it('sends the original baseline revision even after the routines read refreshed', async () => {
+      const service = configure({ 'PATCH /api/routines/{routine_id}': () => gardenRoutineView({ routine_id: 'rtn_1', name: 'n' }) });
+      queryClient.setQueryData(['hub', 'routines'], [gardenRoutineView({ routine_id: 'rtn_1', name: 'n', revision: 9 })]);
+
+      await service.edit(baseline, { ...baseline.draft, urgency: 'urgent' });
+
+      expect(stub.forRoute('/api/routines/rtn_1', 'PATCH')[0].headers['if-match']).toBe('3');
+    });
   });
 });

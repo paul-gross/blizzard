@@ -11,7 +11,6 @@ import {
 } from 'fleet';
 import type { Routine } from '../core/routine.domain';
 import { effectiveGraphByName } from './gardening-effective-graph';
-import type { RoutineEditVars } from './routine-edit.mutations';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import type {
   KeptByVm,
@@ -51,14 +50,6 @@ export function routineOverrideRetired(
   if (routine === null) return null;
   const vars = pending.find((v) => v.routineId === routine.id);
   return vars ? vars.retired : null;
-}
-
-/** The edit setting `routine`'s graph to `graphName`, trimmed — `null` with no routine, on a blank name, or on the
- * graph it already runs, so nothing is sent that would change nothing. */
-export function routineGraphEdit(routine: Routine | null, graphName: string): RoutineEditVars | null {
-  const trimmed = graphName.trim();
-  if (routine === null || trimmed === '' || trimmed === routine.graph) return null;
-  return { routineId: routine.id, graphName: trimmed };
 }
 
 /** The read-only strategy steps of the routine's effective graph, in node order. */
@@ -226,4 +217,9 @@ export function routinePanelState(
   if (graphsPending) return 'loading';
   if (graphsError) return 'error';
   return 'ready';
+}
+
+/** The inline edit's value — its field tree, or the open field — while it holds a baseline, else `null`. */
+export function whileEditing<T>(baseline: unknown, value: T): T | null {
+  return baseline === null ? null : value;
 }

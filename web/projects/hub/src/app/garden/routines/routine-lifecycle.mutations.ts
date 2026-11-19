@@ -8,11 +8,13 @@ import { hubRoutinesKey } from '../../core/query-keys';
 /** Retire or re-enable a routine's reversible brake. */
 export interface RoutineLifecycleVars {
   readonly routineId: string;
+  /** The revision the confirmation opened on — sent as `If-Match`. */
+  readonly revision: number | null;
   readonly retired: boolean;
 }
 
 /**
- * `POST /api/routines/{routine_id}/retire|enable` — routed by the desired `retired`
+ * `POST /api/routines/{routine_id}/retire|enable` with `If-Match: <revision>` when the routine has one — routed by the desired `retired`
  * state (`injectScopeLifecycleMutation`'s own shape), through the generated client
  * (bzh:generated-client). On success it re-reads the routine list. `by` defaults to
  * `operator` server-side.
@@ -25,6 +27,7 @@ export function injectRoutineLifecycleMutation() {
       const call = vars.retired ? retireRoutineApiRoutinesRoutineIdRetirePost : enableRoutineApiRoutinesRoutineIdEnablePost;
       const { error } = await call({
         path: { routine_id: vars.routineId },
+        ...(vars.revision === null ? {} : { headers: { 'if-match': vars.revision } }),
         body: { by: 'operator' },
         throwOnError: false,
       });

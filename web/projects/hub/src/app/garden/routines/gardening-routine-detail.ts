@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue } from 'fleet';
+import { FLEET_CLOCK, asyncState, type EditBaseline, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, submitForm } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
-import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
+import { FleetRoutinePanel, type RoutineEditField, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
   keptByVms,
   lastSweptRows,
@@ -12,22 +13,23 @@ import {
   routineRecentRuns,
   relatedScopeRows,
   routineBySlug,
-  routineGraphEdit,
   routineEffectiveGraph,
   routineOverrideRetired,
   routinePanelState,
   routinePanelVm,
   strategySteps,
+  whileEditing,
 } from './gardening-routine-detail.model';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesDomainQuery } from '../core/routines.query';
-import type { Routine } from '../core/routine.domain';
-import { toUrgencyRef } from '../core/routine.translate';
-import { injectEditRoutineMutation, type RoutineEditVars } from './routine-edit.mutations';
+import { EMPTY_ROUTINE_EDIT_DRAFT, type Routine, type RoutineEditDraft } from '../core/routine.domain';
+import { toEditBaseline, toUrgencyRef } from '../core/routine.translate';
+import { routineEditRules } from './routine.form';
+import { injectRoutineService } from './routine.service';
 import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './routine-lifecycle.mutations';
-import { editRoutineMutationKey, routineLifecycleMutationKey } from '../../core/mutation-keys';
+import { routineLifecycleMutationKey } from '../../core/mutation-keys';
 import { map } from 'rxjs';
 
 import { isRoutineBlocked } from './gardening-effective-graph';
@@ -73,10 +75,7 @@ export class GardeningRoutineDetail {
   private readonly graphsQuery = injectHubGraphsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();
-  private readonly editRoutineMutation = injectEditRoutineMutation();
-
-  /** Every routine id a graph edit is currently pending for. */
-  private readonly pendingRoutineEdits = injectPendingMutationVariables<RoutineEditVars>(editRoutineMutationKey);
+  private readonly routineService = injectRoutineService();
 
   /** Every routine id a Retire/Enable mutation is currently pending for, and its own
    * variables (`bzh:frontend-pending-override`) — `GardeningScopeDetail`'s own
@@ -254,7 +253,7 @@ export class GardeningRoutineDetail {
     this.runningRoutine.set(null);
   }
 
-  /** Set on a failed edit/retire/enable; cleared at the start of the next attempt —
+  /** Set on a failed retire/enable; cleared at the start of the next attempt —
    * `GardeningScopeDetail.scopeActionError`'s own shape. */
   protected readonly lifecycleActionError = signal<string | null>(null);
 
@@ -265,46 +264,85 @@ export class GardeningRoutineDetail {
     isPendingFor(this.pendingRoutineLifecycle(), (v) => v.routineId === this.selectedRoutine()?.id),
   );
 
-  /** Whether a graph edit is in flight for the selected routine — disables the editor's Set. */
-  protected readonly editPending = computed(() =>
-    isPendingFor(this.pendingRoutineEdits(), (v) => v.routineId === this.selectedRoutine()?.id),
-  );
+  /** What the open inline edit started from — `null` while no field is open. */
+  private readonly editBaseline = signal<EditBaseline<RoutineEditDraft> | null>(null);
+  private readonly editFieldOpen = signal<RoutineEditField | null>(null);
+  private readonly editDraft = signal<RoutineEditDraft>(EMPTY_ROUTINE_EDIT_DRAFT);
+  private readonly editTree = form(this.editDraft, routineEditRules);
 
-  protected onEditGraph(graphName: string): void {
-    const vars = routineGraphEdit(this.selectedRoutine(), graphName);
-    if (vars === null) return;
-    this.lifecycleActionError.set(null);
-    this.editRoutineMutation.mutate(vars, {
-      onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set graph failed.')),
-    });
+  /** The inline edit's field tree while a field is open. */
+  protected readonly editForm = computed(() => whileEditing(this.editBaseline(), this.editTree));
+  protected readonly editField = computed(() => whileEditing(this.editBaseline(), this.editFieldOpen()));
+
+  /** Whether the selected routine offers an inline edit: it may be edited, and it has a revision to guard one with. */
+  protected readonly editable = computed(() => {
+    const routine = this.selectedRoutine();
+    return this.canEdit() && routine !== null && toEditBaseline(routine) !== null;
+  });
+
+  protected onStartEditGraph(): void {
+    this.beginEdit('graph', null);
   }
 
-  protected onEditUrgency(value: string): void {
+  protected onStartEditUrgency(urgency: string): void {
+    this.beginEdit('urgency', urgency);
+  }
+
+  /** Opens `field` on a baseline captured from this read; an urgency edit opens on the choice made. */
+  private beginEdit(field: RoutineEditField, urgency: string | null): void {
     const routine = this.selectedRoutine();
-    if (routine === null) return;
+    const baseline = routine === null ? null : toEditBaseline(routine);
+    if (baseline === null) return;
     this.lifecycleActionError.set(null);
-    this.editRoutineMutation.mutate({ routineId: routine.id, defaultUrgency: value || null }, {
-      onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set urgency failed.')),
+    this.editTree().reset({ ...baseline.draft, ...(urgency === null ? {} : { urgency }) });
+    this.editBaseline.set(baseline);
+    this.editFieldOpen.set(field);
+  }
+
+  protected async onSaveEdit(): Promise<void> {
+    const baseline = this.editBaseline();
+    if (baseline === null) return;
+    const saved = await submitForm(this.editTree, (draft) => this.routineService.edit(baseline, draft));
+    if (saved && this.editBaseline() === baseline) this.editBaseline.set(null);
+  }
+
+  protected onCancelEdit(): void {
+    this.editBaseline.set(null);
+  }
+
+  /** The routine and revision the open retire or enable confirmation acts on, captured as it opened. */
+  private lifecycleCapture: { readonly routineId: string; readonly revision: number | null } | null = null;
+
+  protected onConfirmOpened(): void {
+    const routine = this.selectedRoutine();
+    this.lifecycleCapture = routine === null ? null : { routineId: routine.id, revision: routine.revision };
+  }
+
+  constructor() {
+    // Selecting another routine ends the edit.
+    effect(() => {
+      this.routineSlugParam();
+      untracked(() => this.editBaseline.set(null));
     });
   }
 
   protected onRetireRoutine(slug: string): void {
-    const routineId = routineBySlug(slug, this.routines())?.id;
-    if (routineId === undefined) return;
-    this.lifecycleActionError.set(null);
-    this.routineLifecycleMutation.mutate(
-      { routineId, retired: true },
-      { onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Retire failed.')) },
-    );
+    this.lifecycle(slug, true, 'Retire failed.');
   }
 
   protected onEnableRoutine(slug: string): void {
+    this.lifecycle(slug, false, 'Enable failed.');
+  }
+
+  /** Sends the retire or enable against the revision its confirmation captured, never one read at click time. */
+  private lifecycle(slug: string, retired: boolean, fallback: string): void {
     const routineId = routineBySlug(slug, this.routines())?.id;
-    if (routineId === undefined) return;
+    const capture = this.lifecycleCapture;
+    if (routineId === undefined || capture === null || capture.routineId !== routineId) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
-      { routineId, retired: false },
-      { onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Enable failed.')) },
+      { routineId, revision: capture.revision, retired },
+      { onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, fallback)) },
     );
   }
 }

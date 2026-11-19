@@ -7,7 +7,7 @@ import { commands, page } from 'vitest/browser';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 import { EMPTY_ROUTINE_CREATE_DRAFT } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';
-import { routineCreateRules } from './routine.form';
+import { routineCreateRules, routineEditRules } from './routine.form';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
  * injected so the kit badges' tone colours resolve to real colours. */
@@ -110,6 +110,7 @@ async function render(vm: RoutinePanelVm | null = VM, canEdit = false, state: 'l
   fixture.componentRef.setInput('vm', vm);
   fixture.componentRef.setInput('project', 'Blizzard');
   fixture.componentRef.setInput('canEdit', canEdit);
+  fixture.componentRef.setInput('editable', canEdit);
   await fixture.whenStable();
   return fixture;
 }
@@ -292,6 +293,12 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
       expect(record.scrollWidth).toBeLessThanOrEqual(record.clientWidth);
 
       record.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-edit"]')!.click();
+      // The container answers Edit with the field tree; this sweep plays the container.
+      fixture.componentRef.setInput(
+        'editForm',
+        TestBed.runInInjectionContext(() => form(signal({ graph: 'garden-routine', urgency: '' }), routineEditRules)),
+      );
+      fixture.componentRef.setInput('editField', 'graph');
       await fixture.whenStable();
       const editor = root.querySelector<HTMLElement>('[data-testid="gardening-routine-panel-graph-input"]');
       expect(editor, `the graph editor did not open at ${width}px`).not.toBeNull();

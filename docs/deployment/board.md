@@ -183,6 +183,10 @@ its last run, linked to that run, and when it is next due. The detail's actions 
 removing a chore ask first. Each edit carries the revision the detail read, so one made against a cadence someone else
 has since changed is refused and says so rather than overwriting it.
 
+A routine's detail edits its graph and its default urgency in place, and retires and re-enables it. Each carries the
+revision the detail read when the edit or the confirmation opened, so one made against a routine someone else has since
+changed is refused and says so rather than overwriting it. A routine the hub serves no revision for offers no edit.
+
 A routine's detail names what keeps it under **Kept by**: each chore that runs it on an enabled cadence of its project,
 with the cadence linked, the chore's key and its next moment. A routine no cadence keeps reads "No cadence keeps it — it
 runs when started." and its row in the routines list reads `manual` rather than `cadence`. A run a cadence minted names

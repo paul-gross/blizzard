@@ -1,6 +1,6 @@
 import { gardenRoutineView } from 'fleet/testing';
 
-import { fromRoutineView, ROUTINE_CREATE_REFUSALS, toCreateRequest, toEditBaseline, toUrgencyRef } from './routine.translate';
+import { fromRoutineView, ROUTINE_CREATE_REFUSALS, routineEditRefusals, toCreateRequest, toEditBaseline, toEditRequest, toUrgencyRef } from './routine.translate';
 
 describe('fromRoutineView', () => {
   it('reads every field of a served routine', () => {
@@ -118,5 +118,40 @@ describe('ROUTINE_CREATE_REFUSALS', () => {
 
   it('sends a malformed scope slug to the scope', () => {
     expect(ROUTINE_CREATE_REFUSALS.kinds['urn:blizzard:problem:scope-slug-invalid']).toBe('scope');
+  });
+});
+
+describe('toEditRequest', () => {
+  const before = { graph: 'garden', urgency: '' };
+
+  it('sends a changed graph trimmed, and nothing else', () => {
+    expect(toEditRequest(before, { ...before, graph: ' garden-delta ' })).toEqual({ graph_name: 'garden-delta' });
+  });
+
+  it('sends a changed urgency, the tenant default as null', () => {
+    expect(toEditRequest(before, { ...before, urgency: 'urgent' })).toEqual({ default_urgency: 'urgent' });
+    expect(toEditRequest({ ...before, urgency: 'urgent' }, before)).toEqual({ default_urgency: null });
+  });
+
+  it('omits every unchanged field', () => {
+    expect(toEditRequest(before, { graph: ' garden ', urgency: '' })).toEqual({});
+  });
+});
+
+describe('routineEditRefusals', () => {
+  const before = { graph: 'garden', urgency: '' };
+
+  it('routes each validation path to its own field', () => {
+    const map = routineEditRefusals(before, before);
+    expect(map.field('graph_name')).toBe('graph');
+    expect(map.field('default_urgency')).toBe('urgency');
+    expect(map.field('slug')).toBeNull();
+  });
+
+  it('lands a definition refusal, which names no field, on the one field the edit changed', () => {
+    const kind = 'urn:blizzard:problem:routine-definition-invalid';
+    expect(routineEditRefusals(before, { ...before, graph: 'x' }).kinds[kind]).toBe('graph');
+    expect(routineEditRefusals(before, { ...before, urgency: 'urgent' }).kinds[kind]).toBe('urgency');
+    expect(routineEditRefusals(before, before).kinds[kind]).toBeUndefined();
   });
 });
