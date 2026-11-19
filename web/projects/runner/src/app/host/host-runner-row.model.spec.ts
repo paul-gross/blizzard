@@ -94,6 +94,27 @@ describe('hostRunnerRows', () => {
     expect(row.state).toEqual([{ label: 'HALTED', tone: 'needs', title: 'no token; no hub' }]);
   });
 
+  it('badges a runner added and not yet started STARTING', () => {
+    const row = one(RUNNER({ state: 'starting', served: false, pause: null, bindings: [] }));
+
+    expect(row.state).toEqual([{ label: 'STARTING', tone: 'idle', title: 'Added — the host starts it at its next tick' }]);
+  });
+
+  it('badges a runner whose start failed START FAILED, titled with the step and the error', () => {
+    const row = one(RUNNER({
+      state: 'start_failed',
+      served: false,
+      halted_reasons: ['failed to start at worker_shell: no shell'],
+      start_failure: { step: 'worker_shell', error: 'no shell' },
+    }));
+
+    expect(row.state).toEqual([{ label: 'START FAILED', tone: 'needs', title: 'worker_shell: no shell' }]);
+  });
+
+  it('badges a retired runner RETIRED', () => {
+    expect(one(RUNNER({ state: 'retired', served: false })).state).toEqual([{ label: 'RETIRED', tone: 'idle', title: null }]);
+  });
+
   it('reads a runner cut off from its hub red, badged HUB UNREACHABLE', () => {
     const row = one(RUNNER(), STATUS({ hub: { endpoint: 'http://hub', reachable: false, last_contact_at: null, buffer_depth: 3, hub_version: null, window: null } }));
 

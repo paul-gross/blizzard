@@ -148,6 +148,13 @@ function stateBadges(
   status: runnerApi.RunnerStatusView | undefined,
   held: number | null,
 ): readonly HostRunnerBadge[] {
+  if (runner.state === 'starting') return [{ label: 'STARTING', tone: 'idle', title: 'Added — the host starts it at its next tick' }];
+  if (runner.state === 'start_failed') {
+    const failure = runner.start_failure;
+    const title = failure ? `${failure.step}: ${failure.error}` : runner.halted_reasons.join('; ') || null;
+    return [{ label: 'START FAILED', tone: 'needs', title }];
+  }
+  if (runner.state === 'retired') return [{ label: 'RETIRED', tone: 'idle', title: null }];
   if (runner.state !== 'serving') {
     return [{ label: 'HALTED', tone: 'needs', title: runner.halted_reasons.join('; ') || null }];
   }
