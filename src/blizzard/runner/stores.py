@@ -301,6 +301,11 @@ class IRunnerAudit(Protocol):
         """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
         ...
 
+    def stored_names(self) -> dict[str, str]:
+        """Each runner's stored name, by id, read in one pass: its non-blank ``name`` settings entry, else its
+        identity row's name."""
+        ...
+
     def unhosted_runners(self) -> tuple[str, ...]:
         """The runners an identity row names and no hosted row accounts for, once the store hosts any runner; none on
         a store hosting no runner yet."""

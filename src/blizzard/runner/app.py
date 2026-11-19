@@ -13,7 +13,6 @@ import secrets
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import cast
 from urllib.parse import quote
 
 import httpx2
@@ -117,13 +116,14 @@ from blizzard.runner.composition import (
     HostRunnerSet,
     IHostedRunnerSource,
     IRunnerDrivers,
-    IRunnerResume,
     IRunnerStart,
     IWiredRunner,
+    LiveRunner,
     NoDrivers,
     RunnerProcess,
-    build_hosted_runner_service,
+    StartupNote,
     build_runner_process,
+    build_running_host_runner_service,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.environments.workspaces import IWorkspaces
@@ -685,6 +685,28 @@ def _served_identity(scope: Scope) -> ICurrentRunnerIdentity | None:
 
 
 @dataclass(frozen=True)
+class _WiredRunner:
+    """One hosted runner's served seams, its stepper, its harness health, and the hub clients it owns."""
+
+    served: ServedRunner
+    stepper: RunnerStepper
+    harness_health: HarnessHealthCache
+    clients: tuple[httpx2.Client, ...]
+
+    def quiesce(self) -> None:
+        self.stepper.quiesce()
+
+    def close(self) -> None:
+        with contextlib.ExitStack() as closing:
+            closing.callback(self.stepper.close)
+            for client in self.clients:
+                closing.callback(client.close)
+
+
+_wired_runner_conforms: type[IWiredRunner] = _WiredRunner
+
+
+@dataclass(frozen=True)
 class HostedApp:
     """The served app over one host graph, and the host's live runner set it serves.
 
@@ -699,18 +721,18 @@ class HostedApp:
     harness_health: HarnessHealthCache | None
     hub_http_client: httpx2.Client
     #: Every live runner, its wiring and drivers; a runner added or retired while the host runs moves through it.
-    runners: HostRunnerSet
+    runners: HostRunnerSet[_WiredRunner, ResumeMarking]
     #: How a runner is started on this app; the host's serve hands it the drivers and the operator's output.
     start: AppRunnerStart
     owned_host: HostProcess | None = None
     host_stepper: HostPassStepper | None = None
     #: The host tick's reconcile of its live runners against its hosted ones; ``None`` when no seed source is wired.
-    reconcile: HostRunnerReconcile | None = None
+    reconcile: HostRunnerReconcile[_WiredRunner, ResumeMarking] | None = None
 
     @property
     def resumes(self) -> tuple[ResumeMarking, ...]:
         """One resume hook per live runner, in the host's runner order."""
-        return tuple(cast(ResumeMarking, live.resume) for live in self.runners.live())
+        return tuple(live.resume for live in self.runners.live())
 
     @property
     def resume(self) -> ResumeMarking:
@@ -736,9 +758,13 @@ class HostedApp:
             closing.callback(self.hub_http_client.close)
 
 
-def _served(runners: HostRunnerSet) -> tuple[_WiredRunner, ...]:
+def _served(runners: HostRunnerSet[_WiredRunner, ResumeMarking]) -> tuple[_WiredRunner, ...]:
     """Each live runner's wiring, for those served, in the host's runner order."""
-    return tuple(cast(_WiredRunner, live.wired) for live in runners.live() if live.wired is not None)
+    return tuple(live.wired for live in runners.live() if live.wired is not None)
+
+
+def _log_startup_note(note: StartupNote) -> None:
+    get_logger("blizzard.runner").info(note.event, runner_id=note.runner_id, count=note.count)
 
 
 @dataclass
@@ -751,20 +777,20 @@ class AppRunnerStart:
     registry: HostRunnerRegistry
     drivers: Callable[[RunnerProcess, RunnerStepper], IRunnerDrivers] = lambda _runner, _stepper: NoDrivers()
     scratch: Callable[[RunnerProcess], None] = lambda _runner: None
-    said: Callable[[str], None] = lambda message: get_logger("blizzard.runner").info(message)
+    said: Callable[[StartupNote], None] = _log_startup_note
 
     def serving(
         self,
         *,
         drivers: Callable[[RunnerProcess, RunnerStepper], IRunnerDrivers],
         scratch: Callable[[RunnerProcess], None],
-        said: Callable[[str], None],
+        said: Callable[[StartupNote], None],
     ) -> None:
         """Start each runner served from now on under ``drivers``, reconciling its scratch through ``scratch`` and
         telling the operator through ``said``."""
         self.drivers, self.scratch, self.said = drivers, scratch, said
 
-    def resume(self, runner: RunnerProcess) -> IRunnerResume:
+    def resume(self, runner: RunnerProcess) -> ResumeMarking:
         return ResumeMarking(
             runner.stores,
             self.host.host_stores,
@@ -777,14 +803,14 @@ class AppRunnerStart:
     def reconcile_scratch(self, runner: RunnerProcess) -> None:
         self.scratch(runner)
 
-    def announce(self, message: str) -> None:
-        self.said(message)
+    def announce(self, note: StartupNote) -> None:
+        self.said(note)
 
-    def wire(self, runner: RunnerProcess) -> IWiredRunner:
+    def wire(self, runner: RunnerProcess) -> _WiredRunner:
         return _wire_runner(runner.config, self.host, runner)
 
-    def serve(self, runner: RunnerProcess, wired: IWiredRunner) -> None:
-        self.registry.serve(cast(_WiredRunner, wired).served)
+    def serve(self, runner: RunnerProcess, wired: _WiredRunner) -> None:
+        self.registry.serve(wired.served)
 
     def withdraw(self, runner_id: str) -> None:
         self.registry.withdraw(runner_id)
@@ -792,13 +818,13 @@ class AppRunnerStart:
     def halt(self, runner: HaltedRunner) -> None:
         self.registry.halt(runner)
 
-    def drive(self, runner: RunnerProcess, wired: IWiredRunner) -> IRunnerDrivers:
-        drivers = self.drivers(runner, cast(_WiredRunner, wired).stepper)
+    def drive(self, runner: RunnerProcess, wired: _WiredRunner) -> IRunnerDrivers:
+        drivers = self.drivers(runner, wired.stepper)
         drivers.start()
         return drivers
 
 
-_runner_start_conforms: type[IRunnerStart] = AppRunnerStart
+_runner_start_conforms: type[IRunnerStart[_WiredRunner, ResumeMarking]] = AppRunnerStart
 
 
 class _FirstServedIdentity:
@@ -857,13 +883,12 @@ def _wire_hosted_app(
     """One app over ``host``, whether it serves runners or none: each runner's routes mount under its own id, over its
     own seams and its own authenticated hub clients; an app over no runner is the runnerless host."""
     registry = HostRunnerRegistry(RunnerRegistry((), tuple(host.halted)))
-    runners = HostRunnerSet(host)
+    runners = HostRunnerSet[_WiredRunner, ResumeMarking](host)
     start = AppRunnerStart(config, host, registry)
     startup.callback(runners.close_all)
     for graph in host.runners:
-        live = runners.place(graph, start.resume(graph))
         wired = start.wire(graph)
-        live.wired = wired
+        runners.place(LiveRunner(graph, start.resume(graph), wired=wired))
         start.serve(graph, wired)
     reconcile = (
         HostRunnerReconcile(host_config, host, runners, start, source)
@@ -901,12 +926,12 @@ def _wire_hosted_app(
     app.state.runners = registry
     app.state.start_failures = reconcile.failures if reconcile is not None else None
     app.state.hosted_runners = (
-        build_hosted_runner_service(host_config, host.engine, host.host_hub, clock=host.clock)
+        build_running_host_runner_service(host_config, host, host.host_hub)
         if host_config is not None and host.host_hub is not None
         else None
     )
     live = runners.live()
-    first = cast(_WiredRunner, live[0].wired) if live else None
+    first = live[0].wired if live else None
     return HostedApp(
         app,
         host.engine,
@@ -918,28 +943,6 @@ def _wire_hosted_app(
         host_stepper,
         reconcile,
     )
-
-
-@dataclass(frozen=True)
-class _WiredRunner:
-    """One hosted runner's served seams, its stepper, its harness health, and the hub clients it owns."""
-
-    served: ServedRunner
-    stepper: RunnerStepper
-    harness_health: HarnessHealthCache
-    clients: tuple[httpx2.Client, ...]
-
-    def quiesce(self) -> None:
-        self.stepper.quiesce()
-
-    def close(self) -> None:
-        with contextlib.ExitStack() as closing:
-            closing.callback(self.stepper.close)
-            for client in self.clients:
-                closing.callback(client.close)
-
-
-_wired_runner_conforms: type[IWiredRunner] = _WiredRunner
 
 
 def _harnesses_for_lease(graph: RunnerProcess, lease_id: str) -> HarnessRegistry:

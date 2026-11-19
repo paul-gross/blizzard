@@ -43,6 +43,9 @@ class _Rows:
     def key_ids(self) -> frozenset[str]:
         return frozenset(row.sealed.key_id for row in self.rows.values())
 
+    def held_runner_ids(self) -> frozenset[str]:
+        return frozenset(self.rows)
+
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         if runner_id in self.rows:
             return False

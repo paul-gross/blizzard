@@ -69,31 +69,61 @@ def store_only_entries(config: HostConfig, clock: IClock) -> tuple[RunnerEntry, 
         engine.dispose()
 
 
+def retired_runner_ids(config: HostConfig, clock: IClock) -> frozenset[str]:
+    """The ids of the runners the store holds retired; none when the host has no store file yet."""
+    if not HostLayout(config.root).store_path.exists():
+        return frozenset()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners.retired()
+    finally:
+        engine.dispose()
+
+
 def resolve_runner(config: HostConfig, runner: str | None, clock: IClock) -> RunnerEntry:
     """The runner a stopped-host verb acts on, by name or id, else the host's only one: a ``[[runner]]``, or a runner
-    the store hosts that no ``[[runner]]`` names, by its stored ``name``. Raises :class:`ConfigError` as
-    :meth:`HostConfig.sole_runner` does when neither holds it."""
+    the store hosts that no ``[[runner]]`` names, by its stored ``name``. A ``[[runner]]`` the store holds retired
+    yields to an active store-hosted runner of that name, or — with no ``runner`` — to the store's only one. Raises
+    :class:`ConfigError` as :meth:`HostConfig.sole_runner` does when neither holds it."""
     try:
-        return config.sole_runner(runner)
+        declared = config.sole_runner(runner)
     except ConfigError as refused:
         try:
-            stored = store_only_entries(config, clock)
+            matched = _store_matches(config, runner, clock, declared=None)
         except Exception:
             raise refused from None
-        if runner is not None:
-            matched = [entry for entry in stored if runner in (entry.name, entry.id)]
-        elif not config.runners:
-            matched = list(stored)
-        else:
-            matched = []
-        if len(matched) == 1:
-            return matched[0]
-        if len(matched) > 1:
-            held = ", ".join(f"{entry.name} ({entry.id})" for entry in matched)
-            raise ConfigError(
-                f"the store at {config.db_url} hosts several runners ({held}); name one with --runner"
-            ) from None
-        raise
+        if (found := _sole_match(config, matched)) is None:
+            raise
+        return found
+    try:
+        matched = _store_matches(config, runner, clock, declared=declared)
+    except Exception:
+        return declared
+    return _sole_match(config, matched) or declared
+
+
+def _store_matches(
+    config: HostConfig, runner: str | None, clock: IClock, *, declared: RunnerEntry | None
+) -> list[RunnerEntry]:
+    """The active store-hosted runners ``runner`` may mean in place of ``declared`` — none while ``declared`` is a
+    ``[[runner]]`` the store does not hold retired."""
+    if declared is not None and declared.id not in retired_runner_ids(config, clock):
+        return []
+    stored = store_only_entries(config, clock)
+    if runner is not None:
+        return [entry for entry in stored if runner in (entry.name, entry.id)]
+    if declared is not None or not config.runners:
+        return list(stored)
+    return []
+
+
+def _sole_match(config: HostConfig, matched: list[RunnerEntry]) -> RunnerEntry | None:
+    if len(matched) > 1:
+        held = ", ".join(f"{entry.name} ({entry.id})" for entry in matched)
+        raise ConfigError(f"the store at {config.db_url} hosts several runners ({held}); name one with --runner")
+    return matched[0] if matched else None
 
 
 def store_hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:

@@ -44,6 +44,14 @@ class HostHubTokenStore:
                 str(key_id) for key_id in conn.execute(select(runner_hub_tokens.c.key_id).distinct()).scalars()
             )
 
+    def held_runner_ids(self) -> frozenset[str]:
+        with self._store.connect() as conn:
+            if runner_hub_tokens.name not in inspect(conn).get_table_names():
+                return frozenset()
+            return frozenset(
+                str(runner_id) for runner_id in conn.execute(select(runner_hub_tokens.c.runner_id)).scalars()
+            )
+
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
         try:
             with self._store.begin() as conn:

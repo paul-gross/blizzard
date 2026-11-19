@@ -31,7 +31,7 @@ from blizzard.runner.composition import (
     RunnerProcess,
     build_host_process,
     build_host_stores,
-    build_hosted_runner_service,
+    build_running_host_runner_service,
     build_settings_stores,
 )
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
@@ -496,6 +496,60 @@ def test_add_refuses_a_name_an_added_runner_already_holds(tmp_path: Path, fake_i
     assert len(fake_init_hub.admin.added) == 2
 
 
+def test_add_refuses_the_name_a_retired_file_runner_still_holds(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "retire", "--runner", "runner-local", "--dir", str(root)).exit_code == 0
+
+    result = _run(fake_init_hub, "add", "runner-local", "--project", "default", "--dir", str(root))
+
+    assert result.exit_code != 0
+    assert "already holds a runner named 'runner-local'" in result.output
+    assert len(fake_init_hub.admin.added) == 1
+
+
+def _drive_tick(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    seen: list[str] = []
+
+    def tick_once(_wiring: LoopWiring, *, process: RunnerProcess | None = None) -> None:
+        assert process is not None
+        seen.append(process.runner_id)
+
+    monkeypatch.setattr(LoopWiring, "tick_once", tick_once)
+    return seen
+
+
+def test_a_verb_naming_no_runner_acts_on_the_stores_runner_once_the_files_sole_runner_is_retired(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "retire", "--runner", "runner-local", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    seen = _drive_tick(monkeypatch)
+
+    result = _run(fake_init_hub, "tick", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert seen == ["rn_init2"]
+
+
+def test_a_retired_file_runners_name_yields_to_the_active_runner_the_store_names_so(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    assert _run(fake_init_hub, "retire", "--runner", "runner-local", "--dir", str(root)).exit_code == 0
+    assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0
+    config_path = HostLayout(root).config_path
+    text = config_path.read_text()
+    assert 'name = "runner-local"' in text
+    config_path.write_text(text.replace('name = "runner-local"', 'name = "r2"'))
+    seen = _drive_tick(monkeypatch)
+
+    result = _run(fake_init_hub, "tick", "--runner", "r2", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert seen == ["rn_init2"]
+
+
 def test_add_under_a_host_holding_the_directory_without_answering_is_refused(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
@@ -677,8 +731,8 @@ def _serving(root: Path, hub: FakeInitHub) -> Generator[HostConfig]:
     served = replace(ready[0].config, port=0)
     hosted = build_hosted_app(served, host=graph, host_config=config, source=StoreHostedRunners(config, SystemClock()))
     with hub.host_clients(config.hub_url) as host_clients:
-        hosted.app.state.hosted_runners = build_hosted_runner_service(
-            config, graph.engine, host_clients(config.host_token.value), clock=SystemClock()
+        hosted.app.state.hosted_runners = build_running_host_runner_service(
+            config, graph, host_clients(config.host_token.value)
         )
         sockets = Listeners.of(served).bound()
         server = uvicorn.Server(uvicorn.Config(hosted.app, log_level="warning"))

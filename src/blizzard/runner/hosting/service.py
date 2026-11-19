@@ -175,7 +175,7 @@ class HostedRunnerService:
         refusal of the host, and the hub client's own errors — its refusal while the runner holds chunks among
         them."""
         runner_id = runner.runner_id
-        name = self.names.name_of(runner_id)
+        name = self.names.names_of((runner_id,))[runner_id]
         if runner.retired():
             return RetiredRunner(runner_id=runner_id, name=name, already=True)
         answer = self.hub.retire_runner(runner_id, force=force)
@@ -190,11 +190,11 @@ class HostedRunnerService:
         return RetiredRunner(runner_id=runner_id, name=name, released_chunk_ids=answer.released_chunk_ids)
 
     def active_names(self) -> frozenset[str]:
-        """The names the host's active runners go by, and its ``[[runner]]`` entries not hosted yet."""
-        return (
-            frozenset(self.names.name_of(runner_id) for runner_id in self.hosted.active()) | self.names.unhosted_names()
-        )
+        """The names the host's active runners go by, and every name its ``[[runner]]`` entries hold."""
+        return frozenset(self.names.names_of(self.hosted.active()).values()) | self.names.declared_names()
 
     def active(self) -> tuple[tuple[str, str], ...]:
         """Each active hosted runner, (id, name), in the order it was first hosted."""
-        return tuple((runner_id, self.names.name_of(runner_id)) for runner_id in self.hosted.active())
+        active = self.hosted.active()
+        names = self.names.names_of(active)
+        return tuple((runner_id, names[runner_id]) for runner_id in active)

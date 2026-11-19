@@ -74,6 +74,9 @@ class _Audit:
     def named_runners(self) -> tuple[str, ...]:
         raise NotImplementedError
 
+    def stored_names(self) -> dict[str, str]:
+        raise NotImplementedError
+
     def unhosted_runners(self) -> tuple[str, ...]:
         raise NotImplementedError
 

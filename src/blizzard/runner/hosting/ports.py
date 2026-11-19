@@ -134,12 +134,14 @@ class INewRunnerSettings(Protocol):
 class IHostedRunnerNames(Protocol):
     """The names the host's runners go by."""
 
-    def name_of(self, runner_id: str) -> str:
-        """A hosted runner's name: its ``[[runner]]``'s, else its stored ``name`` entry, else its id."""
+    def names_of(self, runner_ids: Sequence[str]) -> Mapping[str, str]:
+        """Each of ``runner_ids``' names, read for all of them at once: its ``[[runner]]``'s, else its stored ``name``
+        entry, else its identity row's, else its id."""
         ...
 
-    def unhosted_names(self) -> frozenset[str]:
-        """The names of the ``[[runner]]`` entries no hosted runner stands for yet — a scaffold not yet joined."""
+    def declared_names(self) -> frozenset[str]:
+        """Every ``[[runner]]`` entry's name — one standing for an active runner, a scaffold not yet joined, or one
+        retired — each held by the host file, so no added runner may take it."""
         ...
 
 

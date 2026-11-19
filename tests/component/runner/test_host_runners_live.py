@@ -105,7 +105,7 @@ class _World:
     def runner(self, runner_id: str) -> RunnerProcess:
         return next(runner for runner in self.host.runners if runner.runner_id == runner_id)
 
-    def live(self, runner_id: str) -> LiveRunner:
+    def live(self, runner_id: str) -> LiveRunner[Any, Any]:
         live = self.hosted.runners.get(runner_id)
         assert live is not None
         return live
@@ -270,12 +270,14 @@ def test_a_failing_start_is_retried_at_the_next_tick_while_its_neighbour_keeps_t
     assert world.served() == {TEST_RUNNER_ID}
     assert [runner.runner_id for runner in world.host.runners] == [TEST_RUNNER_ID]
     assert world.resolves(_ADDED) == 503
+    assert "failed to start at tracing" in (world.host.readiness.evaluate().detail or "")
     world.tick(TEST_RUNNER_ID)
 
     failing.clear()
     world.host_pass()
 
     assert reconcile.failures.of(_ADDED) is None
+    assert "is halted" not in (world.host.readiness.evaluate().detail or "")
     assert world.served() == {TEST_RUNNER_ID, _ADDED}
     world.tick(_ADDED)
     world.tick(TEST_RUNNER_ID)
@@ -331,7 +333,7 @@ def test_a_hub_side_retirement_stops_the_runners_threads_in_the_tick_that_notice
     def drivers(runner: RunnerProcess, stepper: RunnerStepper) -> composition.IRunnerDrivers:
         return build_runner_threads(host, runner, stepper, tick_seconds=3600)
 
-    world.hosted.start.serving(drivers=drivers, scratch=lambda _runner: None, said=lambda _message: None)
+    world.hosted.start.serving(drivers=drivers, scratch=lambda _runner: None, said=lambda _note: None)
     live = world.live(TEST_RUNNER_ID)
     assert live.wired is not None
     live.drivers = world.hosted.start.drive(live.runner, live.wired)

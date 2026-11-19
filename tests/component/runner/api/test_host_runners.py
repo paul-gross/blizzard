@@ -23,7 +23,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import StoreHostedRunners, seed_runners
-from blizzard.runner.composition import build_host_process, build_host_stores, build_hosted_runner_service
+from blizzard.runner.composition import build_host_process, build_host_stores, build_running_host_runner_service
 from blizzard.runner.host_config import HaltedRunner, HostConfig
 from blizzard.runner.host_keys import ENV_HOST_SECRET_KEY
 from blizzard.runner.host_layout import HostLayout
@@ -89,9 +89,7 @@ def _served(config: HostConfig, hub: _Hub, *, registered: bool = True) -> Genera
         ready[0].config, host=graph, host_config=config, source=StoreHostedRunners(config, SystemClock())
     )
     hosted.app.state.hub_auth_mode = SimpleNamespace(enabled=lambda: False)
-    hosted.app.state.hosted_runners = (
-        build_hosted_runner_service(config, graph.engine, hub, clock=SystemClock()) if registered else None
-    )
+    hosted.app.state.hosted_runners = build_running_host_runner_service(config, graph, hub) if registered else None
     try:
         with TestClient(hosted.app) as client:
             yield client

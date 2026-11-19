@@ -142,6 +142,10 @@ class IReadHubTokenRepository(Protocol):
         the table."""
         ...
 
+    def held_runner_ids(self) -> frozenset[str]:
+        """The runners holding a sealed row; empty for a store behind the revision that adds the table."""
+        ...
+
 
 class IWriteHubTokenRepository(IReadHubTokenRepository, Protocol):
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:

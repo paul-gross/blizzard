@@ -109,10 +109,11 @@ _NAMED: dict[str, str] = {}
 
 
 class _Names:
-    def name_of(self, runner_id: str) -> str:
-        return {"rn_day": "day-1", **_NAMED}.get(runner_id, runner_id)
+    def names_of(self, runner_ids: Sequence[str]) -> Mapping[str, str]:
+        named = {"rn_day": "day-1", **_NAMED}
+        return {runner_id: named.get(runner_id, runner_id) for runner_id in runner_ids}
 
-    def unhosted_names(self) -> frozenset[str]:
+    def declared_names(self) -> frozenset[str]:
         return frozenset({"scaffold"})
 
 

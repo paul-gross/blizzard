@@ -69,6 +69,7 @@ from blizzard.runner.composition import (
     NoDrivers,
     RunnerProcess,
     RunnerStartFailed,
+    StartupNote,
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
@@ -1542,7 +1543,7 @@ def _serve_host(
         _reconcile_host_scratch(config, host, [runner.runner_id], every_named=False)
 
     # The boot's runners share the one host-wide scratch reconcile below; a runner started later reconciles its own.
-    hosted.start.serving(drivers=drivers, scratch=no_scratch, said=click.echo)
+    hosted.start.serving(drivers=drivers, scratch=no_scratch, said=_echo_note)
     host_tick = (
         None
         if stepped or hosted.host_stepper is None
@@ -1585,7 +1586,7 @@ def _serve_host(
                 run_startup_steps(live, hosted.start)
             except RunnerStartFailed as exc:
                 raise exc.__cause__ or exc from None
-        hosted.start.serving(drivers=drivers, scratch=own_scratch, said=click.echo)
+        hosted.start.serving(drivers=drivers, scratch=own_scratch, said=_echo_note)
 
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.
@@ -1677,6 +1678,10 @@ def reconcile_scratch_roots(
         leases,
         scratch_factory,
     )
+
+
+def _echo_note(note: StartupNote) -> None:
+    click.echo(note.message)
 
 
 def _reconcile_host_scratch(
