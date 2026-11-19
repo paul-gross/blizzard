@@ -539,15 +539,19 @@ def test_a_mint_refused_for_its_rate_is_an_unavailable_forge_never_a_suspension(
 
 
 @pytest.mark.parametrize(
-    "headers",
-    [{"x-ratelimit-remaining": "0"}, {"Retry-After": "30"}],
-    ids=["primary-budget-spent", "retry-after"],
+    ("headers", "message"),
+    [
+        ({"x-ratelimit-remaining": "0"}, "forbidden"),
+        ({"Retry-After": "30"}, "forbidden"),
+        ({}, "API rate limit exceeded for installation."),
+    ],
+    ids=["primary-budget-spent", "retry-after", "headerless-rate-limit"],
 )
-def test_a_403_carrying_a_rate_refusal_classifies_as_no_mint_refusal(headers: dict[str, str]) -> None:
+def test_a_403_carrying_a_rate_refusal_classifies_as_no_mint_refusal(headers: dict[str, str], message: str) -> None:
     classified = classify_mint_refusal(
         403,
         headers,
-        "forbidden",
+        message,
         documentation_url=None,
         operation="mint_token",
         endpoint="POST /x",

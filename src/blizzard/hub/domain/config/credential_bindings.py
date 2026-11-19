@@ -64,6 +64,18 @@ class CredentialBinding(Protocol):
         ...
 
 
+#: How a ``github.token`` credential's authority names the secret it reads.
+_SECRET_AUTHORITY_PREFIX = "secret/"
+
+
+def secret_of_authority(authority: str | None) -> str | None:
+    """The secret ``authority`` acts as, when it is a ``github.token`` credential's; ``None`` for any other authority
+    and the anonymous one."""
+    if authority is None or not authority.startswith(_SECRET_AUTHORITY_PREFIX):
+        return None
+    return authority.removeprefix(_SECRET_AUTHORITY_PREFIX)
+
+
 #: The values a ``github.token`` credential's ``variant`` takes.
 _TOKEN_VARIANTS = ("classic", "fine-grained")
 
@@ -98,7 +110,7 @@ class GitHubTokenBinding:
         return {"variant": variant}
 
     def authority(self, secret_name: str, settings: Mapping[str, object]) -> str:
-        return f"secret/{secret_name}"
+        return f"{_SECRET_AUTHORITY_PREFIX}{secret_name}"
 
     def declared_offers(self, settings: Mapping[str, object], kind: frozenset[Capability]) -> frozenset[Capability]:
         return kind

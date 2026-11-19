@@ -27,7 +27,7 @@ from blizzard.hub.domain.kernel.forge_refusals import (
     ForgeMintRefused,
     sanitize_forge_text,
 )
-from blizzard.hub.forge.internal.github_auth import variant_refusals
+from blizzard.hub.forge.internal.github_grants import variant_refusals
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.landing import (

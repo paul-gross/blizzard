@@ -124,6 +124,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceSecretUnavailable,
+    may_act_without_credential,
     require_known_provider,
 )
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
@@ -584,12 +585,18 @@ class ConfigAuthoring:
             current=record.fields.secret,
             field="secret",
             required=False,
+            clearable=may_act_without_credential(provider),
             forge_moved=forge_id != record.fields.forge_id,
         )
 
         def write(old: _OldField | None) -> Authored[ConfiguredWorkSource]:
             named = _named_credential(decision, old)
-            sparse = moved if named is None else replace(moved, credential_id=named[0], secret=named[1])
+            if decision.clear:
+                sparse = replace(moved, credential_id=None, secret=None)
+            elif named is None:
+                sparse = moved
+            else:
+                sparse = replace(moved, credential_id=named[0], secret=named[1])
             written, resolved = self._edit_work_source(record, sparse, ctx, if_match=if_match, old=old)
             return Authored(written, _used(old, resolved))
 
@@ -719,6 +726,7 @@ class ConfigAuthoring:
             current=record.fields.secret_name,
             field="secret_name",
             required=False,
+            clearable=False,
             forge_moved=forge_id != record.fields.forge_id,
         )
 

@@ -1801,6 +1801,141 @@ def test_adapter_isolation_admits_wiring_roots_and_own_adapter(tmp_path: Path, i
     assert _plant_harness(tmp_path, importer, statement) == []
 
 
+@dataclass(frozen=True)
+class _FlatSeam:
+    """One flat ``internal/`` seam, every module of its ``internal/`` classed. ``package`` is the seam's package path
+    under the source root; ``adapters`` and ``helpers`` are module stems in its ``internal/``; ``wiring`` holds the
+    package-relative paths that may name an adapter, in ``internal/`` or beside it."""
+
+    package: str
+    adapters: frozenset[str]
+    helpers: frozenset[str] = frozenset()
+    wiring: frozenset[str] = frozenset({"internal/factory.py"})
+
+
+#: The flat ``internal/`` seams ``bzh:pluggable-seams`` names as the reference shape. A module a roster does not class
+#: fails the check until someone places it.
+_FLAT_SEAMS = (
+    _FlatSeam(
+        package="hub/forge",
+        adapters=frozenset({"github_auth", "github_landing", "github_readiness", "github_web"}),
+        helpers=frozenset({"github_grants", "github_refusals", "github_rates", "github_reads", "read_only_transport"}),
+        wiring=frozenset({"internal/factory.py", "internal/authorizations.py", "web.py"}),
+    ),
+    _FlatSeam(package="hub/work_sources", adapters=frozenset({"github_work_source", "hub_work_source"})),
+    _FlatSeam(package="hub/auth/oauth", adapters=frozenset({"github_provider", "oidc_provider"})),
+)
+
+
+def _flat_seam_breaches(src_root: Path, seams: Iterable[_FlatSeam], *, exempt: frozenset[Path]) -> list[str]:
+    """Every breach of a flat ``internal/`` seam under ``src_root``: an adapter importing another adapter of its seam;
+    any module other than the seam's wiring or ``exempt`` (the composition roots) naming an adapter; and a module in a
+    rostered ``internal/`` its roster does not class."""
+    violations: list[str] = []
+    for seam in seams:
+        package = src_root / seam.package
+        internal = package / "internal"
+        wiring = {package / rel for rel in seam.wiring}
+        dotted = ".".join((src_root.name, *Path(seam.package).parts, "internal"))
+        classed = seam.adapters | seam.helpers
+        for path in sorted(internal.glob("*.py")) if internal.is_dir() else []:
+            if path.stem != "__init__" and path.stem not in classed and path not in wiring:
+                where = path.relative_to(src_root.parent.parent)
+                violations.append(f"{where}:1 is unclassed (place it in the seam's roster)")
+        for path in _production_files(src_root):
+            own = path.stem if path.parent == internal and path.stem in seam.adapters else None
+            may_name = path in wiring or path in exempt
+            tree = ast.parse(path.read_text(), filename=str(path))
+            breaches: dict[int, str] = {}
+            for lineno, module in _resolved_imports(path, tree, src_root):
+                target = next(
+                    (a for a in seam.adapters if module == f"{dotted}.{a}" or module.startswith(f"{dotted}.{a}.")),
+                    None,
+                )
+                if target is None or target == own:
+                    continue
+                if own is not None:
+                    breaches.setdefault(lineno, f"{module} (adapter -> other adapter)")
+                elif not may_name:
+                    breaches.setdefault(lineno, f"{module} (adapter named outside wiring and the composition roots)")
+            shown = path.relative_to(src_root.parent.parent)
+            violations += [f"{shown}:{lineno} imports {breach}" for lineno, breach in sorted(breaches.items())]
+    return violations
+
+
+def test_flat_internal_seams_keep_their_adapters_apart() -> None:
+    """``bzh:pluggable-seams``: on each flat ``internal/`` seam no adapter imports another, only the seam's wiring and
+    the composition roots name an adapter, and every module of its ``internal/`` is classed adapter, helper or
+    wiring."""
+    violations = _flat_seam_breaches(_SRC_DIR, _FLAT_SEAMS, exempt=_COMPOSITION_ROOTS)
+    assert not violations, f"S — flat-seam adapter isolation: {violations}"
+
+
+_PLANTED_SEAM = _FlatSeam(
+    package="hub/forge",
+    adapters=frozenset({"alpha", "beta"}),
+    helpers=frozenset({"shared"}),
+    wiring=frozenset({"internal/factory.py", "web.py"}),
+)
+
+
+def _plant_flat_seam(tmp_path: Path, importer: str, statement: str) -> list[str]:
+    """A flat forge seam with two adapters, a helper, its factory and a kind selector beside it, where ``importer``
+    holds one ``statement``."""
+    src = tmp_path / "blizzard"
+    for rel in (
+        "__init__.py",
+        "hub/__init__.py",
+        "hub/app.py",
+        "hub/api/__init__.py",
+        "hub/forge/__init__.py",
+        "hub/forge/web.py",
+        "hub/forge/internal/__init__.py",
+        "hub/forge/internal/alpha.py",
+        "hub/forge/internal/beta.py",
+        "hub/forge/internal/shared.py",
+        "hub/forge/internal/factory.py",
+    ):
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("")
+    (src / importer).parent.mkdir(parents=True, exist_ok=True)
+    (src / importer).write_text(f"{statement}\n")
+    return _flat_seam_breaches(src, (_PLANTED_SEAM,), exempt=frozenset({src / "hub" / "app.py"}))
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement", "breach"),
+    [
+        ("hub/forge/internal/alpha.py", "from blizzard.hub.forge.internal.beta import X", ":1 imports blizzard.hub."),
+        ("hub/forge/internal/alpha.py", "from .beta import X", "other adapter"),
+        ("hub/forge/internal/alpha.py", "from blizzard.hub.forge.internal import beta", "other adapter"),
+        ("hub/forge/internal/shared.py", "from .alpha import X", "adapter named outside"),
+        ("hub/forge/rates.py", "from blizzard.hub.forge.internal.alpha import X", "adapter named outside"),
+        ("hub/api/x.py", "from blizzard.hub.forge.internal.beta import X", "adapter named outside"),
+        ("hub/forge/internal/gamma.py", "", "internal/gamma.py:1 is unclassed"),
+    ],
+)
+def test_flat_seam_check_catches_every_breach(tmp_path: Path, importer: str, statement: str, breach: str) -> None:
+    violations = _plant_flat_seam(tmp_path, importer, statement)
+    assert len(violations) == 1
+    assert breach in violations[0]
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("hub/forge/internal/alpha.py", "from blizzard.hub.forge.internal.shared import X"),
+        ("hub/forge/internal/beta.py", "from .shared import X"),
+        ("hub/forge/internal/factory.py", "from .alpha import X"),
+        ("hub/forge/web.py", "from blizzard.hub.forge.internal.beta import X"),
+        ("hub/app.py", "from blizzard.hub.forge.internal.alpha import X"),
+        ("hub/forge/rates.py", "from blizzard.hub.forge.internal.shared import X"),
+    ],
+)
+def test_flat_seam_check_admits_helpers_wiring_and_roots(tmp_path: Path, importer: str, statement: str) -> None:
+    assert _plant_flat_seam(tmp_path, importer, statement) == []
+
+
 def test_the_process_probe_is_declared_under_runner_process() -> None:
     """``IProcessProbe`` lives in ``runner/process/``, so a harness reaches the probe without importing
     ``runner/loop``; the ``/proc`` driver ``LinuxProcessProbe`` lives under ``runner/process/internal/``,

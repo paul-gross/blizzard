@@ -85,7 +85,8 @@ class RepositoryPatchRequest(MovedFieldsRequest):
     owner: str | None = None
     repo: str | None = None
     base_branch: str | None = None
-    #: Re-points the repository at a credential, by id or slug.
+    #: Re-points the repository at a credential, by id or slug; an explicit ``null`` is refused, since a repository
+    #: needs a credential.
     credential: str | None = None
     #: Deprecated: a secret, resolved as on create — send ``credential``.
     secret_name: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)

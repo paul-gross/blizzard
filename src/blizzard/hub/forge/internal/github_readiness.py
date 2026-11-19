@@ -18,7 +18,7 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.kernel.forge_refusals import ForgeMintRefused
 from blizzard.hub.forge.auth import ForgeAuthorization
 from blizzard.hub.forge.budget import SweepingGate
-from blizzard.hub.forge.internal.github_auth import covers, variant_refusals
+from blizzard.hub.forge.internal.github_grants import covers, variant_refusals
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_auth_refusal, diagnostic_of
 from blizzard.hub.forge.internal.read_only_transport import ReadOnlyTransport
 from blizzard.hub.forge.readiness import (

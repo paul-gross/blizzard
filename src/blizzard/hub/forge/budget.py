@@ -48,18 +48,6 @@ class BudgetKey:
     authority: str | None
 
 
-#: How a ``github.token`` authority names the secret it reads.
-_SECRET_AUTHORITY = "secret/"
-
-
-def authority_secret(authority: str | None) -> str | None:
-    """The secret ``authority`` acts as, when it is a secret's; ``None`` for any other authority and the anonymous
-    one."""
-    if authority is None or not authority.startswith(_SECRET_AUTHORITY):
-        return None
-    return authority.removeprefix(_SECRET_AUTHORITY)
-
-
 @domain_model
 @dataclass(frozen=True)
 class BudgetReading:

@@ -90,8 +90,7 @@ class ForgeAuthorizations:
     def authorization(
         self, credential: ResolvedCredential, scope: ForgeScope, *, call_timeout: Callable[[], float] | None = None
     ) -> ForgeAuthorization:
-        if credential.retired:
-            raise CredentialUnavailable(f"credential {credential.slug}", retired=True)
+        credential = credential.require_usable()
         try:
             revealed = self._secrets.reveal(SecretName.parse(credential.secret_name))
         except SecretNotFound as exc:

@@ -17,7 +17,8 @@ from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
 from blizzard.hub.domain.config.secrets import RevealedSecret, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.forge.auth import ForgeScope
 from blizzard.hub.forge.internal.authorizations import ForgeAuthorizations
-from blizzard.hub.forge.internal.github_auth import InstallationTokens, TokenVariant, effective_variant
+from blizzard.hub.forge.internal.github_auth import InstallationTokens, effective_variant
+from blizzard.hub.forge.internal.github_grants import TokenVariant
 from tests.support.forge_auth import sent_authorization
 from tests.support.github_app import Forges
 

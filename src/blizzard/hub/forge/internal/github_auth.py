@@ -15,7 +15,6 @@ import threading
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from functools import partial
 from typing import cast
 
@@ -38,6 +37,7 @@ from blizzard.hub.domain.kernel.forge_refusals import (
     ForgeMintRefused,
 )
 from blizzard.hub.forge.auth import ForgeAuthorization, ForgeScope
+from blizzard.hub.forge.internal.github_grants import TokenVariant, covers
 from blizzard.hub.forge.internal.github_refusals import CallCredential, classify_mint_refusal, diagnostic_of
 
 _log = get_logger("blizzard.hub.forge.github_auth")
@@ -48,14 +48,6 @@ _CLASSIC_PREFIX = "ghp_"
 _LEGACY_CLASSIC = re.compile(r"[0-9a-f]{40}")
 
 
-class TokenVariant(StrEnum):
-    """A GitHub token's effective variant: what the hub treats it as, from its declared variant and its value."""
-
-    CLASSIC = "classic"
-    FINE_GRAINED = "fine-grained"
-    UNSPECIFIED = "unspecified"
-
-
 def effective_variant(declared: object, token: str) -> TokenVariant:
     """The variant a token declared as ``declared`` (``None`` when undeclared) acts as: fine-grained by its prefix or
     its declaration, classic by its form unless declared fine-grained, else as declared — unspecified when not."""
@@ -64,17 +56,6 @@ def effective_variant(declared: object, token: str) -> TokenVariant:
     if token.startswith(_CLASSIC_PREFIX) or _LEGACY_CLASSIC.fullmatch(token) or declared == TokenVariant.CLASSIC:
         return TokenVariant.CLASSIC
     return TokenVariant.UNSPECIFIED
-
-
-#: What GitHub refuses a fine-grained token on a private repository, though it grants the same token them on a public
-#: one: never withheld up front, only read to classify a refusal GitHub answered.
-_FINE_GRAINED_PRIVATE_REFUSALS: frozenset[Capability] = frozenset({Capability.CHECKS_READ})
-
-
-def variant_refusals(variant: str | None) -> frozenset[Capability]:
-    """What GitHub may refuse a credential of effective ``variant`` whatever it was granted — a fine-grained token's
-    check read, on a private repository; empty for any credential that is no fine-grained token."""
-    return _FINE_GRAINED_PRIVATE_REFUSALS if variant == TokenVariant.FINE_GRAINED else frozenset()
 
 
 class GitHubTokenAuth(httpx2.Auth):
@@ -152,16 +133,8 @@ APP_OPTIONAL_PERMISSIONS: Mapping[ForgeScope, Mapping[str, tuple[str, frozenset[
     },
 }
 
-#: GitHub's permission levels, weakest first; a grant covers every level up to its own.
-_LEVELS = ("read", "write", "admin")
-
 _INSTALLATION = "GET /app/installations/{installation_id}"
 _MINT = "POST /app/installations/{installation_id}/access_tokens"
-
-
-def covers(granted: str | None, needed: str) -> bool:
-    """Whether a grant at ``granted`` (``None`` when not granted) covers the level ``needed``."""
-    return granted in _LEVELS and _LEVELS.index(granted) >= _LEVELS.index(needed)
 
 
 def app_permissions(scope: ForgeScope, granted: Mapping[str, str]) -> dict[str, str]:

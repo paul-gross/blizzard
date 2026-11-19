@@ -424,6 +424,12 @@ class ResolvedCredential:
     slug: str | None = None
     retired: bool = False
 
+    def require_usable(self) -> ResolvedCredential:
+        """This credential, when it may act; :class:`CredentialUnavailable` naming it when it is retired."""
+        if self.retired:
+            raise CredentialUnavailable(f"credential {self.slug}", retired=True)
+        return self
+
 
 def resolved_credential(credential: ConfiguredCredential) -> ResolvedCredential:
     """The authority ``credential`` acts with, retired or not."""

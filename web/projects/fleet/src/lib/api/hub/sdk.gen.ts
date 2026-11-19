@@ -2650,12 +2650,12 @@ export const getRepositoryApiRepositoriesRepositoryGet = <ThrowOnError extends b
  * Patch Repository
  *
  * Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other
- * field. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until
- * another claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository
- * holds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the
- * repository at a forge, and `credential` at a credential, resolved and refused as on create; a deprecated
- * `secret_name` other than the repository's resolves as on create. Moving the forge, or changing `secret_name`, of a
- * repository acting with a credential needs a `credential` too: 422 `credential_forge_mismatch` or
+ * field, `credential` included. A patch that changes nothing writes nothing. A slug that changes keeps resolving to
+ * the repository until another claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a
+ * slug some repository holds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge`
+ * re-points the repository at a forge, and `credential` at a credential, resolved and refused as on create; a
+ * deprecated `secret_name` other than the repository's resolves as on create. Moving the forge, or changing
+ * `secret_name`, of a repository acting with a credential needs a `credential` too: 422 `credential_forge_mismatch` or
  * `credential_conflict` without one.
  */
 export const patchRepositoryApiRepositoriesRepositoryPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRepositoryApiRepositoriesRepositoryPatchData, ThrowOnError>): RequestResult<PatchRepositoryApiRepositoriesRepositoryPatchResponses, PatchRepositoryApiRepositoriesRepositoryPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRepositoryApiRepositoriesRepositoryPatchResponses, PatchRepositoryApiRepositoriesRepositoryPatchErrors, ThrowOnError>({
@@ -3420,14 +3420,15 @@ export const getWorkSourceApiWorkSourcesSourceGet = <ThrowOnError extends boolea
 /**
  * Patch Work Source
  *
- * Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no
- * credential). A patch that changes nothing writes nothing. A slug that changes keeps resolving to the source until
- * another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work
- * source holds, or a taken `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create,
- * a `field_moved_to_forge` naming the source's own forge when the patch names none. `forge` re-points the source at
- * a forge, and `credential` at a credential, resolved and refused as on create; a deprecated `secret` other than the
- * source's resolves as on create. Moving the forge, or changing `secret`, of a source acting with a credential needs
- * a `credential` too: 422 `credential_forge_mismatch` or `credential_conflict` without one.
+ * Apply only the fields present; an explicit `null` clears `secret`, and `credential` with it, only where the
+ * provider needs no credential; on any other provider a `null` `credential` is a 422 naming it. A patch that changes
+ * nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown, 409
+ * for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken `(provider,
+ * locator)`; 422 naming the field (`hub` refused as a slug), coded as on create, a `field_moved_to_forge` naming the
+ * source's own forge when the patch names none. `forge` re-points the source at a forge, and `credential` at a
+ * credential, resolved and refused as on create; a deprecated `secret` other than the source's resolves as on create.
+ * Moving the forge, or changing `secret`, of a source acting with a credential needs a `credential` too: 422
+ * `credential_forge_mismatch` or `credential_conflict` without one.
  */
 export const patchWorkSourceApiWorkSourcesSourcePatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkSourceApiWorkSourcesSourcePatchData, ThrowOnError>): RequestResult<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}',

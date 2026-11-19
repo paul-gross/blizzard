@@ -254,6 +254,32 @@ def test_the_old_field_table_answers_a_deprecation_only_when_an_old_field_resolv
     assert [e["record"] for e in _old_field_events(hub)] == ["repository legacy", "work source issues"]
 
 
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [("/api/repositories", _repository(credential="deploy")), ("/api/work-sources", _source(credential="deploy"))],
+    ids=["repository", "work_source"],
+)
+def test_a_patch_leaves_an_omitted_credential_sets_a_named_one_and_refuses_an_explicit_null(
+    hub: HubHarness, path: str, body: dict[str, object]
+) -> None:
+    _credential(hub)
+    _credential(hub, "deploy2", secret="third-token")
+    created = hub.client.post(path, json=body)
+    assert created.status_code == 201, created.text
+    record = f"{path}/{created.json()['slug']}"
+
+    omitted = hub.client.patch(record, json={"name": "renamed"})
+    assert (omitted.status_code, omitted.json()["credential_slug"]) == (200, "deploy"), omitted.text
+    named = hub.client.patch(record, json={"credential": "deploy2"})
+    assert (named.status_code, named.json()["credential_slug"]) == (200, "deploy2"), named.text
+    revision = named.json()["revision"]
+
+    cleared = hub.client.patch(record, json={"credential": None})
+    assert (_code(cleared), cleared.json()["detail"][0]["loc"]) == ((422, "value_error"), ["body", "credential"])
+    after = hub.client.get(record).json()
+    assert (after["revision"], after["credential_slug"]) == (revision, "deploy2")
+
+
 def test_a_body_written_before_credential_validates_and_its_response_parses(hub: HubHarness) -> None:
     created = hub.client.post("/api/repositories", json=_repository(secret_name=FIXTURE_FORGE_SECRET))
     assert created.status_code == 201, created.text

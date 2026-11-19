@@ -66,7 +66,9 @@ refused. Every write is recorded in the [change log](./config-changes.md).
 Writes need the `config:edit` permission and reads need `fleet:view`. The record fields are also served over
 `GET /api/work-sources` and `GET /api/work-sources/{source}`, where `{source}` is an id or a slug, and the document
 schema at `GET /api/config/schema/work-sources`. A body carries `slug` and `name`; `name` defaults to `slug` on create.
-A source whose secret cannot be revealed is an error on every call through it, never an absent source.
+`PATCH` applies only the fields present, and an explicit `null` on `credential` clears it only for a provider that needs
+none, so it is refused on `github`. A source whose secret cannot be revealed is an error on every call through it, never
+an absent source.
 
 ## Close diagnostics
 
