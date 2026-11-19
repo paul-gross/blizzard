@@ -12,7 +12,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner.api.control import throttle_view
 from blizzard.runner.api.federation import require_superuser
 from blizzard.runner.api.problems import problem, reject_worker_credential
@@ -21,7 +20,6 @@ from blizzard.runner.api.wiring import RunnerWiring, ServedRunner
 from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.hosting.model import API
 from blizzard.runner.hosting.service import (
-    HostedRunnerUnknown,
     HostRunnerHubRefused,
     NewRunner,
     RunnerSettingsInvalid,
@@ -162,17 +160,12 @@ def add_runner(
     service = wiring.maybe_hosted_runners()
     if service is None:
         return problem(409, "host_unregistered", "this host holds no host token, so it cannot add runners at its hub")
-    declared = [workspace.workspace_id for workspace in wiring.workspaces()]
-    projects = [
-        {
-            "project": project.project,
-            **({"workspace": workspace} if (workspace := _workspace(project.workspace, declared)) else {}),
-        }
-        for project in body.projects
-    ]
-    entries = {key: Entry(value) for key, value in body.settings.items()}
-    entries["projects"] = Entry(projects)
-    new = NewRunner(name=body.name, projects=tuple(project.project for project in body.projects), entries=entries)
+    new = NewRunner.of(
+        body.name,
+        [(project.project, project.workspace) for project in body.projects],
+        body.settings,
+        workspaces=[workspace.workspace_id for workspace in wiring.workspaces()],
+    )
     try:
         added = service.add(new, actor=session.username, door=API)
     except RunnerSettingsInvalid as exc:
@@ -189,13 +182,6 @@ def add_runner(
     except HubClientError as exc:
         return problem(503, "hub_unreachable", f"cannot add runner {body.name} at the hub: {exc}")
     return HostRunnerView(runner_id=added.runner_id, name=added.name, state="starting")
-
-
-def _workspace(named: str | None, declared: list[str]) -> str | None:
-    """The workspace a project runs in: the one named, else the host's only one."""
-    if named is not None:
-        return named
-    return declared[0] if len(declared) == 1 else None
 
 
 @writes.post(
@@ -224,10 +210,11 @@ def retire_runner(
         return problem(
             409, "host_unregistered", "this host holds no host token, so it cannot retire runners at its hub"
         )
+    runner = service.held(runner_id)
+    if runner is None:
+        return problem(404, "runner_unknown", f"this host holds no runner {runner_id}")
     try:
-        retired = service.retire(runner_id, force=body.force, actor=session.username, door=API)
-    except HostedRunnerUnknown as exc:
-        return problem(404, "runner_unknown", str(exc))
+        retired = service.retire(runner, force=body.force, actor=session.username, door=API)
     except HostRunnerHubRefused as exc:
         return problem(409, "hub_refused", f"the hub refused to retire runner {runner_id}: {exc.refused.detail}")
     except HostRunnerRetireRefused as exc:

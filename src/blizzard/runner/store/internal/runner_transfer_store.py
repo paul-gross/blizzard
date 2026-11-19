@@ -3,8 +3,8 @@ removed from one.
 
 Both stores' connections are bound to the moving runner and build every statement, so the runner statement guard judges
 a transfer like any adapter's writes. The tables are the schema's runner-scoped ones in reference order; the outboxes go
-through :mod:`.base`'s carry seam, and the host rows and the carried hub token through the host members composition
-hands in."""
+through :mod:`.base`'s carry seam, and the host rows, the moving runner's hosting and the carried hub token through
+the host members composition hands in."""
 
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ from blizzard.runner.transfer.rows import (
     HostIngest,
     IRunnerRowRemoval,
     IRunnerTransfer,
+    IWriteCarriedHosting,
     IWriteCarriedHubTokenRepository,
     IWriteHostIngestRepository,
 )
@@ -47,14 +48,15 @@ _REFERRED = frozenset(target for t in _RUNNER_TABLES for target in references(t)
 
 
 class RunnerTransferStore:
-    """Copies the bound runner from ``source`` into ``destination``; ``host`` and ``hub_tokens`` are the destination's
-    host members."""
+    """Copies the bound runner from ``source`` into ``destination``; ``host``, ``hosted`` and ``hub_tokens`` are the
+    destination's host members."""
 
     def __init__(
         self,
         source: RunnerStoreConnections,
         destination: RunnerStoreConnections,
         host: IWriteHostIngestRepository,
+        hosted: IWriteCarriedHosting,
         hub_tokens: IWriteCarriedHubTokenRepository,
         named_runners: Callable[[], tuple[str, ...]],
     ) -> None:
@@ -63,6 +65,7 @@ class RunnerTransferStore:
         self._source = source
         self._destination = destination
         self._host = host
+        self._hosted = hosted
         self._hub_tokens = hub_tokens
         self._named_runners = named_runners
 
@@ -98,7 +101,8 @@ class RunnerTransferStore:
             carry_outbox_rows(self._source, source, self._destination, destination)
             self._host.merge_host_rows_locked(handle, workspaces=workspaces)
             if ingest is not None:
-                self._host.record_host_ingest_locked(handle, ingest, alongside=alongside)
+                self._host.record_host_ingest_locked(handle, ingest)
+                self._hosted.host_carried_locked(handle, at=ingest.ingested_at, alongside=alongside)
                 if hub_token is not None:
                     self._hub_tokens.seal_carried_locked(handle, hub_token, at=ingest.ingested_at)
         _log.info("runner rows copied", runner_id=runner_id, rows=sum(counts.values()), tables=len(counts))

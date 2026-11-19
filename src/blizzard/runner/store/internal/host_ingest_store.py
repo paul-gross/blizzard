@@ -7,16 +7,14 @@ declarations put them; no list of them is kept here."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import Connection, Table, and_, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import UtcDateTime
-from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostingFact
 from blizzard.runner.store import schema
-from blizzard.runner.store.internal.host_hosted_runner_store import host_locked, hosts_any_locked
 from blizzard.runner.store.internal.row_transfer import (
     WORKSPACE_COLUMN,
     TransferHandle,
@@ -88,9 +86,7 @@ class HostIngestStore:
                 )
         _log.info("host rows merged", runner_id=copy.runner_id, rows=carried)
 
-    def record_host_ingest_locked(
-        self, handle: IRunnerTransferHandle, ingest: HostIngest, *, alongside: Sequence[str] = ()
-    ) -> None:
+    def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
         destination = handle_of(handle).destination
         destination.execute(
             host_ingests.insert().values(
@@ -100,14 +96,7 @@ class HostIngestStore:
                 ingested_at=ingest.ingested_at,
             )
         )
-        # The destination's own hosted row and `added` fact, written beside the identity row the copy carried.
-        if alongside and not hosts_any_locked(destination):
-            for runner_id in alongside:
-                host_locked(destination, runner_id, HostingFact(actor=SEED, door=SEED, at=ingest.ingested_at))
-        hosted = host_locked(
-            destination, ingest.runner_id, HostingFact(actor=OPERATOR, door=CLI, at=ingest.ingested_at)
-        )
-        _log.info("host ingest recorded", runner_id=ingest.runner_id, source=ingest.source, hosted=hosted)
+        _log.info("host ingest recorded", runner_id=ingest.runner_id, source=ingest.source)
 
 
 def _matching(table: Table, row: Mapping[str, Any]) -> Any:

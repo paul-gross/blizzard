@@ -1619,7 +1619,7 @@
           "type": "text"
         },
         {
-          "help": "The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store still names.",
+          "help": "The host's runner to retire, by name or id; one the store holds retired, by id.",
           "hidden": false,
           "kind": "option",
           "name": "runner",

@@ -6,7 +6,7 @@ import threading
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
-from blizzard.runner.hosting.model import HUB, HostedRunnerOp, HostingFact
+from blizzard.runner.hosting.model import HUB, HostingFact
 from blizzard.runner.hosting.ports import IWriteHostedRunnerRepository
 from blizzard.runner.hub.identity import IRecordRunnerRetired
 
@@ -32,7 +32,7 @@ class RetirementNotices:
 @dataclass(frozen=True)
 class HubNoticedRetirement:
     """Records ``runner_id``'s ``retired`` fact under the ``hub`` door and actor, stamped by ``clock``. A runner the
-    store does not host yet is hosted first, so its retirement has a row to belong to."""
+    store does not host yet is hosted in the same transaction, so its retirement has a row to belong to."""
 
     runner_id: str
     hosted: IWriteHostedRunnerRepository
@@ -40,11 +40,8 @@ class HubNoticedRetirement:
     notices: RetirementNotices = field(default_factory=RetirementNotices)
 
     def record_retired(self) -> bool:
-        if self.runner_id in self.hosted.retired():
+        if not self.hosted.record_retired(self.runner_id, HostingFact(actor=HUB, door=HUB, at=self.clock.now())):
             return False
-        fact = HostingFact(actor=HUB, door=HUB, at=self.clock.now())
-        self.hosted.host([self.runner_id], fact)
-        self.hosted.append_fact(self.runner_id, HostedRunnerOp.RETIRED, fact)
         self.notices.notice()
         return True
 

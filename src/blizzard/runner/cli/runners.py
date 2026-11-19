@@ -16,7 +16,6 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
-from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding
@@ -25,9 +24,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import InitCollaborators, host_answers, seed_hosted_runners
 from blizzard.runner.cli.store_guard import (
     StoreVerdict,
-    host_runner,
     hosted_runner_ids,
-    named_runners,
     resolve_runner,
     store_refusal,
     store_write_guard,
@@ -37,7 +34,7 @@ from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import SCAFFOLD_SUBSCRIPTION, HostConfig
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hosting.model import CLI, OPERATOR, HostingFact
+from blizzard.runner.hosting.model import CLI, OPERATOR
 from blizzard.runner.hosting.service import HostRunnerHubRefused, NewRunner, RunnerSettingsInvalid
 from blizzard.runner.hub.client import (
     HostRefusalReason,
@@ -117,12 +114,18 @@ def add(
     if host_answers(config.layout.socket_path, door):
         _add_on_running_host(config, door, name, bindings, settings)
         return
-    entries = {key: Entry(value) for key, value in settings.items()}
-    entries["projects"] = Entry([{"project": b.project, "workspace": b.workspace} for b in bindings])
-    new = NewRunner(name=name, projects=projects, entries=entries)
+    new = NewRunner.of(
+        name,
+        [(b.project, b.workspace) for b in bindings],
+        settings,
+        workspaces=[workspace.id for workspace in config.workspaces],
+    )
     clock = CliCollaborators.of(ctx).wall_clock
     hub = config.hub_url
     with store_write_guard(config, action=f"add runner {name}", door=door, clock=clock, refuse_foreign=True):
+        # The file's runners hosted first, as the host's next start would, so the new runner's hosted row leaves none
+        # of them unhosted.
+        seed_hosted_runners(config, clock=clock)
         engine = create_engine_from_url(config.db_url)
         try:
             with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
@@ -173,8 +176,7 @@ def _add_on_running_host(
     "--runner",
     "runner",
     required=True,
-    help="The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store "
-    "still names.",
+    help="The host's runner to retire, by name or id; one the store holds retired, by id.",
 )
 @click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
 @click.pass_context
@@ -203,8 +205,11 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
         try:
             with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
                 service = build_hosted_runner_service(config, engine, host_clients(token), clock=clock)
+                held = service.held(target.runner_id)
+                if held is None:
+                    raise click.ClickException(f"the store does not hold runner {target.runner_id}")
                 try:
-                    retired = service.retire(target.runner_id, force=force, actor=OPERATOR, door=CLI)
+                    retired = service.retire(held, force=force, actor=OPERATOR, door=CLI)
                 except HostRunnerHubRefused as exc:
                     raise click.ClickException(
                         _host_refused(exc.refused, hub, f"retire runner {target.name} ({target.runner_id})")
@@ -261,15 +266,12 @@ def _retire_on_running_host(config: HostConfig, door: Door, runner: str, force: 
 
 def _hosting(config: HostConfig, target: _Retiring, verdict: StoreVerdict, clock: IClock) -> None:
     """Make the stopped host's store hold ``target`` before it is retired: the file's runners hosted as the host's next
-    start would, and a runner only an identity row names hosted under the operator's door. A store judged foreign is
-    not taken up; one that does not hold the runner refuses."""
+    start would. A store judged foreign is not taken up, and refuses unless it already hosts the runner."""
     if verdict.foreign is not None:
         if target.runner_id in hosted_runner_ids(config, clock):
             return
         raise click.ClickException(store_refusal(verdict) or f"the store does not hold runner {target.runner_id}")
     seed_hosted_runners(config, clock=clock)
-    if target.runner_id not in hosted_runner_ids(config, clock):
-        host_runner(config, target.runner_id, HostingFact(actor=OPERATOR, door=CLI, at=clock.now()), clock=clock)
 
 
 def _released(chunk_ids: Sequence[str]) -> str:
@@ -298,12 +300,12 @@ class _Retiring:
 
 
 def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
-    """The runner ``runner`` names: one the host file configures or the store hosts, by name or id, else one only the
-    store's identity rows still name, by id."""
+    """The runner ``runner`` names: one the host file configures or the store hosts, by name or id, else one the store
+    holds retired, by id — so its retire reports it retired already."""
     try:
         entry = resolve_runner(config, runner, clock)
     except ConfigError as exc:
-        if runner in _named_runners(config, clock):
+        if HostLayout(config.root).store_path.exists() and runner in hosted_runner_ids(config, clock):
             return _Retiring(name=runner, runner_id=runner, configured=False)
         raise click.ClickException(str(exc)) from exc
     if entry.id is None:
@@ -312,14 +314,6 @@ def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
             "remove its [[runner]] by hand"
         )
     return _Retiring(name=entry.name, runner_id=entry.id, configured=any(e.id == entry.id for e in config.runners))
-
-
-def _named_runners(config: HostConfig, clock: IClock) -> tuple[str, ...]:
-    """The runners the store's identity rows name — none when the host has no store file yet. A store that exists but
-    cannot be read raises, so the cause is not hidden behind a "no such runner" refusal."""
-    if not HostLayout(config.root).store_path.exists():
-        return ()
-    return named_runners(config, clock)
 
 
 @click.command("ingest")

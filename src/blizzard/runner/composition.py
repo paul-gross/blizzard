@@ -1265,9 +1265,9 @@ class HostRunnerReconcile:
 
     def run(self) -> None:
         with self._lock:
-            hosted = self.host.host_stores.hosted_runners
-            active, retired = hosted.active(), hosted.retired()
-            plan = reconcile(active, retired, self.runners.running(), self.failures.failed())
+            roster = self.host.host_stores.hosted_runners.roster()
+            retired = roster.retired
+            plan = reconcile(roster.active, retired, self.runners.running(), self.failures.failed())
             for runner_id in plan.forget_failures:
                 self.failures.clear(runner_id)
             for runner_id in plan.drain:
@@ -1890,7 +1890,8 @@ def build_runner_admission(
     connections = RunnerStoreConnections(engine, errors, runner_id)
     return RunnerAdmissionStore(
         connections,
-        clock,
+        identity=RunnerIdentityStore(connections),
+        settings=RunnerSettingsStore(connections, clock),
         hosted=HostHostedRunnerStore(connections),
         hub_tokens=HostHubTokenStore(connections),
         named_runners=RunnerAudit(connections).named_runners,
@@ -2065,6 +2066,7 @@ def build_runner_transfer(
         RunnerStoreConnections(source, errors, runner_id),
         into,
         _build_host_stores(into, clock).host_ingests,
+        HostHostedRunnerStore(into),
         HostHubTokenStore(into),
         RunnerAudit(into).named_runners,
     )

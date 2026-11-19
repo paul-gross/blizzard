@@ -948,6 +948,73 @@ def test_host_store_check_admits_its_own_doors(tmp_path: Path, rel: str, text: s
     assert _plant_host_store(tmp_path, rel, text) == []
 
 
+#: ``(importing module, imported module)`` pairs of runner-store adapters admitted to import one another, each a declared
+#: exception of ``bzh:sibling-adapter-independence``. None is admitted.
+_SIBLING_ADAPTER_IMPORTS: frozenset[tuple[str, str]] = frozenset()
+
+
+def _sibling_adapter_breaches(src_root: Path, admitted: frozenset[tuple[str, str]]) -> list[str]:
+    """Each import under ``src_root``'s ``runner/store/internal/`` of one ``*_store`` adapter module by another, bar
+    ``admitted``'s pairs; and each admitted pair no longer imported, so the list holds only live exceptions. A shared
+    helper module (one not named ``*_store``) is not an adapter, so importing it is no breach."""
+    internal = src_root / "runner" / "store" / "internal"
+    prefix = "blizzard.runner.store.internal."
+    seen: set[tuple[str, str]] = set()
+    breaches: list[str] = []
+    for path in sorted(internal.glob("*_store.py")) if internal.is_dir() else []:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not (node.module or "").startswith(prefix):
+                continue
+            imported = (node.module or "").removeprefix(prefix)
+            if not imported.endswith("_store") or imported == path.stem:
+                continue
+            pair = (path.stem, imported)
+            seen.add(pair)
+            if pair not in admitted:
+                where = path.relative_to(src_root.parent)
+                breaches.append(f"{where}:{node.lineno} — the adapter imports its sibling adapter {node.module}")
+    breaches += [f"{a} no longer imports {b}; drop the admitted pair" for a, b in sorted(admitted - seen)]
+    return breaches
+
+
+def test_runner_store_adapters_do_not_import_one_another() -> None:
+    """``bzh:sibling-adapter-independence``: a runner-store adapter coordinates another repository through its own
+    ``*_locked`` member on a shared handle, never by importing the sibling adapter's module."""
+    breaches = _sibling_adapter_breaches(_SRC_DIR, _SIBLING_ADAPTER_IMPORTS)
+    assert not breaches, f"runner-store adapters importing one another: {breaches}"
+
+
+def _plant_adapter(tmp_path: Path, name: str, text: str) -> Path:
+    src = tmp_path / "blizzard"
+    internal = src / "runner" / "store" / "internal"
+    internal.mkdir(parents=True, exist_ok=True)
+    (internal / name).write_text(text)
+    return src
+
+
+_SIBLING_IMPORT = "from blizzard.runner.store.internal.host_hosted_runner_store import host_locked\n"
+
+
+def test_the_sibling_adapter_check_catches_an_adapter_importing_another(tmp_path: Path) -> None:
+    src = _plant_adapter(tmp_path, "host_ingest_store.py", _SIBLING_IMPORT)
+    assert _sibling_adapter_breaches(src, frozenset())
+
+
+def test_the_sibling_adapter_check_admits_a_shared_helper_and_a_declared_pair(tmp_path: Path) -> None:
+    src = _plant_adapter(
+        tmp_path, "host_ingest_store.py", "from blizzard.runner.store.internal.row_transfer import handle_of\n"
+    )
+    assert _sibling_adapter_breaches(src, frozenset()) == []
+    _plant_adapter(tmp_path, "identity_store.py", _SIBLING_IMPORT)
+    assert _sibling_adapter_breaches(src, frozenset({("identity_store", "host_hosted_runner_store")})) == []
+
+
+def test_the_sibling_adapter_check_fails_a_stale_declared_pair(tmp_path: Path) -> None:
+    src = _plant_adapter(tmp_path, "identity_store.py", "")
+    assert _sibling_adapter_breaches(src, frozenset({("identity_store", "host_hosted_runner_store")}))
+
+
 _OUTBOX_TABLES = frozenset({"outbound_buffer", "transcript_outbound_buffer"})
 _INSERT_BUILDERS = frozenset({"insert", "insert_rows", "insert_from_select"})
 _FACT_TABLES = frozenset(

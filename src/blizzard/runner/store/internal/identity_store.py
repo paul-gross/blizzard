@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from sqlalchemy import Connection
+
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.hosting.ports import IAdmissionHandle, IWriteAdmittedIdentity
 from blizzard.runner.hub.identity import (
     IRunnerIdentityStore,
     IWriteRunnerIdentityRepository,
     RunnerIdentity,
 )
+from blizzard.runner.store.internal.admission_handle import admission_of
 from blizzard.runner.store.schema import runner_identity
 from blizzard.runner.store.scoped import RunnerAlreadyBound, RunnerStoreConnections, RunnerUnbound
 
@@ -45,22 +49,9 @@ class RunnerIdentityStore:
         )
 
     def record_runner_identity(self, identity: RunnerIdentity) -> None:
-        values = {
-            "runner_name": identity.runner_name,
-            "registered_at": identity.registered_at,
-            "tenant_id": identity.tenant_id,
-            "tenant_name": identity.tenant_name,
-        }
-        bound = self._store.runner_id
-        if bound is None:
-            raise RunnerUnbound(runner_identity.name)
-        if bound != identity.runner_id:
-            raise RunnerAlreadyBound(bound, identity.runner_id)
+        self._bound(identity)
         with self._store.begin() as conn:
-            # The bound runner's row is updated in place, so the served-projects answer's marker on it stays.
-            kept = conn.execute(self._store.update(runner_identity).values(**values)).rowcount
-            if not kept:
-                conn.execute(self._store.insert(runner_identity).values(**values))
+            self._write(conn, identity)
         _log.debug(
             "runner identity recorded",
             runner_id=identity.runner_id,
@@ -68,7 +59,32 @@ class RunnerIdentityStore:
             tenant_id=identity.tenant_id,
         )
 
+    def record_admitted_locked(self, handle: IAdmissionHandle, identity: RunnerIdentity) -> None:
+        self._bound(identity)
+        self._write(admission_of(handle).conn, identity)
+
+    def _bound(self, identity: RunnerIdentity) -> None:
+        bound = self._store.runner_id
+        if bound is None:
+            raise RunnerUnbound(runner_identity.name)
+        if bound != identity.runner_id:
+            raise RunnerAlreadyBound(bound, identity.runner_id)
+
+    def _write(self, conn: Connection, identity: RunnerIdentity) -> None:
+        """The bound runner's row, updated in place when held — so the served-projects answer's marker on it stays —
+        on ``conn``'s open transaction."""
+        values = {
+            "runner_name": identity.runner_name,
+            "registered_at": identity.registered_at,
+            "tenant_id": identity.tenant_id,
+            "tenant_name": identity.tenant_name,
+        }
+        if not conn.execute(self._store.update(runner_identity).values(**values)).rowcount:
+            conn.execute(self._store.insert(runner_identity).values(**values))
+
 
 _runner_identity_store_conforms: type[IWriteRunnerIdentityRepository] = RunnerIdentityStore
 
 _runner_identity_bundle_conforms: type[IRunnerIdentityStore] = RunnerIdentityStore
+
+_admitted_identity_conforms: type[IWriteAdmittedIdentity] = RunnerIdentityStore

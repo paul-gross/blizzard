@@ -343,6 +343,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "a runner's retirement on a stopped host — which runners the host holds, which no runner's board or SSE "
         "stream carries."
     ),
+    "record_retired": Silent(
+        "a retirement the running host notices at its hub (runner/hosting/retirement.py) — which runners the host "
+        "holds, which no runner's board or SSE stream carries; the host tick drains the runner."
+    ),
     "claim_credential_renewal": Silent(
         "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "
         "in the vocabulary represents a renewal, nothing reaches the fact log, and the panel's subscriptions "

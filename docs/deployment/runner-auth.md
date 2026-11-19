@@ -324,7 +324,8 @@ Both verbs take one of two paths, and say which:
   The host starts an added runner at its next tick, and drains a retired one at its next tick, while the runners beside
   it keep ticking: the drained runner's routes are withdrawn, its workers drained, and its sealed token deleted.
 - **On a stopped host** they write the same transaction to the store directly, under the store's write guard. An added
-  runner starts at the host's next start. `--runner` also takes the id of a runner only the store still names.
+  runner starts at the host's next start, and the file's runners are hosted first, as that start would. `--runner` also
+  takes the id of a runner the store holds retired.
 
 A retired runner's `[[runner]]` is no longer read. A stopped-host retire leaves it in the file and says to remove it;
 each start warns of it, naming the runner, until it is removed. Removing a `[[runner]]` from the file no longer retires

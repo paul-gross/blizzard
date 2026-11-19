@@ -43,7 +43,13 @@ from blizzard.runner.harness.selftest_result import IWriteSelfTestResultReposito
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
 from blizzard.runner.hosting.model import RunnerAdmission
-from blizzard.runner.hosting.ports import IWriteAdmittedHosting, IWriteAdmittedHubToken, IWriteHostedRunnerRepository
+from blizzard.runner.hosting.ports import (
+    IWriteAdmittedHosting,
+    IWriteAdmittedHubToken,
+    IWriteAdmittedIdentity,
+    IWriteAdmittedSettings,
+    IWriteHostedRunnerRepository,
+)
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
@@ -81,7 +87,11 @@ from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
-from blizzard.runner.transfer.rows import IWriteCarriedHubTokenRepository, IWriteHostIngestRepository
+from blizzard.runner.transfer.rows import (
+    IWriteCarriedHosting,
+    IWriteCarriedHubTokenRepository,
+    IWriteHostIngestRepository,
+)
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageAttemptRepository,
@@ -611,6 +621,10 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
 }
 
 _HOST_ONLY = "writes only host-scoped tables, which carry no runner"
+_ADMITTED = (
+    "runs only on an admission's transaction, bound to the admitted runner — "
+    "test_an_admission_writes_none_of_another_runners_rows judges it"
+)
 
 #: Runner ``IWrite*`` methods that write no runner-scoped row, each reasoned.
 WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
@@ -635,6 +649,11 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHostedRunnerRepository, "drop"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteAdmittedHosting, "host_admitted_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteAdmittedHubToken, "seal_admitted_locked"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteAdmittedIdentity, "record_admitted_locked"): _ADMITTED + " (runner_identity)",
+    (IWriteAdmittedSettings, "create_admitted_locked"): _ADMITTED
+    + " (runner_settings, runner_setting_entries, runner_setting_changes)",
+    (IWriteCarriedHosting, "host_carried_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
+    (IWriteHostedRunnerRepository, "record_retired"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY
     + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",

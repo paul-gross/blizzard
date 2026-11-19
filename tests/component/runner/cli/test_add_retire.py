@@ -44,7 +44,7 @@ from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import LoopWiring, RunnerStepper
-from blizzard.runner.store.schema import lease_spawns
+from blizzard.runner.store.schema import hosted_runner_facts, hosted_runners, lease_spawns
 from tests.support.child_launch import wait_for_exit
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import UnresolvableSettings
@@ -401,6 +401,34 @@ def test_add_on_a_stopped_host_mints_the_runner_and_writes_it_to_the_store_alone
         **({"subscription": "anthropic"} if load_host_config(root).subscriptions else {}),
     }
     assert _stored_token(root, "rn_init2") == StoredToken.opened("init-token-2", 1)
+
+
+def test_add_on_a_stopped_store_hosting_none_yet_hosts_the_files_runners_first(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    """A ``[[runner]]`` with an id and no identity row is hosted as the host's next start would, so the added runner's
+    hosted row does not leave it unhosted."""
+    root = _registered(tmp_path, fake_init_hub)
+    config_path = HostLayout(root).config_path
+    config_path.write_text(
+        config_path.read_text()
+        + '\n[[runner]]\nname = "file-2"\nprojects = [{ project = "default", workspace = "workspace-local" }]\n'
+        + 'id = "rn_file"\n'
+    )
+    engine = create_engine_from_url(load_host_config(root).db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(hosted_runner_facts.delete())
+            conn.execute(hosted_runners.delete())
+    finally:
+        engine.dispose()
+
+    result = _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    assert _facts(root, "rn_file") == [("added", "seed", "seed")]
+    assert _facts(root, "rn_init1") == [("added", "seed", "seed")]
+    assert _facts(root, "rn_init2") == [("added", "cli", "operator")]
 
 
 def test_add_binds_each_project_to_its_workspace_and_sums_per_project_agents_into_the_runner_count(

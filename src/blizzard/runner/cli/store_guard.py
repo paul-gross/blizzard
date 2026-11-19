@@ -21,7 +21,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, RunnerEntry
 from blizzard.runner.host_layout import HostHeld, HostLayout, hold_host
-from blizzard.runner.hosting.model import HostingFact, hosted_beside_the_file
+from blizzard.runner.hosting.model import hosted_beside_the_file
 from blizzard.runner.hosting.names import stored_name
 from blizzard.runner.lifecycle.identity_check import ForeignStore, foreign_store_reason, host_store_verdict
 from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, reset_command
@@ -46,17 +46,6 @@ def hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:
         return build_host_stores(
             engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
         ).hosted_runners.hosted_runner_ids()
-    finally:
-        engine.dispose()
-
-
-def host_runner(config: IStoreLocation, runner_id: str, hosting: HostingFact, *, clock: IClock) -> None:
-    """Give ``runner_id`` a hosted row and an ``added`` fact, unless the store already holds it."""
-    engine = create_engine_from_url(config.db_url)
-    try:
-        build_host_stores(
-            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
-        ).hosted_runners.host([runner_id], hosting)
     finally:
         engine.dispose()
 

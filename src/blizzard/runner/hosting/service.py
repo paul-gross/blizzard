@@ -6,7 +6,8 @@ one — the hub mints the id. The window between them is recorded in ``bzh:crash
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
@@ -62,14 +63,6 @@ class HostRunnerHubRefused(Exception):
         self.refused = refused
 
 
-class HostedRunnerUnknown(Exception):
-    """The host holds no runner of the id."""
-
-    def __init__(self, runner_id: str) -> None:
-        super().__init__(f"this host holds no runner {runner_id}")
-        self.runner_id = runner_id
-
-
 @domain_model
 @dataclass(frozen=True)
 class NewRunner:
@@ -79,6 +72,26 @@ class NewRunner:
     name: str
     projects: tuple[str, ...]
     entries: Mapping[str, Entry] = field(default_factory=dict[str, Entry])
+
+    @classmethod
+    def of(
+        cls,
+        name: str,
+        bindings: Sequence[tuple[str, str | None]],
+        settings: Mapping[str, object],
+        *,
+        workspaces: Sequence[str],
+    ) -> NewRunner:
+        """The runner ``name`` serving each (project, workspace) of ``bindings`` — a project naming no workspace runs
+        in the host's only one, of its declared ``workspaces`` — with ``settings`` as its other entries."""
+        only = workspaces[0] if len(workspaces) == 1 else None
+        projects = [
+            {"project": project, **({"workspace": chosen} if (chosen := workspace or only) else {})}
+            for project, workspace in bindings
+        ]
+        entries = {key: Entry(value) for key, value in settings.items()}
+        entries["projects"] = Entry(projects)
+        return cls(name=name, projects=tuple(project for project, _ in bindings), entries=entries)
 
 
 @domain_model
@@ -113,11 +126,17 @@ class HostedRunnerService:
     tokens: IRunnerTokenSealer
     hub: IHostRunnerHub
     clock: IClock
+    _adding: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     def add(self, new: NewRunner, *, actor: str, door: Door) -> AddedRunner:
         """Validate ``new`` as a settings write is, ask the hub to mint it, then write its identity, first settings
-        revision, hosting and sealed token in one transaction. Raises :class:`RunnerSettingsInvalid` before the hub is
-        asked, :class:`HostRunnerHubRefused` on the hub's refusal of the host, and the hub client's own errors."""
+        revision, hosting and sealed token in one transaction. Adds run one at a time, so two adds of one name cannot
+        both pass its check. Raises :class:`RunnerSettingsInvalid` before the hub is asked,
+        :class:`HostRunnerHubRefused` on the hub's refusal of the host, and the hub client's own errors."""
+        with self._adding:
+            return self._add(new, actor=actor, door=door)
+
+    def _add(self, new: NewRunner, *, actor: str, door: Door) -> AddedRunner:
         name = new.name.strip()
         entries = {**new.entries, "name": Entry(name)}
         problems = dict(self.settings.problems(name, entries))
@@ -144,15 +163,20 @@ class HostedRunnerService:
         _log.info("runner added", runner_id=answer.runner_id, door=door, actor=actor)
         return AddedRunner(runner_id=answer.runner_id, name=name)
 
-    def retire(self, runner_id: str, *, force: bool, actor: str, door: Door) -> RetiredRunner:
-        """Ask the hub to retire ``runner_id``, then record its ``retired`` fact; the host tick drains it. A retired
-        runner's retire writes nothing and asks nothing of the hub. Raises :class:`HostedRunnerUnknown` for a runner
-        the store does not hold, :class:`HostRunnerHubRefused` on the hub's refusal of the host, and the hub client's
-        own errors — its refusal while the runner holds chunks among them."""
+    def held(self, runner_id: str) -> HostedRunner | None:
+        """The hosted runner of ``runner_id`` and its facts, or ``None`` when the store does not hold it."""
         if runner_id not in self.hosted.hosted_runner_ids():
-            raise HostedRunnerUnknown(runner_id)
+            return None
+        return HostedRunner(runner_id, self.hosted.facts(runner_id))
+
+    def retire(self, runner: HostedRunner, *, force: bool, actor: str, door: Door) -> RetiredRunner:
+        """Ask the hub to retire ``runner``, then record its ``retired`` fact; the host tick drains it. A retired
+        runner's retire writes nothing and asks nothing of the hub. Raises :class:`HostRunnerHubRefused` on the hub's
+        refusal of the host, and the hub client's own errors — its refusal while the runner holds chunks among
+        them."""
+        runner_id = runner.runner_id
         name = self.names.name_of(runner_id)
-        if HostedRunner(runner_id, self.hosted.facts(runner_id)).retired():
+        if runner.retired():
             return RetiredRunner(runner_id=runner_id, name=name, already=True)
         answer = self.hub.retire_runner(runner_id, force=force)
         if isinstance(answer, HostRefused):

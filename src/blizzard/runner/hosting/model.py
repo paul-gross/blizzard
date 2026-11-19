@@ -38,7 +38,8 @@ class HostedRunnerOp(StrEnum):
 
 
 class HostedRunnerState(StrEnum):
-    """A hosted runner's state, its newest fact's: ``active`` while it was last added, ``retired`` once retired."""
+    """A hosted runner's state: ``retired`` once any fact retires it — retirement is final — and ``active`` until
+    then."""
 
     ACTIVE = "active"
     RETIRED = "retired"
@@ -54,6 +55,16 @@ class HostedRunnerFact:
     op: HostedRunnerOp
     actor: str
     door: HostedRunnerDoor
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostedRoster:
+    """The host's runners as one read saw them: the ``active`` ones in the order they were first hosted, and the
+    ``retired`` ones."""
+
+    active: tuple[str, ...] = ()
+    retired: frozenset[str] = frozenset()
 
 
 def state_of(facts: Sequence[HostedRunnerFact]) -> HostedRunnerState | None:

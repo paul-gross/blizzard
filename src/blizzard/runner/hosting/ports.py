@@ -8,7 +8,7 @@ from typing import Protocol
 
 from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
-from blizzard.runner.hosting.model import HostedRunnerFact, HostedRunnerOp, HostingFact, RunnerAdmission
+from blizzard.runner.hosting.model import HostedRoster, HostedRunnerFact, HostedRunnerOp, HostingFact, RunnerAdmission
 from blizzard.runner.hub.client import HostRefused, IHostRunnerAdder, RetiredHostRunner
 from blizzard.runner.hub.identity import RunnerIdentity
 
@@ -20,12 +20,16 @@ class IReadHostedRunnerRepository(Protocol):
         """Every runner with a hosted row, added or retired."""
         ...
 
+    def roster(self) -> HostedRoster:
+        """The active and the retired runners, both read from one snapshot."""
+        ...
+
     def active(self) -> tuple[str, ...]:
-        """The runners whose newest fact is ``added``, in the order they were first hosted."""
+        """The runners no fact retires, in the order they were first hosted."""
         ...
 
     def retired(self) -> frozenset[str]:
-        """The runners whose newest fact is ``retired``."""
+        """The runners a ``retired`` fact names."""
         ...
 
     def facts(self, runner_id: str) -> tuple[HostedRunnerFact, ...]:
@@ -43,6 +47,11 @@ class IWriteHostedRunnerRepository(IReadHostedRunnerRepository, Protocol):
         """Append one fact about a runner the store holds."""
         ...
 
+    def record_retired(self, runner_id: str, hosting: HostingFact) -> bool:
+        """In one transaction, host ``runner_id`` unless the store holds it and append its ``retired`` fact, unless
+        one is held; whether it was recorded."""
+        ...
+
     def drop(self, runner_id: str) -> bool:
         """Delete ``runner_id``'s hosted row and facts, for a runner that has left this host's store; whether it held
         any."""
@@ -56,6 +65,22 @@ class IAdmissionHandle(Protocol):
     @property
     def runner_id(self) -> str:
         """The runner admitted."""
+        ...
+
+
+class IWriteAdmittedIdentity(Protocol):
+    """The runner half of an admission: the admitted runner's identity row, on the admission's own transaction."""
+
+    def record_admitted_locked(self, handle: IAdmissionHandle, identity: RunnerIdentity) -> None:
+        """Write ``identity`` as the admitted runner's row, updated in place when one is held."""
+        ...
+
+
+class IWriteAdmittedSettings(Protocol):
+    """The admitted runner's first settings revision, on the admission's own transaction."""
+
+    def create_admitted_locked(self, handle: IAdmissionHandle, admission: RunnerAdmission) -> int:
+        """Write ``admission``'s entries as the next revision with the ``create`` change naming them; the revision."""
         ...
 
 

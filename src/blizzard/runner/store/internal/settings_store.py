@@ -14,7 +14,10 @@ from blizzard.foundation.settings_record.decision import decide, seed_choice
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
+from blizzard.runner.hosting.model import RunnerAdmission
+from blizzard.runner.hosting.ports import IAdmissionHandle, IWriteAdmittedSettings
 from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsChange, SettingsSnapshot
+from blizzard.runner.store.internal.admission_handle import admission_of
 from blizzard.runner.store.internal.settings_record import RunnerSettingsRecord
 from blizzard.runner.store.schema import runner_identity, runner_setting_changes, runner_setting_entries
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -55,6 +58,21 @@ class RunnerSettingsStore:
         )
         stmt = self._store.select(joined, runner_setting_entries.c.key, *runner_setting_changes.c)
         return {row.key: _change(row) for row in conn.execute(stmt)}
+
+    def create_admitted_locked(self, handle: IAdmissionHandle, admission: RunnerAdmission) -> int:
+        conn = admission_of(handle).conn
+        revision = self._record.bump_revision(conn)
+        self._record.write_entries(conn, admission.entries, revision=revision)
+        self._record.append_change(
+            conn,
+            diff=admission.diff(),
+            op="create",
+            door=admission.door,
+            actor=admission.actor,
+            apply_id=None,
+            revision=revision,
+        )
+        return revision
 
     def _lock_identity(self, conn: Connection) -> None:
         locked = conn.execute(
@@ -137,6 +155,7 @@ class RunnerSettingsStore:
 
 
 _store_conforms: type[IWriteRunnerSettings] = RunnerSettingsStore
+_admitted_settings_conforms: type[IWriteAdmittedSettings] = RunnerSettingsStore
 
 
 def _change(row: Any) -> SettingsChange:
