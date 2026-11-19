@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 
 import { EMPTY_ROUTINE_EDIT_DRAFT, type RoutineEditDraft } from '../core/routine.domain';
 import { type RoutineEditField, type RoutinePanelVm, FleetRoutinePanel } from './routine-panel';
@@ -23,7 +23,7 @@ export class RoutinePanelEditingStoryHost {
   readonly draft = input<Partial<RoutineEditDraft>>({});
   readonly fieldError = input<string | null>(null);
   readonly formError = input<string | null>(null);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
 
   private readonly model = signal<RoutineEditDraft>(EMPTY_ROUTINE_EDIT_DRAFT);
   protected readonly tree = form(this.model, routineEditRules);

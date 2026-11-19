@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { KitAsyncStateValue, RoutineBaselineView, ScopeView, UrgencyView } from 'fleet';
+import type { KitAsyncStateValue, RoutineBaselineView, ScopeView, Urgency } from 'fleet';
 
 import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
@@ -23,7 +23,7 @@ export class RunDialogStoryHost {
   readonly baseline = input<RoutineBaselineView | undefined>(undefined);
   readonly state = input<KitAsyncStateValue>('ready');
   readonly submitting = input(false);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   readonly formError = input<string | null>(null);
   readonly scopeError = input<string | null>(null);
 

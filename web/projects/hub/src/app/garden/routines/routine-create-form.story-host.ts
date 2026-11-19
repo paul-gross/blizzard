@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 
 import { EMPTY_ROUTINE_CREATE_DRAFT, type RoutineCreateDraft } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';
@@ -22,7 +22,7 @@ export class RoutineCreateFormStoryHost {
   readonly touched = input(false);
   readonly scopeError = input<string | null>(null);
   readonly formError = input<string | null>(null);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
 
   private readonly model = signal<RoutineCreateDraft>(EMPTY_ROUTINE_CREATE_DRAFT);
   protected readonly createForm = form(this.model, routineCreateRules);

@@ -1,7 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { form, submit } from '@angular/forms/signals';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 
 import { type ChoreDraft, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { choreAddRules, choreEditRules } from './chore.form';
@@ -23,7 +23,7 @@ export class ChoreFormStoryHost {
   readonly touched = input(false);
   readonly keyError = input<string | null>(null);
   readonly formError = input<string | null>(null);
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   readonly heldMode = input<string | null>(null);
 
   private readonly model = signal<ChoreDraft>(EMPTY_CHORE_DRAFT);
