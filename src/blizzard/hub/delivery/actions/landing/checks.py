@@ -39,7 +39,9 @@ from blizzard.hub.forge.landing import (
 )
 
 # Pure routing decisions (what to do with one repo after reading its live change).
-PUSH = "push"  # mergeable (or already merged) — eligible for the merge stage
+PUSH = "push"  # mergeable — eligible for the merge stage
+LANDED = "landed"  # already merged, its landed revision known — recover it
+UNLANDED = "unlanded"  # already merged, no read carries its landed revision — wait
 WAIT = "wait"  # pending / draft / required-checks-not-green / … — re-poll, no side effect
 UPDATE = "update"  # behind — bring it up to its base, then re-poll
 BOUNCE = "bounce"  # conflicting — a real content conflict, kick back to build
@@ -114,24 +116,38 @@ class Verdict:
 @domain_model
 @dataclass(frozen=True)
 class Route:
-    """Where one repo goes, from its change's live ``(merged, mergeability, verdict)``. Already-merged and
-    conflicting/behind never need a verdict; a mergeable or blocked head pushes only on a green one, else
-    waits."""
+    """Where one repo goes, from its change's live state. Owns the whole landing decision: a merged change lands
+    on its landed revision (or waits for one) and never needs a verdict; conflicting/behind never need one
+    either; a mergeable or blocked head pushes only on a green verdict or an empty read admitted by the repo's
+    empty-check policy, else waits. It also answers which async reads are worth making."""
 
     mergeability: Mergeability
     merged: bool = False
+    landed_revision: str | None = None
     verdict: Verdict | None = None
+    admitted_empty: bool = False
+
+    @property
+    def reads_verdict(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        """Whether the change's checks are worth reading — only for the states merge eligibility turns on, and
+        never for a merged change."""
+        return not self.merged and self.mergeability in CI_WATCH_STATES
+
+    @property
+    def asks_eligibility(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        """Whether the empty-check policy is asked: a read verdict that carries no checks."""
+        return self.verdict is not None and self.verdict.checks == ()
 
     @property
     def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self.merged:
-            return PUSH
+            return LANDED if self.landed_revision is not None else UNLANDED
         if self.mergeability is Mergeability.CONFLICTING:
             return BOUNCE
         if self.mergeability is Mergeability.BEHIND:
             return UPDATE
         if self.mergeability in CI_WATCH_STATES:
-            return PUSH if self.verdict is not None and self.verdict.green else WAIT
+            return PUSH if self.admitted_empty or (self.verdict is not None and self.verdict.green) else WAIT
         return WAIT
 
 

@@ -783,6 +783,24 @@ def test_a_merged_pr_recovers_without_reading_checks() -> None:
     assert not double.named("checks") and not double.named("merge")
 
 
+def test_a_merged_pr_with_no_landed_revision_waits_and_reads_no_checks() -> None:
+    double = _forge(checks={_SUBMITTED: None})
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET,
+        4,
+        branch="feat/x",
+        sha=_SUBMITTED,
+        base="main",
+        state=ChangeState.MERGED,
+        merged_revision=None,
+        mergeability=Mergeability.MERGEABLE,
+    )
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert sink.landings() == []
+    assert not double.named("checks") and not double.named("merge")
+
+
 def test_a_stale_merged_pr_on_a_reused_branch_name_is_not_a_landing() -> None:
     double = _forge()
     double.repos[_WIDGET].changes[4] = change(

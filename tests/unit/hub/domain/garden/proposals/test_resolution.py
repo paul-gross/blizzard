@@ -254,19 +254,6 @@ class _RecordingWriteRepo(_FakeFindings):
     ) -> Finding:
         raise NotImplementedError
 
-    def record_fact(
-        self,
-        finding_id: str,
-        *,
-        kind: str,
-        at: datetime,
-        note: str | None = None,
-        actor: str | None = None,
-        proposal_id: str | None = None,
-        superseded_by: str | None = None,
-    ) -> None:
-        raise NotImplementedError
-
     def record_facts(
         self, entries: Sequence[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
     ) -> list[str]:

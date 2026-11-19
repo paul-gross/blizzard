@@ -7,7 +7,6 @@ runner-held one."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Protocol
@@ -16,25 +15,25 @@ from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts, ChunkVerb, DependencyEdge, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    PRE_CLAIM_STATUSES,
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DependencyEdge,
+    WorkRef,
+    work_item_lock,
+)
 from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
-
-
-def work_item_lock(pointer: WorkRef) -> LockKey:
-    """The keyed lock on the hub work item ``pointer`` names (``bzh:transaction-graduation``), keyed injectively on
-    ``(source, ref)`` as a JSON array: every unit editing, closing, or withdrawing the item declares it, and decides
-    on the item re-read under it."""
-    return LockKey(LockNamespace.WORK_ITEM, json.dumps([pointer.source, pointer.ref]))
 
 
 class IHubItemWithdrawals(Protocol):
     """The hub items a chunk delete withdraws: it reads their closures and withdraws the open ones, each under the
-    item's :func:`work_item_lock`."""
+    item's :func:`~blizzard.hub.domain.chunk.model.work_item_lock`."""
 
     def closures(
         self, pointers: Sequence[WorkRef], *, transaction: Transaction | None = None
@@ -45,7 +44,7 @@ class IHubItemWithdrawals(Protocol):
 
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
         """Write ``pointer``'s withdrawn closure unconditionally in ``transaction``, which must hold its
-        :func:`work_item_lock` — the caller has re-read it open under that key."""
+        :func:`~blizzard.hub.domain.chunk.model.work_item_lock` — the caller has re-read it open under that key."""
         ...
 
 
@@ -128,7 +127,7 @@ class DeleteService:
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
         — every guard read taken fresh under the row lock. Each run declares the
-        :func:`work_item_lock` of every hub ref it knows; a re-read naming one outside
+        :func:`~blizzard.hub.domain.chunk.model.work_item_lock` of every hub ref it knows; a re-read naming one outside
         them runs the delete again over the union, having written nothing."""
         pointers = frozenset(_hub_refs(chunk))
         while True:

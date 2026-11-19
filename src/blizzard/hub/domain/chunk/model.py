@@ -7,6 +7,7 @@ The derivations are pure functions over already-loaded domain facts
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -26,6 +27,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
+from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RecordedPause
 from blizzard.hub.domain.urgency.model import UrgencyId
@@ -115,6 +117,13 @@ class ErrandMark:
 
     cadence_id: str
     chore_id: str
+
+
+def work_item_lock(pointer: WorkRef) -> LockKey:
+    """The keyed lock on the hub work item ``pointer`` names (``bzh:transaction-graduation``), keyed injectively on
+    ``(source, ref)`` as a JSON array: every unit editing, closing, or withdrawing the item declares it, and decides
+    on the item re-read under it."""
+    return LockKey(LockNamespace.WORK_ITEM, json.dumps([pointer.source, pointer.ref]))
 
 
 @domain_model

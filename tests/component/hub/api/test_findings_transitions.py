@@ -13,6 +13,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
+from tests.support.finding_units import seed_fact
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 
@@ -36,8 +37,13 @@ def _seed_finding(hub: HubHarness, finding_id: str, *, scope: str = "blizzard") 
 
 
 def _record(hub: HubHarness, finding_id: str, kind: str, *, actor: str | None = None) -> None:
-    FindingStore(hub_store_connections(hub.engine)).record_fact(
-        finding_id, kind=kind, at=hub.clock.now() - timedelta(hours=1), note="earlier", actor=actor
+    seed_fact(
+        hub_store_connections(hub.engine),
+        finding_id,
+        kind=kind,
+        at=hub.clock.now() - timedelta(hours=1),
+        note="earlier",
+        actor=actor,
     )
 
 

@@ -14,6 +14,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
+from tests.support.finding_units import seed_fact
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -77,7 +78,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
         introduced=None,
         at=_NOW,
     )
-    findings.record_fact("fin_4", kind="gone", at=_NOW, note="no longer reproduces")
+    seed_fact(hub_store_connections(hub.engine), "fin_4", kind="gone", at=_NOW, note="no longer reproduces")
 
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
 
@@ -107,7 +108,9 @@ def test_list_reads_a_delivered_finding_only_with_include_gone(tmp_path: Path) -
         introduced=None,
         at=_NOW,
     )
-    findings.record_fact("fin_1", kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1")
+    seed_fact(
+        hub_store_connections(hub.engine), "fin_1", kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1"
+    )
 
     resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
     assert resp.status_code == 200, resp.text
@@ -250,7 +253,7 @@ def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(t
         introduced=None,
         at=_NOW,
     )
-    store.record_fact("fin_1", kind="gone", at=_NOW, note="no longer reproduces")
+    seed_fact(hub_store_connections(hub.engine), "fin_1", kind="gone", at=_NOW, note="no longer reproduces")
 
     # both absent
     resp = hub.client.get("/api/findings")
@@ -332,8 +335,22 @@ def test_get_renders_an_exit_fact_followed_by_a_reopen_oldest_first(tmp_path: Pa
         introduced=None,
         at=_NOW,
     )
-    store.record_fact("fin_1", kind="wont-fix", at=_NOW.replace(hour=13), note="meh", actor="pgross")
-    store.record_fact("fin_1", kind="reopened", at=_NOW.replace(hour=14), note="regressed", actor="pgross")
+    seed_fact(
+        hub_store_connections(hub.engine),
+        "fin_1",
+        kind="wont-fix",
+        at=_NOW.replace(hour=13),
+        note="meh",
+        actor="pgross",
+    )
+    seed_fact(
+        hub_store_connections(hub.engine),
+        "fin_1",
+        kind="reopened",
+        at=_NOW.replace(hour=14),
+        note="regressed",
+        actor="pgross",
+    )
 
     resp = hub.client.get("/api/findings/fin_1")
 
@@ -360,7 +377,7 @@ def test_get_renders_a_finding_whose_newest_fact_carries_no_note(tmp_path: Path)
         introduced=None,
         at=_NOW,
     )
-    store.record_fact("fin_1", kind="observed", at=_NOW.replace(hour=13))
+    seed_fact(hub_store_connections(hub.engine), "fin_1", kind="observed", at=_NOW.replace(hour=13))
 
     resp = hub.client.get("/api/findings/fin_1")
 
@@ -413,7 +430,7 @@ def _seed_paging_fixture(hub: HubHarness) -> None:
             at=_NOW,
         )
         if finding_id in gone_ids:
-            store.record_fact(finding_id, kind="gone", at=_NOW, note="no longer reproduces")
+            seed_fact(hub_store_connections(hub.engine), finding_id, kind="gone", at=_NOW, note="no longer reproduces")
 
 
 def _page_through(hub: HubHarness, *, params: dict[str, str | int], pages: int) -> list[str]:
@@ -480,7 +497,7 @@ def test_filtered_descending_pages_and_complete_class_options(tmp_path: Path) ->
         introduced=None,
         at=_NOW,
     )
-    store.record_fact("fin_9", kind="resolved", at=_NOW, note="fixed")
+    seed_fact(hub_store_connections(hub.engine), "fin_9", kind="resolved", at=_NOW, note="fixed")
     params = {
         "routine": "nightly",
         "scope": "blizzard",
@@ -512,7 +529,7 @@ def test_filtered_descending_pages_and_complete_class_options(tmp_path: Path) ->
         "stale-docstring",
     ]
     assert hub.client.get("/api/findings/classes", params={"routine": "not-nightly"}).json() == []
-    store.record_fact("fin_9", kind="reopened", at=_NOW, note="reproduces")
+    seed_fact(hub_store_connections(hub.engine), "fin_9", kind="reopened", at=_NOW, note="reproduces")
     assert _page_through(hub, params={**params, "class": "other", "state": "live"}, pages=2) == ["fin_9"]
     assert _page_through(hub, params={**params, "class": "other", "state": "resolved"}, pages=2) == []
     assert hub.client.get("/api/findings", params={**params, "state": "invalid"}).status_code == 422

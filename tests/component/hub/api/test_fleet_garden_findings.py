@@ -17,6 +17,7 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
+from tests.support.finding_units import seed_fact
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -70,14 +71,12 @@ def _seed_finding(
 
 
 def _resolve_finding(hub: HubHarness, finding_id: str) -> None:
-    FindingStore(hub_store_connections(hub.engine)).record_fact(
-        finding_id, kind="resolved", at=_NOW, note="fixed", actor="u_1"
-    )
+    seed_fact(hub_store_connections(hub.engine), finding_id, kind="resolved", at=_NOW, note="fixed", actor="u_1")
 
 
 def _deliver_finding(hub: HubHarness, finding_id: str) -> None:
-    FindingStore(hub_store_connections(hub.engine)).record_fact(
-        finding_id, kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1"
+    seed_fact(
+        hub_store_connections(hub.engine), finding_id, kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1"
     )
 
 
@@ -148,7 +147,7 @@ def test_includes_a_gone_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)
     _seed_finding(hub, "fin_1", scope_slug="other-scope")
-    FindingStore(hub_store_connections(hub.engine)).record_fact("fin_1", kind="gone", at=_NOW, note="n", actor="u_1")
+    seed_fact(hub_store_connections(hub.engine), "fin_1", kind="gone", at=_NOW, note="n", actor="u_1")
 
     body = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings").json()
     assert [(row["finding_id"], row["state"]) for row in body] == [("fin_1", "gone")]

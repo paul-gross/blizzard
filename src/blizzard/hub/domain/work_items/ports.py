@@ -65,17 +65,17 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         transaction: LockedTransaction,
     ) -> HubWorkItem:
         """Write the item's fields unconditionally in ``transaction``, which must hold the item's
-        ``work_item_lock``: the caller has re-read it open under that key and decided the edit."""
+        ``work_item_lock`` (``chunk.model``): the caller has re-read it open under that key and decided the edit."""
         ...
 
     def close(
         self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime, transaction: LockedTransaction
     ) -> HubWorkItem:
         """Write the item's closure unconditionally in ``transaction``, which must hold the item's
-        ``work_item_lock``: the caller has re-read it open under that key and decided the close."""
+        ``work_item_lock`` (``chunk.model``): the caller has re-read it open under that key and decided the close."""
         ...
 
     def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: LockedTransaction) -> None:
         """Write the item's withdrawn closure unconditionally in ``transaction``, which must hold the item's
-        ``work_item_lock``: the caller has re-read it open under that key."""
+        ``work_item_lock`` (``chunk.model``): the caller has re-read it open under that key."""
         ...

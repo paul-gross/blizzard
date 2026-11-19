@@ -23,9 +23,10 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthor,
     WorkItemAuthorKind,
     WorkRef,
+    work_item_lock,
 )
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
-from blizzard.hub.domain.operations.delete import IHubItemWithdrawals, work_item_lock
+from blizzard.hub.domain.operations.delete import IHubItemWithdrawals
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository, IWriteWorkItemRepository
 from blizzard.hub.store import schema as s

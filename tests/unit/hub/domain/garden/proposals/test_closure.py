@@ -281,3 +281,67 @@ def test_pass_and_a_declining_accept_each_declare_the_proposal_key() -> None:
 
     key = garden_proposal_lock(_proposal().proposal_id)
     assert transactions.locked_keys == [[key], [key]]
+
+
+@dataclass
+class _LockedOnlyClosureRepo(_FakeGardenProposalClosureRepo):
+    """A closure only the re-read under the unit's lock sees — what a racing accept leaves between the early read
+    and the lock."""
+
+    minted: list[str] = field(default_factory=list[str])
+
+    def get(self, proposal_id: str, *, transaction: Transaction | None = None) -> GardenProposalClosure | None:
+        return self.closure if transaction is not None else None
+
+    def record_accept_mint(self, proposal_id: str, **_: Any) -> bool:
+        self.minted.append(proposal_id)
+        return True
+
+
+class _MintingItems:
+    def __init__(self) -> None:
+        self.minted: list[object] = []
+
+    def draft_mint(self, source: str, **_: Any) -> object:
+        class _Drafted:
+            pointer = "hub:1"
+            at = _T0
+
+            def lock_keys(self) -> list[object]:
+                return []
+
+        return _Drafted()
+
+    def mint_drafted(self, drafted: object, **_: Any) -> object:
+        self.minted.append(drafted)
+        raise AssertionError("a closed proposal must mint nothing")
+
+
+def test_a_minting_accept_decides_on_the_closure_read_under_its_lock() -> None:
+    existing = GardenProposalClosure(
+        proposal_id="gprop_1",
+        closure=GardenProposalClosureKind.ACCEPTED,
+        reason=None,
+        closed_by="u0",
+        closed_at=_T0,
+        item_outcome=GardenProposalItemOutcome.MINTED,
+        source="hub",
+        ref="wi_0",
+    )
+    repo = _LockedOnlyClosureRepo(closure=existing)
+    items = _MintingItems()
+    graph = cast(Graph, object())
+    service = GardenProposalClosureService(
+        closures=_as_write_repo(repo),
+        items=cast(WorkItemEditService, items),
+        default_graph=lambda: graph,
+        clock=FixedClock(instant=_T0),
+        transactions=FakeTransactions(),
+    )
+
+    with pytest.raises(GardenProposalAlreadyClosed) as excinfo:
+        service.accept(_proposal(), reason=None, by="u1", body=None, mint=True, findings=[])
+
+    assert excinfo.value.closure == existing
+    assert repo.minted == []
+    assert items.minted == []

@@ -32,7 +32,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.schema import artifacts, finding_facts
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.delivery_writes import GardenDeliveryWrites
-from tests.support.finding_units import delivery_unit
+from tests.support.finding_units import delivery_unit, seed_fact
 from tests.support.scaffolding import (
     chunk_unit,
     default_project,
@@ -148,7 +148,7 @@ def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: 
     plan = _plan(
         project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
     )
-    findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
 
     with delivery_unit(hub_store_connections(engine), plan) as unit:
         outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
@@ -180,13 +180,13 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
     findings, deliveries, engine = _world(tmp_path)
     project = default_project(engine)
     _add_finding(findings, project, "fin_1")
-    findings.record_fact("fin_1", kind="delivered", at=_NOW, note="n", actor="u1")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="delivered", at=_NOW, note="n", actor="u1")
     stale = _plan(
         project,
         NewFindingFact(finding_id="fin_1", kind="resolved", finding_set_id="fins_1", note="gone", actor="u1"),
         expect={"fin_1": "delivered"},
     )
-    findings.record_fact("fin_1", kind="reopened", at=_LATER, note="n", actor="u2")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="reopened", at=_LATER, note="n", actor="u2")
 
     with delivery_unit(hub_store_connections(engine), stale) as unit:
         assert (
@@ -220,7 +220,7 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
             deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.RECORDED
         )
-    findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
     revisit = replace(plan, node_id="nd_2", epoch=2)
 
     with delivery_unit(hub_store_connections(engine), revisit) as unit:
@@ -239,7 +239,7 @@ def test_supersede_refuses_an_absorber_exited_after_it_was_read(tmp_path: Path) 
     assert absorber is not None
     superseded = findings.get("fin_a")
     assert superseded is not None
-    findings.record_fact("fin_b", kind="wont-fix", at=_LATER, note="n", actor="u2")
+    seed_fact(hub_store_connections(engine), "fin_b", kind="wont-fix", at=_LATER, note="n", actor="u2")
     service = FindingExitService(
         repo=findings, clock=FixedClock(instant=_LATER), transactions=HubTransactions(hub_store_connections(engine))
     )
