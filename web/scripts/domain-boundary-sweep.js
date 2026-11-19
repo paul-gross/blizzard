@@ -14,8 +14,8 @@
  * permitted under `fleet/src/lib/api/` and `fleet/src/lib/testing/transport/`, and in `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files and their own focused specs; every other `.ts` under
  * `projects/` (`.storybook/` included) is judged. A unit the caller exempts passes, and an exempt unit
- * that no longer consumes the wire outside a strict scope is reported stale. A strict scope is a folder prefix or a concept stem (`<dir>/<concept>.*`). Strict scopes cannot be
- * excused by a parent unit's exemption. Separately, a production file or a story whose
+ * that no longer consumes the wire outside a strict scope is reported stale. A strict scope is a folder
+ * prefix or a concept stem (`<dir>/<concept>.*`); a parent unit's exemption cannot excuse it. Separately, a production file or a story whose
  * consumed symbol is declared under `testing/transport/` reaches the test transport; specs and test
  * helpers may.
  *
