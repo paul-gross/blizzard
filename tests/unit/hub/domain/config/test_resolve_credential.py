@@ -142,3 +142,34 @@ def test_a_record_naming_only_a_secret_acts_with_an_implicit_token_of_no_variant
 
 def test_a_work_source_naming_neither_acts_with_nothing() -> None:
     assert resolve_credential(_work_source(secret=None), _Credentials()) is None
+
+
+def _resolved(*, retired: bool) -> ResolvedCredential:
+    return ResolvedCredential(
+        credential_id=_ID,
+        forge_id=_FORGE,
+        binding="github.token",
+        secret_name="deploy-token",
+        settings={},
+        revision=4,
+        authority="secret/deploy-token",
+        slug="deploy",
+        retired=retired,
+    )
+
+
+def test_a_credential_in_use_is_usable_as_itself() -> None:
+    credential = _resolved(retired=False)
+
+    assert credential.require_usable() is credential
+
+
+def test_a_retired_credential_is_unavailable_by_its_slug() -> None:
+    with pytest.raises(CredentialUnavailable) as caught:
+        _resolved(retired=True).require_usable()
+
+    assert (str(caught.value), caught.value.reference, caught.value.retired) == (
+        "credential deploy is retired",
+        "credential deploy",
+        True,
+    )
