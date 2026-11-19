@@ -67,9 +67,11 @@ test('test_gardening_routines_browser', async ({ api, page, project, wideViewpor
   const routine = (routines.body as Wire.RoutineView[]).find((r) => r.slug === 'nightly')!;
   const renamed = await api.patch(`/api/routines/${routine.routine_id}`, { data: { name: 'Nightly sweep' } });
   expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
+  // A refusal on the field blocks a resubmit until the value changes, so retype before pressing Set.
+  await graph.fill('other-no-such-graph');
   await panel.getByTestId('gardening-routine-panel-graph-save').click();
   await expect(panel.getByTestId('gardening-routine-panel-graph-line')).toBeVisible();
-  await expect(graph).toHaveValue('no-such-graph');
+  await expect(graph).toHaveValue('other-no-such-graph');
 
   // The forms hold at the narrow viewport.
   await page.setViewportSize(narrowViewport);
@@ -77,6 +79,7 @@ test('test_gardening_routines_browser', async ({ api, page, project, wideViewpor
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await panel.getByTestId('gardening-routine-panel-graph-cancel').click();
+  await page.goto(`/p/${project.slug}/gardening/routines`);
   await page.getByTestId('gardening-routine-new').click();
   await expect(page.getByTestId('gardening-routine-create-save')).toBeVisible();
 });
