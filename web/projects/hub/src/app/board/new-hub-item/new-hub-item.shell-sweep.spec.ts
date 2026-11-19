@@ -39,7 +39,7 @@ describe('new hub item dialog shell sweep', () => {
           const rect = dialog.getBoundingClientRect();
           expect(rect.left).toBeGreaterThanOrEqual(0);
           expect(rect.right).toBeLessThanOrEqual(width);
-          for (const id of ['new-hub-item-title', 'new-hub-item-body', 'new-hub-item-urgency', 'new-hub-item-submit']) {
+          for (const id of ['new-hub-item-title', 'new-hub-item-body', 'new-hub-item-urgency', 'new-hub-item-save']) {
             const control = root.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
             const box = control.getBoundingClientRect();
             expect(box.left, id).toBeGreaterThanOrEqual(rect.left);

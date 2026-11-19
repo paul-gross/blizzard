@@ -1,5 +1,5 @@
 import type { ProjectView, UrgencyView } from 'fleet';
-import { createErrorText, projectOptions, urgencyOptions } from './new-hub-item.model';
+import { projectOptions, urgencyOptions } from './new-hub-item.model';
 
 describe('new hub item options', () => {
   it('maps projects by their stable id and name', () => {
@@ -15,15 +15,5 @@ describe('new hub item options', () => {
     ] as UrgencyView[];
     expect(urgencyOptions(urgencies)).toEqual([{ value: 'u1', label: 'Urgent' }, { value: 'u2', label: 'Standard' }]);
     expect(urgencyOptions([])).toEqual([]);
-  });
-});
-
-describe('createErrorText', () => {
-  it('is null with no error, and the fallback for an unrecognised one', () => {
-    expect(createErrorText(null)).toBeNull();
-    expect(createErrorText(new Error('boom'))).toBe('Could not create hub item.');
-  });
-  it('reads a problem detail', () => {
-    expect(createErrorText({ detail: 'Project is archived.' })).toBe('Project is archived.');
   });
 });
