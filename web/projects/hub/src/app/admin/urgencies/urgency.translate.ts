@@ -1,5 +1,5 @@
 import { ProjectColor, RecordKind, type EditBaseline, type RefusalMap, type Urgency, type UrgencyCreateRequest, type UrgencyPatchRequest, type SettingsView } from 'fleet';
-import { markIsImage } from '../config-edit.model';
+import { markIsImage as isImage } from '../config-edit.model';
 import type { UrgencyDraft, UrgencySettings } from './urgency.domain';
 
 export function toDraft(urgency: Urgency | undefined, image: string | null | undefined): UrgencyDraft | null {
@@ -21,6 +21,9 @@ export const URGENCY_REFUSALS: RefusalMap<UrgencyDraft> = {
 function icon(value: string): { media_type: string; data: string } {
   const [header, data] = value.split(',');
   return { media_type: header.slice(5, header.indexOf(';')), data };
+}
+function markIsImage(value: string): boolean {
+  return isImage(value, 'data');
 }
 export function toCreateRequest(draft: UrgencyDraft): UrgencyCreateRequest {
   const mark = draft.mark.trim(); const color = draft.color.trim();

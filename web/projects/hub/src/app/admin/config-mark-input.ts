@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, model, output, sig
 import type { FormValueControl } from '@angular/forms/signals';
 import { KitButton, KitErrorLine, KitTextInput } from 'fleet';
 
-import { markIsImage } from './config-edit.model';
+import { markIsImage, type MarkImageSource } from './config-edit.model';
 
 /**
  * A mark as a form control: emoji text, or a PNG/WebP image read into a data URL, with a preview, a clear, and its own
@@ -22,13 +22,14 @@ export class ConfigMarkInput implements FormValueControl<string> {
   readonly ariaLabel = input('Mark');
   readonly testid = input.required<string>();
   readonly maxImageBytes = input<number | undefined>();
+  readonly imageSource = input<MarkImageSource>('url');
   readonly invalidChange = output<boolean>();
 
   /** Whether a file is being read. */
   readonly reading = output<boolean>();
 
   protected readonly error = signal<string | null>(null);
-  protected readonly isImage = computed(() => markIsImage(this.value()));
+  protected readonly isImage = computed(() => markIsImage(this.value(), this.imageSource()));
   private read = 0;
 
   protected onText(text: string): void {

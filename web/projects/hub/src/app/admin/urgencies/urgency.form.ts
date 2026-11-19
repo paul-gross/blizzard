@@ -26,5 +26,5 @@ export const URGENCY_FIELDS: readonly ConfigFieldView<UrgencyDraft>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', createOnly: true },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'color', label: 'Color', kind: 'color', options: URGENCY_COLORS.map((value) => ({ value, label: value })) },
-  { key: 'mark', label: 'Mark', kind: 'mark', maxImageBytes: URGENCY_ICON_MAX_BYTES },
+  { key: 'mark', label: 'Mark', kind: 'mark', maxImageBytes: URGENCY_ICON_MAX_BYTES, markImageSource: 'data' },
 ];

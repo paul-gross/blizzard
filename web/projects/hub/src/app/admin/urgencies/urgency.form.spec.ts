@@ -36,7 +36,7 @@ describe('urgency form rules', () => {
     const url = (bytes: string) => `data:image/png;base64,${btoa(bytes)}`;
     for (const rules of [urgencyCreateRules, urgencyEditRules]) {
       const f = form(signal({ ...EMPTY_URGENCY_DRAFT, slug: 'soon', name: 'Soon' }), rules, { injector });
-      for (const mark of [url(png + 'x'.repeat(32768 - png.length)), `data:image/webp;base64,${btoa('RIFFxxxxWEBP')}`, '🔥', '1️⃣', '']) {
+      for (const mark of [url(png + 'x'.repeat(32768 - png.length)), `data:image/webp;base64,${btoa('RIFFxxxxWEBP')}`, '🔥', '/', '/🔥', '1️⃣', '']) {
         f.mark().value.set(mark);
         expect(f.mark().errors()).toEqual([]);
       }

@@ -66,4 +66,22 @@ describe('urgency service', () => {
     expect(stub.forRoute('/api/urgencies/u', 'PATCH')[0].body).toEqual({ emoji: null, icon: { media_type: 'image/png', data } });
   });
 
+  it('creates slash marks and permits name-only edits with an existing slash mark', async () => {
+    const view = { urgency_id: 'u', slug: 'soon', name: 'Soon', color: 'red', emoji: '/', icon: null, retired: false, default: false, revision: 1, open_chunks: 0, place: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'u' };
+    const service = setup({ 'POST /api/urgencies': () => view, 'PATCH /api/urgencies/{key}': () => view });
+    for (const mark of ['/', '/🔥']) {
+      const existing = { ...draft, mark };
+      expect(await service.create(existing, vi.fn())).toEqual({ ok: true });
+      expect(await service.edit({ ...baseline, draft: existing }, { ...existing, name: 'Later' })).toEqual({ ok: true });
+      expect(await service.edit(baseline, existing)).toEqual({ ok: true });
+    }
+    expect(stub.forRoute('/api/urgencies', 'POST').map((r) => r.body)).toEqual([
+      { slug: 'soon', name: 'Soon', color: 'red', emoji: '/' },
+      { slug: 'soon', name: 'Soon', color: 'red', emoji: '/🔥' },
+    ]);
+    expect(stub.forRoute('/api/urgencies/u', 'PATCH').map((r) => r.body)).toEqual([
+      { name: 'Later' }, { emoji: '/', icon: null }, { name: 'Later' }, { emoji: '/🔥', icon: null },
+    ]);
+  });
+
 });

@@ -34,8 +34,10 @@ export interface ConfigFieldDef<K extends string = string> {
 }
 
 /** A mark is empty, emoji text, an existing image URL, or an uploaded image data URL. */
-export function markIsImage(value: string): boolean {
-  return value.startsWith('data:image/') || value.startsWith('/') || /^https?:\/\//.test(value);
+export type MarkImageSource = 'data' | 'url';
+
+export function markIsImage(value: string, source: MarkImageSource = 'url'): boolean {
+  return value.startsWith('data:image/') || (source === 'url' && (value.startsWith('/') || /^https?:\/\//.test(value)));
 }
 
 /** A form's values by field key: text for `text`/`password`, a flag for `checkbox`. */

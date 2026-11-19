@@ -20,7 +20,7 @@ export const URGENCY_ICON_SIZE_ERROR = 'Image must be at most 32768 bytes.';
 export function urgencyMarkError(raw: string): string | null {
   const mark = raw.trim();
   if (!mark) return null;
-  if (mark.startsWith('data:') || mark.startsWith('/') || /^https?:\/\//.test(mark)) {
+  if (mark.startsWith('data:') || /^https?:\/\//.test(mark)) {
     const match = /^data:(image\/png|image\/webp);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/i.exec(mark);
     if (!match) return 'Choose a valid PNG or WebP image.';
     const data = match[2];

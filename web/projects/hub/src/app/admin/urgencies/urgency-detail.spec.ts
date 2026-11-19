@@ -14,11 +14,11 @@ const urgency = { urgency_id: 'u', slug: 'soon', name: 'Soon', color: 'red', emo
 describe('UrgencyDetail writes', () => {
   let stub: RequestClientStub;
   afterEach(() => { stub?.restore(); localStorage.clear(); });
-  async function open(retired = false, refuse = false, held?: Promise<typeof urgency>) {
+  async function open(retired = false, refuse = false, held?: Promise<typeof urgency>, emoji: string | null = null) {
     stub = stubHubClient({
       'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: ['config:edit', 'chunk:control'] }),
       'GET /api/urgencies': () => ({ urgencies: [urgency] }),
-      'GET /api/urgencies/{key}': () => ({ ...urgency, retired }),
+      'GET /api/urgencies/{key}': () => ({ ...urgency, retired, emoji }),
       'GET /api/config/changes': () => configChangesPage(),
       'PATCH /api/urgencies/{key}': () => held ?? (refuse ? stubError(409, { detail: 'stale edit' }) : urgency),
       'POST /api/urgencies/{key}/enable': () => refuse ? stubError(409, { detail: 'enable refused' }) : urgency,
@@ -44,6 +44,19 @@ describe('UrgencyDetail writes', () => {
     await settle(harness.fixture);
     expect(stub.forRoute('/api/urgencies/u', 'PATCH')[0]).toMatchObject({ headers: { 'if-match': '7' }, body: { name: 'Later' } });
     expect(document.body.textContent).toContain('stale edit');
+  });
+  it.each(['/', '/🔥'])('shows the stored %s mark as text and saves a name-only edit', async (mark) => {
+    const harness = await open(false, false, undefined, mark);
+    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-urgency-edit"]')!.click();
+    await settle(harness.fixture);
+    expect(document.querySelector<HTMLInputElement>('[data-testid="admin-urgency-edit-field-mark"]')?.value).toBe(mark);
+    expect(document.querySelector('img[alt="Selected mark"]')).toBeNull();
+    const name = document.querySelector<HTMLInputElement>('[data-testid="admin-urgency-edit-field-name"]')!;
+    name.value = 'Later'; name.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    document.querySelector<HTMLElement>('[data-testid="kit-form-save"]')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/urgencies/u', 'PATCH')[0].body).toEqual({ name: 'Later' });
   });
   it('holds save, cancel and dismissal until the edit settles', async () => {
     let release!: (value: typeof urgency) => void;

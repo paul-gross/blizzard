@@ -26,10 +26,12 @@ const meta: Meta<KitColorInput> = {
     testid: null,
     disabled: false,
     valueChange: fn(),
+    touch: fn(),
+    invalidChange: fn(),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-color-input [value]="value" [ariaLabel]="ariaLabel" [testid]="testid" [disabled]="disabled" (valueChange)="valueChange($event)" />`,
+    template: `<fleet-kit-color-input [value]="value" [ariaLabel]="ariaLabel" [testid]="testid" [disabled]="disabled" (valueChange)="valueChange($event)" (touch)="touch()" (invalidChange)="invalidChange($event)" />`,
   }),
 };
 export default meta;

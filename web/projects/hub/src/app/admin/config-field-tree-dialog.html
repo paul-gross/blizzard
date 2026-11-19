@@ -43,6 +43,7 @@
               [ariaLabel]="field.label"
               [testid]="testidPrefix() + '-field-' + field.key"
               [maxImageBytes]="field.maxImageBytes"
+              [imageSource]="field.markImageSource ?? 'url'"
               (invalidChange)="onMarkInvalid(field.key, $event)"
               (reading)="onReading(field.key, $event)"
             />

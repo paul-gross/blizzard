@@ -1,6 +1,6 @@
 import type { FieldChangeView } from 'fleet';
 
-import { type ConfigFieldOption, markIsImage } from './config-edit.model';
+import { type ConfigFieldOption, type MarkImageSource, markIsImage } from './config-edit.model';
 
 /** What the dialog is for: a create takes every field; an edit takes the editable ones and shows a "Will change"
  * diff; a replace takes whatever fields it is given. */
@@ -28,6 +28,7 @@ interface FieldViewBase<D> {
   readonly createOnly?: boolean;
   /** Maximum decoded image bytes for a mark upload. */
   readonly maxImageBytes?: number;
+  readonly markImageSource?: MarkImageSource;
   /** Choices for a select or color field. */
   readonly options?: readonly ConfigFieldOption[];
   /** A choice is offered only when its kind matches this other field's current value. */
@@ -96,7 +97,7 @@ function sameNumber(before: unknown, after: unknown): boolean {
 }
 
 function labelOf<D>(field: ConfigFieldView<D>, value: unknown): string | null {
-  if (field.kind === 'mark') return typeof value === 'string' && markIsImage(value) ? 'Image' : null;
+  if (field.kind === 'mark') return typeof value === 'string' && markIsImage(value, field.markImageSource) ? 'Image' : null;
   if ((field.kind !== 'select' && field.kind !== 'color') || typeof value !== 'string') return null;
   return field.options?.find((option) => option.value === value)?.label ?? null;
 }
