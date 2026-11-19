@@ -1,0 +1,69 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.ctl {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  background: var(--overlay-35);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 6px;
+}
+.ctl:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 0;
+}
+.ctl:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.popup {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 16px);
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--bezel);
+  box-shadow: 0 8px 20px var(--overlay-40);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  outline: none;
+}
+.option {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 3px 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.option:hover,
+.option[data-active='true'] {
+  background: var(--overlay-25);
+}
+.option.current .label {
+  color: var(--amber-hi);
+}
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  flex: none;
+  color: var(--label);
+}
+.empty {
+  padding: 3px 12px;
+  color: var(--label);
+}

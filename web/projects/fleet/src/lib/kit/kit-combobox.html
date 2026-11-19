@@ -1,0 +1,56 @@
+<input
+  #native
+  ngCombobox
+  #combobox="ngCombobox"
+  class="ctl"
+  type="text"
+  autocomplete="off"
+  [(value)]="text"
+  [(expanded)]="expanded"
+  [disabled]="disabled()"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-labelledby]="ariaLabel() ? null : (fieldLabel?.labelId ?? null)"
+  [attr.data-testid]="testid()"
+  (input)="edited.set(true)"
+  (blur)="touch.emit()"
+/>
+
+<ng-template
+  cdkConnectedOverlay
+  [cdkConnectedOverlayOrigin]="native"
+  [cdkConnectedOverlayOpen]="expanded()"
+  [cdkConnectedOverlayMinWidth]="native.offsetWidth"
+>
+  <ng-template ngComboboxPopup [combobox]="combobox">
+    <div
+      class="popup"
+      ngComboboxWidget
+      ngListbox
+      selectionMode="explicit"
+      #listbox="ngListbox"
+      [activeDescendant]="listbox.activeDescendant()"
+      [attr.aria-label]="ariaLabel()"
+      [value]="picked()"
+      (valueChange)="onListChange($event)"
+      (mousedown)="$event.preventDefault()"
+    >
+      @for (option of shown(); track option.value) {
+        <div
+          class="option"
+          ngOption
+          [value]="option.value"
+          [label]="option.label"
+          [class.current]="option.value === value()"
+          [attr.data-testid]="testid() ? testid() + '-option' : null"
+        >
+          <span class="label">{{ option.label }}</span>
+          @if (option.meta) {
+            <span class="meta">{{ option.meta }}</span>
+          }
+        </div>
+      } @empty {
+        <div class="empty">No match</div>
+      }
+    </div>
+  </ng-template>
+</ng-template>

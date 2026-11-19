@@ -24,7 +24,7 @@
       <fleet-kit-text-input [formField]="f.cron" placeholder="0 20 * * *" [testid]="testid() + '-cron'" />
     </fleet-kit-field>
     <fleet-kit-field label="Zone" [field]="f.zone">
-      <fleet-kit-text-input [formField]="f.zone" placeholder="America/Chicago" [testid]="testid() + '-zone'" />
+      <fleet-kit-combobox [formField]="f.zone" [options]="zones" noneLabel="None" ariaLabel="Zone" [testid]="testid() + '-zone'" />
     </fleet-kit-field>
   </div>
   <div class="cf-row">

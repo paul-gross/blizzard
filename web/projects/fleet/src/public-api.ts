@@ -21,6 +21,7 @@ export * from './lib/chunk/chunk-page';
 export * from './lib/core/design';
 export * from './lib/core/forms';
 export * from './lib/core/format';
+export { zoneOptions } from './lib/core/zones';
 export * from './lib/core/when-display';
 export * from './lib/core/now-signal';
 export * from './lib/core/clipboard';
