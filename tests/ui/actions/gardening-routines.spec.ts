@@ -76,7 +76,7 @@ test('test_gardening_routines_browser', async ({ api, page, project, wideViewpor
   // The forms hold at the narrow viewport.
   await page.setViewportSize(narrowViewport);
   await expect(panel.getByTestId('gardening-routine-panel-graph-save')).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  const overflow = await page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   expect(overflow).toBeLessThanOrEqual(0);
   await panel.getByTestId('gardening-routine-panel-graph-cancel').click();
   await page.goto(`/p/${project.slug}/gardening/routines`);
