@@ -35,6 +35,11 @@ from blizzard.hub.config_defaults import (
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.transcripts import (
+    CHUNK_BUDGET_MAX_BYTES,
+    RECORD_MAX_BYTES,
+    RUNNER_DAILY_RATE_MAX_BYTES,
+)
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.layout import (
     CONFIG_FILENAME,
@@ -88,9 +93,16 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("auth.oauth.provider[].api_base", STRING, lifetime=Lifetime.BOOT),
         ConfigKey("auth.oauth.provider[].emails_authoritative", BOOLEAN, default=False, lifetime=Lifetime.BOOT),
         ConfigKey("transcripts", TABLE),
-        ConfigKey("transcripts.record_max_bytes", INTEGER, lifetime=Lifetime.PASS),
-        ConfigKey("transcripts.chunk_budget_max_bytes", INTEGER, lifetime=Lifetime.PASS),
-        ConfigKey("transcripts.runner_daily_rate_max_bytes", INTEGER, lifetime=Lifetime.PASS),
+        ConfigKey("transcripts.record_max_bytes", INTEGER, default=RECORD_MAX_BYTES, lifetime=Lifetime.PASS),
+        ConfigKey(
+            "transcripts.chunk_budget_max_bytes", INTEGER, default=CHUNK_BUDGET_MAX_BYTES, lifetime=Lifetime.PASS
+        ),
+        ConfigKey(
+            "transcripts.runner_daily_rate_max_bytes",
+            INTEGER,
+            default=RUNNER_DAILY_RATE_MAX_BYTES,
+            lifetime=Lifetime.PASS,
+        ),
         *TRACING_KEYS,
         # Runner-only keys the hub never read: declared so an existing file's key resolves, refused at load.
         ConfigKey(

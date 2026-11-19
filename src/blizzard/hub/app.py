@@ -163,7 +163,6 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
@@ -758,18 +757,6 @@ def create_app(
     return app
 
 
-def transcript_caps(config: HubConfig) -> TranscriptCaps:
-    """The configured ingest ceilings, each falling back to the domain's own default
-    (see ``TranscriptCapsConfig`` in `src/blizzard/hub/config.py`)."""
-    defaults = TranscriptCaps()
-    configured = config.transcripts
-    return TranscriptCaps(
-        record_max_bytes=configured.record_max_bytes or defaults.record_max_bytes,
-        chunk_budget_max_bytes=configured.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
-        runner_daily_rate_max_bytes=configured.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
-    )
-
-
 def build_hosted_app(
     config: HubConfig,
     *,
@@ -881,7 +868,7 @@ def build_hosted_app(
             secret_keys=secret_keys,
             trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
             login_throttle=config.auth.login_throttle,
-            transcript_caps=transcript_caps(config),
+            transcript_caps=config.transcripts.transcript_caps(),
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
                 OtlpTraceExporter(

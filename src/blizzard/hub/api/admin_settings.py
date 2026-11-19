@@ -21,7 +21,6 @@ from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_un
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, setting_keys
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
@@ -76,7 +75,7 @@ def _view(settings: HubSettingsGraph) -> HubSettingsView:
         rows.append(
             HubSettingRow(
                 key=key.path,
-                value=thaw(entry.value if source == "entry" and entry else _default(key.path, key.default)),
+                value=thaw(entry.value if source == "entry" and entry else key.default),
                 source="entry" if source == "entry" else "default",
                 lifetime=Lifetime.PASS,
                 revision=metadata[0] if metadata else None,
@@ -95,21 +94,12 @@ def _field_view(registry: ConfigRegistry, field: FieldChange) -> FieldChangeView
     """A moved field with absent and at-default sides resolved to the value in force; a key no longer declared has no
     default to resolve to."""
     declaration = registry.key(field.key)
-    default = _default(field.key, declaration.default if declaration is not None else None)
+    default = declaration.default if declaration is not None else None
     return FieldChangeView(field=field.key, old=_effective(field.old, default), new=_effective(field.new, default))
 
 
 def _effective(entry: Entry | None, default: object) -> object:
     return thaw(default if entry is None or entry.at_default else entry.value)
-
-
-def _default(path: str, default: object) -> object:
-    caps = TranscriptCaps()
-    return {
-        "transcripts.record_max_bytes": caps.record_max_bytes,
-        "transcripts.chunk_budget_max_bytes": caps.chunk_budget_max_bytes,
-        "transcripts.runner_daily_rate_max_bytes": caps.runner_daily_rate_max_bytes,
-    }.get(path, default)
 
 
 @router.get("", response_model=HubSettingsView)
