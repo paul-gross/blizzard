@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { errorMessage, asyncState, type HubSettingRow } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { changesOf, display, revisionsOf } from './hub-settings.model';
+import { changesOf, display, parseSettingValue, revisionsOf } from './hub-settings.model';
 import { injectHubSettingsMutation } from './hub-settings.mutations';
 import { injectHubSettingsHistoryQuery, injectHubSettingsQuery } from './hub-settings.query';
 import { HubSettingsView } from './hub-settings-view';
@@ -31,8 +31,10 @@ export class HubSettingsPage {
   protected save(unset = false): void {
     const edit = this.editing(); if (!edit || !this.allowed() || this.busy()) return;
     let value: unknown = this.value();
-    if (!unset && typeof edit.row.value !== 'string') {
-      try { value = JSON.parse(this.value()); } catch { this.failure.set('Enter a valid JSON value.'); return; }
+    if (!unset) {
+      const parsed = parseSettingValue(edit.row, this.value());
+      if ('error' in parsed) { this.failure.set(parsed.error); return; }
+      value = parsed.value;
     }
     this.failure.set(null);
     this.mutation.mutate({ key: edit.row.key, revision: edit.revision, value, unset }, {
