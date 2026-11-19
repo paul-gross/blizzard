@@ -13,7 +13,7 @@ import { injectCredentialService } from './credential.service';
 import { includeRetired, LIFECYCLE_FILTER_PARAM, lifecycleEmptyText, lifecycleFilterParam, parseLifecycleFilter } from '../config-filter.model';
 import { ConfigMaster } from '../config-master';
 import { injectForgeChoicesQuery } from '../forges/forges.query';
-import { credentialRows, credentialCreateFields } from './credentials.model';
+import { credentialRows, credentialCreateFields, createSettingsUnavailable, removedCreateSettings } from './credentials.model';
 import { injectCredentialsQuery } from './credentials.query';
 
 /**
@@ -48,6 +48,8 @@ export class CredentialsPage {
   protected readonly createOpen = signal(false);
   private readonly draft = signal<CredentialDraft>({ ...EMPTY_CREDENTIAL_DRAFT });
   protected readonly createForm = form(this.draft, credentialRules);
+  protected readonly settingsUnavailable = computed(() => createSettingsUnavailable(this.draft(), this.bindings()));
+  protected readonly removedSettings = computed(() => removedCreateSettings(this.draft(), this.bindings()));
 
   private readonly syncSettings = effect(() => {
     const bindings = this.bindings();
@@ -83,6 +85,7 @@ export class CredentialsPage {
     this.draft.update((draft) => withForge(draft, draft.forge, this.forgeBindings()));
   }
   protected async onCreate(): Promise<void> {
+    if (this.settingsUnavailable() || this.removedSettings().length) return;
     const slug = this.draft().slug.trim();
     if (!(await submitForm(this.createForm, (draft) => this.service.create(draft, this.bindings())))) return;
     this.createOpen.set(false);

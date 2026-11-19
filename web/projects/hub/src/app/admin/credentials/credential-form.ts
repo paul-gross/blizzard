@@ -23,6 +23,7 @@ export class CredentialForm {
   readonly submitLabel = input.required<string>();
   readonly testidPrefix = input.required<string>();
   readonly settingsUnavailable = input(false);
+  readonly removedSettings = input<readonly string[]>([]);
   readonly fieldChanged = output<string>();
   readonly save = output<void>();
   readonly closed = output<void>();

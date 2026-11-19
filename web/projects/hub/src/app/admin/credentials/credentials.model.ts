@@ -1,4 +1,4 @@
-import type { CredentialChange, CredentialDraft, CredentialForgeBindings } from './credential.domain';
+import type { CredentialBinding, CredentialChange, CredentialDraft, CredentialForgeBindings } from './credential.domain';
 import { type CredentialEditBaseline, toEditRequest } from './credential.translate';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import type { ForgeChoice } from '../repositories/repository.domain';
@@ -218,6 +218,16 @@ export function credentialCreateFields(forges: readonly ForgeChoice[], bindings:
 
 export function credentialSettingsUnavailable(baseline: CredentialEditBaseline | null): boolean {
   return baseline !== null && !baseline.bindings.some((binding) => binding.name === baseline.draft.binding);
+}
+
+export function createSettingsUnavailable(draft: CredentialDraft, bindings: readonly CredentialBinding[]): boolean {
+  return !!draft.binding && !bindings.some((binding) => binding.name === draft.binding);
+}
+
+export function removedCreateSettings(draft: CredentialDraft, bindings: readonly CredentialBinding[]): readonly string[] {
+  const binding = bindings.find((item) => item.name === draft.binding);
+  if (!binding) return [];
+  return draft.settings.filter((setting) => setting.binding === draft.binding && setting.text.trim() !== '' && !binding.settings.some((item) => item.key === setting.key)).map((setting) => setting.key);
 }
 
 /** The displayed diff uses the exact same request judgment as save. */

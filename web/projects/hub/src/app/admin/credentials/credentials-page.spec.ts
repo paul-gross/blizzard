@@ -171,4 +171,64 @@ describe('CredentialsPage', () => {
     expect((slug.querySelector('input') ?? slug as HTMLInputElement).value).toBe('in-progress');
     expect(testid(document, 'admin-credentials-create-setting-github.token-variant')!.textContent).toContain('fine-grained');
   });
+
+  it('blocks removed entered settings, preserves them across schema loss and binding switches, and submits them if restored', async () => {
+    const { harness, el } = await open('/admin/credentials');
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'gh-ci');
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await type(harness, 'secret', 'token');
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    const client = TestBed.inject(QueryClient);
+    const update = async (bindings: typeof LIST.bindings) => {
+      client.setQueryData(hubConfigListKey('credentials', false), { ...LIST, bindings });
+      await settle(harness.fixture);
+    };
+    await update([{ ...LIST.bindings[0], settings: [] }, LIST.bindings[1]]);
+    expect(testid(document, 'admin-credentials-create-settings-removed')!.textContent).toContain('variant');
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')).toHaveLength(0);
+    await update([LIST.bindings[1]]);
+    expect(testid(document, 'admin-credentials-create-settings-unavailable')).not.toBeNull();
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')).toHaveLength(0);
+    await pick(harness, 'forge', 'gitlab');
+    await pick(harness, 'binding', 'gitlab.token');
+    expect(testid(document, 'admin-credentials-create-settings-removed')).toBeNull();
+    await update(LIST.bindings);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    expect(testid(document, 'admin-credentials-create-setting-github.token-variant')!.textContent).toContain('fine-grained');
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({
+      slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'token', settings: { variant: 'fine-grained' },
+    });
+  });
+
+  it('allows creation after the user clears a removed setting', async () => {
+    const { harness, el } = await open('/admin/credentials');
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'gh-ci');
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await type(harness, 'secret', 'token');
+    await pick(harness, 'setting-github.token-variant', 'classic');
+    TestBed.inject(QueryClient).setQueryData(hubConfigListKey('credentials', false), {
+      ...LIST, bindings: [{ ...LIST.bindings[0], settings: [] }, LIST.bindings[1]],
+    });
+    await settle(harness.fixture);
+    await pick(harness, 'setting-github.token-variant', 'Not set');
+    expect(testid(document, 'admin-credentials-create-settings-removed')).toBeNull();
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({
+      slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'token',
+    });
+  });
 });

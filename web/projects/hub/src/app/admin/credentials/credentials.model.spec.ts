@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import {
   credentialCreateFields,
+  createSettingsUnavailable,
+  removedCreateSettings,
   checkFailure,
   checkOutcomeTone,
   credentialCheckTarget,
@@ -143,6 +145,24 @@ describe('credential picker', () => {
 });
 
 describe('credential create choices', () => {
+  it('identifies unavailable schemas and entered settings removed from the selected binding', () => {
+    const type = { kind: 'unknown' as const, raw: 'text' };
+    const bindings = [{ name: 'token', forgeKind: 'github', settings: [{ key: 'kept', type }] }];
+    const draft = { ...EMPTY_CREDENTIAL_DRAFT, binding: 'token', settings: [
+      { binding: 'token', key: 'kept', type, text: 'value' },
+      { binding: 'token', key: 'removed', type, text: 'value' },
+      { binding: 'token', key: 'empty', type, text: '  ' },
+      { binding: 'other', key: 'other', type, text: 'value' },
+    ] };
+    expect(createSettingsUnavailable(draft, bindings)).toBe(false);
+    expect(removedCreateSettings(draft, bindings)).toEqual(['removed']);
+    expect(createSettingsUnavailable(draft, [])).toBe(true);
+    expect(removedCreateSettings(draft, [])).toEqual([]);
+    expect(createSettingsUnavailable({ ...draft, binding: '' }, [])).toBe(false);
+    expect(removedCreateSettings(draft, [{ ...bindings[0], settings: [...bindings[0].settings, { key: 'removed', type }] }])).toEqual([]);
+    expect(removedCreateSettings({ ...draft, binding: 'other' }, [{ name: 'other', forgeKind: 'gitlab', settings: [] }])).toEqual(['other']);
+  });
+
   it('offers active forges and associates binding choices with their forge', () => {
     const fields = credentialCreateFields(
       [{ id: 'a', slug: 'alpha', name: 'Alpha', retired: false }, { id: 'b', slug: 'old', name: 'Old', retired: true }],
