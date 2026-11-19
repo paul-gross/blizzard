@@ -403,7 +403,9 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         return _ServingNothing(serving)
 
     monkeypatch.setattr(runtime, "build_early_shutdown_server", build_server)
-    hosted = dataclasses.replace(build_hosted_app(config, host), resumes=(resume,))
+    hosted = build_hosted_app(config, host)
+    (live,) = hosted.runners.live()
+    live.resume = cast(Any, resume)
     try:
         cast(Any, runtime)._serve_host(config, host, hosted, loop=loop, tick_seconds=3600.0)
     finally:

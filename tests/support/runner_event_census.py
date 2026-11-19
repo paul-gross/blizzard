@@ -184,10 +184,6 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "records the hub's answer to the projects a registration the PULL already made declared; no kind "
         "in the vocabulary represents it — status reads it on its next poll, as it reads the identity row."
     ),
-    "forget_runner_identity": Silent(
-        "deletes the identity row of a runner the hub retired; no kind in the vocabulary represents it — status "
-        "reads the row on its next poll, as it reads the recorded one."
-    ),
     "record_runner_identity": Silent(
         "records the id and name of a registration the PULL already made; no kind in the vocabulary "
         "represents it — the panel reads it on its next poll, as it reads the mirrored hub pause."
@@ -337,8 +333,19 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "stream carries."
     ),
     "drop": Silent(
-        "a runner ingest's removal from its source, offline, with no daemon running — a runner's sealed hub token, "
-        "which no runner's board or SSE stream carries."
+        "a runner ingest's removal from its source, offline, with no daemon running — a runner's sealed hub token "
+        "and its hosting, which no runner's board or SSE stream carries."
+    ),
+    "host": Silent(
+        "the host's seed at start — which runners the host holds, which no runner's board or SSE stream carries."
+    ),
+    "append_fact": Silent(
+        "a runner's retirement on a stopped host — which runners the host holds, which no runner's board or SSE "
+        "stream carries."
+    ),
+    "record_retired": Silent(
+        "a retirement the running host notices at its hub (runner/hosting/retirement.py) — which runners the host "
+        "holds, which no runner's board or SSE stream carries; the host tick drains the runner."
     ),
     "claim_credential_renewal": Silent(
         "CredentialRenewalPass (runner/usage/credential_renewal.py) — runner-local diagnostics only: no kind "

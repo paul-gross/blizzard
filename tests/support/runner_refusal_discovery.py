@@ -837,7 +837,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
     # Client construction is reviewed separately from permission to import httpx.
     # Counts intentionally flag a new constructor even in an existing owner file.
     client_constructors = {
-        "app.py": 6,
+        "app.py": 5,
         "composition.py": 2,
         "loop_wiring.py": 2,
         "subscriptions/internal/usage_http_client.py": 1,

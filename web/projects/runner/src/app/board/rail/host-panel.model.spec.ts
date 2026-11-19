@@ -15,6 +15,7 @@ function runner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.Ho
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
     agents_in_use: 1,
     max_agents: 4,
+    start_failure: null,
     ...overrides,
   };
 }

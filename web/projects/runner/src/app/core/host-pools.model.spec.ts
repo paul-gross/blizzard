@@ -17,6 +17,7 @@ function hostRunner(runnerId: string | null, name: string): runnerApi.HostRunner
     bindings: [],
     agents_in_use: 0,
     max_agents: 4,
+    start_failure: null,
   };
 }
 

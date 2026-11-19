@@ -24,26 +24,13 @@ from blizzard.runner.settings.ports import (
 )
 
 
-class RunnerSettingsReader:
-    """Materialize one coherent record with boot-held file inputs and parser defaults."""
+class RunnerEntriesJudge:
+    """Judges a runner's settings entries laid over its file entry — reading no stored record, so a runner with none
+    yet is judged the same as one with its record."""
 
-    def __init__(
-        self,
-        host: HostConfig,
-        entry: RunnerEntry,
-        store: IReadRunnerSettings,
-        *,
-        deferred_seed: IWriteRunnerSettings | None = None,
-        identity_present: Callable[[], bool] | None = None,
-        host_settings: HostSettingsReader | None = None,
-    ) -> None:
+    def __init__(self, host: HostConfig, entry: RunnerEntry) -> None:
         self.host = host
-        #: The host's own record, whose entries every resolution lays over ``host``; ``None`` resolves against it.
-        self.host_settings = host_settings
         self.entry = entry
-        self.store = store
-        self._deferred_seed = deferred_seed
-        self._identity_present = identity_present
         self.keys = runner_keys(HOST_REGISTRY)
         prefix = "runner[]."
         self.aliases = {
@@ -56,6 +43,113 @@ class RunnerSettingsReader:
             and "[]" not in key.path.removeprefix(prefix)
             and key.replaced_by.removeprefix(prefix) in self.keys
         }
+
+    def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        unknown = {
+            key: "not a writable runner setting" for key in entries if key not in self.keys and key not in self.aliases
+        }
+        if unknown:
+            return unknown
+        _, errors = self._resolve(entries)
+        result: dict[str, str] = {}
+        for error in errors:
+            for key in self._error_keys(error, entries):
+                result[key] = f"{result[key]}; {error}" if key in result else error
+        return result
+
+    def _error_keys(self, error: str, entries: Mapping[str, Entry]) -> set[str]:
+        """Translate parser diagnostics to record keys, retaining whole-array ownership.
+
+        Parser diagnostics are also shown at boot and are not a structured API. Prefer
+        explicit paths, and conservatively attribute an unrecognised diagnostic to the
+        supplied entries rather than inventing a setting called ``runner``.
+        """
+        diagnostic = re.sub(r" \(in .+\)$", "", error)
+        text = re.sub(r"\[([a-z_]+)\]\s*\.?\s*", r"\1.", diagnostic)
+        keys = {*self.keys, *self.aliases}
+        found = {key for key in keys if re.search(rf"(?<![\w.]){re.escape(key)}(?![\w])", text)}
+        if "runner_ceiling_usd" in error:
+            found.add("cost.runner_ceiling_usd")
+            found.update(key for key in ("cost.window_hours", "throttle.budget.window_hours") if key in entries)
+        if "has no agents" in error:
+            found.add("agents")
+        if "has no projects" in error or error.startswith(("binding of project ", "binds project ")):
+            found.add("projects")
+        if error.startswith("names subscription "):
+            found.add("subscription")
+        if not found:
+            # A table-level diagnostic may implicate several whole settings.
+            for key in keys:
+                parent = key.rpartition(".")[0]
+                if parent and re.search(rf"(?<![\w.]){re.escape(parent)}(?![\w.])", text):
+                    found.add(key)
+        return found or set(entries) or {"name"}
+
+    def _resolve(self, entries: Mapping[str, Entry]) -> tuple[RunnerEntry, list[str]]:
+        authored = self.entry.authored or ConfigView.unchecked({})
+        body = deepcopy(dict(authored.body))
+        for key in (*self.keys, *self.aliases):
+            parts = key.split(".")
+            table = body
+            parents: list[tuple[dict[str, Any], str]] = []
+            for part in parts[:-1]:
+                value = table.get(part)
+                if not isinstance(value, dict):
+                    break
+                parents.append((table, part))
+                table = cast(dict[str, Any], value)
+            else:
+                if parts[-1] in table:
+                    del table[parts[-1]]
+                    for parent, part in reversed(parents):
+                        if parent[part]:
+                            break
+                        del parent[part]
+        for key, value in entries.items():
+            if (key not in self.keys and key not in self.aliases) or value.at_default:
+                continue
+            if key in self.aliases and self.aliases[key] in entries:
+                continue
+            parts = key.split(".")
+            table = body
+            for part in parts[:-1]:
+                table = table.setdefault(part, {})
+            table[parts[-1]] = deepcopy(value.value)
+        view = ConfigView(authored.registry, authored.path, body, authored.checked, authored.strict, authored.flags)
+        # The file's name identifies the boot entry (and its token); a stored
+        # display name may override it, but an unset resolves to that identity.
+        name = body.get("name", self.entry.name)
+        if not isinstance(name, str) or not name.strip():
+            return self.entry, ["name must be a non-blank string"]
+        body["name"] = name
+        try:
+            parsed = parse_runner_entry(
+                view, name.strip(), root=self.host.root, db_url=self.host.db_url, path=self.host.config_path
+            )
+            return parsed, self.host.runner_problems(parsed)
+        except (ConfigError, ValueError, TypeError) as exc:
+            return self.entry, [str(exc)]
+
+
+class RunnerSettingsReader(RunnerEntriesJudge):
+    """Materialize one coherent record with boot-held file inputs and parser defaults."""
+
+    def __init__(
+        self,
+        host: HostConfig,
+        entry: RunnerEntry,
+        store: IReadRunnerSettings,
+        *,
+        deferred_seed: IWriteRunnerSettings | None = None,
+        identity_present: Callable[[], bool] | None = None,
+        host_settings: HostSettingsReader | None = None,
+    ) -> None:
+        super().__init__(host, entry)
+        #: The host's own record, whose entries every resolution lays over ``host``; ``None`` resolves against it.
+        self.host_settings = host_settings
+        self.store = store
+        self._deferred_seed = deferred_seed
+        self._identity_present = identity_present
 
     def seed_keys(self, entries: Mapping[str, Entry]) -> tuple[str, ...]:
         # An alias and its replacement represent one authored setting. Once either
@@ -143,89 +237,3 @@ class RunnerSettingsReader:
         effective = host if host is not None else self._host_at(None)
         # The token is the held token's, opened from the store — never a settings input.
         return effective.config_for_runner(entry, entry.own, "")
-
-    def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
-        unknown = {
-            key: "not a writable runner setting" for key in entries if key not in self.keys and key not in self.aliases
-        }
-        if unknown:
-            return unknown
-        _, errors = self._resolve(entries)
-        result: dict[str, str] = {}
-        for error in errors:
-            for key in self._error_keys(error, entries):
-                result[key] = f"{result[key]}; {error}" if key in result else error
-        return result
-
-    def _error_keys(self, error: str, entries: Mapping[str, Entry]) -> set[str]:
-        """Translate parser diagnostics to record keys, retaining whole-array ownership.
-
-        Parser diagnostics are also shown at boot and are not a structured API. Prefer
-        explicit paths, and conservatively attribute an unrecognised diagnostic to the
-        supplied entries rather than inventing a setting called ``runner``.
-        """
-        diagnostic = re.sub(r" \(in .+\)$", "", error)
-        text = re.sub(r"\[([a-z_]+)\]\s*\.?\s*", r"\1.", diagnostic)
-        keys = {*self.keys, *self.aliases}
-        found = {key for key in keys if re.search(rf"(?<![\w.]){re.escape(key)}(?![\w])", text)}
-        if "runner_ceiling_usd" in error:
-            found.add("cost.runner_ceiling_usd")
-            found.update(key for key in ("cost.window_hours", "throttle.budget.window_hours") if key in entries)
-        if "has no agents" in error:
-            found.add("agents")
-        if "has no projects" in error or error.startswith(("binding of project ", "binds project ")):
-            found.add("projects")
-        if error.startswith("names subscription "):
-            found.add("subscription")
-        if not found:
-            # A table-level diagnostic may implicate several whole settings.
-            for key in keys:
-                parent = key.rpartition(".")[0]
-                if parent and re.search(rf"(?<![\w.]){re.escape(parent)}(?![\w.])", text):
-                    found.add(key)
-        return found or set(entries) or {"name"}
-
-    def _resolve(self, entries: Mapping[str, Entry]) -> tuple[RunnerEntry, list[str]]:
-        authored = self.entry.authored or ConfigView.unchecked({})
-        body = deepcopy(dict(authored.body))
-        for key in (*self.keys, *self.aliases):
-            parts = key.split(".")
-            table = body
-            parents: list[tuple[dict[str, Any], str]] = []
-            for part in parts[:-1]:
-                value = table.get(part)
-                if not isinstance(value, dict):
-                    break
-                parents.append((table, part))
-                table = cast(dict[str, Any], value)
-            else:
-                if parts[-1] in table:
-                    del table[parts[-1]]
-                    for parent, part in reversed(parents):
-                        if parent[part]:
-                            break
-                        del parent[part]
-        for key, value in entries.items():
-            if (key not in self.keys and key not in self.aliases) or value.at_default:
-                continue
-            if key in self.aliases and self.aliases[key] in entries:
-                continue
-            parts = key.split(".")
-            table = body
-            for part in parts[:-1]:
-                table = table.setdefault(part, {})
-            table[parts[-1]] = deepcopy(value.value)
-        view = ConfigView(authored.registry, authored.path, body, authored.checked, authored.strict, authored.flags)
-        # The file's name identifies the boot entry (and its token); a stored
-        # display name may override it, but an unset resolves to that identity.
-        name = body.get("name", self.entry.name)
-        if not isinstance(name, str) or not name.strip():
-            return self.entry, ["name must be a non-blank string"]
-        body["name"] = name
-        try:
-            parsed = parse_runner_entry(
-                view, name.strip(), root=self.host.root, db_url=self.host.db_url, path=self.host.config_path
-            )
-            return parsed, self.host.runner_problems(parsed)
-        except (ConfigError, ValueError, TypeError) as exc:
-            return self.entry, [str(exc)]

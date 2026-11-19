@@ -110,3 +110,10 @@ A runner store rolled back past the `runner_hub_tokens` migration drops every se
 reads each runner's token from its `.env` again, which still holds the token from before the upgrade, but not one set
 with `blizzard runner token set` or moved in by `blizzard runner ingest` since: put that one in `.env` as
 `BZ_HUB_TOKEN_<NAME>` first ([`docs/upgrade.md`](./upgrade.md#runner-hub-tokens-move-into-the-host-store)).
+
+A runner store rolled back past the `hosted_runners` migration drops the record of which runners are the host's. The
+older host reads its runners from the host file alone, so each runner added through `blizzard runner add` or
+`POST /api/host/runners` since the upgrade is stranded: it has no `[[runner]]` and no token in `.env`. Retire it at the
+hub with `blizzard hub runner retire <id>` and add it again, or write its `[[runner]]` and `BZ_HUB_TOKEN_<NAME>` back
+first ([`docs/upgrade.md`](./upgrade.md#runners-become-records-in-the-host-store)). A runner retired since stays retired
+at the hub; drop its `[[runner]]` if the file still holds it.

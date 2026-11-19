@@ -87,8 +87,8 @@ class IRunnerBoundStores(IRunnerBoundReads, Protocol):
         ...
 
     def remove_runner_rows(self, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
-        """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``, and its
-        sealed hub token with ``drop_hub_token``."""
+        """Delete the runner's rows from the store at ``url``, its outbox counters too unless ``keep_counters``, and,
+        with ``drop_hub_token``, its sealed hub token and its hosting there, since it has left that host."""
         ...
 
 

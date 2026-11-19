@@ -1,34 +1,41 @@
 """``blizzard runner add`` / ``retire`` / ``ingest`` — add a runner to a registered host, retire one from it, under the
-host's own credential, or take one in from another store."""
+host's own credential, or take one in from another store. ``add`` and ``retire`` reach a running host through its
+routes, and write a stopped host's store directly; neither writes ``.env`` or the host file."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
+from pydantic import TypeAdapter
 
-from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.collaborators import CliCollaborators, Response
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import dto
-from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import StoreBelowFloorError
-from blizzard.runner.cli.daemon import Door, daemon_holding
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
-from blizzard.runner.cli.store_guard import named_runners, store_write_guard
-from blizzard.runner.composition import build_identity_service, build_runner_ingest
-from blizzard.runner.config import SCAFFOLD_AGENTS
-from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_config import (
-    SCAFFOLD_SUBSCRIPTION,
-    HostConfig,
-    runner_toml,
-    scaffold_runner,
+from blizzard.runner.cli.runtime import InitCollaborators, host_answers, seed_hosted_runners
+from blizzard.runner.cli.store_guard import (
+    StoreVerdict,
+    hosted_runner_ids,
+    resolve_runner,
+    store_refusal,
+    store_write_guard,
 )
-from blizzard.runner.host_file import append_runner, remove_runner
-from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, hold_host
+from blizzard.runner.composition import build_hosted_runner_service, build_runner_ingest
+from blizzard.runner.config import SCAFFOLD_AGENTS, ProjectBinding
+from blizzard.runner.config_table import ConfigError
+from blizzard.runner.host_config import SCAFFOLD_SUBSCRIPTION, HostConfig
+from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hosting.model import CLI, OPERATOR
+from blizzard.runner.hosting.service import HostRunnerHubRefused, NewRunner, RunnerSettingsInvalid
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -39,6 +46,7 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.transfer.ingest import IngestRequest
 from blizzard.runner.transfer.refusals import IngestRefused
+from blizzard.wire.runner_host import HostRunnerListResponse, HostRunnerRetiredView, HostRunnerView
 
 _DIR_OPTION = click.option(
     "--dir",
@@ -86,70 +94,199 @@ def add(
     workspaces: tuple[str, ...],
     agents: tuple[int, ...],
 ) -> None:
-    """Add runner NAME to this registered host at its hub, with no hub sign-in: its token goes to the host's `.env`
-    as BZ_HUB_TOKEN_<NAME> and its `[[runner]]` to the host file. A running host starts it at its next start.
+    """Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store — its
+    identity, settings and sealed token. A running host is asked over its socket and starts it at its next tick; a
+    stopped host's store is written directly, and it starts at the host's next start. Neither `.env` nor the host file
+    is written.
 
-    Refused, with nothing added, on a host holding no host token, or when NAME or a --workspace is not one the host
-    file allows."""
+    Refused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,
+    or when a --workspace is not one the host declares."""
     config = load_host(directory)
     token = _host_token(config)
     try:
-        config.check_new_runner(name)
         bindings = config.bindings_for(projects, workspaces)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
-    token_env = hub_token_variable(name)
-    runner_agents = _runner_agents(projects, agents)
-    hub = config.hub_url
-    collaborators = InitCollaborators.of(ctx)
-    with collaborators.host_clients(hub) as host_clients:
-        try:
-            answer = host_clients(token).add_runner(name, projects=projects)
-        except RunnerAddRefused as exc:
-            raise click.ClickException(f"the hub at {hub} refused to add runner {name}: {exc.detail}") from exc
-        except HubClientError as exc:
-            raise click.ClickException(f"cannot add runner {name} at the hub at {hub}: {exc}") from exc
-    if isinstance(answer, HostRefused):
-        raise click.ClickException(_host_refused(answer, hub, f"add runner {name}"))
-    retire = f"`blizzard runner retire --runner {answer.runner_id} --dir {config.root}`"
-    try:
-        write_runner_token(config.root, token_env, answer.token)
-    except OSError as exc:
-        raise click.ClickException(
-            f"runner {name} ({answer.runner_id}) was added at {hub}, but its token was not written: {exc}; retire "
-            f"it with `blizzard hub runner retire {answer.runner_id} --hub-url {hub}`"
-        ) from exc
-    (config.root / RUNNERS_DIRNAME / name).mkdir(parents=True, exist_ok=True)
-    declared = {subscription.slug for subscription in config.subscriptions}
-    entry = scaffold_runner(
-        config.root,
+    settings: dict[str, object] = {"agents": _runner_agents(projects, agents)}
+    if SCAFFOLD_SUBSCRIPTION.slug in {subscription.slug for subscription in config.subscriptions}:
+        settings["subscription"] = SCAFFOLD_SUBSCRIPTION.slug
+    door = Door.of(ctx)
+    if host_answers(config.layout.socket_path, door):
+        _add_on_running_host(config, door, name, bindings, settings)
+        return
+    new = NewRunner.of(
         name,
-        bindings=bindings,
-        agents=runner_agents,
-        subscription=SCAFFOLD_SUBSCRIPTION.slug if SCAFFOLD_SUBSCRIPTION.slug in declared else None,
-        runner_id=answer.runner_id,
+        [(b.project, b.workspace) for b in bindings],
+        settings,
+        workspaces=[workspace.id for workspace in config.workspaces],
     )
-    if entry.own is not None:
-        # The new runner joins the host's tool profile, so a host whose runners agreed on it still does.
-        entry = replace(
-            entry,
-            own=replace(
-                entry.own,
-                worker_path_prepend=config.tool_path_prepend,
-                worker_env_passthrough=config.tool_env_passthrough,
-            ),
+    clock = CliCollaborators.of(ctx).wall_clock
+    hub = config.hub_url
+    with store_write_guard(config, action=f"add runner {name}", door=door, clock=clock, refuse_foreign=True):
+        # The file's runners hosted first, as the host's next start would, so the new runner's hosted row leaves none
+        # of them unhosted.
+        seed_hosted_runners(config, clock=clock)
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
+                service = build_hosted_runner_service(config, engine, host_clients(token), clock=clock)
+                try:
+                    added = service.add(new, actor=OPERATOR, door=CLI)
+                except RunnerSettingsInvalid as exc:
+                    raise click.ClickException(f"runner {name} was not added: {_problems(exc.problems)}") from exc
+                except HostRunnerHubRefused as exc:
+                    raise click.ClickException(_host_refused(exc.refused, hub, f"add runner {name}")) from exc
+                except RunnerAddRefused as exc:
+                    raise click.ClickException(f"the hub at {hub} refused to add runner {name}: {exc.detail}") from exc
+                except HubClientError as exc:
+                    raise click.ClickException(f"cannot add runner {name} at the hub at {hub}: {exc}") from exc
+        finally:
+            engine.dispose()
+    click.echo(
+        f"added runner {name} ({added.runner_id}) at {hub} into the stopped host's store at {config.db_url}; it "
+        "starts at the host's next start"
+    )
+
+
+def _add_on_running_host(
+    config: HostConfig, door: Door, name: str, bindings: tuple[ProjectBinding, ...], settings: dict[str, object]
+) -> None:
+    body = {
+        "name": name,
+        "projects": [{"project": b.project, "workspace": b.workspace} for b in bindings],
+        "settings": settings,
+    }
+    with RunnerDaemon.reach("add", str(config.root), None, door) as daemon:
+        response = daemon.send_to_host("post", "/api/host/runners", json_body=body)
+        if not response.is_success:
+            raise click.ClickException(
+                f"the running host at {daemon.where} did not add runner {name}: {_refused(response)}"
+            )
+        _, view = daemon.decode_answer(response, TypeAdapter(HostRunnerView))
+        where = daemon.where
+    click.echo(
+        f"added runner {name} ({view.runner_id}) at {config.hub_url} through the running host at {where}; it starts "
+        "the runner at its next tick"
+    )
+
+
+@click.command("retire")
+@_DIR_OPTION
+@click.option(
+    "--runner",
+    "runner",
+    required=True,
+    help="The host's runner to retire, by name or id; one the store holds retired, by id.",
+)
+@click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
+@click.pass_context
+def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
+    """Retire one of this registered host's runners at its hub, then record it retired in the host store. Retirement is
+    final. Its identity, settings and history are kept. A running host is asked over its socket and drains the runner
+    at its next tick; a stopped host's store is written directly. Neither `.env` nor the host file is written: a
+    `[[runner]]` of a retired runner is no longer read, and the host warns of it until it is removed.
+
+    Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
+    releases them."""
+    config = load_host(directory)
+    token = _host_token(config)
+    door = Door.of(ctx)
+    if host_answers(config.layout.socket_path, door):
+        _retire_on_running_host(config, door, runner, force)
+        return
+    clock = CliCollaborators.of(ctx).wall_clock
+    target = _retiring(config, runner, clock)
+    hub = config.hub_url
+    with store_write_guard(
+        config, action=f"retire runner {target.name}", door=door, clock=clock, refuse_foreign=False
+    ) as verdict:
+        _hosting(config, target, verdict, clock)
+        engine = create_engine_from_url(config.db_url)
+        try:
+            with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
+                service = build_hosted_runner_service(config, engine, host_clients(token), clock=clock)
+                held = service.held(target.runner_id)
+                if held is None:
+                    raise click.ClickException(f"the store does not hold runner {target.runner_id}")
+                try:
+                    retired = service.retire(held, force=force, actor=OPERATOR, door=CLI)
+                except HostRunnerHubRefused as exc:
+                    raise click.ClickException(
+                        _host_refused(exc.refused, hub, f"retire runner {target.name} ({target.runner_id})")
+                    ) from exc
+                except HostRunnerRetireRefused as exc:
+                    raise click.ClickException(
+                        f"the hub refused to retire runner {target.name} ({target.runner_id}): {exc.detail}"
+                    ) from exc
+                except HubClientError as exc:
+                    raise click.ClickException(
+                        f"cannot retire runner {target.name} at the hub at {hub}: {exc}"
+                    ) from exc
+        finally:
+            engine.dispose()
+    if retired.already:
+        click.echo(f"runner {target.name} ({target.runner_id}) is already retired in the stopped host's store")
+    else:
+        click.echo(
+            f"retired runner {target.name} ({target.runner_id}) at {hub}{_released(retired.released_chunk_ids)}, and "
+            "recorded it retired in the stopped host's store"
         )
-    try:
-        append_runner(config.layout, runner_toml(entry), strict=config.strict)
-    except ConfigError as exc:
-        raise click.ClickException(
-            f"runner {name} ({answer.runner_id}) was added at {hub} and its token written, but its [[runner]] was "
-            f"not: {exc}. Add it by hand, or retire it with {retire}"
-        ) from exc
-    click.echo(f"added runner {name} ({answer.runner_id}) at {hub}; its token is in {config.root / ENV_FILENAME}")
-    running = _running(ctx, config.layout)
-    if running is not None:
-        click.echo(f"{running}: it starts runner {name} at its next start")
+    if target.configured:
+        click.echo(f"its [[runner]] in {config.config_path} is no longer read — remove it")
+
+
+def _retire_on_running_host(config: HostConfig, door: Door, runner: str, force: bool) -> None:
+    with RunnerDaemon.reach("retire", str(config.root), None, door) as daemon:
+        _, listed = daemon.decode_answer(daemon.get_from_host("/api/host/runners"), TypeAdapter(HostRunnerListResponse))
+        matched = [
+            item for item in listed.items if item.runner_id is not None and runner in (item.name, item.runner_id)
+        ]
+        if len(matched) != 1:
+            named = ", ".join(f"{item.name} ({item.runner_id or 'no id'})" for item in listed.items) or "none"
+            held = "holds several runners of that name" if matched else f"holds no runner {runner!r}"
+            raise click.ClickException(f"the running host at {daemon.where} {held}: {named}")
+        target = matched[0]
+        response = daemon.send_to_host(
+            "post", f"/api/host/runners/{target.runner_id}/retire", json_body={"force": force}
+        )
+        if not response.is_success:
+            raise click.ClickException(
+                f"the running host at {daemon.where} did not retire runner {target.name}: {_refused(response)}"
+            )
+        _, view = daemon.decode_answer(response, TypeAdapter(HostRunnerRetiredView))
+        where = daemon.where
+    if view.already:
+        click.echo(f"runner {target.name} ({target.runner_id}) is already retired on the running host at {where}")
+        return
+    click.echo(
+        f"retired runner {target.name} ({target.runner_id}) at {config.hub_url}{_released(view.released_chunk_ids)} "
+        f"through the running host at {where}; it drains the runner at its next tick"
+    )
+
+
+def _hosting(config: HostConfig, target: _Retiring, verdict: StoreVerdict, clock: IClock) -> None:
+    """Make the stopped host's store hold ``target`` before it is retired: the file's runners hosted as the host's next
+    start would. A store judged foreign is not taken up, and refuses unless it already hosts the runner."""
+    if verdict.foreign is not None:
+        if target.runner_id in hosted_runner_ids(config, clock):
+            return
+        raise click.ClickException(store_refusal(verdict) or f"the store does not hold runner {target.runner_id}")
+    seed_hosted_runners(config, clock=clock)
+
+
+def _released(chunk_ids: Sequence[str]) -> str:
+    return f", releasing {', '.join(chunk_ids)}" if chunk_ids else ""
+
+
+def _problems(problems: Mapping[str, str]) -> str:
+    return "; ".join(f"{key}: {why}" for key, why in sorted(problems.items()))
+
+
+def _refused(response: Response) -> str:
+    """The host's refusal, in words: its message — naming each failing setting — and its type."""
+    refusal = refusal_of(response)
+    kind = f" ({refusal.type})" if refusal.type else ""
+    return f"{refusal.message or 'no reason given'}{kind}"
 
 
 @dto
@@ -162,65 +299,13 @@ class _Retiring:
     configured: bool
 
 
-class _HostRunning(Exception):
-    """A host holds the directory the runner is retired from."""
-
-    def __init__(self, held: HostHeld) -> None:
-        super().__init__(str(held))
-
-
-@click.command("retire")
-@_DIR_OPTION
-@click.option(
-    "--runner",
-    "runner",
-    required=True,
-    help="The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store "
-    "still names.",
-)
-@click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
-@click.pass_context
-def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
-    """Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.
-    Its identity is retained with settings and history; otherwise the stopped host forgets it immediately and a
-    running host forgets it when it halts the runner at its next tick.
-
-    Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
-    releases them."""
-    config = load_host(directory)
-    token = _host_token(config)
-    clock = CliCollaborators.of(ctx).wall_clock
-    target = _retiring(config, runner, clock)
-    try:
-        with store_write_guard(
-            config,
-            action=f"retire runner {target.name}",
-            door=Door.of(ctx),
-            clock=clock,
-            runners={},
-            configured=(),
-            refuse_foreign=False,
-            held=_HostRunning if target.configured else None,
-        ):
-            released = _retire_at_hub(ctx, config, token, target, force=force)
-            with build_identity_service(config.db_url, runner_id=target.runner_id, clock=clock) as identities:
-                identities.forget()
-            _remove_entry(config, target, released)
-            click.echo(_retired(config, target, released))
-    except _HostRunning as exc:
-        released = _retire_at_hub(ctx, config, token, target, force=force)
-        _remove_entry(config, target, released)
-        click.echo(_retired(config, target, released))
-        click.echo(f"a running host holds {config.root} ({exc}): it halts runner {target.name} at its next tick")
-
-
 def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
-    """The runner ``runner`` names: one the host file configures, by name or id, else one only the store's identity
-    rows still name, by id."""
+    """The runner ``runner`` names: one the host file configures or the store hosts, by name or id, else one the store
+    holds retired, by id — so its retire reports it retired already."""
     try:
-        entry = config.sole_runner(runner)
+        entry = resolve_runner(config, runner, clock)
     except ConfigError as exc:
-        if runner in _named_runners(config, clock):
+        if HostLayout(config.root).store_path.exists() and runner in hosted_runner_ids(config, clock):
             return _Retiring(name=runner, runner_id=runner, configured=False)
         raise click.ClickException(str(exc)) from exc
     if entry.id is None:
@@ -228,50 +313,7 @@ def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
             f"runner {entry.name} has no id in {config.config_path}, so the hub holds no runner of it to retire; "
             "remove its [[runner]] by hand"
         )
-    return _Retiring(name=entry.name, runner_id=entry.id, configured=True)
-
-
-def _named_runners(config: HostConfig, clock: IClock) -> tuple[str, ...]:
-    """The runners the store's identity rows name — none when the host has no store file yet. A store that exists but
-    cannot be read raises, so the cause is not hidden behind a "no such runner" refusal."""
-    if not HostLayout(config.root).store_path.exists():
-        return ()
-    return named_runners(config, clock)
-
-
-def _retire_at_hub(ctx: click.Context, config: HostConfig, token: str, target: _Retiring, *, force: bool) -> str:
-    """Retire ``target`` at the hub under the host's credential, and the chunks it released, in words."""
-    hub = config.hub_url
-    with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
-        try:
-            answer = host_clients(token).retire_runner(target.runner_id, force=force)
-        except HostRunnerRetireRefused as exc:
-            raise click.ClickException(
-                f"the hub refused to retire runner {target.name} ({target.runner_id}): {exc.detail}"
-            ) from exc
-        except HubClientError as exc:
-            raise click.ClickException(f"cannot retire runner {target.name} at the hub at {hub}: {exc}") from exc
-    if isinstance(answer, HostRefused):
-        raise click.ClickException(_host_refused(answer, hub, f"retire runner {target.name} ({target.runner_id})"))
-    return f", releasing {', '.join(answer.released_chunk_ids)}" if answer.released_chunk_ids else ""
-
-
-def _remove_entry(config: HostConfig, target: _Retiring, released: str) -> None:
-    """Remove ``target``'s ``[[runner]]`` from the host file, when the file holds one."""
-    if not target.configured:
-        return
-    try:
-        remove_runner(config.layout, target.name, strict=config.strict)
-    except ConfigError as exc:
-        raise click.ClickException(
-            f"runner {target.name} ({target.runner_id}) was retired at {config.hub_url}{released}, but its "
-            f"[[runner]] was not removed: {exc}. Remove it by hand"
-        ) from exc
-
-
-def _retired(config: HostConfig, target: _Retiring, released: str) -> str:
-    done = "and removed its [[runner]]" if target.configured else "and forgot its identity here"
-    return f"retired runner {target.name} ({target.runner_id}) at {config.hub_url}{released}, {done}"
+    return _Retiring(name=entry.name, runner_id=entry.id, configured=any(e.id == entry.id for e in config.runners))
 
 
 @click.command("ingest")
@@ -348,13 +390,3 @@ def _host_refused(answer: HostRefused, hub: str, act: str) -> str:
         f"`blizzard runner init`, or mint it a new token with `blizzard hub runner-host enroll <host_id> --hub-url "
         f"{hub}` ({answer.detail})"
     )
-
-
-def _running(ctx: click.Context, layout: HostLayout) -> str | None:
-    """Whether a host is running in ``layout``'s directory — its lock held, or its socket answering — in words."""
-    door = Door.of(ctx)
-    try:
-        with hold_host(layout, (layout.socket_path,), lambda sock: daemon_holding(sock, door)):
-            return None
-    except HostHeld as exc:
-        return f"a running host holds {layout.root} ({exc})"

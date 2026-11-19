@@ -22,6 +22,7 @@ __all__ = [
     "IRunnerRowRemoval",
     "IRunnerTransfer",
     "IRunnerTransferHandle",
+    "IWriteCarriedHosting",
     "IWriteCarriedHubTokenRepository",
     "IWriteHostIngestRepository",
     "WorkspacePromptConflict",
@@ -91,6 +92,17 @@ class IWriteHostIngestRepository(IReadHostIngestRepository, Protocol):
 
     def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
         """Append ``ingest`` on ``handle``'s transaction."""
+        ...
+
+
+class IWriteCarriedHosting(Protocol):
+    """The destination's hosting of the moving runner a copy records, on the copy's own transaction."""
+
+    def host_carried_locked(self, handle: IRunnerTransferHandle, *, at: datetime, alongside: Sequence[str]) -> bool:
+        """Host the moving runner on ``handle``'s transaction, under the operator through the CLI, unless the
+        destination already holds it; whether it was hosted. A destination hosting no runner yet first hosts every
+        runner ``alongside`` (the ones its identity rows already name) under the seed's door and actor, so no identity
+        row is left unhosted."""
         ...
 
 

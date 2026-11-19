@@ -8,7 +8,8 @@ service instead."""
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
 import httpx2
@@ -32,6 +33,8 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.hosting.reconcile import RunnerStartFailures
+from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
@@ -101,6 +104,54 @@ class RunnerRegistry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no runner {runner_id} on this host")
 
 
+class HostRunnerRegistry:
+    """The host's live :class:`RunnerRegistry`: every route reads :meth:`current` once per request, so a runner served
+    or withdrawn mid-flight is either fully resolvable or answers ``404``."""
+
+    def __init__(self, registry: RunnerRegistry | None = None) -> None:
+        self._lock = threading.Lock()
+        self._registry = registry or RunnerRegistry()
+
+    def current(self) -> RunnerRegistry:
+        with self._lock:
+            return self._registry
+
+    @property
+    def served(self) -> tuple[ServedRunner, ...]:
+        return self.current().served
+
+    @property
+    def halted(self) -> tuple[HaltedRunner, ...]:
+        return self.current().halted
+
+    def resolve(self, runner_id: str) -> ServedRunner:
+        return self.current().resolve(runner_id)
+
+    def serve(self, runner: ServedRunner) -> None:
+        """Serve ``runner``, in place of any runner or halted entry of its id."""
+        with self._lock:
+            held = self._registry
+            self._registry = RunnerRegistry(
+                (*(r for r in held.served if r.runner_id != runner.runner_id), runner),
+                tuple(h for h in held.halted if h.id != runner.runner_id),
+            )
+
+    def halt(self, runner: HaltedRunner) -> None:
+        """Hold ``runner`` halted, in place of any halted entry of its id."""
+        with self._lock:
+            held = self._registry
+            self._registry = replace(held, halted=(*(h for h in held.halted if h.id != runner.id), runner))
+
+    def withdraw(self, runner_id: str) -> None:
+        """Stop serving, or holding halted, the runner ``runner_id`` names."""
+        with self._lock:
+            held = self._registry
+            self._registry = RunnerRegistry(
+                tuple(r for r in held.served if r.runner_id != runner_id),
+                tuple(h for h in held.halted if h.id != runner_id),
+            )
+
+
 @dto
 @dataclass(frozen=True)
 class ServedWorkspace:
@@ -114,8 +165,7 @@ class ServedWorkspace:
 def bind_runner(request: Request, runner_id: Annotated[str, Path(description="The runner's hub-minted id.")]) -> None:
     """The dependency every runner-owned router mounts behind: binds the runner ``runner_id`` names, so
     :meth:`RunnerWiring.of` resolves that runner's seams."""
-    registry: RunnerRegistry = getattr(request.app.state, "runners", None) or RunnerRegistry()
-    request.state.runner = registry.resolve(runner_id).seams
+    request.state.runner = RunnerWiring.of(request).runners().resolve(runner_id).seams
 
 
 @dataclass(frozen=True)
@@ -138,8 +188,10 @@ class RunnerWiring:
         return getattr(self.state, name, None)
 
     def runners(self) -> RunnerRegistry:
-        """Every runner the host holds, served or halted."""
-        registry: RunnerRegistry | None = self._seam("runners")
+        """Every runner the host holds, served or halted, as it holds them now."""
+        registry: HostRunnerRegistry | RunnerRegistry | None = getattr(self.state, "runners", None)
+        if isinstance(registry, HostRunnerRegistry):
+            return registry.current()
         return registry if registry is not None else RunnerRegistry()
 
     def for_runner(self, runner: ServedRunner) -> RunnerWiring:
@@ -434,6 +486,14 @@ class RunnerWiring:
 
     def maybe_host_read_stores(self) -> HostReadStores | None:
         return self._seam("host_read_stores")
+
+    def maybe_hosted_runners(self) -> HostedRunnerService | None:
+        """What adds and retires the host's runners — ``None`` on a host holding no host token."""
+        return getattr(self.state, "hosted_runners", None)
+
+    def maybe_start_failures(self) -> RunnerStartFailures | None:
+        """Each runner whose latest start failed — ``None`` on a host whose tick starts no runner."""
+        return getattr(self.state, "start_failures", None)
 
     def require_bound(self) -> None:
         """Refuse with a ``503`` when the store is bound to no runner. The host binds each store to its configured

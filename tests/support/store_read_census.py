@@ -251,6 +251,7 @@ from blizzard.runner.harness.observation import ExecutionActivity, ExecutionLive
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.hosting.ports import IReadHostedRunnerRepository
 from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
@@ -1068,6 +1069,12 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
     (IReadHubTokenRepository, "sealed"): lambda w: w.host_read.hub_tokens.sealed("rn_x"),
     (IReadHubTokenRepository, "key_ids"): lambda w: w.host_read.hub_tokens.key_ids(),
+    (IReadHubTokenRepository, "held_runner_ids"): lambda w: w.host_read.hub_tokens.held_runner_ids(),
+    (IReadHostedRunnerRepository, "hosted_runner_ids"): lambda w: w.host_read.hosted_runners.hosted_runner_ids(),
+    (IReadHostedRunnerRepository, "roster"): lambda w: w.host_read.hosted_runners.roster(),
+    (IReadHostedRunnerRepository, "active"): lambda w: w.host_read.hosted_runners.active(),
+    (IReadHostedRunnerRepository, "retired"): lambda w: w.host_read.hosted_runners.retired(),
+    (IReadHostedRunnerRepository, "facts"): lambda w: w.host_read.hosted_runners.facts("rn_x"),
     (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
         w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
     ),

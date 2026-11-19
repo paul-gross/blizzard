@@ -4,7 +4,7 @@ an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +35,13 @@ class HostRunnerBindingView(BaseModel):
     agents: int
 
 
+class HostRunnerStartFailureView(BaseModel):
+    """Why a runner's latest start failed: the startup step it stopped at and the error."""
+
+    step: str
+    error: str
+
+
 class HostRunnerView(HostRunnerStateView):
     """One runner on the host: a served runner's brake, bindings and agents in use, or a halted one's reasons.
     ``served`` is whether its routes answer — true for a runner halted by its hub's refusal, whose own views still
@@ -49,10 +56,42 @@ class HostRunnerView(HostRunnerStateView):
     agents_in_use: int = 0
     #: The sum of its bindings' ``agents``.
     max_agents: int = 0
+    #: Why its latest start failed, for a ``start_failed`` runner; ``None`` otherwise.
+    start_failure: HostRunnerStartFailureView | None = None
+
+
+class HostRunnerRetiredView(HostRunnerView):
+    """A runner just retired: the chunks its hub released from it, and whether it was retired already, so the retire
+    wrote nothing."""
+
+    released_chunk_ids: list[str] = Field(default_factory=list)
+    already: bool = False
 
 
 class HostRunnerListResponse(WireModel):
     items: list[HostRunnerView] = []
+
+
+class HostRunnerProjectWrite(BaseModel):
+    """One project a runner being added serves, and the host's workspace it runs in — the host's only one when
+    omitted."""
+
+    project: str
+    workspace: str | None = None
+
+
+class HostRunnerAddRequest(BaseModel):
+    """A runner to add to the host: its name, the projects it serves, and any further runner settings by key."""
+
+    name: str
+    projects: list[HostRunnerProjectWrite] = Field(min_length=1)
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
+class HostRunnerRetireRequest(BaseModel):
+    """A retire of one of the host's runners; ``force`` releases the chunks it holds."""
+
+    force: bool = False
 
 
 class HostRegistrationView(WireModel):

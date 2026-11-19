@@ -44,7 +44,7 @@ provider = "other"
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
+    ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]

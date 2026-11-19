@@ -40,6 +40,7 @@ from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
+from blizzard.runner.hosting.ports import IReadHostedRunnerRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.hub.sealed_tokens import IReadHubTokenRepository
 from blizzard.runner.settings.ports import IReadHostSettings, IReadRunnerSettings
@@ -228,14 +229,34 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         MethodScopedAllowance(IReadHostSettings, method, "host_setting_changes", 200, _RARE_OPERATOR_EVENT_REASON)
         for method in ("snapshot_with_provenance", "changes")
     ],
-    # The sealed hub tokens: one row per runner the host has ever held a token for, read whole to list key ids.
-    MethodScopedAllowance(
-        IReadHubTokenRepository,
-        "key_ids",
-        "runner_hub_tokens",
-        50,
-        "the host holds one sealed-token row per runner identity, a handful by lifetime",
-    ),
+    # The sealed hub tokens: one row per runner the host holds a token for, read whole to list key ids and holders.
+    *[
+        MethodScopedAllowance(
+            IReadHubTokenRepository,
+            method,
+            "runner_hub_tokens",
+            50,
+            "the host holds one sealed-token row per runner identity, a handful by lifetime",
+        )
+        for method in ("key_ids", "held_runner_ids")
+    ],
+    # The hosted runners: one row per runner the host has ever held, and a handful of facts each, read whole to list
+    # them and derive each one's state from its newest fact.
+    *[
+        MethodScopedAllowance(
+            IReadHostedRunnerRepository,
+            method,
+            table,
+            200,
+            "the host holds one hosted row per runner it ever held and a handful of facts each, a handful by lifetime",
+        )
+        for method, table in (
+            ("hosted_runner_ids", "hosted_runners"),
+            ("roster", "hosted_runners"),
+            ("active", "hosted_runners"),
+            ("retired", "hosted_runners"),
+        )
+    ],
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_facts", 50, _SCHEMA_520_REASON),

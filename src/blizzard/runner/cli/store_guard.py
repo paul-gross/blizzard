@@ -3,23 +3,27 @@ revision this build expects, and no runner's rows foreign to the host."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 import click
 
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import dto
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, daemon_holding
-from blizzard.runner.composition import build_host_stores
+from blizzard.runner.composition import build_host_stores, build_settings_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_config import HostConfig
+from blizzard.runner.host_config import HostConfig, RunnerEntry
 from blizzard.runner.host_layout import HostHeld, HostLayout, hold_host
-from blizzard.runner.lifecycle.identity_check import foreign_store_reason
+from blizzard.runner.hosting.model import hosted_beside_the_file
+from blizzard.runner.hosting.names import stored_name
+from blizzard.runner.lifecycle.identity_check import ForeignStore, foreign_store_reason, host_store_verdict
 from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, reset_command
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
@@ -35,13 +39,158 @@ def named_runners(config: IStoreLocation, clock: IClock) -> tuple[str, ...]:
         engine.dispose()
 
 
-def configured_ids(config: RunnerConfig) -> tuple[str, ...]:
-    """The ids every ``[[runner]]`` of ``config``'s host file configures — the runners a store it opens may name."""
+def hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:
+    """The ids of every runner the store hosts, added or retired."""
+    engine = create_engine_from_url(config.db_url)
     try:
-        host = HostConfig.load(config.root, flag_registry=config.flag_registry, strict=config.strict)
-    except ConfigError:
+        return build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners.hosted_runner_ids()
+    finally:
+        engine.dispose()
+
+
+def store_only_entries(config: HostConfig, clock: IClock) -> tuple[RunnerEntry, ...]:
+    """The entry of each runner the store hosts, not retired, that no ``[[runner]]`` names — built from its stored
+    ``name`` — in the order it was hosted; none when the host has no store file yet."""
+    if not HostLayout(config.root).store_path.exists():
         return ()
-    return tuple(entry.id for entry in host.runners if entry.id is not None)
+    named = {entry.id for entry in config.runners if entry.id is not None}
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    engine = create_engine_from_url(config.db_url)
+    try:
+        entries: list[RunnerEntry] = []
+        for runner_id in build_host_stores(engine, errors=errors, clock=clock).hosted_runners.active():
+            if runner_id not in named:
+                identity, settings = build_settings_stores(engine, errors=errors, runner_id=runner_id)
+                entries.append(config.hosted_entry(runner_id, stored_name(identity, settings, runner_id)))
+        return tuple(entries)
+    finally:
+        engine.dispose()
+
+
+def retired_runner_ids(config: HostConfig, clock: IClock) -> frozenset[str]:
+    """The ids of the runners the store holds retired; none when the host has no store file yet."""
+    if not HostLayout(config.root).store_path.exists():
+        return frozenset()
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners.retired()
+    finally:
+        engine.dispose()
+
+
+def resolve_runner(config: HostConfig, runner: str | None, clock: IClock) -> RunnerEntry:
+    """The runner a stopped-host verb acts on, by name or id, else the host's only one: a ``[[runner]]``, or a runner
+    the store hosts that no ``[[runner]]`` names, by its stored ``name``. A ``[[runner]]`` the store holds retired
+    yields to an active store-hosted runner of that name, or — with no ``runner`` — to the store's only one. Raises
+    :class:`ConfigError` as :meth:`HostConfig.sole_runner` does when neither holds it."""
+    try:
+        declared = config.sole_runner(runner)
+    except ConfigError as refused:
+        try:
+            matched = _store_matches(config, runner, clock, declared=None)
+        except Exception:
+            raise refused from None
+        if (found := _sole_match(config, matched)) is None:
+            raise
+        return found
+    try:
+        matched = _store_matches(config, runner, clock, declared=declared)
+    except Exception:
+        return declared
+    return _sole_match(config, matched) or declared
+
+
+def _store_matches(
+    config: HostConfig, runner: str | None, clock: IClock, *, declared: RunnerEntry | None
+) -> list[RunnerEntry]:
+    """The active store-hosted runners ``runner`` may mean in place of ``declared`` — none while ``declared`` is a
+    ``[[runner]]`` the store does not hold retired."""
+    if declared is not None and declared.id not in retired_runner_ids(config, clock):
+        return []
+    stored = store_only_entries(config, clock)
+    if runner is not None:
+        return [entry for entry in stored if runner in (entry.name, entry.id)]
+    if declared is not None or not config.runners:
+        return list(stored)
+    return []
+
+
+def _sole_match(config: HostConfig, matched: list[RunnerEntry]) -> RunnerEntry | None:
+    if len(matched) > 1:
+        held = ", ".join(f"{entry.name} ({entry.id})" for entry in matched)
+        raise ConfigError(f"the store at {config.db_url} hosts several runners ({held}); name one with --runner")
+    return matched[0] if matched else None
+
+
+def store_hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:
+    """The ids of the runners the store hosts through a store door — retired, or hosted beside the host file — none of
+    which a ``[[runner]]`` being joined can be."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        hosted = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners
+        return frozenset(
+            runner_id
+            for runner_id in hosted.hosted_runner_ids()
+            if runner_id in hosted.retired() or hosted_beside_the_file(hosted.facts(runner_id))
+        )
+    finally:
+        engine.dispose()
+
+
+def file_runners(config: RunnerConfig | HostConfig) -> tuple[tuple[str, str], ...]:
+    """Each ``[[runner]]`` of ``config``'s host file that carries an id, as (id, name)."""
+    if isinstance(config, HostConfig):
+        host = config
+    else:
+        try:
+            host = HostConfig.load(config.root, flag_registry=config.flag_registry, strict=config.strict)
+        except ConfigError:
+            return ()
+    return tuple((entry.id, entry.name) for entry in host.runners if entry.id is not None)
+
+
+@dto
+@dataclass(frozen=True)
+class StoreVerdict:
+    """Whose store a guard found: ``foreign`` when it is not the host's, and the reset command its refusals name."""
+
+    foreign: ForeignStore | None
+    reset: str
+    #: The file's identified runners, (id, name), a refusal is worded for.
+    file_runners: tuple[tuple[str, str], ...] = ()
+
+
+def store_reason(verdict: StoreVerdict, runner_id: str) -> str | None:
+    """Why the store ``verdict`` judged is not ``runner_id``'s, or ``None`` when it is the host's."""
+    if verdict.foreign is None:
+        return None
+    return foreign_store_reason(verdict.foreign, runner_id, verdict.reset)
+
+
+def store_refusal(verdict: StoreVerdict) -> str | None:
+    """The refusal a foreign store earns, worded for the file's first identified runner, else the store's first."""
+    if verdict.foreign is None:
+        return None
+    if verdict.file_runners:
+        runner_id, name = verdict.file_runners[0]
+        return f"runner {name} ({runner_id}): {store_reason(verdict, runner_id)}"
+    return f"the store: {store_reason(verdict, verdict.foreign.named[0])}"
+
+
+def judge_store(config: RunnerConfig | HostConfig, clock: IClock) -> StoreVerdict:
+    """Judge the store ``config`` names as the host's or foreign, over its identity rows, its hosted runners and the
+    host file's ids, each read once."""
+    runners = file_runners(config)
+    verdict = host_store_verdict(
+        named_runners(config, clock), hosted_runner_ids(config, clock), {runner_id for runner_id, _ in runners}
+    )
+    return StoreVerdict(foreign=verdict, reset=reset_command(config.root), file_runners=runners)
 
 
 @contextmanager
@@ -51,14 +200,12 @@ def store_write_guard(
     action: str,
     door: Door,
     clock: IClock,
-    runners: Mapping[str, str],
-    configured: tuple[str, ...],
     refuse_foreign: bool,
     held: Callable[[HostHeld], Exception] | None = None,
-) -> Generator[Mapping[str, str], None, None]:
-    """The host directory held while the caller ``action``s, its store current, and ``runners`` (id to name) judged
-    against the store's identity rows; every refusal is a :class:`click.ClickException` naming ``action``. A foreign
-    runner refuses when ``refuse_foreign``, else is yielded (id to reason) for the caller to halt. A host holding the
+) -> Generator[StoreVerdict, None, None]:
+    """The host directory held while the caller ``action``s, its store current, and the store judged the host's or
+    foreign; every refusal is a :class:`click.ClickException` naming ``action``. A foreign store refuses when
+    ``refuse_foreign``, else its verdict is yielded for the caller to halt every runner with. A host holding the
     directory raises ``held``'s exception when the caller gives one, else the refusal to stop it first."""
     layout = HostLayout(config.root)
     with hold_host(
@@ -69,14 +216,7 @@ def store_write_guard(
     ):
         with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):
             ensure_current_revision(config)
-        named = named_runners(config, clock)
-        foreign = {
-            runner_id: reason
-            for runner_id in runners
-            if (reason := foreign_store_reason(named, runner_id, reset_command(config.root), configured=configured))
-            is not None
-        }
-        if foreign and refuse_foreign:
-            runner_id, reason = next(iter(foreign.items()))
-            raise click.ClickException(f"runner {runners[runner_id]} ({runner_id}): {reason}")
-        yield foreign
+        verdict = judge_store(config, clock)
+        if refuse_foreign and (refusal := store_refusal(verdict)) is not None:
+            raise click.ClickException(refusal)
+        yield verdict

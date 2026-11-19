@@ -24,6 +24,7 @@ import httpx2
 import pytest
 from sqlalchemy import Engine, Row, insert, select
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.secrets.value import SecretValue
@@ -34,13 +35,14 @@ from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
-from blizzard.runner.composition import stored_hub_token
+from blizzard.runner.composition import build_host_stores, stored_hub_token
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.sealed_tokens import StoredTokenState
 from blizzard.runner.hub.token_file import assigned_token
@@ -97,6 +99,7 @@ from tests.crash.support import (
 from tests.support.child_launch import env_git
 from tests.support.config_inputs import init_host, load_host_config, load_hub_config
 from tests.support.crash_points import discover_crash_points
+from tests.support.file_runners import add_file_runner
 from tests.support.fleet_world import BUILD_BRANCH, world_repos
 from tests.support.host_files import load_runner_config, with_runner
 from tests.support.hub_tokens import host_hub_tokens
@@ -147,6 +150,7 @@ _DEDICATED_PREFIXES = (
     "egress.",
     "teardown.",
     "ingest.",
+    "hostrunner.",
     "seed.",
     "release.",
     "policy.",
@@ -205,6 +209,9 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 # `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
 # from the source.
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
+# `hostrunner.*` fires inside a running host's add or retire of one of its runners, between the hub's answer, the
+# store's write and the host tick that starts or drains it.
+_HOSTRUNNER_POINTS = [p for p in _ALL_POINTS if p.startswith("hostrunner.")]
 # `seed.*` fires inside a start's token import, within one runner's import and between two runners.
 _SEED_POINTS = [p for p in _ALL_POINTS if p.startswith("seed.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
@@ -306,6 +313,9 @@ _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 # The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
 _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
+# The hosted-runner CI subset: the add's later window, where the runner is in the store and the host has not started it.
+_HOSTRUNNER_CI_SUBSET = ("hostrunner.add.after-rows.before-start",)
+
 # The seed CI subset: the window where one runner is imported whole and the next is not.
 _SEED_CI_SUBSET = ("seed.after-runner.before-next-runner",)
 
@@ -353,6 +363,7 @@ _HOST_LANE_SWEEP = _select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 _INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
+_HOSTRUNNER_SWEEP = _select(_HOSTRUNNER_POINTS, _HOSTRUNNER_CI_SUBSET)
 _SEED_SWEEP = _select(_SEED_POINTS, _SEED_CI_SUBSET)
 _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 _POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
@@ -400,6 +411,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
         | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
+        | set(_select(_HOSTRUNNER_POINTS, _HOSTRUNNER_CI_SUBSET))
         | set(_select(_SEED_POINTS, _SEED_CI_SUBSET))
         | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
         | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
@@ -4268,6 +4280,12 @@ def _cli_ok(hub_url: str, *args: str) -> subprocess.CompletedProcess[str]:
     return done
 
 
+def _add_file_runner(hub_url: str, root: Path, name: str) -> str:
+    """``name`` minted under the host at ``root`` and written to it as a ``[[runner]]`` with its token in ``.env``."""
+    with httpx2.Client(base_url=hub_url, timeout=30.0) as client:
+        return add_file_runner(HttpHostHubClient(client, token=load_host_config(root).host_token.value), root, name)
+
+
 def _host_id(hub: httpx2.Client, root: Path) -> str:
     token = assigned_token((root / ".env").read_text(), HOST_TOKEN_VARIABLE)
     assert token, f"{root} holds no host token"
@@ -4285,7 +4303,7 @@ def _ingest_world(hub: httpx2.Client, hub_url: str, here: Path, there: Path) -> 
     layout = HostLayout(init_host(there, hub_url=hub_url).root)
     layout.config_path.write_text(layout.config_path.read_text().replace('"runner-local"', '"runner-there"', 1))
     _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
-    _cli_ok(hub_url, "add", _INGEST_MOVING, "--project", "default", "--dir", str(there))
+    _add_file_runner(hub_url, there, _INGEST_MOVING)
     # Its identity is recorded in the store as `init` keeps a runner the hub holds.
     _cli_ok(hub_url, "init", str(there), "--hub", hub_url)
     moving_id = load_host_config(there).sole_runner(_INGEST_MOVING).id
@@ -4422,6 +4440,113 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     }, f"{point}: the re-run's end state differs from an uninterrupted ingest's"
 
 
+# --- Hosted runners — a running host's add and retire, between the hub, the store and the host tick ---
+
+_HOSTRUNNER_ADDED = "r2"
+
+
+def _hosting(runner_dir: Path) -> tuple[tuple[str, ...], frozenset[str], frozenset[str]]:
+    """The store's active and retired hosted runners, and the runners it holds a sealed token for."""
+    config = load_host_config(runner_dir)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        host = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock())
+        hosted = host.hosted_runners
+        ids = hosted.hosted_runner_ids()
+        sealed = frozenset(runner_id for runner_id in ids if host.hub_tokens.sealed(runner_id) is not None)
+        return hosted.active(), hosted.retired(), sealed
+    finally:
+        engine.dispose()
+
+
+def _listed(host_url: str) -> dict[str, str]:
+    """Each runner the host lists, by name, and its state."""
+    with httpx2.Client(base_url=host_url, timeout=30.0) as host:
+        answer = host.get("/api/host/runners")
+        answer.raise_for_status()
+        return {item["name"]: item["state"] for item in answer.json()["items"]}
+
+
+def _await_listed(host_url: str, expected: dict[str, str], *, why: str, timeout: float = 90.0) -> None:
+    deadline = time.monotonic() + timeout
+    listed: dict[str, str] = {}
+    while time.monotonic() < deadline:
+        listed = _listed(host_url)
+        if listed == expected:
+            return
+        time.sleep(0.5)
+    raise AssertionError(f"{why}: the host lists {listed}, not {expected}")
+
+
+def _assert_hosting_invariants(runner_dir: Path, hub_dir: Path, *, when: str) -> None:
+    violations = Invariants(
+        runner_db_url=load_host_config(runner_dir).db_url, hub_db_url=load_hub_config(hub_dir).db_url
+    ).run(after_recovery=False)
+    assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
+
+
+@pytest.mark.parametrize("point", _HOSTRUNNER_SWEEP)
+def test_kill9_at_hostrunner_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` of a running host inside its add or retire of a runner leaves a store the invariant checker holds
+    green, and the restarted host settles it: a runner minted at the hub with no row here is inert and never started;
+    one in the store is started and served beside its neighbour; one retired at the hub — recorded here or not — ends
+    drained, its sealed token deleted."""
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
+    hub_url = daemon_url(hub_dir)
+    hub = httpx2.Client(base_url=hub_url, timeout=30.0)
+    procs: list[subprocess.Popen[str]] = []
+    retiring = point.startswith("hostrunner.retire.")
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        write_runner_config(runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=hub_url)
+        first = load_host_config(runner_dir).sole_runner()
+        assert first.id is not None
+        if retiring:
+            # Added while the host is stopped, so the armed start serves it beside the first runner.
+            _cli_ok(hub_url, "add", _HOSTRUNNER_ADDED, "--project", "default", "--dir", str(runner_dir))
+        proc = start_runner(runner_dir, crash_point=point)
+        procs.append(proc)
+        host_url = await_host(runner_dir, proc)
+        if retiring:
+            _await_listed(host_url, {first.name: "serving", _HOSTRUNNER_ADDED: "serving"}, why="before the retire")
+            verb: tuple[str, ...] = ("retire", "--runner", _HOSTRUNNER_ADDED, "--force")
+        else:
+            _await_listed(host_url, {first.name: "serving"}, why="before the add")
+            verb = ("add", _HOSTRUNNER_ADDED, "--project", "default")
+        _runner_cli(hub_url, *verb, "--dir", str(runner_dir))
+        assert wait_death(proc) == -9, f"the armed host did not die at {point}"
+        _assert_hosting_invariants(runner_dir, hub_dir, when=f"at the kill at {point}")
+        active, retired, sealed = _hosting(runner_dir)
+        if point == "hostrunner.add.after-mint.before-rows":
+            assert (active, retired, sealed) == ((first.id,), frozenset(), frozenset({first.id})), point
+
+        restarted = start_runner(runner_dir, crash_point=None)
+        procs.append(restarted)
+        host_url = await_host(runner_dir, restarted)
+        if point == "hostrunner.add.after-mint.before-rows":
+            # The minted runner has no row here: inert, and recovered by retiring it at the hub and adding again.
+            _await_listed(host_url, {first.name: "serving"}, why=f"after {point}")
+            assert _hosting(runner_dir) == ((first.id,), frozenset(), frozenset({first.id})), point
+        elif point == "hostrunner.add.after-rows.before-start":
+            _await_listed(host_url, {first.name: "serving", _HOSTRUNNER_ADDED: "serving"}, why=f"after {point}")
+        else:
+            _await_listed(host_url, {first.name: "serving"}, why=f"after {point}")
+            deadline = time.monotonic() + 90.0
+            while True:
+                active, retired, sealed = _hosting(runner_dir)
+                if active == (first.id,) and len(retired) == 1 and sealed == frozenset({first.id}):
+                    break
+                assert time.monotonic() < deadline, f"after {point} the retired runner is not drained: {retired}"
+                time.sleep(0.5)
+        _assert_hosting_invariants(runner_dir, hub_dir, when=f"after the restart past {point}")
+    finally:
+        hub.close()
+        for started in procs:
+            terminate(started)
+        terminate(hub_proc)
+
+
 # --- Seed — a start's token import seals each runner's deprecated-source token in the host store ---
 
 _SEED_SECOND = "r2"
@@ -4431,7 +4556,7 @@ def _seed_world(hub_url: str, root: Path) -> dict[str, str]:
     """A host registered at the hub with two runners, one's token in ``.env`` and the other's in ``[hub_tokens]`` —
     as a host from before sealed tokens holds them — and no token row. Answers each runner's id and token, by name."""
     _cli_ok(hub_url, "init", str(root), "--hub", hub_url)
-    _cli_ok(hub_url, "add", _SEED_SECOND, "--project", "default", "--dir", str(root))
+    _add_file_runner(hub_url, root, _SEED_SECOND)
     _cli_ok(hub_url, "init", str(root), "--hub", hub_url)
     config = load_host_config(root)
     tokens = {entry.name: HubTokenFile.of(root, hub_token_variable(entry.name)).held() for entry in config.runners}

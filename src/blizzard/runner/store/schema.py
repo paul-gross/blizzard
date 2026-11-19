@@ -1246,6 +1246,32 @@ runner_hub_tokens = Table(
     info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 
+# --- Hosted runners (the runners this host holds, and how each came and went) -------
+# A host row per runner the host ever held, and its append-only facts: the runner is the host's while its newest fact
+# is not ``retired``. Ingest writes the destination's own rows, so neither is carried.
+
+hosted_runners = Table(
+    "hosted_runners",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("added_at", UtcDateTime, nullable=False),  # injected-clock stamp of its first `added` fact
+    Column("added_by", String, nullable=False),  # the actor of that fact
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+hosted_runner_facts = Table(
+    "hosted_runner_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("op", String, nullable=False),  # "added" | "retired"
+    Column("actor", String, nullable=False),
+    Column("door", String, nullable=False),  # seed | cli | page | api | apply | hub
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+Index("ix_hosted_runner_facts_runner_id_id", hosted_runner_facts.c.runner_id, hosted_runner_facts.c.id)
+
 # --- Usage-limit marks and floor clears (the floor's facts) --------------------
 # Append-only; a floor derives from its key's newest mark and newest clear. Host rows per slug, runner rows per runner.
 

@@ -4446,6 +4446,34 @@
         "title": "HostRegistrationView",
         "type": "object"
       },
+      "HostRunnerAddRequest": {
+        "description": "A runner to add to the host: its name, the projects it serves, and any further runner settings by key.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerProjectWrite"
+            },
+            "minItems": 1,
+            "title": "Projects",
+            "type": "array"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "projects"
+        ],
+        "title": "HostRunnerAddRequest",
+        "type": "object"
+      },
       "HostRunnerBindingView": {
         "description": "One project a runner serves, the workspace it runs in, and the agents it runs there at once.",
         "properties": {
@@ -4487,6 +4515,182 @@
         "title": "HostRunnerListResponse",
         "type": "object"
       },
+      "HostRunnerProjectWrite": {
+        "description": "One project a runner being added serves, and the host's workspace it runs in \u2014 the host's only one when\nomitted.",
+        "properties": {
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "HostRunnerProjectWrite",
+        "type": "object"
+      },
+      "HostRunnerRetireRequest": {
+        "description": "A retire of one of the host's runners; ``force`` releases the chunks it holds.",
+        "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "HostRunnerRetireRequest",
+        "type": "object"
+      },
+      "HostRunnerRetiredView": {
+        "description": "A runner just retired: the chunks its hub released from it, and whether it was retired already, so the retire\nwrote nothing.",
+        "properties": {
+          "agents_in_use": {
+            "default": 0,
+            "title": "Agents In Use",
+            "type": "integer"
+          },
+          "already": {
+            "default": false,
+            "title": "Already",
+            "type": "boolean"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/HostRunnerBindingView"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "halted_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Halted Reasons",
+            "type": "array"
+          },
+          "max_agents": {
+            "default": 0,
+            "title": "Max Agents",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PauseStateView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "released_chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Released Chunk Ids",
+            "type": "array"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "served": {
+            "default": false,
+            "title": "Served",
+            "type": "boolean"
+          },
+          "start_failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostRunnerStartFailureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "serving",
+              "halted",
+              "starting",
+              "start_failed",
+              "retired"
+            ],
+            "title": "State",
+            "type": "string",
+            "x-blizzard-open": true
+          },
+          "throttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThrottleStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "runner_id",
+          "name",
+          "state",
+          "served",
+          "halted_reasons",
+          "pause",
+          "throttle",
+          "bindings",
+          "agents_in_use",
+          "max_agents",
+          "start_failure",
+          "released_chunk_ids",
+          "already"
+        ],
+        "title": "HostRunnerRetiredView",
+        "type": "object"
+      },
+      "HostRunnerStartFailureView": {
+        "description": "Why a runner's latest start failed: the startup step it stopped at and the error.",
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "error"
+        ],
+        "title": "HostRunnerStartFailureView",
+        "type": "object"
+      },
       "HostRunnerStateView": {
         "description": "One runner as the host's readiness names it.",
         "properties": {
@@ -4508,7 +4712,10 @@
           "state": {
             "enum": [
               "serving",
-              "halted"
+              "halted",
+              "starting",
+              "start_failed",
+              "retired"
             ],
             "title": "State",
             "type": "string",
@@ -4580,10 +4787,23 @@
             "title": "Served",
             "type": "boolean"
           },
+          "start_failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HostRunnerStartFailureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "state": {
             "enum": [
               "serving",
-              "halted"
+              "halted",
+              "starting",
+              "start_failed",
+              "retired"
             ],
             "title": "State",
             "type": "string",
@@ -4610,7 +4830,8 @@
           "throttle",
           "bindings",
           "agents_in_use",
-          "max_agents"
+          "max_agents",
+          "start_failure"
         ],
         "title": "HostRunnerView",
         "type": "object"
@@ -9453,7 +9674,7 @@
     },
     "/api/host/runners": {
       "get": {
-        "description": "Every runner the host holds \u2014 a served one with its brake, bindings and agents in use, a halted one with its\nreasons. A served runner its identity verdict refuses \u2014 its token refused or naming another runner, or its hub\nnot holding it under the host \u2014 is halted too, naming why.",
+        "description": "Every runner the host holds \u2014 a served one with its brake, bindings and agents in use, a halted one with its\nreasons, one whose latest start failed with its step and error, and one added and not started yet. A served\nrunner its identity verdict refuses \u2014 its token refused or naming another runner, or its hub not holding it under\nthe host \u2014 is halted too, naming why.",
         "operationId": "list_runners_api_host_runners_get",
         "responses": {
           "200": {
@@ -9471,11 +9692,160 @@
         "tags": [
           "host"
         ]
+      },
+      "post": {
+        "description": "Add a runner to this host: its settings judged as a write of them is, then minted at the hub under the host's\ntoken and written to the store in one transaction. The host starts it at its next tick.",
+        "operationId": "add_runner_api_host_runners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRunnerAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no host token, or its hub refused the add"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The runner's settings would not resolve"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The hub could not be reached"
+          }
+        },
+        "summary": "Add Runner",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/runners/{runner_id}/retire": {
+      "post": {
+        "description": "Retire one of this host's runners at its hub \u2014 with ``force``, releasing the chunks it holds \u2014 then record it\nretired; the host drains it at its next tick. Retirement is final: a retired runner's retire writes nothing.",
+        "operationId": "retire_runner_api_host_runners__runner_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostRunnerRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostRunnerRetiredView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "No runner of this host has the id"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The hub refused the retire"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The hub could not be reached"
+          }
+        },
+        "summary": "Retire Runner",
+        "tags": [
+          "host"
+        ]
       }
     },
     "/api/host/runners/{runner_id}/token": {
       "put": {
-        "description": "Seal ``token`` as the runner's hub token at its row's next revision. Any runner a ``[[runner]]`` of this host\nnames counts, halted or served, so a halted runner's token can be set for its next start.",
+        "description": "Seal ``token`` as the runner's hub token at its row's next revision. Any runner the host holds counts \u2014\nserved, halted, or hosted in its store and not started yet \u2014 so a halted runner's token can be set for its next\nstart.",
         "operationId": "set_runner_token_api_host_runners__runner_id__token_put",
         "parameters": [
           {

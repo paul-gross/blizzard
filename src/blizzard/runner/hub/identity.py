@@ -76,16 +76,16 @@ class IWriteRunnerIdentityRepository(IReadRunnerIdentityRepository, Protocol):
         ...
 
 
-class IWriteRetiredRunnerIdentity(Protocol):
-    """Forget a retired runner's identity row — held only by the runner identity service."""
+class IRecordRunnerRetired(Protocol):
+    """Records one runner's retirement as its host's fact, which drains it; its identity row stays."""
 
-    def forget_runner_identity(self) -> bool:
-        """Delete the bound runner's identity unless settings or history remain; return whether a row was deleted."""
+    def record_retired(self) -> bool:
+        """Record the runner retired unless it already is; whether a fact was written."""
         ...
 
 
-class IRunnerIdentityStore(IWriteRunnerIdentityRepository, IWriteRetiredRunnerIdentity, Protocol):
-    """The runner bundle's one identity store: the row's read-write access and its retirement forgetting."""
+class IRunnerIdentityStore(IWriteRunnerIdentityRepository, Protocol):
+    """The runner bundle's one identity store: the row's read-write access."""
 
 
 class ICurrentRunnerIdentity(Protocol):

@@ -8,26 +8,31 @@ import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
+from blizzard.foundation.secrets.sealing import SealedValue
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.runner.cli.runtime import seed_runners
-from blizzard.runner.composition import build_host_process
+from blizzard.runner.composition import build_host_process, build_runner_admission
 from blizzard.runner.harness.adapter import HarnessVersionChangedError
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
 from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSet, HarnessSets, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
+from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostedRunnerOp, HostingFact, RunnerAdmission
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop_wiring import RunnerStepper
 from blizzard.runner.settings_reader import RunnerSettingsReader
+from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, UnresolvableSettings, write_minimal_host
-from tests.support.runner_fakes import FakeHub, make_store, migrated_store_at
+from tests.support.hub_tokens import host_hub_tokens
+from tests.support.runner_fakes import FakeHub, make_store, migrated_store_at, runner_store_errors
 from tests.support.runner_mint import new_mint
 
 
@@ -49,7 +54,7 @@ def test_legacy_seed_is_durable_and_canonical_edits_override_it(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert ready and not halted
     settings = RunnerSettingsStore(base.connections, SystemClock())
     alias = legacy.split(" = ")[0]
@@ -75,7 +80,7 @@ def test_legacy_seed_is_durable_and_canonical_edits_override_it(
     )
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner=legacy.replace(value, "changed") + "\n")
     reloaded = load_host_config(tmp_path)
-    ready, halted = seed_runners(reloaded, list(reloaded.runners), clock=SystemClock())
+    ready, halted = seed_runners(reloaded, clock=SystemClock())
     assert ready and not halted
     assert settings.snapshot().entries[canonical] == Entry(None, at_default=True)
     section = ready[0].config.harness_sections.of(CLAUDE_CODE_HARNESS_ID)
@@ -94,7 +99,7 @@ def test_live_settings_rebuild_and_failed_prompt_retry(tmp_path: Path, monkeypat
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     try:
@@ -147,7 +152,7 @@ def test_snapshot_resolution_failure_reports_revision_and_recovers(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -191,7 +196,7 @@ def test_recovery_read_failure_keeps_context_and_set_atomic(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, _ = seed_runners(host, clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -280,7 +285,7 @@ def test_disabled_session_recovers_when_binary_becomes_available(
         spawned_at=now,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-b"),
     )
-    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, _ = seed_runners(host, clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -333,7 +338,7 @@ def test_recovery_retry_preserves_enabled_opencode_version_hold(
         spawned_at=now,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "session-a"),
     )
-    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, _ = seed_runners(host, clock=SystemClock())
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
     stepper = RunnerStepper(runner.config, process_graph=runner)
@@ -404,7 +409,7 @@ def test_recovery_retries_unchanged_binary_version_after_transient_failure(
         spawned_at=now,
         session=SessionReference("opencode", "session-a"),
     )
-    ready, _ = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, _ = seed_runners(host, clock=SystemClock())
     clock = ManualMonotonicClock()
     graph = build_host_process(host, ready, monotonic_clock=clock)
     runner = graph.runners[0]
@@ -453,7 +458,7 @@ def test_registration_keeps_pass_snapshot_across_a_write_and_retries_failed_rebu
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -518,7 +523,7 @@ def test_stored_launch_settings_reach_replacement_harness_without_mutating_old_s
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -555,7 +560,7 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     entry = host.runners[0]
     assert entry.own is not None
     base = make_store(url, TEST_RUNNER_ID)
-    ready, halted = seed_runners(host, [entry], clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert ready and not halted and ready[0].config.agents == 3
     settings = RunnerSettingsStore(base.connections, SystemClock())
     assert settings.snapshot().entries == {}
@@ -573,14 +578,14 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
         assert settings.snapshot().entries["agents"] == Entry(3)
     finally:
         graph.close()
-    ready, halted = seed_runners(host, [entry], clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted and ready[0].config.agents == 3
     settings = RunnerSettingsStore(base.connections, SystemClock())
     snapshot = settings.snapshot()
     assert snapshot.entries["agents"] == Entry(3)
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\n')
     edited = load_host_config(tmp_path)
-    ready, halted = seed_runners(edited, list(edited.runners), clock=SystemClock())
+    ready, halted = seed_runners(edited, clock=SystemClock())
     assert not halted and ready[0].config.agents == 3
     settings.write(
         Change("edit", unsets=frozenset({"agents"})),
@@ -591,7 +596,7 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     )
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\n')
     edited = load_host_config(tmp_path)
-    ready, halted = seed_runners(edited, list(edited.runners), clock=SystemClock())
+    ready, halted = seed_runners(edited, clock=SystemClock())
     assert not halted and ready[0].config.agents == 0
     assert settings.snapshot().entries["agents"] == Entry(None, at_default=True)
 
@@ -605,16 +610,16 @@ def test_invalid_initial_seed_and_boot_binding_are_refused(tmp_path: Path, monke
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not ready and "agents" in halted[0].errors[0]
     assert not RunnerSettingsStore(base.connections, SystemClock()).snapshot().entries
 
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
     host = load_host_config(tmp_path)
-    assert seed_runners(host, list(host.runners), clock=SystemClock())[0]
+    assert seed_runners(host, clock=SystemClock())[0]
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\nsubscription = "missing"\n')
     host = load_host_config(tmp_path)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not ready and "subscription" in halted[0].errors[0]
 
 
@@ -631,7 +636,7 @@ def test_seed_validates_related_authored_settings_as_one_configuration(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     assert ready[0].config.throttle is not None
     assert ready[0].config.throttle.budget is not None
@@ -660,7 +665,7 @@ def test_stored_worker_profiles_may_diverge_without_changing_host_tools(
         RunnerIdentityStore(base.connections).record_runner_identity(
             RunnerIdentity(entry.id, entry.name, datetime.now(UTC))
         )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert len(ready) == 2 and not halted
     for entry, path in zip(host.runners, ("/stored-one", "/stored-two"), strict=True):
         assert entry.id is not None
@@ -673,8 +678,97 @@ def test_stored_worker_profiles_may_diverge_without_changing_host_tools(
             actor="test",
         )
     reloaded = load_host_config(tmp_path)
-    ready, halted = seed_runners(reloaded, list(reloaded.runners), clock=SystemClock())
+    ready, halted = seed_runners(reloaded, clock=SystemClock())
     assert not halted
     assert [runner.config.worker_path_prepend for runner in ready] == [("/stored-one",), ("/stored-two",)]
     assert reloaded.host_view().worker_path_prepend == ("/file",)
     assert reloaded.host_view().worker_env_passthrough == ("FILE_VAR",)
+
+
+def _hosted(url: str) -> HostHostedRunnerStore:
+    return HostHostedRunnerStore(make_store(url).connections)
+
+
+def test_an_upgraded_store_is_hosted_from_its_file_once_and_runs_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner="agents = 3\n")
+    host = load_host_config(tmp_path)
+    base = make_store(url, TEST_RUNNER_ID)
+    RunnerIdentityStore(base.connections).record_runner_identity(
+        RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
+    )
+    assert _hosted(url).hosted_runner_ids() == frozenset()
+
+    first, halted = seed_runners(host, clock=SystemClock())
+    again, _ = seed_runners(host, clock=SystemClock())
+
+    assert not halted
+    assert [(item.id, item.config.name, item.config.agents) for item in first] == [
+        (TEST_RUNNER_ID, host.runners[0].name, 3)
+    ]
+    assert [(item.id, item.config.agents) for item in again] == [(TEST_RUNNER_ID, 3)]
+    assert [(fact.op, fact.door, fact.actor) for fact in _hosted(url).facts(TEST_RUNNER_ID)] == [
+        (HostedRunnerOp.ADDED, SEED, SEED)
+    ]
+
+
+def test_a_retired_runners_file_entry_is_warned_about_and_not_started(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"')
+    host = load_host_config(tmp_path)
+    make_store(url, TEST_RUNNER_ID)
+    hosted = _hosted(url)
+    hosted.host([TEST_RUNNER_ID], HostingFact(actor=SEED, door=SEED, at=datetime.now(UTC)))
+    hosted.append_fact(
+        TEST_RUNNER_ID, HostedRunnerOp.RETIRED, HostingFact(actor=OPERATOR, door=CLI, at=datetime.now(UTC))
+    )
+
+    ready, halted = seed_runners(host, clock=SystemClock())
+
+    assert ready == [] and halted == []
+    assert (
+        f"runner runner-local ({TEST_RUNNER_ID}) is retired; its `[[runner]]` is no longer read — remove it"
+        in capsys.readouterr().out
+    )
+    assert [fact.op for fact in _hosted(url).facts(TEST_RUNNER_ID)] == [HostedRunnerOp.ADDED, HostedRunnerOp.RETIRED]
+
+
+def test_a_hosted_runner_the_file_never_names_is_seeded_from_its_stored_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
+    url = f"sqlite:///{tmp_path / 'host.db'}"
+    write_minimal_host(tmp_path, top=f'db_url = "{url}"')
+    host = load_host_config(tmp_path)
+    store = make_store(url, "rn_store_only")
+    with host_hub_tokens(tmp_path, url) as tokens:
+        tokens.seal_if_absent("rn_store_only", SecretValue("store-only-token"))
+    now = datetime.now(UTC)
+    build_runner_admission(
+        store.engine, errors=runner_store_errors(), runner_id="rn_store_only", clock=SystemClock()
+    ).admit(
+        RunnerAdmission(
+            identity=RunnerIdentity("rn_store_only", "night-1", now),
+            entries={"name": Entry("night-1"), "projects": Entry([]), "agents": Entry(2)},
+            actor="ada",
+            door="api",
+            at=now,
+        ),
+        SealedValue(key_id="unused", ciphertext=b"unused", nonce=b"unused"),
+    )
+
+    ready, halted = seed_runners(host, clock=SystemClock())
+
+    assert not halted
+    assert [(item.id, item.config.name, item.config.runner_id) for item in ready] == [
+        (TEST_RUNNER_ID, "runner-local", TEST_RUNNER_ID),
+        ("rn_store_only", "night-1", "rn_store_only"),
+    ]
+    assert ready[1].config.agents == 2
+    assert ready[1].config.hub_token == "store-only-token"

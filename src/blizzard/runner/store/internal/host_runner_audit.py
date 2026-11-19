@@ -8,6 +8,7 @@ read here."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -15,7 +16,13 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.store.schema import binding_releases, env_bindings, runner_identity
+from blizzard.runner.store.schema import (
+    binding_releases,
+    env_bindings,
+    hosted_runners,
+    runner_identity,
+    runner_setting_entries,
+)
 from blizzard.runner.store.scoped import RUNNER_COLUMN, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
 
 
@@ -39,6 +46,36 @@ class RunnerAudit:
         """The ids of the runners the store's identity rows name, oldest first."""
         with self.connect() as conn:
             rows = conn.execute(sa.select(runner_identity.c.runner_id).order_by(runner_identity.c.id)).all()
+        return tuple(str(row.runner_id) for row in rows)
+
+    def stored_names(self) -> dict[str, str]:
+        """Each runner's stored name, by id: its non-blank ``name`` settings entry, else its identity row's name."""
+        entries = runner_setting_entries
+        with self.read_transaction() as conn:
+            named = {
+                str(row.runner_id): str(row.runner_name)
+                for row in conn.execute(sa.select(runner_identity.c.runner_id, runner_identity.c.runner_name))
+            }
+            for row in conn.execute(
+                sa.select(entries.c.runner_id, entries.c.value).where(
+                    entries.c.key == "name", entries.c.value.is_not(None)
+                )
+            ):
+                value = json.loads(row.value)
+                if isinstance(value, str) and value.strip():
+                    named[str(row.runner_id)] = value.strip()
+        return named
+
+    def unhosted_runners(self) -> tuple[str, ...]:
+        """The runners an identity row names and no hosted row accounts for, once the store hosts any runner; none on
+        a store hosting no runner yet."""
+        with self.read_transaction() as conn:
+            if not conn.execute(sa.select(sa.func.count()).select_from(hosted_runners)).scalar_one():
+                return ()
+            identity = runner_identity.c.runner_id
+            rows = conn.execute(
+                sa.select(identity).where(identity.not_in(sa.select(hosted_runners.c.runner_id))).order_by(identity)
+            ).all()
         return tuple(str(row.runner_id) for row in rows)
 
     def held_workspace_bindings(self, workspace_id: str) -> list[EnvBinding]:

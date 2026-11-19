@@ -594,16 +594,28 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
         timings.initMs = Date.now() - started;
 
         started = Date.now();
-        for (const entry of (profile.runner ?? []) as TomlTable[]) {
-          const name = entry.name as string;
-          if (name === defaultRunner) continue;
-          const projects = ((entry.projects ?? []) as TomlTable[]).flatMap((item) => [
-            '--project', item.project as string,
-            ...(item.workspace === undefined ? [] : ['--workspace', item.workspace as string]),
-          ]);
-          const agents = entry.agents === undefined ? [] : ['--agents', String(entry.agents)];
-          await run(runner, ['add', name, '--dir', dir, ...(projects.length > 0 ? projects : ['--project', 'default']), ...agents], home);
-          for (const entry of runnerEntries(readHostFile(dir))) ctx.ledger.add('runner', entry.id);
+        // Each further runner is a `[[runner]]` of the host file, joined by `init` run again as a scaffold is — one
+        // scaffold per run, each joining beside the runners the runs before it joined.
+        const further = adopted === undefined ? ((profile.runner ?? []) as TomlTable[]).filter((entry) => entry.name !== defaultRunner) : [];
+        for (const entry of further) {
+          const file = readHostFile(dir);
+          const entries = (file.runner ?? []) as TomlTable[];
+          const subscription = entries[0]?.subscription;
+          const projects = ((entry.projects ?? []) as TomlTable[]).map((item) => ({
+            project: item.project as string,
+            workspace: (item.workspace as string | undefined) ?? 'workspace-local',
+          }));
+          entries.push({
+            name: entry.name as string,
+            projects: projects.length > 0 ? projects : [{ project: 'default', workspace: 'workspace-local' }],
+            // As `init`'s own scaffold runs one agent unless told otherwise.
+            agents: entry.agents ?? 1n,
+            ...(subscription === undefined ? {} : { subscription }),
+          });
+          file.runner = entries;
+          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
+          await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
+          for (const joined of runnerEntries(readHostFile(dir))) ctx.ledger.add('runner', joined.id);
         }
         timings.addMs = Date.now() - started;
       } else {

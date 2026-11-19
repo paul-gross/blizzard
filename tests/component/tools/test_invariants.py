@@ -512,6 +512,36 @@ def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp
     assert runner_invariants(engine).run() == []
 
 
+def _host(conn: sa.Connection, runner_id: str) -> None:
+    conn.execute(sa.insert(runner.hosted_runners).values(runner_id=runner_id, added_at=NOW, added_by="seed"))
+    conn.execute(
+        sa.insert(runner.hosted_runner_facts).values(
+            runner_id=runner_id, recorded_at=NOW, op="added", actor="seed", door="seed"
+        )
+    )
+
+
+def test_a_store_hosting_every_runner_its_identity_rows_name_holds_identity_row_hosted(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        _host(conn, FIXTURE_RUNNER_ID)
+        _host(conn, "rn_api_added")
+    assert runner_invariants(engine).run() == []
+
+
+def test_an_identity_row_with_no_hosted_row_on_a_hosting_store_is_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        _host(conn, "rn_other")
+    details = {v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:identity-row-hosted"}
+    assert details == {f"runner {FIXTURE_RUNNER_ID} has an identity row and no hosted row"}
+
+
+def test_a_store_hosting_no_runner_holds_identity_row_hosted_vacuously(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    assert not [v for v in runner_invariants(engine).run() if v.invariant == "runner:identity-row-hosted"]
+
+
 def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:

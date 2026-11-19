@@ -27,6 +27,7 @@ function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
     agents_in_use: 0,
     max_agents: 4,
+    start_failure: null,
   };
 }
 

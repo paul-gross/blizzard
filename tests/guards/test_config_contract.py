@@ -116,16 +116,15 @@ def test_a_fixed_variable_has_no_name_rule_and_the_hub_declares_no_env() -> None
 
 #: Modules under ``src/blizzard`` that write ``.env`` or create ``runners/<name>``, with the verbs the contract names.
 _ENV_WRITER_MODULES: dict[str, set[str]] = {
-    "runner/cli/runners.py": {"add"},
     "runner/cli/runtime.py": {"init", "host"},
     "runner/transfer/ingest.py": {"ingest"},
     "runner/hub/bootstrap.py": {"init"},
     "runner/hub/host_bootstrap.py": {"host"},
 }
 #: Ingest writes no ``.env`` line here; it removes the moving runner's line from the source's.
-_ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.remove(", "HubTokenFile.of(")
+_ENV_WRITE_MARKERS = (".write(issued.token)", "tokens.remove(", "HubTokenFile.of(")
 _RUNNER_DIR_MARKERS = ("RUNNERS_DIRNAME / ", "runners_dir / ")
-_RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/transfer/ingest.py": {"ingest"}}
+_RUNNER_DIR_MODULES = {"runner/transfer/ingest.py": {"ingest"}}
 
 
 def _modules_containing(markers: tuple[str, ...]) -> set[str]:

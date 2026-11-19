@@ -35,6 +35,7 @@ function hostRunner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerAp
     bindings: [],
     agents_in_use: 0,
     max_agents: 4,
+    start_failure: null,
     ...overrides,
   };
 }

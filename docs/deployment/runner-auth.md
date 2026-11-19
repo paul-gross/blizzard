@@ -106,11 +106,11 @@ re-added sets the store aside once and adds every runner again over it. A runner
 belongs to a runner stops the same way an unknown token does: put that runner's token back, or re-run init with
 `--allow-readd`.
 
-A kept runner whose store names a runner that neither it nor another `[[runner]]` of the host is stops before init
-writes anything. When the store also names one of the host's runners, it is the wrong file: stop and restore the right
-store, since a reset would drop the history of the runner it holds. When it names only other runners, restore that
-runner's token, or reset the store with `blizzard runner store reset <dir>`, which drops every fact below the hub's
-high-water mark, so only for a runner with no history.
+A kept runner whose store names a runner that is neither it, another `[[runner]]` of the host, nor a runner the store
+hosts stops before init writes anything. When the store also names one of the host's runners, it is the wrong file: stop
+and restore the right store, since a reset would drop the history of the runner it holds. When it names only other
+runners, restore that runner's token, or reset the store with `blizzard runner store reset <dir>`, which drops every
+fact below the hub's high-water mark, so only for a runner with no history.
 
 A runner's token variable is derived from its `name`, as above; the host file has no key to rename it. Init reads the
 token a runner holds from the host's store first, then from the first of the process environment's
@@ -142,8 +142,8 @@ no stored token yet: the first of `BZ_HUB_TOKEN_<NAME>` in the process environme
 token is stored those sources are no longer read for it, and editing them changes nothing: the host warns at start, once
 per runner, while one still holds a token, naming `blizzard runner token set`. They are deprecated, and read only by
 that import. A runner with neither a stored token nor one to import halts, naming `blizzard runner token set`.
-`blizzard runner add` and `blizzard runner init` still write a token they are issued to `.env`, and the next start
-imports it.
+`blizzard runner init` still writes a token it is issued to `.env`, and the next start imports it; `blizzard runner add`
+seals the token it is issued in the store directly.
 
 `blizzard runner token set [--runner <name|id>] [<dir>|--dir <dir>]` replaces a runner's token. It reads the value from
 stdin only, strips a trailing newline, refuses an empty one, and never prints it:
@@ -298,34 +298,52 @@ reports itself as it always has. A registered host:
 
 ### Adding and retiring a host's runners
 
-`blizzard runner add <name> --project <p>` adds a runner to a registered host under the host's own token, with no hub
-sign-in: the hub mints the runner under the host (`POST /api/fleet/host/runners`), then `add` writes its token to the
-host directory's `.env` as `BZ_HUB_TOKEN_<NAME>`, creates `runners/<name>/`, and appends its `[[runner]]` with the id
-the hub minted — in that order, so an entry never exists without its token. The next start seals that token in the
-host's store ([The host's token store](#the-hosts-token-store)). `--project` repeats; `--workspace` names the host's
-workspace each project runs in — once for all, or once per `--project` — and defaults to the host's only one; `--agents`
-likewise, defaulting to `1`. A `--workspace` the host file does not declare, or a name a `[[runner]]` already holds,
-refuses the add before it reaches the hub. A running host starts the new runner at its next start, and `add` says so.
+A host's runners are records in its store: each runner the host serves has a `hosted_runners` row, and an append-only
+history of facts says when it was added and when it was retired. The store, not the host file, says which runners are
+the host's, and neither verb below writes `.env` or `blizzard-host.toml`, nor creates `runners/<name>/`.
 
-`blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, then removes its
-`[[runner]]`. Its identity stays with any retained settings or history. Otherwise, with the host stopped, `retire`
-forgets the row before removing the `[[runner]]`. With the host running, `retire` writes nothing to the store: the host
-halts the runner at its next tick and forgets the row only if no settings or history remain. A retained identity no
-longer in the host file triggers the wrong-store guard on a later start or `init`. Stop the host and run
-`blizzard runner store reset <dir> --runner <retired-runner-id>` to archive that runner's identity and scoped rows
-before starting the configured siblings; its outbox counters stay in the original store. This cleanup does not reinstate
-a retired runner; archive ingest is not a way to restore one. A runner still holding chunks refuses the retire, naming
-them; `--force` releases them. The runner's other rows stay in the host's store, inert. A runner retired or reinstated
-at the hub while `retire` is deciding refuses it with a `409`; run it again
-([control-verbs.md](./control-verbs.md#retire-and-reinstate)). `--runner` also takes the id of a runner the host file no
-longer configures but the store's identity row still names, such as one a host crash left behind: with the host stopped
-it retires that runner at the hub and applies the same retention rule; a running host refuses it, naming that it must be
-stopped first. Both verbs refuse a host holding no host token, naming `blizzard hub runner-host add`.
+`blizzard runner add <name> --project <p>` adds a runner to a registered host under the host's own token, with no hub
+sign-in. It first judges the name, projects and settings as a settings write would, and refuses every failing key before
+the hub is asked. A name another of the host's active runners holds is refused the same way. The hub then mints the
+runner under the host (`POST /api/fleet/host/runners`), and `add` writes its identity, first settings revision, hosted
+row, `added` fact and sealed token in one store transaction. `--project` repeats; `--workspace` names the host's
+workspace each project runs in — once for all, or once per `--project` — and defaults to the host's only one; `--agents`
+likewise, defaulting to `1`. A `--workspace` the host file does not declare refuses the add before it reaches the hub.
+
+`blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, with `--force`
+releasing the chunks it holds, then records the `retired` fact. Without `--force`, a runner still holding chunks is
+refused by the hub, which names them. A runner retired or reinstated at the hub while `retire` is deciding refuses it
+with a `409`; run it again ([control-verbs.md](./control-verbs.md#retire-and-reinstate)). The verb prints the chunks the
+retire released. Retirement is final: the runner's identity, settings and history stay in the store, a retire of a
+retired runner asks and writes nothing, saying it is already retired, and no add or start brings it back.
+
+Both verbs take one of two paths, and say which:
+
+- **On a running host** they call its routes over the socket — `POST /api/host/runners` and
+  `POST /api/host/runners/{runner_id}/retire` ([runner-doors.md](./runner-doors.md#the-hosts-routes-and-each-runners)).
+  The host starts an added runner at its next tick, and drains a retired one at its next tick, while the runners beside
+  it keep ticking: the drained runner's routes are withdrawn, its workers drained, and its sealed token deleted.
+- **On a stopped host** they write the same transaction to the store directly, under the store's write guard. An added
+  runner starts at the host's next start, and the file's runners are hosted first, as that start would. `--runner` also
+  takes the id of a runner the store holds retired.
+
+A retired runner's `[[runner]]` is no longer read. A stopped-host retire leaves it in the file and says to remove it;
+each start warns of it, naming the runner, until it is removed. Removing a `[[runner]]` from the file no longer retires
+its runner: retire it with the verb. `init` records each runner it joins the same way, with a hosted row and an `added`
+fact under the `cli` door and the `init` actor. A runner retired at the hub by another path, such as
+`blizzard hub runner retire`, is recorded retired by the host at its next tick and drained the same way.
+
+A runner the hub minted is written to the store in a separate step: a host that crashes between the two leaves a runner
+the hub holds as never connected and the host does not hold. It is inert; retire it at the hub with
+`blizzard hub runner retire <id>` and add it again. A start that fails is listed as `start_failed`, naming the step and
+the error, and is retried at the next tick. Both verbs refuse a host holding no host token, naming
+`blizzard hub runner-host add`.
 
 `GET /api/host/registration` reads where the host stands — `unregistered`, `pending` until its first report,
 `registered` with its host id and tenant, `refused`, `no_hosts`, or `unreachable` — with the facts waiting on its lane.
 The host page of the panel shows it. A served runner its hub halts is listed by `GET /api/host/runners` as `halted`,
-naming why, and its own views still read.
+naming why, and its own views still read. A runner the store hosts that the host has not started yet is listed as
+`starting`, and one whose latest start failed as `start_failed`, with the step and the error.
 
 ### Ingesting a runner from another store
 

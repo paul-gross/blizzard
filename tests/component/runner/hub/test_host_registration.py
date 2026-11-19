@@ -73,7 +73,7 @@ class _Retirement:
     retired: bool = False
     raises: bool = False
 
-    def forget_if_retired(self) -> bool:
+    def record_if_retired(self) -> bool:
         self.asked += 1
         if self.raises:
             raise RuntimeError("the store is unreadable")
@@ -361,7 +361,9 @@ def test_a_runner_the_host_does_not_hold_is_asked_whether_the_hub_retired_it_and
     assert released.identity_verdict.verdict().state is IdentityState.NOT_HELD
 
 
-def test_a_failed_forget_of_one_runner_reaches_neither_the_others_standing_nor_the_next_tick(tmp_path: Path) -> None:
+def test_a_failed_retirement_record_of_one_runner_reaches_neither_the_others_standing_nor_the_next_tick(
+    tmp_path: Path,
+) -> None:
     broken, other = _runner("rn_a"), _runner("rn_b")
     broken.retirement.raises = True
     world = _world(tmp_path, broken, other)

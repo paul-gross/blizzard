@@ -230,27 +230,6 @@ def runner_value(table: str, key: tuple[str, ...], *, strict: bool) -> object:
     return node.get(key[-1])
 
 
-def remove_runner(layout: HostLayout, runner_name: str, *, strict: bool) -> None:
-    """Remove the ``[[runner]]`` named ``runner_name`` whole: its header, its keys, and every ``[runner.*]``
-    sub-table under it. Comments leading into the next table stay with that table."""
-    text = layout.config_path.read_text()
-    before = _parsed(layout, text)
-    position = _position(layout, before, "runner", "name", runner_name, strict=strict)
-    lines = text.splitlines(keepends=True)
-    statements = _statements(lines)
-    header, end = _runner_span(lines, statements, position)
-    while end > header and (not lines[end - 1].strip() or lines[end - 1].lstrip().startswith("#")):
-        end -= 1
-    # The blank lines that set the removed table off from the one before it go with it.
-    while header > 0 and not lines[header - 1].strip():
-        header -= 1
-    expected = copy.deepcopy(before)
-    del expected["runner"][position]
-    if not expected["runner"]:
-        del expected["runner"]
-    _replace(layout, text, "".join(lines[:header] + lines[end:]), expected, what=f"[[runner]] {runner_name!r}")
-
-
 def _parsed(layout: HostLayout, text: str) -> dict[str, Any]:
     return decode_host_text(text, what=str(layout.config_path))
 

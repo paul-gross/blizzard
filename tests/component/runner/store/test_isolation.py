@@ -26,11 +26,14 @@ import pytest
 import sqlalchemy as sa
 
 import blizzard.runner as runner_pkg
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.settings_record.vocabulary import Change
+from blizzard.foundation.secrets.sealing import SealedValue
+from blizzard.foundation.settings_record.vocabulary import Change, Entry
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.auth.tokens import IWriteTokenRepository
+from blizzard.runner.composition import build_runner_admission
 from blizzard.runner.environments.repository import BindingCompletion, IWriteEnvironmentRepository
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
@@ -39,8 +42,16 @@ from blizzard.runner.harness.observation import ExecutionObservation
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
+from blizzard.runner.hosting.model import RunnerAdmission
+from blizzard.runner.hosting.ports import (
+    IWriteAdmittedHosting,
+    IWriteAdmittedHubToken,
+    IWriteAdmittedIdentity,
+    IWriteAdmittedSettings,
+    IWriteHostedRunnerRepository,
+)
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
-from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
+from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.hub.sealed_tokens import IWriteHubTokenRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
@@ -64,8 +75,7 @@ from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
-from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
     FloorClear,
@@ -77,7 +87,11 @@ from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
 from blizzard.runner.transcripts.ledger import IWriteTranscriptLedgerRepository
-from blizzard.runner.transfer.rows import IWriteCarriedHubTokenRepository, IWriteHostIngestRepository
+from blizzard.runner.transfer.rows import (
+    IWriteCarriedHosting,
+    IWriteCarriedHubTokenRepository,
+    IWriteHostIngestRepository,
+)
 from blizzard.runner.usage.repository import (
     IWriteCredentialRenewalRepository,
     IWriteExternalUsageAttemptRepository,
@@ -604,13 +618,13 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
             harness_id=CLAUDE_CODE_HARNESS_ID, status="failed", error="boom", recorded_at=_at(52)
         )
     ),
-    # Last: it deletes runner A's identity row, which no recipe above may depend on afterwards.
-    (IWriteRetiredRunnerIdentity, "forget_runner_identity"): lambda w: RunnerIdentityStore(
-        RunnerStoreConnections(w.engine, RunnerStoreErrorFactory(get_logger("test")), RUNNER_A)
-    ).forget_runner_identity(),
 }
 
 _HOST_ONLY = "writes only host-scoped tables, which carry no runner"
+_ADMITTED = (
+    "runs only on an admission's transaction, bound to the admitted runner — "
+    "test_an_admission_writes_none_of_another_runners_rows judges it"
+)
 
 #: Runner ``IWrite*`` methods that write no runner-scoped row, each reasoned.
 WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
@@ -630,6 +644,16 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHubTokenRepository, "replace"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteHubTokenRepository, "drop"): _HOST_ONLY + " (runner_hub_tokens)",
     (IWriteCarriedHubTokenRepository, "seal_carried_locked"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteHostedRunnerRepository, "host"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
+    (IWriteHostedRunnerRepository, "append_fact"): _HOST_ONLY + " (hosted_runner_facts)",
+    (IWriteHostedRunnerRepository, "drop"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
+    (IWriteAdmittedHosting, "host_admitted_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
+    (IWriteAdmittedHubToken, "seal_admitted_locked"): _HOST_ONLY + " (runner_hub_tokens)",
+    (IWriteAdmittedIdentity, "record_admitted_locked"): _ADMITTED + " (runner_identity)",
+    (IWriteAdmittedSettings, "create_admitted_locked"): _ADMITTED
+    + " (runner_settings, runner_setting_entries, runner_setting_changes)",
+    (IWriteCarriedHosting, "host_carried_locked"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
+    (IWriteHostedRunnerRepository, "record_retired"): _HOST_ONLY + " (hosted_runners, hosted_runner_facts)",
     (IWriteHostLaneMarkRepository, "record_host_high_water"): _HOST_ONLY
     + " (host_high_water_seen, host_outbound_buffer)",
     (IWriteCredentialRenewalRepository, "claim_credential_renewal"): _HOST_ONLY + " (credential_renewal_claims)",
@@ -683,3 +707,26 @@ def test_runner_a_writes_change_none_of_runner_b_rows(world: RunnerWorld) -> Non
 
     assert _rows_of(world.engine, RUNNER_B) == b_before
     assert _rows_of(world.engine, RUNNER_A) != a_before
+
+
+def test_an_admission_writes_none_of_another_runners_rows(world: RunnerWorld) -> None:
+    _copy_as_runner_b(world.engine)
+    a_before, b_before = _rows_of(world.engine, RUNNER_A), _rows_of(world.engine, RUNNER_B)
+    at = _at(60)
+
+    build_runner_admission(
+        world.engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id="rn_new", clock=FixedClock(at)
+    ).admit(
+        RunnerAdmission(
+            identity=RunnerIdentity("rn_new", "night-1", at),
+            entries={"name": Entry("night-1")},
+            actor="ada",
+            door="api",
+            at=at,
+        ),
+        SealedValue(key_id="k1", ciphertext=b"c", nonce=b"n"),
+    )
+
+    assert _rows_of(world.engine, RUNNER_A) == a_before
+    assert _rows_of(world.engine, RUNNER_B) == b_before
+    assert _rows_of(world.engine, "rn_new")["runner_identity"]

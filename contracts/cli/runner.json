@@ -1,7 +1,7 @@
 {
   "commands": {
     "add": {
-      "help": "Add runner NAME to this registered host at its hub, with no hub sign-in: its token goes to the host's `.env`\nas BZ_HUB_TOKEN_<NAME> and its `[[runner]]` to the host file. A running host starts it at its next start.\n\nRefused, with nothing added, on a host holding no host token, or when NAME or a --workspace is not one the host\nfile allows.",
+      "help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its\nidentity, settings and sealed token. A running host is asked over its socket and starts it at its next tick; a\nstopped host's store is written directly, and it starts at the host's next start. Neither `.env` nor the host file\nis written.\n\nRefused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,\nor when a --workspace is not one the host declares.",
       "params": [
         {
           "hidden": false,
@@ -64,7 +64,7 @@
         }
       ],
       "path": "runner add",
-      "short_help": "Add runner NAME to this registered host at its hub, with no hub sign-in: its token goes to the host's `.env` as BZ_HUB_TOKEN_<NAME> and its `[[runner]]` to the host file."
+      "short_help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its identity, settings and sealed token."
     },
     "analytics": {
       "commands": {
@@ -1604,7 +1604,7 @@
       "short_help": "Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current node, with its retry budget carried over."
     },
     "retire": {
-      "help": "Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.\nIts identity is retained with settings and history; otherwise the stopped host forgets it immediately and a\nrunning host forgets it when it halts the runner at its next tick.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "help": "Retire one of this registered host's runners at its hub, then record it retired in the host store. Retirement is\nfinal. Its identity, settings and history are kept. A running host is asked over its socket and drains the runner\nat its next tick; a stopped host's store is written directly. Neither `.env` nor the host file is written: a\n`[[runner]]` of a retired runner is no longer read, and the host warns of it until it is removed.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -1619,7 +1619,7 @@
           "type": "text"
         },
         {
-          "help": "The host's runner to retire, by name or id; or, with the host stopped, the id of a runner only the store still names.",
+          "help": "The host's runner to retire, by name or id; one the store holds retired, by id.",
           "hidden": false,
           "kind": "option",
           "name": "runner",
@@ -1644,7 +1644,7 @@
         }
       ],
       "path": "runner retire",
-      "short_help": "Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file."
+      "short_help": "Retire one of this registered host's runners at its hub, then record it retired in the host store."
     },
     "scope": {
       "commands": {

@@ -65,7 +65,13 @@ def _store(tmp_path: Path, name: str, runner_id: str, *, tag: str) -> sa.Engine:
         _RUNNER_TABLES - {"outbox_counters"},
         values={**unique, "runner_id": runner_id, "runner_name": name, "final": True},
     )
-    seed_tables(engine, shapes, _HOST_TABLES - {"host_ingests"}, values={"failure_reason": None})
+    # A store's hosted runners are its own, written beside its identity rows, never seeded under another runner's id.
+    seed_tables(
+        engine,
+        shapes,
+        _HOST_TABLES - {"host_ingests", "hosted_runners", "hosted_runner_facts"},
+        values={"failure_reason": None},
+    )
     with engine.begin() as conn:
         for lane in _OUTBOX_LANES:
             conn.execute(sa.insert(shapes.tables["outbox_counters"]).values(runner_id=runner_id, lane=lane, last_seq=1))

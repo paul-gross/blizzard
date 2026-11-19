@@ -265,6 +265,9 @@ class BuiltRunner:
     id: str
     config: RunnerConfig
     token: StoredToken = field(default_factory=StoredToken.absent)
+    #: The entry it projected from — a ``[[runner]]``, or the store's for a runner no file names; its settings reader
+    #: is built over it.
+    entry: RunnerEntry | None = field(default=None, repr=False, compare=False)
 
 
 @domain_model
@@ -446,7 +449,7 @@ class HostConfig:
             )
         if errors or entry.id is None or entry.own is None:
             return HaltedRunner(entry.name, entry.id, tuple(errors))
-        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token.value), token)
+        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token.value), token, entry)
 
     def _unsuffixed_token_hint(self, variable: str, environ: Mapping[str, str]) -> str:
         """The rename a leftover unsuffixed ``BZ_HUB_TOKEN`` calls for, or nothing when none is held: a pre-host
@@ -458,6 +461,18 @@ class HostConfig:
         else:
             return ""
         return f"; {UNSUFFIXED_TOKEN_VARIABLE} is set in {where} but a host reads {variable}: rename it to {variable}"
+
+    def hosted_entry(self, runner_id: str | None, name: str) -> RunnerEntry:
+        """The entry of a runner the store hosts and no ``[[runner]]`` names: an authored body holding only its ``id``
+        and ``name``, which its stored settings entries are laid over — only its ``name`` for a runner its hub has not
+        minted yet."""
+        return parse_runner_entry(
+            ConfigView.unchecked({"name": name} if runner_id is None else {"id": runner_id, "name": name}),
+            name,
+            root=self.root,
+            db_url=self.db_url,
+            path=self.config_path,
+        )
 
     def sole_runner(self, runner: str | None = None) -> RunnerEntry:
         """The ``[[runner]]`` an offline verb acts on: the one ``runner`` names by name or id, else the host's only
@@ -477,24 +492,6 @@ class HostConfig:
                 (f"{self.layout.config_path} declares several runners ({held}); name one with --runner",)
             )
         return first
-
-    def check_new_runner(self, name: str) -> None:
-        """Raises :class:`HostConfigError` when a runner called ``name`` could not join the ``[[runner]]`` entries this
-        host holds — its name, or the token variable it reads, is already taken. It carries no id until the hub
-        assigns one, so the id is not judged."""
-        candidate = RunnerEntry(name=name)
-        clashes = _repeats((*self.runners, candidate))
-        if any(kind == "name" for kind, _ in clashes):
-            raise HostConfigError((f"{self.config_path} already holds a runner named {name!r}; pick another name",))
-        if clashes:
-            variable = hub_token_variable(name)
-            holder = next(entry.name for entry in self.runners if hub_token_variable(entry.name) == variable)
-            raise HostConfigError(
-                (
-                    f"runner {name!r} would read its token from {variable}, which runner {holder!r} already reads; "
-                    "pick another name",
-                )
-            )
 
     def bindings_for(self, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
         """One binding per project of ``projects``, each to its workspace. Raises :class:`HostConfigError` when a

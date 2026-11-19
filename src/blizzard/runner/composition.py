@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import tzinfo
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -43,6 +43,7 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -51,7 +52,13 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config import (
+    HostWorkspace,
+    ProjectBinding,
+    RunnerConfig,
+    SubscriptionDeclaration,
+    worker_shell_refusal,
+)
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
@@ -112,6 +119,10 @@ from blizzard.runner.host_layout import (
     hold_host,
 )
 from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
+from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
+from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
+from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
+from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -125,7 +136,7 @@ from blizzard.runner.hub.identity import (
     IRunnerIdentityStore,
     RunnerIdentityHolder,
 )
-from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
+from blizzard.runner.hub.identity_service import RetiredRunnerWatch
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClient, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.sealed_tokens import (
@@ -155,7 +166,7 @@ from blizzard.runner.runtime import (
 )
 from blizzard.runner.settings.authoring import HostSettingsAuthoring
 from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
-from blizzard.runner.settings_reader import RunnerSettingsReader
+from blizzard.runner.settings_reader import RunnerEntriesJudge, RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -169,6 +180,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
@@ -192,6 +204,7 @@ from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.runner_admission_store import RunnerAdmissionStore
 from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
@@ -228,7 +241,7 @@ from blizzard.runner.tracing.received_export import (
 from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCounter, SpanRateLimiter
 from blizzard.runner.tracing.receiving import ReceiverTracing, TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
-from blizzard.runner.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
@@ -328,6 +341,8 @@ class HostProcess:
     )
     #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
     host_hub_http_client: httpx2.Client | None = None
+    #: The host's own hub calls over that client — ``None`` on a host with no host token.
+    host_hub: IHostHubClient | None = None
     #: The tool profile every host tool child launches under — the workspaces' ``git`` and ``winter``, credential
     #: renewal, the selftest's scratch ``git`` — set by the host tick from its snapshot.
     tool_profile: ToolProfileHolder = field(default_factory=lambda: ToolProfileHolder(ChildEnv(())))
@@ -340,6 +355,8 @@ class HostProcess:
     wakes: WakeSignals = field(default_factory=WakeSignals)
     #: Each runner's sealed hub token under the host's key — ``None`` on a host that holds no key yet.
     hub_tokens: HubTokens | None = None
+    #: Whether the host tick's registration step recorded a runner retired, so the same pass drains it.
+    retirements: RetirementNotices = field(default_factory=RetirementNotices)
     _trace_exporters: list[tuple[ITraceExporter, BoundedTraceExporter]] = field(
         default_factory=list[tuple[ITraceExporter, BoundedTraceExporter]], repr=False
     )
@@ -359,6 +376,10 @@ class HostProcess:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
         no subscriptions of their own."""
         return self.host_registration.current().registered()
+
+    def halted_runners(self) -> tuple[HaltedRunner, ...]:
+        """The runners halted now — read on each call, since a host's runner set changes while it runs."""
+        return self.halted
 
     def close(self) -> None:
         with contextlib.ExitStack() as closing:
@@ -401,7 +422,7 @@ class RunnerProcess:
     identity: RunnerIdentityHolder
     #: Whether this runner has verified its token names the configured runner — unchecked from start.
     identity_verdict: IdentityVerdictHolder
-    #: Forgets this runner's identity row once its own token is refused as retired — the host tick's.
+    #: Records this runner's retirement once its own token is refused as retired — the host tick's.
     retirement: RetiredRunnerWatch
     #: The token every runner->hub client presents — taken up again from the store whenever its row's revision moves.
     hub_token: HubTokenHolder
@@ -521,13 +542,16 @@ class HostReadiness(ReadinessService):
     """The store's readiness with the host's halted runners named in its detail. ``ready`` keeps meaning the store's: a
     halted runner is the host's to report, not a reason it cannot serve."""
 
-    halted: tuple[str, ...] = ()
+    #: The host's halted runners as each evaluation finds them, so a runner whose retried start succeeds stops being
+    #: named and one whose later start fails starts being.
+    halted: Callable[[], Sequence[HaltedRunner]] = tuple
 
     def evaluate(self) -> Readiness:
         readiness = super().evaluate()
-        if not self.halted:
+        halted = [runner.describe() for runner in self.halted()]
+        if not halted:
             return readiness
-        detail = "; ".join(filter(None, (readiness.detail, *self.halted)))
+        detail = "; ".join(filter(None, (readiness.detail, *halted)))
         return replace(readiness, detail=detail)
 
 
@@ -688,9 +712,14 @@ def build_hub_tokens(
 def build_sealing_hub_tokens(engine: Engine, root: Path, *, environ: Mapping[str, str], clock: IClock) -> HubTokens:
     """The host's sealed runner tokens under the key it seals under, its first generation minted when it holds none;
     refuses as :func:`~blizzard.runner.host_keys.sealing_key_provider` does."""
-    store = _hub_token_store(engine)
-    keys = sealing_key_provider(environ, HostLayout(root), sealed_under=store.key_ids())
-    return HubTokens(store, secret_cipher(keys), clock)
+    return _sealing_hub_tokens(_hub_token_store(engine), root, environ=environ, clock=clock)
+
+
+def _sealing_hub_tokens(
+    repository: IWriteHubTokenRepository, root: Path, *, environ: Mapping[str, str], clock: IClock
+) -> HubTokens:
+    keys = sealing_key_provider(environ, HostLayout(root), sealed_under=repository.key_ids())
+    return HubTokens(repository, secret_cipher(keys), clock)
 
 
 def stored_hub_token(engine: Engine, root: Path, runner_id: str, *, environ: Mapping[str, str]) -> StoredToken:
@@ -758,44 +787,24 @@ def build_host_process(
             graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
         )
         for built in runners:
-            entry = next((entry for entry in host.runners if entry.id == built.id), None)
-            runner = _build_runner(
-                built.config,
-                graph,
-                bundle=(bundles or {}).get(built.id),
-                selection=(selections or {}).get(built.id),
-                publish_bundle=publish_bundles,
-                environ=environ,
-                trace_exporter=trace_exporter,
-                identity=None,
-                runner_id=built.id,
-                token=built.token,
-                closes_host=False,
-            )
-            if entry is not None:
-                identity_store = runner.stores.identity
-                runner = replace(
-                    runner,
-                    settings_reader=RunnerSettingsReader(
-                        host,
-                        entry,
-                        runner.stores.settings,
-                        deferred_seed=runner.stores.settings if identity_store.runner_identity() is None else None,
-                        identity_present=lambda identity_store=identity_store: (
-                            identity_store.runner_identity() is not None
-                        ),
-                        host_settings=graph.host_settings.reader,
-                    ),
-                )
             graph.runners = (
                 *graph.runners,
-                runner,
+                compose_runner(
+                    host,
+                    graph,
+                    built,
+                    bundle=(bundles or {}).get(built.id),
+                    selection=(selections or {}).get(built.id),
+                    publish_bundle=publish_bundles,
+                    environ=environ,
+                    trace_exporter=trace_exporter,
+                ),
             )
         graph.halted = tuple(halted)
         graph.readiness = HostReadiness(
             reader=graph.readiness.reader,
             expected_revision=graph.readiness.expected_revision,
-            halted=tuple(runner.describe() for runner in halted),
+            halted=graph.halted_runners,
         )
         return graph
     except BaseException:
@@ -857,6 +866,49 @@ def build_runner_process(
     return runner
 
 
+def compose_runner(
+    host_config: HostConfig,
+    host: HostProcess,
+    built: BuiltRunner,
+    *,
+    bundle: BundleSnapshot | None = None,
+    selection: BindingSelection | None = None,
+    publish_bundle: bool = False,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+) -> RunnerProcess:
+    """One runner composed over ``host`` and bound to ``built``'s id — its graph, its harness set, and its settings
+    reader over the entry it projected from — not yet placed among the host's runners."""
+    runner = _build_runner(
+        built.config,
+        host,
+        bundle=bundle,
+        selection=selection,
+        publish_bundle=publish_bundle,
+        environ=environ,
+        trace_exporter=trace_exporter,
+        identity=None,
+        runner_id=built.id,
+        token=built.token,
+        closes_host=False,
+    )
+    entry = built.entry or next((entry for entry in host_config.runners if entry.id == built.id), None)
+    if entry is None:
+        return runner
+    identity_store = runner.stores.identity
+    return replace(
+        runner,
+        settings_reader=RunnerSettingsReader(
+            host_config,
+            entry,
+            runner.stores.settings,
+            deferred_seed=runner.stores.settings if identity_store.runner_identity() is None else None,
+            identity_present=lambda: identity_store.runner_identity() is not None,
+            host_settings=host.host_settings.reader if host.host_settings is not None else None,
+        ),
+    )
+
+
 def add_runner(
     config: RunnerConfig,
     host: HostProcess,
@@ -884,6 +936,441 @@ def add_runner(
     )
     host.runners = (*host.runners, runner)
     return runner
+
+
+class IRunnerResume(Protocol):
+    """One runner's restart-resume hooks, over its own store."""
+
+    def on_startup(self) -> int: ...
+    def recover_takeovers(self) -> int: ...
+    def reconcile_sessions(self) -> int: ...
+    def on_shutdown(self) -> int: ...
+
+
+class IWiredRunner(Protocol):
+    """One runner's served routes and stepper, as the app wired them."""
+
+    def quiesce(self) -> None:
+        """Wait out the runner's in-flight pass."""
+        ...
+
+    def close(self) -> None:
+        """Close its stepper and the hub clients its routes own."""
+        ...
+
+
+class IRunnerDrivers(Protocol):
+    """One runner's timed drivers — none on a ``stepped`` host."""
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+
+
+class NoDrivers:
+    """The drivers of a runner on a ``stepped`` host, which passes only on request."""
+
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+
+@domain_model
+@dataclass(frozen=True)
+class StartupNote:
+    """What one of a runner's startup steps did: its event, the runner, and how many it touched — the operator's
+    sentence in :attr:`message`, the fields a log consumer filters on in the rest."""
+
+    event: str
+    runner_id: str
+    count: int
+    message: str
+
+
+class IRunnerStart[W: IWiredRunner, R: IRunnerResume](Protocol):
+    """The seams starting a runner reaches beyond composition: the app's wiring and registry, and the loop's resume
+    hooks, scratch reconcile and drivers — injected, since composition imports neither."""
+
+    def resume(self, runner: RunnerProcess) -> R:
+        """``runner``'s restart-resume hooks."""
+        ...
+
+    def reconcile_scratch(self, runner: RunnerProcess) -> None:
+        """Reconcile ``runner``'s worker scratch before it can spawn."""
+        ...
+
+    def announce(self, note: StartupNote) -> None:
+        """Tell the operator what a startup step did."""
+        ...
+
+    def wire(self, runner: RunnerProcess) -> W:
+        """Wire ``runner``'s routes and stepper, not yet served."""
+        ...
+
+    def serve(self, runner: RunnerProcess, wired: W) -> None:
+        """Serve ``wired`` in the app's registry."""
+        ...
+
+    def withdraw(self, runner_id: str) -> None:
+        """Stop serving ``runner_id``, which then answers ``404``."""
+        ...
+
+    def halt(self, runner: HaltedRunner) -> None:
+        """Hold ``runner`` halted in the app's registry, its routes answering ``503`` with its reasons."""
+        ...
+
+    def drive(self, runner: RunnerProcess, wired: W) -> IRunnerDrivers:
+        """Start ``runner``'s drivers; none on a ``stepped`` host."""
+        ...
+
+
+@dataclass
+class LiveRunner[W: IWiredRunner, R: IRunnerResume]:
+    """One runner the host runs: its graph and resume hooks, then its wiring and drivers once it is served."""
+
+    runner: RunnerProcess
+    resume: R
+    wired: W | None = None
+    drivers: IRunnerDrivers | None = None
+    #: Whether its startup steps ran, so its shutdown marks its in-flight leases.
+    started_up: bool = False
+
+    @property
+    def runner_id(self) -> str:
+        return self.runner.runner_id
+
+
+class HostRunnerSet[W: IWiredRunner, R: IRunnerResume]:
+    """The host's live runners. Every change to ``host.runners``, the app's registry and each runner's drivers and
+    clients goes through here, under one lock, so the host tick and a request never see a runner half-placed."""
+
+    def __init__(self, host: HostProcess) -> None:
+        self.host = host
+        self._lock = threading.RLock()
+        self._live: dict[str, LiveRunner[W, R]] = {}
+
+    def live(self) -> tuple[LiveRunner[W, R], ...]:
+        """Every live runner, in the host's runner order."""
+        with self._lock:
+            return tuple(self._live[runner.runner_id] for runner in self.host.runners if runner.runner_id in self._live)
+
+    def get(self, runner_id: str) -> LiveRunner[W, R] | None:
+        with self._lock:
+            return self._live.get(runner_id)
+
+    def running(self) -> frozenset[str]:
+        with self._lock:
+            return frozenset(self._live)
+
+    def place(self, live: LiveRunner[W, R]) -> None:
+        """Hold ``live`` live, its runner among the host's runners."""
+        runner = live.runner
+        with self._lock:
+            self._live[runner.runner_id] = live
+            if all(held.runner_id != runner.runner_id for held in self.host.runners):
+                self.host.runners = (*self.host.runners, runner)
+            self.host.halted = tuple(halted for halted in self.host.halted if halted.id != runner.runner_id)
+
+    def remove(self, runner_id: str) -> LiveRunner[W, R] | None:
+        """Drop ``runner_id`` from the host's runners; the live runner it was, if any."""
+        with self._lock:
+            live = self._live.pop(runner_id, None)
+            self.host.runners = tuple(runner for runner in self.host.runners if runner.runner_id != runner_id)
+            return live
+
+    def serve(self, live: LiveRunner[W, R], start: IRunnerStart[W, R]) -> None:
+        """Wire ``live``'s routes and stepper, then serve it and start its drivers as one change."""
+        wired = start.wire(live.runner)
+        with self._lock:
+            live.wired = wired
+            start.serve(live.runner, wired)
+            live.drivers = start.drive(live.runner, wired)
+
+    def abandon(self, runner_id: str, start: IRunnerStart[W, R]) -> None:
+        """Undo a start that failed after its runner was placed: withdraw it, stop and close what it got, and drop it
+        from the host's runners. Its sealed token stays — it is not retired."""
+        start.withdraw(runner_id)
+        live = self.remove(runner_id)
+        if live is None:
+            return
+        with contextlib.ExitStack() as closing:
+            closing.callback(live.runner.close_runner)
+            if live.wired is not None:
+                closing.callback(live.wired.close)
+            if live.drivers is not None:
+                closing.callback(live.drivers.stop)
+
+    def halt(self, halted: HaltedRunner) -> None:
+        """Hold ``halted`` among the host's halted runners, in place of any of its id."""
+        with self._lock:
+            self.host.halted = (*(held for held in self.host.halted if held.id != halted.id), halted)
+
+    def unhalt(self, runner_id: str) -> None:
+        """Stop holding ``runner_id`` among the host's halted runners."""
+        with self._lock:
+            self.host.halted = tuple(held for held in self.host.halted if held.id != runner_id)
+
+    def stop_all(self, *, mark: bool) -> list[str]:
+        """Stop every live runner's drivers, wait out its in-flight pass, then — with ``mark`` — mark its in-flight
+        leases for restart-resume and drain their workers; the shutdown's messages. Its graph and clients stay for
+        :meth:`close_all` and the host's close."""
+        said: list[str] = []
+        live = self.live()
+        for runner in reversed(live):
+            if runner.drivers is not None:
+                runner.drivers.stop()
+        for runner in live:
+            if runner.wired is not None:
+                runner.wired.quiesce()
+        if mark:
+            for runner in live:
+                if runner.started_up and (marked := runner.resume.on_shutdown()):
+                    said.append(f"marked {marked} in-flight lease(s) for restart-resume")
+        return said
+
+    def close_all(self) -> None:
+        """Close every live runner's stepper and route clients."""
+        with contextlib.ExitStack() as closing:
+            for runner in self.live():
+                if runner.wired is not None:
+                    closing.callback(runner.wired.close)
+
+
+class RunnerStartFailed(Exception):
+    """A runner's start failed at ``step``; nothing of it is served."""
+
+    def __init__(self, runner_id: str, step: RunnerStartStep, error: str) -> None:
+        super().__init__(f"runner {runner_id}: {step}: {error}")
+        self.runner_id = runner_id
+        self.step: RunnerStartStep = step
+        self.error = error
+
+
+@contextlib.contextmanager
+def _start_step(runner_id: str, step: RunnerStartStep) -> Generator[None, None, None]:
+    try:
+        yield
+    except RunnerStartFailed:
+        raise
+    except Exception as exc:
+        raise RunnerStartFailed(runner_id, step, str(exc) or type(exc).__name__) from exc
+
+
+def run_startup_steps[W: IWiredRunner, R: IRunnerResume](live: LiveRunner[W, R], start: IRunnerStart[W, R]) -> None:
+    """``live``'s per-runner startup steps, in the boot's order: the worker-shell refusal, the rejected-tracing
+    announcement, its worker-scratch reconcile, then crash-orphan marking, takeover recovery and session reconcile —
+    all before any of its passes or requests can begin. Raises :class:`RunnerStartFailed` naming the step."""
+    runner, runner_id = live.runner, live.runner_id
+    with _start_step(runner_id, "worker_shell"):
+        if refusal := worker_shell_refusal(runner.config.worker_shell):
+            raise ConfigError(f"runner {runner.config.name}: {refusal}")
+    with _start_step(runner_id, "tracing"):
+        announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
+    with _start_step(runner_id, "worker_scratch"):
+        start.reconcile_scratch(runner)
+    with _start_step(runner_id, "resume"):
+        if resumable := live.resume.on_startup():
+            start.announce(
+                StartupNote(
+                    "marked crash-interrupted leases for restart-resume",
+                    runner_id,
+                    resumable,
+                    f"marked {resumable} crash-interrupted lease(s) for restart-resume",
+                )
+            )
+    live.started_up = True
+    # After the marking, which skips a held lease; before any thread or request can begin an entry.
+    with _start_step(runner_id, "takeovers"):
+        if interrupted := live.resume.recover_takeovers():
+            start.announce(
+                StartupNote(
+                    "ended crash-interrupted takeovers",
+                    runner_id,
+                    interrupted,
+                    f"ended {interrupted} takeover(s) a crash interrupted mid-entry",
+                )
+            )
+    # After the takeovers settle, and before any thread can dispatch a restart resume.
+    with _start_step(runner_id, "sessions"):
+        if stopped := live.resume.reconcile_sessions():
+            start.announce(
+                StartupNote(
+                    "stopped turns a crash left running without a worker",
+                    runner_id,
+                    stopped,
+                    f"stopped {stopped} turn(s) a crash left running without a worker",
+                )
+            )
+
+
+def serve_runner[W: IWiredRunner, R: IRunnerResume](
+    live: LiveRunner[W, R], runners: HostRunnerSet[W, R], start: IRunnerStart[W, R]
+) -> None:
+    """Serve a started ``live`` runner: wire its routes and stepper, register it, and start its drivers."""
+    with _start_step(live.runner_id, "serve"):
+        runners.serve(live, start)
+
+
+@collaborator
+@dataclass(frozen=True)
+class StartingRunner[W: IWiredRunner, R: IRunnerResume]:
+    """A runner composed, its startup steps run and placed among the host's runners, not yet served: the caller
+    reports the host once between preparing a batch and running it, so a runner the hub released is told so before its
+    first tick."""
+
+    live: LiveRunner[W, R]
+    runners: HostRunnerSet[W, R]
+    start: IRunnerStart[W, R]
+
+    @property
+    def runner_id(self) -> str:
+        return self.live.runner_id
+
+    def run(self) -> None:
+        """Serve the runner and start its drivers. Raises :class:`RunnerStartFailed`."""
+        serve_runner(self.live, self.runners, self.start)
+
+
+def start_runner[W: IWiredRunner, R: IRunnerResume](
+    host_config: HostConfig,
+    host: HostProcess,
+    built: BuiltRunner,
+    start: IRunnerStart[W, R],
+    runners: HostRunnerSet[W, R],
+    *,
+    publish_bundle: bool = False,
+    environ: Mapping[str, str] | None = None,
+    trace_exporter: ITraceExporter | None = None,
+) -> StartingRunner[W, R]:
+    """Compose ``built`` over ``host``, run its startup steps, and place it among the host's runners. Raises
+    :class:`RunnerStartFailed` naming the step, with nothing of the runner left behind."""
+    with _start_step(built.id, "compose"):
+        runner = compose_runner(
+            host_config, host, built, publish_bundle=publish_bundle, environ=environ, trace_exporter=trace_exporter
+        )
+    try:
+        live = LiveRunner[W, R](runner, start.resume(runner))
+        run_startup_steps(live, start)
+    except BaseException:
+        runner.close_runner()
+        raise
+    runners.place(live)
+    return StartingRunner(live, runners, start)
+
+
+def drain_runner[W: IWiredRunner, R: IRunnerResume](
+    host: HostProcess, runners: HostRunnerSet[W, R], start: IRunnerStart[W, R], runner_id: str
+) -> bool:
+    """Remove one retired runner, touching no other: withdraw its routes, stop its drivers, wait out its in-flight
+    pass, mark and drain its workers, close its graph and hub clients, drop it from the host's runners, then delete its
+    sealed token. Its identity and settings rows stay. Whether it was running."""
+    live = runners.get(runner_id)
+    if live is None:
+        return False
+    start.withdraw(runner_id)
+    if live.drivers is not None:
+        live.drivers.stop()
+    if live.wired is not None:
+        live.wired.quiesce()
+    with contextlib.ExitStack() as draining:
+        # Unwound last-registered first: the shutdown marking, then the graph, the wiring, the removal and the token.
+        draining.callback(host.host_stores.hub_tokens.drop, runner_id)
+        draining.callback(runners.remove, runner_id)
+        if live.wired is not None:
+            draining.callback(live.wired.close)
+        draining.callback(live.runner.close_runner)
+        if live.started_up:
+            live.resume.on_shutdown()
+    get_logger("blizzard.runner.host").info("drained a retired runner", runner_id=runner_id)
+    return True
+
+
+class IHostedRunnerSource(Protocol):
+    """What starts a runner the store hosts: its seeded projection, read at the tick that starts it."""
+
+    def built(self, runner_id: str) -> BuiltRunner | HaltedRunner: ...
+
+
+@dataclass
+class HostRunnerReconcile[W: IWiredRunner, R: IRunnerResume]:
+    """The host tick's reconcile of its live runners against the store's hosted ones: it starts each active runner not
+    running — retrying a failed start — and drains each retired runner still running; a retired runner's leftover
+    sealed token is deleted. A runner that fails to start is held in ``failures`` and left unstarted, and its
+    neighbours keep ticking."""
+
+    host_config: HostConfig
+    host: HostProcess
+    runners: HostRunnerSet[W, R]
+    start: IRunnerStart[W, R]
+    source: IHostedRunnerSource
+    failures: RunnerStartFailures = field(default_factory=RunnerStartFailures)
+    publish_bundle: bool = False
+    environ: Mapping[str, str] | None = None
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    def run(self) -> None:
+        with self._lock:
+            roster = self.host.host_stores.hosted_runners.roster()
+            retired = roster.retired
+            plan = reconcile(roster.active, retired, self.runners.running(), self.failures.failed())
+            for runner_id in plan.forget_failures:
+                self.failures.clear(runner_id)
+            for runner_id in plan.drain:
+                drain_runner(self.host, self.runners, self.start, runner_id)
+            # A retired runner not running — retired while the host was stopped, or halted — is withdrawn and its
+            # leftover token dropped; only one still holding a token costs the tick a write.
+            stale = retired - self.runners.running()
+            for runner_id in sorted(stale & self.host.host_stores.hub_tokens.held_runner_ids()):
+                self.start.withdraw(runner_id)
+                self.host.host_stores.hub_tokens.drop(runner_id)
+            for runner_id in sorted(stale & {runner.id for runner in self.host.halted if runner.id is not None}):
+                self.start.withdraw(runner_id)
+                self.runners.unhalt(runner_id)
+            starting = [prepared for runner_id in plan.start if (prepared := self._prepare(runner_id)) is not None]
+            if not starting:
+                return
+            # One report between preparing the batch and running it: a runner the hub released claims nothing.
+            self.host.host_tick.report()
+            for prepared in starting:
+                try:
+                    prepared.run()
+                except RunnerStartFailed as exc:
+                    self.runners.abandon(prepared.runner_id, self.start)
+                    self._failed(prepared.runner_id, exc)
+                else:
+                    self.failures.clear(prepared.runner_id)
+                    get_logger("blizzard.runner.host").info("started a hosted runner", runner_id=prepared.runner_id)
+
+    def _prepare(self, runner_id: str) -> StartingRunner[W, R] | None:
+        try:
+            with _start_step(runner_id, "seed"):
+                built = self.source.built(runner_id)
+                if isinstance(built, HaltedRunner):
+                    raise RunnerStartFailed(runner_id, "seed", "; ".join(built.errors))
+            return start_runner(
+                self.host_config,
+                self.host,
+                built,
+                self.start,
+                self.runners,
+                publish_bundle=self.publish_bundle,
+                environ=self.environ,
+            )
+        except RunnerStartFailed as exc:
+            self._failed(runner_id, exc)
+            return None
+
+    def _failed(self, runner_id: str, exc: RunnerStartFailed) -> None:
+        failure = RunnerStartFailure(exc.step, exc.error)
+        if self.failures.hold(runner_id, failure):
+            get_logger("blizzard.runner.host").error(
+                "a hosted runner failed to start", runner_id=runner_id, step=exc.step, detail=exc.error
+            )
+        name = next((runner.name for runner in self.host.halted if runner.id == runner_id), runner_id)
+        halted = HaltedRunner(name, runner_id, (f"failed to start at {exc.step}: {exc.error}",))
+        self.runners.halt(halted)
+        self.start.halt(halted)
 
 
 def _build_host_graph(
@@ -1028,6 +1515,7 @@ def _build_host_graph(
             host_identity=host_identity,
             host_registration=host_registration,
             host_hub_http_client=host_hub_http_client,
+            host_hub=host_hub,
             tool_profile=tool_profile,
         )
         # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
@@ -1364,7 +1852,9 @@ def _build_runner(
             retirement=RetiredRunnerWatch(
                 runner_id=runner_id,
                 rows=stores.identity,
-                forgetter=stores.identity,
+                retirement=HubNoticedRetirement(
+                    runner_id, host.host_stores.hosted_runners, host.clock, host.retirements
+                ),
                 token_identity=HttpHubClient(identity_client),
             ),
             hub_token=hub_token,
@@ -1443,20 +1933,158 @@ def _build_stores(connections: RunnerStoreConnections, clock: IClock | None = No
     )
 
 
+def build_runner_admission(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str, clock: IClock
+) -> IRunnerAdmission:
+    """The admission of ``runner_id`` into the store ``engine`` opens: its runner half bound to it, its host half naming
+    it, the store's identity rows read through the runner audit for a store that hosts no runner yet."""
+    connections = RunnerStoreConnections(engine, errors, runner_id)
+    return RunnerAdmissionStore(
+        connections,
+        identity=RunnerIdentityStore(connections),
+        settings=RunnerSettingsStore(connections, clock),
+        hosted=HostHostedRunnerStore(connections),
+        hub_tokens=HostHubTokenStore(connections),
+        named_runners=RunnerAudit(connections).named_runners,
+    )
+
+
 @contextlib.contextmanager
-def build_identity_service(
-    db_url: str, *, runner_id: str, clock: IClock
-) -> Generator[RunnerIdentityService, None, None]:
-    """The identity row's service, bound to ``runner_id``, for ``runner init`` and ``runner retire`` on a stopped host.
-    It owns the engine it opens and disposes it on exit, so no verb holds a write repository past its use."""
+def runner_admission(db_url: str, *, runner_id: str, clock: IClock) -> Generator[IRunnerAdmission, None, None]:
+    """:func:`build_runner_admission` over its own engine, for ``runner init``'s join on a stopped host; disposes the
+    engine on exit."""
     engine = create_engine_from_url(db_url)
     try:
-        identities = RunnerIdentityStore(
-            RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id)
+        yield build_runner_admission(
+            engine,
+            errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")),
+            runner_id=runner_id,
+            clock=clock,
         )
-        yield RunnerIdentityService(recorder=identities, forgetter=identities, clock=clock)
     finally:
         engine.dispose()
+
+
+@collaborator
+@dataclass(frozen=True)
+class _RunnerAdmissions:
+    admit: Callable[[str], IRunnerAdmission]
+
+    def admission(self, runner_id: str) -> IRunnerAdmission:
+        return self.admit(runner_id)
+
+
+@dataclass(frozen=True)
+class _HostedRunnerNames:
+    """A hosted runner's ``[[runner]]`` name, else its stored one, read for every runner at once."""
+
+    host: HostConfig
+    audit: IRunnerAudit
+
+    def names_of(self, runner_ids: Sequence[str]) -> Mapping[str, str]:
+        declared = {entry.id: entry.name for entry in self.host.runners if entry.id is not None}
+        stored = self.audit.stored_names() if any(runner_id not in declared for runner_id in runner_ids) else {}
+        return {runner_id: declared.get(runner_id) or stored.get(runner_id, runner_id) for runner_id in runner_ids}
+
+    def declared_names(self) -> frozenset[str]:
+        return frozenset(entry.name for entry in self.host.runners)
+
+
+@collaborator
+@dataclass(frozen=True)
+class _NewRunnerSettings:
+    """A new runner's entries judged as a store-only runner's are, over the host file, before its hub mints its id."""
+
+    host: HostConfig
+
+    def problems(self, name: str, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        try:
+            entry = self.host.hosted_entry(None, name)
+        except (ConfigError, ValueError) as exc:
+            return {"name": str(exc)}
+        return RunnerEntriesJudge(self.host, entry).validate(entries)
+
+
+@collaborator
+@dataclass(frozen=True)
+class _SealingTokens:
+    """Seals each added runner's token under the host's key, minting its first generation when it holds none."""
+
+    tokens: Callable[[], HubTokens]
+
+    def seal_first(self, runner_id: str, token: str) -> SealedValue:
+        return self.tokens().seal_first(runner_id, token)
+
+
+def build_hosted_runner_service(
+    host: HostConfig,
+    engine: Engine,
+    hub: IHostRunnerHub,
+    *,
+    clock: IClock,
+    environ: Mapping[str, str] | None = None,
+) -> HostedRunnerService:
+    """The service that adds and retires a stopped host's runners in the store ``engine`` opens, under the host's
+    token through ``hub``, over host stores and a token sealer of its own."""
+    stores = build_host_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock)
+    sealer = functools.partial(
+        _sealing_hub_tokens,
+        stores.hub_tokens,
+        host.root,
+        environ=os.environ if environ is None else environ,
+        clock=clock,
+    )
+    return _hosted_runner_service(host, engine, hub, stores, sealer, clock)
+
+
+def build_running_host_runner_service(
+    host_config: HostConfig, host: HostProcess, hub: IHostRunnerHub, *, environ: Mapping[str, str] | None = None
+) -> HostedRunnerService:
+    """The service that adds and retires a running ``host``'s runners, under the host's token through ``hub``, over
+    the host's own stores and token sealer."""
+    return _hosted_runner_service(
+        host_config,
+        host.engine,
+        hub,
+        host.host_stores,
+        functools.partial(
+            _running_host_tokens, host, host_config.root, environ=os.environ if environ is None else environ
+        ),
+        host.clock,
+    )
+
+
+def _running_host_tokens(host: HostProcess, root: Path, *, environ: Mapping[str, str]) -> HubTokens:
+    """The running host's sealed tokens; on a host that holds no key yet, its first generation minted to seal under."""
+    if host.hub_tokens is not None:
+        return host.hub_tokens
+    return _sealing_hub_tokens(host.host_stores.hub_tokens, root, environ=environ, clock=host.clock)
+
+
+def _hosted_runner_service(
+    host: HostConfig,
+    engine: Engine,
+    hub: IHostRunnerHub,
+    stores: HostStores,
+    tokens: Callable[[], HubTokens],
+    clock: IClock,
+) -> HostedRunnerService:
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    return HostedRunnerService(
+        hosted=stores.hosted_runners,
+        admissions=_RunnerAdmissions(functools.partial(_admission_of, engine, errors=errors, clock=clock)),
+        settings=_NewRunnerSettings(host),
+        names=_HostedRunnerNames(host, stores.runner_audit),
+        tokens=_SealingTokens(tokens),
+        hub=hub,
+        clock=clock,
+    )
+
+
+def _admission_of(
+    engine: Engine, runner_id: str, *, errors: RunnerStoreErrorFactory, clock: IClock
+) -> IRunnerAdmission:
+    return build_runner_admission(engine, errors=errors, runner_id=runner_id, clock=clock)
 
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:
@@ -1491,6 +2119,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
         hub_tokens=HostHubTokenStore(connections),
+        hosted_runners=HostHostedRunnerStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
         settings=HostSettingsStore(connections, clock),
         runner_audit=RunnerAudit(connections),
@@ -1507,7 +2136,9 @@ def build_runner_transfer(
         RunnerStoreConnections(source, errors, runner_id),
         into,
         _build_host_stores(into, clock).host_ingests,
+        HostHostedRunnerStore(into),
         HostHubTokenStore(into),
+        RunnerAudit(into).named_runners,
     )
 
 
@@ -1584,9 +2215,9 @@ class RunnerBoundStoreFiles:
                 keep_counters=keep_counters
             )
             if drop_hub_token:
-                build_host_stores(engine, errors=self.files.errors, clock=self.files.clock).hub_tokens.drop(
-                    self.runner_id
-                )
+                host = build_host_stores(engine, errors=self.files.errors, clock=self.files.clock)
+                host.hub_tokens.drop(self.runner_id)
+                host.hosted_runners.drop(self.runner_id)
 
     def runner_view(self, url: str) -> RunnerStoreView:
         errors, clock = self.files.errors, self.files.clock

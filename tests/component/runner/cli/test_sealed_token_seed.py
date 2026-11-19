@@ -54,7 +54,7 @@ def _stored(config: HostConfig) -> dict[str, StoredToken]:
 
 
 def _seeded(config: HostConfig) -> dict[str, BuiltRunner]:
-    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
+    ready, halted = seed_runners(config, clock=SystemClock())
     assert halted == []
     return {built.id: built for built in ready}
 

@@ -52,9 +52,11 @@ from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
 from blizzard.runner.transfer.ingest import RunnerIngest
 from tests.support.baseline_floor_trees import make_tree
 from tests.support.config_inputs import STRICT, init_host, load_host_config
+from tests.support.file_runners import add_file_runner
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_ingest import (
     HERE_HOST,
+    HUB,
     MOVING,
     MOVING_ID,
     RUNNER_TABLES,
@@ -315,7 +317,8 @@ def test_ingest_is_refused_while_the_runner_holds_an_open_elicitation_or_takeove
 
 def test_ingest_is_refused_for_a_runner_name_this_host_declares(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
-    ok(fake_init_hub, "add", MOVING, "--project", "default", "--dir", str(hosts.here))
+    with fake_init_hub.host_clients(HUB) as host_clients:
+        add_file_runner(host_clients(load_host_config(hosts.here).host_token.value), hosts.here, MOVING)
     fake_init_hub.admin.held[HERE_HOST].append(MOVING_ID)
     _refuse(fake_init_hub, hosts, "already declares runner r2", "--workspace-id", _NEW_WORKSPACE)
 
@@ -436,6 +439,28 @@ def test_ingest_reseals_a_sealed_source_token_under_this_hosts_key(tmp_path: Pat
     assert _key_id(hosts.here) != there_key, "each host seals under its own key"
     assert _stored(hosts.there) == StoredToken.absent()
     assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
+
+
+def test_ingest_hosts_the_runner_here_with_its_rows_and_drops_its_hosting_there(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    there = _engine(hosts.there)
+    assert MOVING_ID in {r["runner_id"] for r in rows(there, "hosted_runners")}
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    here = _engine(hosts.here)
+    assert [(r["op"], r["door"], r["actor"]) for r in rows(here, "hosted_runner_facts", runner_id=MOVING_ID)] == [
+        ("added", "cli", "operator")
+    ]
+    assert {r["runner_id"] for r in rows(here, "hosted_runners")} == {_HERE_ID, MOVING_ID}
+    assert rows(there, "hosted_runners", runner_id=MOVING_ID) == []
+    assert rows(there, "hosted_runner_facts", runner_id=MOVING_ID) == []
+    assert invariant_violations(here) == []
+    here.dispose()
+    there.dispose()
 
 
 def test_ingest_seals_an_env_only_source_token_under_this_hosts_key(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:

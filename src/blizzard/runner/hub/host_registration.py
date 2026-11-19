@@ -103,10 +103,10 @@ class HostRegistrationHolder:
 _current_host_registration_conforms: type[ICurrentHostRegistration] = HostRegistrationHolder
 
 
-class IForgetRetiredRunner(Protocol):
-    """Forgets one runner's identity row once the hub proves it retired."""
+class IWatchRetiredRunner(Protocol):
+    """Records one runner's retirement once the hub proves it retired."""
 
-    def forget_if_retired(self) -> bool: ...
+    def record_if_retired(self) -> bool: ...
 
 
 class IStandingRunner(Protocol):
@@ -120,7 +120,7 @@ class IStandingRunner(Protocol):
     @property
     def identity_verdict(self) -> IHostStandingSink: ...
     @property
-    def retirement(self) -> IForgetRetiredRunner: ...
+    def retirement(self) -> IWatchRetiredRunner: ...
 
 
 def status_after_refusal(answer: HostRefused, prior: HostRegistrationStatus) -> tuple[HostRegistrationStatus, bool]:
@@ -223,16 +223,16 @@ class HostRegistration:
             standing, reason = standing_of(runner.runner_id, own.tenant_id if own else None, answer, identity)
             runner.identity_verdict.stand(standing, reason=reason)
             if standing is HostStanding.NOT_HELD:
-                self._forget_if_retired(runner)
+                self._record_if_retired(runner)
 
-    def _forget_if_retired(self, runner: IStandingRunner) -> None:
-        """A runner not held may be retired, or only awaiting adoption: its row goes only on the hub's proof. A
-        failed forget stays this runner's — the next tick retries — and reaches neither the other runners nor the
-        tick's other steps."""
+    def _record_if_retired(self, runner: IStandingRunner) -> None:
+        """A runner not held may be retired, or only awaiting adoption: it is recorded retired only on the hub's
+        proof. A failed record stays this runner's — the next tick retries — and reaches neither the other runners nor
+        the tick's other steps."""
         try:
-            runner.retirement.forget_if_retired()
+            runner.retirement.record_if_retired()
         except Exception:
-            _log.exception("forgetting a retired runner's identity failed", runner_id=runner.runner_id)
+            _log.exception("recording a retired runner's retirement failed", runner_id=runner.runner_id)
 
     def _identity_for(self, answer: HostRecord, now: datetime) -> HostIdentity:
         """The host's identity per ``answer``, from a first answer; raises :class:`HostIdentityAlreadyRecorded`."""

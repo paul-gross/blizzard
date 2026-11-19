@@ -48,7 +48,6 @@ def test_writes_validate_and_keep_revision_and_identity_atomic(tmp_path: Path) -
     assert settings.snapshot().revision == 1
     settings.write(Change("edit", unsets=frozenset({"agents"})), if_match=1, validate=_valid, door="cli", actor="test")
     assert settings.snapshot().entries == {"agents": Entry(None, at_default=True)}
-    assert identity.forget_runner_identity() is False
     sibling = RunnerSettingsStore(
         RunnerStoreConnections(base.engine, runner_store_errors(), "sibling"), FixedClock(now)
     )

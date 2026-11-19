@@ -87,7 +87,8 @@ class HostIngestStore:
         _log.info("host rows merged", runner_id=copy.runner_id, rows=carried)
 
     def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
-        handle_of(handle).destination.execute(
+        destination = handle_of(handle).destination
+        destination.execute(
             host_ingests.insert().values(
                 runner_id=ingest.runner_id,
                 source=ingest.source,

@@ -142,6 +142,10 @@ class IReadHubTokenRepository(Protocol):
         the table."""
         ...
 
+    def held_runner_ids(self) -> frozenset[str]:
+        """The runners holding a sealed row; empty for a store behind the revision that adds the table."""
+        ...
+
 
 class IWriteHubTokenRepository(IReadHubTokenRepository, Protocol):
     def seal_if_absent(self, runner_id: str, sealed: SealedValue, *, at: datetime) -> bool:
@@ -176,6 +180,10 @@ class HubTokens:
         """The revision the runner's row is at, or ``None`` when it holds none — one primary-key read."""
         row = self._repository.sealed(runner_id)
         return None if row is None else row.revision
+
+    def seal_first(self, runner_id: str, token: str) -> SealedValue:
+        """``token`` sealed as the runner's first row, for a writer that inserts it on its own transaction."""
+        return seal_token(self._cipher, runner_id, SecretValue.entered(token))
 
     def seal_if_absent(self, runner_id: str, token: SecretValue) -> bool:
         """Seal ``token`` as the runner's first row, unless it holds one; whether it was sealed."""

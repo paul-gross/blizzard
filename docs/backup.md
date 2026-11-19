@@ -97,3 +97,9 @@ store `host.db` and `data/secret-keys/`, the host's key. Back the key up togethe
 token is sealed under it, and a lost key leaves every runner refusing until its token is set again
 ([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md#the-hosts-key)). It is absent when `BZ_HOST_SECRET_KEY`
 supplies the key, which then belongs in your own secret management. Stop the host before copying the store.
+
+The store also holds which runners are the host's — each runner added, through the API, the CLI or the host file, and
+each retired — so a host file restored without its store does not say which runners the host serves. Back up the store
+and the host file together. A `runners/<name>/` directory in the host directory is deprecated: only `runner ingest`
+still writes one, for the path files a moved runner's `[[runner]]` reads, so back it up with the directory while a
+`[[runner]]` points into it.

@@ -293,7 +293,7 @@ HOST_REGISTRY = ConfigRegistry(
         DurablePath(
             ENV_FILENAME,
             "the host token, and runner hub tokens the next start imports into the host store",
-            written_by=("add", "host", "ingest", "init"),
+            written_by=("host", "ingest", "init"),
             mode=ENV_FILE_MODE,
         ),
         DurablePath(DATA_DIRNAME, "the host's data directory"),
@@ -306,11 +306,12 @@ HOST_REGISTRY = ConfigRegistry(
         ),
         DurablePath(f"{DATA_DIRNAME}/{HOST_LOCK_FILENAME}", "the lock that keeps one host process on the directory"),
         DurablePath(HOST_SOCKET_FILENAME, "the host's local API socket"),
-        DurablePath(RUNNERS_DIRNAME, "each runner's own files, by runner name"),
+        DurablePath(RUNNERS_DIRNAME, "deprecated: each runner's own files, by runner name"),
         DurablePath(
             f"{RUNNERS_DIRNAME}/<name>",
-            "one runner's own directory, named for the runner",
-            written_by=("add", "ingest"),
+            "deprecated: one runner's own directory, named for the runner; only an ingest still creates it, for the "
+            "path files its carried [[runner]] reads",
+            written_by=("ingest",),
         ),
         DurablePath(WORKER_STDOUT_DIRNAME, "each worker's harness stdout, one file per lease generation"),
         DurablePath(ELICITATION_OUTPUT_DIRNAME, "each elicitation's output, one file per attempt"),
