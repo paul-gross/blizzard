@@ -4,7 +4,7 @@ import { ConfigRecordPanel } from '../config-record-panel';
 import { ConfigRevisions } from '../config-revisions';
 import { ConfigFieldDiff } from '../config-field-diff';
 import type { RevisionRowVm } from '../config-history.model';
-import { diffOf, recordOf } from './hub-settings.model';
+import { recordOf } from './hub-settings.model';
 
 @Component({ selector: 'app-hub-settings-view', changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState, KitButton, KitErrorLine, KitTextInput, ConfigRecordPanel, ConfigRevisions, ConfigFieldDiff], templateUrl: './hub-settings-view.html' })
@@ -28,5 +28,4 @@ export class HubSettingsView {
   readonly cancelled = output<void>();
   readonly loadMore = output<void>();
   protected readonly record = recordOf;
-  protected readonly diff = diffOf;
 }

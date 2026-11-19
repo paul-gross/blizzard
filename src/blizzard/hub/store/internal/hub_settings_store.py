@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from types import MappingProxyType
+from typing import cast
 
 from sqlalchemy import Connection, delete, insert, select, true, update
 
@@ -16,8 +17,7 @@ from blizzard.foundation.settings_record.decision import decide, seed_choice
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange, Op
-from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.settings.model import HubSettingsSnapshot
+from blizzard.hub.settings.model import HubSettingsChangeEntry, HubSettingsSnapshot
 from blizzard.hub.settings.values import freeze
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import hub_setting_changes, hub_setting_entries, hub_settings
@@ -247,24 +247,34 @@ class HubSettingsStore:
         provenance = {row.key: (row.revision, row.recorded_at, row.actor) for row in rows if row.key is not None}
         return HubSettingsSnapshot(rows[0].settings_revision, MappingProxyType(entries)), provenance
 
-    def changes(self, limit: int, before: int | None) -> tuple[list[dict[str, object]], int | None]:
+    def changes(self, limit: int, before: int | None) -> tuple[list[HubSettingsChangeEntry], int | None]:
         statement = select(hub_setting_changes).order_by(hub_setting_changes.c.revision.desc()).limit(limit + 1)
         if before is not None:
             statement = statement.where(hub_setting_changes.c.revision < before)
         with self._store.read("hub_settings_changes") as conn:
             rows = conn.execute(statement).all()
         page = rows[:limit]
-        result: list[dict[str, object]] = [
-            {
-                "id": r.revision,
-                "revision": r.revision,
-                "recorded_at": iso_utc(r.recorded_at),
-                "actor": r.actor,
-                "door": r.door,
-                "op": r.op,
-                "apply_id": r.apply_id,
-                "diff": json.loads(r.diff_json),
-            }
+        result = [
+            HubSettingsChangeEntry(
+                revision=r.revision,
+                recorded_at=r.recorded_at,
+                actor=r.actor,
+                door=r.door,
+                op=r.op,
+                apply_id=r.apply_id,
+                diff=tuple(_field_change(item) for item in json.loads(r.diff_json)),
+            )
             for r in page
         ]
         return result, page[-1].revision if len(rows) > limit else None
+
+
+def _stored_entry(raw: Mapping[str, object] | None) -> Entry | None:
+    return None if raw is None else Entry(freeze(raw["value"]), bool(raw["at_default"]))
+
+
+def _field_change(item: Mapping[str, object]) -> FieldChange:
+    """Read one diff item back the way ``_Record.append_change`` wrote it."""
+    new = _stored_entry(cast(Mapping[str, object] | None, item["new"]))
+    assert new is not None
+    return FieldChange(str(item["key"]), _stored_entry(cast(Mapping[str, object] | None, item["old"])), new)

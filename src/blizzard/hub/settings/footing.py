@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from blizzard.foundation.config_keys import TABLE, ConfigRegistry, ConfigView, InvalidConfigValue, Lifetime
+from blizzard.foundation.config_keys import TABLE, ConfigKey, ConfigRegistry, ConfigView, InvalidConfigValue, Lifetime
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.vocabulary import Entry
@@ -17,12 +17,51 @@ from blizzard.hub.config import ConfigError, Env, HubConfig
 from blizzard.hub.settings.values import thaw
 
 
-def setting_keys(registry: ConfigRegistry) -> tuple[str, ...]:
+def settable_declarations(registry: ConfigRegistry) -> tuple[ConfigKey, ...]:
+    """The declarations of every live, settable leaf key."""
     return tuple(
-        key.path
+        key
         for key in registry.keys
         if key.lifetime == Lifetime.PASS and not key.deprecated and "[]" not in key.path and key.type != TABLE
     )
+
+
+def setting_keys(registry: ConfigRegistry) -> tuple[str, ...]:
+    return tuple(key.path for key in settable_declarations(registry))
+
+
+class SettingUnknown(Exception):
+    """A key the hub does not declare as a settable setting."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"Unknown hub setting {key!r}")
+        self.key = key
+
+
+class SettingNotLive(Exception):
+    """A declared boot setting: edited in the hub's config file, applied on restart."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"{key} is a boot setting; edit blizzard-hub.toml and restart")
+        self.key = key
+
+
+def require_settable(registry: ConfigRegistry, keys: Iterable[str]) -> None:
+    """Refuse the first key, in sorted order, that is not a live setting."""
+    settable = set(setting_keys(registry))
+    for key in sorted(set(keys)):
+        if key in settable:
+            continue
+        declaration = registry.key(key)
+        if (
+            declaration is not None
+            and not declaration.deprecated
+            and declaration.type != TABLE
+            and "[]" not in key
+            and declaration.lifetime != Lifetime.PASS
+        ):
+            raise SettingNotLive(key)
+        raise SettingUnknown(key)
 
 
 def _put(document: dict[str, object], path: str, value: object) -> None:

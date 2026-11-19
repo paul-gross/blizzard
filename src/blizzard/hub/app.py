@@ -52,7 +52,6 @@ from blizzard.hub.api import problems
 from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_invariants import router as admin_invariants_router
 from blizzard.hub.api.admin_settings import router as admin_settings_router
-from blizzard.hub.api.admin_settings import validation_problem as hub_settings_validation_problem
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
@@ -97,6 +96,7 @@ from blizzard.hub.api.members import router as members_router
 from blizzard.hub.api.openapi_problems import install_problem_responses
 from blizzard.hub.api.problem_exceptions import problem_http_exception
 from blizzard.hub.api.problem_rendering import declared_problem_response
+from blizzard.hub.api.problems_admin import settings_invalid_problem
 from blizzard.hub.api.project_params import refuse_project_required
 from blizzard.hub.api.projects import router as projects_router
 from blizzard.hub.api.questions import router as questions_router
@@ -163,7 +163,6 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.projects.declarations import ImportLinks
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
@@ -554,7 +553,9 @@ async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
         ("PATCH", "/api/admin/settings"),
         ("POST", "/api/admin/settings/apply"),
     }:
-        response = declared_problem_response(request, hub_settings_validation_problem(instance=request.url.path))
+        response = declared_problem_response(
+            request, settings_invalid_problem("Invalid settings request", {}, instance=request.url.path)
+        )
         assert response is not None
         return response
     if request.url.path == "/api/admin/clock":
@@ -756,18 +757,6 @@ def create_app(
     return app
 
 
-def transcript_caps(config: HubConfig) -> TranscriptCaps:
-    """The configured ingest ceilings, each falling back to the domain's own default
-    (see ``TranscriptCapsConfig`` in `src/blizzard/hub/config.py`)."""
-    defaults = TranscriptCaps()
-    configured = config.transcripts
-    return TranscriptCaps(
-        record_max_bytes=configured.record_max_bytes or defaults.record_max_bytes,
-        chunk_budget_max_bytes=configured.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
-        runner_daily_rate_max_bytes=configured.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
-    )
-
-
 def build_hosted_app(
     config: HubConfig,
     *,
@@ -879,7 +868,7 @@ def build_hosted_app(
             secret_keys=secret_keys,
             trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
             login_throttle=config.auth.login_throttle,
-            transcript_caps=transcript_caps(config),
+            transcript_caps=config.transcripts.transcript_caps(),
             # No exporter is built unless OpenTelemetry's own variables enable tracing.
             trace_exporter=(
                 OtlpTraceExporter(

@@ -407,6 +407,15 @@ class TranscriptCapsConfig:
             runner_daily_rate_max_bytes=cls._bytes(transcripts, "runner_daily_rate_max_bytes"),
         )
 
+    def transcript_caps(self) -> TranscriptCaps:
+        """The ceilings the ingest lane adjudicates against: each override, else the domain's own default."""
+        defaults = TranscriptCaps()
+        return TranscriptCaps(
+            record_max_bytes=self.record_max_bytes or defaults.record_max_bytes,
+            chunk_budget_max_bytes=self.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
+            runner_daily_rate_max_bytes=self.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
+        )
+
     @staticmethod
     def _bytes(raw: ConfigView, key: str) -> int | None:
         value = raw.get(key)

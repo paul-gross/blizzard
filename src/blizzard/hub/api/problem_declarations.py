@@ -57,7 +57,7 @@ from blizzard.wire.egress import EgressBackfillFailure
 from blizzard.wire.flags import FlagOffProblem
 from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
-from blizzard.wire.hub_settings import HubSettingsInvalidProblem
+from blizzard.wire.hub_settings import SettingNotLiveProblem, SettingsInvalidProblem, SettingUnknownProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
     HubStoreUnavailableProblem,
@@ -745,8 +745,11 @@ ADMIN_DECLARATIONS = (ProblemDeclaration("GET", "/api/admin/invariants", 409, In
 
 HUB_SETTINGS_DECLARATIONS = (
     ProblemDeclaration("PATCH", "/api/admin/settings", 409, RevisionConflictProblem),
-    ProblemDeclaration("PATCH", "/api/admin/settings", 422, HubSettingsInvalidProblem),
-    ProblemDeclaration("POST", "/api/admin/settings/apply", 422, HubSettingsInvalidProblem),
+    *(
+        ProblemDeclaration(method, path, 422, model)
+        for method, path in (("PATCH", "/api/admin/settings"), ("POST", "/api/admin/settings/apply"))
+        for model in (SettingUnknownProblem, SettingNotLiveProblem, SettingsInvalidProblem)
+    ),
     *(
         ProblemDeclaration(method, path, 403, RunnerCredentialForbiddenProblem)
         for method, path in _OPERATOR_HUB_OPERATIONS

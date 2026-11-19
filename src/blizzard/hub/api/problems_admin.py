@@ -6,6 +6,7 @@ from blizzard.wire import config as config_wire
 from blizzard.wire import credential as credential_wire
 from blizzard.wire import forge as forge_wire
 from blizzard.wire import graph as graph_wire
+from blizzard.wire import hub_settings as hub_settings_wire
 from blizzard.wire import invitation as invitation_wire
 from blizzard.wire import project as project_wire
 from blizzard.wire import record_referrer as record_referrer_wire
@@ -528,4 +529,46 @@ def unknown_body_project_problem(field: str, value: str, *, instance: str) -> Un
         detail=[UnknownProjectDetail(loc=["body", field], msg=f"unknown project {value!r}", type="unknown_project")],
         instance=instance,
         status=422,
+    )
+
+
+def setting_unknown_problem(
+    message: str, errors: dict[str, str], *, instance: str
+) -> hub_settings_wire.SettingUnknownProblem:
+    return hub_settings_wire.SettingUnknownProblem(
+        type=hub_settings_wire.SETTING_UNKNOWN,
+        title="Invalid settings",
+        detail=message,
+        instance=instance,
+        status=422,
+        code="setting_unknown",
+        errors=errors,
+    )
+
+
+def setting_not_live_problem(
+    message: str, errors: dict[str, str], *, instance: str
+) -> hub_settings_wire.SettingNotLiveProblem:
+    return hub_settings_wire.SettingNotLiveProblem(
+        type=hub_settings_wire.SETTING_NOT_LIVE,
+        title="Invalid settings",
+        detail=message,
+        instance=instance,
+        status=422,
+        code="setting_not_live",
+        errors=errors,
+    )
+
+
+def settings_invalid_problem(
+    message: str, errors: dict[str, str], *, instance: str
+) -> hub_settings_wire.SettingsInvalidProblem:
+    return hub_settings_wire.SettingsInvalidProblem(
+        type=hub_settings_wire.SETTINGS_INVALID,
+        title="Invalid settings",
+        detail=message,
+        instance=instance,
+        status=422,
+        code="settings_invalid",
+        errors=errors,
     )

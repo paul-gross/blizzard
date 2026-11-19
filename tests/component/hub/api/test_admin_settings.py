@@ -200,6 +200,20 @@ def test_apply_diff_resolves_defaults_for_absent_and_unset_entries(tmp_path: Pat
     assert (diff["field"], diff["old"], diff["new"]) == ("action_pass_seconds", 300, 6)
 
 
+def test_changes_resolve_absent_and_at_default_sides_to_effective_values(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    assert client.post(path + "/apply", json={"action_pass_seconds": 5}).status_code == 200
+    assert client.patch(path, headers={"If-Match": "1"}, json={"unset": ["action_pass_seconds"]}).status_code == 200
+    unset, applied = client.get(path + "/changes").json()["changes"]
+    assert applied["diff"] == [
+        {"field": "action_pass_seconds", "old": 300, "new": 5, "old_label": None, "new_label": None}
+    ]
+    assert unset["diff"] == [
+        {"field": "action_pass_seconds", "old": 5, "new": 300, "old_label": None, "new_label": None}
+    ]
+
+
 def test_transcript_caps_show_effective_defaults_and_overrides(tmp_path: Path) -> None:
     client = _hub(tmp_path).client
     path = "/api/admin/settings"
@@ -214,6 +228,23 @@ def test_transcript_caps_show_effective_defaults_and_overrides(tmp_path: Path) -
     response = client.patch(path, headers={"If-Match": "1"}, json={"unset": ["transcripts.record_max_bytes"]})
     row = next(r for r in response.json()["settings"] if r["key"] == "transcripts.record_max_bytes")
     assert (row["value"], row["source"]) == (defaults.record_max_bytes, "default")
+
+
+def test_get_omits_and_patch_refuses_a_grouping_key(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    assert "transcripts" not in {r["key"] for r in client.get(path).json()["settings"]}
+    refused = client.patch(path, headers={"If-Match": "1"}, json={"set": {"transcripts": {}}})
+    assert refused.status_code == 422
+    assert (refused.json()["type"], refused.json()["code"]) == (
+        "urn:blizzard:problem:setting-unknown",
+        "setting_unknown",
+    )
+    boot = client.patch(path, headers={"If-Match": "1"}, json={"set": {"host": "x"}})
+    assert (boot.json()["type"], boot.json()["code"]) == (
+        "urn:blizzard:problem:setting-not-live",
+        "setting_not_live",
+    )
 
 
 def test_request_validation_matches_declared_problem(tmp_path: Path) -> None:

@@ -80,7 +80,6 @@ from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import (
     LeaseSegmentsNotOwned,
-    TranscriptCaps,
     refuse_foreign_lease_read,
 )
 from blizzard.hub.domain.projects.model import ProjectId
@@ -956,13 +955,7 @@ def ingest_transcript_segments(
     runner is retired."""
     runner_id = fleet.caller_id()
     records = [(record.seq, transcripts_api.to_domain_record(record, runner_id=runner_id)) for record in batch.records]
-    configured = fleet.config.transcripts
-    defaults = TranscriptCaps()
-    caps = TranscriptCaps(
-        record_max_bytes=configured.record_max_bytes or defaults.record_max_bytes,
-        chunk_budget_max_bytes=configured.chunk_budget_max_bytes or defaults.chunk_budget_max_bytes,
-        runner_daily_rate_max_bytes=configured.runner_daily_rate_max_bytes or defaults.runner_daily_rate_max_bytes,
-    )
+    caps = fleet.config.transcripts.transcript_caps()
     result = services.transcript_ingest.ingest(runner_id, records, caps=caps if fleet.live_settings else None)
     return transcripts_api.to_ack(runner_id, result)
 

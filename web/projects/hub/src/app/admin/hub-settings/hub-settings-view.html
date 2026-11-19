@@ -4,7 +4,7 @@
     @for (row of rows(); track row.key) {
       <article>
         <app-config-record-panel [vm]="record(row)" state="ready" emptyText="No setting" testidPrefix="hub-setting" />
-        @if (row.lifetime === 'pass') { <fleet-kit-button [disabled]="busy()" (click)="edit.emit(row)">Edit {{ row.key }}</fleet-kit-button> }
+        <fleet-kit-button [disabled]="busy()" (click)="edit.emit(row)">Edit {{ row.key }}</fleet-kit-button>
       </article>
     }
   </fleet-kit-async-state>
@@ -23,7 +23,7 @@
   @for (change of changes(); track change.id) {
     <article><h3>Revision {{ change.revision }} · {{ change.op }}</h3>
       <p>{{ change.recorded_at }} · {{ change.actor }} via {{ change.door }}</p>
-      <app-config-field-diff [diff]="diff(change)" />
+      <app-config-field-diff [diff]="change.diff" />
     </article>
   }
   @if (hasNext()) { <fleet-kit-button [disabled]="loadingNext()" (click)="loadMore.emit()">Load more</fleet-kit-button> }

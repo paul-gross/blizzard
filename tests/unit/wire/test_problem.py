@@ -301,6 +301,9 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "SECRET_NOT_FOUND": "urn:blizzard:problem:secret-not-found",
         "SECRET_RETIRED": "urn:blizzard:problem:secret-retired",
         "SECRET_VALUE_BLANK": "urn:blizzard:problem:secret-value-blank",
+        "SETTING_NOT_LIVE": "urn:blizzard:problem:setting-not-live",
+        "SETTING_UNKNOWN": "urn:blizzard:problem:setting-unknown",
+        "SETTINGS_INVALID": "urn:blizzard:problem:settings-invalid",
         "SELF_ANCHORED_MOVE": "urn:blizzard:problem:self-anchored-move",
         "SPEND_INSTANT_INVALID": "urn:blizzard:problem:spend-instant-invalid",
         "SSO_REFUSED": "urn:blizzard:problem:sso-refused",
@@ -745,6 +748,17 @@ def test_every_problem_model_literal_has_a_local_final() -> None:
             missing = _problem_literal_values(model) - local_values
             assert not missing, (
                 f"{module.__name__}.{model.__name__} has problem Literal(s) without a local Final: {sorted(missing)}"
+            )
+
+
+def test_no_problem_model_types_its_type_as_a_plain_string() -> None:
+    for module in _wire_modules():
+        for model in _local_models(module):
+            field = model.model_fields.get("type")
+            if field is None or not issubclass(model, ProblemDetails):
+                continue
+            assert field.annotation is not str, (
+                f"{module.__name__}.{model.__name__} types `type` as a plain str; declare a Literal URN and a Final"
             )
 
 
