@@ -11,20 +11,3 @@ h2 {
   font-size: var(--fs-md);
   color: var(--text);
 }
-
-/* `stretch`, not `center`: at the narrow widths the dialog is still reachable at, a
-   `cta`-sized button's label wraps to a second line rather than overflowing the
-   panel, and centering two buttons of unequal height leaves their tops offset by
-   half the difference. Stretching gives both the row's height, so the action row
-   reads as one row however either label wraps. */
-.footer {
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.submit-error {
-  flex: 1;
-  align-self: center;
-}
