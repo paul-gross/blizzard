@@ -7,7 +7,7 @@ import type { Credential, CredentialCheck, CredentialCheckOperation, CredentialC
 export type { CredentialCheckTarget } from './credential.domain';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { type ConfigFieldDef, type ConfigFieldOption } from '../config-edit.model';
+import type { ConfigFieldOption } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { recordLink } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
@@ -78,11 +78,6 @@ export function credentialOptions(credentials: readonly CredentialChoice[]): rea
   return credentials
     .filter((credential) => !credential.retired)
     .map((credential) => ({ value: credential.id, label: `${credential.slug} · ${credential.binding}`, kind: credential.forgeId }));
-}
-
-/** `fields` with its `credential` select's choices filled in. */
-export function credentialPickerFields<K extends string>(fields: readonly ConfigFieldDef<K>[], credentials: readonly CredentialChoice[]): readonly ConfigFieldDef<K>[] {
-  return fields.map((field) => (field.key === 'credential' ? { ...field, options: credentialOptions(credentials) } : field));
 }
 
 /** One operation of a credential check, as the check table shows it. */

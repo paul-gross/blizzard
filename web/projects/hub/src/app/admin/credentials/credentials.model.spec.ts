@@ -13,7 +13,6 @@ import {
   shownCheckVm,
   credentialCheckVm,
   credentialOptions,
-  credentialPickerFields,
   credentialRecordVm,
   credentialRows,
 } from './credentials.model';
@@ -70,8 +69,6 @@ describe('credential picker', () => {
       { value: 'cred_g', label: 'gh-main · github.token', kind: 'frg_g' },
       { value: 'cred_l', label: 'lab · gitlab.token', kind: 'frg_l' },
     ]);
-    expect(credentialPickerFields([{ key: 'credential', label: 'Credential', kind: 'select', filterBy: 'forge' }], [{ id: 'cred_g', slug: 'gh-main', binding: 'github.token', forgeId: 'frg_g', retired: false }])[0].options)
-      .toEqual([{ value: 'cred_g', label: 'gh-main · github.token', kind: 'frg_g' }]);
   });
 
   describe('credentialCheckVm', () => {

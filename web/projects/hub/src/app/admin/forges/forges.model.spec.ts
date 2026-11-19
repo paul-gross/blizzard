@@ -1,7 +1,7 @@
 import type { ForgeSummary } from 'fleet';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { forge, forgeRecord } from '../../forge/forge.builders';
-import { budgetFacts, FORGE_FIELD_VIEWS, forgeOptions, forgePickerFields, forgeRecordVm, forgeRows } from './forges.model';
+import { budgetFacts, FORGE_FIELD_VIEWS, forgeOptions, forgeRecordVm, forgeRows } from './forges.model';
 
 const GITHUB: ForgeSummary = {
   forge_id: 'frg_1', slug: 'github', name: 'GitHub', kind: 'github', api_base: 'https://api.github.com',
@@ -30,8 +30,6 @@ describe('forge admin models', () => {
   it('lists only enabled forges, matching a source provider when requested', () => {
     expect(forgeOptions([GITHUB, GITLAB, RETIRED]).map((option) => option.value)).toEqual(['frg_1', 'frg_2']);
     expect(forgeOptions([GITHUB, GITLAB, RETIRED], 'github')).toEqual([{ value: 'frg_1', label: 'github · GitHub', kind: 'github' }]);
-    expect(forgePickerFields([{ key: 'forge', label: 'Forge', kind: 'select' }], [GITHUB, GITLAB])[0].options)
-      .toEqual([{ value: 'frg_1', label: 'github · GitHub', kind: 'github' }, { value: 'frg_2', label: 'gitlab · GitLab', kind: 'gitlab' }]);
   });
 
   it('links both kinds of referring records by id and shows the effective web origin', () => {

@@ -1,6 +1,5 @@
 import { formatAbsolute, RecordKind, type ForgeSummary } from 'fleet';
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import type { ConfigFieldDef } from '../config-edit.model';
 import type { ConfigFieldView } from '../config-field-tree.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import { factText, recordLink } from '../config-links.model';
@@ -73,8 +72,4 @@ export function forgeOptions(
   return forges
     .filter((forge) => !forge.retired && (provider === undefined || forge.kind === provider))
     .map((forge) => ({ value: forge.forge_id, label: `${forge.slug} · ${forge.name}`, kind: forge.kind }));
-}
-
-export function forgePickerFields<K extends string>(fields: readonly ConfigFieldDef<K>[], forges: readonly ForgeSummary[], provider?: string): readonly ConfigFieldDef<K>[] {
-  return fields.map((field) => field.key === 'forge' ? { ...field, options: forgeOptions(forges, provider) } : field);
 }
