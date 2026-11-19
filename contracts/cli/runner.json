@@ -2265,6 +2265,56 @@
       "path": "runner tick",
       "short_help": "Run one pass of the host's runner against the live hub and workspace, then exit."
     },
+    "token": {
+      "commands": {
+        "set": {
+          "help": "Seal the runner's hub token, read from stdin \u2014 never an argument \u2014 in the host store.\n\nOn a running host the runner takes it up within its next check cycle, and a runner its hub refused as retired is\nrefused; on a stopped host it takes effect at the next start. Trailing CR/LF is stripped; an empty value is\nrefused. DIRECTORY (positional) and --dir are equivalent \u2014 pass one. The token is never printed.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "directory",
+              "opts": [
+                "directory"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "dir_option",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The host's runner whose token to set, by name or id; may be omitted on a host of one runner.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner",
+              "opts": [
+                "--runner"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner token set",
+          "short_help": "Seal the runner's hub token, read from stdin \u2014 never an argument \u2014 in the host store."
+        }
+      },
+      "help": "Replace a runner's hub token, sealed in the host store.",
+      "params": [],
+      "path": "runner token",
+      "short_help": "Replace a runner's hub token, sealed in the host store."
+    },
     "traces": {
       "commands": {
         "replay": {

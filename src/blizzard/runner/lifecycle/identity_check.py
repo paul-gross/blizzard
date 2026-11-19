@@ -1,26 +1,9 @@
 """The identity check — the head of every tick, before any other hub call.
 
-A runner is the one its host file's ``[[runner]] id`` names, and its store is bound to that id before anything runs.
-Each tick asks the hub which runner the bearer token belongs to and compares that id with the configured one — the id
-alone, since a runner never changes tenant and ids are unique across the hub. The store's identity row takes no part:
-configuration, not the store, says whose it is. A different runner means a wrong token or a hub URL pointing
-somewhere else, and a token the hub refuses — unknown, revoked, retired — is a refusal of its own: either way the
-runner refuses to drive its leases or deliver its buffered facts, and checks again next
-tick, so restoring the right token or hub resumes it with nothing lost. A matching answer also fills in the
-tenant it names when the row lacks it or holds another name for it — the first contact after an upgrade gives
-a row written before tenants its tenant. While refusing, each check first re-reads the token from the host
-dir's ``.env`` and checks with a corrected one, so restoring the token there needs no restart; a token the
-process environment or the host file supplied stays fixed until a restart. A hub that does not answer leaves the
-verdict as it stood: an outage never reads as a mismatch. The check writes only the token's own verdict; the
-runner's standing under a registered host is the host tick's, and neither clears the other.
-
-A matching answer also carries the hub's ``fleet`` flags, which the check applies to the runner's flags before any
-later step of the tick reads them. Any other outcome — an outage, a refused token, a mismatch, a hub with no identity
-read — leaves the flags as they stood: a mismatched answer is not this runner's hub's, and an outage never flips
-behavior.
-
-A hub forward served outside the loop — the hub proxy — is a first contact too: while the loop has not
-checked yet, it judges the hub's answer the same way first (:class:`ProxyIdentityCheck`), writing nothing."""
+Each tick asks the hub which runner the bearer token belongs to and compares that id with the configured one. A
+mismatch or a refused token stops the runner driving leases or delivering facts until the next tick resolves it; an
+outage leaves the verdict and the ``fleet`` flags as they stood. A match backfills the row's tenant and applies the
+hub's flags. A hub forward outside the loop judges its first contact the same way (:class:`ProxyIdentityCheck`)."""
 
 from __future__ import annotations
 
@@ -35,6 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.hub.client import (
     HubClientError,
     IdentityRouteMissing,
@@ -43,7 +27,7 @@ from blizzard.runner.hub.client import (
     TokenRefusal,
 )
 from blizzard.runner.hub.flags import FlagsHolder
-from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
+from blizzard.runner.hub.held_token import HubTokenHolder, TokenRefresh
 from blizzard.runner.hub.identity import (
     ICurrentIdentityVerdict,
     IdentityVerdict,
@@ -54,6 +38,7 @@ from blizzard.runner.hub.identity import (
     answered_tenant,
     judged,
 )
+from blizzard.runner.hub.sealed_tokens import unreadable_token
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -89,9 +74,8 @@ class IdentityCheckContext(Protocol):
     def flags(self) -> FlagsHolder: ...
 
 
-def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_fixed: bool) -> None:
-    """Log a verdict that changed state, once per change, naming both ids and the remedy — and,
-    when ``token_fixed``, that only a restart takes up a corrected token."""
+def log_transition(holder: IdentityVerdictHolder, was: IdentityState) -> None:
+    """Log a verdict that changed state, once per change, naming both ids and the remedy."""
     verdict = holder.verdict()
     if verdict.state is was:
         return
@@ -119,12 +103,6 @@ def log_transition(holder: IdentityVerdictHolder, was: IdentityState, *, token_f
             was=str(was),
         )
         return
-    else:
-        return
-    if token_fixed:
-        _log.warning(
-            "runner token comes from the process environment or the host file: restart the runner to change it"
-        )
 
 
 class ForeignStoreKind(StrEnum):
@@ -189,8 +167,6 @@ def check_token(
     configured_id: str,
     verdict: IdentityVerdictHolder,
     now: datetime,
-    *,
-    token_fixed: bool,
 ) -> TokenIdentity | None:
     """Ask the hub which runner the token belongs to, judge it against the configured runner, and hold
     the verdict. Returns the hub's answer; ``None`` when the hub refused the token — held as a refusal of its
@@ -206,8 +182,9 @@ def check_token(
             store_runner_id=configured_id,
             reason=_refused(answer),
             checked_at=now,
+            retired=answer.reason is RunnerTokenRefusalReason.RETIRED,
         )
-        log_transition(verdict, was, token_fixed=token_fixed)
+        log_transition(verdict, was)
         return None
     was = verdict.record(
         judged(configured_id, answer.runner_id),
@@ -215,7 +192,7 @@ def check_token(
         token_runner_id=answer.runner_id,
         checked_at=now,
     )
-    log_transition(verdict, was, token_fixed=token_fixed)
+    log_transition(verdict, was)
     return answer
 
 
@@ -246,15 +223,21 @@ class IdentityCheck:
 
     def run(self) -> None:
         ctx = self.ctx
-        if ctx.identity_verdict.token_refusing():
-            _take_up_a_corrected_token(ctx.hub_token)
+        _take_up_a_replaced_token(ctx.hub_token)
+        if (key_id := ctx.hub_token.unreadable_key()) is not None:
+            was = ctx.identity_verdict.refuse(
+                store_runner_id=ctx.config.runner_id,
+                reason=unreadable_token(key_id),
+                checked_at=ctx.clock.now(),
+            )
+            log_transition(ctx.identity_verdict, was)
+            return
         try:
             answer = check_token(
                 ctx.token_identity,
                 ctx.config.runner_id,
                 ctx.identity_verdict,
                 ctx.clock.now(),
-                token_fixed=ctx.hub_token.fixed(),
             )
         except HubClientError:
             return  # unreachable — the verdict stands
@@ -270,12 +253,9 @@ class IdentityCheck:
 
 
 class ProxyIdentityCheck:
-    """The identity check a hub forward outside the loop runs as its process's first contact. While the
-    loop has not checked, the forward asks the hub which runner its token belongs to and this judges the
-    answer against the configured runner. A match is remembered for the process, so the forward asks once; a
-    refused token, a hub with no identity read, or a mismatch forwards nothing and is asked again next
-    time. It writes nothing the status reports: the verdict stays the loop's, which alone logs a
-    transition and re-reads a corrected token, and prevails once it has checked."""
+    """The identity check a hub forward outside the loop runs until the loop has checked. A match is remembered
+    for the process; any other answer forwards nothing and is asked again next time. It writes nothing: the
+    verdict stays the loop's, which prevails once it has checked."""
 
     def __init__(self, configured_id: str, verdict: ICurrentIdentityVerdict, clock: IClock) -> None:
         self._configured_id = configured_id
@@ -326,10 +306,10 @@ def _record(ctx: IdentityCheckContext, identity: RunnerIdentity) -> None:
     ctx.identity.hold(identity)
 
 
-def _take_up_a_corrected_token(token: HubTokenHolder) -> None:
-    """Re-read the token from ``.env`` so the check below runs with a corrected one."""
-    reread = token.reread()
-    if reread is TokenReread.SWITCHED:
-        _log.info("runner token changed in its .env: checking its identity with the new one")
-    elif reread is TokenReread.UNREADABLE:
-        _log.debug("runner token file unreadable: checking its identity with the token in use")
+def _take_up_a_replaced_token(token: HubTokenHolder) -> None:
+    """Take up the stored token when its row has moved, so the check below runs with the replaced one."""
+    refresh = token.refresh()
+    if refresh is TokenRefresh.SWITCHED:
+        _log.info("runner token replaced in the host store: checking its identity with the new one")
+    elif refresh is TokenRefresh.UNREADABLE:
+        _log.debug("runner token row does not open under the host's key: refusing until its token is set again")

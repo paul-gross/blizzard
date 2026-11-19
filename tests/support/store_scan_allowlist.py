@@ -41,6 +41,7 @@ from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatu
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.sealed_tokens import IReadHubTokenRepository
 from blizzard.runner.settings.ports import IReadHostSettings, IReadRunnerSettings
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
@@ -227,6 +228,14 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         MethodScopedAllowance(IReadHostSettings, method, "host_setting_changes", 200, _RARE_OPERATOR_EVENT_REASON)
         for method in ("snapshot_with_provenance", "changes")
     ],
+    # The sealed hub tokens: one row per runner the host has ever held a token for, read whole to list key ids.
+    MethodScopedAllowance(
+        IReadHubTokenRepository,
+        "key_ids",
+        "runner_hub_tokens",
+        50,
+        "the host holds one sealed-token row per runner identity, a handful by lifetime",
+    ),
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_facts", 50, _SCHEMA_520_REASON),

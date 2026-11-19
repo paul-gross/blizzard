@@ -10,13 +10,14 @@ import httpx2
 import pytest
 
 import blizzard.runner.composition as composition
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.runner.composition import HostProcess, add_runner, build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken, TokenSource
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.identity import RunnerIdentity
 from tests.support.host_files import host_config_of
+from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_fakes import migrated_store_at
 
 _RUNNER_ID = "rn_a"
@@ -31,8 +32,8 @@ def _config(tmp_path: Path) -> RunnerConfig:
     return config
 
 
-def _host(config: RunnerConfig, *, token: ResolvedToken | None = None) -> HostProcess:
-    built = BuiltRunner(_RUNNER_ID, dataclasses.replace(config, runner_id=_RUNNER_ID), token or ResolvedToken())
+def _host(config: RunnerConfig) -> HostProcess:
+    built = BuiltRunner(_RUNNER_ID, dataclasses.replace(config, runner_id=_RUNNER_ID))
     return build_host_process(host_config_of(config), [built])
 
 
@@ -62,11 +63,12 @@ def test_the_watch_reads_and_forgets_through_the_runners_own_identity_store(tmp_
         host.close()
 
 
-def test_one_instrumented_client_serves_every_identity_call_and_presents_the_re_read_token(
+def test_one_instrumented_client_serves_every_identity_call_and_presents_the_replaced_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
-    (tmp_path / ".env").write_text(f"{config.token_env}=old\n")
+    with host_hub_tokens(config.root, config.db_url) as tokens:
+        tokens.seal_if_absent("rn_b", SecretValue("old"))
     seen: list[str] = []
     built: list[httpx2.Client] = []
     instrumented: list[httpx2.Client] = []
@@ -79,18 +81,12 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_re_
         return client
 
     monkeypatch.setattr(composition.httpx2, "Client", recording_client)
-    real_held = composition.held_hub_token
-
-    def dotenv_held(cfg: RunnerConfig, _token: ResolvedToken | None = None) -> HubTokenHolder:
-        return real_held(cfg, ResolvedToken("old", TokenSource.DOTENV))
-
-    monkeypatch.setattr(composition, "held_hub_token", dotenv_held)
     host = _host(config)
     try:
         monkeypatch.setattr(host.platform_tracing, "instrument_client", instrumented.append)
         built.clear()
         add_runner(
-            dataclasses.replace(config, runner_id="rn_b"),
+            dataclasses.replace(config, runner_id="rn_b", hub_token=""),
             host,
             runner_id="rn_b",
         )
@@ -100,8 +96,9 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_re_
         runner.stores.identity.record_runner_identity(record)
         assert runner.retirement.forget_if_retired() is True
         runner.stores.identity.record_runner_identity(record)
-        (tmp_path / ".env").write_text(f"{config.token_env}=new\n")
-        runner.hub_token.reread()
+        with host_hub_tokens(config.root, config.db_url) as tokens:
+            tokens.replace("rn_b", "new", verdict=None)
+        runner.hub_token.refresh()
         assert runner.retirement.forget_if_retired() is True
         assert seen == ["Bearer old", "Bearer new"]
         assert built == [runner.identity_client]

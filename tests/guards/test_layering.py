@@ -267,12 +267,10 @@ def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
 
 #: Kernel modules that stay shared despite one side reaching them, each with the reason — an entry the check no longer
 #: needs fails it (``bzh:shared-kernel``).
-_HUB_ONLY_UNTIL_HOST_SEALS = (
-    "only the hub reaches it until the host seals its runners' tokens with it (`product:runners-come-and-go`)"
-)
 _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
-    f"blizzard.foundation.secrets.{module}": _HUB_ONLY_UNTIL_HOST_SEALS
-    for module in ("factories", "key_variables", "rotation", "sealing", "value")
+    "blizzard.foundation.secrets.rotation": (
+        "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
+    ),
 }
 
 
@@ -1351,6 +1349,7 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "cli" / "runners.py",
         _RUNNER_DIR / "cli" / "store.py",
         _RUNNER_DIR / "cli" / "store_guard.py",
+        _RUNNER_DIR / "cli" / "token.py",
         _RUNNER_COMPOSITION_FILE,
         _RUNNER_DIR / "cli" / "opencode.py",
         _RUNNER_DIR / "cli" / "children.py",
@@ -3162,6 +3161,7 @@ _RUNNER_EDGE_MODULES = frozenset(
         "config_keys",
         "host_config",
         "host_file",
+        "host_keys",
         "host_layout",
         "host_settings_reader",
         "listeners",

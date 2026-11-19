@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.secrets.value import SecretValue
+from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, SealedHubToken, sealed_name
 from blizzard.runner.transfer.ingest import IngestOutcome, IngestRequest
-from blizzard.runner.transfer.refusals import SourceUnsupported
+from blizzard.runner.transfer.refusals import SourceTokenUnreadable, SourceUnsupported, TokenConflict
 from blizzard.runner.transfer.rows import HostIngest
 from blizzard.runner.transfer.source import SourceKind
 from tests.support.runner_ingest_fakes import (
@@ -19,6 +21,7 @@ from tests.support.runner_ingest_fakes import (
     RUNNER,
     RUNNER_ID,
     T0,
+    FakeCipher,
     IngestWorld,
     ingest_world,
     source_store,
@@ -139,3 +142,91 @@ def test_each_path_is_copied_by_its_kind_before_the_runner_directory_and_its_tab
         ("append_runner", HERE),
     ]
     assert runner_dir / "missing" not in world.files.files | world.files.directories
+
+
+def _source_row(world: IngestWorld, token: str, *, key_id: str = "key-there") -> None:
+    """The source store holds the runner's token sealed under ``key_id``."""
+    world.ciphers.keys.setdefault(THERE, "key-there")
+    sealed = FakeCipher(key_id).seal(SecretValue(token), name=sealed_name(RUNNER_ID), revision=FIRST_REVISION)
+    world.stores.hub_tokens[_store_url(source_store(THERE))] = SealedHubToken(RUNNER_ID, FIRST_REVISION, sealed, T0)
+
+
+def _opened_here(world: IngestWorld) -> str:
+    row = world.stores.hub_tokens[HERE_URL]
+    return FakeCipher(world.ciphers.keys[HERE]).open(row.secret()).expose()
+
+
+def test_a_source_row_is_resealed_under_this_hosts_key_and_dropped_from_the_source() -> None:
+    world = _host_directory()
+    world.tokens.tokens.clear()
+    _source_row(world, "sealed-token")
+
+    world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    assert world.stores.hub_tokens[HERE_URL].sealed.key_id == "key-here"
+    assert _opened_here(world) == "sealed-token"
+    assert _store_url(source_store(THERE)) not in world.stores.hub_tokens
+
+
+def test_a_source_row_wins_over_its_env_line() -> None:
+    world = _host_directory()
+    _source_row(world, "sealed-token")
+
+    world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    assert _opened_here(world) == "sealed-token"
+
+
+def test_an_env_only_source_is_sealed_under_this_hosts_key() -> None:
+    world = _host_directory()
+
+    world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    assert ("mint_key", HERE) in world.journal
+    assert _opened_here(world) == "token"
+    assert (THERE, hub_token_variable(RUNNER)) not in world.tokens.tokens
+
+
+def test_a_source_row_that_does_not_open_refuses_before_anything_is_copied() -> None:
+    world = _host_directory()
+    _source_row(world, "sealed-token", key_id="key-lost")
+
+    with pytest.raises(SourceTokenUnreadable, match="runner token set") as refused:
+        world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    # This host's key resolves from the same environment, so the source's key is never asked for there.
+    assert "BZ_HOST_SECRET_KEY" not in str(refused.value)
+    assert not any(op[0] in ("copy_runner", "mint_key") for op in world.journal)
+    assert HERE_URL not in world.stores.hub_tokens
+
+
+def test_a_source_row_without_a_source_key_refuses() -> None:
+    world = _host_directory()
+    _source_row(world, "sealed-token")
+    del world.ciphers.keys[THERE]
+
+    with pytest.raises(SourceTokenUnreadable):
+        world.ingest().run(IngestRequest(THERE, RUNNER))
+
+
+def test_a_source_row_opens_under_the_shared_environment_key_and_is_sealed_under_this_hosts_own() -> None:
+    world = _host_directory()
+    _source_row(world, "sealed-token", key_id="key-env")
+    del world.ciphers.keys[THERE]
+    world.ciphers.environ_key = "key-env"
+    world.ciphers.keys[HERE] = "key-here"
+
+    world.ingest().run(IngestRequest(THERE, RUNNER))
+
+    assert world.stores.hub_tokens[HERE_URL].sealed.key_id == "key-here"
+    assert _opened_here(world) == "sealed-token"
+
+
+def test_a_different_token_held_here_in_a_row_refuses() -> None:
+    world = _host_directory()
+    world.ciphers.keys[HERE] = "key-here"
+    sealed = FakeCipher("key-here").seal(SecretValue("other"), name=sealed_name(RUNNER_ID), revision=FIRST_REVISION)
+    world.stores.hub_tokens[HERE_URL] = SealedHubToken(RUNNER_ID, FIRST_REVISION, sealed, T0)
+
+    with pytest.raises(TokenConflict, match="already holds a different hub token"):
+        world.ingest().run(IngestRequest(THERE, RUNNER))

@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261118_1000_host_settings",
+  "head_revision": "20261118_1000_runner_hub_tokens",
   "store": "runner",
   "tables": {
     "asks": {
@@ -2616,6 +2616,53 @@
       "foreign_keys": [],
       "primary_key": [
         "id"
+      ],
+      "unique": []
+    },
+    "runner_hub_tokens": {
+      "checks": [],
+      "columns": {
+        "ciphertext": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "key_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "nonce": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "updated_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id"
       ],
       "unique": []
     },

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,7 @@ from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.federation import require_superuser
-from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.problems import RunnerProblem, problem, reject_worker_credential
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.config import RunnerConfig
@@ -25,14 +25,6 @@ from blizzard.runner.settings.ports import SettingsChange, SettingsSnapshot
 from blizzard.runner.throttle.settings import DAY_NAMES, DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
-
-
-def reject_worker_credential(request: Request) -> None:
-    # An ungated host grants implicit human authority, but a presented lease token
-    # identifies the worker lane, not an implicit human caller.
-    if presented_lease_token(request) is not None:
-        raise HTTPException(status_code=401, detail="runner session required")
-
 
 router = APIRouter(prefix="/api/settings", tags=["runner settings"], dependencies=[Depends(reject_worker_credential)])
 
@@ -103,12 +95,7 @@ class SettingError(WireModel):
     message: str
 
 
-class SettingsProblem(WireModel):
-    type: str
-    title: str
-    status: int
-    detail: str
-    code: str
+class SettingsProblem(RunnerProblem):
     key: str | None = None
     current: int | None = None
     errors: list[SettingError] | None = None
@@ -131,20 +118,7 @@ WRITE_RESPONSES: dict[int | str, dict[str, object]] = {
 
 
 def settings_problem(status: int, code: str, message: str, **members: object) -> JSONResponse:
-    return JSONResponse(
-        status_code=status,
-        content=SettingsProblem.model_validate(
-            {
-                "type": f"urn:blizzard:problem:{code.replace('_', '-')}",
-                "title": code.replace("_", " "),
-                "status": status,
-                "detail": message,
-                "code": code,
-                **members,
-            }
-        ).model_dump(mode="json"),
-        media_type="application/problem+json",
-    )
+    return problem(status, code, message, model=SettingsProblem, **members)
 
 
 def _view(wiring: RunnerWiring) -> SettingsView:

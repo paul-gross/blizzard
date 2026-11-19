@@ -255,17 +255,21 @@ def refuse_token_conflict(
     runner_id: str,
 ) -> None:
     """Raises :class:`TokenConflict` when the runner's token cannot move. ``carries_runner`` is whether the source
-    brings the runner's ``[[runner]]``; ``offered`` is the token its ``.env`` holds under ``source_variable``, and
-    ``held_here`` the one this host's holds under ``variable``."""
+    brings the runner's ``[[runner]]``; ``offered`` is the token the source holds — its sealed row, else its ``.env``
+    line under ``source_variable`` — and ``held_here`` the one this host holds, its sealed row else its ``.env`` line
+    under ``variable``."""
     if carries_runner and not offered:
         raise TokenConflict(
-            f"the source's .env holds no {source_variable} for runner {runner_name}, so there is none to move"
+            f"the source holds no sealed hub token and its .env no {source_variable} for runner {runner_name}, so "
+            "there is none to move"
         )
     if not carries_runner and not held_here:
         raise TokenConflict(
-            f"an archive store carries no token, and this host's .env holds no {variable} for runner {runner_name}"
+            f"an archive store carries no token, and this host holds no sealed hub token and its .env no {variable} "
+            f"for runner {runner_name}"
         )
     if offered and held_here and held_here != offered:
         raise TokenConflict(
-            f"this host's .env already holds a different {variable}; remove it, then re-run (runner {runner_id})"
+            f"this host already holds a different hub token for runner {runner_name} ({runner_id}): set it with "
+            f"`blizzard runner token set --runner {runner_name}`, or remove its {variable} line from .env, then re-run"
         )

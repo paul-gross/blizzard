@@ -98,13 +98,14 @@ def _scenario_lines(scenario: dict[str, Any]) -> Iterator[str]:
         yield f"  ... and {remainder} more passed"
 
 
-def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
-    """A freshly minted bearer token, printed once as the line a host directory's ``.env`` takes: the variable is
-    derived from the runner's name."""
+def _token_lines(runner_name: str, token: str, *, selector: str) -> tuple[str, str, str]:
+    """A freshly minted bearer token on a line of its own, framed by how a host takes it up."""
     return (
-        "bearer token, shown only once — put this line in the host directory's .env "
-        "(the variable follows the host file's [[runner]] name):",
-        f"{hub_token_variable(runner_name)}={token}",
+        "bearer token, shown only once — on the runner's host, pipe it on stdin to "
+        f"`blizzard runner token set --runner {selector}`:",
+        token,
+        "(a host from before the sealed token store reads it from its directory's .env instead, as "
+        f"{hub_token_variable(runner_name)})",
     )
 
 
@@ -158,7 +159,8 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
     cli.show_lines(
         body,
         f"added runner {body['runner_id']} ({body['runner_name']}) — never connected",
-        *_token_lines(body["runner_name"], body["token"]),
+        # A just-added runner's host declares it by name; its id lands in the host file only once it joins.
+        *_token_lines(body["runner_name"], body["token"], selector=body["runner_name"]),
     )
 
 
@@ -241,7 +243,7 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
     cli.show_lines(
         body,
         f"enrolled {runner_id} — its previous token no longer resolves",
-        *_token_lines(entry.json()["runner_name"], body["token"]),
+        *_token_lines(entry.json()["runner_name"], body["token"], selector=runner_id),
     )
 
 

@@ -29,7 +29,7 @@ export interface MockHub extends MockHubClient {
   logTail(): string;
   /** With `mockHubRelay` on: the relay every runner host reaches this hub through, to hold an outage open under an in-flight call. */
   readonly relay: HubRelay | undefined;
-  /** The `/api/fleet` plane as `host`'s runner named `runner`, or as the host itself when none is named, by the token its `.env` holds now. */
+  /** The `/api/fleet` plane as `host`'s runner named `runner`, or as the host itself when none is named, by the token enrollment issued it (`RunnerHost.hubTokens`). */
   fleetOf(host: RunnerHost, runner?: string): ReturnType<MockHubClient['fleet']>;
 }
 
@@ -106,7 +106,7 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
         fleetOf(host, runner) {
           const tokens = host.hubTokens();
           const token = runner === undefined ? tokens.host : tokens.runners[runner];
-          if (token === undefined) throw new Error(`the host's .env holds no token for ${runner === undefined ? 'the host' : `runner ${runner}`}`);
+          if (token === undefined) throw new Error(`enrollment issued the host no token for ${runner === undefined ? 'the host' : `runner ${runner}`}`);
           return clients.fleet(token);
         },
       });

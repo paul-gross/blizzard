@@ -18,12 +18,15 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
+from blizzard.runner.hub.sealed_tokens import StoredTokenState, seal_token, token_set_command, unreadable_token
 from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
 from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
@@ -38,7 +41,9 @@ from blizzard.runner.transfer.paths import rebase_path_keys
 from blizzard.runner.transfer.refusals import (
     HostNotHolding,
     SourceRunning,
+    SourceTokenUnreadable,
     SourceUnsupported,
+    TokenConflict,
     WorkspaceConflict,
 )
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
@@ -59,6 +64,7 @@ from blizzard.runner.transfer.rules import (
 from blizzard.runner.transfer.runner_stores import (
     HeldBinding,
     IRunnerBoundReadsFactory,
+    IRunnerBoundStores,
     IRunnerBoundStoresFactory,
     RunnerStoreView,
 )
@@ -66,6 +72,7 @@ from blizzard.runner.transfer.source import SourceKind
 
 __all__ = [
     "INGEST_COMMAND",
+    "IHostCiphers",
     "IHostFileEditor",
     "IIngestStores",
     "ITokenFiles",
@@ -82,7 +89,7 @@ _CP_AFTER_COPY = crashpoint(
 )
 _CP_AFTER_CONFIG = crashpoint(
     "ingest.after-config.before-removal",
-    "this host holds the runner's configuration and token and the source's token is gone; its rows are still there",
+    "this host holds the runner's configuration and the source's .env token line is gone; its rows are still there",
 )
 
 #: The revision from which every runner-owned table carries its runner, so one runner's rows can be removed from a
@@ -130,6 +137,10 @@ class IIngestStores(IRunnerBoundReadsFactory, IRunnerBoundStoresFactory, Protoco
         """Every held binding of every runner the store at ``url`` names."""
         ...
 
+    def sealed_key_ids(self, url: str) -> frozenset[str]:
+        """The key generations the store at ``url``'s hub-token rows are sealed under."""
+        ...
+
 
 class IHostFileEditor(Protocol):
     """The host-file edits an ingest makes to the host at ``root``, and the re-read that tells whether one is made."""
@@ -150,8 +161,26 @@ class ITokenFiles(Protocol):
         """The token ``.env`` assigns ``token_env``, or ``""``."""
         ...
 
-    def write(self, root: Path, token_env: str, token: str) -> None: ...
     def remove(self, root: Path, token_env: str) -> None: ...
+
+
+class IHostCiphers(Protocol):
+    """The ciphers under a host's key: this host's, resolved as its service resolves it, and a source's own."""
+
+    def cipher(self, root: Path) -> ISecretCipher | None:
+        """The cipher under the key of the host at ``root``, never minted; ``None`` when it holds no key."""
+        ...
+
+    def sealing_cipher(self, root: Path, *, sealed_under: frozenset[str]) -> ISecretCipher:
+        """The cipher the host at ``root`` seals under, its first key generation minted when it holds none; raises
+        :class:`ConfigError` as :func:`~blizzard.runner.host_keys.sealing_key_provider` does for ``sealed_under``,
+        the generations its rows are sealed under."""
+        ...
+
+    def source_ciphers(self, root: Path) -> tuple[ISecretCipher, ...]:
+        """The ciphers a source host directory's row may open under, never minted: its own key directory's, then
+        the invoking environment's key, which a source sharing this host's environment was sealed under."""
+        ...
 
 
 @domain_model
@@ -174,7 +203,6 @@ class _ConfigPlan:
     subscription: DeclaredSubscription | None = None
     runner_table: str | None = None
     files: tuple[tuple[Path, Path], ...] = ()
-    token: str = ""
 
 
 @dataclass(frozen=True)
@@ -186,6 +214,7 @@ class RunnerIngest:
     stores: IIngestStores
     host_file: IHostFileEditor
     tokens: ITokenFiles
+    ciphers: IHostCiphers
     hub: IHostRecordReader
     #: What answers on a socket path, if anything.
     holder: Callable[[Path], str | None]
@@ -312,7 +341,8 @@ class RunnerIngest:
                 self._refuse_fresh(source, entry, runner_id, view, copy)
             plan = self._plan(source, entry, request.workspace_id)
             if not resuming:
-                self._refuse_conflicts(source, entry, runner_id, view, plan)
+                offered = self._offered_token(source, entry, runner, copy.url)
+                self._refuse_conflicts(source, entry, runner_id, view, plan, offered)
                 ingest = HostIngest(
                     runner_id=runner_id,
                     source=str(source.path),
@@ -326,6 +356,7 @@ class RunnerIngest:
                         workspace_ids=plan.workspace_ids,
                         bound_workspaces=tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
                         ingest=ingest,
+                        hub_token=self._sealed_here(runner_id, offered) if offered else None,
                     )
                 except WorkspacePromptConflict as exc:
                     raise WorkspaceConflict(f"{exc}; nothing was changed") from exc
@@ -337,7 +368,7 @@ class RunnerIngest:
             # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
             moved = self.files.set_aside(source.store, now=self.clock.now())
         else:
-            runner.remove_runner_rows(self.files.store_url(source.store), keep_counters=False)
+            runner.remove_runner_rows(self.files.store_url(source.store), keep_counters=False, drop_hub_token=True)
             moved = self._set_aside_emptied(source)
         _log.info("runner ingested", runner_id=runner_id, source=str(source.path), resumed=resuming)
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
@@ -433,14 +464,12 @@ class RunnerIngest:
             else None
         )
         table, files = self._runner_plan(source, entry, ids)
-        token = self.tokens.held(theirs.root, source.token_variable(entry.name))
         return _ConfigPlan(
             workspaces=workspaces,
             workspace_ids=ids or None,
             subscription=subscription,
             runner_table=table,
             files=files,
-            token=token,
         )
 
     def _workspace_plan(
@@ -494,8 +523,59 @@ class RunnerIngest:
         )
         return self.sources.carried(source, entry.name, projects=projects, copies=copies), files
 
+    def _offered_token(self, source: SourceHost, entry: RunnerDeclaration, runner: IRunnerBoundStores, url: str) -> str:
+        """The token a host-directory source holds for the runner: its sealed row in the copy at ``url``, opened
+        under the source's own key, which is never minted; else, for a source from before sealed tokens, its ``.env``
+        line. A row that does not open refuses the ingest. An archive offers none: the runner's token must already
+        be on this host."""
+        if source.declared is None:
+            return ""
+        root = source.declared.root
+        row = runner.sealed_hub_token(url)
+        if row is None:
+            return self.tokens.held(root, source.token_variable(entry.name))
+        for cipher in self.ciphers.source_ciphers(root):
+            stored = row.stored(cipher)
+            if stored.state is StoredTokenState.OPENED:
+                return stored.value
+        raise SourceTokenUnreadable(
+            f"the source's sealed hub token for runner {entry.name} does not open under the source's key "
+            f"(generation {row.sealed.key_id}): set its token on the source first with `blizzard runner token set "
+            f"--runner {entry.name} {root}`, run as the source's service runs; nothing was changed"
+        )
+
+    def _held_here(self, runner: IRunnerBoundStores, entry: RunnerDeclaration, variable: str) -> str:
+        """The token this host holds for the runner: its sealed row opened under this host's key, else its ``.env``
+        line. A row that does not open refuses the ingest."""
+        row = runner.sealed_hub_token(self.host.db_url)
+        if row is None:
+            return self.tokens.held(self.host.root, variable)
+        stored = row.stored(self.ciphers.cipher(self.host.root))
+        if stored.state is StoredTokenState.UNREADABLE:
+            raise TokenConflict(
+                f"runner {entry.name}: {unreadable_token(stored.key_id)}; set it again with "
+                f"{token_set_command(entry.name)}, then re-run"
+            )
+        return stored.value
+
+    def _sealed_here(self, runner_id: str, token: str) -> SealedValue:
+        """``token`` sealed under this host's key as the runner's first revision, minting the key if it holds none."""
+        try:
+            cipher = self.ciphers.sealing_cipher(
+                self.host.root, sealed_under=self.stores.sealed_key_ids(self.host.db_url)
+            )
+        except ConfigError as exc:
+            raise TokenConflict(f"{exc}; nothing was changed") from exc
+        return seal_token(cipher, runner_id, SecretValue(token))
+
     def _refuse_conflicts(
-        self, source: SourceHost, entry: RunnerDeclaration, runner_id: str, view: RunnerStoreView, plan: _ConfigPlan
+        self,
+        source: SourceHost,
+        entry: RunnerDeclaration,
+        runner_id: str,
+        view: RunnerStoreView,
+        plan: _ConfigPlan,
+        offered: str,
     ) -> None:
         """The refusals that need the configuration plan: a held environment two runners would hold, and a token that
         cannot move."""
@@ -508,8 +588,8 @@ class RunnerIngest:
         variable = hub_token_variable(entry.name)
         refuse_token_conflict(
             carries_runner=plan.runner_table is not None,
-            offered=plan.token,
-            held_here=self.tokens.held(self.host.root, variable),
+            offered=offered,
+            held_here=self._held_here(self.stores.for_runner(runner_id), entry, variable),
             source_variable=source.token_variable(entry.name),
             variable=variable,
             runner_name=entry.name,
@@ -532,9 +612,6 @@ class RunnerIngest:
             self.files.make_directory(self.host.runners_dir / entry.name)
             if entry.name not in self.host_file.declared(root, "runner", "name"):
                 self.host_file.append_runner(root, plan.runner_table)
-        variable = hub_token_variable(entry.name)
-        if plan.token and self.tokens.held(root, variable) != plan.token:
-            self.tokens.write(root, variable, plan.token)
         if source.declared is not None:
             self.tokens.remove(source.declared.root, source.token_variable(entry.name))
 

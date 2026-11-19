@@ -25,7 +25,7 @@ from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
 from tests.support.config_inputs import create_runner_app, load_host_config
-from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
+from tests.support.host_files import TEST_RUNNER_ID, UnresolvableSettings, write_minimal_host
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import make_store, make_stores
 from tests.support.runner_mint import new_mint
@@ -53,7 +53,7 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
     RunnerIdentityStore(sibling.connections).record_runner_identity(
         RunnerIdentity("rn_sibling", "sibling", datetime.now(UTC))
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert len(ready) == 2 and not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -77,15 +77,15 @@ def test_first_registration_seeds_settings_for_http_without_another_tick(
             assert next(row for row in preview["settings"] if row["key"] == "agents")["value"] == 3
             assert RunnerIdentityStore(base.connections).runner_identity() is None
             assert runner.stores.settings.snapshot().entries == {}
-            dotenv = tmp_path / ".env"
-            dotenv.mkdir()
+            unresolvable = UnresolvableSettings(monkeypatch)
+            unresolvable.hold()
             unavailable = client.get("/api/settings")
             assert unavailable.status_code == 200, unavailable.text
             assert unavailable.json()["revision"] == preview["revision"]
             assert unavailable.json()["settings"] == []
             assert unavailable.json()["settings_error"]
             assert runner.stores.settings.snapshot().entries == {}
-            dotenv.rmdir()
+            unresolvable.release()
             stepper.request()
             assert RunnerIdentityStore(base.connections).runner_identity() is not None
             assert runner.stores.settings.snapshot().entries == {}
@@ -117,12 +117,12 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
     assert host.runners[0].own is not None
     store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
     app = create_runner_app(
-        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]))
+        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )
     seams = runner_seams(app)
     seams.settings_reader = reader
     seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
@@ -240,8 +240,8 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
 
         response = client.patch("/api/settings", headers={"If-Match": "6"}, json={"set": {"agents": 2}})
         assert response.status_code == 200
-        dotenv = tmp_path / ".env"
-        dotenv.mkdir()
+        unresolvable = UnresolvableSettings(monkeypatch)
+        unresolvable.hold()
         stepper.request()
         response = client.get("/api/settings")
         assert response.status_code == 200, response.text
@@ -265,7 +265,7 @@ def test_settings_writes_are_revision_conditioned_and_history_is_paged(
         assert response.status_code == 200
         assert response.json()["revision"] == 8
         assert response.json()["settings_error"]
-        dotenv.rmdir()
+        unresolvable.release()
         stepper.request()
         recovered_view = client.get("/api/settings").json()
         assert recovered_view["in_force"]["revision"] == 8
@@ -311,13 +311,13 @@ def test_settings_human_roles_and_worker_credential(
         )
     )
     app = create_runner_app(
-        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0])),
+        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value),
         runner_stores=make_stores(base),
     )
     seams = runner_seams(app)
     seams.settings_reader = reader
     seams.settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
@@ -390,9 +390,9 @@ def test_legacy_entry_projects_provenance_and_can_be_unset(
     assert host.runners[0].own is not None
     store.seed(host.runners[0].authored, reader.seed_keys({}), validate=reader.validate)
     app = create_runner_app(
-        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]))
+        host.config_for_runner(host.runners[0], host.runners[0].own, host.token_for(host.runners[0]).value)
     )
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])

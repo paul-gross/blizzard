@@ -10,6 +10,7 @@ __all__ = [
     "RunnerBusy",
     "SourceMoved",
     "SourceRunning",
+    "SourceTokenUnreadable",
     "SourceUnsupported",
     "TokenConflict",
     "WorkspaceConflict",
@@ -49,7 +50,11 @@ class BindingConflict(IngestRefused):
 
 
 class TokenConflict(IngestRefused):
-    """The runner's token cannot move: the source holds none, or this host's ``.env`` holds a different one."""
+    """The runner's token cannot move: the source holds none, or this host holds a different one."""
+
+
+class SourceTokenUnreadable(IngestRefused):
+    """The source's sealed token for the runner does not open under the source's key."""
 
 
 class SourceMoved(IngestRefused):

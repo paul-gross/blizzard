@@ -43,8 +43,8 @@ consumers, two behaviors; the client obeying the variable does not mean the daem
 differs from the hub an existing host file names.
 
 Change `name` through [runner settings](./deployment/runner-settings.md); the next registration shows the new label. Its
-id, token, pause state, and history stay as they were. Token lookup continues to use the host file name; do not rename
-the token variable merely because the live display name changes.
+id, token, pause state, and history stay as they were. The host stores the runner's token under its id, so no token
+variable needs renaming ([runner-auth.md](./deployment/runner-auth.md#the-hosts-token-store)).
 
 ## Add
 
@@ -92,10 +92,11 @@ Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL`
 its tenant by `--tenant` or `BZ_HUB_TENANT`. On a hub with `auth.mode = "oauth"`, `blizzard hub login --hub-url …` comes
 first.
 
-`add` prints the runner's id and, once, its token as a `BZ_HUB_TOKEN_<NAME>=…` line, the runner's name upper-cased with
-every character outside `A-Z0-9` replaced by `_`: `runner-local` prints `BZ_HUB_TOKEN_RUNNER_LOCAL=…`. Put that line in
-the runtime dir's `.env` on the runner machine as the service account, under a umask that keeps the file owner-only
-(`0600`) — the token is the runner's whole credential, so no other account may read it:
+`add` prints the runner's id and, once, its token on a line of its own, then the variable a host directory's `.env`
+takes it under: the runner's name upper-cased with every character outside `A-Z0-9` replaced by `_`, so `runner-local`
+names `BZ_HUB_TOKEN_RUNNER_LOCAL`. A fresh directory has no runner with an id for `blizzard runner token set` to seal
+the token for yet, so put it in the runtime dir's `.env` on the runner machine as the service account, under a umask
+that keeps the file owner-only (`0600`) — the token is the runner's whole credential, so no other account may read it:
 
 ```bash
 sudo -u blizzard mkdir -p /var/lib/blizzard/runner
@@ -104,17 +105,22 @@ sudo -u blizzard sh -c 'umask 077; echo "BZ_HUB_TOKEN_RUNNER_LOCAL=…" >> /var/
 
 Then run the same `blizzard-runner init … --hub https://hub.example.net` there: it finds the token, confirms the hub
 knows it, and keeps that runner rather than adding another; a host init adds adopts it. It also makes a `.env` that
-other accounts can read owner-only, or warns when it cannot.
+other accounts can read owner-only, or warns when it cannot. The host's first start seals the token in its store, and
+from then on `.env` is no longer read for it: replace the token with `blizzard runner token set`
+([runner-auth.md](./deployment/runner-auth.md#the-hosts-token-store)).
 
 Give the runner its own session-signing secret too, so board sessions survive a restart: generate one with
 `openssl rand -base64 48` and put it in the environment variable the `session_secret_env` key names (default
-`BZ_RUNNER_SESSION_SECRET`) — the unit's `EnvironmentFile` is the natural place, since the daemon reads only the hub
-token from the runtime dir's `.env`. It must be base64 decoding to at least 32 bytes — a shorter one fails config load
-with an error naming the variable. Unset, the runner signs with a fresh random secret each start and logs that sessions
-will not survive a restart. Never share one secret between runners: a cookie minted by one would verify on the other.
+`BZ_RUNNER_SESSION_SECRET`) — the unit's `EnvironmentFile` is the natural place, since the daemon reads the runtime
+dir's `.env` only to import a hub token its store does not hold yet. It must be base64 decoding to at least 32 bytes — a
+shorter one fails config load with an error naming the variable. Unset, the runner signs with a fresh random secret each
+start and logs that sessions will not survive a restart. Never share one secret between runners: a cookie minted by one
+would verify on the other.
 
 Then start the runner with `systemctl enable --now blizzard-runner`, or `systemctl restart blizzard-runner` if the unit
-already runs: the daemon reads its token and session secret only at start.
+already runs: the daemon reads its session secret only at start. Back up `data/secret-keys/` in the runtime dir with the
+store, or supply the host's key as `BZ_HOST_SECRET_KEY` from your own secret management: the stored tokens are sealed
+under it ([runner-auth.md](./deployment/runner-auth.md#the-hosts-key)).
 
 A registered host takes more runners with no sign-in: `blizzard-runner add <name> --project <p> --dir <runtime dir>`
 adds one under the host's token and appends its `[[runner]]`, and the host starts it at its next start.

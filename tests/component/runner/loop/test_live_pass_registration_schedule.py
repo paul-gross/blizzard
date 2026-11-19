@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.cli.runtime import seed_runners
@@ -43,7 +44,7 @@ provider = "other"
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]

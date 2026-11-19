@@ -53,7 +53,9 @@ def test_a_valid_host_checks_clean_resolving_each_token_to_its_id(tmp_path: Path
     result = _check(fake_init_hub, root)
 
     assert result.exit_code == 0, result.output
-    assert "runner runner-local (rn_init1): its token (.env) resolves to its id" in result.output
+    assert (
+        "runner runner-local (rn_init1): its token (which the next start imports) resolves to its id" in result.output
+    )
     assert "host ok" in result.output
     _nothing_started(root)
     assert (layout.lock_path.stat().st_mtime_ns if layout.lock_path.exists() else None) == lock_before
@@ -76,7 +78,7 @@ def test_check_previews_seed_and_honors_stored_values_without_writing(
 
     layout.config_path.write_text(original.replace("agents = 1", "agents = 3"))
     host = load_host_config(root)
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert ready and not halted
     snapshot = settings.snapshot()
     layout.config_path.write_text(original.replace("agents = 1", 'agents = "invalid"'))

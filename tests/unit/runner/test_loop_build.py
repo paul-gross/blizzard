@@ -50,7 +50,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCo
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -1101,7 +1101,7 @@ def test_host_runners_share_the_injected_exporter_guard(tmp_path: Path, monkeypa
     transport = HeldExporter()
     host = composition.build_host_process(
         host_config_of(config),
-        [BuiltRunner(rid, replace(config, runner_id=rid), ResolvedToken()) for rid in ("rn_a", "rn_b")],
+        [BuiltRunner(rid, replace(config, runner_id=rid)) for rid in ("rn_a", "rn_b")],
         environ=env,
         trace_exporter=transport,
     )

@@ -89,3 +89,11 @@ docker volume create blizzard_hub-data
 docker run --rm -v blizzard_hub-data:/to -v "$(pwd)":/from alpine tar xzf /from/hub-data-backup.tgz -C /to
 docker compose up -d hub
 ```
+
+## The runner host
+
+A runner host's durable state is its directory: the host file `blizzard-host.toml`, `.env`, and `data/`, which holds the
+store `host.db` and `data/secret-keys/`, the host's key. Back the key up together with the store: each runner's hub
+token is sealed under it, and a lost key leaves every runner refusing until its token is set again
+([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md#the-hosts-key)). It is absent when `BZ_HOST_SECRET_KEY`
+supplies the key, which then belongs in your own secret management. Stop the host before copying the store.

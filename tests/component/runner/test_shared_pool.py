@@ -20,7 +20,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner
 from blizzard.runner.hub.client import ClaimRequest, HubClientError, QueueEntry, RouteClaimOutcome
 from blizzard.runner.lifecycle.claim import ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
@@ -137,7 +137,7 @@ def test_a_halted_runners_unreleased_binding_is_excluded_from_its_siblings_pool(
     halted = HaltedRunner("r_a", "r_a", ("has no hub token",))
     host = build_host_process(
         host_config_of(config),
-        [BuiltRunner("r_b", dataclasses.replace(config, runner_id="r_b"), ResolvedToken())],
+        [BuiltRunner("r_b", dataclasses.replace(config, runner_id="r_b"))],
         halted=(halted,),
     )
     try:

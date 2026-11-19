@@ -105,3 +105,8 @@ credential by the direct store edit the refusal spells out, then roll back again
 A rollback past the tenants migrations is refused while the hub holds more than one tenant, or while a tenant's deletion
 is underway, and the refusal names them: only a hub that holds `default` alone rolls back past them
 ([`docs/upgrade.md`](./upgrade.md#tenants-boundary)).
+
+A runner store rolled back past the `runner_hub_tokens` migration drops every sealed runner hub token. The older host
+reads each runner's token from its `.env` again, which still holds the token from before the upgrade, but not one set
+with `blizzard runner token set` or moved in by `blizzard runner ingest` since: put that one in `.env` as
+`BZ_HUB_TOKEN_<NAME>` first ([`docs/upgrade.md`](./upgrade.md#runner-hub-tokens-move-into-the-host-store)).

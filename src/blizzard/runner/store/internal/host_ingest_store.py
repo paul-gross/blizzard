@@ -1,6 +1,7 @@
 """SQLAlchemy adapter for the host half of a runner transfer (package-private): its host-row merge and ingest record.
 
-Host-scoped: every statement here names a host table, so none carries a runner equality. Each host table's treatment is
+Host-scoped: every statement here names a host table, so none carries a runner equality; the ingest record names its
+runner explicitly. Each host table's treatment is
 the one it declares (``info["transfer"]``), applied over the schema's host tables in the order their reference
 declarations put them; no list of them is kept here."""
 

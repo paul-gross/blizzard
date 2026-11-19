@@ -26,6 +26,7 @@ from sqlalchemy import Engine, Row, insert, select
 
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
@@ -33,6 +34,7 @@ from blizzard.hub.domain.tenancy.teardown import DRAIN_BATCH_ROWS
 from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
+from blizzard.runner.composition import stored_hub_token
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -40,6 +42,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.sealed_tokens import StoredTokenState
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -96,6 +99,7 @@ from tests.support.config_inputs import init_host, load_host_config, load_hub_co
 from tests.support.crash_points import discover_crash_points
 from tests.support.fleet_world import BUILD_BRANCH, world_repos
 from tests.support.host_files import load_runner_config, with_runner
+from tests.support.hub_tokens import host_hub_tokens
 from tests.support.opencode2_store import seed_store
 from tests.support.otlp_sink import OtlpSink, otlp_sink
 from tests.support.runner_fakes import (
@@ -143,6 +147,7 @@ _DEDICATED_PREFIXES = (
     "egress.",
     "teardown.",
     "ingest.",
+    "seed.",
     "release.",
     "policy.",
     "escalate.",
@@ -200,6 +205,8 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 # `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
 # from the source.
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
+# `seed.*` fires inside a start's token import, within one runner's import and between two runners.
+_SEED_POINTS = [p for p in _ALL_POINTS if p.startswith("seed.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
 _POLICY_POINTS = [p for p in _ALL_POINTS if p.startswith("policy.")]
@@ -299,6 +306,9 @@ _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 # The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
 _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
+# The seed CI subset: the window where one runner is imported whole and the next is not.
+_SEED_CI_SUBSET = ("seed.after-runner.before-next-runner",)
+
 # The release CI subset: the between-steps window; the full sweep runs the usage-limited one too.
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
 _TAKEOVER_CI_SUBSET = ("takeover.after-open.before-kill",)
@@ -343,6 +353,7 @@ _HOST_LANE_SWEEP = _select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 _INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
+_SEED_SWEEP = _select(_SEED_POINTS, _SEED_CI_SUBSET)
 _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 _POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
 _ESCALATE_SWEEP = _select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET)
@@ -389,6 +400,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
         | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
+        | set(_select(_SEED_POINTS, _SEED_CI_SUBSET))
         | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
         | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
         | set(_select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET))
@@ -4288,12 +4300,28 @@ def _ingest_world(hub: httpx2.Client, hub_url: str, here: Path, there: Path) -> 
         seed_runner(engine, moving_id, tag="b", workspace_id="workspace-local")
     finally:
         engine.dispose()
+    # As a source host's start seals it, beside the `.env` line the start left.
+    token = HubTokenFile.of(there, hub_token_variable(_INGEST_MOVING)).held()
+    with host_hub_tokens(there, load_host_config(there).db_url) as tokens:
+        assert tokens.seal_if_absent(moving_id, SecretValue(token))
     return moving_id
 
 
+def _sealed_token(root: Path, moving_id: str) -> str | None:
+    """The moving runner's token the host at ``root`` holds sealed, opened under that host's own key, or ``None``."""
+    config = load_host_config(root)
+    engine = create_engine_from_url(config.db_url)
+    try:
+        stored = stored_hub_token(engine, config.root, moving_id, environ=os.environ)
+    finally:
+        engine.dispose()
+    assert stored.state is not StoredTokenState.UNREADABLE, f"{root.name}'s token row does not open"
+    return stored.value if stored.state is StoredTokenState.OPENED else None
+
+
 def _ingest_end_state(here: Path, there: Path, moving_id: str) -> dict[str, object]:
-    """What an ingest leaves: the runner's rows here and in the source, both host files' runners and workspaces, and
-    where its token is."""
+    """What an ingest leaves: the runner's rows here and in the source, both host files' runners and workspaces, the
+    token each host holds sealed for it, and whether each ``.env`` still holds a line for it."""
     variable = hub_token_variable(_INGEST_MOVING)
     here_engine = create_engine_from_url(load_host_config(here).db_url)
     there_engine = create_engine_from_url(load_host_config(there).db_url)
@@ -4311,7 +4339,8 @@ def _ingest_end_state(here: Path, there: Path, moving_id: str) -> dict[str, obje
         config = load_host_config(root)
         state[f"{name} runners"] = sorted((r.name, r.id) for r in config.runners)
         state[f"{name} workspaces"] = sorted(w.id for w in config.workspaces)
-        state[f"{name} token"] = bool(HubTokenFile.of(root, variable).held())
+        state[f"{name} token"] = _sealed_token(root, moving_id)
+        state[f"{name} .env token"] = bool(HubTokenFile.of(root, variable).held())
     return state
 
 
@@ -4327,8 +4356,8 @@ def _expected_ingest(moving: dict[str, list[dict[str, Any]]]) -> dict[str, list[
 
 @pytest.mark.parametrize("point", _INGEST_SWEEP)
 def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` of ``blizzard runner ingest`` after it copied the runner's rows, or after it moved the runner's
-    configuration and token, is completed by an unarmed re-run: the end state is the one an uninterrupted ingest
+    """A ``kill -9`` of ``blizzard runner ingest`` after it copied the runner's rows and sealed its token, or after
+    it moved the runner's configuration, is completed by an unarmed re-run: the end state is the one an uninterrupted ingest
     leaves, and both stores hold their invariants at every step."""
     hub_dir = tmp_path / "hub"
     here, there = tmp_path / "here", tmp_path / "there"
@@ -4344,6 +4373,8 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         finally:
             engine.dispose()
         before = _ingest_end_state(here, there, moving_id)
+        token = before["there token"]
+        assert token, "the source holds no sealed token"
         here_runners_before = sorted((r.name, r.id) for r in load_host_config(here).runners)
         ingest = ("ingest", str(there), "--runner", _INGEST_MOVING, "--workspace-id", _INGEST_WORKSPACE)
 
@@ -4355,7 +4386,10 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert at_kill["here"] == _expected_ingest(moving), f"{point}: the copy is not whole at the kill"
         assert at_kill["there"] == moving, f"{point}: the source lost rows before its removal"
         assert (at_kill["here violations"], at_kill["there violations"]) == ([], []), at_kill
-        assert at_kill["there token"] is (point == "ingest.after-copy.before-config"), at_kill
+        # The copy seals the token here; the source's row goes with its rows, its `.env` line with the configuration.
+        assert (at_kill["here token"], at_kill["there token"]) == (token, token), at_kill
+        assert at_kill["here .env token"] is False, at_kill
+        assert at_kill["there .env token"] is (point == "ingest.after-copy.before-config"), at_kill
 
         resumed = _runner_cli(hub_url, *ingest, "--dir", str(here))
         assert resumed.returncode == 0, resumed.stdout + resumed.stderr
@@ -4381,9 +4415,91 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         "there runners": before["there runners"],
         "here workspaces": ["workspace-local", _INGEST_WORKSPACE],
         "there workspaces": ["workspace-local"],
-        "here token": True,
-        "there token": False,
+        "here token": token,
+        "there token": None,
+        "here .env token": False,
+        "there .env token": False,
     }, f"{point}: the re-run's end state differs from an uninterrupted ingest's"
+
+
+# --- Seed — a start's token import seals each runner's deprecated-source token in the host store ---
+
+_SEED_SECOND = "r2"
+
+
+def _seed_world(hub_url: str, root: Path) -> dict[str, str]:
+    """A host registered at the hub with two runners, one's token in ``.env`` and the other's in ``[hub_tokens]`` —
+    as a host from before sealed tokens holds them — and no token row. Answers each runner's id and token, by name."""
+    _cli_ok(hub_url, "init", str(root), "--hub", hub_url)
+    _cli_ok(hub_url, "add", _SEED_SECOND, "--project", "default", "--dir", str(root))
+    _cli_ok(hub_url, "init", str(root), "--hub", hub_url)
+    config = load_host_config(root)
+    tokens = {entry.name: HubTokenFile.of(root, hub_token_variable(entry.name)).held() for entry in config.runners}
+    assert all(tokens.values()), tokens
+    HubTokenFile.of(root, hub_token_variable(_SEED_SECOND)).remove()
+    path = HostLayout(root).config_path
+    text = path.read_text()
+    first_table = text.index("\n[") + 1
+    path.write_text(
+        f"{text[:first_table]}[hub_tokens]\n{json.dumps(_SEED_SECOND)} = {json.dumps(tokens[_SEED_SECOND])}\n\n"
+        f"{text[first_table:]}"
+    )
+    assert load_host_config(root).hub_tokens == ((_SEED_SECOND, tokens[_SEED_SECOND]),)
+    return tokens
+
+
+def _seed_rows(root: Path) -> dict[str, tuple[int, str] | None]:
+    """Each runner's token row, by name: its revision and the token it opens to, or ``None`` when it has none."""
+    config = load_host_config(root)
+    rows: dict[str, tuple[int, str] | None] = {}
+    with host_hub_tokens(config.root, config.db_url) as tokens:
+        for entry in config.runners:
+            assert entry.id is not None
+            stored = tokens.stored(entry.id)
+            assert stored.state is not StoredTokenState.UNREADABLE
+            rows[entry.name] = None if stored.revision is None else (stored.revision, stored.value)
+    return rows
+
+
+@pytest.mark.parametrize("point", _SEED_SWEEP)
+def test_kill9_at_seed_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` of a start inside its token import leaves each runner with at most its one imported row, and the
+    next start completes the import: each runner holds exactly one row, at its first revision, opening to the token
+    its source held, and each runner's step then completes under it."""
+    hub_dir = tmp_path / "hub"
+    root = tmp_path / "host"
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None, work_sources=())
+    hub_url = daemon_url(hub_dir)
+    hub = httpx2.Client(base_url=hub_url, timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        tokens = _seed_world(hub_url, root)
+        names = list(tokens)
+        assert set(_seed_rows(root).values()) == {None}
+
+        killed = _runner_cli(hub_url, "tick", "--dir", str(root), "--runner", names[0], crash_point=point)
+        assert killed.returncode == -9, f"armed tick at {point} exited {killed.returncode}, not SIGKILL (-9):\n" + (
+            killed.stdout + killed.stderr
+        )
+        at_kill = _seed_rows(root)
+        assert at_kill[names[0]] == (1, tokens[names[0]]), f"{point}: the first runner's import is not durable"
+        assert at_kill[names[1]] is None, f"{point}: the second runner was imported before the kill"
+
+        for name in names:
+            stepped = _runner_cli(hub_url, "tick", "--dir", str(root), "--runner", name)
+            assert stepped.returncode == 0, f"{name}'s step after {point}:\n{stepped.stdout}\n{stepped.stderr}"
+        assert _seed_rows(root) == {name: (1, token) for name, token in tokens.items()}, (
+            f"{point}: the restart did not complete the import"
+        )
+        violations = Invariants(
+            runner_db_url=load_host_config(root).db_url, hub_db_url=load_hub_config(hub_dir).db_url
+        ).run(after_recovery=False)
+        assert not violations, f"invariant violations after the restart past {point}:\n" + "\n".join(
+            str(v) for v in violations
+        )
+    finally:
+        hub.close()
+        terminate(hub_proc)
 
 
 # --- The OpenCode 2 lane: a killed driver leaves its turn running on the service, so each stop path is proven ---

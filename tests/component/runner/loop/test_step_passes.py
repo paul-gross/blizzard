@@ -20,7 +20,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runtime
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.host_tick import HostTick
@@ -377,7 +377,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
 
     monkeypatch.setattr(signal, "signal", install_no_handler)
     config = _config(tmp_path)
-    built = [BuiltRunner(FIXTURE_RUNNER_ID, config, ResolvedToken())]
+    built = [BuiltRunner(FIXTURE_RUNNER_ID, config)]
     host = build_host_process(host_config_of(config), built)
     # This synthetic BuiltRunner bypasses the normal file seed; keep its supplied
     # config rather than resolving an unseeded settings record.

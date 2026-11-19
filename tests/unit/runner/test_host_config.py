@@ -22,7 +22,7 @@ from blizzard.runner.host_config import (
     resolve_token,
 )
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
+from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.settings.ports import SettingsSnapshot
 from blizzard.runner.settings_reader import RunnerSettingsReader
@@ -226,9 +226,9 @@ def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
     assert isinstance(halted, HaltedRunner)
     no_id, no_token = halted.errors
     assert no_id == "has no id"
-    assert no_token.startswith(
-        f"has no hub token: set {hub_token_variable(entry.name)}, a [hub_tokens] entry, "
-        f"or {hub_token_variable(entry.name)} in .env"
+    assert no_token.startswith(f"has no hub token: set it with `blizzard runner token set --runner {entry.name}`")
+    assert f"{hub_token_variable(entry.name)}, a [hub_tokens] entry, or {hub_token_variable(entry.name)} in .env" in (
+        no_token
     )
     assert "`blizzard hub runner enroll <id>`" in no_token
 
@@ -525,31 +525,29 @@ def test_the_host_token_resolves_in_the_same_order(tmp_path: Path) -> None:
     assert load_host_config(root).host_token == ResolvedToken("file-token", TokenSource.HOST_FILE)
 
 
-class _DotenvFile:
-    def __init__(self, token: str) -> None:
-        self.token = token
-
-    def held(self) -> str:
-        return self.token
-
-
 @pytest.mark.parametrize(
-    ("hub_tokens", "environ", "source", "reread"),
+    ("stored", "built", "token"),
     [
-        ("", {}, TokenSource.DOTENV, TokenReread.SWITCHED),
-        ('[hub_tokens]\nr-one = "old"\n', {}, TokenSource.HOST_FILE, TokenReread.FIXED),
-        ("", {"BZ_HUB_TOKEN_R_ONE": "old"}, TokenSource.ENVIRONMENT, TokenReread.FIXED),
+        (StoredToken.opened("sealed", 3), True, "sealed"),
+        (StoredToken.unreadable("gen-gone", 3), True, ""),
+        (StoredToken.absent(), False, ""),
     ],
+    ids=["opened", "unreadable", "absent"],
 )
-def test_the_holder_rereads_the_dotenv_only_when_it_was_the_source(
-    tmp_path: Path, hub_tokens: str, environ: dict[str, str], source: TokenSource, reread: TokenReread
+def test_a_runner_projects_over_its_stored_token_and_never_its_deprecated_sources(
+    tmp_path: Path, stored: StoredToken, built: bool, token: str
 ) -> None:
-    root = _write(tmp_path / "host", hub_tokens + _runner('id = "x"'))
-    (root / ".env").write_text("BZ_HUB_TOKEN_R_ONE=old\n")
-    built = _built(load_host_config(root), environ)
-    assert built.token == ResolvedToken("old", source)
-    holder = HubTokenHolder(built.config.hub_token, file=_DotenvFile("new") if built.token.rereads_dotenv() else None)
-    assert holder.reread() is reread
+    root = _write(tmp_path / "host", '[hub_tokens]\nr-one = "deprecated"\n' + _runner('id = "x"'))
+    (root / ".env").write_text("BZ_HUB_TOKEN_R_ONE=deprecated\n")
+    config = load_host_config(root)
+
+    projection = config.project(config.runners[0], stored, {"BZ_HUB_TOKEN_R_ONE": "deprecated"})
+
+    assert isinstance(projection, BuiltRunner) is built
+    if isinstance(projection, BuiltRunner):
+        assert (projection.config.hub_token, projection.token) == (token, stored)
+    else:
+        assert any("`blizzard runner token set --runner r-one`" in error for error in projection.errors)
 
 
 def test_a_credential_file_others_can_read_earns_a_warning_and_a_private_one_does_not(tmp_path: Path) -> None:

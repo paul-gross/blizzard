@@ -30,7 +30,8 @@ from blizzard.runner.cli.runtime import host_tick_driver
 from blizzard.runner.composition import HostProcess, build_host_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken, TokenSource
+from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.loop_wiring import PeriodicDriver
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE
@@ -123,7 +124,7 @@ def main() -> None:
         host = build_host_process(
             dataclasses.replace(host_config_of(configs[0]), subscriptions=(subscription,)),
             [
-                BuiltRunner(rid, config, ResolvedToken(token, TokenSource.HOST_FILE))
+                BuiltRunner(rid, config, StoredToken.opened(token, 1))
                 for (rid, token), config in zip(identities, configs, strict=True)
             ],
             events=EventBroker(),

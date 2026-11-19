@@ -727,7 +727,8 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) 
     assert isinstance(result.exception, RuntimeError)
     assert "runner runner-local" in result.output and "is halted: has no hub token" in result.output
     assert "`blizzard runner init` adds the runner" in result.output
-    assert "`blizzard hub runner enroll <id>` prints the line to put there" in result.output
+    assert "`blizzard runner token set --runner runner-local`" in result.output
+    assert "`blizzard hub runner enroll <id>` prints its token" in result.output
 
 
 def test_runner_host_probes_the_bindings_once_and_publishes_and_composes_that_one_selection(

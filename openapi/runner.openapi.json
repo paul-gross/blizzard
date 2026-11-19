@@ -4885,6 +4885,22 @@
         "title": "HubConnectivityView",
         "type": "object"
       },
+      "HubTokenWrite": {
+        "description": "The runner's new hub bearer token.",
+        "properties": {
+          "token": {
+            "format": "password",
+            "title": "Token",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "HubTokenWrite",
+        "type": "object"
+      },
       "IdentityState": {
         "description": "Whether this process may work as the configured runner: its token's own verdict, and \u2014 on a registered\nhost \u2014 whether the hub holds it under the host.",
         "enum": [
@@ -6781,6 +6797,39 @@
         ],
         "title": "RunnerEventType",
         "type": "string"
+      },
+      "RunnerProblem": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "title": "RunnerProblem",
+        "type": "object"
       },
       "RunnerStatusView": {
         "description": "``GET /api/runner`` \u2014 identity, pause states, capacities, hub connectivity, last tick.",
@@ -9419,6 +9468,75 @@
           }
         },
         "summary": "List Runners",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/runners/{runner_id}/token": {
+      "put": {
+        "description": "Seal ``token`` as the runner's hub token at its row's next revision. Any runner a ``[[runner]]`` of this host\nnames counts, halted or served, so a halted runner's token can be set for its next start.",
+        "operationId": "set_runner_token_api_host_runners__runner_id__token_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HubTokenWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "No runner of this host has the id"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The hub refused the runner's token as retired"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "A blank token"
+          }
+        },
+        "summary": "Set Runner Token",
         "tags": [
           "host"
         ]

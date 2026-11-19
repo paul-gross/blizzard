@@ -173,7 +173,7 @@ def test_a_binding_on_the_same_chunk_another_environment_or_workspace_does_not_c
 @pytest.mark.parametrize(
     ("carries_runner", "offered", "held_here", "match"),
     [
-        (True, "", "", "holds no SRC"),
+        (True, "", "", "its .env no SRC"),
         (False, "", "", "an archive store carries no token"),
         (True, "tok", "other", "already holds a different"),
     ],

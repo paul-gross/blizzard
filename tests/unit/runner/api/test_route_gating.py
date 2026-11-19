@@ -61,6 +61,7 @@ _HUMAN: set[tuple[str, str]] = {
     ("GET", "/api/host/workspaces/{workspace_id}/prompt"),
     ("PUT", "/api/host/workspaces/{workspace_id}/prompt"),
     ("DELETE", "/api/host/workspaces/{workspace_id}/prompt"),
+    ("PUT", "/api/host/runners/{runner_id}/token"),
     ("GET", "/runners/{runner_id}/api/runner"),
     ("PATCH", "/runners/{runner_id}/api/runner"),
     ("GET", "/runners/{runner_id}/api/settings"),

@@ -27,7 +27,7 @@ from blizzard.runner.cli.runtime import (
 )
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.host_config import BuiltRunner, ResolvedToken
+from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import WORKER_SCRATCH_DIRNAME, HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -97,7 +97,7 @@ def _host(tmp_path: Path, exports: _Exports) -> HostProcess:
     resource = {"service.name": "blizzard-runner"}
     return build_host_process(
         host_config_of(config),
-        [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid), ResolvedToken()) for rid in _RUNNERS],
+        [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in _RUNNERS],
         platform_tracing=build_platform_tracing(
             config.tracing,
             _ENDPOINT,

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.api.settings import SettingsProblem
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
@@ -37,7 +38,7 @@ def hosted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[H
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
     config = seed_host(config, {})
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     app = build_hosted_app(host.runners[0].config, host)

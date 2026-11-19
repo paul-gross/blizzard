@@ -16,7 +16,6 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from pytest import MonkeyPatch
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
@@ -26,7 +25,6 @@ from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.runner.composition import held_hub_token
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.host_config import ResolvedToken, TokenSource
 from blizzard.runner.hub.client import (
     HubVersionWindow,
     IdentityRouteMissing,
@@ -39,7 +37,7 @@ from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.hub_version import HubVersion
 from blizzard.runner.hub.identity import IdentityVerdictHolder
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
-from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.sealed_tokens import StoredToken
 from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
@@ -55,7 +53,6 @@ from tests.support.runner_fakes import (
     make_store,
     no_retry_clock,
 )
-from tests.support.runner_join import DEFAULT_TOKEN_ENV
 from tests.support.scaffolding import RunnerFleetClient, build_hub
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -593,41 +590,64 @@ _WRONG = "token-of-another-runner"
 _RIGHT = "token-of-the-store-runner"
 
 
-def _runtime_with_env_token(tmp_path: Path, token: str) -> RunnerConfig:
-    """A runtime dir whose ``.env`` holds ``token``, as ``runner init`` leaves it, and the config the
-    runner started with from it."""
-    HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).write(token)
-    return RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421", hub_token=token)
+class _Row:
+    """A runner's stored token row, replaced in place as ``runner token set`` replaces it; ``unreadable`` names the
+    key generation a row that does not open under the host's key was sealed under."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+        self.at = 1
+        self.unreadable: str | None = None
+
+    def replace(self, token: str) -> None:
+        self.token = token
+        self.at += 1
+
+    def revision(self) -> int | None:
+        return self.at
+
+    def stored(self) -> StoredToken:
+        if self.unreadable is not None:
+            return StoredToken.unreadable(self.unreadable, self.at)
+        return StoredToken.opened(self.token, self.at)
 
 
-def _refusing(
-    tmp_path: Path, monkeypatch: MonkeyPatch, *, from_process_env: bool = False
-) -> tuple[LoopContext, FakeHub]:
-    """A runner started on another runner's token, refusing after its first tick; its hub sees whichever
-    token the runner's held token presents."""
-    if from_process_env:
-        monkeypatch.setenv(DEFAULT_TOKEN_ENV, _WRONG)
-    else:
-        monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
-    source = TokenSource.ENVIRONMENT if from_process_env else TokenSource.DOTENV
-    held = held_hub_token(_runtime_with_env_token(tmp_path, _WRONG), ResolvedToken(_WRONG, source))
+class _CountingHub(FakeHub):
+    """A hub that counts the identity reads it answers."""
+
+    def __init__(self) -> None:
+        super().__init__(default_runner_id="r1")
+        self.identity_calls = 0
+
+    def identity(self) -> TokenIdentity | TokenRefusal:
+        self.identity_calls += 1
+        return super().identity()
+
+
+def _held(row: _Row) -> HubTokenHolder:
+    return held_hub_token(RunnerConfig(root=Path("/h"), db_url="sqlite://"), StoredToken.opened(row.token, row.at), row)
+
+
+def _started(tmp_path: Path, token: str) -> tuple[LoopContext, FakeHub, _Row]:
+    """A runner started on ``token``'s row after its first tick; its hub sees whichever token the held token
+    presents."""
+    row = _Row(token)
+    held = _held(row)
     hub = FakeHub(default_runner_id="r1")
     hub.issued = {_WRONG: "rn_other", _RIGHT: "r1"}
     hub.presents(held)
     ctx = _ctx(tmp_path, hub, hub_token=held)
     _buffer_a_fact(ctx)
     tick(ctx)
+    return ctx, hub, row
+
+
+def test_a_refusing_runner_whose_token_is_replaced_resumes_without_a_restart(tmp_path: Path) -> None:
+    ctx, hub, row = _started(tmp_path, _WRONG)
     assert _state(ctx) is IdentityState.MISMATCHED
-    return ctx, hub
-
-
-def test_a_refusing_runner_whose_env_token_is_corrected_resumes_without_a_restart(
-    tmp_path: Path, monkeypatch: MonkeyPatch
-) -> None:
-    ctx, hub = _refusing(tmp_path, monkeypatch)
     assert (hub.registered, hub.push_facts_calls, hub.peek_queue_calls) == ([], [], 0)
 
-    HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).write(_RIGHT)
+    row.replace(_RIGHT)
     with capture_logs() as logs:
         tick(ctx)
 
@@ -636,58 +656,80 @@ def test_a_refusing_runner_whose_env_token_is_corrected_resumes_without_a_restar
     assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (IdentityState.MATCHED, "r1", "r1")
     assert hub.registered != [] and hub.peek_queue_calls > 0
     assert [fact.kind for fact in hub.pushed] == ["lease.minted"]
-    assert any(e["event"].startswith("runner token changed") for e in logs)
+    assert any(e["event"].startswith("runner token replaced in the host store") for e in logs)
     assert not [e for e in logs if any(_RIGHT in str(v) or _WRONG in str(v) for v in e.values())]
+    assert not [e for e in logs if ".env" in str(e)]
 
 
-def test_a_token_from_the_process_environment_is_never_re_read(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    with capture_logs() as logs:
-        ctx, hub = _refusing(tmp_path, monkeypatch, from_process_env=True)
-        HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).write(_RIGHT)
-        tick(ctx)
+def test_a_matched_runner_whose_token_is_replaced_presents_the_new_one_at_its_next_check(tmp_path: Path) -> None:
+    ctx, hub, row = _started(tmp_path, _RIGHT)
+    assert _state(ctx) is IdentityState.MATCHED
 
-    assert hub.token == _WRONG
-    assert _state(ctx) is IdentityState.MISMATCHED
-    assert hub.push_facts_calls == []
-    restarts = [e for e in logs if e["event"].startswith("runner token comes from the process environment")]
-    assert len(restarts) == 1  # once, with the refusal it explains
-
-
-@pytest.mark.parametrize("env", [f"{DEFAULT_TOKEN_ENV}={_WRONG}\n", "# no token assigned\n"], ids=["same", "none"])
-def test_a_reread_that_names_no_other_token_changes_nothing(tmp_path: Path, monkeypatch: MonkeyPatch, env: str) -> None:
-    ctx, hub = _refusing(tmp_path, monkeypatch)
-    (tmp_path / ".env").write_text(env)
-
-    with capture_logs() as logs:
-        tick(ctx)
-
-    assert hub.token == _WRONG
-    assert _state(ctx) is IdentityState.MISMATCHED
-    assert hub.push_facts_calls == []
-    assert not [e for e in logs if e["event"].startswith("runner token changed")]
-
-
-@pytest.mark.parametrize("env", ["missing", "unreadable"])
-def test_a_missing_or_unreadable_env_leaves_the_verdict_as_it_was(
-    tmp_path: Path, monkeypatch: MonkeyPatch, env: str
-) -> None:
-    ctx, hub = _refusing(tmp_path, monkeypatch)
-    (tmp_path / ".env").unlink()
-    if env == "unreadable":
-        (tmp_path / ".env").mkdir()  # reading it raises an OSError
-
+    row.replace(_WRONG)
     tick(ctx)
 
     assert hub.token == _WRONG
     assert _state(ctx) is IdentityState.MISMATCHED
+
+
+def test_a_row_at_the_revision_held_is_not_opened_again(tmp_path: Path) -> None:
+    ctx, hub, row = _started(tmp_path, _WRONG)
+    row.token = _RIGHT  # the same revision: nothing the holder reads moved
+
+    with capture_logs() as logs:
+        tick(ctx)
+
+    assert hub.token == _WRONG
+    assert _state(ctx) is IdentityState.MISMATCHED
     assert hub.push_facts_calls == []
+    assert not [e for e in logs if e["event"].startswith("runner token replaced")]
 
 
-def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+def test_a_matched_runner_whose_replaced_row_does_not_open_refuses_and_presents_no_token(tmp_path: Path) -> None:
+    ctx, hub, row = _started(tmp_path, _RIGHT)
+    assert _state(ctx) is IdentityState.MATCHED
+    row.replace(_RIGHT)
+    row.unreadable = "gen-gone"
+    pushed = len(hub.push_facts_calls)
+
+    tick(ctx)
+
+    verdict = ctx.identity_verdict.verdict()
+    assert verdict.state is IdentityState.REFUSED
+    assert verdict.reason is not None and "gen-gone" in verdict.reason
+    assert ctx.hub_token.auth_headers() == {}
+    assert len(hub.push_facts_calls) == pushed
+
+
+def test_a_runner_built_over_an_unreadable_row_refuses_without_asking_the_hub(tmp_path: Path) -> None:
+    row = _Row(_RIGHT)
+    row.unreadable = "gen-gone"
+    held = held_hub_token(RunnerConfig(root=Path("/h"), db_url="sqlite://"), StoredToken.unreadable("gen-gone", 1), row)
+    hub = _CountingHub()
+    hub.issued = {_RIGHT: "r1"}
+    hub.presents(held)
+    ctx = _ctx(tmp_path, hub, hub_token=held)
+
+    tick(ctx)
+
+    verdict = ctx.identity_verdict.verdict()
+    assert verdict.state is IdentityState.REFUSED
+    assert verdict.reason is not None and "gen-gone" in verdict.reason
+    assert (hub.identity_calls, hub.registered) == (0, [])
+
+    row.unreadable = None
+    row.replace(_RIGHT)
+    tick(ctx)
+
+    assert _state(ctx) is IdentityState.MATCHED
+    assert hub.registered != []
+
+
+def test_the_hub_clients_present_the_replaced_token(tmp_path: Path) -> None:
     """The loop's hub client and the hub proxy both present the held token as it stands at each call."""
-    monkeypatch.delenv(DEFAULT_TOKEN_ENV, raising=False)
-    config = _runtime_with_env_token(tmp_path, _WRONG)
-    held = held_hub_token(config, ResolvedToken(_WRONG, TokenSource.DOTENV))
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421", hub_token=_WRONG)
+    row = _Row(_WRONG)
+    held = _held(row)
     presented: list[str] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -705,8 +747,8 @@ def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, mon
         identity_verdict=IdentityVerdictHolder(_RESET, state=IdentityState.MATCHED),
         hub_token=held,
     )
-    HubTokenFile.of(tmp_path, DEFAULT_TOKEN_ENV).write(_RIGHT)
-    held.reread()
+    row.replace(_RIGHT)
+    held.refresh()
 
     loop_client.identity()
     assert runner_client(app).get("/api/fleet-summary").status_code == 200

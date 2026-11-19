@@ -30,6 +30,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.tracing.sweep",
     "blizzard.runner.lifecycle.host_lane_drain",
     "blizzard.runner.transfer.ingest",
+    "blizzard.runner.hub.token_seed",
     "blizzard.runner.throttle.release",
     "blizzard.hub.delivery.flow_driver",
     "blizzard.hub.delivery.flow_turn",

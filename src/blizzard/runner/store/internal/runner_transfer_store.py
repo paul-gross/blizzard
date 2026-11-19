@@ -3,7 +3,8 @@ removed from one.
 
 Both stores' connections are bound to the moving runner and build every statement, so the runner statement guard judges
 a transfer like any adapter's writes. The tables are the schema's runner-scoped ones in reference order; the outboxes go
-through :mod:`.base`'s carry seam, and the host rows through the host member composition hands in."""
+through :mod:`.base`'s carry seam, and the host rows and the carried hub token through the host members composition
+hands in."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from typing import Any
 from sqlalchemy import CursorResult, Table, inspect
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.runner.store import schema
 from blizzard.runner.store.internal.base import CARRIED_OUTBOX_TABLES, carry_outbox_rows
 from blizzard.runner.store.internal.row_transfer import (
@@ -29,6 +31,7 @@ from blizzard.runner.transfer.rows import (
     HostIngest,
     IRunnerRowRemoval,
     IRunnerTransfer,
+    IWriteCarriedHubTokenRepository,
     IWriteHostIngestRepository,
 )
 
@@ -44,16 +47,22 @@ _REFERRED = frozenset(target for t in _RUNNER_TABLES for target in references(t)
 
 
 class RunnerTransferStore:
-    """Copies the bound runner from ``source`` into ``destination``; ``host`` is the destination's host member."""
+    """Copies the bound runner from ``source`` into ``destination``; ``host`` and ``hub_tokens`` are the destination's
+    host members."""
 
     def __init__(
-        self, source: RunnerStoreConnections, destination: RunnerStoreConnections, host: IWriteHostIngestRepository
+        self,
+        source: RunnerStoreConnections,
+        destination: RunnerStoreConnections,
+        host: IWriteHostIngestRepository,
+        hub_tokens: IWriteCarriedHubTokenRepository,
     ) -> None:
         if source.bound_runner_id() != destination.bound_runner_id():
             raise ValueError("a transfer's two stores must be bound to the one runner it moves")
         self._source = source
         self._destination = destination
         self._host = host
+        self._hub_tokens = hub_tokens
 
     def copy_runner(
         self,
@@ -61,6 +70,7 @@ class RunnerTransferStore:
         workspace_ids: Mapping[str, str] | None = None,
         bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
+        hub_token: SealedValue | None = None,
     ) -> None:
         renames = dict(workspace_ids or {})
         runner_id = self._source.bound_runner_id()
@@ -84,6 +94,8 @@ class RunnerTransferStore:
             self._host.merge_host_rows_locked(handle, workspaces=workspaces)
             if ingest is not None:
                 self._host.record_host_ingest_locked(handle, ingest)
+                if hub_token is not None:
+                    self._hub_tokens.seal_carried_locked(handle, hub_token, at=ingest.ingested_at)
         _log.info("runner rows copied", runner_id=runner_id, rows=sum(counts.values()), tables=len(counts))
 
     def _insert(self, handle: TransferHandle, table: Table, rows: list[dict[str, Any]]) -> None:

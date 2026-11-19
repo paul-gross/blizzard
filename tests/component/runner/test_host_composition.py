@@ -74,7 +74,7 @@ def _config(tmp_path: Path) -> RunnerConfig:
 
 def _host(config: RunnerConfig, *runner_ids: str, halted: tuple[HaltedRunner, ...] = ()) -> HostProcess:
     """The host the config's file declares, with one built runner for each of ``runner_ids``."""
-    built = [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid), ResolvedToken()) for rid in runner_ids]
+    built = [BuiltRunner(rid, dataclasses.replace(config, runner_id=rid)) for rid in runner_ids]
     return build_host_process(host_config_of(config), built, halted=halted)
 
 
@@ -215,7 +215,7 @@ def test_replacement_with_unchanged_bundle_keeps_snapshot_path(tmp_path: Path, m
         return select(sets, key)
 
     monkeypatch.setattr(HarnessSets, "select", capture)
-    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())
+    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"))
     host = build_host_process(host_config_of(config), [built], publish_bundles=True)
     try:
         sets = host.runners[0].harness_sets
@@ -333,7 +333,7 @@ def test_worker_config_change_rebuilds_and_republishes_bundle(tmp_path: Path, mo
         return select(sets, key)
 
     monkeypatch.setattr(HarnessSets, "select", capture)
-    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())
+    built = BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"))
     host = build_host_process(
         host_config_of(config), [built], selections={"rn_a": first_bindings()}, publish_bundles=True
     )
@@ -551,7 +551,7 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
     config = _sampling_config(tmp_path)
     host = build_host_process(
         host_config_of(config),
-        [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())],
+        [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"))],
         events=events,
     )
     try:
@@ -574,9 +574,7 @@ def test_an_unregistered_hosts_sample_reaches_its_runners_outbound_buffer_and_is
 def _registered_host(config: RunnerConfig) -> HostProcess:
     """The host the config's file declares, holding a host token, with one built runner ``rn_a``."""
     file = dataclasses.replace(host_config_of(config), host_token=ResolvedToken("host-tok", TokenSource.HOST_FILE))
-    return build_host_process(
-        file, [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"), ResolvedToken())]
-    )
+    return build_host_process(file, [BuiltRunner("rn_a", dataclasses.replace(config, runner_id="rn_a"))])
 
 
 def test_a_host_identity_row_without_a_host_token_leaves_the_host_unregistered(
@@ -747,7 +745,7 @@ def test_the_host_graphs_tool_env_follows_the_host_tool_profile_not_the_first_ru
     first = dataclasses.replace(config, runner_id="rn_a", worker_path_prepend=("/opt/first",))
     host_config = dataclasses.replace(host_config_of(config), tool_path_prepend=("/opt/host",))
 
-    host = build_host_process(host_config, [BuiltRunner("rn_a", first, ResolvedToken())])
+    host = build_host_process(host_config, [BuiltRunner("rn_a", first)])
     host.close()
 
     path = launched[0].current().variables["PATH"].split(":")

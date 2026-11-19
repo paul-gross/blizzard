@@ -56,6 +56,8 @@ def _env(env: EnvFile | None) -> dict[str, Any] | None:
             {
                 "name": variable.name,
                 "holds": variable.holds,
+                "deprecated": variable.deprecated,
+                "replaced_by": variable.replaced_by,
                 "name_rule": None
                 if variable.name_rule is None
                 else {

@@ -10,6 +10,8 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.runner.config import (
     DEFAULT_WORKSPACE_ID,
@@ -187,3 +189,21 @@ def _bindings_of(config: RunnerConfig) -> tuple[ProjectBinding, ...]:
         return config.bindings
     projects = SCAFFOLD_PROJECTS if config.projects is None else config.projects
     return tuple(ProjectBinding(project, config.home_workspace.id) for project in projects)
+
+
+class UnresolvableSettings:
+    """While held, every runner settings resolution fails as an unreadable host input does, so a scenario can show a
+    failed rebuild and its recovery."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._monkeypatch = monkeypatch
+        self._original = HostConfig.config_for_runner
+
+    def hold(self) -> None:
+        def unreadable(_self: HostConfig, *_args: object, **_kwargs: object) -> RunnerConfig:
+            raise OSError("a host input is unreadable")
+
+        self._monkeypatch.setattr(HostConfig, "config_for_runner", unreadable)
+
+    def release(self) -> None:
+        self._monkeypatch.setattr(HostConfig, "config_for_runner", self._original)

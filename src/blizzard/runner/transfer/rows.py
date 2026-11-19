@@ -1,9 +1,9 @@
 """Moving one runner's rows between two runner stores — the seams ``runner ingest`` and ``runner store reset --runner``
 stand on, in opposite directions.
 
-A copy writes one runner's rows into a destination store in one transaction, the destination issuing every integer
-surrogate key anew, with the source's host rows merged by each host table's declared treatment and any ingest recorded
-there too; it never writes the source. A removal deletes one runner's rows from one store."""
+A copy writes one runner's rows into a destination store in one transaction, issuing every surrogate key anew, merging
+host rows by each table's declared treatment and sealing the hub token under the destination's key; it never writes
+the source. A removal deletes one runner's rows from one store."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.secrets.sealing import SealedValue
 
 __all__ = [
     "DanglingReference",
@@ -21,6 +22,7 @@ __all__ = [
     "IRunnerRowRemoval",
     "IRunnerTransfer",
     "IRunnerTransferHandle",
+    "IWriteCarriedHubTokenRepository",
     "IWriteHostIngestRepository",
     "WorkspacePromptConflict",
 ]
@@ -92,6 +94,15 @@ class IWriteHostIngestRepository(IReadHostIngestRepository, Protocol):
         ...
 
 
+class IWriteCarriedHubTokenRepository(Protocol):
+    """The destination's sealed hub token a copy carries, on the copy's own transaction."""
+
+    def seal_carried_locked(self, handle: IRunnerTransferHandle, sealed: SealedValue, *, at: datetime) -> bool:
+        """Insert ``sealed`` as the moving runner's first row on ``handle``'s transaction unless the destination
+        holds one; whether it was inserted."""
+        ...
+
+
 class IRunnerTransfer(Protocol):
     """Copy one runner from a source store into a destination store."""
 
@@ -101,14 +112,15 @@ class IRunnerTransfer(Protocol):
         workspace_ids: Mapping[str, str] | None = None,
         bound_workspaces: Sequence[str] = (),
         ingest: HostIngest | None = None,
+        hub_token: SealedValue | None = None,
     ) -> None:
         """Copy every runner-scoped row of the runner, its outbox rows under their own ``seq``s and each lane's counter
-        at the larger of the two stores', then merge the source's host rows and record ``ingest`` when given — all in
-        one destination transaction, so a failure leaves the destination as it was. ``workspace_ids`` renames a
-        workspace id the copied rows name; an id it leaves out keeps its name. The workspaces the host merge carries
-        are the ``bound_workspaces`` the runner's ``[[runner]]`` binds, each under its renamed id, and then the ones
-        its rows name: a runner bound to a workspace that no row of it names still carries that workspace's
-        host-scoped rows."""
+        at the larger of the two stores', then merge the source's host rows, record ``ingest`` when given, sealing
+        ``hub_token`` with it — all in one destination transaction, so a failure leaves the destination as it was.
+        ``workspace_ids`` renames a workspace id the copied rows name; an id it leaves out keeps its name. The
+        workspaces the host merge carries are the ``bound_workspaces`` the runner's ``[[runner]]`` binds, each under its
+        renamed id, and then the ones its rows name: a runner bound to a workspace that no row of it names still
+        carries that workspace's host-scoped rows."""
         ...
 
 

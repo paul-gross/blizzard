@@ -48,7 +48,7 @@ test('test_a_token_that_resolves_to_another_runner_halts_that_runner_while_the_h
   expect(status.body.identity?.state).toBe('mismatched');
   const cli = await host.cli(['status', '--dir', host.dir]);
   expect(cli.stdout + cli.stderr).toContain(`REFUSING: token belongs to runner ${other.runner_id}`);
-  expect(cli.stdout + cli.stderr).toContain('BZ_HUB_TOKEN_RUNNER_LOCAL');
+  expect(cli.stdout + cli.stderr).toContain('blizzard runner token set --runner runner-local');
   expect((await mockHub.runner(other.token, other.runner_id, 409)).status).toBe(409);
 });
 

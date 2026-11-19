@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.sweep_passes import SweepPassOutcome
@@ -49,7 +49,7 @@ def test_live_warning_and_cadence_apply_only_to_next_pass(tmp_path: Path, monkey
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, now)
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]
@@ -147,7 +147,7 @@ def test_live_chunk_cap_parks_at_completion_boundary(tmp_path: Path, monkeypatch
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, now)
     )
-    ready, halted = seed_runners(config, list(config.runners))
+    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     runner = host.runners[0]

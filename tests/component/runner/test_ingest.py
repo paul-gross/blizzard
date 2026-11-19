@@ -6,6 +6,7 @@ reset archive ingests back."""
 from __future__ import annotations
 
 import re
+import shutil
 import tomllib
 from collections.abc import Callable
 from dataclasses import replace
@@ -17,9 +18,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.cli.main import blizzard
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli import runners as runners_cli
@@ -30,7 +33,9 @@ from blizzard.runner.composition import (
     RunnerBoundStoreFiles,
     build_host_stores,
     build_runner_ingest,
+    build_sealing_hub_tokens,
     build_stores,
+    stored_hub_token,
 )
 from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_file import HostFileEditor, append_workspace
@@ -39,6 +44,7 @@ from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClient
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, StoredToken
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -46,6 +52,7 @@ from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
 from blizzard.runner.transfer.ingest import RunnerIngest
 from tests.support.baseline_floor_trees import make_tree
 from tests.support.config_inputs import STRICT, init_host, load_host_config
+from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_ingest import (
     HERE_HOST,
     MOVING,
@@ -129,6 +136,29 @@ def _renamed(table: str, held: list[dict[str, object]]) -> list[dict[str, object
     return sorted(({**row, "workspace_id": _NEW_WORKSPACE} for row in held), key=repr)
 
 
+def _stored(root: Path) -> StoredToken:
+    """The moving runner's stored-token outcome on the host at ``root``, under that host's own key."""
+    engine = _engine(root)
+    try:
+        return stored_hub_token(engine, root, MOVING_ID, environ={})
+    finally:
+        engine.dispose()
+
+
+def _seal(root: Path, token: str) -> None:
+    """The moving runner's token sealed in the store of the host at ``root``, under that host's own key."""
+    engine = _engine(root)
+    tokens = build_sealing_hub_tokens(engine, root, environ={}, clock=SystemClock())
+    assert tokens.seal_if_absent(MOVING_ID, SecretValue(token))
+    engine.dispose()
+
+
+def _holds_sealed(root: Path, token: str) -> None:
+    """The host at ``root`` holds ``token`` as the moving runner's first sealed row, and no ``.env`` line for it."""
+    assert _stored(root) == StoredToken.opened(token, FIRST_REVISION)
+    assert HubTokenFile.of(root, _VARIABLE).held() == ""
+
+
 def _runner_names(root: Path) -> list[str]:
     return [r["name"] for r in tomllib.loads(HostLayout(root).config_path.read_text()).get("runner", [])]
 
@@ -148,11 +178,11 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
     removing = RunnerBoundStoreFiles.remove_runner_rows
     seen: list[str] = []
 
-    def remove(self: RunnerBoundStoreFiles, url: str, *, keep_counters: bool) -> None:
+    def remove(self: RunnerBoundStoreFiles, url: str, *, keep_counters: bool, drop_hub_token: bool = False) -> None:
         if url.endswith("there/data/host.db"):
             assert _source_store_bytes(hosts) == untouched, "the source was written before its removal"
             seen.append(self.runner_id)
-        removing(self, url, keep_counters=keep_counters)
+        removing(self, url, keep_counters=keep_counters, drop_hub_token=drop_hub_token)
 
     monkeypatch.setattr(RunnerBoundStoreFiles, "remove_runner_rows", remove)
 
@@ -176,11 +206,11 @@ def test_ingest_moves_a_colliding_runner_under_a_new_workspace_id_and_reads_the_
     assert [w.id for w in host.workspaces] == ["workspace-local", _NEW_WORKSPACE]
     added = host.sole_runner(MOVING)
     assert (added.id, [b.workspace for b in added.bindings]) == (MOVING_ID, [_NEW_WORKSPACE])
-    assert all(isinstance(p, BuiltRunner) for p in host.projections({}))
+    assert isinstance(host.project(added, _stored(hosts.here), {}), BuiltRunner)
     assert added.own is not None and str(hosts.here / "runners" / MOVING) in str(
         added.own.harness_sections.of("opencode")
     )
-    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
+    _holds_sealed(hosts.here, _TOKEN)
     assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
     assert HostLayout(hosts.there).store_path.exists(), "a source still holding a runner stays in place"
     assert rows(here, "host_identity") == [], "only the host's own registration records its identity"
@@ -198,6 +228,9 @@ def test_ingest_of_a_reset_archive_takes_the_runner_back_and_moves_the_archive_a
     ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
     [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
     assert contents(here, "runner_identity", runner_id=MOVING_ID) == []
+    # An archive carrying a token row of its own, sealed under a key no host here holds, still needs none.
+    with host_hub_tokens(tmp_path / "elsewhere", f"sqlite:///{archive}") as tokens:
+        tokens.replace(MOVING_ID, "archived-token", verdict=None)
 
     result = _ingest(fake_init_hub, hosts, source=archive)
 
@@ -373,13 +406,71 @@ def test_ingest_is_refused_when_this_hosts_env_holds_a_different_token(
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     HubTokenFile.of(hosts.here, _VARIABLE).write("someone-elses")
-    _refuse(fake_init_hub, hosts, f"already holds a different {_VARIABLE}", "--workspace-id", _NEW_WORKSPACE)
+    _refuse(fake_init_hub, hosts, "already holds a different hub token", "--workspace-id", _NEW_WORKSPACE)
 
 
 def test_ingest_is_refused_when_the_source_holds_no_token(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     HubTokenFile.of(hosts.there, _VARIABLE).remove()
-    _refuse(fake_init_hub, hosts, f"holds no {_VARIABLE}", "--workspace-id", _NEW_WORKSPACE)
+    _refuse(fake_init_hub, hosts, f"its .env no {_VARIABLE}", "--workspace-id", _NEW_WORKSPACE)
+
+
+def _key_id(root: Path) -> str:
+    """The key generation the moving runner's row on the host at ``root`` is sealed under."""
+    engine = _engine(root)
+    [row] = rows(engine, "runner_hub_tokens", runner_id=MOVING_ID)
+    engine.dispose()
+    return str(row["key_id"])
+
+
+def test_ingest_reseals_a_sealed_source_token_under_this_hosts_key(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    _seal(hosts.there, _TOKEN)
+    assert _stored(hosts.there) == StoredToken.opened(_TOKEN, FIRST_REVISION)
+    there_key = _key_id(hosts.there)
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    _holds_sealed(hosts.here, _TOKEN)
+    assert _key_id(hosts.here) != there_key, "each host seals under its own key"
+    assert _stored(hosts.there) == StoredToken.absent()
+    assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
+
+
+def test_ingest_seals_an_env_only_source_token_under_this_hosts_key(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    assert _stored(hosts.there) == StoredToken.absent()
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    _holds_sealed(hosts.here, _TOKEN)
+    assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
+
+
+def test_ingest_is_refused_when_the_source_token_does_not_open_under_its_key(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    _seal(hosts.there, _TOKEN)
+    shutil.rmtree(HostLayout(hosts.there).secret_keys_dir)
+    check = _unchanged(hosts)
+
+    _refuse(fake_init_hub, hosts, "runner token set --runner r2", "--workspace-id", _NEW_WORKSPACE)
+
+    check()
+    here = _engine(hosts.here)
+    assert rows(here, "runner_identity", runner_id=MOVING_ID) == []
+    assert rows(here, "runner_hub_tokens") == []
+    here.dispose()
+    assert not HostLayout(hosts.here).secret_keys_dir.exists(), "a refused ingest mints no key"
+
+
+def test_ingest_is_refused_when_this_hosts_sealed_token_differs(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    _seal(hosts.here, "someone-elses")
+    _refuse(fake_init_hub, hosts, "already holds a different hub token", "--workspace-id", _NEW_WORKSPACE)
 
 
 def test_ingest_is_refused_for_a_source_store_ahead_of_this_build(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
@@ -450,7 +541,6 @@ _EDITS = (
     (HostFileEditor, "append_workspace"),
     (HostFileEditor, "append_subscription"),
     (HostFileEditor, "append_runner"),
-    (DotenvTokenFiles, "write"),
     (DotenvTokenFiles, "remove"),
 )
 
@@ -500,7 +590,7 @@ def test_an_ingest_failing_at_any_configuration_edit_completes_on_a_rerun(
     assert [w.id for w in host.workspaces] == ["workspace-local", _NEW_WORKSPACE]
     assert [s.slug for s in host.subscriptions] == ["anthropic", "anthropic-there"]
     assert _runner_names(hosts.here) == ["runner-local", MOVING]
-    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
+    _holds_sealed(hosts.here, _TOKEN)
     assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
     assert invariant_violations(here) == []
     here.dispose()
@@ -619,7 +709,7 @@ def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves
     assert (declared["agents"], "agents" in declared["projects"][0]) == (2, False)
     assert declared["harness"]["config_dir"] == str(hosts.here / "runners" / MOVING / "bundle")
     assert (hosts.here / "runners" / MOVING / "bundle" / "settings.json").exists()
-    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _PRE_HOST_TOKEN
+    _holds_sealed(hosts.here, _PRE_HOST_TOKEN)
     assert HubTokenFile.of(legacy, "BZ_HUB_TOKEN").held() == ""
     here = _engine(hosts.here)
     assert [r["lease_id"] for r in rows(here, "leases", runner_id=MOVING_ID)] == ["lease_pre_host"]
@@ -783,7 +873,7 @@ def test_ingest_removes_a_runner_from_a_source_store_behind_head(tmp_path: Path,
     here = _engine(hosts.here)
     assert len(rows(here, "runner_identity", runner_id=MOVING_ID)) == 1
     here.dispose()
-    assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _TOKEN
+    _holds_sealed(hosts.here, _TOKEN)
 
 
 def test_ingest_is_refused_when_the_hub_cannot_be_reached_for_this_hosts_record(

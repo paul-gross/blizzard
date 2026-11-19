@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 import blizzard.runner.composition as composition
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.runner.cli.runtime import seed_runners
 from blizzard.runner.hub.identity import RunnerIdentity
@@ -34,7 +35,7 @@ def test_binding_change_rebuilds_health_probes_at_new_workspace_root(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host_config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host_config, list(host_config.runners))
+    ready, halted = seed_runners(host_config, list(host_config.runners), clock=SystemClock())
     assert not halted
     roots: list[tuple[str, ...]] = []
     build = composition.build_production_harnesses

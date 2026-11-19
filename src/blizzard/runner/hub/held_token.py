@@ -1,10 +1,8 @@
-"""The hub bearer token a runner process presents, and taking up a corrected one without a restart.
+"""The hub bearer token a runner process presents, and taking up a replaced one without a restart.
 
-Every runner->hub client presents the process holder's current token. A runner whose token names
-another runner than the configured one re-reads its runtime dir's ``.env`` at each identity check, so
-restoring the right token there resumes it in-process with nothing lost. A token the process environment or
-the host file supplied takes precedence over ``.env``, so it stays fixed until the runner restarts.
-The holder never logs a token."""
+Every runner->hub client presents the holder's current token. At each identity check the holder opens the sealed row
+only when its revision has moved; a row that does not open under the host's key leaves it without a token, refusing
+until the token is set again. The holder never logs a token."""
 
 from __future__ import annotations
 
@@ -12,13 +10,18 @@ import threading
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.runner.hub.sealed_tokens import RunnerHubTokenSource, StoredToken, StoredTokenState
 
-class IHubTokenFile(Protocol):
-    """The runtime dir's ``.env`` assignment of the runner's token."""
 
-    def held(self) -> str:
-        """The token the file assigns, or ``""`` when the file or the assignment is absent. Raises
-        ``OSError`` when the file cannot be read."""
+class IHubTokenSource(Protocol):
+    """The runner's stored token row."""
+
+    def revision(self) -> int | None:
+        """The revision the row is at, or ``None`` when the runner holds no row."""
+        ...
+
+    def stored(self) -> StoredToken:
+        """The row's stored-token outcome under the host's key."""
         ...
 
 
@@ -30,51 +33,73 @@ class ICurrentHubToken(Protocol):
         ...
 
 
-class TokenReread(StrEnum):
-    """What a re-read of the runner's ``.env`` did to the token in use."""
+class TokenRefresh(StrEnum):
+    """What comparing the held revision with the row's did to the token in use."""
 
-    #: The file names a different token, now the one every hub call presents.
+    #: The row moved to a new revision, whose token every hub call now presents.
     SWITCHED = "switched"
-    #: The file names the token in use, or none: nothing changed.
+    #: The row is at the revision held, or there is none: nothing changed.
     UNCHANGED = "unchanged"
-    #: The token came from the process environment, which overrides the file: a restart changes it.
-    FIXED = "fixed"
-    #: The file could not be read: the token in use stays.
+    #: The row does not open under the host's key: no token is held, so the runner refuses until it is set again.
     UNREADABLE = "unreadable"
 
 
 class HubTokenHolder:
-    """The process-lifetime :class:`ICurrentHubToken`, seeded with the token the runner started with.
-    ``file`` is where a corrected token is re-read from; ``None`` when the process environment supplied
-    the token, which the file cannot override."""
+    """The process-lifetime :class:`ICurrentHubToken`, seeded with the token the runner started with and the
+    revision it was opened at. ``source`` is the runner's row; ``None`` holds the token as it is."""
 
-    def __init__(self, token: str, *, file: IHubTokenFile | None) -> None:
+    def __init__(
+        self,
+        token: str,
+        *,
+        revision: int | None = None,
+        unreadable_key: str | None = None,
+        source: IHubTokenSource | None = None,
+    ) -> None:
         self._lock = threading.Lock()
         self._token = token
-        self._file = file
+        self._revision = revision
+        self._unreadable_key = unreadable_key
+        self._source = source
 
-    def fixed(self) -> bool:
-        """Whether the token came from the process environment, so only a restart changes it."""
-        return self._file is None
+    @classmethod
+    def of(cls, stored: StoredToken, source: IHubTokenSource | None) -> HubTokenHolder:
+        """The holder a runner starts with from its stored-token outcome: an unreadable row holds no token."""
+        unreadable = stored.key_id if stored.state is StoredTokenState.UNREADABLE else None
+        return cls(stored.value, revision=stored.revision, unreadable_key=unreadable, source=source)
 
     def auth_headers(self) -> dict[str, str]:
         with self._lock:
             token = self._token
         return {"Authorization": f"Bearer {token}"} if token else {}
 
-    def reread(self) -> TokenReread:
-        """Take up the token the ``.env`` now assigns, when it names one other than the token in use."""
-        if self._file is None:
-            return TokenReread.FIXED
-        try:
-            token = self._file.held()
-        except OSError:
-            return TokenReread.UNREADABLE
+    def unreadable_key(self) -> str | None:
+        """The key generation the runner's row names when it does not open, so no token is held; else ``None``."""
         with self._lock:
-            if not token or token == self._token:
-                return TokenReread.UNCHANGED
-            self._token = token
-        return TokenReread.SWITCHED
+            return self._unreadable_key
+
+    def refresh(self) -> TokenRefresh:
+        """Take up the row's token when its revision has moved from the one held, or while the row did not open."""
+        if self._source is None:
+            return TokenRefresh.UNCHANGED
+        revision = self._source.revision()
+        with self._lock:
+            if revision is None or (revision == self._revision and self._unreadable_key is None):
+                return TokenRefresh.UNCHANGED
+        stored = self._source.stored()
+        if stored.state is StoredTokenState.UNREADABLE:
+            with self._lock:
+                self._unreadable_key = stored.key_id
+                self._token = ""
+            return TokenRefresh.UNREADABLE
+        if stored.state is StoredTokenState.ABSENT:
+            return TokenRefresh.UNCHANGED
+        with self._lock:
+            self._token = stored.value
+            self._revision = stored.revision
+            self._unreadable_key = None
+        return TokenRefresh.SWITCHED
 
 
 _current_hub_token_conforms: type[ICurrentHubToken] = HubTokenHolder
+_hub_token_source_conforms: type[IHubTokenSource] = RunnerHubTokenSource

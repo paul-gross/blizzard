@@ -20,7 +20,8 @@ test('a legacy identity refusal halts the runner until its credential is rotated
 
   const token = (await mockHub.enroll.rotate(runner.id)).body.token;
   await host.stop();
-  host.prepareStopped({ runnerTokens: { 'runner-local': token } });
+  const set = await host.shell(`blizzard-runner token set --runner runner-local --dir '${host.dir}'`, `${token}\n`);
+  expect(set.code, set.stdout + set.stderr).toBe(0);
   await host.restart();
   const reader = (await mockHub.enroll.runner({ name: 'reader' })).body.token;
   await stepUntil(host, async () => (await mockHub.fleet(reader).get(`/api/fleet/chunks/${chunkId}`)).body.status as string, (status) => status === 'done');

@@ -19,6 +19,7 @@ _COMMANDS = {
     "add": f"{_CLI}.runners:add",
     "retire": f"{_CLI}.runners:retire",
     "ingest": f"{_CLI}.runners:ingest",
+    "token": f"{_CLI}.token:token_group",
     "store": f"{_CLI}.store:store_group",
     "external-usage": f"{_CLI}.external_usage:external_usage_group",
     "heartbeat": f"{_CLI}.worker:heartbeat",

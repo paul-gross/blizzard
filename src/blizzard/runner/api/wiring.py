@@ -37,6 +37,7 @@ from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
+from blizzard.runner.hub.sealed_tokens import HubTokens
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -214,6 +215,10 @@ class RunnerWiring:
     def read_stores(self) -> RunnerReadStores:
         stores = self.maybe_read_stores()
         return stores if stores is not None else self._refuse(_STORE)
+
+    def hub_tokens(self) -> HubTokens:
+        tokens: HubTokens | None = self._seam("hub_tokens")
+        return tokens if tokens is not None else self._refuse("host key")
 
     def host_read_stores(self) -> HostReadStores:
         stores = self.maybe_host_read_stores()

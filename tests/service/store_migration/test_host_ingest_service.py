@@ -227,6 +227,10 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         routes = select(store, "route_tokens", ["runner_id"], {"chunk_id": _ROUTE_CHUNK})
         assert {r["runner_id"] for r in routes} == {staying.runner_id, moving.runner_id}
         assert len(select(store, "graph_artifacts", ["name"], {"graph_id": _GRAPH_ID})) == 1
+        # The token is sealed under this host's key, the source's `.env` line gone and none written here.
+        assert [r["runner_id"] for r in select(store, "runner_hub_tokens", ["runner_id"])] == [moving.runner_id]
+        assert HubTokenFile.of(here, hub_token_variable(_MOVING)).held() == ""
+        assert HubTokenFile.of(there, hub_token_variable(_MOVING)).held() == ""
         invariants = subprocess.run(
             [str(Path(sys.executable).parent / "blizzard"), "dev", "check-invariants", "--runner-dir", str(here)],
             capture_output=True,

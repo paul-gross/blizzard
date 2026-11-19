@@ -132,9 +132,13 @@ def _global_key_columns(shapes: sa.MetaData) -> frozenset[str]:
 
 
 def seed_host(engine: sa.Engine) -> None:
-    """One row in every host table an ingest carries or leaves but its own record."""
+    """One row in every host table an ingest carries or leaves but its own record, and the runners' sealed hub tokens,
+    whose content must be a real seal."""
     seed_tables(
-        engine, reflect(engine), HOST_TABLES - {"host_ingests", "host_identity"}, values={"failure_reason": None}
+        engine,
+        reflect(engine),
+        HOST_TABLES - {"host_ingests", "host_identity", "runner_hub_tokens"},
+        values={"failure_reason": None},
     )
 
 
