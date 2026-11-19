@@ -163,6 +163,29 @@ describe('UrgencyDetail image mark', () => {
     expect(stub.forRoute('/api/urgencies/u', 'PATCH')).toHaveLength(0);
   });
 
+  it('shows an image fetch failure after retries and never offers edit', async () => {
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: ['config:edit', 'chunk:control'] }),
+      'GET /api/urgencies': () => ({ urgencies: [imaged] }),
+      'GET /api/urgencies/{key}': () => imaged,
+      'GET /api/urgencies/{key}/icon': () => stubError(503, { detail: 'unavailable' }),
+      'GET /api/config/changes': () => configChangesPage(),
+    });
+    sessionStorage.setItem(TAB_TENANT_KEY, 'ten_a');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 1, retryDelay: 0 } } });
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideTanStackQuery(client), provideRouter([{ path: 'admin/urgencies/:key', component: UrgencyDetail }])] });
+    TestBed.inject(ViewportService).setOverride('desktop');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/admin/urgencies/u');
+    await vi.waitFor(async () => {
+      await settle(harness.fixture);
+      expect(harness.routeNativeElement?.textContent).toContain('Could not load the urgency image');
+    });
+    expect(stub.forRoute('/api/urgencies/u/icon')).toHaveLength(2);
+    expect((harness.routeNativeElement as HTMLElement).querySelector('[data-testid="admin-urgency-edit"]')).toBeNull();
+    expect(document.querySelector('[data-testid="admin-urgency-edit-dialog"]')).toBeNull();
+  });
+
   it('does not let a prior digest conversion unlock a newer icon', async () => {
     let resolve!: (value: ArrayBuffer) => void;
     const pending = new Promise<ArrayBuffer>((done) => { resolve = done; });
