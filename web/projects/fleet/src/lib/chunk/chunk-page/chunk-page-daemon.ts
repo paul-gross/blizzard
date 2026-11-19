@@ -1,7 +1,7 @@
 import { InjectionToken, type Provider, type Signal } from '@angular/core';
 
 import type { ChunkControl } from '../chunk-detail/chunk-control';
-import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
+import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../awaiting-human';
 import type { DaemonTarget } from '../../core/daemon-target/daemon-target';
 
 /**

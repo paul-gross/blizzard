@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
-import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { KitButton } from '../../kit/kit-button';
 import { KitChip } from '../../kit/kit-chips';
 import { KitToolbar, KitToolbarWidget } from '../../kit/kit-toolbar';
@@ -8,7 +7,7 @@ import { KitSectionHead } from '../../kit/kit-section-head';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
-import { ChunkEscalation } from './chunk-escalation';
+import { type AwaitingHuman, type AwaitingQuestion, deliveryLine } from './awaiting-human.domain';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
@@ -26,30 +25,25 @@ export interface ResolveDecisionEvent {
   readonly note?: string;
 }
 
-/** How many recently answered questions the dock keeps a trail for. */
-const ANSWERED_TRAIL_LIMIT = 3;
-
-
 /**
  * The chunk's awaiting-human gate — whatever the chunk waits on
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
- * criterion 12), or an open **escalation**, rendered by {@link ChunkEscalation}
- * — this component keeps no escalation state of its own, just forwards `detail`.
+ * criterion 12). The escalation box is its composition sites' to render.
  *
  * Below those, the **answered trail**: a recently answered question stays
  * rendered with who answered it, what they said, and whether the runner has delivered
  * the answer into the resumed session — the return leg of the rendezvous, so the person
  * who answered sees it arrive instead of watching the row disappear.
  *
- * Presentational only: it holds the detail input and emits `answerQuestion`
+ * Presentational only: it reads the {@link AwaitingHuman} state and emits `answerQuestion`
  * / `resolveDecision`; the mutations those events drive live in the
  * container.
  */
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, FleetWhen, KitButton, KitChip, KitToolbar, KitToolbarWidget, KitSectionHead, KitTextInput],
+  imports: [FleetWhen, KitButton, KitChip, KitToolbar, KitToolbarWidget, KitSectionHead, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })
@@ -57,8 +51,8 @@ export class ChunkAwaitingHuman {
   /** Render one independently placed part, or the complete legacy presentation. */
   readonly section = input<'all' | 'asks' | 'answered' | 'decisions'>('all');
 
-  /** The chunk aggregate to render (open questions, gate decision, escalation). */
-  readonly detail = input.required<ChunkDetail>();
+  /** What the chunk waits on a human for. */
+  readonly state = input.required<AwaitingHuman>();
 
   /** Whether the current identity may answer an open question (`question:answer`).
    * Withholds the answer input/chips when `false`, though the question
@@ -99,62 +93,10 @@ export class ChunkAwaitingHuman {
     return runnerDisplayName(runnerId, name, this.runnerHosts().get(runnerId));
   }
 
-  /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
-  protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
-    (this.detail().questions ?? []).filter((q) => !q.answered),
-  );
-
-  /**
-   * The chunk's recently answered questions, most recently **answered** first — the
-   * return trail, so an operator who answered has evidence their answer went
-   * somewhere: who answered, what they said, and whether the runner has delivered it
-   * into the resumed session.
-   *
-   * Sorted on `answered_at` and capped at {@link ANSWERED_TRAIL_LIMIT}; the cap is
-   * presentational only.
-   */
-  protected readonly answeredQuestions = computed<readonly QuestionView[]>(() =>
-    // `filter` already copied, so sorting in place does not mutate the query's data.
-    (this.detail().questions ?? [])
-      .filter((q) => q.answered)
-      .sort((a, b) => (b.answered_at ?? '').localeCompare(a.answered_at ?? ''))
-      .slice(0, ANSWERED_TRAIL_LIMIT),
-  );
-
-  /**
-   * The delivery leg of one answered question's trail.
-   *
-   * Four states, not two. A restart answers every open question for the system and ends its session,
-   * so a superseded answer is named for that cause, ahead of any terminal line.
-   *
-   * An answer that has not been delivered is otherwise only *in flight* while the chunk can still
-   * resume — a question answered after its runner went down, or on a chunk since reaped or taken
-   * over, has no delivery row and never will. A two-state ternary reads the present-progressive
-   * "Delivering…" forever there, which is the one place this trail would assert something false
-   * rather than merely stale: it promises a return trip nothing will complete. On a terminal chunk
-   * (the wire's `terminal` — a status the chunk never leaves, so nothing is left to resume) it says so.
-   */
-  protected deliveryLine(question: QuestionView): string {
-    if (question.delivered) return 'Delivered · agent resumed';
-    if (question.superseded) return 'Not delivered — the session was restarted';
-    return this.detail().terminal
-      ? 'Not delivered — the chunk ended first'
-      : 'Delivering to the agent…';
+  /** The delivery leg of one answered question's trail. */
+  protected deliveryLine(question: AwaitingQuestion): string {
+    return deliveryLine(question, this.state().terminal);
   }
-
-  /** The chunk's live gate decision — not yet resolved, so its choices are still offered. */
-  protected readonly openDecision = computed<DecisionView | null>(() => {
-    const decision = this.detail().decision;
-    return decision && !decision.transitioned && !decision.resolved_choice ? decision : null;
-  });
-
-  /** The chunk's gate decision once resolved but before the runner records the resolving
-   * transition — rendered as who chose what, and when, in place of the choices. Once the
-   * transition lands the chunk detail stops carrying it. */
-  protected readonly resolvedDecision = computed<DecisionView | null>(() => {
-    const decision = this.detail().decision;
-    return decision && !decision.transitioned && decision.resolved_choice ? decision : null;
-  });
 
   /** The live draft for one question's answer field — `''` for a question the
    * operator has not typed into yet. */
@@ -172,7 +114,7 @@ export class ChunkAwaitingHuman {
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
     if (!trimmed) return;
-    this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.detail().chunk_id });
+    this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.state().chunk_id });
     this.answerDrafts.update((drafts) => {
       const next = { ...drafts };
       delete next[questionId];
@@ -187,7 +129,7 @@ export class ChunkAwaitingHuman {
     this.resolveDecision.emit({
       decisionId,
       choice,
-      chunkId: this.detail().chunk_id,
+      chunkId: this.state().chunk_id,
       ...(note ? { note } : {}),
     });
     this.noteDraft.set('');

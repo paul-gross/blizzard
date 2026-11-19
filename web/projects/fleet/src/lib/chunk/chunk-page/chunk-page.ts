@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
-import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../chunk-detail/chunk-awaiting-human';
+import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../awaiting-human';
 import { deriveWorkItemsState, type WorkItemsState } from '../chunk-detail/work-items-state';
 import { STATUS_TONE } from '../../core/chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';

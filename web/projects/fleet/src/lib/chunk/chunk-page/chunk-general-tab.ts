@@ -3,18 +3,17 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../../api/hub';
+import { type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, toAwaitingHuman } from '../awaiting-human';
 import {
-  type AnswerQuestionEvent,
-  ChunkAwaitingHuman,
   ChunkFacts,
   ChunkIssuePane,
   ChunkTimeline,
   chunkGraphLabel,
-  type ResolveDecisionEvent,
   type WorkItemsState,
 } from '../chunk-detail';
 import { KitPanel, KitPanelHeader } from '../../kit/kit-panel';
 import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
+import { ChunkEscalation } from '../chunk-detail/chunk-escalation';
 import { hasDelivery } from '../chunk-detail/has-delivery';
 import { AppLink } from '../../core/app-scope';
 
@@ -39,7 +38,7 @@ import { AppLink } from '../../core/app-scope';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, AppLink],
+  imports: [ChunkAwaitingHuman, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkDelivery, KitPanel, KitPanelHeader, NgTemplateOutlet, RouterLink, AppLink],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
@@ -72,6 +71,9 @@ export class ChunkGeneralTab {
 
   /** The chunk page's own path segments, before the chunk id — each dependency neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
+
+  /** What the chunk waits on a human for, read once for every awaiting-human section. */
+  protected readonly awaitingHuman = computed(() => toAwaitingHuman(this.detail()));
 
   /** The chunk's graph as `G-XXXX#name-YYYYMMDD`, beside the node history label. */
   protected readonly graphLabel = computed(() => chunkGraphLabel(this.detail()));

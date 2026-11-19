@@ -19,8 +19,8 @@
  *
  * Fails when a source file reachable that eagerly is one esbuild cannot drop from the
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
- * failure mode this check exists to catch): the fleet `chunk/chunk-detail/` or `transcripts/`
- * sub-barrels and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
+ * failure mode this check exists to catch): the fleet `chunk/chunk-detail/`, `chunk/awaiting-human/`, or
+ * `transcripts/` sub-barrels and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
  * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
  * Run from `web/`: `npm run bundle-check` (`node scripts/bundle-check.js`).
@@ -38,6 +38,7 @@ const ROOT = path.resolve(__dirname, '..');
  * The fleet sub-barrels and the CDK stack are shared; the rest is per app. */
 const SHARED_FORBIDDEN = [
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
+  { name: 'fleet awaiting-human/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/awaiting-human/') },
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
   {
     name: '@angular/cdk menu/overlay/listbox',

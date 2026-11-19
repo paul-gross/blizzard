@@ -377,7 +377,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/host-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts' },
-  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/awaiting-human/chunk-awaiting-human.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-nav.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/host/host-page.shell-sweep.spec.ts' },

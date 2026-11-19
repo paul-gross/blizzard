@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page, userEvent } from 'vitest/browser';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, decisionView, questionView } from 'fleet/testing';
+import { answeredQuestion, awaitingDecision, awaitingHuman, awaitingQuestion } from 'fleet/testing';
+import type { AwaitingDecision } from './awaiting-human.domain';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 /**
@@ -13,44 +13,33 @@ import { ChunkAwaitingHuman } from './chunk-awaiting-human';
  * (`bzh:narrow-viewport-tier-rule`). Excluded from the default `ng test fleet` run; run it
  * via `npm run shell-sweep`.
  */
-function detail(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}): ChunkDetail {
-  return chunkDetail({
+
+type Parts = NonNullable<Parameters<typeof awaitingHuman>[0]>;
+
+function detail(imposedBy: string | null, resolution: Partial<AwaitingDecision> = {}): Parts {
+  return {
     chunk_id: 'ch_01gate0000000000000000000000',
-    graph_id: 'gr_1',
-    status: 'waiting_on_human',
-    current_node_id: 'nd_gate',
-    latest_epoch: 1,
-    work_refs: [],
-    history: [],
-    artifacts: [],
-    decision: decisionView({
+    decision: awaitingDecision({
       decision_id: 'de_01',
-      chunk_id: 'ch_01gate0000000000000000000000',
-      node_id: 'nd_gate',
       node_name: 'approve-gate',
-      epoch: 1,
-      submitted_at: '2026-07-13T00:00:01Z',
       choices: [
-        { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
-        { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
+        { name: 'approve', description: 'Ship it.', would_override_red_checks: false },
+        { name: 'reject', description: 'Send it back.', would_override_red_checks: false },
       ],
       check_results: [],
-      transitioned: false,
       imposed_by_runner_id: imposedBy,
       ...resolution,
     }),
-    graph_name: null,
-    current_node_name: null,
-  });
+  };
 }
 
-async function mount(imposedBy: string | null, resolution: Partial<NonNullable<ChunkDetail['decision']>> = {}) {
+async function mount(imposedBy: string | null, resolution: Partial<AwaitingDecision> = {}) {
   await TestBed.configureTestingModule({
     imports: [ChunkAwaitingHuman],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-  fixture.componentRef.setInput('detail', detail(imposedBy, resolution));
+  fixture.componentRef.setInput('state', awaitingHuman(detail(imposedBy, resolution)));
   fixture.componentRef.setInput('canResolve', true);
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -65,10 +54,10 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
       imports: [ChunkAwaitingHuman], providers: [provideZonelessChangeDetection()],
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('detail', {
+    fixture.componentRef.setInput('state', awaitingHuman({
       ...detail(null),
-      questions: [questionView({ question_id: 'q1', question: 'Choose an answer', answered: false, options: ['yes', 'no'] })],
-    });
+      questions: [awaitingQuestion({ question_id: 'q1', question: 'Choose an answer', options: ['yes', 'no'] })],
+    }));
     fixture.componentRef.setInput('canAnswer', true);
     fixture.componentRef.setInput('canResolve', true);
     const answers: string[] = [];
@@ -118,10 +107,10 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     const text = `first line\n  second line\n\n${'long-token-'.repeat(35)}`;
-    fixture.componentRef.setInput('detail', chunkDetail({
+    fixture.componentRef.setInput('state', awaitingHuman({
       questions: [
-        questionView({ question_id: 'q_open', question: text, answered: false }),
-        questionView({ question_id: 'q_answered', question: text, answered: true, answer: text }),
+        awaitingQuestion({ question_id: 'q_open', question: text }),
+        answeredQuestion({ question_id: 'q_answered', question: text, answer: text }),
       ],
     }));
     const root = fixture.nativeElement as HTMLElement;

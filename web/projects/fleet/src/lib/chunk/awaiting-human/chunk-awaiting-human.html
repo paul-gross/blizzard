@@ -1,7 +1,7 @@
-@if ((section() === 'all' || section() === 'asks') && openQuestions().length > 0) {
+@if ((section() === 'all' || section() === 'asks') && state().open_questions.length > 0) {
   <div class="awaiting" data-testid="awaiting-human">
     <fleet-kit-section-head label="Asks" />
-    @for (q of openQuestions(); track q.question_id) {
+    @for (q of state().open_questions; track q.question_id) {
       <div class="ask" data-testid="open-question">
         <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
         @if (canAnswer()) {
@@ -38,10 +38,10 @@
   </div>
 }
 
-@if ((section() === 'all' || section() === 'answered') && answeredQuestions().length > 0) {
+@if ((section() === 'all' || section() === 'answered') && state().answered_trail.length > 0) {
   <div class="answered" data-testid="answered-questions">
     <fleet-kit-section-head label="Answered questions" />
-    @for (q of answeredQuestions(); track q.question_id) {
+    @for (q of state().answered_trail; track q.question_id) {
       <div class="trail" data-testid="answered-question">
         <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>
         <p class="trail-line" data-testid="answered-by">
@@ -56,10 +56,10 @@
   </div>
 }
 
-@if ((section() === 'all' || section() === 'decisions') && (openDecision() || resolvedDecision())) {
+@if ((section() === 'all' || section() === 'decisions') && (state().live_decision || state().resolved_decision)) {
   <div class="awaiting" data-testid="awaiting-human">
     <fleet-kit-section-head label="Decisions" />
-    @if (openDecision(); as d) {
+    @if (state().live_decision; as d) {
       <div class="gate" data-testid="open-decision">
         <fleet-kit-section-head label="Gate">
           <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
@@ -104,7 +104,7 @@
         }
       </div>
     }
-    @if (resolvedDecision(); as d) {
+    @if (state().resolved_decision; as d) {
       <div class="gate" data-testid="resolved-decision">
         <fleet-kit-section-head label="Gate">
           <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
@@ -119,8 +119,4 @@
       </div>
     }
   </div>
-}
-
-@if (section() === 'all' || section() === 'asks') {
-  <fleet-chunk-detail-escalation [detail]="detail()" />
 }
