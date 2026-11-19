@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
 import {
   configChangesPage,
@@ -57,7 +56,7 @@ describe('AdminShell', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function open(slug: string | null, permissions: MeResponse['permissions']) {
+  async function open(slug: string | null, permissions: typeof OPERATOR_ME_RESPONSE.permissions) {
     stub = stubHubClient({
       'GET /api/me': () => {
         const tenants = OPERATOR_ME_RESPONSE.tenants.map((tenant) => ({ ...tenant, permissions }));

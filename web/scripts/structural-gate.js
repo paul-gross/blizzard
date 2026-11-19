@@ -998,7 +998,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/sse',
   'fleet/src/lib/transcripts',
   'hub/src/app/admin',
-  'hub/src/app/admin/changes',
   'hub/src/app/admin/forges',
   'hub/src/app/admin/hub-settings',
   'hub/src/app/admin/members',
@@ -1029,7 +1028,16 @@ const DOMAIN_BOUNDARY_EXEMPT = [
 ];
 
 const DOMAIN_BOUNDARY_SUBKEYED = 'hub/src/app/admin';
-const DOMAIN_BOUNDARY_STRICT_SCOPES = ['hub/src/app/admin/projects', 'fleet/src/lib/chunk/awaiting-human'];
+/** A strict scope is a folder prefix, or a concept stem (`<dir>/<concept>`) matching that concept's own files
+ * (`<concept>.*`), so a concept can be pinned inside a unit whose other concepts are still exempt. */
+const DOMAIN_BOUNDARY_STRICT_SCOPES = [
+  'hub/src/app/admin/projects',
+  'hub/src/app/admin/config-history',
+  'hub/src/app/admin/config-field-diff',
+  'hub/src/app/admin/config-revisions',
+  'hub/src/app/admin/admin-shell',
+  'fleet/src/lib/chunk/awaiting-human',
+];
 
 /** The `DOMAIN_BOUNDARY_EXEMPT` unit of `rel`, a `projects/`-relative posix path.
  * @param {string} rel

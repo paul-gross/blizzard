@@ -14,8 +14,8 @@
  * permitted under `fleet/src/lib/api/` and `fleet/src/lib/testing/transport/`, and in `*.query.ts`,
  * `*.mutations.ts`, and `*.translate.ts` files and their own focused specs; every other `.ts` under
  * `projects/` (`.storybook/` included) is judged. A unit the caller exempts passes, and an exempt unit
- * that no longer consumes the wire outside a strict scope is reported stale. Strict scopes cannot be
- * excused by a parent unit's exemption. Separately, a production file or a story whose
+ * that no longer consumes the wire outside a strict scope is reported stale. A strict scope is a folder
+ * prefix or a concept stem (`<dir>/<concept>.*`); a parent unit's exemption cannot excuse it. Separately, a production file or a story whose
  * consumed symbol is declared under `testing/transport/` reaches the test transport; specs and test
  * helpers may.
  *
@@ -464,7 +464,8 @@ function referencedDeclarations(checker, sf) {
  *
  * @param {{ root: string, memory?: Map<string, string> | null, unitOf: (rel: string) => string,
  *   exempt: readonly string[], strictScopes?: readonly string[] }} opts `unitOf` maps a `projects/`-relative file to its exemption unit;
- *   `strictScopes` are projects-relative directory prefixes, without a trailing slash
+ *   `strictScopes` are projects-relative directory prefixes, without a trailing slash, or concept stems (a scope
+ *   followed by `.` matches that concept's own files)
  * @returns {DomainBoundaryResult} unexempted consumers, consumers an exemption passed, exempt units
  *   that consume nothing, and transport reach — paths `projects/`-relative
  */
@@ -500,7 +501,7 @@ function sweepDomainBoundary({ root, memory = null, unitOf, exempt, strictScopes
     }
     if (judgeWire && wireNames.size > 0) {
       const unit = unitOf(rel);
-      const strict = strictScopes.some((scope) => rel.startsWith(`${scope}/`));
+      const strict = strictScopes.some((scope) => rel.startsWith(`${scope}/`) || rel.startsWith(`${scope}.`));
       (exempt.includes(unit) && !strict ? exempted : consumers).push({ file: rel, unit, names: [...wireNames].sort() });
     }
     if (judgeReach && transportNames.size > 0) reach.push({ file: rel, names: [...transportNames].sort() });
@@ -600,6 +601,8 @@ function assertDomainBoundaryDetectorWorks() {
     ["hub/src/app/admin/projects/project.translate.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
     ["hub/src/app/admin/projects/project.translate.spec.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
     ["hub/src/app/admin/sibling/view.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/stem.model.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
+    ["hub/src/app/admin/other.model.ts", "import type { ChunkDetail } from 'fleet';\nexport let d: ChunkDetail;\n"],
   ];
   const memory = new Map(tree.map(([rel, text]) => [`${p}/${rel}`, text]));
   /** @param {string} rel */
@@ -666,8 +669,15 @@ function assertDomainBoundaryDetectorWorks() {
   if (!strictResult.exempted.some((c) => c.file === "hub/src/app/admin/sibling/view.ts") || strictResult.stale.includes(admin)) {
     throw new Error("strict scope did not preserve the sibling exemption");
   }
+  const stemRun = sweepDomainBoundary({ root, memory, unitOf, exempt: [admin], strictScopes: ["hub/src/app/admin/stem"] });
+  if (!stemRun.consumers.some((c) => c.file === "hub/src/app/admin/stem.model.ts")) throw new Error("stem scope missed its own concept's file");
+  if (!stemRun.exempted.some((c) => c.file === "hub/src/app/admin/other.model.ts")) {
+    throw new Error("stem scope caught a different-stem sibling");
+  }
   const withoutSibling = new Map(memory);
   withoutSibling.delete(`${p}/hub/src/app/admin/sibling/view.ts`);
+  withoutSibling.delete(`${p}/hub/src/app/admin/stem.model.ts`);
+  withoutSibling.delete(`${p}/hub/src/app/admin/other.model.ts`);
   if (!strictRun(withoutSibling).stale.includes(admin)) {
     throw new Error("strict scope sustained a stale parent exemption");
   }

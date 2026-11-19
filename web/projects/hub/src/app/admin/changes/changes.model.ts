@@ -1,5 +1,4 @@
-import type { ConfigChangeView } from 'fleet';
-
+import type { ConfigChange, ConfigFieldChange } from '../config-history.domain';
 import { changeActor } from '../config-history.model';
 import { recordKindLabel, recordRoute } from '../config-links.model';
 import type { ConfigRowVm } from '../config-record-list';
@@ -14,7 +13,7 @@ export interface ChangeEntry {
   /** When the entry's newest change was recorded. */
   readonly at: string;
   /** The entry's changes, newest first. */
-  readonly changes: readonly ConfigChangeView[];
+  readonly changes: readonly ConfigChange[];
 }
 
 /** One change inside an entry's detail. */
@@ -24,7 +23,7 @@ export interface ChangeRowVm {
   readonly title: string;
   /** The changed record's route, or `null` for a kind the board has no surface for. */
   readonly route: readonly string[] | null;
-  readonly diff: ConfigChangeView['diff'];
+  readonly diff: readonly ConfigFieldChange[];
   /** A change with no field diff (a secret's value replace) renders as the revision
    * step it made, `r{n-1} → r{n}`; `null` for a change with a diff. */
   readonly revisionStep: string | null;
@@ -44,9 +43,9 @@ export interface ChangeEntryVm {
  * `apply_id` are one entry, placed where its newest row falls; every other row is
  * its own entry.
  */
-export function changeEntries(changes: readonly ConfigChangeView[]): readonly ChangeEntry[] {
-  const entries: { key: string; applyId: string | null; changes: ConfigChangeView[] }[] = [];
-  const byApply = new Map<string, ConfigChangeView[]>();
+export function changeEntries(changes: readonly ConfigChange[]): readonly ChangeEntry[] {
+  const entries: { key: string; applyId: string | null; changes: ConfigChange[] }[] = [];
+  const byApply = new Map<string, ConfigChange[]>();
   for (const change of changes) {
     const applyId = change.apply_id ?? null;
     if (applyId !== null) {
@@ -70,7 +69,7 @@ export function changeEntries(changes: readonly ConfigChangeView[]): readonly Ch
   }));
 }
 
-function changeTitle(change: ConfigChangeView): string {
+function changeTitle(change: ConfigChange): string {
   return `${recordKindLabel(change.record_kind)} ${change.record_label ?? change.record_key} · ${change.op}`;
 }
 
