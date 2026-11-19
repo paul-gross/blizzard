@@ -35,35 +35,50 @@ describe('NewHubItem', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="new-hub-item"]')).toBeNull();
   });
 
-  it('requires a project on All and starts at the tenant default urgency', async () => {
+  it('starts at the tenant default urgency and withholds retired ones', async () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
     el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item"]')!.click();
     await settle(fixture);
     expect(el.querySelector('[data-testid="new-hub-item-urgency"]')?.getAttribute('aria-label')).toBe('Urgency: Standard');
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!.disabled).toBe(true);
-    const title = el.querySelector<HTMLInputElement>('[data-testid="new-hub-item-title"]')!;
-    title.value = 'Title'; title.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!.disabled).toBe(true);
-    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-project"]')!.click();
-    await settle(fixture);
-    const option = document.querySelector<HTMLElement>('[role="option"]')!;
-    expect(option.textContent).toContain('Alpha');
-    option.click();
-    await settle(fixture);
-    const submit = el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!;
-    expect(submit.disabled).toBe(true);
-    const body = el.querySelector<HTMLTextAreaElement>('[data-testid="new-hub-item-body"]')!;
-    body.value = '   '; body.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    expect(submit.disabled).toBe(true);
-    body.value = 'Body'; body.dispatchEvent(new Event('input'));
-    await settle(fixture);
-    expect(submit.disabled).toBe(false);
     el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-urgency"]')!.click();
     await settle(fixture);
     expect(document.querySelector('[role="listbox"]')?.textContent).not.toContain('Retired');
+  });
+
+  it('shows a field error and sends no request for each missing field', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item"]')!.click();
+    await settle(fixture);
+    const save = () => el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-save"]')!;
+    const fieldErrors = () => el.querySelectorAll('fleet-kit-field fleet-kit-error-line').length;
+    save().click();
+    await settle(fixture);
+    // title, body and project are missing; the urgency defaulted.
+    expect(fieldErrors()).toBe(3);
+    expect(stub.forRoute('/api/work-sources/hub/items', 'POST')).toHaveLength(0);
+    const title = el.querySelector<HTMLInputElement>('[data-testid="new-hub-item-title"]')!;
+    title.value = 'Title'; title.dispatchEvent(new Event('input'));
+    const body = el.querySelector<HTMLTextAreaElement>('[data-testid="new-hub-item-body"]')!;
+    body.value = '   '; body.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    expect(fieldErrors()).toBe(2);
+    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-project"]')!.click();
+    await settle(fixture);
+    document.querySelector<HTMLElement>('[role="option"]')!.click();
+    await settle(fixture);
+    expect(fieldErrors()).toBe(1);
+    save().click();
+    await settle(fixture);
+    expect(stub.forRoute('/api/work-sources/hub/items', 'POST')).toHaveLength(0);
+    body.value = 'Body'; body.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    expect(fieldErrors()).toBe(0);
+    save().click();
+    await settle(fixture);
+    const request = stub.forRoute('/api/work-sources/hub/items', 'POST')[0];
+    expect(new URLSearchParams(request.search).get('project')).toBe('pr_alpha');
   });
 
   it('uses the lens, creates and emits the minted chunk', async () => {
@@ -79,7 +94,7 @@ describe('NewHubItem', () => {
     title.value = ' Title '; title.dispatchEvent(new Event('input'));
     body.value = 'Body'; body.dispatchEvent(new Event('input'));
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-save"]')!.click();
     await settle(fixture);
     expect(created).toEqual(['ch_created']);
     expect(el.querySelector('[data-testid="new-hub-item-dialog"]')).toBeNull();
@@ -98,7 +113,7 @@ describe('NewHubItem', () => {
     const body = el.querySelector<HTMLTextAreaElement>('[data-testid="new-hub-item-body"]')!;
     body.value = 'Body'; body.dispatchEvent(new Event('input'));
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-save"]')!.click();
     await settle(fixture);
     expect(el.querySelector('[data-testid="new-hub-item-dialog"]')).not.toBeNull();
     expect(title.value).toBe('Title');
@@ -116,7 +131,7 @@ describe('NewHubItem', () => {
     title.value = 'Draft'; title.dispatchEvent(new Event('input'));
     body.value = 'Body'; body.dispatchEvent(new Event('input'));
     await settle(fixture);
-    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-submit"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="new-hub-item-save"]')!.click();
     fixture.detectChanges();
     const dialog = el.querySelector<HTMLElement>('[data-testid="new-hub-item-dialog"]')!;
     dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
