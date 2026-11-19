@@ -125,7 +125,7 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
     host = seed_host(host, {})
-    ready, halted = seed_runners(host, list(host.runners))
+    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     hosted = build_hosted_app(graph.runners[0].config, graph)

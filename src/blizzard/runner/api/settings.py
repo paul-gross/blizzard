@@ -26,14 +26,6 @@ from blizzard.runner.throttle.settings import DAY_NAMES, DEFAULT_BUDGET_WINDOW_H
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
 
-
-def reject_worker_credential(request: Request) -> None:
-    # An ungated host grants implicit human authority, but a presented lease token
-    # identifies the worker lane, not an implicit human caller.
-    if presented_lease_token(request) is not None:
-        raise HTTPException(status_code=401, detail="runner session required")
-
-
 router = APIRouter(prefix="/api/settings", tags=["runner settings"], dependencies=[Depends(reject_worker_credential)])
 
 

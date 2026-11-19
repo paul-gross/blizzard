@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.federation import require_superuser
+from blizzard.runner.api.problems import reject_worker_credential
 from blizzard.runner.api.settings import (
     WRITE_RESPONSES,
     ChangeView,
@@ -22,7 +23,6 @@ from blizzard.runner.api.settings import (
     SettingsView,
     SettingsWrite,
     entry_view,
-    reject_worker_credential,
     settings_problem,
 )
 from blizzard.runner.api.wiring import RunnerWiring
