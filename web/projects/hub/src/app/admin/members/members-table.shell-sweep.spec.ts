@@ -2,7 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { page, userEvent } from 'vitest/browser';
 
-import type { MemberView } from 'fleet';
+import { member } from './members.builders';
+import type { Member } from './members.domain';
 import { MembersTable } from './members-table';
 
 /**
@@ -21,31 +22,31 @@ import { MembersTable } from './members-table';
  */
 /** A name with no break opportunity, so the table cannot wrap its way out of the width. */
 const LONG = 'averylongnamethatapersonoratenantmightreallycarryandthatmustnotpushthepagesideways';
-const MEMBERS: readonly MemberView[] = [
-  {
-    user_id: 'usr_admin',
+const MEMBERS: readonly Member[] = [
+  member({
+    userId: 'usr_admin',
     username: 'ada',
-    display_name: 'Ada',
+    displayName: 'Ada',
     email: 'ada@example.com',
     role: 'admin',
-    hub_admin: true,
-    created_at: '2026-07-21T00:00:00Z',
-    identities: [{ provider_name: 'github', handle: 'ada' }],
-    assignable_roles: [],
+    hubAdmin: true,
+    createdAt: '2026-07-21T00:00:00Z',
+    identities: [{ providerName: 'github', handle: 'ada' }],
+    assignableRoles: [],
     revocable: false,
-  },
-  {
-    user_id: 'usr_long',
+  }),
+  member({
+    userId: 'usr_long',
     username: LONG,
-    display_name: LONG,
+    displayName: LONG,
     email: `${LONG}@example.com`,
-    role: 'guest',
-    hub_admin: true,
-    created_at: '2026-07-21T00:00:00Z',
-    identities: [{ provider_name: 'github', handle: LONG }],
-    assignable_roles: ['guest', 'contributor', 'admin'],
+    role: { unlisted: LONG },
+    hubAdmin: true,
+    createdAt: '2026-07-21T00:00:00Z',
+    identities: [{ providerName: 'github', handle: LONG }],
+    assignableRoles: ['guest', 'contributor', 'admin'],
     revocable: true,
-  },
+  }),
 ];
 
 async function sweep(width: number) {
@@ -98,6 +99,31 @@ async function sweep(width: number) {
       expect(box.left, `${testid} is outside the screen at ${width}px`).toBeGreaterThanOrEqual(0);
       expect(box.right, `${testid} is outside the screen at ${width}px`).toBeLessThanOrEqual(width);
     }
+    const select = root.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')!;
+    expect(select.getAttribute('aria-label')).toContain(LONG);
+    select.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (width <= 390) {
+      scroller.scrollLeft += select.getBoundingClientRect().left - (width - select.getBoundingClientRect().width) / 2;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(Math.abs(select.getBoundingClientRect().left - (width - select.getBoundingClientRect().width) / 2)).toBeLessThan(1);
+    }
+    select.click();
+    await fixture.whenStable();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const popup = document.querySelector<HTMLElement>('[role="listbox"]')!;
+    const option = [...popup.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent?.trim() === LONG)!;
+    const bounds = option.getBoundingClientRect();
+    const popupBounds = popup.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(width);
+    expect(bounds.top).toBeGreaterThanOrEqual(popupBounds.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(popupBounds.bottom);
+    expect(popupBounds.left).toBeGreaterThanOrEqual(0);
+    expect(popupBounds.right).toBeLessThanOrEqual(width);
+    expect(option.scrollWidth).toBeLessThanOrEqual(option.clientWidth);
+    expect(option.scrollHeight).toBeLessThanOrEqual(option.clientHeight);
+    expect(bounds.height).toBeGreaterThan(30);
+    select.click();
   } finally {
     root.remove();
     window.removeEventListener('error', onError);
@@ -114,8 +140,8 @@ describe('members table shell sweep (web:shell-sweep)', () => {
 });
 
 const SELF = MEMBERS[0];
-const ASSIGNABLE: MemberView = { ...MEMBERS[1], user_id: 'usr_grace', username: 'grace', display_name: 'Grace', email: null, identities: [] };
-const PENDING: MemberView = { ...ASSIGNABLE, user_id: 'usr_otto', username: 'otto', display_name: 'Otto' };
+const ASSIGNABLE: Member = { ...MEMBERS[1], userId: 'usr_grace', username: 'grace', displayName: 'Grace', email: null, identities: [], role: 'guest' };
+const PENDING: Member = { ...ASSIGNABLE, userId: 'usr_otto', username: 'otto', displayName: 'Otto' };
 
 describe('members table keyboard sweep (web:shell-sweep)', () => {
   const settle = () => new Promise<void>((done) => setTimeout(done, 80));
@@ -137,8 +163,8 @@ describe('members table keyboard sweep (web:shell-sweep)', () => {
     const fixture = TestBed.createComponent(MembersTable);
     fixture.componentRef.setInput('members', [SELF, ASSIGNABLE, PENDING]);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('currentUserId', SELF.user_id);
-    fixture.componentRef.setInput('pendingUserIds', [PENDING.user_id]);
+    fixture.componentRef.setInput('currentUserId', SELF.userId);
+    fixture.componentRef.setInput('pendingUserIds', [PENDING.userId]);
     const root = fixture.nativeElement as HTMLElement;
     document.body.append(root, after);
     await page.viewport(1280, 900);
@@ -146,7 +172,7 @@ describe('members table keyboard sweep (web:shell-sweep)', () => {
     const changes: { userId: string; role: string }[] = [];
     const revokes: string[] = [];
     fixture.componentInstance.changeRole.subscribe((e) => changes.push(e));
-    fixture.componentInstance.revoke.subscribe((m) => revokes.push(m.user_id));
+    fixture.componentInstance.revoke.subscribe((m) => revokes.push(m.userId));
     const cleanup = () => {
       fixture.destroy();
       root.remove();

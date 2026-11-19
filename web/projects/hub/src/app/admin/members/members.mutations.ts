@@ -1,14 +1,16 @@
 import { inject } from '@angular/core';
 import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
 
-import { type MemberView, type hubApi, grantMembershipApiMembersUserIdPut, revokeMembershipApiMembersUserIdDelete } from 'fleet';
+import { grantMembershipApiMembersUserIdPut, revokeMembershipApiMembersUserIdDelete } from 'fleet';
+import { type Member, type MemberRole } from './members.domain';
+import { fromMemberView, toMemberRoleRequest } from './members.translate';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { hubMembersKey } from '../../core/query-keys';
 
 /** A role change's variables: the member and the membership role they are given. */
 export interface MemberRoleVars {
   readonly userId: string;
-  readonly role: hubApi.Role;
+  readonly role: MemberRole;
 }
 
 /** A revocation's variables: the member whose membership ends. */
@@ -25,14 +27,14 @@ export function injectMemberRoleMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: memberRoleMutationKey,
-    mutationFn: async (vars: MemberRoleVars): Promise<MemberView> => {
+    mutationFn: async (vars: MemberRoleVars): Promise<Member> => {
       const { data, error } = await grantMembershipApiMembersUserIdPut({
         path: { user_id: vars.userId },
-        body: { role: vars.role },
+        body: toMemberRoleRequest(vars.role),
         throwOnError: false,
       });
       if (error) throw error;
-      return data!;
+      return fromMemberView(data!);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: hubMembersKey }),
   }));

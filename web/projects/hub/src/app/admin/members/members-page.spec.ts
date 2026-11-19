@@ -1,48 +1,50 @@
+import { memberWire } from './members-fixture.translate';
+import { member } from './members.builders';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, type MemberView } from 'fleet';
-import { memberView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import type { Member } from './members.domain';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { MembersPage } from './members-page';
 import { hubMembersKey } from '../../core/query-keys';
 
-const ACME: MeResponse['tenants'][number] = { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['user:manage'] };
+const ACME = { tenant_id: 'ten_acme', name: 'Acme', role: 'admin' as const, permissions: ['user:manage' as const] };
 
-const ME_ADMIN: MeResponse = {
+const ME_ADMIN = {
   ...OPERATOR_ME_RESPONSE,
   user_id: 'usr_admin',
   username: 'ada',
   display_name: 'Ada',
-  role: 'admin',
-  permissions: ['user:manage'],
+  role: 'admin' as const,
+  permissions: ['user:manage' as const],
   hub_admin: false,
   tenants: [ACME],
 };
 
-const MEMBERS: MemberView[] = [
-  memberView({
-    user_id: 'usr_admin',
+const MEMBERS: Member[] = [
+  member({
+    userId: 'usr_admin',
     username: 'ada',
-    display_name: 'Ada',
+    displayName: 'Ada',
     email: 'ada@example.com',
     role: 'admin',
-    hub_admin: false,
-    created_at: '2026-07-21T00:00:00Z',
+    hubAdmin: false,
+    createdAt: '2026-07-21T00:00:00Z',
     identities: [],
-    assignable_roles: [],
+    assignableRoles: [],
     revocable: false,
   }),
-  memberView({
-    user_id: 'usr_guest',
+  member({
+    userId: 'usr_guest',
     username: 'grace',
-    display_name: 'Grace',
+    displayName: 'Grace',
     email: null,
     role: 'guest',
-    hub_admin: false,
-    created_at: '2026-07-21T00:00:00Z',
+    hubAdmin: false,
+    createdAt: '2026-07-21T00:00:00Z',
     identities: [],
-    assignable_roles: ['guest', 'contributor', 'admin'],
+    assignableRoles: ['guest', 'contributor', 'admin'],
     revocable: true,
   }),
 ];
@@ -58,11 +60,11 @@ describe('MembersPage', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function mount(me: MeResponse, members: MembersAnswer, routes: Routes = {}) {
+  async function mount(me: typeof ME_ADMIN, members: MembersAnswer, routes: Routes = {}) {
     stub = stubHubClient({
       'GET /api/me': () => me,
       'GET /api/members': members,
-      'PUT /api/members/{user_id}': (_request, { user_id }) => ({ ...MEMBERS[1], user_id }),
+      'PUT /api/members/{user_id}': (_request, { user_id }) => memberWire({ ...MEMBERS[1], userId: user_id }),
       'DELETE /api/members/{user_id}': () => undefined,
       ...routes,
     });
@@ -85,7 +87,7 @@ describe('MembersPage', () => {
   }
 
   it("lists the tenant's members from GET /api/members, never the users route", async () => {
-    const { el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
 
     expect(el.querySelectorAll('[data-testid="members-table-row"]')).toHaveLength(2);
     expect(stub.forRoute('/api/members', 'GET')).toHaveLength(1);
@@ -93,7 +95,7 @@ describe('MembersPage', () => {
   });
 
   it('labels the table Members', async () => {
-    const { el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
 
     expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members');
   });
@@ -107,7 +109,7 @@ describe('MembersPage', () => {
   });
 
   it('keeps a refused change visible when the listing becomes empty', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS, {
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire), {
       'PUT /api/members/{user_id}': () => stubError(409, { detail: 'refused' }),
     });
     await choose(fixture, el, 'usr_guest', 'contributor');
@@ -120,7 +122,7 @@ describe('MembersPage', () => {
   });
 
   it('keeps a pending confirmation when the listing becomes empty', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
     el.querySelector<HTMLElement>('[data-user-id="usr_guest"] [data-testid="members-table-revoke"]')!.click();
     await settle(fixture);
     TestBed.inject(QueryClient).setQueryData(hubMembersKey, []);
@@ -137,7 +139,7 @@ describe('MembersPage', () => {
   });
 
   it("keeps the actor's own row read-only", async () => {
-    const { el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
 
     const own = el.querySelector('[data-user-id="usr_admin"]');
     expect(own?.querySelector('[data-testid="members-table-role-static"]')?.textContent).toContain('(you)');
@@ -145,8 +147,8 @@ describe('MembersPage', () => {
   });
 
   it('changes a role with PUT /api/members/{id}', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS, {
-      'PUT /api/members/{user_id}': () => ({ ...MEMBERS[1], role: 'contributor' }),
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire), {
+      'PUT /api/members/{user_id}': () => memberWire({ ...MEMBERS[1], role: 'contributor' }),
     });
 
     await choose(fixture, el, 'usr_guest', 'contributor');
@@ -159,7 +161,7 @@ describe('MembersPage', () => {
   });
 
   it('surfaces a refused role change instead of appearing to succeed', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS, {
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire), {
       'PUT /api/members/{user_id}': () => stubError(409, { detail: 'a tenant keeps at least one admin' }),
     });
 
@@ -172,7 +174,7 @@ describe('MembersPage', () => {
   });
 
   it('revokes with DELETE /api/members/{id} only once confirmed', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
 
     el.querySelector<HTMLElement>('[data-user-id="usr_guest"] [data-testid="members-table-revoke"]')!.click();
     await settle(fixture);
@@ -188,7 +190,7 @@ describe('MembersPage', () => {
   });
 
   it('cancelling the confirmation revokes nothing', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS);
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire));
 
     el.querySelector<HTMLElement>('[data-user-id="usr_guest"] [data-testid="members-table-revoke"]')!.click();
     await settle(fixture);
@@ -200,7 +202,7 @@ describe('MembersPage', () => {
   });
 
   it('surfaces a refused revocation', async () => {
-    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS, {
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS.map(memberWire), {
       'DELETE /api/members/{user_id}': () => stubError(409, { detail: 'a tenant keeps at least one admin' }),
     });
 
