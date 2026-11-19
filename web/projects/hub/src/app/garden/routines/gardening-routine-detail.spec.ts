@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView } from 'fleet';
+import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView, type UrgencyView } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
   gardenGraphSummaryView,
@@ -579,6 +579,11 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it('edits the default urgency, sending only that field', async () => {
+    const normal: UrgencyView = {
+      urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false,
+      color: '#888888', emoji: null, icon: null, place: 0, revision: 1,
+      open_chunks: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'operator',
+    };
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       params: { routineSlug: 'nightly' },
@@ -586,10 +591,11 @@ describe('GardeningRoutineDetail', () => {
         'GET /api/urgencies': () =>
           ({
             urgencies: [
-              { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false },
-              { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false },
+              normal,
+              { ...normal, urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false },
+              { ...normal, urgency_id: 'r', slug: 'retired', name: 'Retired', default: false, retired: true },
             ],
-          }) as never,
+          }),
         'PATCH /api/routines/{routine_id}': () => ({ ...ROUTINE, default_urgency: 'urgent' }),
       },
     });
@@ -597,6 +603,7 @@ describe('GardeningRoutineDetail', () => {
     await settle(fixture);
 
     await open('gardening-routine-urgency-select', el, fixture);
+    expect([...document.body.querySelectorAll<HTMLElement>('[role="option"]')].map((o) => o.textContent?.trim())).not.toContain('Retired');
     [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-urgency-edit-save"]')!.click();

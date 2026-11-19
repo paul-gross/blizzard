@@ -1,6 +1,7 @@
 import type { FindingFactView } from 'fleet';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
@@ -13,6 +14,7 @@ import { FleetProposalPanel } from './proposals/proposal-panel';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routines/routine-proposal-counts';
 import { FleetRunDelta, type RunDeltaVm } from './runs/run-delta';
 import { FleetScopePanel, type ScopePanelVm } from './scopes/scope-panel';
+import { SCOPE_DESCRIPTION_RULES } from './scopes/scope.form';
 import { FleetRunList, type RunListRowVm } from './runs/run-list';
 
 /**
@@ -357,10 +359,15 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('vm', PANEL_SCOPE);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('canEdit', true);
+    fixture.componentRef.setInput(
+      'descriptionForm',
+      TestBed.runInInjectionContext(() => form(signal({ description: PANEL_SCOPE.description }), SCOPE_DESCRIPTION_RULES)),
+    );
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await fixture.whenStable();
     root.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    fixture.componentRef.setInput('editing', true);
     await fixture.whenStable();
 
     try {
