@@ -710,12 +710,23 @@ class RunnerStepper:
             return self._ctx
 
 
-def host_pass_stepper(host: HostProcess) -> HostPassStepper:
+def host_pass_stepper(host: HostProcess, reconcile: Callable[[], None] | None = None) -> HostPassStepper:
+    """The host's pass: the host record's snapshot, then ``reconcile`` of its live runners against its hosted ones,
+    then the host tick — reconciling again right after the registration step whenever that step recorded a runner
+    retired, so a hub-side retirement drains in the pass that notices it."""
+
+    def after_report() -> None:
+        if reconcile is not None and host.retirements.take():
+            reconcile()
+
     def run() -> None:
         # The host record's snapshot first: its tool profile is in force for every tool child this pass launches.
         if host.host_settings is not None:
             host.host_settings.take()
-        host.host_tick.run()
+        if reconcile is not None:
+            host.retirements.take()
+            reconcile()
+        host.host_tick.run(after_report)
 
     return HostPassStepper(run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick")
 

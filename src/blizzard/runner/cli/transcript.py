@@ -11,18 +11,20 @@ import click
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.runtime import click_exception_on
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
-from blizzard.runner.cli.directory import load_runner
+from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.store_guard import store_write_guard
+from blizzard.runner.cli.store_guard import resolve_runner, store_write_guard
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.wiring import load_published_harness_bundle, select_harness_bindings
+from blizzard.runner.host_config import HostConfigError
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.transcripts.backfill import TranscriptReshipError
 
@@ -118,7 +120,12 @@ def _transcript_config(
 ) -> Generator[RunnerConfig, None, None]:
     """Every store-writing transcript verb's guards, and the host directory held while the verb runs — shared so a
     second verb cannot ship with fewer of them than the first."""
-    config = load_runner(directory, runner=runner)
+    host = load_host(directory)
+    with click_exception_on(ConfigError):
+        entry = resolve_runner(host, runner, clock)
+        if (errors := host.runner_problems(entry)) or entry.own is None:
+            raise HostConfigError(tuple(f"runner {entry.name}: {error}" for error in errors))
+    config = host.config_for_runner(entry, entry.own, host.token_for(entry).value)
     if config.runner_id is None:
         raise click.ClickException(
             f"runner {config.name} has not joined its hub and has no id, so it has no transcript lane to touch; "

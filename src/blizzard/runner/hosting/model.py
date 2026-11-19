@@ -22,6 +22,8 @@ SEED: Final = "seed"
 OPERATOR: Final = "operator"
 #: The door a CLI verb's fact is recorded under.
 CLI: Final = "cli"
+#: The door and actor a retirement the host notices at its hub is recorded under.
+HUB: Final = "hub"
 
 
 class HostedRunnerOp(StrEnum):
@@ -58,6 +60,16 @@ def state_of(facts: Sequence[HostedRunnerFact]) -> HostedRunnerState | None:
     if any(fact.op is HostedRunnerOp.RETIRED for fact in facts):
         return HostedRunnerState.RETIRED
     return HostedRunnerState.ACTIVE
+
+
+#: The doors a runner is hosted through without a ``[[runner]]`` of the host file: the store is its only record.
+STORE_DOORS: Final = frozenset({"page", "api", "apply"})
+
+
+def hosted_beside_the_file(facts: Sequence[HostedRunnerFact]) -> bool:
+    """Whether ``facts`` (oldest first) say their runner was hosted through a store door, not seeded from the host file
+    nor joined by ``init`` — so no ``[[runner]]`` stands for it, and a joining scaffold is not it."""
+    return bool(facts) and facts[0].op is HostedRunnerOp.ADDED and facts[0].door in STORE_DOORS
 
 
 @domain_model

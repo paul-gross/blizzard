@@ -5,6 +5,7 @@ step blocked on a vendor CLI holds neither a runner's tick nor another runner's.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from blizzard.runner.hub.host_registration import HostRegistration
@@ -30,8 +31,11 @@ class HostTick:
         if self.registration is not None:
             self.registration.run()
 
-    def run(self) -> None:
+    def run(self, after_report: Callable[[], None] | None = None) -> None:
+        """Every step in order; ``after_report`` runs right after the registration step."""
         self.report()
+        if after_report is not None:
+            after_report()
         if self.credential_renewal is not None:
             self.credential_renewal.run()
         if self.external_usage_sample is not None:

@@ -20,7 +20,7 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.settings_record.vocabulary import Change
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.runtime import named_runners, seed_runners
-from blizzard.runner.composition import RunnerProcess, build_host_process
+from blizzard.runner.composition import RunnerProcess, build_host_process, build_host_stores
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import BuiltRunner
@@ -50,6 +50,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    runner_store_errors,
 )
 from tests.support.runner_init_fakes import FakeInitHub
 
@@ -245,7 +246,7 @@ def test_retire_of_a_runner_not_under_the_host_is_refused_leaving_its_entry(
     assert _runner_names(root) == ["runner-local"]
 
 
-def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaining_runner(
+def test_retire_keeps_the_runners_identity_and_records_it_retired_so_init_runs_again_over_the_remaining_runner(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _registered(tmp_path, fake_init_hub)
@@ -257,7 +258,8 @@ def test_retire_forgets_the_runners_identity_so_init_runs_again_over_the_remaini
     result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
 
     assert result.exit_code == 0, result.output
-    assert named_runners(load_host_config(root), SystemClock()) == ("rn_init1",)
+    assert set(named_runners(load_host_config(root), SystemClock())) == {"rn_init1", "rn_init2"}
+    assert _retired(root) == {"rn_init2"}
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
     assert again.exit_code == 0, again.output
 
@@ -586,6 +588,14 @@ def test_add_refuses_a_workspace_the_host_does_not_declare_with_nothing_added(
     assert len(fake_init_hub.admin.added) == 1
 
 
+def _retired(root: Path) -> frozenset[str]:
+    engine = create_engine_from_url(load_host_config(root).db_url)
+    try:
+        return build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock()).hosted_runners.retired()
+    finally:
+        engine.dispose()
+
+
 def _row_ids(root: Path) -> tuple[str, ...]:
     return named_runners(load_host_config(root), SystemClock())
 
@@ -608,7 +618,7 @@ def test_retire_under_a_running_host_writes_nothing_to_the_store_and_leaves_the_
     assert _runner_names(root) == ["runner-local"]
 
 
-def test_retire_of_a_runner_only_the_store_names_retires_it_at_the_hub_and_forgets_the_row(
+def test_retire_of_a_runner_only_the_store_hosts_retires_it_at_the_hub_and_records_it_retired(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _registered(tmp_path, fake_init_hub)
@@ -621,11 +631,13 @@ def test_retire_of_a_runner_only_the_store_names_retires_it_at_the_hub_and_forge
 
     assert result.exit_code == 0, result.output
     assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1"]}
-    assert _row_ids(root) == ("rn_init1",)
+    assert set(_row_ids(root)) == {"rn_init1", "rn_init2"}
+    assert _retired(root) == {"rn_init2"}
+    assert "and recorded it retired here" in result.output
     assert _runner_names(root) == ["runner-local"]
 
 
-def test_retire_of_a_runner_only_the_store_names_is_refused_while_a_host_runs(
+def test_retire_of_a_runner_only_the_store_hosts_is_left_to_a_running_hosts_tick(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:
     root = _registered(tmp_path, fake_init_hub)
@@ -636,7 +648,8 @@ def test_retire_of_a_runner_only_the_store_names_is_refused_while_a_host_runs(
     with HostLock.acquire(HostLayout(root)):
         result = _run(fake_init_hub, "retire", "--runner", "rn_init2", "--dir", str(root))
 
-    assert result.exit_code != 0
-    assert "stop it first" in result.output
-    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1", "rn_init2"]}
+    assert result.exit_code == 0, result.output
+    assert "at its next tick" in result.output
+    assert fake_init_hub.admin.held == {"hs_init1": ["rn_init1"]}
     assert set(_row_ids(root)) == {"rn_init1", "rn_init2"}
+    assert _retired(root) == set()

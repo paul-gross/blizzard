@@ -1,5 +1,5 @@
-"""The runner identity service and the retirement rule (unit tier): a runner's row is forgotten on the hub's proof of
-its retirement alone."""
+"""The retired-runner watch and the retirement rule (unit tier): a runner is recorded retired on the hub's proof of its
+retirement alone, and its identity row stays."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.identity import RunnerIdentity, proves_retired
-from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
+from blizzard.runner.hub.identity_service import RetiredRunnerWatch
 from tests.support.runner_init_fakes import FakeTokenIdentityReader
 
 _AT = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
@@ -21,42 +21,35 @@ _RETIRED = TokenRefusal(RunnerTokenRefusalReason.RETIRED, runner_id="rn_a")
 @dataclass
 class _Rows:
     row: RunnerIdentity | None = None
-    forgotten: int = 0
-    retained_settings: bool = False
 
     def runner_identity(self) -> RunnerIdentity | None:
         return self.row
 
-    def record_runner_identity(self, identity: RunnerIdentity) -> None:
-        self.row = identity
 
-    def forget_runner_identity(self) -> bool:
-        if self.retained_settings or self.row is None:
+@dataclass
+class _Retirement:
+    recorded: int = 0
+    already: bool = False
+
+    def record_retired(self) -> bool:
+        if self.already:
             return False
-        self.row = None
-        self.forgotten += 1
+        self.already = True
+        self.recorded += 1
         return True
 
 
 @dataclass
 class _Watched:
     rows: _Rows = field(default_factory=_Rows)
+    retirement: _Retirement = field(default_factory=_Retirement)
 
     def watch(
         self, answer: TokenIdentity | TokenRefusal | HubClientError
     ) -> tuple[RetiredRunnerWatch, FakeTokenIdentityReader]:
         reader = FakeTokenIdentityReader(answer)
-        return RetiredRunnerWatch(runner_id="rn_a", rows=self.rows, forgetter=self.rows, token_identity=reader), reader
-
-
-def test_forgetting_deletes_the_row_and_forgetting_none_is_not_an_error() -> None:
-    rows = _Rows(row=RunnerIdentity("rn_a", "a", _AT))
-    service = RunnerIdentityService(forgetter=rows)
-
-    service.forget()
-    service.forget()
-
-    assert rows.row is None
+        watch = RetiredRunnerWatch(runner_id="rn_a", rows=self.rows, retirement=self.retirement, token_identity=reader)
+        return watch, reader
 
 
 @pytest.mark.parametrize(
@@ -76,23 +69,21 @@ def test_only_a_retired_refusal_naming_the_runner_proves_it_retired(
     assert proves_retired(answer, "rn_a") is proves
 
 
-def test_a_retired_answer_forgets_the_row() -> None:
+def test_a_retired_answer_records_the_retirement_and_keeps_the_row() -> None:
     watched = _Watched(_Rows(row=RunnerIdentity("rn_a", "a", _AT)))
     watch, _ = watched.watch(_RETIRED)
 
-    assert watch.forget_if_retired() is True
-    assert watched.rows.row is None
+    assert watch.record_if_retired() is True
+    assert watched.retirement.recorded == 1
+    assert watched.rows.row is not None
 
 
-def test_retired_runner_with_retained_settings_keeps_its_identity() -> None:
-    watched = _Watched(_Rows(row=RunnerIdentity("rn_a", "a", _AT), retained_settings=True))
+def test_a_runner_already_retired_records_nothing_more() -> None:
+    watched = _Watched(_Rows(row=RunnerIdentity("rn_a", "a", _AT)), _Retirement(already=True))
     watch, _ = watched.watch(_RETIRED)
 
-    assert watch.forget_if_retired() is False
-    assert watched.rows.row is not None
-    service = RunnerIdentityService(forgetter=watched.rows)
-    assert service.forget() is False
-    assert watched.rows.row is not None
+    assert watch.record_if_retired() is False
+    assert watched.retirement.recorded == 0
 
 
 @pytest.mark.parametrize(
@@ -105,16 +96,16 @@ def test_retired_runner_with_retained_settings_keeps_its_identity() -> None:
         HubClientError("outage"),
     ],
 )
-def test_any_other_answer_or_an_outage_leaves_the_row(answer: TokenIdentity | TokenRefusal | HubClientError) -> None:
+def test_any_other_answer_or_an_outage_records_nothing(answer: TokenIdentity | TokenRefusal | HubClientError) -> None:
     watched = _Watched(_Rows(row=RunnerIdentity("rn_a", "a", _AT)))
     watch, _ = watched.watch(answer)
 
-    assert watch.forget_if_retired() is False
-    assert watched.rows.row is not None
+    assert watch.record_if_retired() is False
+    assert watched.retirement.recorded == 0
 
 
 def test_a_runner_with_no_row_costs_no_hub_call() -> None:
     watch, reader = _Watched().watch(_RETIRED)
 
-    assert watch.forget_if_retired() is False
+    assert watch.record_if_retired() is False
     assert reader.calls == 0

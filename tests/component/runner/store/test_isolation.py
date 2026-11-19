@@ -45,7 +45,7 @@ from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepos
 from blizzard.runner.hosting.model import RunnerAdmission
 from blizzard.runner.hosting.ports import IWriteAdmittedHosting, IWriteAdmittedHubToken, IWriteHostedRunnerRepository
 from blizzard.runner.hub.host_identity import IWriteHostIdentityRepository
-from blizzard.runner.hub.identity import IWriteRetiredRunnerIdentity, IWriteRunnerIdentityRepository, RunnerIdentity
+from blizzard.runner.hub.identity import IWriteRunnerIdentityRepository, RunnerIdentity
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.hub.sealed_tokens import IWriteHubTokenRepository
 from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, ServedProject
@@ -69,8 +69,7 @@ from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository
 from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
-from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
+from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 from blizzard.runner.throttle.pause import IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
     FloorClear,
@@ -609,10 +608,6 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
             harness_id=CLAUDE_CODE_HARNESS_ID, status="failed", error="boom", recorded_at=_at(52)
         )
     ),
-    # Last: it deletes runner A's identity row, which no recipe above may depend on afterwards.
-    (IWriteRetiredRunnerIdentity, "forget_runner_identity"): lambda w: RunnerIdentityStore(
-        RunnerStoreConnections(w.engine, RunnerStoreErrorFactory(get_logger("test")), RUNNER_A)
-    ).forget_runner_identity(),
 }
 
 _HOST_ONLY = "writes only host-scoped tables, which carry no runner"

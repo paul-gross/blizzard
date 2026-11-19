@@ -16,13 +16,16 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, daemon_holding
-from blizzard.runner.composition import build_host_stores
+from blizzard.runner.composition import build_host_stores, build_settings_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_config import HostConfig
+from blizzard.runner.host_config import HostConfig, RunnerEntry
 from blizzard.runner.host_layout import HostHeld, HostLayout, hold_host
+from blizzard.runner.hosting.model import hosted_beside_the_file
+from blizzard.runner.hub.identity import IReadRunnerIdentityRepository
 from blizzard.runner.lifecycle.identity_check import ForeignStore, foreign_store_reason, host_store_verdict
 from blizzard.runner.runtime import IStoreLocation, ensure_current_revision, reset_command
+from blizzard.runner.settings.ports import IReadRunnerSettings
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 
@@ -44,6 +47,78 @@ def hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:
         return build_host_stores(
             engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
         ).hosted_runners.hosted_runner_ids()
+    finally:
+        engine.dispose()
+
+
+def stored_name(identity: IReadRunnerIdentityRepository, settings: IReadRunnerSettings, runner_id: str) -> str:
+    """A hosted runner's name: its stored ``name`` entry, else its identity row's, else its id."""
+    stored = settings.snapshot().entries.get("name")
+    if stored is not None and isinstance(stored.value, str) and stored.value.strip():
+        return stored.value.strip()
+    row = identity.runner_identity()
+    return row.runner_name if row is not None else runner_id
+
+
+def store_only_entries(config: HostConfig, clock: IClock) -> tuple[RunnerEntry, ...]:
+    """The entry of each runner the store hosts, not retired, that no ``[[runner]]`` names — built from its stored
+    ``name`` — in the order it was hosted; none when the host has no store file yet."""
+    if not HostLayout(config.root).store_path.exists():
+        return ()
+    named = {entry.id for entry in config.runners if entry.id is not None}
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    engine = create_engine_from_url(config.db_url)
+    try:
+        entries: list[RunnerEntry] = []
+        for runner_id in build_host_stores(engine, errors=errors, clock=clock).hosted_runners.active():
+            if runner_id not in named:
+                identity, settings = build_settings_stores(engine, errors=errors, runner_id=runner_id)
+                entries.append(config.hosted_entry(runner_id, stored_name(identity, settings, runner_id)))
+        return tuple(entries)
+    finally:
+        engine.dispose()
+
+
+def resolve_runner(config: HostConfig, runner: str | None, clock: IClock) -> RunnerEntry:
+    """The runner a stopped-host verb acts on, by name or id, else the host's only one: a ``[[runner]]``, or a runner
+    the store hosts that no ``[[runner]]`` names, by its stored ``name``. Raises :class:`ConfigError` as
+    :meth:`HostConfig.sole_runner` does when neither holds it."""
+    try:
+        return config.sole_runner(runner)
+    except ConfigError as refused:
+        try:
+            stored = store_only_entries(config, clock)
+        except Exception:
+            raise refused from None
+        if runner is not None:
+            matched = [entry for entry in stored if runner in (entry.name, entry.id)]
+        elif not config.runners:
+            matched = list(stored)
+        else:
+            matched = []
+        if len(matched) == 1:
+            return matched[0]
+        if len(matched) > 1:
+            held = ", ".join(f"{entry.name} ({entry.id})" for entry in matched)
+            raise ConfigError(
+                f"the store at {config.db_url} hosts several runners ({held}); name one with --runner"
+            ) from None
+        raise
+
+
+def store_hosted_runner_ids(config: IStoreLocation, clock: IClock) -> frozenset[str]:
+    """The ids of the runners the store hosts through a store door — retired, or hosted beside the host file — none of
+    which a ``[[runner]]`` being joined can be."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        hosted = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners
+        return frozenset(
+            runner_id
+            for runner_id in hosted.hosted_runner_ids()
+            if runner_id in hosted.retired() or hosted_beside_the_file(hosted.facts(runner_id))
+        )
     finally:
         engine.dispose()
 

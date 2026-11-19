@@ -1604,7 +1604,7 @@
       "short_help": "Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current node, with its retry budget carried over."
     },
     "retire": {
-      "help": "Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.\nIts identity is retained with settings and history; otherwise the stopped host forgets it immediately and a\nrunning host forgets it when it halts the runner at its next tick.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "help": "Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.\nIts identity, settings and history are kept: a stopped host records it retired now, and a running host records it\nand drains it at its next tick.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",

@@ -57,12 +57,19 @@ from blizzard.runner.cli.store_guard import (
     hosted_runner_ids,
     judge_store,
     named_runners,
+    resolve_runner,
+    store_hosted_runner_ids,
     store_reason,
     store_write_guard,
+    stored_name,
 )
 from blizzard.runner.composition import (
     HostProcess,
+    IHostedRunnerSource,
+    IRunnerDrivers,
+    NoDrivers,
     RunnerProcess,
+    RunnerStartFailed,
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
@@ -71,6 +78,7 @@ from blizzard.runner.composition import (
     build_runner_process,
     build_sealing_hub_tokens,
     build_settings_stores,
+    run_startup_steps,
     runner_admission,
     stored_hub_token,
 )
@@ -182,7 +190,6 @@ from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
-from blizzard.runner.tracing.sweep import announce_rejected_tracing
 
 #: Bounds each of ``init``'s hub calls, so an unresponsive hub fails the command instead of hanging it.
 _INIT_HUB_TIMEOUT_SECONDS = 15.0
@@ -632,8 +639,12 @@ class _RuntimeStore:
 
     def stored_runner_id(self, *, sibling_of: RunnerEntry | None = None) -> str | None:
         """The runner the store's identity rows name, other than any another ``[[runner]]`` of the host configures
-        beside ``sibling_of`` — asked of the cross-runner audit, since no runner is bound to a view yet."""
+        beside ``sibling_of``, or the store hosts beside the file or holds retired — asked of the cross-runner audit,
+        since no runner is bound to a view yet."""
         siblings = {e.id for e in self.config.runners if sibling_of is not None and e.name != sibling_of.name}
+        # A runner the store hosts beside the file, or holds retired, is the host's own as a sibling's is: a scaffold
+        # joins beside an API-added runner.
+        siblings |= store_hosted_runner_ids(self.config, self.clock) if sibling_of is not None else frozenset()
         named = [runner_id for runner_id in named_runners(self.config, self.clock) if runner_id not in siblings]
         return named[0] if named else None
 
@@ -1036,6 +1047,7 @@ def host(
                 InitCollaborators.of(ctx),
                 tcp_socket=sock,
                 listening_file=listening_file,
+                clock=clock if verdict.foreign is None else None,
             )
 
 
@@ -1111,19 +1123,10 @@ def hosted_entries(config: HostConfig, *, clock: IClock) -> list[RunnerEntry]:
         for runner_id in active:
             if runner_id not in named:
                 identity, settings = build_settings_stores(engine, errors=errors, runner_id=runner_id)
-                entries.append(config.hosted_entry(runner_id, _stored_name(identity, settings, runner_id)))
+                entries.append(config.hosted_entry(runner_id, stored_name(identity, settings, runner_id)))
     finally:
         engine.dispose()
     return entries
-
-
-def _stored_name(identity: IRunnerIdentityStore, settings: IWriteRunnerSettings, runner_id: str) -> str:
-    """A hosted runner's name: its stored ``name`` entry, else its identity row's, else its id."""
-    stored = settings.snapshot().entries.get("name")
-    if stored is not None and isinstance(stored.value, str) and stored.value.strip():
-        return stored.value.strip()
-    row = identity.runner_identity()
-    return row.runner_name if row is not None else runner_id
 
 
 def seed_runners(config: HostConfig, *, clock: IClock) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
@@ -1131,32 +1134,67 @@ def seed_runners(config: HostConfig, *, clock: IClock) -> tuple[list[BuiltRunner
     hosted the file's: each runner's token is imported into the store first, then its settings are seeded, then it
     is projected over its stored token. Mints the host's key when it holds none."""
     seed_hosted_runners(config, clock=clock)
-    runners = hosted_entries(config, clock=clock)
-    engine = create_engine_from_url(config.db_url)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
+    for projection in _seed_entries(config, hosted_entries(config, clock=clock), clock, RUNNER_SEEDED.reached):
+        if isinstance(projection, HaltedRunner):
+            halted.append(projection)
+        else:
+            ready.append(projection)
+    return ready, halted
+
+
+def _seed_entries(
+    config: HostConfig, entries: Sequence[RunnerEntry], clock: IClock, after_each: Callable[[], None] | None = None
+) -> list[BuiltRunner | HaltedRunner]:
+    """Each hosted runner's token imported, its settings seeded, and the runner projected over its stored token;
+    ``after_each`` runs once each is seeded."""
+    engine = create_engine_from_url(config.db_url)
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    projections: list[BuiltRunner | HaltedRunner] = []
     try:
-        host_settings = HostSettingsReader(
-            config,
-            build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))),
-        )
+        host_settings = HostSettingsReader(config, build_host_settings_store(engine, errors=errors))
         with click_exception_on(ConfigError):
             tokens = build_sealing_hub_tokens(engine, config.root, environ=os.environ, clock=clock)
-        for entry in runners:
+        for entry in entries:
             assert entry.id is not None
             stored = _import_token(config, entry, tokens)
-            identity, settings = build_settings_stores(
-                engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=entry.id
-            )
-            projection = _seed_runner(config, entry, stored, identity, settings, host_settings)
-            if isinstance(projection, HaltedRunner):
-                halted.append(projection)
-            else:
-                ready.append(projection)
-            RUNNER_SEEDED.reached()
+            identity, settings = build_settings_stores(engine, errors=errors, runner_id=entry.id)
+            projections.append(_seed_runner(config, entry, stored, identity, settings, host_settings))
+            if after_each is not None:
+                after_each()
     finally:
         engine.dispose()
-    return ready, halted
+    return projections
+
+
+@dataclass(frozen=True)
+class StoreHostedRunners:
+    """The running host's source of a runner the store hosts, seeded as a start seeds it: the ``[[runner]]`` naming
+    it, else its stored ``name``, its token imported and its settings seeded at the tick that starts it."""
+
+    config: HostConfig
+    clock: IClock
+
+    def built(self, runner_id: str) -> BuiltRunner | HaltedRunner:
+        entry = next((entry for entry in self.config.runners if entry.id == runner_id), None)
+        if entry is None:
+            engine = create_engine_from_url(self.config.db_url)
+            try:
+                identity, settings = build_settings_stores(
+                    engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id=runner_id
+                )
+                entry = self.config.hosted_entry(runner_id, stored_name(identity, settings, runner_id))
+            finally:
+                engine.dispose()
+        try:
+            (projection,) = _seed_entries(self.config, [entry], self.clock)
+        except click.ClickException as exc:
+            return HaltedRunner(entry.name, runner_id, (exc.message,))
+        return projection
+
+
+_hosted_runner_source_conforms: type[IHostedRunnerSource] = StoreHostedRunners
 
 
 def _import_token(config: HostConfig, entry: RunnerEntry, tokens: HubTokens) -> StoredToken:
@@ -1208,7 +1246,7 @@ def _seed_runner(
     projection = config.project(replace(entry, own=resolved, errors=()), stored, os.environ)
     if isinstance(projection, HaltedRunner):
         return projection
-    return replace(projection, config=replace(resolved, hub_token=stored.value))
+    return replace(projection, config=replace(resolved, hub_token=stored.value), entry=entry)
 
 
 def held_runner_token(config: HostConfig, entry: RunnerEntry) -> ResolvedToken:
@@ -1244,10 +1282,12 @@ def start(
     *,
     tcp_socket: socket.socket | None = None,
     listening_file: Path | None = None,
+    clock: IClock | None = None,
 ) -> None:
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped.
     ``tcp_socket`` is the TCP listener already bound at ``config``'s port; ``listening_file`` receives the local
-    API's URL once the host is serving."""
+    API's URL once the host is serving. With ``clock``, the store is the host's: its tick starts each runner the store
+    comes to host and drains each it comes to hold retired."""
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
     for built in runners:
@@ -1280,10 +1320,12 @@ def start(
         for runner in process.runners:
             if snapshot := runner.harness_sets.current.bundle:
                 click.echo(snapshot.summary())
-        shared = runners[0].config if runners else config.host_view()
+        # The app is built over the host's own keys, never a runner's.
+        shared = config.host_view()
+        source: IHostedRunnerSource | None = StoreHostedRunners(config, clock) if clock is not None else None
         # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
         with click_exception_on(ConfigError):
-            hosted = build_hosted_app(shared, process)
+            hosted = build_hosted_app(shared, process, host_config=config, source=source)
         # The host's record resolved into ``config`` at its seed: its entry, else the file's, else the default.
         tick_seconds = config.tick_seconds if config.tick_seconds is not None else DEFAULT_TICK_SECONDS
         try:
@@ -1497,20 +1539,22 @@ def _serve_host(
     """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer, each runner's tick and the
     host tick waiting the live ``tick_seconds`` (``tick_seconds`` here is its boot value) between passes; a ``stepped``
     one starts none, and a pass runs only when
-    requested through its stepper."""
+    requested through its stepper. A runner the host tick starts later is driven the same way."""
     app = hosted.app
     interval = tick_seconds
-    for runner in host.runners:
-        announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
     stepped = loop is LoopMode.STEPPED
-    threads = (
-        []
-        if stepped
-        else [
-            build_runner_threads(host, runner, stepper, tick_seconds=interval)
-            for runner, stepper in zip(host.runners, hosted.steppers, strict=True)
-        ]
-    )
+
+    def drivers(runner: RunnerProcess, stepper: RunnerStepper) -> IRunnerDrivers:
+        return NoDrivers() if stepped else build_runner_threads(host, runner, stepper, tick_seconds=interval)
+
+    def no_scratch(_runner: RunnerProcess) -> None:
+        return None
+
+    def own_scratch(runner: RunnerProcess) -> None:
+        _reconcile_host_scratch(config, host, [runner.runner_id], every_named=False)
+
+    # The boot's runners share the one host-wide scratch reconcile below; a runner started later reconciles its own.
+    hosted.start.serving(drivers=drivers, scratch=no_scratch, said=click.echo)
     host_tick = (
         None
         if stepped or hosted.host_stepper is None
@@ -1524,7 +1568,6 @@ def _serve_host(
     cadence = "stepped: a pass runs only on request" if stepped else f"loop tick {interval}s"
     click.echo(f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} ({cadence})")
 
-    started: list[_RunnerThreads] = []
     host_tick_started = False
     reconciled = False
     try:
@@ -1548,27 +1591,21 @@ def _serve_host(
         ids.extend(runner.id for runner in host.halted if runner.id is not None)
         _reconcile_host_scratch(config, host, ids)
 
-        # Mark crash-orphaned sessions, for every runner, before any driver or the host tick starts.
-        for resume in hosted.resumes:
-            resumable = resume.on_startup()
-            if resumable:
-                click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
-            # After the marking, which skips a held lease; before any thread or request can begin an entry.
-            interrupted = resume.recover_takeovers()
-            if interrupted:
-                click.echo(f"ended {interrupted} takeover(s) a crash interrupted mid-entry")
-            # After the takeovers settle, and before any thread can dispatch a restart resume.
-            stopped = resume.reconcile_sessions()
-            if stopped:
-                click.echo(f"stopped {stopped} turn(s) a crash left running without a worker")
+        # Every runner's startup steps, before any driver or the host tick starts; a failing step fails the boot.
+        for live in hosted.runners.live():
+            try:
+                run_startup_steps(live, hosted.start)
+            except RunnerStartFailed as exc:
+                raise exc.__cause__ or exc from None
+        hosted.start.serving(drivers=drivers, scratch=own_scratch, said=click.echo)
 
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.
         host.host_tick.report()
         reconciled = True
-        for runner_threads in threads:
-            runner_threads.start()
-            started.append(runner_threads)
+        for live in hosted.runners.live():
+            if live.wired is not None and live.drivers is None:
+                live.drivers = hosted.start.drive(live.runner, live.wired)
         if host_tick is not None:
             host_tick.start()
             host_tick_started = True
@@ -1579,16 +1616,9 @@ def _serve_host(
             # the drain and are closed by the outer host frame.
             if host_tick is not None and host_tick_started:
                 host_tick.stop()
-            for runner_threads in reversed(started):
-                runner_threads.stop()
             # A requested pass in flight is waited out, as a timed one is by its driver's join.
-            for stepper in hosted.steppers:
-                stepper.quiesce()
-            if reconciled:
-                for resume in hosted.resumes:
-                    marked = resume.on_shutdown()
-                    if marked:
-                        click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
+            for marked in hosted.runners.stop_all(mark=reconciled):
+                click.echo(marked)
         finally:
             # uvicorn closes a pre-bound socket but does not unlink its file.
             Uds(config.socket_path).unlink()
@@ -1661,9 +1691,14 @@ def reconcile_scratch_roots(
     )
 
 
-def _reconcile_host_scratch(config: RunnerConfig, host: HostProcess, runner_ids: list[str]) -> None:
+def _reconcile_host_scratch(
+    config: RunnerConfig, host: HostProcess, runner_ids: list[str], *, every_named: bool = True
+) -> None:
+    """Reconcile the host's worker scratch for ``runner_ids`` — and, with ``every_named``, every runner the store's
+    identity rows name."""
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    runner_ids = list(dict.fromkeys((*runner_ids, *host.host_stores.runner_audit.named_runners())))
+    if every_named:
+        runner_ids = list(dict.fromkeys((*runner_ids, *host.host_stores.runner_audit.named_runners())))
     repositories = {
         runner_id: build_read_stores(host.engine, errors=errors, runner_id=runner_id).lease_record
         for runner_id in runner_ids
@@ -1705,7 +1740,7 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         raise click.ClickException(f"no host is serving {directory}, so there is no host pass to run")
     config = load_host(directory)
     with click_exception_on(ConfigError):
-        entry = config.sole_runner(runner)
+        entry = resolve_runner(config, runner, CliCollaborators.of(ctx).wall_clock)
     if entry.id is None:
         raise click.ClickException(f"runner {entry.name} is not built, so a tick cannot drive it")
     with store_write_guard(

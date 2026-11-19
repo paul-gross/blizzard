@@ -265,6 +265,9 @@ class BuiltRunner:
     id: str
     config: RunnerConfig
     token: StoredToken = field(default_factory=StoredToken.absent)
+    #: The entry it projected from — a ``[[runner]]``, or the store's for a runner no file names; its settings reader
+    #: is built over it.
+    entry: RunnerEntry | None = field(default=None, repr=False, compare=False)
 
 
 @domain_model
@@ -446,7 +449,7 @@ class HostConfig:
             )
         if errors or entry.id is None or entry.own is None:
             return HaltedRunner(entry.name, entry.id, tuple(errors))
-        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token.value), token)
+        return BuiltRunner(entry.id, self.config_for_runner(entry, entry.own, token.value), token, entry)
 
     def _unsuffixed_token_hint(self, variable: str, environ: Mapping[str, str]) -> str:
         """The rename a leftover unsuffixed ``BZ_HUB_TOKEN`` calls for, or nothing when none is held: a pre-host

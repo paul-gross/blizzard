@@ -15,6 +15,7 @@ from blizzard.runner.composition import HostProcess, add_runner, build_host_proc
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner
 from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.hosting.retirement import HubNoticedRetirement
 from blizzard.runner.hub.identity import RunnerIdentity
 from tests.support.host_files import host_config_of
 from tests.support.hub_tokens import host_hub_tokens
@@ -52,13 +53,18 @@ def _retired_answer(request: httpx2.Request, seen: list[str]) -> httpx2.Response
     )
 
 
-def test_the_watch_reads_and_forgets_through_the_runners_own_identity_store(tmp_path: Path) -> None:
+def test_the_watch_reads_the_runners_own_identity_store_and_records_into_the_hosts_hosted_runners(
+    tmp_path: Path,
+) -> None:
     host = _host(_config(tmp_path))
     try:
         [runner] = host.runners
         watch = runner.retirement
         assert watch._rows is runner.stores.identity  # pyright: ignore[reportPrivateUsage]
-        assert watch._forgetter is runner.stores.identity  # pyright: ignore[reportPrivateUsage]
+        retirement = watch._retirement  # pyright: ignore[reportPrivateUsage]
+        assert isinstance(retirement, HubNoticedRetirement)
+        assert retirement.hosted is host.host_stores.hosted_runners
+        assert retirement.notices is host.retirements
     finally:
         host.close()
 
@@ -94,12 +100,11 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_rep
         assert built == [runner.identity_client] == instrumented
         record = RunnerIdentity(runner_id="rn_b", runner_name="b", registered_at=datetime(2026, 1, 1, tzinfo=UTC))
         runner.stores.identity.record_runner_identity(record)
-        assert runner.retirement.forget_if_retired() is True
-        runner.stores.identity.record_runner_identity(record)
+        assert runner.retirement.record_if_retired() is True
         with host_hub_tokens(config.root, config.db_url) as tokens:
             tokens.replace("rn_b", "new", verdict=None)
         runner.hub_token.refresh()
-        assert runner.retirement.forget_if_retired() is True
+        assert runner.retirement.record_if_retired() is False
         assert seen == ["Bearer old", "Bearer new"]
         assert built == [runner.identity_client]
     finally:

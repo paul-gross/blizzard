@@ -21,7 +21,7 @@ from blizzard.runner.cli.daemon import Door, RunnerDaemon
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import host_answers
-from blizzard.runner.cli.store_guard import store_write_guard
+from blizzard.runner.cli.store_guard import resolve_runner, store_write_guard
 from blizzard.runner.composition import build_sealing_hub_tokens
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_keys import key_source
@@ -105,13 +105,13 @@ def _selected(items: list[HostRunnerView], runner: str | None, where: str) -> Ho
 
 def _set_on_stopped_host(ctx: click.Context, directory: str, door: Door, runner: str | None, value: str) -> None:
     config = load_host(directory)
+    clock = CliCollaborators.of(ctx).wall_clock
     with click_exception_on(ConfigError):
-        entry = config.sole_runner(runner)
+        entry = resolve_runner(config, runner, clock)
     if entry.id is None:
         raise click.ClickException(
             f"runner {entry.name} has no id in {config.config_path}, so it holds no hub token to set"
         )
-    clock = CliCollaborators.of(ctx).wall_clock
     with store_write_guard(
         config,
         action=f"set runner {entry.name}'s hub token",

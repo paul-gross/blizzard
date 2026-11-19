@@ -19,8 +19,8 @@ from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
-from blizzard.runner.cli.store_guard import named_runners, store_write_guard
-from blizzard.runner.composition import build_host_stores, build_identity_service, build_runner_ingest
+from blizzard.runner.cli.store_guard import named_runners, resolve_runner, store_write_guard
+from blizzard.runner.composition import build_host_stores, build_runner_ingest
 from blizzard.runner.config import SCAFFOLD_AGENTS
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
@@ -164,6 +164,8 @@ class _Retiring:
     name: str
     runner_id: str
     configured: bool
+    #: Whether a running host runs it — a ``[[runner]]``'s, or one the store hosts — so its tick drains it.
+    hosted: bool = True
 
 
 class _HostRunning(Exception):
@@ -186,8 +188,8 @@ class _HostRunning(Exception):
 @click.pass_context
 def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
     """Retire one of this registered host's runners at its hub and remove its `[[runner]]` from the host file.
-    Its identity is retained with settings and history; otherwise the stopped host forgets it immediately and a
-    running host forgets it when it halts the runner at its next tick.
+    Its identity, settings and history are kept: a stopped host records it retired now, and a running host records it
+    and drains it at its next tick.
 
     Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
     releases them."""
@@ -202,12 +204,10 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
             door=Door.of(ctx),
             clock=clock,
             refuse_foreign=False,
-            held=_HostRunning if target.configured else None,
+            held=_HostRunning if target.hosted else None,
         ):
             released = _retire_at_hub(ctx, config, token, target, force=force)
             _record_retired(config, target.runner_id, clock)
-            with build_identity_service(config.db_url, runner_id=target.runner_id) as identities:
-                identities.forget()
             _remove_entry(config, target, released)
             click.echo(_retired(config, target, released))
     except _HostRunning as exc:
@@ -231,20 +231,20 @@ def _record_retired(config: HostConfig, runner_id: str, clock: IClock) -> None:
 
 
 def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:
-    """The runner ``runner`` names: one the host file configures, by name or id, else one only the store's identity
-    rows still name, by id."""
+    """The runner ``runner`` names: one the host file configures or the store hosts, by name or id, else one only the
+    store's identity rows still name, by id."""
     try:
-        entry = config.sole_runner(runner)
+        entry = resolve_runner(config, runner, clock)
     except ConfigError as exc:
         if runner in _named_runners(config, clock):
-            return _Retiring(name=runner, runner_id=runner, configured=False)
+            return _Retiring(name=runner, runner_id=runner, configured=False, hosted=False)
         raise click.ClickException(str(exc)) from exc
     if entry.id is None:
         raise click.ClickException(
             f"runner {entry.name} has no id in {config.config_path}, so the hub holds no runner of it to retire; "
             "remove its [[runner]] by hand"
         )
-    return _Retiring(name=entry.name, runner_id=entry.id, configured=True)
+    return _Retiring(name=entry.name, runner_id=entry.id, configured=any(e.id == entry.id for e in config.runners))
 
 
 def _named_runners(config: HostConfig, clock: IClock) -> tuple[str, ...]:
@@ -286,7 +286,7 @@ def _remove_entry(config: HostConfig, target: _Retiring, released: str) -> None:
 
 
 def _retired(config: HostConfig, target: _Retiring, released: str) -> str:
-    done = "and removed its [[runner]]" if target.configured else "and forgot its identity here"
+    done = "and removed its [[runner]]" if target.configured else "and recorded it retired here"
     return f"retired runner {target.name} ({target.runner_id}) at {config.hub_url}{released}, {done}"
 
 
