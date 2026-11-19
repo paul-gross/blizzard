@@ -2,7 +2,6 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, type RoutineView, type ScopeView } from 'fleet';
 import {
   gardenRoutineView,
   gardenScopeView,
@@ -21,7 +20,7 @@ import { HUB_PROJECT_FILTER } from '../../core/project-filter';
 /** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
  * `graph:edit` — the default for tests unconcerned with the scope panel's gated
  * description-editor/retire/enable controls. */
-const VIEWER_ME_RESPONSE: MeResponse = {
+const VIEWER_ME_RESPONSE: typeof OPERATOR_ME_RESPONSE = {
   ...OPERATOR_ME_RESPONSE,
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
 };
@@ -58,9 +57,9 @@ describe('GardeningScopeDetail', () => {
 
   async function render(
     opts: {
-      scopes?: ScopeView[];
-      routines?: RoutineView[];
-      me?: MeResponse;
+      scopes?: ReturnType<typeof gardenScopeView>[];
+      routines?: ReturnType<typeof gardenRoutineView>[];
+      me?: typeof OPERATOR_ME_RESPONSE;
       routeOverride?: HubRoutes;
       params?: Record<string, string>;
     } = {},
@@ -349,7 +348,7 @@ describe('GardeningScopeDetail', () => {
     );
   });
 
-  it('reports a failed edit through the panel action-error line rather than swallowing it', async () => {
+  it('keeps the editor open with a failed edit on the form line, never on the lifecycle action line', async () => {
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
@@ -361,11 +360,64 @@ describe('GardeningScopeDetail', () => {
     await fixture.whenStable();
     const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
     input.value = 'updated description';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
     await settle(fixture);
 
-    expect(el.querySelector('[data-testid="gardening-scope-panel-error"]')?.textContent).toContain(
-      'unknown scope blizzard',
-    );
+    expect(el.querySelector('[data-testid="gardening-scope-panel-edit-error"]')?.textContent).toContain('unknown scope blizzard');
+    expect(el.querySelector('[data-testid="gardening-scope-panel-error"]')?.textContent?.trim() ?? '').toBe('');
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeTruthy();
+  });
+
+  it('shows a refusal of the description at the field and keeps the draft', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: {
+        'PATCH /api/projects/{project}/scopes/{slug}': () =>
+          stubError(422, { detail: [{ loc: ['body', 'description'], msg: 'too long', type: 'value_error' }] }),
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
+    input.value = 'updated description';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('.edit-field')?.textContent).toContain('too long');
+    expect(el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!.value).toBe('updated description');
+  });
+
+  it('refuses a blank description locally, sending nothing and keeping the editor open', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="gardening-scope-panel-description-input"]')!;
+    input.value = '   ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/projects/acme/scopes/blizzard', 'PATCH')).toHaveLength(0);
+    expect(el.querySelector('.edit-field')?.textContent).toContain('Enter a description');
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeTruthy();
+  });
+
+  it('closes the editor once the edit is saved', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-edit"]')!.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-scope-panel-description-submit"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-scope-panel-description-input"]')).toBeNull();
   });
 });

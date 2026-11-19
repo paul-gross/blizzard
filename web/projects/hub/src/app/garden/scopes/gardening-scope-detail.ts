@@ -1,20 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { apply, form } from '@angular/forms/signals';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncStateOf, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
+import { FLEET_CLOCK, asyncStateOf, createRefusalState, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, submitForm, type KitAsyncStateValue } from 'fleet';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectEditScopeMutation, type ScopeEditVars } from './scope-edit.mutations';
-import { injectHubRoutinesQuery } from '../core/routines.query';
-import { injectHubScopeRoutinesQuery, injectHubScopesQuery } from '../core/scopes.query';
+import { type ScopeEditVars } from './scope-edit.mutations';
+import { EMPTY_SCOPE_DESCRIPTION_DRAFT, type Scope, type ScopeDescriptionDraft, scopeDescriptionDraft } from '../core/scope.domain';
+import { SCOPE_DESCRIPTION_RULES } from './scope.form';
+import { injectScopeService } from './scope.service';
+import { injectHubScopeRoutinesDomainQuery } from '../core/routines.query';
+import { injectHubDomainScopesQuery, injectHubScopeRoutinesQuery } from '../core/scopes.query';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectScopeLifecycleMutation, type ScopeLifecycleVars } from './scope-lifecycle.mutations';
 import { editScopeMutationKey, scopeLifecycleMutationKey } from '../../core/mutation-keys';
-import { type ScopeDescriptionEditEvent } from './scope-list';
 import { map } from 'rxjs';
 import { defaultRoutineWindow } from '../core/routine-window';
-import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import { injectHubScopeSweepsQuery } from '../runs/garden-runs.query';
 import { scopeSwept } from './gardening-scopes-page.model';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -50,14 +53,14 @@ import { injectProjectFilter } from '../../core/project-filter';
 export class GardeningScopeDetail {
   private readonly route = inject(ActivatedRoute);
 
-  private readonly routinesQuery = injectHubRoutinesQuery();
-  private readonly scopesQuery = injectHubScopesQuery();
-  private readonly tenantScopesQuery = injectHubScopesQuery({ tenantWide: true });
+  private readonly routinesQuery = injectHubScopeRoutinesDomainQuery();
+  private readonly scopesQuery = injectHubDomainScopesQuery();
+  private readonly tenantScopesQuery = injectHubDomainScopesQuery({ tenantWide: true });
   private readonly project = injectLensedProject();
   protected readonly projectFilter = injectProjectFilter();
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
   /** The runs window's read, the list beside this pane's own — for when the selected scope was last swept. */
-  private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
+  private readonly runsQuery = injectHubScopeSweepsQuery(() => this.window.since);
 
   /** The project the scope belongs to, for the chip beside its slug. */
   protected readonly projectName = computed(() => this.project()?.name ?? null);
@@ -67,7 +70,7 @@ export class GardeningScopeDetail {
     sameSlugProjects(this.selectedScope(), this.project()?.project_id ?? null, this.tenantScopesQuery.data() ?? []),
   );
   private readonly meQuery = injectMeQuery();
-  private readonly editScopeMutation = injectEditScopeMutation();
+  private readonly scopeService = injectScopeService();
   private readonly scopeLifecycleMutation = injectScopeLifecycleMutation();
 
   /** Every scope slug a Retire/Enable mutation is currently pending for, with its
@@ -80,14 +83,14 @@ export class GardeningScopeDetail {
   /** Every scope slug a description edit is currently pending for. */
   private readonly pendingScopeEdits = injectPendingMutationVariables<ScopeEditVars>(editScopeMutationKey);
 
-  private readonly scopes = computed<readonly ScopeView[]>(() => this.scopesQuery.data() ?? []);
+  private readonly scopes = computed<readonly Scope[]>(() => this.scopesQuery.data() ?? []);
 
   /** The `scopeSlug` route param, or `null` on the bare child route. */
   private readonly scopeSlug = toSignal(this.route.paramMap.pipe(map((params) => params.get('scopeSlug'))), {
     initialValue: null,
   });
 
-  private readonly selectedScope = computed<ScopeView | null>(() => scopeBySlug(this.scopeSlug(), this.scopes()));
+  private readonly selectedScope = computed<Scope | null>(() => scopeBySlug(this.scopeSlug(), this.scopes()));
 
   private readonly scopeRoutinesQuery = injectHubScopeRoutinesQuery(() => this.selectedScope()?.slug ?? null);
 
@@ -158,11 +161,57 @@ export class GardeningScopeDetail {
     isPendingFor(this.pendingScopeLifecycle(), (v) => v.slug === this.selectedScope()?.slug),
   );
 
-  protected onEditScopeDescription(event: ScopeDescriptionEditEvent): void {
-    this.scopeActionError.set(null);
-    this.editScopeMutation.mutate(event, {
-      onError: (error: unknown) => this.scopeActionError.set(errorMessage(error, 'Set description failed.')),
+  /** The slug of the scope whose description is open for editing — `null` while none is. */
+  protected readonly editingSlug = signal<string | null>(null);
+
+  protected readonly isEditing = computed(() => {
+    const slug = this.editingSlug();
+    return slug !== null && slug === this.selectedScope()?.slug;
+  });
+
+  private readonly draft = signal<ScopeDescriptionDraft>(EMPTY_SCOPE_DESCRIPTION_DRAFT);
+  private readonly refusal = createRefusalState<ScopeDescriptionDraft>();
+  protected readonly descriptionForm = form(this.draft, (p) => {
+    apply(p, SCOPE_DESCRIPTION_RULES);
+    apply(p, this.refusal.schema);
+  });
+
+  /** Picking another scope closes the editor and drops its draft, so coming back finds the saved description. */
+  private readonly closeOnPick = effect(() => {
+    const slug = this.selectedScope()?.slug ?? null;
+    untracked(() => {
+      if (this.editingSlug() !== null && this.editingSlug() !== slug) this.closeEditor();
     });
+  });
+
+  private closeEditor(): void {
+    this.editingSlug.set(null);
+    this.refusal.clear();
+    this.draft.set(EMPTY_SCOPE_DESCRIPTION_DRAFT);
+  }
+
+  protected onEditStart(): void {
+    const scope = this.selectedScope();
+    if (scope === null) return;
+    this.refusal.clear();
+    this.draft.set(scopeDescriptionDraft(scope));
+    this.editingSlug.set(scope.slug);
+    this.descriptionForm().reset();
+  }
+
+  protected onEditCancel(): void {
+    this.closeEditor();
+  }
+
+  protected async onSaveDescription(): Promise<void> {
+    const slug = this.editingSlug();
+    if (slug === null || this.scopeService.pending()) return;
+    const ok = await submitForm(
+      this.descriptionForm,
+      (draft) => this.scopeService.editDescription(slug, draft),
+      { refusalState: this.refusal, isCurrent: () => this.editingSlug() === slug },
+    );
+    if (ok) this.closeEditor();
   }
 
   protected onRetireScope(slug: string): void {

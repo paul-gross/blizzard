@@ -1,0 +1,15 @@
+<app-scope-panel
+    [vm]="vm()"
+    [state]="state()"
+    [hasProjectLens]="true"
+    [project]="project()"
+    [sameSlugIn]="sameSlugIn()"
+    [canEdit]="canEdit()"
+    [editPending]="editPending()"
+    [editing]="isEditing()"
+    [relatedRoutinesState]="relatedRoutinesState()"
+    [descriptionForm]="descriptionForm"
+    (editStart)="start()"
+    (editCancel)="isEditing.set(false)"
+    (saveDescription)="save()"
+  />

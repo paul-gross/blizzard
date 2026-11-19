@@ -8,6 +8,8 @@ import {
   type RunDeltaView,
   type RunRowView,
 } from 'fleet';
+import type { ScopeSweep } from '../core/scope.domain';
+import { fromRunRowView } from '../core/scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';
 import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
 
@@ -26,8 +28,18 @@ import { lensedKey, hubRunDeltaKey, hubRunsKey } from '../../core/query-keys';
  * clock actually recording `minted_at`.
  */
 export function injectHubRunsQuery(since: () => string) {
+  return injectQuery(runsQueryOptions(since));
+}
+
+/** The run list as the {@link ScopeSweep}s of its scopes — the same read and cache entry as {@link injectHubRunsQuery}. */
+export function injectHubScopeSweepsQuery(since: () => string) {
+  const read = runsQueryOptions(since);
+  return injectQuery(() => ({ ...read(), select: (wire: RunRowView[]): readonly ScopeSweep[] => wire.map(fromRunRowView) }));
+}
+
+function runsQueryOptions(since: () => string) {
   const project = injectProjectFilter();
-  return injectQuery(() => {
+  return () => {
     const lens = project();
     const window = { since: since() };
     return {
@@ -45,7 +57,7 @@ export function injectHubRunsQuery(since: () => string) {
         return data ?? [];
       },
     };
-  });
+  };
 }
 
 /**

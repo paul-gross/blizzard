@@ -6,6 +6,8 @@ import {
   listScopesApiScopesGet,
   type ScopeView,
 } from 'fleet';
+import type { Scope } from './scope.domain';
+import { fromScopeView } from './scope.translate';
 import { hubScopeRoutinesKey, hubScopesKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -19,9 +21,22 @@ import { injectProjectFilter } from '../../core/project-filter';
  * `tenantWide` reads the whole tenant even under a lens, for a figure that sets one project beside the others.
  */
 export function injectHubScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
+  return injectQuery(scopesQueryOptions(options));
+}
+
+/**
+ * The scope list as {@link Scope}s — the same read and cache entry as {@link injectHubScopesQuery}, which keeps the
+ * wire response; this reader takes the domain.
+ */
+export function injectHubDomainScopesQuery(options: { readonly tenantWide?: boolean } = {}) {
+  const read = scopesQueryOptions(options);
+  return injectQuery(() => ({ ...read(), select: (wire: ScopeView[]): readonly Scope[] => wire.map(fromScopeView) }));
+}
+
+function scopesQueryOptions(options: { readonly tenantWide?: boolean }) {
   const filter = injectProjectFilter();
   const project = options.tenantWide === true ? () => null : filter;
-  return injectQuery(() => {
+  return () => {
     const lens = project();
     return {
       queryKey: lensedKey(hubScopesKey, lens),
@@ -34,7 +49,7 @@ export function injectHubScopesQuery(options: { readonly tenantWide?: boolean } 
         return data ?? [];
       },
     };
-  });
+  };
 }
 
 /**

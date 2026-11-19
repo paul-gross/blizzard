@@ -8,8 +8,12 @@
   [canEdit]="canEditScopes()"
   [actionError]="scopeActionError()"
   [editPending]="editPending()"
+  [editing]="isEditing()"
+  [descriptionForm]="descriptionForm"
   [lifecyclePending]="lifecyclePending()"
-  (editDescription)="onEditScopeDescription($event)"
+  (editStart)="onEditStart()"
+  (editCancel)="onEditCancel()"
+  (saveDescription)="onSaveDescription()"
   (retire)="onRetireScope($event)"
   (enable)="onEnableScope($event)"
 />

@@ -1,9 +1,11 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
+import { SCOPE_DESCRIPTION_RULES } from './scope.form';
 
 /**
  * The gardening scope panel's layout (the tooled half of
@@ -44,6 +46,10 @@ async function render(inputs: { vm: ScopePanelVm | null; state: 'loading' | 'emp
   fixture.componentRef.setInput('relatedRoutinesState', inputs.vm?.relatedRoutines?.length ? 'ready' : 'empty');
   fixture.componentRef.setInput('sameSlugIn', ['Winter']);
   fixture.componentRef.setInput('canEdit', true);
+  fixture.componentRef.setInput(
+    'descriptionForm',
+    TestBed.runInInjectionContext(() => form(signal({ description: inputs.vm?.description ?? '' }), SCOPE_DESCRIPTION_RULES)),
+  );
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
   mounted.push(root);
@@ -108,6 +114,7 @@ describe('gardening scope panel layout shell sweep (web:shell-sweep)', () => {
       expect(panel.scrollWidth, `panel overflows at ${width}px`).toBeLessThanOrEqual(panel.clientWidth);
 
       (edit as HTMLButtonElement).click();
+      fixture.componentRef.setInput('editing', true);
       await fixture.whenStable();
       await frame();
       onScreen(root.querySelector('[data-testid="gardening-scope-panel-description-input"]'), width, 'description editor');

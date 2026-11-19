@@ -24,8 +24,8 @@
           <span class="sp-actions">
             <fleet-kit-button
               testid="gardening-scope-panel-edit"
-              [disabled]="isEditing(panel)"
-              (click)="startEditing(panel)"
+              [disabled]="editing()"
+              (click)="editStart.emit()"
             >
               Edit
             </fleet-kit-button>
@@ -53,26 +53,31 @@
       </header>
 
       <fleet-kit-error-line class="sp-error" [message]="actionError()" testid="gardening-scope-panel-error" />
+      @for (message of formErrors(); track $index) {
+        <fleet-kit-error-line class="sp-error" [message]="message" testid="gardening-scope-panel-edit-error" />
+      }
 
       <ng-template #descriptionFact>
-        @if (isEditing(panel)) {
+        @if (editing()) {
+          @let f = descriptionForm();
           <span class="sp-edit">
-            <fleet-kit-text-input
-              class="edit-input"
-              [value]="descriptionValue(panel)"
-              testid="gardening-scope-panel-description-input"
-              [ariaLabel]="'Set description for scope ' + panel.slug"
-              (valueChange)="updateDescription(panel, $event)"
-            />
+            <fleet-kit-field class="edit-field" label="Description" [field]="f.description">
+              <fleet-kit-text-input
+                class="edit-input"
+                [formField]="f.description"
+                testid="gardening-scope-panel-description-input"
+                [ariaLabel]="'Set description for scope ' + panel.slug"
+              />
+            </fleet-kit-field>
             <fleet-kit-button
               variant="primary"
               testid="gardening-scope-panel-description-submit"
               [disabled]="editPending()"
-              (click)="submitDescription(descriptionValue(panel))"
+              (click)="saveDescription.emit()"
             >
               Set
             </fleet-kit-button>
-            <fleet-kit-button testid="gardening-scope-panel-description-cancel" (click)="stopEditing()">
+            <fleet-kit-button testid="gardening-scope-panel-description-cancel" (click)="editCancel.emit()">
               Cancel
             </fleet-kit-button>
           </span>

@@ -21,13 +21,6 @@ export interface ScopeSweptVm {
   readonly notSwept: string;
 }
 
-/** Emitted when the operator sets a scope's description in place — `FleetScopePanel`'s
- * own event now that description editing lives there. */
-export interface ScopeDescriptionEditEvent {
-  readonly slug: string;
-  readonly description: string;
-}
-
 /**
  * The gardening scope list — a selection list only: every scope's slug, its description and when a run last swept it,
  * retired ones marked as such, on `fleet-kit-select-row`. Presentational, no query injection.
