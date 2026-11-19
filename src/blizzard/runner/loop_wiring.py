@@ -32,7 +32,6 @@ from blizzard.runner.harness.harness_set import (
     HarnessAssemblyKey,
     HarnessSet,
     IInvocationHarnesses,
-    JudgeInvocation,
     WorkerInvocation,
 )
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -323,11 +322,7 @@ class UsageRegistryLookup:
     def __call__(self, lease_id: str, generation: int, judge: bool) -> UsageRecorderHarnesses:
         if self.owners is None:
             return self.fallback
-        key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
-        owner = self.owners.find(key)
-        if owner is None and judge:
-            owner = self.owners.find(WorkerInvocation(lease_id, generation))
-        return owner.registry if owner is not None else self.owners.current.registry
+        return self.owners.owner(lease_id, generation, judge=judge).registry
 
 
 @dataclass(frozen=True)
@@ -337,13 +332,10 @@ class _OrphanScope:
     invocation_harnesses: IInvocationHarnesses | None = None
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
+        if self.invocation_harnesses is None:
+            return self.harnesses
         generation = self.stores.liveness.lease_generation(lease_id)
-        owner = (
-            self.invocation_harnesses.find(WorkerInvocation(lease_id, generation))
-            if self.invocation_harnesses is not None
-            else None
-        )
-        return owner.registry if owner is not None else self.harnesses
+        return self.invocation_harnesses.owner(lease_id, generation).registry
 
     def harnesses_for_judge(self, lease_id: str) -> IHarnessRegistry:
         return self.harnesses_for_lease(lease_id)

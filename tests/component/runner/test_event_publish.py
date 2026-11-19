@@ -537,7 +537,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         elicitations=store,
         local_api_url="http://x",
         workspaces=single_workspace(FakeProvider({})),
-        harnesses=HarnessRegistry(
+        harnesses_for_lease=lambda _lease_id: HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
         events=RunnerEventPublisher(events, FIXTURE_RUNNER_ID),
@@ -574,7 +574,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         elicitations=store,
         local_api_url="http://x",
         workspaces=single_workspace(FakeProvider({})),
-        harnesses=HarnessRegistry(
+        harnesses_for_lease=lambda _lease_id: HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
         events=RunnerEventPublisher(events, FIXTURE_RUNNER_ID),

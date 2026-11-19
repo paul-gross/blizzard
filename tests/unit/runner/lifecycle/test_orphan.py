@@ -205,7 +205,9 @@ def test_a_forced_takeover_kills_the_worker_and_orphans_nothing(tmp_path: Path) 
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspaces=single_workspace(FakeProvider({})),
-        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
+        harnesses_for_lease=lambda _lease_id: HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}
+        ),
     )
     scope = TakeoverOpenScope(
         chunk_id="ch_1",

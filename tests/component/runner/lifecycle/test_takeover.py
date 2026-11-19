@@ -90,7 +90,7 @@ def _service(
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspaces=workspaces or single_workspace(FakeProvider({}), spawn_root=workspace_root),
-        harnesses=HarnessRegistry(
+        harnesses_for_lease=lambda _lease_id: HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
         ),
     )
@@ -315,7 +315,7 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         takeover=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
-        harnesses=resolved,
+        harnesses_for_lease=lambda _lease_id: resolved,
         workspaces=single_workspace(FakeProvider({})),
     )
 

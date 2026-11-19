@@ -6,14 +6,17 @@ Driven through a :class:`FakeHarness` whose scripted observation each test sets,
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSets, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.observation import (
     ExecutionActivity,
@@ -21,6 +24,7 @@ from blizzard.runner.harness.observation import (
     ExecutionObservation,
     ExecutionObservationRequest,
 )
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, NO_PROGRESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopContext
@@ -415,3 +419,39 @@ def test_the_warning_is_announced_as_its_buffered_fact(tmp_path: Path) -> None:
     assert warned is not None
     assert warned.generation == 1
     assert warned.anchor_at == _NOW
+
+
+# --- ownership ---------------------------------------------------------------------------------
+
+
+def test_a_retained_lease_is_observed_through_its_retained_set_after_a_replacement(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed(store)
+    clock = FixedClock(_NOW)
+    ctx, composed = _ctx(store, clock)
+    retained, replacement = FakeHarness(handle=_HANDLE, verdict="pass"), FakeHarness(handle=_HANDLE, verdict="pass")
+    sets = HarnessSets(
+        Mock(
+            side_effect=[
+                Mock(
+                    registry=HarnessRegistry(
+                        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=retained, execution_observation=retained)}
+                    )
+                ),
+                Mock(
+                    registry=HarnessRegistry(
+                        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=replacement, execution_observation=replacement)}
+                    )
+                ),
+            ]
+        )
+    )
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.retain(WorkerInvocation("lease_1", 1))
+    sets.select(HarnessAssemblyKey((2,)))
+    clock.advance(_MINUTE)
+
+    ExecutionObserve(replace(ctx, harness_sets=sets)).run()
+
+    assert [request.generation for request in retained.observation_requests] == [1]
+    assert replacement.observation_requests == [] and composed.observation_requests == []

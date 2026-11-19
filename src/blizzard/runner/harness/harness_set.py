@@ -75,8 +75,7 @@ class IInvocationHarnesses(Protocol):
     """Ownership of the set selected for an individual in-flight invocation.
 
     The key identifies the invocation, not its harness session: two concurrent
-    invocations can resume the same session. A caller can retain a provisional
-    key before launch and transfer it to the process identity once known.
+    invocations can resume the same session.
     """
 
     def retain(self, invocation: Hashable) -> HarnessSet: ...
@@ -86,9 +85,7 @@ class IInvocationHarnesses(Protocol):
     @property
     def current(self) -> HarnessSet: ...
 
-    def lookup(self, invocation: Hashable) -> HarnessSet: ...
-
-    def transfer(self, invocation: Hashable, process: Hashable) -> None: ...
+    def owner(self, lease_id: str, generation: int | None = None, *, judge: bool = False) -> HarnessSet: ...
 
     def release(self, invocation: Hashable) -> None: ...
 
@@ -200,6 +197,18 @@ class HarnessSets:
 
     def lookup(self, invocation: Hashable) -> HarnessSet:
         return self._retained[invocation]
+
+    def owner(self, lease_id: str, generation: int | None = None, *, judge: bool = False) -> HarnessSet:
+        """The set retained for an invocation, else the current set.
+
+        With a generation the lookup is exact, a judge falling back to its
+        generation's worker; with only a lease, the newest retained worker.
+        """
+        if generation is None:
+            return self.worker_for_lease(lease_id) or self.current
+        if judge and (retained := self.find(JudgeInvocation(lease_id, generation))) is not None:
+            return retained
+        return self.find(WorkerInvocation(lease_id, generation)) or self.current
 
     def find(self, invocation: Hashable) -> HarnessSet | None:
         """Find an in-process owner; absence also covers recovery after restart."""

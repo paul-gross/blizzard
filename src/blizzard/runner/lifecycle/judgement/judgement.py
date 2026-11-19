@@ -766,7 +766,5 @@ class Judgement:
         owners = self.ctx.harness_sets
         if owners is not None:
             generation = self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
-            owner = owners.find(JudgeInvocation(self.lease.lease_id, generation))
-            if owner is not None:
-                return owner.registry
+            return owners.owner(self.lease.lease_id, generation, judge=True).registry
         return self.ctx.harnesses_for_judge(self.lease.lease_id)
