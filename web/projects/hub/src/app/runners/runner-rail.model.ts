@@ -1,5 +1,6 @@
 import { type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
 
+import { fleetIdOf } from '../core/runners.domain';
 import { type ConnectionLight, runnerLight } from './connection-status.model';
 import { busyAgents, declaredAgents, type HostGroups } from './host-rows.model';
 import type { RunnerRow } from './runner-rows.model';
@@ -89,8 +90,10 @@ export function agentGauges(row: RunnerRow): readonly Gauge[] {
 
 /** The rail's view model: the env strips, the subscriptions, then the hosted runners in card order and the host-less after. */
 export function railVm(groups: HostGroups<RunnerRow>): RailVm {
-  const hosted = groups.cards.flatMap(({ card, rows }) => rows.map((row) => ({ row, fleetId: card.hostId, hostName: card.hostName })));
-  const hostless = groups.hostless.map((row) => ({ row, fleetId: row.runner_id, hostName: null }));
+  // The memberships come from the cards the Fleet tab itself resolves against, so a lens-hidden host never reaches a link.
+  const memberships = groups.cards.map(({ card, rows }) => ({ host_id: card.hostId, runner_ids: rows.map((row) => row.runner_id) }));
+  const hosted = groups.cards.flatMap(({ card, rows }) => rows.map((row) => ({ row, fleetId: fleetIdOf(row.runner_id, memberships), hostName: card.hostName })));
+  const hostless = groups.hostless.map((row) => ({ row, fleetId: fleetIdOf(row.runner_id, memberships), hostName: null }));
   return {
     envs: envGauges(groups),
     subscriptions: subscriptionLines(groups),

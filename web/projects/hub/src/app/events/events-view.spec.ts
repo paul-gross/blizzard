@@ -19,7 +19,7 @@ describe('EventsView', () => {
     fixture.componentRef.setInput('now', Date.parse('2026-07-16T00:01:00Z'));
     fixture.componentRef.setInput('state', state);
     fixture.componentRef.setInput('mobile', mobile);
-    fixture.componentRef.setInput('runnerFleetIds', new Map([['rn_01', 'host_01']]));
+    fixture.componentRef.setInput('hosts', [{ host_id: 'host_01', runner_ids: ['rn_01'] }]);
     await fixture.whenStable();
     return fixture;
   }

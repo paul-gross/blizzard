@@ -6,7 +6,6 @@ import { injectQueryFilters, injectRouteParam } from '../core/route-state';
 import { injectHubHostsQuery } from '../core/hosts.query';
 import { EventDetailView } from './event-detail-view';
 import { detailState, findEvent } from './event-detail.model';
-import { eventRunnerFleetIds } from './events-panel.model';
 import { injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 @Component({
@@ -26,7 +25,7 @@ export class EventDetailPage {
   }));
   protected readonly hosts = injectRunnerHostNames();
   private readonly hostsQuery = injectHubHostsQuery();
-  protected readonly runnerFleetIds = computed(() => eventRunnerFleetIds(this.hostsQuery.data() ?? []));
+  protected readonly hostMemberships = computed(() => this.hostsQuery.data() ?? []);
   protected readonly viewport = inject(ViewportService);
   private readonly resolved = resource({
     params: () => ({
