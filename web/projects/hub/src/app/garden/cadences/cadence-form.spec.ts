@@ -37,15 +37,24 @@ describe('FleetCadenceForm', () => {
       field.dispatchEvent(new Event('input', { bubbles: true }));
       await fixture.whenStable();
     };
-    return { fixture, host: fixture.componentInstance, el, q, type };
+    /** The zone box is pick-only: search the list, then click the matching row. */
+    const pickZone = async (zone: string) => {
+      await type('zone', zone);
+      const row = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (r) => r.querySelector('.label')?.textContent?.trim() === zone,
+      );
+      row!.click();
+      await fixture.whenStable();
+    };
+    return { fixture, host: fixture.componentInstance, el, q, type, pickZone };
   }
 
   it('binds every field typed into the draft it is handed, and emits save', async () => {
-    const { fixture, host, q, type } = await mount(true);
+    const { fixture, host, q, type, pickZone } = await mount(true);
 
     await type('slug', 'evening');
     await type('cron', '0 20 * * *');
-    await type('zone', 'America/Chicago');
+    await pickZone('America/Chicago');
     await type('spacing', '10d');
     expect(q('save')?.textContent).toContain('Create');
     q('save')!.click();

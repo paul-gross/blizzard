@@ -49,8 +49,10 @@ const FLEET_LIB = 'projects/fleet/src/lib';
  * - `core/forms` is a bootstrap exemption: the shared form-save contracts land before any app
  *   form adopts them, so neither app reaches the unit yet. Awaiting-human adoption, where both apps
  *   reach it, removes this entry.
+ * - `core/zones` is the zone options for the kit combobox; only the hub's cadence form reaches it
+ *   today; a runner surface reaching it removes this entry.
  */
-const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format', 'core/forms'];
+const PLACEMENT_EXEMPT_UNITS = ['testing', 'core/format', 'core/forms', 'core/zones'];
 
 /** Folders that only group units: a file under one belongs to the unit named by its first two segments. */
 const GROUPING_FOLDERS = ['core', 'chunk', 'shell'];

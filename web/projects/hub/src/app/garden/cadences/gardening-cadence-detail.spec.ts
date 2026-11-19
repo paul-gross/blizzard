@@ -193,10 +193,14 @@ describe('GardeningCadenceDetail', () => {
     });
 
     it('refuses an invalid edit inline, sending nothing', async () => {
-      const { click, type, q } = await render();
+      const { fixture, click, type, q } = await render();
 
       await click('gardening-cadence-panel-edit');
-      await type('gardening-cadence-edit-zone', '');
+      await type('gardening-cadence-edit-zone', 'None');
+      [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((r) => r.querySelector('.label')?.textContent?.trim() === 'None')!
+        .click();
+      await fixture.whenStable();
       await click('gardening-cadence-edit-save');
 
       expect(stub.forRoute('/api/cadences/cad_evening', 'PATCH')).toHaveLength(0);

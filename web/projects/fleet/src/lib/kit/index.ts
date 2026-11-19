@@ -44,6 +44,7 @@ export { KitOption } from './kit-option';
 export { KitPaceBar } from './kit-pace-bar';
 export { KitProseBlock } from './kit-prose-block';
 export { KitOptionGroup } from './kit-option-group';
+export { KitCombobox, type ComboOption } from './kit-combobox';
 export { KitSelect } from './kit-select';
 export { KitSelectList } from './kit-select-list';
 export { KitSelectRow } from './kit-select-row';

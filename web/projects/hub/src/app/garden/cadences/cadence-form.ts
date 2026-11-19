@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { type FieldTree, FormField } from '@angular/forms/signals';
 
-import { type KitChipOption, KitField, KitForm, KitSelect, KitTextInput } from 'fleet';
+import { FLEET_CLOCK, type KitChipOption, KitCombobox, KitField, KitForm, KitSelect, KitTextInput, zoneOptions } from 'fleet';
 
 import { CADENCE_ANCHORS, type CadenceDraft } from '../core/cadence.domain';
 
@@ -18,7 +18,7 @@ const ANCHOR_OPTIONS: readonly KitChipOption[] = [
 @Component({
   selector: 'app-cadence-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormField, KitField, KitForm, KitSelect, KitTextInput],
+  imports: [FormField, KitCombobox, KitField, KitForm, KitSelect, KitTextInput],
   templateUrl: './cadence-form.html',
   styleUrl: './cadence-form.css',
 })
@@ -35,4 +35,6 @@ export class FleetCadenceForm {
   readonly cancel = output<void>();
 
   protected readonly anchorOptions = ANCHOR_OPTIONS;
+  /** The browser's zones with their offsets as of opening the form. */
+  protected readonly zones = zoneOptions(inject(FLEET_CLOCK)());
 }
