@@ -13,7 +13,7 @@ import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { RoutineCreateForm } from './routine-create-form';
 import { routineCreateRules } from './routine.form';
 import { injectRoutineService } from './routine.service';
@@ -41,7 +41,7 @@ import { injectRoutineService } from './routine.service';
   styleUrl: './gardening-routines-page.css',
 })
 export class GardeningRoutinesPage {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineService = injectRoutineService();
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));

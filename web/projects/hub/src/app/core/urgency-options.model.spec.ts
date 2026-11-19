@@ -1,13 +1,13 @@
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { urgencyOptions } from './urgency-options.model';
 
-const live = { urgency_id: 'u1', slug: 'live', name: 'Live', retired: false } as UrgencyView;
-const old = { urgency_id: 'u2', slug: 'old', name: 'Old', retired: true } as UrgencyView;
+const live = { id: 'u1', slug: 'live', name: 'Live', retired: false } as Urgency;
+const old = { id: 'u2', slug: 'old', name: 'Old', retired: true } as Urgency;
 const both = [old, live];
 
 describe('urgencyOptions', () => {
   it('keys each option by id or by slug, in arrival order', () => {
-    expect(urgencyOptions(both, { key: 'urgency_id', retired: 'include' })).toEqual([
+    expect(urgencyOptions(both, { key: 'id', retired: 'include' })).toEqual([
       { value: 'u2', label: 'Old' },
       { value: 'u1', label: 'Live' },
     ]);

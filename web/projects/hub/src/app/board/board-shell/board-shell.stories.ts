@@ -3,7 +3,7 @@ import { applicationConfig } from '@storybook/angular-vite';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { chunkSummary } from 'fleet/testing';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { BoardShell } from './board-shell';
@@ -28,7 +28,7 @@ export const Generic: Story = { args: { donePolicy: generic } };
 export const Empty: Story = { args: { chunks: [], state: 'empty' } };
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
-const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1 } as UrgencyView;
+const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1 } as Urgency;
 const urgencyChunks = [chunkSummary({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', urgency: { urgency_id: 'u', slug: 'urgent' } }), ...chunks];
 export const UrgencyCards: Story = { decorators: [urgencyProviders], args: { chunks: urgencyChunks, urgencies: [urgent] } };
 export const UrgencyList: Story = { decorators: [urgencyProviders], args: { chunks: urgencyChunks, urgencies: [urgent], layout: 'list' } };

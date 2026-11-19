@@ -1,8 +1,9 @@
+import { fromUrgencyRef } from '../../core/urgency.translate';
 import { withPendingUrgencies } from '../chunks/urgency.model';
 import type { ChunkUrgencyVars } from '../chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
 import { injectPendingMutationVariables } from 'fleet';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { bannerUrgencyIcons } from '../../core/urgencies.model';
 import { injectUrgencyIconUrls } from '../../core/urgency-icon.query';
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
@@ -36,7 +37,7 @@ import { injectShowProjectColors, projectColorMap } from '../../core/project-len
   styleUrl: './glance-board.css',
 })
 export class GlanceBoard {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
@@ -62,7 +63,7 @@ export class GlanceBoard {
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
   /** The image marks the glance banners show, read once per digest. */
-  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks(), this.urgenciesQuery.data()));
+  protected readonly urgencyIconUrls = injectUrgencyIconUrls(() => bannerUrgencyIcons(this.chunks().map((chunk) => ({ terminal: chunk.terminal, urgency: chunk.urgency ? fromUrgencyRef(chunk.urgency) : null })), this.urgenciesQuery.data()));
   protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 

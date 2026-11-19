@@ -118,7 +118,7 @@ export interface ChoreFormVm {
   styleUrl: './cadence-panel.css',
 })
 export class FleetCadencePanel {
-  readonly urgencies = input<readonly import('fleet').UrgencyView[]>([]);
+  readonly urgencies = input<readonly import('fleet').Urgency[]>([]);
   readonly vm = input<CadencePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 

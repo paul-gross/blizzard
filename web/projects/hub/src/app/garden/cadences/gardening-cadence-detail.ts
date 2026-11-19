@@ -15,7 +15,7 @@ import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { cadenceLifecycleMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubCadenceErrandsQuery, injectHubCadencesQuery } from '../core/cadences.query';
 import { type Cadence, type CadenceDraft, type ChoreDraft, EMPTY_CADENCE_DRAFT, EMPTY_CHORE_DRAFT } from '../core/cadence.domain';
 import { toChoreDraft, toChoresBaseline, toEditBaseline } from '../core/cadence.translate';
@@ -62,7 +62,7 @@ import {
   styleUrl: '../core/gardening-detail-host.css',
 })
 export class GardeningCadenceDetail {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
   private readonly cadencesQuery = injectHubCadencesQuery();

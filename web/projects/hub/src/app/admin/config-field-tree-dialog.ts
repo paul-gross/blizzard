@@ -63,6 +63,8 @@ export class ConfigFieldTreeDialog<D> {
 
   /** The keys of the mark fields whose file is being read. */
   private readonly reading = signal<ReadonlySet<string>>(new Set());
+  private readonly invalidColors = signal<ReadonlySet<string>>(new Set());
+  private readonly invalidMarks = signal<ReadonlySet<string>>(new Set());
 
   protected readonly submitting = computed(() => this.form()().submitting());
   protected readonly draft = computed(() => this.form()().value());
@@ -79,8 +81,9 @@ export class ConfigFieldTreeDialog<D> {
   private readonly readingShown = computed(() => this.visibleFields().some((field) => this.reading().has(field.key)));
 
   /** Save is held while an edit has nothing to send, and while a mark's file is still being read. */
+  protected readonly invalidColorShown = computed(() => this.visibleFields().some((field) => this.invalidColors().has(field.key)));
   protected readonly saveHeld = computed(
-    () => this.readingShown() || (this.mode() === 'edit' && this.changes().length === 0),
+    () => this.invalidColorShown() || this.visibleFields().some((field) => this.invalidMarks().has(field.key)) || this.readingShown() || (this.mode() === 'edit' && this.changes().length === 0),
   );
 
   protected textField(key: string): FieldTree<string> {
@@ -118,6 +121,22 @@ export class ConfigFieldTreeDialog<D> {
     this.fieldChanged.emit(key);
   }
 
+  protected onColorInvalid(key: string, invalid: boolean): void {
+    this.invalidColors.update((keys) => {
+      const next = new Set(keys);
+      if (invalid) next.add(key); else next.delete(key);
+      return next;
+    });
+  }
+
+  protected onMarkInvalid(key: string, invalid: boolean): void {
+    this.invalidMarks.update((keys) => {
+      const next = new Set(keys);
+      if (invalid) next.add(key); else next.delete(key);
+      return next;
+    });
+  }
+
   protected onReading(key: string, reading: boolean): void {
     this.reading.update((keys) => {
       if (keys.has(key) === reading) return keys;
@@ -128,10 +147,16 @@ export class ConfigFieldTreeDialog<D> {
     });
   }
 
+  protected onSave(): void {
+    if (!this.saveHeld() && !this.submitting()) this.save.emit();
+  }
+
   /** Escape, a backdrop click, and Cancel all close — except while the save is in flight. */
   protected onClosed(): void {
     if (this.submitting()) return;
     this.reading.set(new Set());
+    this.invalidColors.set(new Set());
+    this.invalidMarks.set(new Set());
     this.closed.emit();
   }
 }

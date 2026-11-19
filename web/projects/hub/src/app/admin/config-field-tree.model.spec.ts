@@ -106,6 +106,13 @@ describe('config field tree model', () => {
     expect(diff.find((c) => c.field === 'Mark')).toMatchObject({ old: '🙂', new_label: 'Image', old_label: null });
     expect(fieldChanges(FIELDS, BASE, { ...BASE, detail: 'x' })).toEqual([]);
   });
+
+  it('labels marks according to the field image source', () => {
+    const field = { key: 'mark', label: 'Mark', kind: 'mark', markImageSource: 'data' } as const;
+    expect(fieldChanges([field], BASE, { ...BASE, mark: '/🔥' })[0].new_label).toBeNull();
+    expect(fieldChanges([field], BASE, { ...BASE, mark: 'data:image/png;base64,AA' })[0].new_label).toBe('Image');
+    expect(fieldChanges([{ ...field, markImageSource: 'url' }], BASE, { ...BASE, mark: '/icons/a.png' })[0].new_label).toBe('Image');
+  });
 });
 
 describe('a number field with a default choice', () => {

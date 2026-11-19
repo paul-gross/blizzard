@@ -1,6 +1,6 @@
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TenantContext } from '../../core/auth/tenant-context';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
@@ -77,8 +77,8 @@ describe('BoardList', () => {
   });
 
   it('places the non-default urgency after the id, omitting it on finished rows', async () => {
-    const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' } as UrgencyView;
-    const ref = { urgency_id: 'u', slug: 'urgent' };
+    const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' } as Urgency;
+    const ref = { id: 'u', slug: 'urgent' };
     const el = await render(groups({ live: [entry('running', card('live', { urgency: ref }))], done: [entry('done', card('done', { urgency: ref, terminal: true }))] }));
     fixture.componentRef.setInput('urgencies', [urgent]);
     await fixture.whenStable();

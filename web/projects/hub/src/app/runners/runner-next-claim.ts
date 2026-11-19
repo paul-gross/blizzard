@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { asyncState } from 'fleet';
-import { injectUrgenciesQuery } from '../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { claimUrgencyIcons, prerequisiteIds } from './runner-next-claim.model';
 import { injectPrerequisiteStatuses, injectRunnerNextClaimQuery } from './runner-next-claim.query';
 import { injectUrgencyIconUrls } from '../core/urgency-icon.query';
@@ -13,7 +13,7 @@ import { RunnerNextClaimView } from './runner-next-claim-view';
 export class RunnerNextClaim {
   readonly runnerId = input.required<string>();
   protected readonly next = injectRunnerNextClaimQuery(this.runnerId);
-  protected readonly urgencies = injectUrgenciesQuery();
+  protected readonly urgencies = injectDomainUrgenciesQuery();
   protected readonly urgencyIconUrl = injectUrgencyIconUrls(() => claimUrgencyIcons(this.next.data(), this.urgencies.data()));
   private readonly prerequisites = injectPrerequisiteStatuses(() => prerequisiteIds(this.next.data()));
   protected readonly statuses = this.prerequisites;

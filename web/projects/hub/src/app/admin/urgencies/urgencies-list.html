@@ -14,11 +14,11 @@
     <fleet-kit-chips ariaLabel="Urgency lifecycle" [options]="options" [selectedValue]="lifecycle()" (choose)="filter.emit($event)" />
     <fleet-kit-async-state [state]="state()" placement="inline" loadingText="Loading urgencies…" errorText="Could not load urgencies." emptyText="No urgencies found.">
     <div cdkDropList fleetKitSelectList ariaLabel="Urgencies" [value]="selected()" (valueChange)="pick.emit($event)" [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="reorder.emit($event)">
-      @for (urgency of rows(); track urgency.urgency_id) {
+      @for (urgency of rows(); track urgency.id) {
         <div cdkDrag [cdkDragDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" class="urgency-item">
           @if (canEdit() && lifecycle() === 'active') { <span cdkDragHandle class="drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span> }
-          <fleet-kit-select-row class="urgency-row" [value]="urgency.urgency_id" [label]="urgency.slug">
-            <app-urgency-pill [urgency]="urgency" [focusable]="false" /> {{ urgency.slug }} · {{ urgency.open_chunks }} open
+          <fleet-kit-select-row class="urgency-row" [value]="urgency.id" [label]="urgency.slug">
+            <app-urgency-pill [urgency]="urgency" [focusable]="false" /> {{ urgency.slug }} · {{ urgency.openChunks }} open
             @if (urgency.default) { · default } @if (urgency.retired) { · retired }
           </fleet-kit-select-row>
         </div>
@@ -26,7 +26,6 @@
     </div>
     </fleet-kit-async-state>
 @if (createOpen() && canEdit()) {
-  <app-config-form-dialog heading="New urgency" mode="create" [fields]="fields" submitLabel="Create"
-    [submitError]="createError()" [submitting]="createPending()" testidPrefix="admin-urgencies-create"
-    (closed)="closeCreate.emit()" (submitted)="submitCreate.emit($event)" />
+  <app-config-field-tree-dialog heading="New urgency" mode="create" [fields]="fields" [form]="createForm()" submitLabel="Create" testidPrefix="admin-urgencies-create"
+    (closed)="closeCreate.emit()" (save)="submitCreate.emit()" />
 }

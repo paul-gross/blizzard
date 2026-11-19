@@ -1,5 +1,5 @@
 import { urgencyPill } from '../../core/urgencies.model';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -93,7 +93,7 @@ export class GlanceView {
     return graphStepLabel(row.graphName, row.node);
   }
 
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** Each banner urgency's image-mark URL by urgency id, read by the page. */
   readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   protected readonly urgencyPill = urgencyPill;

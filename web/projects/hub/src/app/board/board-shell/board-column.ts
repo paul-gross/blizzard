@@ -1,5 +1,5 @@
 import { urgencyPill } from '../../core/urgencies.model';
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
@@ -72,15 +72,15 @@ export function laneDropId(list: BoardReorderList): string {
   styleUrl: './board-column.css',
 })
 export class BoardColumn {
-  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgencies = input<readonly Urgency[]>([]);
   /** Each banner urgency's image-mark URL by urgency id, read by the page. */
   readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   readonly chunkControl = input<ChunkControl | null>(null);
   protected urgencyDetail(chunkId: string) {
     const card = this.cardsById().get(chunkId)!;
-    return { chunk_id: chunkId, terminal: card.terminal, urgency: card.urgency ?? null };
+    return { chunk_id: chunkId, terminal: card.terminal, urgency: card.urgency ? { urgency_id: card.urgency.id, slug: card.urgency.slug } : null };
   }
-  protected urgencyFor(chunkId: string): UrgencyView | null {
+  protected urgencyFor(chunkId: string): Urgency | null {
     const card = this.cardsById().get(chunkId);
     return card ? urgencyPill({ urgency: card.urgency ?? null, terminal: card.terminal }, this.urgencies()) : null;
   }

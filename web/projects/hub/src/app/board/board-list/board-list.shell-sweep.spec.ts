@@ -90,8 +90,8 @@ describe('board list shell sweep (web:shell-sweep)', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
       const fixture = TestBed.createComponent(BoardList);
-      fixture.componentRef.setInput('groups', { ...GROUPS, live: [entry('running', 'RUN1', { urgency: { urgency_id: 'u', slug: 'urgent' } })] });
-      fixture.componentRef.setInput('urgencies', [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' }]);
+      fixture.componentRef.setInput('groups', { ...GROUPS, live: [entry('running', 'RUN1', { urgency: { id: 'u', slug: 'urgent' } })] });
+      fixture.componentRef.setInput('urgencies', [{ id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' }]);
       await fixture.whenStable();
       const root = fixture.nativeElement as HTMLElement;
       root.style.width = `${width}px`;

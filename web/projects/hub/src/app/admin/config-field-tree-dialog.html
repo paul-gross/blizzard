@@ -5,7 +5,7 @@
     [form]="form()"
     [saveLabel]="submitLabel()"
     [saveDisabled]="saveHeld()"
-    (save)="save.emit()"
+    (save)="onSave()"
     (cancel)="onClosed()"
   >
     @for (field of visibleFields(); track field.key) {
@@ -34,6 +34,7 @@
               [ariaLabel]="field.label"
               [disabled]="submitting()"
               (choose)="onColor(field, $event)"
+              (invalidChange)="onColorInvalid(field.key, $event)"
             />
           }
           @case ('mark') {
@@ -41,6 +42,9 @@
               [formField]="textField(field.key)"
               [ariaLabel]="field.label"
               [testid]="testidPrefix() + '-field-' + field.key"
+              [maxImageBytes]="field.maxImageBytes"
+              [imageSource]="field.markImageSource ?? 'url'"
+              (invalidChange)="onMarkInvalid(field.key, $event)"
               (reading)="onReading(field.key, $event)"
             />
           }
@@ -94,6 +98,7 @@
       </fleet-kit-field>
     }
     <ng-content select="[additional-fields]" />
+    @if (invalidColorShown()) { <p class="form-note">Enter a color as #rrggbb or choose a palette color.</p> }
     @if (hint(); as note) {
       <p class="form-note" [attr.data-testid]="testidPrefix() + '-hint'">{{ note }}</p>
     }

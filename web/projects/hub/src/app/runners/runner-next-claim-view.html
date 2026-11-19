@@ -28,7 +28,7 @@
 
 <ng-template #urgencyDisplay let-ref>
   @if (urgency(ref); as item) {
-    @if (item.default) { <span> · {{ item.name }}</span> } @else { <fleet-kit-urgency-pill [name]="item.name" [color]="item.color" [emoji]="item.emoji" [iconUrl]="urgencyIconUrls()[item.urgency_id] ?? null" /> }
+    @if (item.default) { <span> · {{ item.name }}</span> } @else { <fleet-kit-urgency-pill [name]="item.name" [color]="item.color" [emoji]="item.emoji" [iconUrl]="urgencyIconUrls()[item.id] ?? null" /> }
   } @else if (ref) { <span> · {{ ref.slug }}</span> }
 </ng-template>
 

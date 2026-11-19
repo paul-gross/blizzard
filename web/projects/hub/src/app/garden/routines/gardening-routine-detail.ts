@@ -25,7 +25,7 @@ import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesDomainQuery } from '../core/routines.query';
 import { EMPTY_ROUTINE_EDIT_DRAFT, type Routine, type RoutineEditDraft } from '../core/routine.domain';
-import { toEditBaseline, toUrgencyRef } from '../core/routine.translate';
+import { toEditBaseline } from '../core/routine.translate';
 import { routineEditRules } from './routine.form';
 import { injectRoutineService } from './routine.service';
 import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './routine-lifecycle.mutations';
@@ -36,7 +36,7 @@ import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
-import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../../core/urgencies.query';
 
 /**
  * The selected routine's own detail — the right-hand child of
@@ -68,7 +68,7 @@ import { injectUrgenciesQuery } from '../../core/urgencies.query';
   styleUrl: '../core/gardening-detail-host.css',
 })
 export class GardeningRoutineDetail {
-  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  protected readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
   private readonly routinesQuery = injectHubRoutinesDomainQuery();
@@ -243,7 +243,7 @@ export class GardeningRoutineDetail {
   protected readonly runningRoutine = signal<Routine | null>(null);
 
   /** The running routine's effective urgency, in the run dialog's input shape. */
-  protected readonly runUrgency = computed(() => toUrgencyRef(this.runningRoutine()?.effectiveUrgency ?? null));
+  protected readonly runUrgency = computed(() => this.runningRoutine()?.effectiveUrgency ?? null);
 
   protected run(): void {
     this.runningRoutine.set(this.selectedRoutine());

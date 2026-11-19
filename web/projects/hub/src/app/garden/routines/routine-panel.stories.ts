@@ -1,4 +1,4 @@
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
@@ -25,11 +25,11 @@ export const RelatedScopesError: Story = { args: { vm: { ...VM, relatedScopes: n
 export const RelatedScopesEmpty: Story = { args: { vm: { ...VM, relatedScopes: [] }, relatedScopesState: 'empty' } };
 
 export const DefaultUrgency: Story = { args: { canEdit: true, editable: true, urgenciesReady: true, defaultUrgency: null,
-  urgencies: [{ urgency_id: 'u', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView] } };
+  urgencies: [{ id: 'u', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency] } };
 
 const URGENCIES = [
-  { urgency_id: 'u1', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-  { urgency_id: 'u2', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+  { id: 'u1', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+  { id: 'u2', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
 ];
 
 const editing = (attrs: string, args: Record<string, unknown> = {}): Story => ({

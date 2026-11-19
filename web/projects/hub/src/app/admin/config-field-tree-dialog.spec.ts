@@ -181,6 +181,18 @@ describe('ConfigFieldTreeDialog', () => {
       await type('setting', 'before');
       expect(q<HTMLButtonElement>('kit-form-save')!.disabled).toBe(true);
     });
+    it('updates the preview when a required label is cleared and refuses to save it', async () => {
+      const { host, q, type, submit } = await mount(UrgencyDialogHost);
+      await type('urg-field-label', '');
+      expect(host.f.label().value()).toBe('');
+      expect(q('urg-diff')?.textContent).toContain('Urgent');
+      expect(q('urg-diff')?.textContent).toContain('—');
+      expect(q<HTMLButtonElement>('kit-form-save')!.disabled).toBe(false);
+      await submit();
+      expect(host.saved).toEqual([]);
+      expect(document.body.textContent).toContain('Required');
+    });
+
     it('holds Save with "Nothing yet." until an edit, then names the change with labels', async () => {
       const { host, q, type, submit } = await mount(UrgencyDialogHost);
       const save = () => q<HTMLButtonElement>('kit-form-save')!.disabled;

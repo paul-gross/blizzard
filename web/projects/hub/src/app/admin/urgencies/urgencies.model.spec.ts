@@ -1,9 +1,9 @@
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import { liveUrgencies, overlayUrgencies, urgencyOptions, visibleUrgencies } from './urgencies.model';
 
-const first = { urgency_id: 'first', retired: false } as UrgencyView;
-const second = { urgency_id: 'second', retired: false } as UrgencyView;
-const retired = { urgency_id: 'retired', retired: true } as UrgencyView;
+const first = { id: 'first', retired: false } as Urgency;
+const second = { id: 'second', retired: false } as Urgency;
+const retired = { id: 'retired', retired: true } as Urgency;
 
 describe('visibleUrgencies', () => {
   it('filters lifecycle without changing the hub order', () => {
@@ -13,7 +13,8 @@ describe('visibleUrgencies', () => {
   });
 });
 
-import { urgencyCreate, urgencyEdit, urgencyPosition } from './urgencies.model';
+import { urgencyPosition } from './urgencies.model';
+import { toCreateRequest as urgencyCreate, toEditRequest as urgencyEdit } from './urgency.translate';
 
 describe('urgency writes', () => {
   const image = 'data:image/png;base64,YWJj';
@@ -52,7 +53,7 @@ describe('pending overlays', () => {
     const a = { ...first, default: true };
     const b = { ...second, default: false };
     const rows = overlayUrgencies([a, b, retired], [{ urgency: 'second', after: null }], [{ key: 'second' }]);
-    expect(rows.map((row) => row.urgency_id)).toEqual(['second', 'first', 'retired']);
+    expect(rows.map((row) => row.id)).toEqual(['second', 'first', 'retired']);
     expect(rows.map((row) => row.default)).toEqual([true, false, false]);
     expect(a.default).toBe(true);
     expect(b.default).toBe(false);

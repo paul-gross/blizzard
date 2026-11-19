@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 
-import type { UrgencyView } from 'fleet';
+import type { Urgency } from 'fleet';
 import type { RoutineEditDraft } from '../core/routine.domain';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 import { routineEditRules } from './routine.form';
@@ -598,8 +598,8 @@ describe('FleetRoutinePanel', () => {
     const fixture = await mount({ canEdit: true });
     fixture.componentRef.setInput('urgenciesReady', true);
     fixture.componentRef.setInput('urgencies', [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as Urgency,
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
@@ -628,8 +628,8 @@ describe('FleetRoutinePanel', () => {
     const fixture = await mount({ canEdit: true });
     fixture.componentRef.setInput('urgenciesReady', true);
     fixture.componentRef.setInput('urgencies', [
-      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-      { urgency_id: 'o', slug: 'old', name: 'Old', default: false, retired: true } as UrgencyView,
+      { id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as Urgency,
+      { id: 'o', slug: 'old', name: 'Old', default: false, retired: true } as Urgency,
     ]);
     fixture.componentRef.setInput('defaultUrgency', current);
     await fixture.whenStable();

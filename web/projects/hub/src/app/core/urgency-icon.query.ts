@@ -64,17 +64,46 @@ export async function urgencyIconDataUrl(blob: Blob): Promise<string> {
   return `data:${blob.type};base64,${btoa(binary)}`;
 }
 
-/** Authenticated image bytes for the form preview as a data URL, never a raw API URL. */
-export function injectUrgencyIconDataUrl(icon: () => UrgencyIconRef | null): Signal<string | null> {
+export type UrgencyIconDataUrlState =
+  | { readonly status: 'idle' | 'loading' | 'error' }
+  | { readonly status: 'success'; readonly url: string };
+
+/** Authenticated image bytes for the form, including fetch and conversion failures. */
+export function injectUrgencyIconDataUrlState(icon: () => UrgencyIconRef | null): Signal<UrgencyIconDataUrlState> {
   const tenant = inject(TenantContext);
   const query = injectQuery(() => urgencyIconQueryOptions(tenant.current(), icon()));
-  const url = signal<string | null>(null);
+  const identity = computed(() => {
+    const ref = icon();
+    const tenantId = tenant.current();
+    return tenantId !== null && ref !== null ? JSON.stringify([tenantId, ref.key, ref.digest]) : null;
+  });
+  const converted = signal<{ identity: string; blob: Blob; state: UrgencyIconDataUrlState } | null>(null);
   effect((onCleanup) => {
+    const current = identity();
     const blob = query.data();
     let live = true;
     onCleanup(() => { live = false; });
-    if (!blob) { url.set(null); return; }
-    void urgencyIconDataUrl(blob).then((value) => { if (live) url.set(value); });
+    if (!current || !blob) return;
+    converted.set({ identity: current, blob, state: { status: 'loading' } });
+    void urgencyIconDataUrl(blob).then(
+      (url) => { if (live && identity() === current && query.data() === blob) converted.set({ identity: current, blob, state: { status: 'success', url } }); },
+      () => { if (live && identity() === current && query.data() === blob) converted.set({ identity: current, blob, state: { status: 'error' } }); },
+    );
   });
-  return url.asReadonly();
+  return computed(() => {
+    const current = identity();
+    if (!current) return { status: 'idle' };
+    if (query.isError()) return { status: 'error' };
+    const result = converted();
+    return result?.identity === current && result.blob === query.data() ? result.state : { status: 'loading' };
+  });
+}
+
+/** Authenticated image bytes for the form preview as a data URL, never a raw API URL. */
+export function injectUrgencyIconDataUrl(icon: () => UrgencyIconRef | null): Signal<string | null> {
+  const state = injectUrgencyIconDataUrlState(icon);
+  return computed(() => {
+    const current = state();
+    return current.status === 'success' ? current.url : null;
+  });
 }

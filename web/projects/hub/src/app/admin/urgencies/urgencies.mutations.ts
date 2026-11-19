@@ -22,7 +22,7 @@ export function injectCreateUrgencyMutation() {
     mutationFn: async (body: UrgencyCreateRequest) => {
       const { data, error } = await createUrgencyApiUrgenciesPost({ body, throwOnError: false });
       if (error) throw error;
-      return data!;
+      return data!.urgency_id;
     },
     onSettled: () => client.invalidateQueries({ queryKey: hubConfigKey }),
   }));

@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { TenantContext } from './auth/tenant-context';
 import {
   injectUrgencyIconDataUrl,
+  injectUrgencyIconDataUrlState,
   injectUrgencyIconUrl,
   injectUrgencyIconUrls,
   readUrgencyIcon,
@@ -23,6 +24,7 @@ class IconHost {
   readonly single = injectUrgencyIconUrl(() => icon());
   readonly multi = injectUrgencyIconUrls(() => icons());
   readonly form = injectUrgencyIconDataUrl(() => icon());
+  readonly formState = injectUrgencyIconDataUrlState(() => icon());
 }
 
 describe('urgency icon reader', () => {
@@ -122,6 +124,55 @@ describe('urgency icon reader', () => {
   ])('refuses %s Blob', async (_, make) => {
     body = make;
     await expect(readUrgencyIcon('u')).rejects.toThrow('Invalid urgency icon');
+  });
+
+  it('exposes invalid-format failures to the form observer', async () => {
+    body = () => new Blob(['wrong'], { type: 'text/plain' });
+    const fixture = TestBed.createComponent(IconHost);
+    await vi.waitFor(() => expect(fixture.componentInstance.formState()).toEqual({ status: 'error' }));
+    expect(fixture.componentInstance.form()).toBeNull();
+  });
+
+  it('exposes a failed fetch to the form observer', async () => {
+    hubClient.setConfig({ fetch: (async () => { throw new Error('offline'); }) as typeof fetch });
+    const fixture = TestBed.createComponent(IconHost);
+    await vi.waitFor(() => expect(fixture.componentInstance.formState()).toEqual({ status: 'error' }));
+    expect(fixture.componentInstance.form()).toBeNull();
+  });
+
+  it('exposes a failed blob read without an unhandled rejection', async () => {
+    body = () => {
+      const blob = new Blob([BYTES], { type: 'image/png' });
+      vi.spyOn(blob, 'arrayBuffer').mockRejectedValue(new Error('read failed'));
+      return blob;
+    };
+    const fixture = TestBed.createComponent(IconHost);
+    await vi.waitFor(() => expect(fixture.componentInstance.formState()).toEqual({ status: 'error' }));
+    expect(fixture.componentInstance.form()).toBeNull();
+  });
+
+  it('exposes a failed base64 conversion', async () => {
+    vi.spyOn(globalThis, 'btoa').mockImplementation(() => { throw new Error('conversion failed'); });
+    const fixture = TestBed.createComponent(IconHost);
+    await vi.waitFor(() => expect(fixture.componentInstance.formState()).toEqual({ status: 'error' }));
+  });
+
+  it('ignores a stale conversion failure after changing the icon', async () => {
+    let rejectRead!: (error: Error) => void;
+    const pending = new Promise<ArrayBuffer>((_, reject) => { rejectRead = reject; });
+    body = () => {
+      const blob = new Blob([BYTES], { type: 'image/png' });
+      vi.spyOn(blob, 'arrayBuffer').mockReturnValue(pending);
+      return blob;
+    };
+    const fixture = TestBed.createComponent(IconHost);
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    body = () => new Blob(['new'], { type: 'image/png' });
+    icon.set({ key: 'u', digest: 'd2' });
+    await vi.waitFor(() => expect(fixture.componentInstance.formState()).toEqual({ status: 'success', url: `data:image/png;base64,${btoa('new')}` }));
+    rejectRead(new Error('old read failed'));
+    await fixture.whenStable();
+    expect(fixture.componentInstance.formState().status).toBe('success');
   });
 
   it('revokes an object URL when the icon changes and on destroy', async () => {

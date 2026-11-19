@@ -1,4 +1,4 @@
-import type { ProjectView, UrgencyView } from 'fleet';
+import type { ProjectView, Urgency } from 'fleet';
 import { projectOptions, urgencyOptions } from './new-hub-item.model';
 
 describe('new hub item options', () => {
@@ -9,10 +9,10 @@ describe('new hub item options', () => {
   });
   it('keeps live urgencies in order and excludes retired ones', () => {
     const urgencies = [
-      { urgency_id: 'u1', name: 'Urgent', retired: false },
-      { urgency_id: 'old', name: 'Old', retired: true },
-      { urgency_id: 'u2', name: 'Standard', retired: false },
-    ] as UrgencyView[];
+      { id: 'u1', name: 'Urgent', retired: false },
+      { id: 'old', name: 'Old', retired: true },
+      { id: 'u2', name: 'Standard', retired: false },
+    ] as Urgency[];
     expect(urgencyOptions(urgencies)).toEqual([{ value: 'u1', label: 'Urgent' }, { value: 'u2', label: 'Standard' }]);
     expect(urgencyOptions([])).toEqual([]);
   });

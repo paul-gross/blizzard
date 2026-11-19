@@ -3,7 +3,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { KitTab, KitTabStrip } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
-import { injectUrgenciesQuery } from '../core/urgencies.query';
+import { injectDomainUrgenciesQuery } from '../core/urgencies.query';
 import { injectProjectsQuery } from '../core/projects.query';
 import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
@@ -37,7 +37,7 @@ export class AdminShell {
   protected readonly canManageSettings = computed(() => hasPermission(this.meQuery.data(), 'settings:admin'));
   private readonly membersQuery = injectMembersQuery(() => hasPermission(this.meQuery.data(), 'user:manage'));
   private readonly projectsQuery = injectProjectsQuery();
-  private readonly urgenciesQuery = injectUrgenciesQuery();
+  private readonly urgenciesQuery = injectDomainUrgenciesQuery();
   private readonly sourcesQuery = injectWorkSourcesQuery(() => false);
   private readonly repositoriesQuery = injectRepositoriesQuery(() => false);
   private readonly forgesQuery = injectForgesQuery(() => false);

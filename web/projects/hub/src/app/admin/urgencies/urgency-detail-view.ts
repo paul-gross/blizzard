@@ -1,14 +1,15 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitButton, KitDialog, KitErrorLine, KitSelect, type KitAsyncStateValue, type UrgencyView } from 'fleet';
+import { KitButton, KitDialog, KitErrorLine, KitSelect, type KitAsyncStateValue, type Urgency } from 'fleet';
 import type { ConfigActionsVm } from '../config-actions.model';
-import type { ConfigFormValues } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
+import type { FieldTree } from '@angular/forms/signals';
+import type { UrgencyDraft } from './urgency.domain';
+import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import type { LastChangeVm, RevisionRowVm } from '../config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from '../config-record-panel';
-import { URGENCY_FIELDS } from './urgencies.model';
+import { URGENCY_FIELDS } from './urgency.form';
 
 @Component({ selector: 'app-urgency-detail-view', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel, KitButton, KitDialog, KitErrorLine, KitSelect],
+  imports: [ConfigFieldTreeDialog, ConfigRecordPanel, KitButton, KitDialog, KitErrorLine, KitSelect],
   templateUrl: './urgency-detail-view.html', styleUrl: './urgency-detail.css' })
 export class UrgencyDetailView {
   readonly vm = input.required<ConfigRecordVm | null>();
@@ -20,18 +21,18 @@ export class UrgencyDetailView {
   readonly actions = input<ConfigActionsVm | null>(null);
   readonly busy = input(false);
   readonly actionError = input<string | null>(null);
+  readonly imageError = input<string | null>(null);
   readonly mobile = input(false);
-  readonly record = input<UrgencyView | undefined>();
-  readonly editInitial = input<ConfigFormValues | null>(null);
+  readonly record = input<Urgency | undefined>();
+  readonly editForm = input.required<FieldTree<UrgencyDraft>>();
+  readonly editBaseline = input<UrgencyDraft | null>(null);
   readonly editOpen = input(false);
-  readonly editError = input<string | null>(null);
-  readonly editPending = input(false);
   readonly retireSnapshot = input<{ key: string; revision: number; openChunks: number } | null>(null);
   readonly destination = input('');
   readonly destinationOptions = input.required<readonly { value: string; label: string }[]>();
   readonly edit = output<void>();
   readonly lifecycle = output<'retire' | 'enable'>();
-  readonly save = output<ConfigFormValues>();
+  readonly save = output<void>();
   readonly closeEdit = output<void>();
   readonly closeRetire = output<void>();
   readonly retire = output<void>();
