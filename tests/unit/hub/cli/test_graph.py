@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import httpx2
 import pytest
@@ -17,7 +16,7 @@ from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.graph import GraphDetail
-from blizzard.wire.graph import GRAPH_DEFINITION_INVALID
+from blizzard.wire.graph import GRAPH_DEFINITION_INVALID, GraphView
 from tests.support.worker_http import bind_stubs
 
 
@@ -39,6 +38,39 @@ class _FakeResponse:
             )
 
 
+def _summary(**fields: object) -> dict[str, object]:
+    """A ``GET /graphs`` row valid for ``GraphSummaryView``, ``fields`` overriding the defaults."""
+    return {
+        "graph_id": "gr_1",
+        "name": "alpha",
+        "entry_node_id": "nd_1",
+        "created_at": "t0",
+        "effective": True,
+    } | fields
+
+
+def _node(**fields: object) -> dict[str, object]:
+    """A node valid for ``GraphNodeView``."""
+    return {
+        "node_id": "nd_1",
+        "name": "build",
+        "executor": "runner",
+        "session": "fresh",
+        "judged_by": "worker",
+    } | fields
+
+
+def _graph(**fields: object) -> dict[str, object]:
+    """A graph answer valid for ``GraphView``, ``fields`` overriding the defaults."""
+    return {
+        "graph_id": "gr_1",
+        "name": "alpha",
+        "entry_node_id": "nd_1",
+        "enabled": True,
+        "definition_yaml": "name: alpha\n",
+    } | fields
+
+
 def _answer_with(body: object) -> Callable[..., _FakeResponse]:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, body)
@@ -54,8 +86,8 @@ def test_graph_list_prints_each_row() -> None:
         return _FakeResponse(
             200,
             [
-                {"graph_id": "gr_new", "name": "alpha", "effective": True, "retired": False, "created_at": "t1"},
-                {"graph_id": "gr_old", "name": "alpha", "effective": False, "retired": True, "created_at": "t0"},
+                _summary(graph_id="gr_new", effective=True, retired=False, created_at="t1"),
+                _summary(graph_id="gr_old", effective=False, retired=True, created_at="t0"),
             ],
         )
 
@@ -86,7 +118,7 @@ def test_graph_retire_posts_to_the_retire_endpoint() -> None:
 
     def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(202, {"graph_id": "gr_1", "retired": True})
+        return _FakeResponse(202, _graph(retired=True))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "retire", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
@@ -102,7 +134,7 @@ def test_graph_follow_latest_patches_the_graph(value: str, sent: object) -> None
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(200, {"graph_id": "gr_1", "follow_latest": sent})
+        return _FakeResponse(200, _graph(follow_latest=sent))
 
     bound = bind_stubs(patch=fake_patch)
     result = bound.runner.invoke(
@@ -118,7 +150,7 @@ def test_graph_enable_posts_to_the_enable_endpoint() -> None:
 
     def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(202, {"graph_id": "gr_1", "retired": False})
+        return _FakeResponse(202, _graph(retired=False))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "enable", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
@@ -143,16 +175,12 @@ def test_graph_show_prints_the_reified_graph() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
-            {
-                "graph_id": "gr_1",
-                "name": "alpha",
-                "entry_node_id": "nd_1",
-                "enabled": True,
-                "retired": False,
-                "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
-                "edges": [{"from_node_id": "nd_1", "choice_id": "pass", "to_node_name": "done"}],
-                "warnings": [],
-            },
+            _graph(
+                retired=False,
+                nodes=[_node()],
+                edges=[{"from_node_id": "nd_1", "choice_id": "pass", "to_node_name": "done"}],
+                warnings=[],
+            ),
         )
 
     bound = bind_stubs(get=fake_get)
@@ -165,11 +193,7 @@ def test_graph_show_prints_the_reified_graph() -> None:
 
 
 def test_graph_show_renders_session_pools() -> None:
-    body = {
-        "graph_id": "gr_1",
-        "name": "alpha",
-        "entry_node_id": "nd_1",
-        "retired": False,
+    body = _graph(retired=False) | {
         "sessions": [
             {
                 "name": "code",
@@ -179,7 +203,7 @@ def test_graph_show_renders_session_pools() -> None:
                 "compaction_window": "150000",
             }
         ],
-        "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+        "nodes": [_node()],
         "edges": [],
     }
 
@@ -193,11 +217,7 @@ def test_graph_show_renders_session_pools() -> None:
 
 
 def test_graph_show_renders_a_sessions_harnesses_set() -> None:
-    body = {
-        "graph_id": "gr_1",
-        "name": "alpha",
-        "entry_node_id": "nd_1",
-        "retired": False,
+    body = _graph(retired=False) | {
         "sessions": [
             {
                 "name": "code",
@@ -208,7 +228,7 @@ def test_graph_show_renders_a_sessions_harnesses_set() -> None:
                 "harnesses": ["claude_code", "codex"],
             }
         ],
-        "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+        "nodes": [_node()],
         "edges": [],
     }
 
@@ -223,12 +243,8 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json() -> None:
     """The read-back for what a mint actually baked, and its one working form: the human
     rendering is nodes and edges, so a graph's `artifacts:` names — and the authored order
     a reorder-only edit silently leaves alone — reach an operator only through ``--json``."""
-    body = {
-        "graph_id": "gr_1",
-        "name": "alpha",
-        "entry_node_id": "nd_1",
-        "retired": False,
-        "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+    body = _graph(retired=False) | {
+        "nodes": [_node()],
         "edges": [],
         "artifacts": ["zebra", "apple"],
     }
@@ -294,7 +310,7 @@ def test_graph_mint_posts_the_prompt_inlined(tmp_path: Path) -> None:
 
     def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+        return _FakeResponse(201, _graph(graph_id="gr_new", warnings=[]))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -314,7 +330,7 @@ def test_graph_mint_prints_the_minted_graph_id(tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+        return _FakeResponse(201, _graph(graph_id="gr_new", warnings=[]))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "mint", str(graph_path)])
@@ -327,7 +343,7 @@ def test_graph_mint_surfaces_mint_warnings(tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": ["node build has no incoming edges"]})
+        return _FakeResponse(201, _graph(graph_id="gr_new", warnings=["node build has no incoming edges"]))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "mint", str(graph_path)])
@@ -400,7 +416,7 @@ def test_graph_mint_reads_the_definition_from_stdin() -> None:
 
     def fake_post(url: str, *, json: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+        return _FakeResponse(201, _graph(graph_id="gr_new", warnings=[]))
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -520,7 +536,7 @@ def test_graph_mint_renders_a_decode_error_naming_the_key_and_line(tmp_path: Pat
 
 def _session_line(session: dict[str, object]) -> str:
     """The pinning summary ``GraphDetail`` renders after a session's name."""
-    body: dict[str, Any] = {"graph_id": "gr_1", "name": "alpha", "sessions": [{"name": "code", **session}]}
+    body = GraphView.model_validate(_graph(sessions=[{"name": "code", **session}]))
     return list(GraphDetail(body).lines())[1].removeprefix("  session code  ")
 
 

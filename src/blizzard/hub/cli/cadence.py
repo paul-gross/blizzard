@@ -5,11 +5,12 @@ cadence, rewrites its whole chore list, and writes it back on the revision it re
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
@@ -20,7 +21,13 @@ from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.flag_gate import hub_flag_on
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.cadence import REVISION_CONFLICT
+from blizzard.wire.cadence import REVISION_CONFLICT, CadenceErrandView, CadenceView
+from blizzard.wire.project import ProjectsListView
+
+_PROJECTS = TypeAdapter(ProjectsListView)
+_CADENCE = TypeAdapter(CadenceView)
+_CADENCES = TypeAdapter(list[CadenceView])
+_ERRANDS = TypeAdapter(list[CadenceErrandView])
 
 _FLAG_OFF_NOTICE = "note: cadences mint nothing until the flag cadences is on"
 _ANCHORS = click.Choice(["scheduled", "started", "finished"])
@@ -28,12 +35,12 @@ _STATES = ("due", "running", "waiting", "stopped")
 _MODES = click.Choice([mode.value for mode in RunMode])
 
 
-def _rhythm(row: dict[str, Any]) -> str:
+def _rhythm(row: CadenceView) -> str:
     parts: list[str] = []
-    if row.get("schedule"):
-        parts.append(f"cron={row['schedule']['cron']!r} zone={row['schedule']['zone']}")
-    if row.get("spacing_minutes") is not None:
-        parts.append(f"spacing={row['spacing_minutes']}m anchor={row['anchor']}")
+    if row.schedule:
+        parts.append(f"cron={row.schedule.cron!r} zone={row.schedule.zone}")
+    if row.spacing_minutes is not None:
+        parts.append(f"spacing={row.spacing_minutes}m anchor={row.anchor}")
     return "  ".join(parts) or "no rhythm"
 
 
@@ -41,15 +48,16 @@ class CadenceListing(Listing):
     empty = "no cadences yet"
 
     def line(self, row: Any) -> str:
-        marker = "  retired" if row.get("retired") else ""
-        attention = f"  attention={len(row['attention'])}" if row.get("attention") else ""
+        cadence: CadenceView = row
+        marker = "  retired" if cadence.retired else ""
+        attention = f"  attention={len(cadence.attention)}" if cadence.attention else ""
         return (
-            f"{row['cadence_id']}  slug={row['slug']}  name={row['name']}  {_rhythm(row)}  "
-            f"chores={len(row.get('chores') or [])}{attention}{marker}"
+            f"{cadence.cadence_id}  slug={cadence.slug}  name={cadence.name}  {_rhythm(cadence)}  "
+            f"chores={len(cadence.chores)}{attention}{marker}"
         )
 
 
-def _scopes_text(scopes: Any) -> str:
+def _scopes_text(scopes: str | list[str] | None) -> str:
     if scopes is None:
         return "default scope"
     if scopes == "all":
@@ -60,51 +68,47 @@ def _scopes_text(scopes: Any) -> str:
 @dto
 @dataclass(frozen=True)
 class CadenceDetail:
-    body: dict[str, Any]
+    body: CadenceView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        marker = "  retired" if body.get("retired") else ""
-        yield f"{body['cadence_id']}  slug={body['slug']}  name={body['name']}  revision={body['revision']}{marker}"
+        marker = "  retired" if body.retired else ""
+        yield f"{body.cadence_id}  slug={body.slug}  name={body.name}  revision={body.revision}{marker}"
         yield f"  rhythm: {_rhythm(body)}"
-        chores: Sequence[dict[str, Any]] = body.get("chores") or []
-        if not chores:
+        if not body.chores:
             yield "  chores: none"
-        for chore in chores:
-            held = "" if chore["promote"] else "  held"
-            note = f"  note={chore['note']!r}" if chore.get("note") else ""
-            urgency = f"  urgency={chore['urgency']}" if chore.get("urgency") else ""
+        for chore in body.chores:
+            held = "" if chore.promote else "  held"
+            note = f"  note={chore.note!r}" if chore.note else ""
+            urgency = f"  urgency={chore.urgency}" if chore.urgency else ""
             yield (
-                f"  chore {chore['key']}  {chore['chore_id']}  routine={chore['routine']}  "
-                f"{_scopes_text(chore.get('scopes'))}  mode={chore['mode']}{held}{urgency}{note}"
+                f"  chore {chore.key}  {chore.chore_id}  routine={chore.routine}  "
+                f"{_scopes_text(chore.scopes)}  mode={chore.mode}{held}{urgency}{note}"
             )
-        counts: dict[str, int] = body.get("errand_counts") or {}
-        yield "  errands: " + "  ".join(f"{state}={counts.get(state, 0)}" for state in _STATES)
-        attention: Sequence[dict[str, Any]] = body.get("attention") or []
-        if not attention:
+        counts = body.errand_counts
+        yield "  errands: " + "  ".join(f"{state}={getattr(counts, state)}" for state in _STATES)
+        if not body.attention:
             yield "  attention: none"
-        for entry in attention:
-            where = "".join(f"  {label}={entry[label]}" for label in ("chore", "scope") if entry.get(label) is not None)
-            yield f"  attention: {entry['reason']}{where}"
+        for entry in body.attention:
+            labelled = (("chore", entry.chore), ("scope", entry.scope))
+            where = "".join(f"  {label}={value}" for label, value in labelled if value is not None)
+            yield f"  attention: {entry.reason}{where}"
 
 
 class ErrandListing(Listing):
     empty = "no errands"
 
     def line(self, row: Any) -> str:
-        run = row.get("last_run")
+        errand: CadenceErrandView = row
+        run = errand.last_run
         last = "last run: none"
         if run is not None:
-            last = (
-                f"last run: {run.get('chunk_id') or 'unresolved'} {run.get('status') or 'unknown'} "
-                f"scheduled={run['scheduled_at']}"
-            )
-            if run.get("finished_at"):
-                last += f" finished={run['finished_at']}"
-        due = row.get("due_at") or "-"
-        attention: list[dict[str, Any]] = row.get("attention") or []
-        stopped = "".join(f"  {a['reason']}" for a in attention)
-        return f"{row['chore']}  scope={row['scope']}  {row['state']}  due_at={due}  {last}{stopped}"
+            last = f"last run: {run.chunk_id or 'unresolved'} {run.status or 'unknown'} scheduled={run.scheduled_at}"
+            if run.finished_at:
+                last += f" finished={run.finished_at}"
+        due = errand.due_at or "-"
+        stopped = "".join(f"  {a.reason}" for a in errand.attention)
+        return f"{errand.chore}  scope={errand.scope}  {errand.state}  due_at={due}  {last}{stopped}"
 
 
 def _flag_notice() -> None:
@@ -130,10 +134,11 @@ def _project(cli: CliContext, project: str | None) -> str:
     """``project`` as named, else the tenant's only project; refused naming the projects when it holds several."""
     if project is not None:
         return project
-    projects = cli.get("/api/projects", "GET /projects").json()["projects"]
+    _, listing = cli.decode(cli.get("/api/projects", "GET /projects"), _PROJECTS, "GET /projects")
+    projects = listing.projects
     if len(projects) != 1:
-        raise project_required([{k: str(p[k]) for k in ("project_id", "slug", "name")} for p in projects])
-    return str(projects[0]["project_id"])
+        raise project_required([{"project_id": p.project_id, "slug": p.slug, "name": p.name} for p in projects])
+    return projects[0].project_id
 
 
 @cadence_group.command("create", cls=FleetCommand)
@@ -171,8 +176,8 @@ def cadence_create(
         door=True,
     )
     cli.check(resp, "POST /cadences")
-    created = resp.json()
-    cli.show_lines(created, f"created cadence {created['slug']!r} {created['cadence_id']}")
+    raw, created = cli.decode(resp, _CADENCE, "POST /cadences")
+    cli.show_lines(raw, f"created cadence {created.slug!r} {created.cadence_id}")
 
 
 @cadence_group.command("list", cls=FleetCommand)
@@ -183,20 +188,21 @@ def cadence_list(cli: CliContext, include_retired: bool, project: str | None) ->
 
     Excludes a retired cadence unless --include-retired."""
     params = {"include_retired": "true"} if include_retired else {}
-    rows = cli.get("/api/cadences", "GET /cadences", params=(params | project_query(project)) or None).json()
+    resp = cli.get("/api/cadences", "GET /cadences", params=(params | project_query(project)) or None)
+    raw, rows = cli.decode(resp, _CADENCES, "GET /cadences")
     _flag_notice()
-    cli.show(rows, CadenceListing(rows))
+    cli.show(raw, CadenceListing(rows))
 
 
-def _resolve_cadence(cli: CliContext, slug: str, project: str | None) -> dict[str, Any]:
-    """The cadence SLUG within ``project``, a retired one included. With no project named, SLUG resolves only in a
-    tenant holding one project: a slug is unique within its project alone."""
+def _resolve_cadence(cli: CliContext, slug: str, project: str | None) -> tuple[Any, CadenceView]:
+    """The cadence SLUG within ``project``, a retired one included, as sent beside its decoded form. With no project
+    named, SLUG resolves only in a tenant holding one project: a slug is unique within its project alone."""
     params = {"include_retired": "true"} | project_query(_project(cli, project))
-    rows = cli.get("/api/cadences", "GET /cadences", params=params).json()
-    matched = next((r for r in rows if r["slug"] == slug), None)
+    raw, rows = cli.decode(cli.get("/api/cadences", "GET /cadences", params=params), _CADENCES, "GET /cadences")
+    matched = next(((sent, row) for sent, row in zip(raw, rows, strict=True) if row.slug == slug), None)
     if matched is None:
         raise click.ClickException(f"unknown cadence {slug!r}")
-    return dict(matched)
+    return matched
 
 
 @cadence_group.command("get", cls=FleetCommand)
@@ -204,9 +210,9 @@ def _resolve_cadence(cli: CliContext, slug: str, project: str | None) -> dict[st
 @project_option(required_by_hub=True)
 def cadence_show(cli: CliContext, slug: str, project: str | None) -> None:
     """One cadence's whole record — its rhythm, its chores with their ids, and its attention."""
-    body = _resolve_cadence(cli, slug, project)
+    raw, body = _resolve_cadence(cli, slug, project)
     _flag_notice()
-    cli.show(body, CadenceDetail(body))
+    cli.show(raw, CadenceDetail(body))
 
 
 @cadence_group.command("errands", cls=FleetCommand)
@@ -216,29 +222,28 @@ def cadence_errands(cli: CliContext, slug: str, project: str | None) -> None:
     """Cadence SLUG's errands — each chore over each scope — with its state, its last run, and when it is next due.
 
     A due errand mints on the next pass; due_at is empty while an errand is running or stopped."""
-    cadence = _resolve_cadence(cli, slug, project)
-    rows = cli.get(
-        f"/api/cadences/{cadence['cadence_id']}/errands",
-        "GET /cadences/{id}/errands",
-    ).json()
+    _, cadence = _resolve_cadence(cli, slug, project)
+    resp = cli.get(f"/api/cadences/{cadence.cadence_id}/errands", "GET /cadences/{id}/errands")
+    raw, rows = cli.decode(resp, _ERRANDS, "GET /cadences/{id}/errands")
     _flag_notice()
-    cli.show(rows, ErrandListing(rows))
+    cli.show(raw, ErrandListing(rows))
 
 
-def _patch(cli: CliContext, cadence: dict[str, Any], body: dict[str, Any], *, done: str) -> None:
+def _patch(cli: CliContext, cadence: CadenceView, body: dict[str, Any], *, done: str) -> None:
     """PATCH ``body`` onto ``cadence`` on the revision it was read at."""
     resp = cli.send(
         "patch",
-        f"/api/cadences/{cadence['cadence_id']}",
+        f"/api/cadences/{cadence.cadence_id}",
         json_body=body,
-        if_match=int(cadence["revision"]),
+        if_match=cadence.revision,
         door=True,
     )
     refusal = refusal_of(resp)
     if refusal.type == REVISION_CONFLICT:
         raise click.ClickException(f"cadence edit refused: {refusal.message or 'conflict'}")
     cli.check(resp, "PATCH /cadences/{id}")
-    cli.show_lines(resp.json(), done)
+    raw, _ = cli.decode(resp, _CADENCE, "PATCH /cadences/{id}")
+    cli.show_lines(raw, done)
 
 
 @cadence_group.command("edit", cls=FleetCommand)
@@ -269,13 +274,13 @@ def cadence_edit(
         raise click.UsageError("--no-schedule contradicts --cron and --zone")
     if no_spacing and (spacing is not None or anchor is not None):
         raise click.UsageError("--no-spacing contradicts --spacing and --anchor")
-    cadence = _resolve_cadence(cli, slug, project)
+    _, cadence = _resolve_cadence(cli, slug, project)
     body: dict[str, Any] = {
         k: v for k, v in {"name": display_name, "spacing": spacing, "anchor": anchor}.items() if v is not None
     }
     if cron is not None or zone is not None:
-        stored: dict[str, str] = cadence.get("schedule") or {}
-        body["schedule"] = _schedule(cron or stored.get("cron"), zone or stored.get("zone"))
+        stored_cron, stored_zone = (cadence.schedule.cron, cadence.schedule.zone) if cadence.schedule else (None, None)
+        body["schedule"] = _schedule(cron or stored_cron, zone or stored_zone)
     if no_schedule:
         body["schedule"] = None
     if no_spacing:
@@ -304,16 +309,16 @@ def cadence_enable(cli: CliContext, slug: str, by: str, project: str | None) -> 
 
 
 def _set_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: str | None) -> None:
-    cadence = _resolve_cadence(cli, slug, project)
+    _, cadence = _resolve_cadence(cli, slug, project)
     resp = cli.post(
-        f"/api/cadences/{cadence['cadence_id']}/{verb}",
+        f"/api/cadences/{cadence.cadence_id}/{verb}",
         f"POST /cadences/{{id}}/{verb}",
         json_body={"by": by},
         door=True,
     )
-    body = resp.json()
-    state = "retired" if body.get("retired") else "enabled"
-    cli.show_lines(body, f"cadence {slug!r} is now {state}")
+    raw, body = cli.decode(resp, _CADENCE, f"POST /cadences/{{id}}/{verb}")
+    state = "retired" if body.retired else "enabled"
+    cli.show_lines(raw, f"cadence {slug!r} is now {state}")
 
 
 @cadence_group.group("chore")
@@ -326,24 +331,20 @@ _CHORE_URGENCY_HELP = (
 )
 
 
-def _documents(cadence: dict[str, Any]) -> list[dict[str, Any]]:
+def _documents(cadence: CadenceView) -> list[dict[str, Any]]:
     """The cadence's chores as the edit request writes them back."""
     return [
         {
-            "key": chore["key"],
-            "routine": chore["routine"],
-            "scopes": chore.get("scopes"),
-            "mode": chore["mode"],
-            "note": chore.get("note"),
-            "promote": chore["promote"],
-            "urgency": chore.get("urgency"),
+            "key": chore.key,
+            "routine": chore.routine,
+            "scopes": chore.scopes,
+            "mode": str(chore.mode),
+            "note": chore.note,
+            "promote": chore.promote,
+            "urgency": chore.urgency,
         }
-        for chore in _chores(cadence)
+        for chore in cadence.chores
     ]
-
-
-def _chores(cadence: dict[str, Any]) -> list[dict[str, Any]]:
-    return cadence.get("chores") or []
 
 
 def _scope_selection(all_scopes: bool, scopes: tuple[str, ...], default_scope: bool) -> tuple[bool, Any]:
@@ -384,7 +385,7 @@ def chore_add(
 ) -> None:
     """Add chore KEY to cadence SLUG, running --routine over its default scope unless --scope or --all-scopes."""
     _, selection = _scope_selection(all_scopes, scopes, False)
-    cadence = _resolve_cadence(cli, slug, project)
+    _, cadence = _resolve_cadence(cli, slug, project)
     chores = _documents(cadence)
     chore: dict[str, Any] = {"key": key, "routine": routine, "scopes": selection, "promote": not hold}
     chore |= {k: v for k, v in {"mode": mode, "note": note, "urgency": urgency}.items() if v is not None}
@@ -423,7 +424,7 @@ def chore_edit(
 ) -> None:
     """Change chore KEY of cadence SLUG; only the options given change, and the chore keeps its id."""
     selected, selection = _scope_selection(all_scopes, scopes, default_scope)
-    cadence = _resolve_cadence(cli, slug, project)
+    _, cadence = _resolve_cadence(cli, slug, project)
     chores = _documents(cadence)
     chore = next((c for c in chores if c["key"] == key), None)
     if chore is None:
@@ -451,7 +452,7 @@ def chore_edit(
 @project_option(required_by_hub=True)
 def chore_remove(cli: CliContext, slug: str, key: str, project: str | None) -> None:
     """Remove chore KEY from cadence SLUG; adding the key back later mints a new chore."""
-    cadence = _resolve_cadence(cli, slug, project)
+    _, cadence = _resolve_cadence(cli, slug, project)
     chores = _documents(cadence)
     kept = [c for c in chores if c["key"] != key]
     if len(kept) == len(chores):

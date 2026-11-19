@@ -194,6 +194,7 @@ def test_finding_show_renders_the_detail() -> None:
                 "note": None,
                 "last_seen_at": "t0",
                 "observed_count": 2,
+                "facts": [],
             },
         )
 
@@ -228,6 +229,7 @@ def test_finding_show_renders_a_review_sourced_finding() -> None:
                 "source": "review",
                 "severity": "should-fix",
                 "raised_by_chunk_id": "ch_1",
+                "facts": [],
             },
         )
 

@@ -5,48 +5,53 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.finding import FindingDetailView, FindingsPageView, FindingView
+
+_PAGE = TypeAdapter(FindingsPageView)
+_DETAIL = TypeAdapter(FindingDetailView)
+_EXITED = TypeAdapter(list[FindingView])
 
 
 class FindingListing(Listing):
     empty = "no findings"
 
-    def line(self, row: Any) -> str:
-        marker = row["state"]
-        suffix = f"  ({row['note']})" if row.get("note") else ""
-        return f"{row['finding_id']}  {marker}  class={row['class']}  {row['locus']}{suffix}"
+    def line(self, row: FindingView) -> str:
+        suffix = f"  ({row.note})" if row.note else ""
+        return f"{row.finding_id}  {row.state}  class={row.class_}  {row.locus}{suffix}"
 
 
 @dto
 @dataclass(frozen=True)
 class FindingDetail:
-    body: dict[str, Any]
+    body: FindingDetailView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        if body.get("source") == "review":
+        if body.source == "review":
             yield (
-                f"{body['finding_id']}  {body['state']}  source=review  severity={body['severity']}  "
-                f"raised_by={body['raised_by_chunk_id']}  scope={body['scope_slug']}"
+                f"{body.finding_id}  {body.state}  source=review  severity={body.severity}  "
+                f"raised_by={body.raised_by_chunk_id}  scope={body.scope_slug}"
             )
         else:
-            yield f"{body['finding_id']}  {body['state']}  routine={body['routine_name']}  scope={body['scope_slug']}"
-        yield f"  class={body['class']}  locus={body['locus']}"
-        yield f"  {body['summary']}"
-        if body.get("introduced"):
-            yield f"  introduced: {body['introduced']}"
-        yield f"  last_seen_at={body.get('last_seen_at') or '-'}  observed_count={body['observed_count']}"
-        if body.get("note"):
-            yield f"  note: {body['note']}"
+            yield f"{body.finding_id}  {body.state}  routine={body.routine_name}  scope={body.scope_slug}"
+        yield f"  class={body.class_}  locus={body.locus}"
+        yield f"  {body.summary}"
+        if body.introduced:
+            yield f"  introduced: {body.introduced}"
+        yield f"  last_seen_at={body.last_seen_at or '-'}  observed_count={body.observed_count}"
+        if body.note:
+            yield f"  note: {body.note}"
 
 
 @click.group("finding", cls=GetGroup)
@@ -81,8 +86,10 @@ def finding_list(
         params["routine"] = routine
     if source is not None:
         params["source"] = source
-    rows = cli.get_all("/api/findings", "GET /findings", key="findings", params=params | project_query(project))
-    cli.show(rows, FindingListing(rows))
+    raw, pages = read_pages(
+        cli, "/api/findings", "GET /findings", page=_PAGE, key="findings", params=params | project_query(project)
+    )
+    cli.show(raw, FindingListing([row for page in pages for row in page.findings]))
 
 
 @finding_group.command("get", cls=FleetCommand)
@@ -90,19 +97,20 @@ def finding_list(
 def finding_show(cli: CliContext, finding_id: str) -> None:
     """One finding's whole record."""
     resp = cli.get(f"/api/findings/{finding_id}", "GET /findings/{id}")
-    body = resp.json()
-    cli.show(body, FindingDetail(body))
+    raw, body = cli.decode(resp, _DETAIL, "GET /findings/{id}")
+    cli.show(raw, FindingDetail(body))
 
 
 def _post_exit(
     cli: CliContext, *, path: str, wire_name: str, finding_ids: tuple[str, ...], note: str, verb: str, **extra: str
 ) -> None:
-    rows = cli.post(
+    resp = cli.post(
         f"/api/findings/{path}",
         wire_name,
         json_body={"finding_ids": list(finding_ids), "note": note, **extra},
-    ).json()
-    cli.show(rows, FindingListing(rows))
+    )
+    raw, rows = cli.decode(resp, _EXITED, wire_name)
+    cli.show(raw, FindingListing(rows))
 
 
 @finding_group.command("resolve", cls=FleetCommand)

@@ -105,7 +105,14 @@ def test_flow_show_record_pages_on_next_before_until_the_limit_is_read() -> None
 
 
 def _fact(fact_id: int) -> dict[str, object]:
-    return {"id": fact_id, "flow_id": "flw_1", "submission_id": "sub_1", "chunk_id": "ch_1", "kind": "landed"}
+    return {
+        "id": fact_id,
+        "flow_id": "flw_1",
+        "submission_id": "sub_1",
+        "chunk_id": "ch_1",
+        "kind": "landed",
+        "at": "2026-01-01T00:00:00+00:00",
+    }
 
 
 def test_flow_show_record_prints_one_line_per_entry_newest_first(line: Line) -> None:

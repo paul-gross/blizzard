@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, TypedDict, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
@@ -16,123 +16,135 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
+from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label, urgency_label
+from blizzard.hub.cli.views import ChunkLine, Cost, Listing, pointer_label, urgency_label
 from blizzard.wire.chunk import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
     DEPENDENT_NOT_EDITABLE,
     NO_STANDING_DEPENDENCY,
     POINTER_ALREADY_HELD,
     PREREQUISITE_EPHEMERAL,
+    ChunkDeleteResponse,
+    ChunkDependencyEdgeView,
+    ChunkDetail,
+    ChunkEscalationView,
+    ChunkIngestResponse,
+    ChunkNeighborView,
+    ChunkPatchResponse,
+    ChunkRepositoryTargetView,
+    ChunksPageView,
+    ChunkSummary,
+    WorkItemEntry,
+    WorkItemsView,
 )
+from blizzard.wire.queue import ChunkGroupResponse
+from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TranscriptSegmentIndexView
 
-
-class Neighbor(TypedDict):
-    chunk_id: str
-    satisfied: bool
-
-
-class Neighborhood(TypedDict, total=False):
-    prerequisites: list[Neighbor]
-    dependents: list[Neighbor]
+_CHUNKS = TypeAdapter(ChunksPageView)
+_DETAIL = TypeAdapter(ChunkDetail)
+_INGESTED = TypeAdapter(ChunkIngestResponse)
+_PATCHED = TypeAdapter(ChunkPatchResponse)
+_SUMMARY = TypeAdapter(ChunkSummary)
+_EDGE = TypeAdapter(ChunkDependencyEdgeView)
+_GROUPED = TypeAdapter(ChunkGroupResponse)
+_DELETED = TypeAdapter(ChunkDeleteResponse)
+_WORK_ITEMS = TypeAdapter(WorkItemsView)
+_SEGMENTS = TypeAdapter(TranscriptSegmentIndexView)
+_SEGMENT = TypeAdapter(TranscriptSegmentContentView)
 
 
 class ChunkListing(Listing):
     empty = "no chunks"
 
-    def line(self, row: Any) -> str:
+    def line(self, row: ChunkSummary) -> str:
         return ChunkLine(row, show_urgency=True).line()
 
 
 @dto
 @dataclass(frozen=True)
-class ChunkDetail:
-    body: dict[str, Any]
+class ChunkDetailLines:
+    body: ChunkDetail
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        graph = body.get("graph_name") or body["graph_id"]
-        urgency = urgency_label(body.get("urgency"))
-        yield f"{body['chunk_id']}  status={body['status']}  urgency={urgency}  graph={graph}"
-        for place in cast(list[dict[str, Any]], body.get("flow_places") or []):
-            yield f"  on {flow_label(place)} ({place['flow_id']}): {place_label(place)}"
-        yield f"  node: {ChunkLine(cast(ChunkRow, body)).node}"
+        graph = body.graph_name or body.graph_id
+        urgency = urgency_label(body.urgency)
+        yield f"{body.chunk_id}  status={body.status}  urgency={urgency}  graph={graph}"
+        for place in body.flow_places:
+            yield f"  on {flow_label(place)} ({place.flow_id}): {place_label(place)}"
+        yield f"  node: {ChunkLine(body).node}"
         # Both defaults on their own line: `chunk set` can write either, so a text-mode
         # read-back exists for both. `-` is "express no preference", not unknown.
-        models = ", ".join(body.get("default_model") or []) or "-"
-        yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
-        harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
+        models = ", ".join(body.default_model) or "-"
+        yield f"  default model: {models}   default effort: {body.default_effort or '-'}"
+        harnesses = ", ".join(body.default_harnesses) or "-"
         yield f"  default harnesses: {harnesses}"
-        pointers = cast(list[dict[str, object]], body.get("work_refs") or [])
-        if pointers:
-            labels = ", ".join(pointer_label(p) for p in pointers)
+        if body.work_refs:
+            labels = ", ".join(pointer_label(p) for p in body.work_refs)
             yield f"  pointers: {labels}"
-        route = body.get("route")
+        route = body.route
         # A done or stopped chunk can still carry a route; no runner holds it.
-        if route and body["status"] not in TERMINAL_STATUSES:
-            yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
-        for target in cast(list[dict[str, Any]], body.get("repository_targets") or []):
+        if route and body.status not in TERMINAL_STATUSES:
+            yield f"  runner: {route.runner_id}  environments: {len(route.environment_ids)}"
+        for target in body.repository_targets:
             yield f"  {_target_line(target)}"
-        blocked = body.get("blocked")
-        if blocked:
-            yield f"  blocked: waiting on {blocked['prerequisite_chunk_id']}"
-        neighborhood = cast(Neighborhood, body.get("neighborhood") or {})
-        prerequisites = neighborhood.get("prerequisites") or []
-        dependents = neighborhood.get("dependents") or []
+        if body.blocked:
+            yield f"  blocked: waiting on {body.blocked.prerequisite_chunk_id}"
+        prerequisites = body.neighborhood.prerequisites
+        dependents = body.neighborhood.dependents
         if prerequisites:
             yield f"  prerequisites: {', '.join(_neighbor_label(n) for n in prerequisites)}"
         if dependents:
             yield f"  dependents: {', '.join(_neighbor_label(n) for n in dependents)}"
-        yield f"  cost: {Cost.of(body.get('cost')).rendered}"
-        escalation = body.get("escalation")
-        if escalation:
-            yield from _escalation_lines(escalation)
+        yield f"  cost: {Cost.of(body.cost).rendered}"
+        if body.escalation:
+            yield from _escalation_lines(body.escalation)
 
 
-def _target_line(target: dict[str, Any]) -> str:
+def _target_line(target: ChunkRepositoryTargetView) -> str:
     """One repository's branch for the chunk: whether it is inherited or overridden, and captured or a preview."""
-    origin = "inherited" if target.get("inherited") else "override"
-    captured = target.get("captured_at")
-    held = f"captured {captured}" if captured else "preview"
-    return f"repository {target['repository_slug']}: {target['base_branch']} ({origin}, {held})"
+    origin = "inherited" if target.inherited else "override"
+    held = f"captured {target.captured_at}" if target.captured_at else "preview"
+    return f"repository {target.repository_slug}: {target.base_branch} ({origin}, {held})"
 
 
-def _escalation_lines(escalation: dict[str, Any]) -> Iterator[str]:
+def _escalation_lines(escalation: ChunkEscalationView) -> Iterator[str]:
     """The open escalation's block: its cause and detail, then the takeover command to paste,
     preferring the wrapped form."""
-    yield f"  escalated: {escalation.get('cause') or 'unknown cause'}"
-    if escalation.get("detail"):
-        yield f"    detail: {escalation['detail']}"
-    if escalation.get("wrapped_takeover_command"):
-        yield f"    takeover: {escalation['wrapped_takeover_command']}"
-    elif escalation.get("takeover_command"):
-        yield f"    takeover: {escalation['takeover_command']}"
+    yield f"  escalated: {escalation.cause or 'unknown cause'}"
+    if escalation.detail:
+        yield f"    detail: {escalation.detail}"
+    if escalation.wrapped_takeover_command:
+        yield f"    takeover: {escalation.wrapped_takeover_command}"
+    elif escalation.takeover_command:
+        yield f"    takeover: {escalation.takeover_command}"
 
 
-def _neighbor_label(neighbor: Neighbor) -> str:
-    marker = "satisfied" if neighbor.get("satisfied") else "unsatisfied"
-    return f"{neighbor['chunk_id']} ({marker})"
+def _neighbor_label(neighbor: ChunkNeighborView) -> str:
+    marker = "satisfied" if neighbor.satisfied else "unsatisfied"
+    return f"{neighbor.chunk_id} ({marker})"
 
 
 @dto
 @dataclass(frozen=True)
 class MigrationIntent:
     chunk_id: str
-    body: dict[str, Any]
+    body: ChunkPatchResponse
     cancelled: bool
 
     def lines(self) -> Iterator[str]:
         if self.cancelled:
             yield f"cleared {self.chunk_id}'s standing migration intent"
             return
-        intent = self.body.get("intended_migration")
+        intent = self.body.intended_migration
         if intent is None:
             # Shouldn't happen for a successful set, but degrade legibly rather than raise.
             yield f"{self.chunk_id}: migration intent not set"
             return
-        target = intent.get("graph_name") or intent.get("graph_id")
-        if intent.get("mode") == "forced":
-            yield f"{self.chunk_id} will migrate to {target} node {intent.get('node_name')} at its next transition"
+        target = intent.graph_name or intent.graph_id
+        if intent.mode == "forced":
+            yield f"{self.chunk_id} will migrate to {target} node {intent.node_name} at its next transition"
         else:
             yield f"{self.chunk_id} will auto-migrate to {target} at its next transition (name-matched node)"
 
@@ -140,11 +152,11 @@ class MigrationIntent:
 class WorkItemListing(Listing):
     empty = "no work items"
 
-    def line(self, row: Any) -> str:
+    def line(self, row: WorkItemEntry) -> str:
         label = pointer_label(row)
-        if row.get("error"):
-            return f"{label}: error — {row['error']}"
-        return f"{label}: {row.get('title') or '(no title)'}"
+        if row.error:
+            return f"{label}: error — {row.error}"
+        return f"{label}: {row.title or '(no title)'}"
 
 
 @click.group("chunk", cls=GetGroup)
@@ -156,8 +168,10 @@ def chunk_group() -> None:
 @project_option(required_by_hub=False)
 def chunk_list(cli: CliContext, project: str | None) -> None:
     """List chunks with each one's status."""
-    rows = cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=project_query(project))
-    cli.show(rows, ChunkListing(rows))
+    raw, pages = read_pages(
+        cli, "/api/chunks", "GET /chunks", page=_CHUNKS, key="chunks", params=project_query(project)
+    )
+    cli.show(raw, ChunkListing([row for page in pages for row in page.chunks]))
 
 
 @chunk_group.command("get", cls=FleetCommand)
@@ -165,8 +179,8 @@ def chunk_list(cli: CliContext, project: str | None) -> None:
 def chunk_show(cli: CliContext, chunk_id: str) -> None:
     """Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."""
     resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}")
-    detail = resp.json()
-    cli.show(detail, ChunkDetail(detail))
+    raw, detail = cli.decode(resp, _DETAIL, "GET /chunks/{id}")
+    cli.show(raw, ChunkDetailLines(detail))
 
 
 class Pointer(click.ParamType[str]):
@@ -222,8 +236,8 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
         )
     cli.check(resp, "POST /chunks")
-    body = resp.json()
-    cli.show_lines(body, f"ingested {len(tokens)} pointer(s) → chunk {body['chunk_id']}")
+    raw, body = cli.decode(resp, _INGESTED, "POST /chunks")
+    cli.show_lines(raw, f"ingested {len(tokens)} pointer(s) → chunk {body.chunk_id}")
 
 
 @chunk_group.command("set", cls=FleetCommand)
@@ -294,19 +308,19 @@ def chunk_set(
         "PATCH /chunks/{id}",
         json_body=body,
     )
-    view = resp.json()
+    raw, view = cli.decode(resp, _PATCHED, "PATCH /chunks/{id}")
     parts: list[str] = []
     if graph_id is not None:
-        parts.append(f"graph → {view['graph_id']}")
+        parts.append(f"graph → {view.graph_id}")
     if default_model:
-        parts.append(f"default model → {', '.join(view.get('default_model') or []) or '-'}")
+        parts.append(f"default model → {', '.join(view.default_model) or '-'}")
     if default_effort is not None:
-        parts.append(f"default effort → {view.get('default_effort') or '-'}")
+        parts.append(f"default effort → {view.default_effort or '-'}")
     if default_harnesses:
-        parts.append(f"default harnesses → {', '.join(view.get('default_harnesses') or []) or '-'}")
+        parts.append(f"default harnesses → {', '.join(view.default_harnesses) or '-'}")
     if urgency is not None:
-        parts.append(f"urgency → {urgency_label(view.get('urgency'))}")
-    cli.show_lines(view, f"{chunk_id}: {', '.join(parts)}")
+        parts.append(f"urgency → {urgency_label(view.urgency)}")
+    cli.show_lines(raw, f"{chunk_id}: {', '.join(parts)}")
 
 
 @chunk_group.command("promote", cls=FleetCommand)
@@ -322,7 +336,12 @@ def chunk_promote(cli: CliContext, chunk_id: str, after: str | None) -> None:
         "POST /chunks/{id}/promote",
         json_body={"after_chunk_id": after} if after is not None else None,
     )
-    cli.finish(resp, f"promoted {chunk_id} — now ready for a runner to claim")
+    cli.finish(
+        resp,
+        f"promoted {chunk_id} — now ready for a runner to claim",
+        "POST /chunks/{id}/promote",
+        answer=_SUMMARY,
+    )
 
 
 @chunk_group.command("demote", cls=FleetCommand)
@@ -341,7 +360,12 @@ def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
         "POST /chunks/{id}/demote",
         json_body={"after_chunk_id": after} if after is not None else None,
     )
-    cli.finish(resp, f"demoted {chunk_id} — back to not ready")
+    cli.finish(
+        resp,
+        f"demoted {chunk_id} — back to not ready",
+        "POST /chunks/{id}/demote",
+        answer=_SUMMARY,
+    )
 
 
 @chunk_group.command("pause", cls=FleetCommand)
@@ -362,6 +386,8 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
         resp,
         f"paused {chunk_id} — a runner holding it parks its worker after a brief grace period, "
         "keeping the claim; an unclaimed chunk stays out of the queue",
+        "POST /chunks/{id}/pause",
+        answer=_SUMMARY,
     )
 
 
@@ -382,6 +408,8 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
         resp,
         f"resumed {chunk_id} — the pause is cleared; a held chunk continues from its current node, "
         "an unclaimed one rejoins the queue",
+        "POST /chunks/{id}/resume",
+        answer=_SUMMARY,
     )
 
 
@@ -400,6 +428,8 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     cli.finish(
         resp,
         f"detached {chunk_id} — claim removed, still at its current node; status re-derives from its remaining facts",
+        "POST /chunks/{id}/detach",
+        answer=_SUMMARY,
     )
 
 
@@ -436,7 +466,12 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
         resp,
         "POST /chunks/{id}/dependencies",
     )
-    cli.finish(resp, f"{chunk_id} now depends on {prerequisite_chunk_id}")
+    cli.finish(
+        resp,
+        f"{chunk_id} now depends on {prerequisite_chunk_id}",
+        "POST /chunks/{id}/dependencies",
+        answer=_EDGE,
+    )
 
 
 @chunk_group.command("release-dependency", cls=FleetCommand)
@@ -459,7 +494,12 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
             f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"
         )
     cli.check(resp, "POST /chunks/{id}/dependencies/release")
-    cli.finish(resp, f"released {chunk_id}'s dependency on {prerequisite_chunk_id}")
+    cli.finish(
+        resp,
+        f"released {chunk_id}'s dependency on {prerequisite_chunk_id}",
+        "POST /chunks/{id}/dependencies/release",
+        answer=_EDGE,
+    )
 
 
 @chunk_group.command("requeue", cls=FleetCommand)
@@ -474,7 +514,12 @@ def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
         "POST /chunks/{id}/requeues",
         json_body={"note": note} if note is not None else None,
     )
-    cli.finish(resp, f"requeued {chunk_id} — re-leasable at its current node")
+    cli.finish(
+        resp,
+        f"requeued {chunk_id} — re-leasable at its current node",
+        "POST /chunks/{id}/requeues",
+        answer=_SUMMARY,
+    )
 
 
 @chunk_group.command("stop", cls=FleetCommand)
@@ -491,7 +536,12 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
         "POST /chunks/{id}/stop",
         json_body={"by": by},
     )
-    cli.finish(resp, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
+    cli.finish(
+        resp,
+        f"stopped {chunk_id} — terminally abandoned, its route (if any) released",
+        "POST /chunks/{id}/stop",
+        answer=_SUMMARY,
+    )
 
 
 @chunk_group.command("done", cls=FleetCommand)
@@ -507,7 +557,12 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
         "POST /chunks/{id}/complete",
         json_body={"by": by},
     )
-    cli.finish(resp, f"completed {chunk_id} — done, its route (if any) released")
+    cli.finish(
+        resp,
+        f"completed {chunk_id} — done, its route (if any) released",
+        "POST /chunks/{id}/complete",
+        answer=_SUMMARY,
+    )
 
 
 @chunk_group.command("restart", cls=FleetCommand)
@@ -540,10 +595,10 @@ def chunk_restart(
         "POST /chunks/{id}/restart",
         json_body={"node": node, "to_graph": to_graph, "by": by, **({"note": note} if note is not None else {})},
     )
-    body = resp.json()
-    landed = body.get("current_node_name") or node or "its current node"
+    raw, restarted = cli.decode(resp, _SUMMARY, "POST /chunks/{id}/restart")
+    landed = restarted.current_node_name or node or "its current node"
     onto = f" on graph `{to_graph}`" if to_graph is not None else ""
-    cli.show_lines(body, f"restarted {chunk_id} at `{landed}`{onto} — re-entering on a fresh session")
+    cli.show_lines(raw, f"restarted {chunk_id} at `{landed}`{onto} — re-entering on a fresh session")
 
 
 @chunk_group.command("migrate", cls=FleetCommand)
@@ -581,8 +636,8 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
         json_body=body,
     )
 
-    body = resp.json()
-    cli.show(body, MigrationIntent(chunk_id, body, cancelled=cancel))
+    raw, patched = cli.decode(resp, _PATCHED, "PATCH /chunks/{id}")
+    cli.show(raw, MigrationIntent(chunk_id, patched, cancelled=cancel))
 
 
 @chunk_group.command("group", cls=FleetCommand)
@@ -599,9 +654,9 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
         "POST /chunks/{id}/group",
         json_body={"merge_chunk_ids": list(merge_ids)},
     )
-    body = resp.json()
-    merged = ", ".join(body.get("merged_chunk_ids", [])) or "none"
-    cli.show_lines(body, f"grouped into {body['chunk_id']} (merged: {merged})")
+    raw, grouped = cli.decode(resp, _GROUPED, "POST /chunks/{id}/group")
+    merged = ", ".join(grouped.merged_chunk_ids) or "none"
+    cli.show_lines(raw, f"grouped into {grouped.chunk_id} (merged: {merged})")
 
 
 @chunk_group.command("delete", cls=FleetCommand)
@@ -620,7 +675,12 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
         "DELETE /chunks/{id}",
         json_body={"by": by},
     )
-    cli.finish(resp, f"deleted {chunk_id} — its hub item(s), if any, withdrawn")
+    cli.finish(
+        resp,
+        f"deleted {chunk_id} — its hub item(s), if any, withdrawn",
+        "DELETE /chunks/{id}",
+        answer=_DELETED,
+    )
 
 
 @dataclass(frozen=True)
@@ -636,8 +696,8 @@ class WorkItems:
             f"/api/chunks/{self.chunk_id}/work-items",
             "GET /chunks/{id}/work-items",
         )
-        body = resp.json()
-        self.cli.show(body, WorkItemListing(body.get("items", [])))
+        raw, body = self.cli.decode(resp, _WORK_ITEMS, "GET /chunks/{id}/work-items")
+        self.cli.show(raw, WorkItemListing(body.items))
 
 
 @chunk_group.command("work-items", cls=FleetCommand)
@@ -660,11 +720,9 @@ def chunk_transcript_list(cli: CliContext, chunk_id: str) -> None:
     """List CHUNK_ID's transcript segments — id, node, epoch, turn range, whether it is closed or cut short, and size.
 
     A chunk no worker has run lists none. Pass a segment id to `transcript get` to read it."""
-    body = cli.get(
-        f"/api/chunks/{chunk_id}/transcripts",
-        "GET /chunks/{id}/transcripts",
-    ).json()
-    cli.show(body, SegmentIndexLines(body))
+    resp = cli.get(f"/api/chunks/{chunk_id}/transcripts", "GET /chunks/{id}/transcripts")
+    raw, _ = cli.decode(resp, _SEGMENTS, "GET /chunks/{id}/transcripts")
+    cli.show(raw, SegmentIndexLines(raw))
 
 
 @chunk_transcript_group.command("get", cls=FleetCommand)
@@ -675,11 +733,9 @@ def chunk_transcript_get(cli: CliContext, chunk_id: str, segment_id: str) -> Non
     a subagent's turns indented under the call that spawned it.
 
     Under --json, the segment as the hub stores it."""
-    body = cli.get(
-        f"/api/chunks/{chunk_id}/transcripts/{segment_id}",
-        "GET /chunks/{id}/transcripts/{segment_id}",
-    ).json()
-    cli.show(body, SegmentContentLines(body))
+    resp = cli.get(f"/api/chunks/{chunk_id}/transcripts/{segment_id}", "GET /chunks/{id}/transcripts/{segment_id}")
+    raw, _ = cli.decode(resp, _SEGMENT, "GET /chunks/{id}/transcripts/{segment_id}")
+    cli.show(raw, SegmentContentLines(raw))
 
 
 @chunk_group.command("pm", hidden=True, cls=FleetCommand)

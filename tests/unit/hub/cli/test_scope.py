@@ -32,7 +32,7 @@ def test_scope_create_posts_slug_and_description() -> None:
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(201, {"slug": "blizzard", "description": "the repo", "retired": False})
+        return _FakeResponse(201, {"slug": "blizzard", "description": "the repo", "created_at": "t0", "retired": False})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -81,7 +81,7 @@ def test_scope_edit_patches_the_description() -> None:
 
     def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(200, {"slug": "blizzard", "description": "new", "retired": False})
+        return _FakeResponse(200, {"slug": "blizzard", "description": "new", "created_at": "t0", "retired": False})
 
     bound = bind_stubs(patch=fake_patch)
     result = bound.runner.invoke(
@@ -99,7 +99,7 @@ def test_scope_retire_posts_to_the_retire_endpoint() -> None:
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(202, {"slug": "blizzard", "retired": True})
+        return _FakeResponse(202, {"slug": "blizzard", "description": "", "created_at": "t0", "retired": True})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -116,7 +116,7 @@ def test_scope_enable_posts_to_the_enable_endpoint() -> None:
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(202, {"slug": "blizzard", "retired": False})
+        return _FakeResponse(202, {"slug": "blizzard", "description": "", "created_at": "t0", "retired": False})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(

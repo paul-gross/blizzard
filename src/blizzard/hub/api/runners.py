@@ -15,6 +15,7 @@ from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, Query, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.node_steps import Executor
@@ -27,7 +28,6 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.execution.fleet import (
     ReinstateFailed,

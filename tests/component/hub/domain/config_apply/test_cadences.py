@@ -11,9 +11,9 @@ from typing import Any
 
 import pytest
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api import auth_session
-from blizzard.hub.auth.permissions import Permission, permissions_for
+from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.domain.config.apply import UrgencyReferenceGuard
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.wire.config import CONFIG_DOCUMENT_INVALID

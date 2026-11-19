@@ -12,9 +12,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from blizzard.auth_core import Permission
 from blizzard.hub.api import auth_session, flag_guard, hub_level
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
-from blizzard.hub.auth.permissions import Permission, expand
+from blizzard.hub.auth.permissions import expand
 from tests.support.handler_applicability import transitive_dispatch
 from tests.support.runner_refusal_discovery import route_inventory
 

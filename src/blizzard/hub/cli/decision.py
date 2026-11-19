@@ -2,27 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.decision import DECISION_ALREADY_RESOLVED
+from blizzard.wire.decision import (
+    DECISION_ALREADY_RESOLVED,
+    DecisionResolutionResponse,
+    DecisionView,
+    OpenDecisionsResponse,
+)
+
+_OPEN = TypeAdapter(OpenDecisionsResponse)
+_RESOLUTION = TypeAdapter(DecisionResolutionResponse)
 
 
 class DecisionListing(Listing):
     empty = "no open decisions"
 
-    def line(self, row: Any) -> str:
-        choices = ", ".join(c["name"] for c in row.get("choices", []))
-        checks = row.get("check_results", [])
-        red = sum(1 for c in checks if not c["passed"])
+    def line(self, row: DecisionView) -> str:
+        choices = ", ".join(c.name for c in row.choices)
+        checks = row.check_results
+        red = sum(1 for c in checks if not c.passed)
         summary = f"  checks={red}/{len(checks)} red" if checks else ""
-        return f"{row['decision_id']}  chunk={row['chunk_id']}  node={row['node_name']}  choices=[{choices}]{summary}"
+        return f"{row.decision_id}  chunk={row.chunk_id}  node={row.node_name}  choices=[{choices}]{summary}"
 
 
 @click.group("decision")
@@ -34,8 +41,10 @@ def decision_group() -> None:
 @project_option(required_by_hub=False)
 def decision_list(cli: CliContext, project: str | None) -> None:
     """List open decisions awaiting a human (gate surfacing), or only one project's."""
-    body = cli.get("/api/decisions", "GET /decisions", params=project_query(project)).json()
-    cli.show(body, DecisionListing(body.get("decisions", [])))
+    raw, body = cli.decode(
+        cli.get("/api/decisions", "GET /decisions", params=project_query(project)), _OPEN, "GET /decisions"
+    )
+    cli.show(raw, DecisionListing(body.decisions))
 
 
 @decision_group.command("resolve", cls=FleetCommand)
@@ -60,6 +69,6 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
         resp,
         "POST /decisions/{id}/resolutions",
     )
-    body = resp.json()
-    override = " — overrode red checks" if body.get("overrode_red_checks") else ""
-    cli.show_lines(body, f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']}){override}")
+    raw, body = cli.decode(resp, _RESOLUTION, "POST /decisions/{id}/resolutions")
+    override = " — overrode red checks" if body.overrode_red_checks else ""
+    cli.show_lines(raw, f"decision {decision_id} resolved: {body.choice} (by {body.resolved_by}){override}")

@@ -12,13 +12,13 @@ from functools import partial
 from fastapi import APIRouter, Depends
 from pydantic import TypeAdapter
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
     SegmentSummary,

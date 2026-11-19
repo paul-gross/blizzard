@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response, StreamingResponse
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems, problems_runners
@@ -26,7 +27,6 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.work_source_params import QuerySource
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.kernel.pagination import MalformedCursor
 from blizzard.hub.domain.observability.analytics.derivation import ReDeriveScope, ReDeriveScopeRefused
 from blizzard.hub.domain.observability.analytics.extraction import read_version

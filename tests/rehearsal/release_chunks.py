@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     import httpx2 as httpx
@@ -49,7 +49,10 @@ def main() -> None:
             object.__setattr__(reader, "requests", [])
             object.__setattr__(reader, "pages", [])
             params = {"board_window": "true"} if board_window else {}
-            rows = reader.get_all("/api/chunks", "GET /chunks", key="chunks", params=params)
+            # The installed release's reader, whose ``get_all`` still takes ``key=`` and returns the rows.
+            rows: list[dict[str, Any]] = cast(Any, reader).get_all(
+                "/api/chunks", "GET /chunks", key="chunks", params=params
+            )
             pages = reader.pages
             assert len(pages) >= 2, "the probe needs at least two chunk pages"
             for index, page in enumerate(pages):

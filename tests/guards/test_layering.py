@@ -96,7 +96,7 @@ _MOVED_HOMES = {
     "is_tenant_name": "blizzard.foundation.tenants",
     "HUB_PERMISSIONS": "blizzard.hub.auth.permissions",
     "permissions_for": "blizzard.hub.auth.permissions",
-    "Permission": "blizzard.hub.auth.permissions",
+    "Permission": "blizzard.auth_core",
     "ROLE_PERMISSIONS": "blizzard.hub.auth.permissions",
     "expand": "blizzard.hub.auth.permissions",
     "PRE_CLAIM_STATUSES": "blizzard.hub.domain.chunk.model",

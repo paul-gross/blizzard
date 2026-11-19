@@ -8,13 +8,13 @@ from functools import partial
 
 from fastapi import APIRouter, Depends
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.traces import (
     TraceReplayRequest,

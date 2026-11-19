@@ -11,8 +11,19 @@ import pytest
 from blizzard.hub.cli import hub as hub_group
 from tests.support.worker_http import Bound, bind_stubs
 
-_RESOLVED = {"decision_id": "dec_1", "choice": "pass", "resolved_by": "operator"}
-_SUMMARY = {"chunk_id": "ch_1", "status": "ready", "current_node_name": "build"}
+_RESOLVED = {
+    "decision_id": "dec_1",
+    "choice": "pass",
+    "resolved_by": "operator",
+    "resolved_at": "2026-10-01T00:00:00Z",
+}
+_SUMMARY = {
+    "chunk_id": "ch_1",
+    "graph_id": "gr_1",
+    "status": "ready",
+    "current_node_id": "nd_build",
+    "current_node_name": "build",
+}
 
 
 def _posting(status: int, body: object) -> tuple[Bound, list[dict[str, Any]]]:

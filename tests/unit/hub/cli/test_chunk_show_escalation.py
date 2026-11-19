@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from blizzard.hub.cli.chunk import ChunkDetail
+from blizzard.hub.cli.chunk import ChunkDetailLines
+from blizzard.wire.chunk import ChunkDetail
 
-_BODY: dict[str, Any] = {"chunk_id": "ch_1", "status": "needs_human", "graph_id": "gr_1", "node_name": "build"}
+_BODY: dict[str, Any] = {
+    "chunk_id": "ch_1",
+    "status": "needs_human",
+    "graph_id": "gr_1",
+    "current_node_id": "n_build",
+    "latest_epoch": 2,
+}
 
 
 def _lines(escalation: dict[str, Any] | None) -> list[str]:
-    return list(ChunkDetail(_BODY | {"escalation": escalation}).lines())
+    return list(ChunkDetailLines(ChunkDetail.model_validate(_BODY | {"escalation": escalation})).lines())
 
 
 def test_an_escalated_chunk_prints_cause_detail_and_the_wrapped_command() -> None:

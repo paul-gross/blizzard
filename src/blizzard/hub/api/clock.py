@@ -6,11 +6,11 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.clock import ClockBackwards, ControlledClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
-from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.clock import ClockMoveRequest, ClockMoveResponse, ClockReading
 
 

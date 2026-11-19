@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.stream import Cursor, CursorRefused, Stream
 from blizzard.foundation.roles import dto
@@ -28,7 +29,6 @@ from blizzard.hub.api.auth_session import PresentedSession, require, tenant_boun
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFeed, OperationalEvent
 from blizzard.hub.domain.chunk.ports.events import FeedLens

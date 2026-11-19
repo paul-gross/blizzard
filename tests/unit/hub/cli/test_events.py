@@ -13,10 +13,11 @@ import pytest
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.events import FeedListing
+from blizzard.wire.events import EventView
 from tests.support.worker_http import Bound, bind_stubs
 
 _EVENT = {
-    "id": "ev_1",
+    "id": 1,
     "recorded_at": "2026-08-12T09:00:00Z",
     "severity": "warning",
     "kind": "attempt-failed",
@@ -171,21 +172,25 @@ def test_json_prints_the_raw_response_including_detail() -> None:
 def test_an_event_lacking_runner_chunk_or_node_omits_just_that_token(row: dict[str, object], line: str) -> None:
     sparse = {k: v for k, v in _EVENT.items() if k not in ("runner_id", "chunk_id", "node_name")} | row
 
-    assert FeedListing([sparse]).line(sparse) == line
+    event = EventView.model_validate(sparse)
+
+    assert FeedListing([event]).line(event) == line
 
 
 def test_an_escalation_row_keeps_its_detail_on_the_text_line() -> None:
-    row = _EVENT | {"detail": {"cause": "retries-exhausted", "detail": "build failed 3 times"}}
+    row = EventView.model_validate(
+        _EVENT | {"detail": {"cause": "retries-exhausted", "detail": "build failed 3 times"}}
+    )
 
     assert FeedListing([row]).line(row).endswith("retried (build failed 3 times)")
 
 
 @pytest.mark.parametrize(
     "detail",
-    ["a plain string", ["a", "list"], 7, None, {"detail": ""}, {"detail": 5}, {"other": "x"}],
+    [None, {"detail": ""}, {"detail": 5}, {"other": "x"}],
 )
 def test_a_detail_that_is_not_an_explanation_adds_nothing_to_the_text_line(detail: object) -> None:
-    row = _EVENT | {"detail": detail}
+    row = EventView.model_validate(_EVENT | {"detail": detail})
 
     assert FeedListing([row]).line(row) == (
         "2026-08-12T09:00:00Z  warning  attempt-failed runner=r1 chunk=ch_a node=build  retried"

@@ -7,10 +7,14 @@ from http import HTTPStatus
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.flag_guard import flag_command, flag_option
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.hub.cli.context import CliContext
+from blizzard.wire.flags import FlagsResponse
+
+_FLAGS = TypeAdapter(FlagsResponse)
 
 
 def hub_flags(ctx: click.Context) -> Mapping[str, bool]:
@@ -20,7 +24,8 @@ def hub_flags(ctx: click.Context) -> Mapping[str, bool]:
     if resp.status_code == HTTPStatus.NOT_FOUND:
         return {}
     cli.check(resp, "GET /flags")
-    return dict(resp.json()["flags"])
+    _, answer = cli.decode(resp, _FLAGS, "GET /flags")
+    return answer.flags
 
 
 def hub_flag_on(flag: str, ctx: click.Context) -> bool:

@@ -8,6 +8,7 @@ from typing import Any
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.runner import RunnerRegistryView
 from tests.support.worker_http import Bound, bind_stubs
 
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
@@ -41,7 +42,20 @@ def _stub(verb: str, response: _FakeResponse) -> tuple[Bound, list[dict[str, Any
     return bind_stubs(**{verb: fake}), calls
 
 
-_RETIRED_VIEW = {"runner_id": "runner-a", "retired": True, "retired_at": "2026-09-28T00:00:00Z", "retired_by": "op"}
+def _runner(**fields: Any) -> dict[str, Any]:
+    """A ``RunnerRegistryView`` body for runner-a, ``fields`` over its defaults."""
+    base: dict[str, Any] = {
+        "runner_id": "runner-a",
+        "runner_name": "alpha",
+        "connection": "online",
+        "online": False,
+        "added_at": "2026-09-01T00:00:00Z",
+        "hub_paused": False,
+    }
+    return RunnerRegistryView.model_validate({**base, **fields}).model_dump(mode="json")
+
+
+_RETIRED_VIEW = _runner(retired=True, retired_at="2026-09-28T00:00:00Z", retired_by="op")
 
 
 def test_retire_posts_force_and_by_and_names_what_it_released() -> None:
@@ -65,7 +79,7 @@ def test_retire_surfaces_the_holdings_refusal() -> None:
 
 
 def test_reinstate_posts_by_and_reports_it() -> None:
-    bound, calls = _stub("post", _FakeResponse(200, {"runner_id": "runner-a", "retired": False}))
+    bound, calls = _stub("post", _FakeResponse(200, _runner()))
 
     result = bound.runner.invoke(hub_group, ["runner", "reinstate", "runner-a"], env=_ENV)
 
@@ -76,7 +90,7 @@ def test_reinstate_posts_by_and_reports_it() -> None:
 
 
 def test_revoke_token_posts_a_revocation_and_shows_the_hubs_unenrolled_refusal() -> None:
-    bound, calls = _stub("post", _FakeResponse(201, {"runner": {"runner_id": "runner-a", "retired": False}}))
+    bound, calls = _stub("post", _FakeResponse(201, {"runner": _runner()}))
     ok = bound.runner.invoke(hub_group, ["runner", "revoke-token", "runner-a"], env=_ENV)
     assert ok.exit_code == 0, ok.output
     assert calls[0]["url"].endswith("/api/runners/runner-a/token-revocations")

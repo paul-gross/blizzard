@@ -11,16 +11,10 @@ from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.spend import SpendFigure
-
-
-class CostRow(TypedDict, total=False):
-    cost_usd: float
-    estimated_cost_usd: float | None
-    cost_partial: bool
-
-
-class BlockedRow(TypedDict):
-    prerequisite_chunk_id: str
+from blizzard.wire.chunk import ChunkDetail, ChunkSummary, ChunkUsageTotalView, WorkItemEntry, WorkRefView
+from blizzard.wire.fleet import FleetSpendView
+from blizzard.wire.question import QuestionView
+from blizzard.wire.urgency import UrgencyRef
 
 
 class UrgencyRefRow(TypedDict):
@@ -28,19 +22,11 @@ class UrgencyRefRow(TypedDict):
     slug: str
 
 
-def urgency_label(urgency: UrgencyRefRow | None) -> str:
+def urgency_label(urgency: UrgencyRef | UrgencyRefRow | None) -> str:
     """The urgency a chunk view names, by slug; ``-`` from a hub that names none."""
-    return urgency["slug"] if urgency else "-"
-
-
-class ChunkRow(TypedDict):
-    chunk_id: str
-    status: str
-    current_node_name: NotRequired[str | None]
-    current_node_id: NotRequired[str | None]
-    cost: NotRequired[CostRow | None]
-    blocked: NotRequired[BlockedRow | None]
-    urgency: NotRequired[UrgencyRefRow | None]
+    if urgency is None:
+        return "-"
+    return urgency.slug if isinstance(urgency, UrgencyRef) else urgency["slug"]
 
 
 class DecliningRow(TypedDict):
@@ -66,16 +52,13 @@ class RunnerRow(TypedDict):
     retired_by: NotRequired[str | None]
 
 
-class QuestionRow(TypedDict):
-    question_id: str
-    chunk_id: str
-    question: str
-    options: NotRequired[list[str] | None]
-
-
-def pointer_label(row: dict[str, object]) -> str:
+def pointer_label(row: WorkRefView | WorkItemEntry | dict[str, object]) -> str:
     """A pointer a response carries, as people read it: its hub-rendered ``label``, else ``{slug}#{ref}`` under the
     source's current slug, else the raw ``{source}#{ref}``."""
+    if isinstance(row, WorkRefView):
+        return row.label or f"{row.source}#{row.ref}"
+    if isinstance(row, WorkItemEntry):
+        return row.label or f"{row.slug or row.source}#{row.ref}"
     return cast(str, row.get("label")) or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
 
 
@@ -90,7 +73,9 @@ class Cost:
     partial: bool
 
     @classmethod
-    def of(cls, cost: CostRow | dict[str, Any] | None) -> Cost:
+    def of(cls, cost: ChunkUsageTotalView | FleetSpendView | dict[str, Any] | None) -> Cost:
+        if isinstance(cost, ChunkUsageTotalView | FleetSpendView):
+            return cls(cost.cost_usd, cost.estimated_cost_usd, cost.cost_partial)
         cost = cost or {}
         return cls(
             cost.get("cost_usd", 0.0),
@@ -106,7 +91,7 @@ class Cost:
 @dto
 @dataclass(frozen=True)
 class ChunkLine:
-    row: ChunkRow
+    row: ChunkSummary | ChunkDetail
     #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
     #: True renders the chunk's urgency column after its status.
@@ -114,15 +99,15 @@ class ChunkLine:
 
     @property
     def node(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        name = self.row.get("current_node_name") if self.prefer_node_name else None
-        return name or self.row.get("current_node_id") or "-"
+        name = self.row.current_node_name if self.prefer_node_name else None
+        return name or self.row.current_node_id or "-"
 
     def line(self) -> str:
-        rendered = Cost.of(self.row.get("cost")).rendered
-        blocked = self.row.get("blocked")
-        marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
-        urgency = f"{urgency_label(self.row.get('urgency')):<12} " if self.show_urgency else ""
-        return f"{self.row['chunk_id']}  {self.row['status']:<16} {urgency}@ {self.node}  {rendered:>10}{marking}"
+        rendered = Cost.of(self.row.cost).rendered
+        blocked = self.row.blocked
+        marking = f"  [blocked on {blocked.prerequisite_chunk_id}]" if blocked else ""
+        urgency = f"{urgency_label(self.row.urgency):<12} " if self.show_urgency else ""
+        return f"{self.row.chunk_id}  {self.row.status!s:<16} {urgency}@ {self.node}  {rendered:>10}{marking}"
 
 
 def _declining_reason(reason: DecliningRow) -> str:
@@ -203,12 +188,12 @@ class RunnerLine:
 @dto
 @dataclass(frozen=True)
 class QuestionLine:
-    row: QuestionRow
+    row: QuestionView
 
     def line(self) -> str:
-        options = self.row.get("options") or []
+        options = self.row.options
         offered = f"  [{'|'.join(options)}]" if options else ""
-        return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
+        return f"{self.row.question_id}  (chunk {self.row.chunk_id}): {self.row.question}{offered}"
 
 
 @collaborator

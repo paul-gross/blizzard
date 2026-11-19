@@ -3,22 +3,27 @@
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.tenant import TenantDeletionResponse, TenantView
+
+_TENANT = TypeAdapter(TenantView)
+_TENANTS = TypeAdapter(list[TenantView])
+_DELETION = TypeAdapter(TenantDeletionResponse)
 
 
 class TenantListing(Listing):
     empty = "no tenants"
 
-    def line(self, row: Any) -> str:
-        if row["state"] == "deleting":
-            return f"{row['tenant_id']}  {row['name']}  deleting since {row.get('closed_at') or '-'}"
-        return f"{row['tenant_id']}  {row['name']}  open  created_at={row['created_at']}  by {row['created_by']}"
+    def line(self, row: TenantView) -> str:
+        if row.state == "deleting":
+            return f"{row.tenant_id}  {row.name}  deleting since {row.closed_at or '-'}"
+        return f"{row.tenant_id}  {row.name}  open  created_at={row.created_at}  by {row.created_by}"
 
 
 @click.group("tenant")
@@ -38,16 +43,16 @@ def tenant_create(cli: CliContext, name: str, admin_user_id: str | None) -> None
         json_body={"name": name, "admin_user_id": admin_user_id},
         door=True,
     )
-    body = resp.json()
+    raw, tenant = cli.decode(resp, _TENANT, "POST /admin/tenants")
     admin = f" — {admin_user_id} is its admin" if admin_user_id else ""
-    cli.show_lines(body, f"created tenant {body['tenant_id']}  {body['name']}{admin}")
+    cli.show_lines(raw, f"created tenant {tenant.tenant_id}  {tenant.name}{admin}")
 
 
 @tenant_group.command("list", cls=AdminCommand)
 def tenant_list(cli: CliContext) -> None:
     """Every tenant the hub holds, oldest first: open ones, and those whose deletion is underway with when it began."""
-    rows = cli.get("/api/admin/tenants", "GET /admin/tenants").json()
-    cli.show(rows, TenantListing(rows))
+    raw, rows = cli.decode(cli.get("/api/admin/tenants", "GET /admin/tenants"), _TENANTS, "GET /admin/tenants")
+    cli.show(raw, TenantListing(rows))
 
 
 @tenant_group.command("rename", cls=AdminCommand)
@@ -60,8 +65,8 @@ def tenant_rename(cli: CliContext, tenant_id: str, name: str) -> None:
         "PATCH /admin/tenants/{id}",
         json_body={"name": name},
     )
-    body = resp.json()
-    cli.show_lines(body, f"tenant {body['tenant_id']} is now named {body['name']}")
+    raw, tenant = cli.decode(resp, _TENANT, "PATCH /admin/tenants/{id}")
+    cli.show_lines(raw, f"tenant {tenant.tenant_id} is now named {tenant.name}")
 
 
 @tenant_group.command("delete", cls=AdminCommand)
@@ -85,12 +90,12 @@ def tenant_delete(cli: CliContext, tenant_id: str, yes: bool) -> None:
         resp,
         "DELETE /admin/tenants/{id}",
     )
-    body = resp.json()
+    raw, deletion = cli.decode(resp, _DELETION, "DELETE /admin/tenants/{id}")
     if resp.status_code == HTTPStatus.ACCEPTED:
         cli.show_lines(
-            body,
+            raw,
             f"tenant {tenant_id} is closed and its deletion is underway; the hub finishes it in the background — "
             "'blizzard hub tenant list' shows it until it is gone",
         )
         return
-    cli.show_lines(body, f"deleted tenant {tenant_id} — {body['rows_removed']} rows removed")
+    cli.show_lines(raw, f"deleted tenant {tenant_id} — {deletion.rows_removed} rows removed")

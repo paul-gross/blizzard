@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
@@ -14,13 +16,31 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Cost, Listing
+from blizzard.wire.analytics import (
+    AnalyticsChunkSpendResponse,
+    AnalyticsChunkSpendView,
+    AnalyticsCountsResponse,
+    AnalyticsCountView,
+    AnalyticsDurationsResponse,
+    AnalyticsDurationView,
+    AnalyticsEventsResponse,
+    AnalyticsEventView,
+    AnalyticsOutcomesResponse,
+    AnalyticsOutcomeView,
+    AnalyticsSpendResponse,
+    AnalyticsSpendView,
+    ReDeriveResponse,
+)
+
+_RE_DERIVE = TypeAdapter(ReDeriveResponse)
+_EVENTS = TypeAdapter(AnalyticsEventsResponse)
 
 
-def named_key(row: dict[str, Any], key_field: str = "key") -> str:
+def named_key(row: AnalyticsCountView | AnalyticsSpendView) -> str:
     """The row's key, with ``graph/node`` or ``graph`` names beside it when the hub named it —
     unless the key already is the name path a ``by_name`` roll-up produced."""
-    key = str(row[key_field])
-    graph, node = row.get("graph_name"), row.get("node_name")
+    key = row.key
+    graph, node = row.graph_name, row.node_name
     name = f"{graph}/{node}" if graph and node else graph or node
     if not name or name == key:
         return key
@@ -30,68 +50,62 @@ def named_key(row: dict[str, Any], key_field: str = "key") -> str:
 @dto
 @dataclass(frozen=True)
 class SpendLine:
-    """One grouping key's spend rollup — the key column varies (``key`` for
-    node/graph, ``chunk_id`` for the per-chunk dataset), so the caller names it."""
+    """One grouping key's spend rollup — a node, graph or model row keyed by its named key, a per-chunk row by its
+    chunk id."""
 
-    row: dict[str, Any]
-    key_field: str = "key"
+    row: AnalyticsSpendView | AnalyticsChunkSpendView
 
     def line(self) -> str:
         row = self.row
-        cost = Cost.of(row).rendered
+        cost = Cost(row.cost_usd, row.estimated_cost_usd, row.cost_partial).rendered
+        key = row.chunk_id if isinstance(row, AnalyticsChunkSpendView) else named_key(row)
         return (
-            f"{named_key(row, self.key_field)}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
-            f"cache_read={row['cache_read_tokens']} cache_create={row['cache_create_tokens']}"
+            f"{key}  {cost}  in={row.input_tokens} out={row.output_tokens} "
+            f"cache_read={row.cache_read_tokens} cache_create={row.cache_create_tokens}"
         )
 
 
 class EventListing(Listing):
     empty = "no events"
 
-    def line(self, row: Any) -> str:
-        occurred = row.get("occurred_at") or "-"
-        tool = f"  tool={row['tool']}" if row.get("tool") else ""
-        subject = f"  {row['subject']}" if row.get("subject") else ""
-        return f"{occurred}  {row['kind']:<16} chunk={row['chunk_id']} node={row['node_id']}{tool}{subject}"
+    def line(self, row: AnalyticsEventView) -> str:
+        occurred = row.occurred_at or "-"
+        tool = f"  tool={row.tool}" if row.tool else ""
+        subject = f"  {row.subject}" if row.subject else ""
+        return f"{occurred}  {row.kind:<16} chunk={row.chunk_id} node={row.node_id}{tool}{subject}"
 
 
 class CountsListing(Listing):
     empty = "no counts"
 
-    def line(self, row: Any) -> str:
-        return f"{named_key(row)}: {row['count']}"
+    def line(self, row: AnalyticsCountView) -> str:
+        return f"{named_key(row)}: {row.count}"
 
 
 class DurationsListing(Listing):
     empty = "no durations"
 
-    def line(self, row: Any) -> str:
-        return (
-            f"{row['key']}  steps={row['completed_steps']}  "
-            f"total={row['total_seconds']:.1f}s  avg={row['avg_seconds']:.1f}s"
-        )
+    def line(self, row: AnalyticsDurationView) -> str:
+        return f"{row.key}  steps={row.completed_steps}  total={row.total_seconds:.1f}s  avg={row.avg_seconds:.1f}s"
 
 
 class SpendListing(Listing):
     empty = "no spend rollups"
 
-    def line(self, row: Any) -> str:
+    def line(self, row: AnalyticsSpendView | AnalyticsChunkSpendView) -> str:
         return SpendLine(row).line()
 
 
-class ChunkSpendListing(Listing):
+class ChunkSpendListing(SpendListing):
     empty = "no chunk spend rollups"
-
-    def line(self, row: Any) -> str:
-        return SpendLine(row, key_field="chunk_id").line()
 
 
 class OutcomesListing(Listing):
     empty = "no outcomes"
 
-    def line(self, row: Any) -> str:
-        choices = ", ".join(f"{name}={count}" for name, count in row["choice_counts"].items())
-        return f"{row['node_id']}  choices=[{choices}]  attempt_failures={row['attempt_failures']}"
+    def line(self, row: AnalyticsOutcomeView) -> str:
+        choices = ", ".join(f"{name}={count}" for name, count in row.choice_counts.items())
+        return f"{row.node_id}  choices=[{choices}]  attempt_failures={row.attempt_failures}"
 
 
 @click.group("analytics")
@@ -116,11 +130,11 @@ def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str |
     if chunk_id is not None:
         body["chunk_id"] = chunk_id
     resp = cli.post("/api/analytics/re-derive", "POST /analytics/re-derive", json_body=body)
-    result = resp.json()
-    if result.get("not_visible"):
-        cli.show_lines(result, "segment is not visible; nothing derived")
+    raw, result = cli.decode(resp, _RE_DERIVE, "POST /analytics/re-derive")
+    if result.not_visible:
+        cli.show_lines(raw, "segment is not visible; nothing derived")
         return
-    cli.show_lines(result, f"derived {result['derived']}, {result['remaining']} remaining in scope")
+    cli.show_lines(raw, f"derived {result.derived}, {result.remaining} remaining in scope")
 
 
 # `blizzard hub analytics events`/`summary` — shared filter options: one
@@ -294,8 +308,10 @@ def analytics_events(
     if cursor is not None:
         params["cursor"] = cursor
     params["limit"] = str(limit if limit is not None else 200)
-    body = cli.get("/api/analytics/events", "GET /analytics/events", params=params).json()
-    cli.show(body, EventListing(body["events"]))
+    raw, page = cli.decode(
+        cli.get("/api/analytics/events", "GET /analytics/events", params=params), _EVENTS, "GET /analytics/events"
+    )
+    cli.show(raw, EventListing(page.events))
 
 
 # `blizzard hub analytics summary`'s dataset table. A filter a dataset does not take is
@@ -334,12 +350,28 @@ _FLAG_NAMES = {
 
 @dto
 @dataclass(frozen=True)
+class Answer[R]:
+    """A dataset route's served response model, and the rows its answer carries."""
+
+    adapter: TypeAdapter[R]
+    rows_of: Callable[[R], Sequence[Any]]
+
+
+_COUNTS = Answer(TypeAdapter(AnalyticsCountsResponse), lambda a: a.counts)
+_DURATIONS = Answer(TypeAdapter(AnalyticsDurationsResponse), lambda a: a.durations)
+_SPEND = Answer(TypeAdapter(AnalyticsSpendResponse), lambda a: a.spend)
+_CHUNK_SPEND = Answer(TypeAdapter(AnalyticsChunkSpendResponse), lambda a: a.spend)
+_OUTCOMES = Answer(TypeAdapter(AnalyticsOutcomesResponse), lambda a: a.outcomes)
+
+
+@dto
+@dataclass(frozen=True)
 class _Dataset:
-    """One ``summary`` choice: its read path, the key its envelope carries the rows under,
-    the view that renders them, which shared filters it takes, and which paging it supports."""
+    """One ``summary`` choice: its read path, the model its answer decodes against, the view that renders its rows,
+    which shared filters it takes, and which paging it supports."""
 
     path: str
-    response_key: str
+    answer: Answer[Any]
     view: type[Listing]
     filters: frozenset[str]
     paginated: bool = False
@@ -351,45 +383,43 @@ class _Dataset:
 DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
         "/api/analytics/counts/files",
-        "counts",
+        _COUNTS,
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "tool", "subject_prefix", "node_id"},
         top_n=True,
     ),
     "counts-skills": _Dataset(
         "/api/analytics/counts/skills",
-        "counts",
+        _COUNTS,
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "node_id"},
     ),
     "counts-agent-types": _Dataset(
         "/api/analytics/counts/agent-types",
-        "counts",
+        _COUNTS,
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix", "node_id"},
     ),
     "counts-nodes": _Dataset(
         "/api/analytics/counts/nodes",
-        "counts",
+        _COUNTS,
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix"},
     ),
-    "durations-nodes": _Dataset("/api/analytics/durations/nodes", "durations", DurationsListing, _OPERATIONAL_FILTERS),
-    "durations-graphs": _Dataset(
-        "/api/analytics/durations/graphs", "durations", DurationsListing, _OPERATIONAL_FILTERS
-    ),
-    "spend-nodes": _Dataset("/api/analytics/spend/nodes", "spend", SpendListing, _OPERATIONAL_FILTERS),
-    "spend-graphs": _Dataset("/api/analytics/spend/graphs", "spend", SpendListing, _OPERATIONAL_FILTERS),
-    "spend-models": _Dataset("/api/analytics/spend/models", "spend", SpendListing, _OPERATIONAL_FILTERS),
+    "durations-nodes": _Dataset("/api/analytics/durations/nodes", _DURATIONS, DurationsListing, _OPERATIONAL_FILTERS),
+    "durations-graphs": _Dataset("/api/analytics/durations/graphs", _DURATIONS, DurationsListing, _OPERATIONAL_FILTERS),
+    "spend-nodes": _Dataset("/api/analytics/spend/nodes", _SPEND, SpendListing, _OPERATIONAL_FILTERS),
+    "spend-graphs": _Dataset("/api/analytics/spend/graphs", _SPEND, SpendListing, _OPERATIONAL_FILTERS),
+    "spend-models": _Dataset("/api/analytics/spend/models", _SPEND, SpendListing, _OPERATIONAL_FILTERS),
     "spend-chunks": _Dataset(
         "/api/analytics/spend/chunks",
-        "spend",
+        _CHUNK_SPEND,
         ChunkSpendListing,
         _OPERATIONAL_FILTERS,
         paginated=True,
         streamable=True,
     ),
-    "outcomes-nodes": _Dataset("/api/analytics/outcomes/nodes", "outcomes", OutcomesListing, _OPERATIONAL_FILTERS),
+    "outcomes-nodes": _Dataset("/api/analytics/outcomes/nodes", _OUTCOMES, OutcomesListing, _OPERATIONAL_FILTERS),
 }
 
 _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
@@ -513,7 +543,7 @@ def analytics_summary(
     elif spec.top_n and limit is not None:
         params["limit"] = str(limit)
     operation = f"GET {spec.path.removeprefix('/api')}"
-    body = cli.get(spec.path, operation, params=params).json()
-    cli.show(body, spec.view(body[spec.response_key]))
+    raw, answer = cli.decode(cli.get(spec.path, operation, params=params), spec.answer.adapter, operation)
+    cli.show(raw, spec.view(spec.answer.rows_of(answer)))
     if spec.top_n and limit is not None and not cli.as_json:
         click.echo(f"top at most {limit} paths; other paths may be omitted")

@@ -13,6 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
@@ -26,7 +27,6 @@ from blizzard.hub.auth.invitations import (
     InvitationRecord,
 )
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.invitation import (
     InvitationCreateRequest,
     InvitationCreateResponse,

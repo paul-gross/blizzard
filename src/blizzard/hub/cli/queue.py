@@ -2,25 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, urgency_label
+from blizzard.wire.queue import QueuePageView, QueuePeekEntry, QueuePeekResponse
+
+_PAGE = TypeAdapter(QueuePageView)
+_ORDER = TypeAdapter(QueuePeekResponse)
 
 
 class QueueListing(Listing):
     empty = "queue is empty"
 
-    def line(self, row: Any) -> str:
-        blocked = row.get("blocked")
-        marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
-        urgency = urgency_label(row.get("urgency"))
-        return f"{row['position']}  {row['chunk_id']}  urgency={urgency}  graph={row.get('graph_id')}{marking}"
+    def line(self, row: QueuePeekEntry) -> str:
+        marking = f"  [blocked on {row.blocked.prerequisite_chunk_id}]" if row.blocked else ""
+        urgency = urgency_label(row.urgency)
+        return f"{row.position}  {row.chunk_id}  urgency={urgency}  graph={row.graph_id}{marking}"
 
 
 @click.group("queue", cls=GetGroup)
@@ -32,8 +35,8 @@ def queue_group() -> None:
 @project_option(required_by_hub=False)
 def queue_show(cli: CliContext, project: str | None) -> None:
     """Show the whole ready queue, front first."""
-    entries = cli.get_all("/api/queue", "GET /queue", key="entries", params=project_query(project))
-    cli.show({"entries": entries}, QueueListing(entries))
+    raw, pages = read_pages(cli, "/api/queue", "GET /queue", page=_PAGE, key="entries", params=project_query(project))
+    cli.show({"entries": raw}, QueueListing([entry for page in pages for entry in page.entries]))
 
 
 @queue_group.command("set", cls=FleetCommand)
@@ -48,8 +51,8 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
         "PUT /queue",
         json_body={"chunk_ids": list(chunk_ids)},
     )
-    body = resp.json()
-    cli.show_lines(body, f"queue order set ({len(body.get('entries', []))} ready chunk(s))")
+    raw, order = cli.decode(resp, _ORDER, "PUT /queue")
+    cli.show_lines(raw, f"queue order set ({len(order.entries)} ready chunk(s))")
 
 
 @queue_group.command("move", cls=FleetCommand)
@@ -59,8 +62,8 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
     No other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included."""
-    entries = cli.get_all("/api/queue", "GET /queue", key="entries")
-    rest = [cast(str, entry["chunk_id"]) for entry in entries if entry["chunk_id"] != chunk_id]
+    pages = cli.get_all("/api/queue", "GET /queue", page=_PAGE)
+    rest = [entry.chunk_id for page in pages for entry in page.entries if entry.chunk_id != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
     resp = cli.post(
@@ -68,5 +71,6 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
         "POST /queue/position",
         json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id},
     )
-    landed = next(entry["position"] for entry in resp.json()["entries"] if entry["chunk_id"] == chunk_id)
-    cli.finish(resp, f"moved {chunk_id} to position {landed}")
+    _, order = cli.decode(resp, _ORDER, "POST /queue/position")
+    landed = next(entry.position for entry in order.entries if entry.chunk_id == chunk_id)
+    cli.finish(resp, f"moved {chunk_id} to position {landed}", "POST /queue/position", answer=_ORDER)

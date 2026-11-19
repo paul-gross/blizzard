@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, TypedDict, cast
+from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
@@ -15,20 +16,27 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.host import (
+    HostAddResponse,
+    HostEnrollmentResponse,
+    HostRegistryListResponse,
+    HostRegistryView,
+    HostRetireResponse,
+    HostTokenRevocationResponse,
+)
 
-
-class WorkspaceRow(TypedDict):
-    workspace_id: str
-
-
-class SubscriptionRow(TypedDict):
-    slug: str
+_ADDED = TypeAdapter(HostAddResponse)
+_REGISTRY = TypeAdapter(HostRegistryListResponse)
+_HOST = TypeAdapter(HostRegistryView)
+_REVOKED = TypeAdapter(HostTokenRevocationResponse)
+_ENROLLED = TypeAdapter(HostEnrollmentResponse)
+_RETIRED = TypeAdapter(HostRetireResponse)
 
 
 @dto
 @dataclass(frozen=True)
 class HostLine:
-    row: dict[str, Any]
+    row: HostRegistryView
     #: The name column's width; a listing widens it to the longest name it shows.
     name_width: int = 16
 
@@ -36,25 +44,25 @@ class HostLine:
 
     @property
     def name(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        return self.row.get("host_name") or "-"
+        return self.row.host_name or "-"
 
     @property
     def connection(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """``never-connected`` for a host added but never reported — else ``online`` or ``offline``."""
-        if self.row.get("connection") == RunnerConnection.NEVER_CONNECTED:
+        if self.row.connection == RunnerConnection.NEVER_CONNECTED:
             return "never-connected"
-        return "online" if self.row.get("online") else "offline"
+        return "online" if self.row.online else "offline"
 
     @property
     def retirement(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        if not self.row.get("retired"):
+        if not self.row.retired:
             return ""
-        return f" [retired {self.row.get('retired_at') or '-'} by {self.row.get('retired_by') or '-'}]"
+        return f" [retired {self.row.retired_at or '-'} by {self.row.retired_by or '-'}]"
 
     def line(self) -> str:
-        runners = len(self.row.get("runner_ids") or [])
+        runners = len(self.row.runner_ids)
         return (
-            f"{self.row['host_id']}  {self.name:<{self.name_width}} {self.connection:<15} runners={runners}"
+            f"{self.row.host_id}  {self.name:<{self.name_width}} {self.connection:<15} runners={runners}"
             f"{self.retirement}"
         )
 
@@ -72,19 +80,18 @@ class HostListing(Listing):
 @dto
 @dataclass(frozen=True)
 class HostDetail:
-    body: dict[str, Any]
+    body: HostRegistryView
 
     def lines(self) -> Iterator[str]:
-        yield HostLine(self.body).line()
-        yield f"  added={self.body.get('added_at') or '-'} by {self.body.get('added_by') or '-'}"
-        yield f"  url={self.body.get('url') or '-'}  enrolled={self.body.get('enrolled')}"
-        workspace_rows = cast(list[WorkspaceRow], self.body.get("workspaces") or [])
-        workspaces = ", ".join(w["workspace_id"] for w in workspace_rows) or "-"
+        body = self.body
+        yield HostLine(body).line()
+        yield f"  added={body.added_at or '-'} by {body.added_by or '-'}"
+        yield f"  url={body.url or '-'}  enrolled={body.enrolled}"
+        workspaces = ", ".join(w.workspace_id for w in body.workspaces) or "-"
         yield f"  workspaces={workspaces}"
-        subscription_rows = cast(list[SubscriptionRow], self.body.get("subscriptions") or [])
-        subscriptions = ", ".join(s["slug"] for s in subscription_rows) or "-"
+        subscriptions = ", ".join(s.slug for s in body.subscriptions) or "-"
         yield f"  subscriptions={subscriptions}"
-        yield f"  runners={', '.join(self.body.get('runner_ids') or []) or '-'}"
+        yield f"  runners={', '.join(body.runner_ids) or '-'}"
 
 
 def token_lines(token: str) -> tuple[str, str]:
@@ -120,11 +127,11 @@ def host_add(cli: CliContext, name: str, adopt: tuple[str, ...]) -> None:
         resp,
         "POST /hosts",
     )
-    body = resp.json()
-    lines = [f"added host {body['host_id']} ({body['host_name']}) — never connected"]
-    if body.get("adopted"):
-        lines.append(f"adopted: {', '.join(body['adopted'])}")
-    cli.show_lines(body, *lines, *token_lines(body["token"]))
+    raw, added = cli.decode(resp, _ADDED, "POST /hosts")
+    lines = [f"added host {added.host_id} ({added.host_name}) — never connected"]
+    if added.adopted:
+        lines.append(f"adopted: {', '.join(added.adopted)}")
+    cli.show_lines(raw, *lines, *token_lines(added.token))
 
 
 @runner_host_group.command("list", cls=FleetCommand)
@@ -134,8 +141,8 @@ def host_list(cli: CliContext, include_retired: bool) -> None:
 
     A host added but never reported shows as never-connected. Excludes a retired host unless --all."""
     params = {"include_retired": "true"} if include_retired else None
-    body = cli.get("/api/hosts", "GET /hosts", params=params).json()
-    cli.show(body, HostListing(body.get("hosts", [])))
+    raw, registry = cli.decode(cli.get("/api/hosts", "GET /hosts", params=params), _REGISTRY, "GET /hosts")
+    cli.show(raw, HostListing(registry.hosts))
 
 
 @runner_host_group.command("get", cls=FleetCommand)
@@ -143,18 +150,15 @@ def host_list(cli: CliContext, include_retired: bool) -> None:
 def host_show(cli: CliContext, host_id: str) -> None:
     """One host's connection, reported facts and runners, by HOST_ID — symmetric with ``runner-host list``."""
     resp = cli.get(f"/api/hosts/{host_id}", "GET /hosts/{id}")
-    body = resp.json()
-    cli.show(body, HostDetail(body))
+    raw, host = cli.decode(resp, _HOST, "GET /hosts/{id}")
+    cli.show(raw, HostDetail(host))
 
 
-def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *, verb: str, by: str) -> dict[str, Any]:
-    resp = cli.post(
-        f"/api/hosts/{host_id}/{verb}",
-        f"POST /hosts/{{id}}/{verb}",
-        json_body={"by": by, "runner_ids": list(runner_ids)},
-    )
-    body: dict[str, Any] = resp.json()
-    return body
+def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *, verb: str, by: str) -> Any:
+    operation = f"POST /hosts/{{id}}/{verb}"
+    resp = cli.post(f"/api/hosts/{host_id}/{verb}", operation, json_body={"by": by, "runner_ids": list(runner_ids)})
+    raw, _ = cli.decode(resp, _HOST, operation)
+    return raw
 
 
 @runner_host_group.command("adopt", cls=FleetCommand)
@@ -191,7 +195,8 @@ def host_revoke_token(cli: CliContext, host_id: str, by: str) -> None:
         "POST /hosts/{id}/token-revocations",
         json_body={"by": by},
     )
-    cli.show_lines(resp.json(), f"revoked {host_id}'s token — enroll it to mint a fresh one")
+    raw, _ = cli.decode(resp, _REVOKED, "POST /hosts/{id}/token-revocations")
+    cli.show_lines(raw, f"revoked {host_id}'s token — enroll it to mint a fresh one")
 
 
 @runner_host_group.command("enroll", cls=FleetCommand)
@@ -204,8 +209,8 @@ def host_enroll(cli: CliContext, host_id: str) -> None:
         f"/api/hosts/{host_id}/enrollments",
         "POST /hosts/{id}/enrollments",
     )
-    body = resp.json()
-    cli.show_lines(body, f"enrolled {host_id} — its previous token no longer resolves", *token_lines(body["token"]))
+    raw, enrolled = cli.decode(resp, _ENROLLED, "POST /hosts/{id}/enrollments")
+    cli.show_lines(raw, f"enrolled {host_id} — its previous token no longer resolves", *token_lines(enrolled.token))
 
 
 @runner_host_group.command("retire", cls=FleetCommand)
@@ -222,9 +227,8 @@ def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
         "POST /hosts/{id}/retire",
         json_body={"by": by, "force": force},
     )
-    body = resp.json()
+    raw, retired = cli.decode(resp, _RETIRED, "POST /hosts/{id}/retire")
     lines = [f"host {host_id} is retired"]
-    released = cast(list[str], body.get("released_chunk_ids") or [])
-    if released:
-        lines.append(f"released: {', '.join(released)}")
-    cli.show_lines(body, *lines)
+    if retired.released_chunk_ids:
+        lines.append(f"released: {', '.join(retired.released_chunk_ids)}")
+    cli.show_lines(raw, *lines)

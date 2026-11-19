@@ -9,9 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.tenancy import TenantId
 
 

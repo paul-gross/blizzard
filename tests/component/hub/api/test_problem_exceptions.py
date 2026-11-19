@@ -8,9 +8,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from blizzard.auth_core import Permission
 from blizzard.hub.api import problems
 from blizzard.hub.api.problem_exceptions import ProblemFactory, ProblemHTTPException, problem_http_exception
-from blizzard.hub.auth.permissions import Permission
 from blizzard.wire import auth as auth_wire
 from blizzard.wire import problem as problem_types
 from blizzard.wire import project as project_wire

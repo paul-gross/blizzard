@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.window import since_option, utc_query_value
 from blizzard.foundation.event_log import EventLogSeverity
@@ -13,20 +13,22 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.events import EventsResponse, EventView
+
+_EVENTS = TypeAdapter(EventsResponse)
 
 
 class FeedListing(Listing):
     empty = "no events"
 
-    def line(self, row: Any) -> str:
-        runner = f" runner={row['runner_id']}" if row.get("runner_id") else ""
-        chunk = f" chunk={row['chunk_id']}" if row.get("chunk_id") else ""
-        node = f" node={row['node_name']}" if row.get("node_name") else ""
+    def line(self, row: EventView) -> str:
+        runner = f" runner={row.runner_id}" if row.runner_id else ""
+        chunk = f" chunk={row.chunk_id}" if row.chunk_id else ""
+        node = f" node={row.node_name}" if row.node_name else ""
         # An escalation row carries its explanation as `detail.detail`; other rows' payloads stay JSON-only.
-        payload = row.get("detail")
-        explained = cast(dict[str, object], payload).get("detail") if isinstance(payload, dict) else None
+        explained = row.detail.get("detail") if row.detail is not None else None
         why = f" ({explained})" if isinstance(explained, str) and explained else ""
-        return f"{row['recorded_at']}  {row['severity']:<8} {row['kind']}{runner}{chunk}{node}  {row['message']}{why}"
+        return f"{row.recorded_at}  {row.severity!s:<8} {row.kind}{runner}{chunk}{node}  {row.message}{why}"
 
 
 @click.command("events", cls=FleetCommand)
@@ -60,5 +62,5 @@ def events(
         "limit": str(limit) if limit is not None else None,
     }
     params = {k: v for k, v in named.items() if v is not None} | project_query(project)
-    body = cli.get("/api/events", "GET /events", params=params).json()
-    cli.show(body, FeedListing(body["events"]))
+    raw, body = cli.decode(cli.get("/api/events", "GET /events", params=params), _EVENTS, "GET /events")
+    cli.show(raw, FeedListing(body.events))

@@ -5,13 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, QuestionLine
-from blizzard.wire.question import QUESTION_ALREADY_ANSWERED
+from blizzard.wire.question import QUESTION_ALREADY_ANSWERED, AnswerResult, QuestionView
+
+_QUESTIONS = TypeAdapter(list[QuestionView])
+_ANSWER = TypeAdapter(AnswerResult)
 
 
 class QuestionListing(Listing):
@@ -30,8 +34,10 @@ def question_group() -> None:
 @project_option(required_by_hub=False)
 def question_list(cli: CliContext, project: str | None) -> None:
     """Every open (unanswered) question across the fleet, or only one project's."""
-    rows = cli.get("/api/questions", "GET /questions", params=project_query(project)).json()
-    cli.show(rows, QuestionListing(rows))
+    raw, rows = cli.decode(
+        cli.get("/api/questions", "GET /questions", params=project_query(project)), _QUESTIONS, "GET /questions"
+    )
+    cli.show(raw, QuestionListing(rows))
 
 
 @question_group.command("answer", cls=FleetCommand)
@@ -51,4 +57,9 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
         body = refusal.members
         raise click.ClickException(f"already answered by {body['answered_by']}: {body['answer']!r}")
     cli.check(resp, "POST /questions/{id}/answers")
-    cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
+    cli.finish(
+        resp,
+        f"answered {question_id}: {answer_text!r} (the runner will resume the session)",
+        "POST /questions/{id}/answers",
+        answer=_ANSWER,
+    )

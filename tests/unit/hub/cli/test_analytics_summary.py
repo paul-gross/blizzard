@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import named_key
+from blizzard.wire.analytics import AnalyticsCountView
 from tests.support.worker_http import bind_stubs
 
 
@@ -443,8 +444,8 @@ def test_an_unknown_dataset_is_rejected() -> None:
 
 
 def test_named_key_prints_the_names_beside_an_id_and_not_beside_a_rolled_up_name() -> None:
-    assert named_key({"key": "nd_1", "graph_name": "adv", "node_name": "build"}) == "nd_1 (adv/build)"
-    assert named_key({"key": "gr_1", "graph_name": "adv", "node_name": None}) == "gr_1 (adv)"
-    assert named_key({"key": "adv/build", "graph_name": "adv", "node_name": "build"}) == "adv/build"
-    assert named_key({"key": "nd_gone", "graph_name": None, "node_name": None}) == "nd_gone"
-    assert named_key({"key": "src/a.py"}) == "src/a.py"
+    assert named_key(AnalyticsCountView(key="nd_1", count=1, graph_name="adv", node_name="build")) == "nd_1 (adv/build)"
+    assert named_key(AnalyticsCountView(key="gr_1", count=1, graph_name="adv")) == "gr_1 (adv)"
+    assert named_key(AnalyticsCountView(key="adv/build", count=1, graph_name="adv", node_name="build")) == "adv/build"
+    assert named_key(AnalyticsCountView(key="nd_gone", count=1)) == "nd_gone"
+    assert named_key(AnalyticsCountView(key="src/a.py", count=1)) == "src/a.py"

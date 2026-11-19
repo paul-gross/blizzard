@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
@@ -17,24 +18,37 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import GraphFile
-from blizzard.wire.graph import GRAPH_DEFINITION_INVALID
+from blizzard.wire.graph import (
+    GRAPH_DEFINITION_INVALID,
+    GraphSessionView,
+    GraphSummaryView,
+    GraphSyncEntry,
+    GraphView,
+)
+from blizzard.wire.tenant import AdminGraphSyncResponse, TenantGraphSync
+
+_GRAPH_SUMMARIES = TypeAdapter(list[GraphSummaryView])
+_GRAPH = TypeAdapter(GraphView)
+_ADMIN_GRAPH_SYNC = TypeAdapter(AdminGraphSyncResponse)
 
 
 class GraphListing(Listing):
     empty = "no graphs minted yet"
 
     def line(self, row: Any) -> str:
-        marker = "effective" if row["effective"] else ("retired" if row["retired"] else "superseded")
-        return f"{row['graph_id']}  name={row['name']}  {marker}  created_at={row['created_at']}"
+        graph: GraphSummaryView = row
+        marker = "effective" if graph.effective else ("retired" if graph.retired else "superseded")
+        return f"{graph.graph_id}  name={graph.name}  {marker}  created_at={graph.created_at}"
 
 
 class GraphSyncListing(Listing):
     empty = "no packaged graphs to reconcile"
 
     def line(self, row: Any) -> str:
-        detail = f" — {row['detail']}" if row.get("detail") else ""
-        graph_id = f" {row['graph_id']}" if row.get("graph_id") else ""
-        return f"{row['name']}: {row['status']}{graph_id}{detail}"
+        entry: GraphSyncEntry = row
+        detail = f" — {entry.detail}" if entry.detail else ""
+        graph_id = f" {entry.graph_id}" if entry.graph_id else ""
+        return f"{entry.name}: {entry.status}{graph_id}{detail}"
 
 
 @dto
@@ -42,45 +56,45 @@ class GraphSyncListing(Listing):
 class TenantGraphSyncReport:
     """One block per open tenant — its id and name, then a line per packaged graph."""
 
-    tenants: list[dict[str, Any]]
+    tenants: list[TenantGraphSync]
 
     def lines(self) -> Iterator[str]:
         if not self.tenants:
             yield "no open tenants"
         for tenant in self.tenants:
-            yield f"{tenant['tenant_id']}  {tenant['name']}"
-            for line in GraphSyncListing(tenant.get("entries", [])).lines():
+            yield f"{tenant.tenant_id}  {tenant.name}"
+            for line in GraphSyncListing(tenant.entries).lines():
                 yield f"  {line}"
 
 
 @dto
 @dataclass(frozen=True)
 class GraphDetail:
-    body: dict[str, Any]
+    body: GraphView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        marker = "retired" if body.get("retired") else "enabled"
-        yield f"{body['graph_id']}  name={body['name']}  {marker}  entry={body.get('entry_node_id')}"
-        for session in body.get("sessions", []):
-            yield f"  session {session['name']}  {_session_summary(session)}"
-        for node in body.get("nodes", []):
-            yield f"  node {node['node_id']}  name={node['name']}  executor={node.get('executor')}"
-        for edge in body.get("edges", []):
-            yield f"  edge {edge['from_node_id']} --[{edge.get('choice_id')}]--> {edge.get('to_node_name')}"
+        marker = "retired" if body.retired else "enabled"
+        yield f"{body.graph_id}  name={body.name}  {marker}  entry={body.entry_node_id}"
+        for session in body.sessions:
+            yield f"  session {session.name}  {_session_summary(session)}"
+        for node in body.nodes:
+            yield f"  node {node.node_id}  name={node.name}  executor={node.executor}"
+        for edge in body.edges:
+            yield f"  edge {edge.from_node_id} --[{edge.choice_id}]--> {edge.to_node_name}"
 
 
-def _session_summary(session: dict[str, Any]) -> str:
+def _session_summary(session: GraphSessionView) -> str:
     parts: list[str] = []
-    if session.get("model"):
-        parts.append(f"model={','.join(session['model'])}")
-    if session.get("effort"):
-        parts.append(f"effort={session['effort']}")
-    if session.get("compaction_window"):
-        parts.append(f"compaction_window={session['compaction_window']}")
-    if session.get("harnesses"):
-        parts.append(f"harnesses={','.join(session['harnesses'])}")
-    rotate = cast(dict[str, object], session.get("rotate") or {})
+    if session.model:
+        parts.append(f"model={','.join(session.model)}")
+    if session.effort:
+        parts.append(f"effort={session.effort}")
+    if session.compaction_window:
+        parts.append(f"compaction_window={session.compaction_window}")
+    if session.harnesses:
+        parts.append(f"harnesses={','.join(session.harnesses)}")
+    rotate = session.rotate.model_dump() if session.rotate is not None else {}
     bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
     if bounds:
         parts.append(f"rotate=({bounds})")
@@ -95,8 +109,8 @@ def graph_group() -> None:
 @graph_group.command("list", cls=FleetCommand)
 def graph_list(cli: CliContext) -> None:
     """List every minted graph, newest first — name, graph_id, effective, retired."""
-    rows = cli.get("/api/graphs", "GET /graphs").json()
-    cli.show(rows, GraphListing(rows))
+    raw, rows = cli.decode(cli.get("/api/graphs", "GET /graphs"), _GRAPH_SUMMARIES, "GET /graphs")
+    cli.show(raw, GraphListing(rows))
 
 
 @graph_group.command("get", cls=FleetCommand)
@@ -104,8 +118,8 @@ def graph_list(cli: CliContext) -> None:
 def graph_show(cli: CliContext, graph_id: str) -> None:
     """One graph's full reified definition — session pools, nodes, and edges."""
     resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}")
-    body = resp.json()
-    cli.show(body, GraphDetail(body))
+    raw, body = cli.decode(resp, _GRAPH, "GET /graphs/{id}")
+    cli.show(raw, GraphDetail(body))
 
 
 @graph_group.command("mint", cls=FleetCommand)
@@ -131,9 +145,9 @@ def graph_mint(cli: CliContext, path: str) -> None:
         lines += [f"warning: {w}" for w in cast(list[object], refusal.members.get("warnings", []))]
         raise click.ClickException("graph definition invalid:\n" + "\n".join(lines))
     cli.check(resp, "POST /graphs")
-    body = resp.json()
-    warnings = [f"warning: {w}" for w in body.get("warnings", [])]
-    cli.show_lines(body, f"minted graph {body['graph_id']}", *warnings)
+    raw, body = cli.decode(resp, _GRAPH, "POST /graphs")
+    warnings = [f"warning: {w}" for w in body.warnings]
+    cli.show_lines(raw, f"minted graph {body.graph_id}", *warnings)
 
 
 @graph_group.command("sync", cls=AdminCommand)
@@ -143,9 +157,10 @@ def graph_sync(cli: CliContext) -> None:
     Idempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.
     Exits non-zero only if a packaged graph failed to load in some tenant. When to run it:
     https://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy"""
-    body = cli.post("/api/admin/graphs/sync", "POST /admin/graphs/sync", json_body={}).json()
-    cli.show(body, TenantGraphSyncReport(body.get("tenants", [])))
-    if not body.get("ok", True):
+    resp = cli.post("/api/admin/graphs/sync", "POST /admin/graphs/sync", json_body={})
+    raw, body = cli.decode(resp, _ADMIN_GRAPH_SYNC, "POST /admin/graphs/sync")
+    cli.show(raw, TenantGraphSyncReport(body.tenants))
+    if not body.ok:
         raise click.ClickException("one or more packaged graphs failed to reconcile")
 
 
@@ -178,10 +193,10 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
         "PATCH /graphs/{id}",
         json_body={"follow_latest": follow_latest},
     )
-    body = resp.json()
-    stored = body.get("follow_latest")
+    raw, body = cli.decode(resp, _GRAPH, "PATCH /graphs/{id}")
+    stored = body.follow_latest
     rendered = "inherit (the hub default)" if stored is None else str(stored).lower()
-    cli.show_lines(body, f"graph {graph_id} follow-latest is now {rendered}")
+    cli.show_lines(raw, f"graph {graph_id} follow-latest is now {rendered}")
 
 
 def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str) -> None:
@@ -190,6 +205,6 @@ def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str) -> None:
         f"POST /graphs/{{id}}/{verb}",
         json_body={},
     )
-    body = resp.json()
-    state = "retired" if body.get("retired") else "enabled"
-    cli.show_lines(body, f"graph {graph_id} is now {state}")
+    raw, body = cli.decode(resp, _GRAPH, f"POST /graphs/{{id}}/{verb}")
+    state = "retired" if body.retired else "enabled"
+    cli.show_lines(raw, f"graph {graph_id} is now {state}")

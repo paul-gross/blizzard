@@ -98,7 +98,7 @@ def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path) ->
     for dataset, spec in DATASETS.items():
         result = _invoke(bound, dataset, "--json")
         assert result.exit_code == 0, (dataset, result.output)
-        assert spec.response_key in json.loads(result.stdout)
+        spec.answer.adapter.validate_python(json.loads(result.stdout))
 
 
 # --- filter round-trips: the events-derived counts datasets ---------------------------

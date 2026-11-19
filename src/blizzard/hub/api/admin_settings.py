@@ -7,6 +7,7 @@ from typing import Annotated, Any, NoReturn, Protocol, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
@@ -18,7 +19,6 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, settable_declarations
 from blizzard.hub.settings.values import thaw

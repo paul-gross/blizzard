@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
 
 import click
+from pydantic import BaseModel, TypeAdapter, model_validator
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.refusal import refusal_of
@@ -16,7 +17,17 @@ from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import accepted_extensions, codec_for_path
-from blizzard.wire.config import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
+from blizzard.wire.config import (
+    CONFIG_APPLY_CONFLICT,
+    CONFIG_DOCUMENT_INVALID,
+    CONFIG_MEDIA_TYPE_UNSUPPORTED,
+    ConfigApplyOutcome,
+    ConfigApplyResponse,
+    ConfigChangesPage,
+    ConfigChangeView,
+    ConfigDocumentV2,
+    ConfigDocumentV3,
+)
 from blizzard.wire.problem_reading import ProblemReading
 
 _KINDS = click.Choice(
@@ -36,26 +47,59 @@ _KINDS = click.Choice(
 )
 
 
+class ChangesPageAnswer(BaseModel):
+    """A change-log page as the hub answered it: decoded against :class:`ConfigChangesPage`, its rows also kept as
+    sent so ``--json`` prints them unchanged."""
+
+    raw_changes: list[Any]
+    page: ConfigChangesPage
+
+    @model_validator(mode="before")
+    @classmethod
+    def _of_answer(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            answer = cast(dict[str, Any], value)
+            return {"raw_changes": answer.get("changes"), "page": answer}
+        return value
+
+    @property
+    def next_before(self) -> int | None:
+        return self.page.next_before
+
+    def rows(self) -> list[tuple[Any, ConfigChangeView]]:
+        """Each row as sent beside its decoded form."""
+        return list(zip(self.raw_changes, self.page.changes, strict=True))
+
+
+CHANGES_PAGE = TypeAdapter(ChangesPageAnswer)
+_APPLIED = TypeAdapter(ConfigApplyResponse)
+#: The document model an export decodes against, by the version it asks for.
+_DOCUMENTS: dict[str, TypeAdapter[ConfigDocumentV2 | ConfigDocumentV3]] = {
+    "2": TypeAdapter[ConfigDocumentV2 | ConfigDocumentV3](ConfigDocumentV2),
+    "3": TypeAdapter[ConfigDocumentV2 | ConfigDocumentV3](ConfigDocumentV3),
+}
+
+
 class ChangeListing(Listing):
     empty = "no configuration changes yet"
 
-    def line(self, row: Any) -> str:
-        fields = ",".join(d["field"] for d in row["diff"])
+    def line(self, row: ConfigChangeView) -> str:
+        fields = ",".join(d.field for d in row.diff)
         tail = f"  {fields}" if fields else ""
-        record = row.get("record_label") or row["record_key"]
+        record = row.record_label or row.record_key
         return (
-            f"#{row['id']}  {row['recorded_at']}  {row['actor']}  {row['door']}  "
-            f"{row['record_kind']} {record}  r{row['revision']}  {row['op']}{tail}"
+            f"#{row.id}  {row.recorded_at}  {row.actor}  {row.door}  "
+            f"{row.record_kind} {record}  r{row.revision}  {row.op}{tail}"
         )
 
 
 class ApplyListing(Listing):
     empty = "nothing named in the document"
 
-    def line(self, row: Any) -> str:
-        fields = ",".join(d["field"] for d in row["diff"])
+    def line(self, row: ConfigApplyOutcome) -> str:
+        fields = ",".join(d.field for d in row.diff)
         tail = f"  {fields}" if fields else ""
-        return f"{row['op']:<9}  {row['kind']} {row['key']}{tail}"
+        return f"{row.op!s:<9}  {row.kind} {row.key}{tail}"
 
 
 #: The problem types the hub refuses a document with — each names the entry it stopped at.
@@ -110,12 +154,13 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
     rows, _ = cli.get_before_pages(
         "/api/config/changes",
         "GET /config/changes",
-        key="changes",
+        page=CHANGES_PAGE,
+        rows_of=ChangesPageAnswer.rows,
         params=params,
         want=None,
         first_page_only=not everything,
     )
-    cli.show({"changes": rows}, ChangeListing(rows))
+    cli.show({"changes": [raw for raw, _ in rows]}, ChangeListing([row for _, row in rows]))
 
 
 @config_group.command("apply", cls=FleetCommand)
@@ -142,8 +187,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     if refusal.type in _REFUSED:
         raise click.ClickException(_refusal(refusal))
     cli.check(resp, "POST /config/apply")
-    payload = resp.json()
-    cli.show(payload, ApplyListing(payload["outcomes"]))
+    raw, applied = cli.decode(resp, _APPLIED, "POST /config/apply")
+    cli.show(raw, ApplyListing(applied.outcomes))
 
 
 @config_group.command("export", cls=FleetCommand)
@@ -174,7 +219,7 @@ def config_export(cli: CliContext, fmt: str, version: str) -> None:
     if refusal.type in _REFUSED:
         raise click.ClickException(_refusal(refusal))
     cli.check(resp, "GET /config/export")
-    document = resp.json()
+    document, _ = cli.decode(resp, _DOCUMENTS[version], "GET /config/export")
     click.echo(codec.encode(document).decode("utf-8"), nl=False)
 
 

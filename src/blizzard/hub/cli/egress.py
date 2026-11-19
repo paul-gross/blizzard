@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import InstantTime, since_option, until_option, utc_query_value
@@ -14,42 +15,51 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.wire.egress import EGRESS_BACKFILL_FAILED
+from blizzard.wire.egress import (
+    EGRESS_BACKFILL_FAILED,
+    EgressBackfillResponse,
+    EgressResetResponse,
+    EgressStatusResponse,
+)
 
 #: A backfill runs inside the request, and a week-long window outlasts the default client timeout.
 _BACKFILL_TIMEOUT = 600.0
+
+_STATUS = TypeAdapter(EgressStatusResponse)
+_RESET = TypeAdapter(EgressResetResponse)
+_BACKFILL = TypeAdapter(EgressBackfillResponse)
 
 
 @dto
 @dataclass(frozen=True)
 class StatusView:
-    status: dict[str, Any]
+    status: EgressStatusResponse
 
     def lines(self) -> list[str]:
         s = self.status
-        if s["state"] == "off":
+        if s.state == "off":
             return ["egress: off"]
-        if s["state"] == "rejected":
-            return [f"egress: off — {s['rejected_setting']}={s['rejected_value']!r} is not available"]
-        lines = [f"egress: on, writing {s['format']} to {s['directory']}"]
-        if s["rejected_setting"] is not None:
-            lines.append(f"events: off — {s['rejected_setting']}={s['rejected_value']!r} names no key")
-        for dataset in s["datasets"]:
-            cursor = dataset["cursor_at"] or "none yet"
-            lag = "none waiting" if dataset["lag_seconds"] is None else f"{dataset['lag_seconds']:.0f}s"
-            lines.append(f"{dataset['name']}: cursor {cursor}  lag: {lag}")
-        if s["last_pass_at"] is None:
+        if s.state == "rejected":
+            return [f"egress: off — {s.rejected_setting}={s.rejected_value!r} is not available"]
+        lines = [f"egress: on, writing {s.format} to {s.directory}"]
+        if s.rejected_setting is not None:
+            lines.append(f"events: off — {s.rejected_setting}={s.rejected_value!r} names no key")
+        for dataset in s.datasets:
+            cursor = dataset.cursor_at or "none yet"
+            lag = "none waiting" if dataset.lag_seconds is None else f"{dataset.lag_seconds:.0f}s"
+            lines.append(f"{dataset.name}: cursor {cursor}  lag: {lag}")
+        if s.last_pass_at is None:
             lines.append("last pass: none")
         else:
-            lines.append(f"last pass: {s['last_pass_at']}  ({s['last_pass_dataset']}, {s['last_pass_row_count']} rows)")
-        lines.append(f"last file: {s['last_file'] or 'none'}")
-        if s["last_error_at"] is None:
+            lines.append(f"last pass: {s.last_pass_at}  ({s.last_pass_dataset}, {s.last_pass_row_count} rows)")
+        lines.append(f"last file: {s.last_file or 'none'}")
+        if s.last_error_at is None:
             lines.append("last error: none")
         else:
-            ongoing = "ongoing" if s["last_error_ongoing"] else "recovered"
-            lines.append(f"last error: {s['last_error_at']}  ({ongoing})  {s['last_error_message']}")
-        free = "unreadable" if s["free_bytes"] is None else f"{s['free_bytes']} bytes"
-        lines.append(f"free space: {free}  (min {s['min_free_bytes']} bytes)")
+            ongoing = "ongoing" if s.last_error_ongoing else "recovered"
+            lines.append(f"last error: {s.last_error_at}  ({ongoing})  {s.last_error_message}")
+        free = "unreadable" if s.free_bytes is None else f"{s.free_bytes} bytes"
+        lines.append(f"free space: {free}  (min {s.min_free_bytes} bytes)")
         return lines
 
 
@@ -62,8 +72,9 @@ def egress_group() -> None:
 def egress_status(cli: CliContext) -> None:
     """Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and
     file, the last error, and the free space."""
-    status = cli.get("/api/egress/status", "GET /egress/status").json()
-    cli.show(status, StatusView(status))
+    resp = cli.get("/api/egress/status", "GET /egress/status")
+    raw, status = cli.decode(resp, _STATUS, "GET /egress/status")
+    cli.show(raw, StatusView(status))
 
 
 @egress_group.command("reset", cls=AdminCommand)
@@ -83,11 +94,11 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
     body = {"dataset": dataset, "to": iso_utc(to.astimezone(UTC))}
     resp = cli.send("post", "/api/egress/reset", json_body=body)
     cli.check(resp, "POST /egress/reset")
-    result = resp.json()
-    was = result["from_at"] or "no cursor yet"
+    raw, result = cli.decode(resp, _RESET, "POST /egress/reset")
+    was = result.from_at or "no cursor yet"
     cli.show_lines(
-        result,
-        f"{result['dataset']} cursor moved from {was} to {result['to_at']}; the window was {result['direction']}",
+        raw,
+        f"{result.dataset} cursor moved from {was} to {result.to_at}; the window was {result.direction}",
     )
 
 
@@ -113,7 +124,7 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
             f"{refusal.message} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
         )
     cli.check(resp, "POST /egress/backfill")
-    result = resp.json()
+    raw, result = cli.decode(resp, _BACKFILL, "POST /egress/backfill")
     verb = "would write" if dry_run else "wrote"
-    lines = [f"{verb} {c['rows']} {c['dataset']} rows in {c['files']} files" for c in result["datasets"]]
-    cli.show_lines(result, *lines)
+    lines = [f"{verb} {c.rows} {c.dataset} rows in {c.files} files" for c in result.datasets]
+    cli.show_lines(raw, *lines)

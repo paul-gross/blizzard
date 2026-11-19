@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import click
+from pydantic import BaseModel, TypeAdapter, model_validator
 
+from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
@@ -15,45 +17,92 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
+from blizzard.wire.garden_proposal import (
+    GardenProposalAcceptResponse,
+    GardenProposalClosureView,
+    GardenProposalsPageView,
+    GardenProposalView,
+)
+
+
+class ProposalsPageAnswer(BaseModel):
+    """A proposals page as the hub answered it: decoded against :class:`GardenProposalsPageView`, its rows also kept
+    as sent so ``--json`` prints them unchanged."""
+
+    raw_proposals: list[Any]
+    page: GardenProposalsPageView
+
+    @model_validator(mode="before")
+    @classmethod
+    def _of_answer(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            answer = cast(dict[str, Any], value)
+            return {"raw_proposals": answer.get("proposals", []), "page": answer}
+        return value
+
+    @property
+    def next_cursor(self) -> str | None:
+        return self.page.next_cursor
+
+    def rows(self) -> list[tuple[Any, GardenProposalView]]:
+        """Each row as sent beside its decoded form."""
+        return list(zip(self.raw_proposals, self.page.proposals, strict=True))
+
+
+_PROPOSALS_PAGE = TypeAdapter(ProposalsPageAnswer)
+_PROPOSAL = TypeAdapter(GardenProposalView)
+_ACCEPTED = TypeAdapter(GardenProposalAcceptResponse)
 
 
 class GardenProposalListing(Listing):
+    """Rows as ``(sent, decoded)`` pairs: the origin tokens read the row as sent."""
+
     empty = "no garden proposals"
 
     def line(self, row: Any) -> str:
-        return f"{row['proposal_id']}  class={row['class']}  {ProposalOrigin(row).rendered}  {row['title']}"
+        sent, proposal = cast(tuple[dict[str, Any], GardenProposalView], row)
+        return f"{proposal.proposal_id}  class={proposal.class_}  {ProposalOrigin(sent).rendered}  {proposal.title}"
 
 
-def _closure_lines(closure: dict[str, Any] | None) -> Iterator[str]:
+def _closure_lines(closure: GardenProposalClosureView | None) -> Iterator[str]:
     if closure is None:
         return
-    if closure["closure"] == "passed":
-        yield f"  passed by {closure['closed_by']} at {closure['closed_at']}: {closure['reason']}"
+    if closure.closure == "passed":
+        yield f"  passed by {closure.closed_by} at {closure.closed_at}: {closure.reason}"
         return
-    if closure["item_outcome"] == "minted":
-        yield f"  accepted by {closure['closed_by']} at {closure['closed_at']} → {closure['source']}:{closure['ref']}"
+    if closure.item_outcome == "minted":
+        yield f"  accepted by {closure.closed_by} at {closure.closed_at} → {closure.source}:{closure.ref}"
     else:
-        yield f"  accepted by {closure['closed_by']} at {closure['closed_at']}, no work item minted"
-    if closure["reason"]:
-        yield f"  reason: {closure['reason']}"
+        yield f"  accepted by {closure.closed_by} at {closure.closed_at}, no work item minted"
+    if closure.reason:
+        yield f"  reason: {closure.reason}"
 
 
 @dto
 @dataclass(frozen=True)
 class GardenProposalDetail:
-    body: dict[str, Any]
+    """One proposal: ``sent`` is its body as the hub answered it, which the origin tokens read."""
+
+    sent: dict[str, Any]
+    body: GardenProposalView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['proposal_id']}  class={body['class']}  {ProposalOrigin(body).rendered}"
-        yield f"  {body['title']}"
-        yield f"  {body['body']}"
-        if body["findings"]:
-            yield f"  findings: {', '.join(body['findings'])}"
-        yield from _closure_lines(body.get("closure"))
-        chunk_id = body.get("chunk_id")  # the accept response only
-        if chunk_id is not None:
-            yield f"  → chunk {chunk_id}"
+        yield f"{body.proposal_id}  class={body.class_}  {ProposalOrigin(self.sent).rendered}"
+        yield f"  {body.title}"
+        yield f"  {body.body}"
+        if body.findings:
+            yield f"  findings: {', '.join(body.findings)}"
+        yield from _closure_lines(body.closure)
+        if isinstance(body, GardenProposalAcceptResponse) and body.chunk_id is not None:
+            yield f"  → chunk {body.chunk_id}"
+
+
+def _show_proposal[P: GardenProposalView](
+    cli: CliContext, resp: Response, operation: str, answer: TypeAdapter[P]
+) -> None:
+    raw, body = cli.decode(resp, answer, operation)
+    cli.show(raw, GardenProposalDetail(raw, body))
 
 
 @click.group("garden-proposal", cls=GetGroup)
@@ -67,8 +116,9 @@ def garden_proposal_group() -> None:
 def garden_proposal_list(cli: CliContext, origin: str | None, project: str | None) -> None:
     """List every garden proposal, newest first."""
     params = ({"origin": origin} if origin is not None else {}) | project_query(project)
-    rows = cli.get_all("/api/garden-proposals", "GET /garden-proposals", key="proposals", params=params)
-    cli.show(rows, GardenProposalListing(rows))
+    pages = cli.get_all("/api/garden-proposals", "GET /garden-proposals", page=_PROPOSALS_PAGE, params=params)
+    rows = [row for page in pages for row in page.rows()]
+    cli.show([sent for sent, _ in rows], GardenProposalListing(rows))
 
 
 @garden_proposal_group.command("get", cls=FleetCommand)
@@ -79,8 +129,7 @@ def garden_proposal_show(cli: CliContext, proposal_id: str) -> None:
         f"/api/garden-proposals/{proposal_id}",
         "GET /garden-proposals/{id}",
     )
-    body = resp.json()
-    cli.show(body, GardenProposalDetail(body))
+    _show_proposal(cli, resp, "GET /garden-proposals/{id}", _PROPOSAL)
 
 
 @garden_proposal_group.command("pass", cls=FleetCommand)
@@ -96,8 +145,7 @@ def garden_proposal_pass(cli: CliContext, proposal_id: str, reason: str) -> None
         "POST /garden-proposals/{id}/pass",
         json_body={"reason": reason},
     )
-    body = resp.json()
-    cli.show(body, GardenProposalDetail(body))
+    _show_proposal(cli, resp, "POST /garden-proposals/{id}/pass", _PROPOSAL)
 
 
 @garden_proposal_group.command("accept", cls=FleetCommand)
@@ -144,8 +192,7 @@ def garden_proposal_accept(
         "POST /garden-proposals/{id}/accept",
         json_body=json_body,
     )
-    body = resp.json()
-    cli.show(body, GardenProposalDetail(body))
+    _show_proposal(cli, resp, "POST /garden-proposals/{id}/accept", _ACCEPTED)
 
 
 @garden_proposal_group.command("create", cls=FleetCommand)
@@ -173,8 +220,7 @@ def garden_proposal_create(
     if routine is not None:
         json_body["routine"] = routine
     resp = cli.post(project_path(project, "/garden-proposals"), "POST /garden-proposals", json_body=json_body)
-    body_json = resp.json()
-    cli.show(body_json, GardenProposalDetail(body_json))
+    _show_proposal(cli, resp, "POST /garden-proposals", _PROPOSAL)
 
 
 @garden_proposal_group.command("edit", cls=FleetCommand)
@@ -199,8 +245,7 @@ def garden_proposal_edit(
         "PATCH /garden-proposals/{id}",
         json_body=json_body,
     )
-    body_json = resp.json()
-    cli.show(body_json, GardenProposalDetail(body_json))
+    _show_proposal(cli, resp, "PATCH /garden-proposals/{id}", _PROPOSAL)
 
 
 @garden_proposal_group.command("attach", cls=FleetCommand)
@@ -214,8 +259,7 @@ def garden_proposal_attach(cli: CliContext, proposal_id: str, finding_ids: tuple
         "POST /garden-proposals/{id}/attach",
         json_body={"findings": list(finding_ids)},
     )
-    body_json = resp.json()
-    cli.show(body_json, GardenProposalDetail(body_json))
+    _show_proposal(cli, resp, "POST /garden-proposals/{id}/attach", _PROPOSAL)
 
 
 @garden_proposal_group.command("detach", cls=FleetCommand)
@@ -229,5 +273,4 @@ def garden_proposal_detach(cli: CliContext, proposal_id: str, finding_ids: tuple
         "POST /garden-proposals/{id}/detach",
         json_body={"findings": list(finding_ids)},
     )
-    body_json = resp.json()
-    cli.show(body_json, GardenProposalDetail(body_json))
+    _show_proposal(cli, resp, "POST /garden-proposals/{id}/detach", _PROPOSAL)

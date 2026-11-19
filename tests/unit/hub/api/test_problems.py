@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -42,7 +43,6 @@ from blizzard.hub.api.problems import (
     runner_identity_problem,
     runner_version_problem,
 )
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.execution.claim import (

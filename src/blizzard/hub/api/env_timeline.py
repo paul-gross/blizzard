@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.usage_kind import UsageKind
@@ -21,7 +22,6 @@ from blizzard.hub.api.chunk_views import usage_total_view
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.env_timeline import (
     EnvSegment,
     EnvTimeline,

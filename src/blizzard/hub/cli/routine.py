@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
@@ -19,6 +20,20 @@ from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
 from blizzard.wire.chunk import POINTER_ALREADY_HELD
+from blizzard.wire.garden_proposal_counts import GardenProposalCountsView
+from blizzard.wire.garden_sweeps import GardenSweepsView
+from blizzard.wire.garden_trend import TrendView
+from blizzard.wire.project import ProjectsListView
+from blizzard.wire.routine import RoutineRunResponse, RoutineView
+
+_PROJECTS = TypeAdapter(ProjectsListView)
+_ROUTINE = TypeAdapter(RoutineView)
+_ROUTINES = TypeAdapter(list[RoutineView])
+_SCOPES = TypeAdapter(list[str])
+_RUN = TypeAdapter(RoutineRunResponse)
+_TREND = TypeAdapter(TrendView)
+_SWEEPS = TypeAdapter(GardenSweepsView)
+_PROPOSAL_COUNTS = TypeAdapter(GardenProposalCountsView)
 
 _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "
@@ -40,28 +55,29 @@ class RoutineListing(Listing):
     empty = "no routines yet"
 
     def line(self, row: Any) -> str:
-        marker = "  retired" if row.get("retired") else ""
+        routine: RoutineView = row
+        marker = "  retired" if routine.retired else ""
         return (
-            f"{row['routine_id']}  slug={row['slug']}  name={row['name']}  graph={row['graph_name']}  "
-            f"scope={row['default_scope_slug']}{marker}"
+            f"{routine.routine_id}  slug={routine.slug}  name={routine.name}  graph={routine.graph_name}  "
+            f"scope={routine.default_scope_slug}{marker}"
         )
 
 
 @dto
 @dataclass(frozen=True)
 class RoutineDetail:
-    body: dict[str, Any]
+    body: RoutineView
     scopes: Sequence[str]
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['routine_id']}  slug={body['slug']}  name={body['name']}  graph={body['graph_name']}"
-        yield f"  default scope: {body['default_scope_slug']}"
-        models = ", ".join(body.get("default_model") or []) or "-"
-        yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
-        harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
+        yield f"{body.routine_id}  slug={body.slug}  name={body.name}  graph={body.graph_name}"
+        yield f"  default scope: {body.default_scope_slug}"
+        models = ", ".join(body.default_model) or "-"
+        yield f"  default model: {models}   default effort: {body.default_effort or '-'}"
+        harnesses = ", ".join(body.default_harnesses) or "-"
         yield f"  default harnesses: {harnesses}"
-        yield f"  default urgency: {body.get('default_urgency') or '- (the tenant default)'}"
+        yield f"  default urgency: {body.default_urgency or '- (the tenant default)'}"
         yield f"  scopes: {', '.join(self.scopes)}"
 
 
@@ -113,8 +129,8 @@ def routine_create(
         door=True,
     )
     cli.check(resp, "POST /routines")
-    body = resp.json()
-    cli.show_lines(body, f"minted routine {body['routine_id']}")
+    raw, body = cli.decode(resp, _ROUTINE, "POST /routines")
+    cli.show_lines(raw, f"minted routine {body.routine_id}")
 
 
 @routine_group.command("list", cls=FleetCommand)
@@ -125,8 +141,9 @@ def routine_list(cli: CliContext, include_retired: bool, project: str | None) ->
 
     Excludes a retired routine unless --include-retired."""
     params = {"include_retired": "true"} if include_retired else {}
-    rows = cli.get("/api/routines", "GET /routines", params=(params | project_query(project)) or None).json()
-    cli.show(rows, RoutineListing(rows))
+    resp = cli.get("/api/routines", "GET /routines", params=(params | project_query(project)) or None)
+    raw, rows = cli.decode(resp, _ROUTINES, "GET /routines")
+    cli.show(raw, RoutineListing(rows))
 
 
 @routine_group.command("get", cls=FleetCommand)
@@ -135,12 +152,10 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
     """One routine's whole record — slug, name, graph, default scope, model/effort defaults,
     and its linked scopes."""
     resp = cli.get(f"/api/routines/{routine_id}", "GET /routines/{id}")
-    body = resp.json()
-    scopes = cli.get(
-        f"/api/routines/{routine_id}/scopes",
-        "GET /routines/{id}/scopes",
-    ).json()
-    cli.show({**body, "scopes": scopes}, RoutineDetail(body, scopes))
+    raw, body = cli.decode(resp, _ROUTINE, "GET /routines/{id}")
+    scopes_resp = cli.get(f"/api/routines/{routine_id}/scopes", "GET /routines/{id}/scopes")
+    raw_scopes, scopes = cli.decode(scopes_resp, _SCOPES, "GET /routines/{id}/scopes")
+    cli.show({**raw, "scopes": raw_scopes}, RoutineDetail(body, scopes))
 
 
 @routine_group.command("edit", cls=FleetCommand)
@@ -208,7 +223,8 @@ def routine_edit(
         raise click.UsageError("nothing to change — give a field to set or --clear")
     resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body, door=True)
     cli.check(resp, "PATCH /routines/{id}")
-    cli.show_lines(resp.json(), f"routine {routine_id} updated")
+    raw, _ = cli.decode(resp, _ROUTINE, "PATCH /routines/{id}")
+    cli.show_lines(raw, f"routine {routine_id} updated")
 
 
 @routine_group.group("scope")
@@ -258,15 +274,17 @@ def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
     ``unknown routine`` one. With no project named, NAME resolves only in a tenant holding
     one project: a slug is unique within its project alone."""
     if project is None:
-        projects = cli.get("/api/projects", "GET /projects").json()["projects"]
-        if len(projects) > 1:
-            raise project_required([{k: str(p[k]) for k in ("project_id", "slug", "name")} for p in projects])
+        _, listing = cli.decode(cli.get("/api/projects", "GET /projects"), _PROJECTS, "GET /projects")
+        if len(listing.projects) > 1:
+            raise project_required(
+                [{"project_id": p.project_id, "slug": p.slug, "name": p.name} for p in listing.projects]
+            )
     params = {"include_retired": "true"} | project_query(project)
-    rows = cli.get("/api/routines", "GET /routines", params=params).json()
-    matched = next((r for r in rows if r["slug"] == name), None)
+    _, rows = cli.decode(cli.get("/api/routines", "GET /routines", params=params), _ROUTINES, "GET /routines")
+    matched = next((r for r in rows if r.slug == name), None)
     if matched is None:
         raise click.ClickException(f"unknown routine {name!r}")
-    return str(matched["routine_id"])
+    return matched.routine_id
 
 
 @routine_group.command("retire", cls=FleetCommand)
@@ -295,9 +313,9 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
         json_body={"by": by},
         door=True,
     )
-    body = resp.json()
-    state = "retired" if body.get("retired") else "enabled"
-    cli.show_lines(body, f"routine {name!r} is now {state}")
+    raw, body = cli.decode(resp, _ROUTINE, f"POST /routines/{{id}}/{verb}")
+    state = "retired" if body.retired else "enabled"
+    cli.show_lines(raw, f"routine {name!r} is now {state}")
 
 
 @routine_group.command("run", cls=FleetCommand)
@@ -354,12 +372,12 @@ def routine_run(
         resp,
         "POST /routines/{id}/run",
     )
-    body = resp.json()
-    lines = [f"minted {body['chunk_id']} from routine {name!r} — mode={body['effective_mode']}"]
-    if body["downgraded"]:
+    raw, body = cli.decode(resp, _RUN, "POST /routines/{id}/run")
+    lines = [f"minted {body.chunk_id} from routine {name!r} — mode={body.effective_mode}"]
+    if body.downgraded:
         lines.append("note: requested delta downgraded to full — the routine/scope pair has recorded no baseline yet")
-    lines.append(f"not yet claimable — promote it with: blizzard hub chunk promote {body['chunk_id']}")
-    cli.show_lines(body, *lines)
+    lines.append(f"not yet claimable — promote it with: blizzard hub chunk promote {body.chunk_id}")
+    cli.show_lines(raw, *lines)
 
 
 @dto
@@ -367,22 +385,21 @@ def routine_run(
 class TrendDetail:
     """`routine trend`'s own render — per-period counts, then the age cut."""
 
-    body: dict[str, Any]
+    body: TrendView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield (f"{body['routine_name']}  {body['since']} .. {body['until']}  period_days={body['period_days']}")
-        for period in body["periods"]:
-            exits = ", ".join(f"{kind}={count}" for kind, count in period["exits"].items())
+        yield (f"{body.routine_name}  {body.since} .. {body.until}  period_days={body.period_days}")
+        for period in body.periods:
+            exits = ", ".join(f"{kind}={count}" for kind, count in period.exits.items())
             yield (
-                f"  {period['period_start']} .. {period['period_end']}  created={period['created']}  "
-                f"outflow={period['outflow']}  withdrawn={period['withdrawn']}  reopened={period['reopened']}  "
+                f"  {period.period_start} .. {period.period_end}  created={period.created}  "
+                f"outflow={period.outflow}  withdrawn={period.withdrawn}  reopened={period.reopened}  "
                 f"({exits})"
             )
-        age = body["age"]
+        age = body.age
         yield (
-            f"  age boundary={age['boundary']}  recent={age['recent']}  older={age['older']}  "
-            f"unattributed={age['unattributed']}"
+            f"  age boundary={age.boundary}  recent={age.recent}  older={age.older}  unattributed={age.unattributed}"
         )
 
 
@@ -424,8 +441,8 @@ def routine_trend(
         | project_query(project),
     )
     cli.check(resp, "GET /routines/trend")
-    body = resp.json()
-    cli.show(body, TrendDetail(body))
+    raw, body = cli.decode(resp, _TREND, "GET /routines/trend")
+    cli.show(raw, TrendDetail(body))
 
 
 @dto
@@ -435,24 +452,24 @@ class SweepsDetail:
     measurement series, over the same window `trend`'s own ``--since``/``--until``
     name."""
 
-    body: dict[str, Any]
+    body: GardenSweepsView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['routine_name']}  measurement window {body['since']} .. {body['until']}"
+        yield f"{body.routine_name}  measurement window {body.since} .. {body.until}"
         yield "  last swept:"
-        for row in body["last_swept"]:
-            if row["finding_set_id"] is None:
-                yield f"    {row['scope_slug']}: never"
+        for row in body.last_swept:
+            if row.finding_set_id is None:
+                yield f"    {row.scope_slug}: never"
                 continue
-            revisions = ", ".join(f"{repo}@{rev}" for repo, rev in sorted(row["revisions"].items()))
+            revisions = ", ".join(f"{repo}@{rev}" for repo, rev in sorted(row.revisions.items()))
             yield (
-                f"    {row['scope_slug']}: {row['produced_at']}  {row['finding_set_id']}  "
+                f"    {row.scope_slug}: {row.produced_at}  {row.finding_set_id}  "
                 f"({revisions or 'no repositories recorded'})"
             )
         yield "  measurements:"
-        for reading in body["measurements"]:
-            yield f"    {reading['produced_at']}  {reading['scope_slug']}: {reading['measurement']}"
+        for reading in body.measurements:
+            yield f"    {reading.produced_at}  {reading.scope_slug}: {reading.measurement}"
 
 
 @routine_group.command("sweeps", cls=FleetCommand)
@@ -470,32 +487,32 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime,
         params={"since": utc_query_value(since), "until": utc_query_value(until)},
     )
     cli.check(resp, "GET /routines/{id}/sweeps")
-    body = resp.json()
-    cli.show(body, SweepsDetail(body))
+    raw, body = cli.decode(resp, _SWEEPS, "GET /routines/{id}/sweeps")
+    cli.show(raw, SweepsDetail(body))
 
 
 @dto
 @dataclass(frozen=True)
 class ProposalCountsDetail:
     """`routine proposal-counts`'s own render — one line per class/origin
-    pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum."""
+    pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum. ``sent`` is the answer as
+    the hub sent it, which each row's origin tokens read."""
 
-    body: dict[str, Any]
+    sent: dict[str, Any]
+    body: GardenProposalCountsView
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        routine = body.get("routine")
-        scope = f"  routine={routine}" if routine else ""
-        yield f"{body['since']} .. {body['until']}{scope}"
-        rows = body["rows"]
-        if not rows:
+        scope = f"  routine={body.routine}" if body.routine else ""
+        yield f"{body.since} .. {body.until}{scope}"
+        if not body.rows:
             yield "  no proposals in this window"
             return
-        for row in rows:
+        for sent, row in zip(self.sent["rows"], body.rows, strict=True):
             yield (
-                f"  {row['class']}  {ProposalOrigin(row).rendered}  created={row['created']}  "
-                f"open={row['open']}  passed={row['passed']}  accepted(item)={row['accepted_with_item']}  "
-                f"accepted(no item)={row['accepted_without_item']}"
+                f"  {row.class_}  {ProposalOrigin(sent).rendered}  created={row.created}  "
+                f"open={row.open}  passed={row.passed}  accepted(item)={row.accepted_with_item}  "
+                f"accepted(no item)={row.accepted_without_item}"
             )
 
 
@@ -518,5 +535,5 @@ def routine_proposal_counts(
         params["origin"] = origin
     resp = cli.send("get", "/api/routines/proposal-counts", params=params)
     cli.check(resp, "GET /routines/proposal-counts")
-    body = resp.json()
-    cli.show(body, ProposalCountsDetail(body))
+    raw, body = cli.decode(resp, _PROPOSAL_COUNTS, "GET /routines/proposal-counts")
+    cli.show(raw, ProposalCountsDetail(raw, body))

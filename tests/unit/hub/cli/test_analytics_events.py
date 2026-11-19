@@ -31,6 +31,10 @@ _EVENT: dict[str, object] = {
     "depth": 0,
     "agent_type": None,
     "occurred_at": "2026-08-12T09:00:00+00:00",
+    "harness_id": None,
+    "harness_version": None,
+    "model": None,
+    "effort": None,
 }
 
 
