@@ -273,7 +273,7 @@ class Judgement:
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
         lease = self.lease
         observed = ElicitationExit(elicitation, self.ctx.clock.now(), alive=_elicitation_alive(self.ctx, elicitation))
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         worker = WorkerInvocation(lease.lease_id, generation)
         if not observed.alive and owners is not None and owners.awaiting_recovery(worker, self.session.harness_id):
@@ -382,7 +382,7 @@ class Judgement:
         self._relaunch(elicitation)
 
     def _release_judge(self, generation: int) -> None:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is not None:
             owners.release_judges(self.lease.lease_id, generation)
 
@@ -505,7 +505,7 @@ class Judgement:
             # that closure — no other runner can resume this exact session to relaunch on.
             return
         binding = self.bindings[0]
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         key = JudgeInvocation(lease.lease_id, generation)
         settings = harness.launch_settings(
@@ -593,7 +593,7 @@ class Judgement:
 
     def current_launch_available(self) -> bool:
         """Defer a judge when current launch values cannot be resolved by exact owner."""
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is None:
             return True
         return self._launch_set() is not None
@@ -763,11 +763,10 @@ class Judgement:
             return None
 
     def _judge_harnesses(self) -> IHarnessLifecycleAndVerdictRegistry:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is not None:
             generation = self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
             owner = owners.find(JudgeInvocation(self.lease.lease_id, generation))
             if owner is not None:
                 return owner.registry
-        resolve = getattr(self.ctx, "harnesses_for_judge", None)
-        return resolve(self.lease.lease_id) if resolve is not None else self.ctx.harnesses
+        return self.ctx.harnesses_for_judge(self.lease.lease_id)
