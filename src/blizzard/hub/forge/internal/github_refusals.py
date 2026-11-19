@@ -14,9 +14,9 @@ from blizzard.hub.domain.kernel.forge_refusals import (
     ForgeDiagnostic,
     sanitize_forge_text,
 )
+from blizzard.hub.forge.internal.github_rates import is_rate_refusal
 
 _SAML_MARKERS = ("saml enforcement", "saml sso")
-_RATE_MARKER = "rate limit"
 
 
 @domain_model
@@ -85,7 +85,7 @@ def classify_mint_refusal(
     permissions the mint asked for that the installation lacks. ``None`` for any other answer, a rate refusal's 403
     among them."""
     refusal = _MINT_REFUSALS.get(status)
-    if refusal is None or (status == 403 and is_rate_refusal(headers, message)):
+    if refusal is None or is_rate_refusal(status, headers, message):
         return None
     diagnostic = diagnostic_of(
         status,
@@ -100,13 +100,6 @@ def classify_mint_refusal(
     if refusal is AuthRefusal.PERMISSION_MISSING and missing is not None:
         diagnostic = replace(diagnostic, accepted_permissions=missing)
     return ClassifiedRefusal(refusal, diagnostic)
-
-
-def is_rate_refusal(headers: Mapping[str, str], message: str) -> bool:
-    """Whether a 403 refuses for rate rather than for the credential: its primary budget spent, a ``Retry-After``,
-    or a message naming a rate limit."""
-    lowered = _lowered(headers)
-    return lowered.get("x-ratelimit-remaining") == "0" or "retry-after" in lowered or _RATE_MARKER in message.lower()
 
 
 def diagnostic_of(

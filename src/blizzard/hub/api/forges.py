@@ -20,6 +20,7 @@ from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.config.credential_bindings import secret_of_authority
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
@@ -30,7 +31,6 @@ from blizzard.hub.domain.config.forges import (
     ForgeSlugTaken,
 )
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES, missing_capabilities
-from blizzard.hub.forge.budget import authority_secret
 from blizzard.wire.forge import (
     ForgeBudgetView,
     ForgeCreateRequest,
@@ -89,7 +89,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
         ],
         budgets=[
             ForgeBudgetView(
-                secret_name=authority_secret(key.authority),
+                secret_name=secret_of_authority(key.authority),
                 authority=key.authority,
                 bucket=reading.bucket,
                 limit=reading.limit,

@@ -9,7 +9,8 @@ from datetime import datetime
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets, authority_secret
+from blizzard.hub.domain.config.credential_bindings import secret_of_authority
+from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets
 
 _KINDS: dict[BudgetNoticeKind, EventLogKind] = {
     BudgetNoticeKind.BUDGET_LOW: "forge-budget-low",
@@ -41,7 +42,7 @@ class BudgetNoticeDrain:
                     detail={
                         "forge": notice.key.forge_id,
                         "authority": notice.key.authority,
-                        "secret": authority_secret(notice.key.authority),
+                        "secret": secret_of_authority(notice.key.authority),
                         "bucket": notice.bucket,
                         "remaining": notice.remaining,
                         "limit": notice.limit,

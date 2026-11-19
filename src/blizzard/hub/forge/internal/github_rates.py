@@ -13,6 +13,8 @@ from blizzard.hub.forge.budget import CORE_BUCKET, BudgetReading
 
 #: A rate limit that names no usable instant, and the floor of a secondary limit.
 DEFAULT_RESUME = timedelta(seconds=60)
+#: What a rate refusal's message names, whichever limit it hit.
+_RATE_MARKER = "rate limit"
 
 
 @adapter_model
@@ -36,18 +38,24 @@ class GitHubRateDialect:
         return rate_refusal_resume_at(status, headers, message, now)
 
 
-def rate_refusal_resume_at(status: int, headers: Mapping[str, str], message: str, now: datetime) -> datetime | None:
-    """When a GitHub answer says to come back, or ``None`` when the answer is no rate refusal. Only a ``403`` or a
-    ``429`` can be one: with no budget left, a ``Retry-After``, or a secondary limit named in ``message`` — the last
-    never lifting sooner than :data:`DEFAULT_RESUME`."""
+def is_rate_refusal(status: int, headers: Mapping[str, str], message: str) -> bool:
+    """Whether a GitHub answer refuses for rate rather than for the credential. Only a ``403`` or a ``429`` can: with
+    its budget spent, a ``Retry-After``, or a message naming a rate limit."""
     if status not in (403, 429):
+        return False
+    lowered = _lowered(headers)
+    return lowered.get("x-ratelimit-remaining") == "0" or "retry-after" in lowered or _RATE_MARKER in message.lower()
+
+
+def rate_refusal_resume_at(status: int, headers: Mapping[str, str], message: str, now: datetime) -> datetime | None:
+    """When a GitHub answer says to come back, or ``None`` when :func:`is_rate_refusal` says it is no rate refusal: the
+    ``Retry-After``, else the budget's reset, else :data:`DEFAULT_RESUME` from now — a secondary limit named in
+    ``message`` never lifting sooner than :data:`DEFAULT_RESUME`."""
+    if not is_rate_refusal(status, headers, message):
         return None
     lowered = _lowered(headers)
     secondary = "secondary rate limit" in message.lower()
-    retry_after = lowered.get("retry-after")
-    if lowered.get("x-ratelimit-remaining") != "0" and retry_after is None and not secondary:
-        return None
-    resume = _seconds_from(now, retry_after) or _reset_at(now, lowered.get("x-ratelimit-reset"))
+    resume = _seconds_from(now, lowered.get("retry-after")) or _reset_at(now, lowered.get("x-ratelimit-reset"))
     resume = resume or now + DEFAULT_RESUME
     return max(resume, now + DEFAULT_RESUME) if secondary else resume
 

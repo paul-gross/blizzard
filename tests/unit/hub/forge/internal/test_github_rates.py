@@ -1,5 +1,5 @@
 """The GitHub rate dialect — how a GitHub answer's ``X-RateLimit-*`` headers become a budget reading, and
-``rate_refusal_resume_at``, the rule for whether a GitHub answer is a rate refusal and when it lifts (unit tier)."""
+``is_rate_refusal`` and ``rate_refusal_resume_at``, the rule for whether a GitHub answer is a rate refusal and when it lifts (unit tier)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.forge.budget import BudgetReading
-from blizzard.hub.forge.internal.github_rates import GitHubRateDialect, rate_refusal_resume_at
+from blizzard.hub.forge.internal.github_rates import GitHubRateDialect, is_rate_refusal, rate_refusal_resume_at
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _RESET = _NOW + timedelta(seconds=600)
@@ -55,6 +55,7 @@ def test_a_reading_naming_no_bucket_lands_in_the_core_bucket() -> None:
         (403, {}, "You have exceeded a secondary rate limit.", 60),
         (403, {"retry-after": "10"}, "You have exceeded a secondary rate limit.", 60),
         (403, {"retry-after": "120"}, "You have exceeded a secondary rate limit.", 120),
+        (403, {}, "API rate limit exceeded for installation.", 60),
     ],
     ids=[
         "reset",
@@ -65,6 +66,7 @@ def test_a_reading_naming_no_bucket_lands_in_the_core_bucket() -> None:
         "secondary",
         "secondary-floor",
         "secondary-later",
+        "headerless-rate-limit",
     ],
 )
 def test_a_rate_refusal_says_when_it_lifts(
@@ -83,7 +85,27 @@ def test_a_rate_refusal_says_when_it_lifts(
     ids=["forbidden", "not-found", "ok"],
 )
 def test_any_other_answer_is_no_rate_refusal(status: int, headers: dict[str, str], message: str) -> None:
+    assert not is_rate_refusal(status, headers, message)
     assert rate_refusal_resume_at(status, headers, message, _NOW) is None
+
+
+@pytest.mark.parametrize(
+    ("status", "headers", "message"),
+    [
+        (403, {"x-ratelimit-remaining": "0"}, ""),
+        (429, {"Retry-After": "30"}, ""),
+        (403, {}, "API rate limit exceeded for installation."),
+        (403, {}, "You have exceeded a secondary rate limit."),
+    ],
+    ids=["budget-spent", "retry-after", "headerless-rate-limit", "secondary"],
+)
+def test_a_rate_refusal_is_one_to_every_reader(status: int, headers: dict[str, str], message: str) -> None:
+    assert is_rate_refusal(status, headers, message)
+    assert rate_refusal_resume_at(status, headers, message, _NOW) is not None
+
+
+def test_a_rate_limit_named_on_any_other_status_is_no_rate_refusal() -> None:
+    assert not is_rate_refusal(404, {}, "API rate limit exceeded")
 
 
 def test_the_dialect_refusal_is_the_rate_refusal_rule() -> None:

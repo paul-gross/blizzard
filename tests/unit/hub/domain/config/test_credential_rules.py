@@ -14,6 +14,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, Fi
 from blizzard.hub.domain.config.credential_bindings import (
     CREDENTIAL_BINDINGS,
     CredentialSettingsInvalid,
+    secret_of_authority,
 )
 from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.credentials import (
@@ -80,6 +81,15 @@ def test_a_github_token_refuses_any_other_setting_naming_it(settings: dict[str, 
 def test_a_github_token_acts_as_its_secret() -> None:
     assert _TOKEN.authority("gh", {"variant": "fine-grained"}) == "secret/gh"
     assert (_TOKEN.name, _TOKEN.forge_kind, _TOKEN.supplied) == ("github.token", "github", True)
+
+
+def test_a_github_token_authority_names_its_secret_back() -> None:
+    assert secret_of_authority(_TOKEN.authority("gh-token", {})) == "gh-token"
+
+
+def test_no_other_authority_names_a_secret() -> None:
+    assert secret_of_authority(_APP.authority("key", {"app_id": 1, "installation_id": 2})) is None
+    assert secret_of_authority(None) is None
 
 
 def test_every_token_variant_declares_its_forge_s_whole_kind() -> None:
