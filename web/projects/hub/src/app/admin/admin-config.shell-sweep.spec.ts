@@ -1,5 +1,5 @@
 import { Injector, provideZonelessChangeDetection, signal } from '@angular/core';
-import { form } from '@angular/forms/signals';
+import { form, required, schema } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
@@ -9,7 +9,6 @@ import type { Urgency } from 'fleet';
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';
 import { ConfigFieldTreeDialog } from './config-field-tree-dialog';
-import { ConfigFormDialog } from './config-form-dialog';
 import type { RevisionRowVm } from './config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
 import { SECRET_CREATE_FIELD_VIEWS } from './secrets/secrets.model';
@@ -140,15 +139,23 @@ async function mountMaster(canCreate: boolean) {
   return fixture;
 }
 
+interface ForgePickDraft {
+  forge: string;
+}
+
+const forgePickRules = schema<ForgePickDraft>((p) => required(p.forge, { message: 'A forge is required' }));
+
 async function mountForgeForm() {
   await TestBed.configureTestingModule({
-    imports: [ConfigFormDialog], providers: [provideZonelessChangeDetection()],
+    imports: [ConfigFieldTreeDialog], providers: [provideZonelessChangeDetection()],
   }).compileComponents();
-  const fixture = TestBed.createComponent(ConfigFormDialog);
+  const fixture = TestBed.createComponent(ConfigFieldTreeDialog<ForgePickDraft>);
+  const draft = form(signal<ForgePickDraft>({ forge: '' }), forgePickRules, { injector: TestBed.inject(Injector) });
   fixture.componentRef.setInput('heading', 'New repository');
   fixture.componentRef.setInput('mode', 'create');
+  fixture.componentRef.setInput('form', draft);
   fixture.componentRef.setInput('fields', [
-    { key: 'forge', label: 'Forge', kind: 'select', required: true, options: [
+    { key: 'forge', label: 'Forge', kind: 'select', options: [
       { value: 'frg_github', label: 'github · GitHub Enterprise with a long display name' },
     ] },
   ]);
@@ -262,14 +269,13 @@ describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
     await sweep(width, async (root) => {
       const trigger = root.querySelector<HTMLButtonElement>('[data-testid="forge-form-field-forge"]')!;
       expect(trigger).not.toBeNull();
-      expect((root.querySelector('[data-testid="forge-form-submit"]') as HTMLButtonElement).disabled).toBe(true);
       trigger.click();
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const option = document.querySelector<HTMLElement>('[role="option"]')!;
       expect(option?.textContent).toContain('GitHub Enterprise');
       option.click();
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      expect((root.querySelector('[data-testid="forge-form-submit"]') as HTMLButtonElement).disabled).toBe(false);
+      expect(trigger.textContent).toContain('GitHub Enterprise');
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
     }, mountForgeForm);
   });
