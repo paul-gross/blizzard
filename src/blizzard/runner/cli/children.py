@@ -8,8 +8,11 @@ from dataclasses import dataclass
 import click
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.runner.harness.binding_selection import IVersionProbe
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.compatibility.loopback import ILoopbackTransport, UrllibLoopbackTransport
 from blizzard.runner.harness.opencode_v2.transport import IServiceTransport, UrllibServiceTransport
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
@@ -51,3 +54,9 @@ class RunnerCliCollaborators(CliCollaborators):
 
 def command_children(ctx: click.Context) -> IChildProcesses:
     return RunnerCliCollaborators.of(ctx).children
+
+
+def command_versions(ctx: click.Context, env: ChildEnv) -> IVersionProbe:
+    """The version probe a verb selects bindings through: each binary's ``--version`` run under ``env`` by the
+    carrier's launcher."""
+    return VersionProbe(command_children(ctx), env)

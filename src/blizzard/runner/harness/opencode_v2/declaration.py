@@ -17,7 +17,6 @@ from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
@@ -135,7 +134,7 @@ class OpenCodeTwoDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        versions: IVersionProbe | None = None,
+        versions: IVersionProbe,
     ) -> HarnessAssembly:
         """This runner's adapter and its one health probe, sharing one service keeper and one version hold — the
         hold refuses a version either observes for as long as this runner's composition lasts. The keeper, the
@@ -170,7 +169,7 @@ class OpenCodeTwoDeclaration:
             worker_env=shared.worker_env,
             launcher=launcher,
             keeper=keeper,
-            versions=versions or VersionProbe(children, shared.worker_env.tool()),
+            versions=versions,
             hold=hold,
             request_dir=shared.root / REQUEST_DIRNAME,
             clock=clock,
@@ -192,7 +191,7 @@ class OpenCodeTwoDeclaration:
             keeper=keeper,
             hold=hold,
             corpus=corpus,
-            versions=versions or VersionProbe(children, shared.worker_env.tool()),
+            versions=versions,
             model_aliases=section.model_aliases,
             effort_aliases=section.effort_aliases,
         )

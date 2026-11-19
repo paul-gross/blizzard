@@ -35,7 +35,7 @@ from blizzard.runner.harness.opencode.bundle import (
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import HarnessSections, first_bindings, publish_harness_bundle, shared_inputs
-from tests.support.child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.config_inputs import init_host
 from tests.support.harness_sections import opencode, sections, with_claude_code
 from tests.support.runner_fakes import NO_TRACING, FakeProbe
@@ -117,6 +117,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
         monotonic_clock=SystemMonotonicClock(),
         health_roots=("",),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     ).binding
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter.config_env()
@@ -136,6 +137,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
         monotonic_clock=SystemMonotonicClock(),
         health_roots=("",),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     ).binding
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter.config_env()
@@ -449,6 +451,7 @@ def test_a_plugins_only_bundle_still_yields_the_snapshot_config_dir(tmp_path: Pa
         monotonic_clock=SystemMonotonicClock(),
         health_roots=("",),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     ).binding
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter.config_env()

@@ -517,6 +517,7 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
         monotonic_clock=SystemMonotonicClock(),
         health_roots=("",),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     ).binding
     assert binding.adapter is not None
     binding.adapter.resume_with_message(

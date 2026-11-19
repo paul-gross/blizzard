@@ -95,6 +95,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import BundleSnapshot
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, select_harness_bindings
 from blizzard.runner.host_config import (
     BuiltRunner,
@@ -1436,11 +1437,10 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
 
 def select_runner_bindings(config: RunnerConfig) -> BindingSelection:
     """The bindings ``config``'s binaries choose, each version-chosen one's ``--version`` run once."""
-    worker_env = config.worker_env(TracingSettings.of(os.environ))
+    tool_env = config.worker_env(TracingSettings.of(os.environ)).tool()
     return select_harness_bindings(
         config.harness_sections,
-        worker_env=worker_env,
-        children=SubprocessChildProcesses(SystemMonotonicClock()),
+        versions=VersionProbe(SubprocessChildProcesses(SystemMonotonicClock()), tool_env),
     )
 
 

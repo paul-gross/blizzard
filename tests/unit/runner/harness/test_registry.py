@@ -31,7 +31,7 @@ from blizzard.runner.harness.registry import (
 )
 from blizzard.runner.harness.wiring import HarnessSettings, build_production_harnesses, first_bindings
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.support.child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.config_inputs import export_runner_app, init_host
 from tests.support.harness_sections import with_claude_code, with_opencode
 from tests.support.runner_client import runner_seams
@@ -160,6 +160,7 @@ def _harnesses(
         monotonic_clock=ManualMonotonicClock(),
         spawn_roots=spawn_roots,
         corpus=corpus or CommittedCorpus(),
+        versions=version_probe(),
     )
 
 

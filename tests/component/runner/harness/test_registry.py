@@ -12,7 +12,7 @@ from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.wiring import build_production_harnesses, first_bindings
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.support.child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.runner_fakes import NO_TRACING
 
 
@@ -31,6 +31,7 @@ def test_the_production_opencode_probe_admits_against_the_injected_corpus(
         monotonic_clock=ManualMonotonicClock(),
         spawn_roots=("",),
         corpus=corpus,
+        versions=version_probe(),
     )
     probe = probes[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)

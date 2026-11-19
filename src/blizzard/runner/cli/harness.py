@@ -7,7 +7,7 @@ import os
 import click
 
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.cli.children import command_children
+from blizzard.runner.cli.children import command_children, command_versions
 from blizzard.runner.cli.daemon import runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -49,7 +49,7 @@ def harness_status(ctx: click.Context, directory: str, runner: str | None) -> No
         tracing = TracingSettings.of(os.environ)
         shared = shared_inputs(config.harness_settings(tracing))
         selection = select_harness_bindings(
-            config.harness_sections, worker_env=config.worker_env(tracing), children=command_children(ctx)
+            config.harness_sections, versions=command_versions(ctx, config.worker_env(tracing).tool())
         )
         launch = WorkspaceLaunch(children=command_children(ctx), env=config.tool_env(tracing))
         spawn_roots = dict.fromkeys(

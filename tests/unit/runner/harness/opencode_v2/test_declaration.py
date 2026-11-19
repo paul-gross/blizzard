@@ -15,6 +15,7 @@ from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.declaration import OPENCODE_V2_DECLARATION, REQUEST_DIRNAME, driver_command
@@ -64,6 +65,7 @@ def test_the_binding_is_the_opencode_2_adapter_over_the_shared_section(tmp_path:
             monotonic_clock=SystemMonotonicClock(),
             health_roots=("",),
             corpus=CommittedCorpus(),
+            versions=VersionProbe(CHILDREN, AllowlistedEnv.of(()).tool()),
         ).binding
     adapter = binding.adapter
     assert isinstance(adapter, OpenCodeTwoAdapter)
@@ -120,6 +122,7 @@ def _binding_adapter(root: Path, worker_env: AllowlistedEnv) -> OpenCodeTwoAdapt
             monotonic_clock=SystemMonotonicClock(),
             health_roots=("",),
             corpus=CommittedCorpus(),
+            versions=VersionProbe(CHILDREN, worker_env.tool()),
         ).binding
     assert isinstance(binding.adapter, OpenCodeTwoAdapter)
     return binding.adapter
@@ -173,6 +176,7 @@ def _assembly(
             monotonic_clock=monotonic_clock or ManualMonotonicClock(),
             health_roots=("",),
             corpus=CommittedCorpus(),
+            versions=VersionProbe(children, worker_env.tool()),
         )
 
 

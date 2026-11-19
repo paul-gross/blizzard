@@ -1662,9 +1662,7 @@ def _build_runner(
             chosen = (
                 held_selection
                 or (None if recovering else selection)
-                or select_harness_bindings(
-                    sections, worker_env=inputs.worker_env, children=host.children, versions=versions
-                )
+                or select_harness_bindings(sections, versions=versions)
             )
             recovery_sections: tuple[Any, ...] = ()
             pending_recovery: set[str] = set()
@@ -1698,8 +1696,6 @@ def _build_runner(
                     )
                     recovery_selection = select_harness_bindings(
                         HarnessSections(recovery_sections),
-                        worker_env=inputs.worker_env,
-                        children=host.children,
                         versions=versions,
                     )
                     chosen = BindingSelection(

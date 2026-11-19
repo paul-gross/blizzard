@@ -41,7 +41,6 @@ from blizzard.runner.harness.internal.bundle_publisher import (
     published_snapshot,
 )
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -149,15 +148,13 @@ def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
 def select_harness_bindings(
     sections: HarnessSections,
     *,
-    worker_env: AllowlistedEnv,
-    children: IChildProcesses,
-    versions: IVersionProbe | None = None,
+    versions: IVersionProbe,
 ) -> BindingSelection:
     """Select declarations for ``sections`` using version evidence shared by the assembly.
 
     See ``bzh:pluggable-seams`` for selection ownership."""
     by_id = {section.harness_id: section for section in sections}
-    return select_bindings(harness_families(), by_id, versions or VersionProbe(children, worker_env.tool()))
+    return select_bindings(harness_families(), by_id, versions)
 
 
 def first_bindings() -> BindingSelection:
@@ -277,7 +274,7 @@ def build_production_harnesses(
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
-    versions: IVersionProbe | None = None,
+    versions: IVersionProbe,
 ) -> tuple[HarnessRegistry, dict[str, IHarnessHealthProbe]]:
     """Assemble every enabled binding ``selection`` chose for one harness set, over one shared probe/launcher pair:
     its registry, and each binding's health probe by harness id. The process graph owns the injected executor and

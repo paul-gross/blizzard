@@ -36,7 +36,6 @@ from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptS
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
@@ -98,7 +97,7 @@ class ClaudeCodeDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        versions: IVersionProbe | None = None,
+        versions: IVersionProbe,
     ) -> HarnessAssembly:
         # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
         del clock, monotonic_clock, corpus
@@ -121,7 +120,7 @@ class ClaudeCodeDeclaration:
             bundle_path=str(shared.bundle.path) if shared.bundle is not None else None,
             process=process,
             launcher=launcher,
-            versions=versions or VersionProbe(children, shared.worker_env.tool()),
+            versions=versions,
             harness_telemetry=self.telemetry_plan(section, shared),
         )
         probes = tuple(
@@ -130,7 +129,7 @@ class ClaudeCodeDeclaration:
                 credentials_path=section.credentials_path,
                 ambient_sources=claude_code_ambient_sources(shared.worker_env, spawn_root=root),
                 permission_mode=claude_code_permission_mode(shared.autonomy, section.permission_mode),
-                versions=versions or VersionProbe(children, shared.worker_env.tool()),
+                versions=versions,
             )
             for root in health_roots
         )

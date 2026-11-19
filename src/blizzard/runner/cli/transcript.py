@@ -15,7 +15,7 @@ from blizzard.cli.runtime import click_exception_on
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.cli.children import command_children
+from blizzard.runner.cli.children import command_versions
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -150,7 +150,7 @@ def _loop_wiring(ctx: click.Context, config: RunnerConfig) -> LoopWiring:
     if config.harness_config_dir is not None:
         tracing = TracingSettings.of(os.environ)
         selection = select_harness_bindings(
-            config.harness_sections, worker_env=config.worker_env(tracing), children=command_children(ctx)
+            config.harness_sections, versions=command_versions(ctx, config.worker_env(tracing).tool())
         )
         try:
             bundle = load_published_harness_bundle(config.harness_config_dir, config.root, selection=selection)
