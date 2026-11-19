@@ -24,7 +24,7 @@ import { workSourceFieldViews, workSourceKey, workSourceRows } from './work-sour
 import { injectWorkSourcesQuery } from './work-sources.query';
 import { ProjectLens } from '../../core/project-lens';
 import { credentialOptions } from '../credentials/credentials.model';
-import { injectCredentialsQuery } from '../credentials/credentials.query';
+import { injectCredentialChoicesQuery } from '../credentials/credentials.query';
 import { forgeOptions } from '../forges/forges.model';
 import { injectForgesQuery } from '../forges/forges.query';
 
@@ -91,11 +91,11 @@ export class WorkSourcesPage {
   private readonly meQuery = injectMeQuery();
   private readonly workSourceService = injectWorkSourceService();
   private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly credentialsQuery = injectCredentialsQuery(() => false);
+  private readonly credentialsQuery = injectCredentialChoicesQuery(() => false);
   protected readonly fields = computed(() =>
     workSourceFieldViews(
       forgeOptions(this.forgesQuery.data() ?? []),
-      credentialOptions(this.credentialsQuery.data()?.credentials ?? []),
+      credentialOptions(this.credentialsQuery.data() ?? []),
     ),
   );
 

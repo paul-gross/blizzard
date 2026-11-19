@@ -1,10 +1,11 @@
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
 import { SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost } from './config-field-tree-dialog.story-host';
+import { ProjectedDialogHost } from './config-field-tree-dialog.projected.story-host';
 
 const meta: Meta = {
   title: 'Hub admin/Config field-tree dialog',
-  decorators: [moduleMetadata({ imports: [SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost] })],
+  decorators: [moduleMetadata({ imports: [SourceDialogHost, TimeoutDialogHost, UrgencyDialogHost, ProjectedDialogHost] })],
   parameters: { layout: 'fullscreen' },
 };
 export default meta;
@@ -17,6 +18,10 @@ const edit = (attrs = ''): Story => ({ render: () => ({ template: `<app-story-ur
 export const Create: Story = create();
 export const CreateTracker: Story = create('kind="tracker"');
 export const Edit: Story = edit();
+export const ProjectedEmpty: Story = { render: () => ({ template: '<app-story-projected-dialog />' }) };
+export const ProjectedOneChange: Story = { render: () => ({ template: '<app-story-projected-dialog [initialChanges]="1" />' }) };
+export const ProjectedManyChanges: Story = { render: () => ({ template: '<app-story-projected-dialog [initialChanges]="2" />' }) };
+export const ProjectedPhone: Story = { ...ProjectedManyChanges, globals: { viewport: { value: 'phone', isRotated: false } } };
 export const FieldRefusal: Story = {
   render: () => ({
     props: { outcome: { ok: false, fields: { name: 'That name is taken.' }, form: null } },

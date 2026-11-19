@@ -999,7 +999,6 @@ const DOMAIN_BOUNDARY_EXEMPT = [
   'fleet/src/lib/transcripts',
   'hub/src/app/admin',
   'hub/src/app/admin/changes',
-  'hub/src/app/admin/credentials',
   'hub/src/app/admin/forges',
   'hub/src/app/admin/hub-settings',
   'hub/src/app/admin/members',

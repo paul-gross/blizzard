@@ -48,11 +48,16 @@ export class ConfigFieldTreeDialog<D> {
   readonly fields = input.required<readonly ConfigFieldView<NoInfer<D>>[]>();
   /** The draft an edit started from — the container's captured baseline; `null` for a create or replace. */
   readonly baseline = input<NoInfer<D> | null>(null);
+  /** Complete presentation diff for an edit, including projected fields; when supplied it also governs the no-change save hold. Null uses the built-in field diff. Project controls with the `additional-fields` attribute into the form. */
+  readonly presentationDiff = input<readonly FieldChangeView[] | null>(null);
   readonly submitLabel = input.required<string>();
   /** A standing note under the fields — what a value means or what changing it does. */
   readonly hint = input<string | null>(null);
   readonly testidPrefix = input.required<string>();
 
+  /** Parent-owned dependent clearing for these keys; all other keys retain the default behavior. */
+  readonly externalDependentKeys = input<readonly string[]>([]);
+  readonly fieldChanged = output<string>();
   readonly save = output<void>();
   readonly closed = output<void>();
 
@@ -64,6 +69,8 @@ export class ConfigFieldTreeDialog<D> {
   protected readonly visibleFields = computed(() => shownFieldViews(this.fields(), this.mode(), this.draft()));
 
   protected readonly changes = computed<readonly FieldChangeView[]>(() => {
+    const supplied = this.presentationDiff();
+    if (supplied !== null) return supplied;
     const baseline = this.baseline();
     return this.mode() === 'edit' && baseline !== null ? fieldChanges(this.fields(), baseline, this.draft()) : [];
   });
@@ -105,7 +112,10 @@ export class ConfigFieldTreeDialog<D> {
 
   /** A field changed: every field whose choices hang on it, directly or through another, is cleared. */
   protected onChanged(key: string): void {
-    for (const dependent of dependentsOf(this.fields(), key)) this.textField(dependent)().value.set('');
+    if (!this.externalDependentKeys().includes(key)) {
+      for (const dependent of dependentsOf(this.fields(), key)) this.textField(dependent)().value.set('');
+    }
+    this.fieldChanged.emit(key);
   }
 
   protected onReading(key: string, reading: boolean): void {

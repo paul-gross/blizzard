@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, ViewportService } from 'fleet';
+import { ViewportService } from 'fleet';
 import {
   credentialDocument,
   credentialSummary,
@@ -16,8 +16,9 @@ import {
 
 import { CredentialDetail } from './credential-detail';
 import { CredentialsPage } from './credentials-page';
+import { hubConfigListKey } from '../../core/query-keys';
 
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit' as const] };
 const LIST = {
   credentials: [credentialSummary({ referrer_count: 2 })],
   bindings: [
@@ -43,11 +44,11 @@ describe('CredentialsPage', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(url: string) {
+  async function open(url: string, credentials: () => typeof LIST | Promise<typeof LIST> = () => LIST) {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/forges': () => FORGES,
-      'GET /api/credentials': () => LIST,
+      'GET /api/credentials': credentials,
       'GET /api/credentials/{credential}': () => credentialDocument({ credential_id: 'cred_n', slug: 'gh-ci' }),
       'POST /api/credentials': () => credentialSummary({ credential_id: 'cred_n', slug: 'gh-ci' }),
     });
@@ -84,14 +85,14 @@ describe('CredentialsPage', () => {
     );
 
   async function pick(harness: RouterTestingHarness, field: string, label: string): Promise<void> {
-    testid(document, `admin-credentials-create-field-${field}`)!.click();
+    testid(document, `admin-credentials-create-${field.startsWith('setting-') ? field : 'field-' + field}`)!.click();
     await settle(harness.fixture);
     options().find((option) => option.textContent?.includes(label))!.click();
     await settle(harness.fixture);
   }
 
   async function type(harness: RouterTestingHarness, field: string, value: string): Promise<void> {
-    const host = testid(document, `admin-credentials-create-field-${field}`)!;
+    const host = testid(document, `admin-credentials-create-${field.startsWith('setting-') ? field : 'field-' + field}`)!;
     const input = host.querySelector('input') ?? (host as HTMLInputElement);
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -132,13 +133,102 @@ describe('CredentialsPage', () => {
     await pick(harness, 'forge', 'github');
     await pick(harness, 'binding', 'github.token');
     await type(harness, 'secret', 'gh-ci-token');
-    await pick(harness, 'setting.github.token.variant', 'fine-grained');
-    testid(document, 'admin-credentials-create-submit')!.click();
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    testid(document, 'kit-form-save')!.click();
     await settle(harness.fixture);
 
     expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({
       slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'gh-ci-token', settings: { variant: 'fine-grained' },
     });
     expect(router.url).toBe('/admin/credentials/cred_n');
+  });
+
+  it('reconciles delayed and refreshed settings without losing the create draft', async () => {
+    let resolve!: (value: typeof LIST) => void;
+    const pending = new Promise<typeof LIST>((done) => { resolve = done; });
+    const { harness, el } = await open('/admin/credentials', () => pending);
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'in-progress');
+    resolve(LIST);
+    await settle(harness.fixture);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    await pick(harness, 'forge', 'gitlab');
+
+    const client = TestBed.inject(QueryClient);
+    client.setQueryData(hubConfigListKey('credentials', false), {
+      ...LIST,
+      bindings: [LIST.bindings[1]],
+    });
+    await settle(harness.fixture);
+    client.setQueryData(hubConfigListKey('credentials', false), LIST);
+    await settle(harness.fixture);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    const slug = testid(document, 'admin-credentials-create-field-slug')!;
+    expect((slug.querySelector('input') ?? slug as HTMLInputElement).value).toBe('in-progress');
+    expect(testid(document, 'admin-credentials-create-setting-github.token-variant')!.textContent).toContain('fine-grained');
+  });
+
+  it('blocks removed entered settings, preserves them across schema loss and binding switches, and submits them if restored', async () => {
+    const { harness, el } = await open('/admin/credentials');
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'gh-ci');
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await type(harness, 'secret', 'token');
+    await pick(harness, 'setting-github.token-variant', 'fine-grained');
+    const client = TestBed.inject(QueryClient);
+    const update = async (bindings: typeof LIST.bindings) => {
+      client.setQueryData(hubConfigListKey('credentials', false), { ...LIST, bindings });
+      await settle(harness.fixture);
+    };
+    await update([{ ...LIST.bindings[0], settings: [] }, LIST.bindings[1]]);
+    expect(testid(document, 'admin-credentials-create-settings-removed')!.textContent).toContain('variant');
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')).toHaveLength(0);
+    await update([LIST.bindings[1]]);
+    expect(testid(document, 'admin-credentials-create-settings-unavailable')).not.toBeNull();
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')).toHaveLength(0);
+    await pick(harness, 'forge', 'gitlab');
+    await pick(harness, 'binding', 'gitlab.token');
+    expect(testid(document, 'admin-credentials-create-settings-removed')).toBeNull();
+    await update(LIST.bindings);
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    expect(testid(document, 'admin-credentials-create-setting-github.token-variant')!.textContent).toContain('fine-grained');
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({
+      slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'token', settings: { variant: 'fine-grained' },
+    });
+  });
+
+  it('allows creation after the user clears a removed setting', async () => {
+    const { harness, el } = await open('/admin/credentials');
+    testid(el, 'admin-credentials-new')!.click();
+    await settle(harness.fixture);
+    await type(harness, 'slug', 'gh-ci');
+    await pick(harness, 'forge', 'github');
+    await pick(harness, 'binding', 'github.token');
+    await type(harness, 'secret', 'token');
+    await pick(harness, 'setting-github.token-variant', 'classic');
+    TestBed.inject(QueryClient).setQueryData(hubConfigListKey('credentials', false), {
+      ...LIST, bindings: [{ ...LIST.bindings[0], settings: [] }, LIST.bindings[1]],
+    });
+    await settle(harness.fixture);
+    await pick(harness, 'setting-github.token-variant', 'Not set');
+    expect(testid(document, 'admin-credentials-create-settings-removed')).toBeNull();
+    testid(document, 'kit-form-save')!.click();
+    await settle(harness.fixture);
+    expect(stub.forRoute('/api/credentials', 'POST')[0].body).toEqual({
+      slug: 'gh-ci', forge: 'frg_g', binding: 'github.token', secret: 'token',
+    });
   });
 });

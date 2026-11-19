@@ -8,6 +8,7 @@ import {
 import { hubConfigListKey, hubConfigRecordKey } from '../../core/query-keys';
 import type { CredentialChoice } from '../repositories/repository.domain';
 import { fromCredentialSummary } from '../repositories/repository.translate';
+import { fromCredentialBinding, fromCredentialDocument, fromCredentialListItem, fromForgeBindings } from './credential.translate';
 
 const NOUN = 'credentials';
 
@@ -15,7 +16,14 @@ const NOUN = 'credentials';
  * one's referrer count and the bindings a credential may name. Freshness: `hubConfigKey`
  * (`web/projects/hub/src/app/core/query-keys.ts`). */
 export function injectCredentialsQuery(includeRetired: () => boolean) {
-  return injectQuery(() => credentialsOptions(includeRetired()));
+  return injectQuery(() => ({
+    ...credentialsOptions(includeRetired()),
+    select: (list: CredentialsListView) => ({
+      credentials: list.credentials.map(fromCredentialListItem),
+      bindings: list.bindings.map(fromCredentialBinding),
+      forgeBindings: list.forge_bindings.map(fromForgeBindings),
+    }),
+  }));
 }
 
 /** {@link injectCredentialsQuery}'s read, on the same cache key, as the credentials a repository form may offer. */
@@ -49,6 +57,7 @@ export function injectCredentialQuery(key: () => string | null) {
         if (error) throw error;
         return data!;
       },
+      select: fromCredentialDocument,
     };
   });
 }

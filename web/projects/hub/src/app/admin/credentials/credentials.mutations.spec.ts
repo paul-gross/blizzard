@@ -9,7 +9,8 @@ import { hubConfigKey } from '../../core/query-keys';
 
 const CHECK: CredentialCheckView = {
   credential: 'gh-main', binding: 'github.token', variant: 'classic', variant_contradicted: false, granted_permissions: null, mint: null,
-  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null, uses: [],
+  not_evaluated: 'Branch protection, required reviews, and rulesets are not evaluated.', unreached_reason: null,
+  uses: [{ id: 'repo_c', kind: 'repository', slug: 'core', reached: true, operations: [{ operation: 'access', outcome: 'proven', detail: null, diagnostic: null }] }],
 };
 
 describe('credential mutations', () => {
@@ -52,7 +53,11 @@ describe('credential mutations', () => {
   it('posts a check, answers it as its data, and invalidates nothing', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const check = TestBed.runInInjectionContext(() => injectCheckCredentialMutation());
-    expect(await check.mutateAsync({ credentialId: 'cred_g', scope: { repositories: ['core'] } })).toEqual(CHECK);
+    expect(await check.mutateAsync({ credentialId: 'cred_g', scope: { repositories: ['core'] } })).toEqual({
+      credential: CHECK.credential, binding: CHECK.binding, variant: 'classic', variantContradicted: false,
+      grantedPermissions: null, mint: null, notEvaluated: CHECK.not_evaluated, unreachedReason: null,
+      uses: [{ id: 'repo_c', kind: 'repository', slug: 'core', reached: true, operations: [{ operation: 'access', outcome: 'proven', detail: null, diagnostic: null }] }],
+    });
     expect(stub.forRoute('/api/credentials/cred_g/checks', 'POST')[0].body).toEqual({ repositories: ['core'] });
     expect(spy).not.toHaveBeenCalled();
   });

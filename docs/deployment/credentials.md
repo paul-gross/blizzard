@@ -150,8 +150,8 @@ blizzard hub source edit blizzard --credential gh-app
 
 On the board, a user with `config:edit` does the same on a desktop from the Admin page. On the Secrets tab, create a
 secret and paste the whole `.pem` file into its value; the field hides the key and keeps its line breaks. On the
-Credentials tab, create a credential, pick `github.app-installation` as its binding and the secret, and enter the App id
-and the installation id as numbers. The credential's detail shows its authority, read-only.
+Credentials tab, create a credential, pick `github.app-installation` as its binding, enter the secret's name and the App
+id and the installation id as numbers. The credential's detail shows its authority, read-only.
 
 ### Replacing the key
 
