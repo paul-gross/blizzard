@@ -29,7 +29,7 @@ import { ProjectLens, lensLink } from '../../core/project-lens';
 import { injectProjectRunnersQuery } from '../../core/runners.query';
 import { ConfigFieldTreeDialog } from '../config-field-tree-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
-import { injectProjectHistoryQuery } from '../config-history.query';
+import { injectConfigHistoryQuery } from '../config-history.query';
 import { injectProjectRepositoriesQuery } from '../repositories/repositories.query';
 import { injectProjectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { projectDraft, type ProjectDraft } from './project.domain';
@@ -118,7 +118,7 @@ export class ProjectDetail {
   private readonly sourcesQuery = injectProjectWorkSourcesQuery(() => true);
   private readonly repositoriesQuery = injectProjectRepositoriesQuery(() => true);
   private readonly runnersQuery = injectProjectRunnersQuery();
-  private readonly historyQuery = injectProjectHistoryQuery(() => this.projectId());
+  private readonly historyQuery = injectConfigHistoryQuery('project', () => this.projectId());
   private readonly now = injectNowSignal();
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
   protected readonly countsQuery = injectProjectChunkCountsQuery(

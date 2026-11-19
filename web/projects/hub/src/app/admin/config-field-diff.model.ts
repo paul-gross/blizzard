@@ -1,4 +1,4 @@
-import type { FieldChangeView } from 'fleet';
+import type { ConfigFieldChange } from './config-history.domain';
 
 /** One rendered row of a field diff. */
 export interface FieldDiffRowVm {
@@ -16,7 +16,7 @@ export function formatDiffValue(value: unknown): string {
 }
 
 /** The rows a field diff renders. */
-export function fieldDiffRows(diff: readonly FieldChangeView[]): readonly FieldDiffRowVm[] {
+export function fieldDiffRows(diff: readonly ConfigFieldChange[]): readonly FieldDiffRowVm[] {
   return diff.map((change) => ({
     field: change.field,
     old: formatDiffValue(change.old_label ?? change.old),

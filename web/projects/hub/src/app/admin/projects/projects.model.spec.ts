@@ -56,9 +56,13 @@ function change(id: number, diff: ConfigFieldChange[]): ConfigChange {
     id,
     actor: 'ada',
     actor_name: null,
+    apply_id: null,
     door: 'board',
     op: 'edit',
     recorded_at: '2026-10-01T00:00:00Z',
+    record_kind: 'project',
+    record_key: 'winter',
+    record_label: null,
     revision: id,
     diff,
   };

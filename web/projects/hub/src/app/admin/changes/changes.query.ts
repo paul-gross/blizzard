@@ -1,6 +1,8 @@
-import { injectInfiniteQuery } from '@tanstack/angular-query-experimental';
+import { type InfiniteData, injectInfiniteQuery } from '@tanstack/angular-query-experimental';
 
 import { type ConfigChangesPage, listChangesApiConfigChangesGet } from 'fleet';
+import type { ConfigChangePage } from '../config-history.domain';
+import { toConfigChangePage } from '../config-history.translate';
 import { hubConfigChangesKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -31,6 +33,10 @@ export function injectConfigChangesQuery() {
         return data ?? { changes: [] };
       },
       getNextPageParam: (last: ConfigChangesPage) => last.next_before ?? undefined,
+      select: (data: InfiniteData<ConfigChangesPage, number | undefined>): InfiniteData<ConfigChangePage, number | undefined> => ({
+        pages: data.pages.map(toConfigChangePage),
+        pageParams: data.pageParams,
+      }),
     };
   });
 }

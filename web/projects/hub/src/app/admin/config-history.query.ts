@@ -50,13 +50,8 @@ export function injectConfigHistoryQuery(
   recordKind: RecordKind,
   recordKey: () => string | null,
 ) {
-  return injectQuery(() => ConfigHistoryQueryOptions(recordKind, recordKey));
-}
-
-/** Domain projection over the same cached wire read. */
-export function injectProjectHistoryQuery(recordKey: () => string | null) {
   return injectQuery(() => ({
-    ...ConfigHistoryQueryOptions('project', recordKey),
+    ...ConfigHistoryQueryOptions(recordKind, recordKey),
     select: (rows: ConfigChangeView[]) => rows.map(toConfigChange),
   }));
 }

@@ -1,9 +1,10 @@
-import type { ConfigChangeView } from 'fleet';
 import { describe, expect, it } from 'vitest';
+
+import type { ConfigChange } from './config-history.domain';
 
 import { changeActor, changesOfPages, historyRecordKey, lastChange, revisionRows } from './config-history.model';
 
-function change(id: number, revision: number, overrides: Partial<ConfigChangeView> = {}): ConfigChangeView {
+function change(id: number, revision: number, overrides: Partial<ConfigChange> = {}): ConfigChange {
   return {
     id,
     revision,
@@ -11,7 +12,6 @@ function change(id: number, revision: number, overrides: Partial<ConfigChangeVie
     door: 'cli',
     actor_name: null,
     apply_id: null,
-    project_id: null,
     record_label: null,
     op: 'edit',
     record_kind: 'work_source',

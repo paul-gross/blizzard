@@ -1,4 +1,4 @@
-import type { ConfigChangesPage } from 'fleet';
+import type { ConfigChangePage } from './config-history.domain';
 
 /** How many records an admin tab holds, `null` while its read has not answered (or is not the actor's to make). */
 export function tabCount(records: readonly unknown[] | undefined, narrowedTo: ReadonlySet<string> | null = null): number | null {
@@ -8,7 +8,7 @@ export function tabCount(records: readonly unknown[] | undefined, narrowedTo: Re
 }
 
 /** How many changes the change log's filters select — its first page's `total` — `null` until that page answers. */
-export function changesTotal(pages: readonly ConfigChangesPage[] | undefined): number | null {
+export function changesTotal(pages: readonly ConfigChangePage[] | undefined): number | null {
   return pages?.[0]?.total ?? null;
 }
 
