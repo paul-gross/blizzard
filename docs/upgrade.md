@@ -83,6 +83,21 @@ table. `.env` and the other sources still hold every token they held before the 
 `runner token set` or moved in by `runner ingest` since then lives only in the store: put it back in `.env` as
 `BZ_HUB_TOKEN_<NAME>` before rolling back, or enroll the runner again with `blizzard hub runner enroll <id>` afterwards.
 
+### Runners become records in the host store
+
+From this release a host's runners are records in its store, added and retired through `blizzard runner add` and
+`retire` or the host's `POST /api/host/runners` routes, and neither verb writes `.env` or the host file. Migrate the
+store with the new release's `blizzard runner migrate --dir <host-directory>` before starting it. The first start
+records every identified `[[runner]]` of the host file as one of the host's runners, in one transaction, so a host keeps
+its file runners. From then on a `[[runner]]` removed from the file no longer retires its runner: retire it with
+`blizzard runner retire`. A `[[runner]]` of a retired runner is no longer read, and the host warns of it at each start
+until it is removed. `runner add` no longer creates `runners/<name>/`.
+
+Walking back to an earlier release strands each runner added since through the API or `runner add`: the older host reads
+its runners from the host file alone, and such a runner has no `[[runner]]` and no token in `.env`. Retire each at the
+hub with `blizzard hub runner retire <id>` and add it again on the older release, or add its `[[runner]]` and
+`BZ_HUB_TOKEN_<NAME>` by hand before walking back ([rollback](./rollback.md)).
+
 ## Upgrading to 0.4.0
 
 ### Store baseline at 0.2.0
