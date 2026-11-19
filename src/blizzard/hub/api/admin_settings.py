@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
-from typing import Annotated, NoReturn, cast
+from typing import Annotated, Any, NoReturn, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 
@@ -16,20 +17,22 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, setting_keys
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (
     HubSettingRow,
     HubSettingsChange,
     HubSettingsChanges,
-    HubSettingsInvalidProblem,
     HubSettingsView,
     HubSettingsWrite,
 )
+from blizzard.wire.problem import ProblemDetails
 
 router = APIRouter(prefix="/api/admin/settings", tags=["admin"], dependencies=[Depends(reject_runner_principal)])
 Admin = Annotated[ResolvedIdentity, Depends(require_hub(Permission.SETTINGS_ADMIN))]
@@ -45,42 +48,28 @@ def graph(request: Request) -> HubSettingsGraph:
 Settings = Annotated[HubSettingsGraph, Depends(graph)]
 
 
-def _problem(code: str, message: str, errors: dict[str, str], *, instance: str) -> HubSettingsInvalidProblem:
-    return HubSettingsInvalidProblem(
-        type=f"urn:blizzard:problem:{code.replace('_', '-')}",
-        title="Invalid settings",
-        detail=message,
-        instance=instance,
-        status=422,
-        code=code,
-        errors=errors,
-    )
-
-
-def validation_problem(*, instance: str) -> HubSettingsInvalidProblem:
-    return _problem("settings_invalid", "Invalid settings request", {}, instance=instance)
-
-
-def _refuse(code: str, message: str, errors: dict[str, str] | None = None) -> NoReturn:
-    raise ProblemHTTPException(partial(_problem, code, message, errors or {}))
+def _refuse(
+    builder: Callable[..., ProblemDetails[Any]], message: str, errors: dict[str, str] | None = None
+) -> NoReturn:
+    raise ProblemHTTPException(partial(builder, message, errors or {}))
 
 
 def _check_keys(settings: HubSettingsGraph, keys: set[str]) -> None:
-    registry = settings.footing.key_registry
-    for key in sorted(keys):
-        declaration = registry.key(key)
-        if declaration is None or declaration.deprecated or declaration.type == TABLE or "[]" in key:
-            _refuse("setting_unknown", f"Unknown hub setting {key!r}")
-        if declaration.lifetime != Lifetime.PASS:
-            _refuse("setting_not_live", f"{key} is a boot setting; edit blizzard-hub.toml and restart")
+    try:
+        require_settable(settings.footing.key_registry, keys)
+    except SettingUnknown as exc:
+        _refuse(setting_unknown_problem, str(exc))
+    except SettingNotLive as exc:
+        _refuse(setting_not_live_problem, str(exc))
 
 
 def _view(settings: HubSettingsGraph) -> HubSettingsView:
     snapshot, provenance = settings.store.view()
     rows: list[HubSettingRow] = []
-    for key in settings.footing.key_registry.keys:
-        if key.lifetime != Lifetime.PASS or key.deprecated or "[]" in key.path:
-            continue
+    registry = settings.footing.key_registry
+    for path in setting_keys(registry):
+        key = registry.key(path)
+        assert key is not None
         entry = snapshot.entries.get(key.path)
         source = "entry" if entry is not None and not entry.at_default else "default"
         metadata = provenance.get(key.path)
@@ -89,7 +78,7 @@ def _view(settings: HubSettingsGraph) -> HubSettingsView:
                 key=key.path,
                 value=thaw(entry.value if source == "entry" and entry else _default(key.path, key.default)),
                 source="entry" if source == "entry" else "default",
-                lifetime=key.lifetime,
+                lifetime=Lifetime.PASS,
                 revision=metadata[0] if metadata else None,
                 written_at=iso_utc(metadata[1]) if metadata else None,
                 written_by=metadata[2] if metadata else None,
@@ -99,7 +88,7 @@ def _view(settings: HubSettingsGraph) -> HubSettingsView:
 
 
 def _invalid(exc: SettingsInvalid) -> NoReturn:
-    _refuse("settings_invalid", str(exc), exc.errors)
+    _refuse(settings_invalid_problem, str(exc), exc.errors)
 
 
 def _effective(entry: Entry | None, default: object) -> object:
@@ -130,14 +119,14 @@ def patch_settings(
 ) -> HubSettingsView:
     _check_keys(settings, set(body.sets) | set(body.unset))
     if any(value is None for value in body.sets.values()):
-        _refuse("settings_invalid", "null is not a setting value; use the unset list")
+        _refuse(settings_invalid_problem, "null is not a setting value; use the unset list")
     try:
         change = Change("edit", sets=body.sets, unsets=frozenset(body.unset))
         # The shared vocabulary names the page door "page"; the HTTP header names it "board".
         actual_door: Door = "page" if door.value == "board" else "cli" if door.value == "cli" else "api"
         settings.authoring.apply(change, if_match=if_match, door=actual_door, actor=identity.user_id)
     except ValueError as exc:
-        _refuse("settings_invalid", str(exc))
+        _refuse(settings_invalid_problem, str(exc))
     except SettingsRevisionConflict as exc:
         raise ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc))) from exc
     except SettingsInvalid as exc:
@@ -180,7 +169,7 @@ def apply_document(
 ) -> ConfigApplyResponse:
     entries = _document(settings, document)
     if any(value is None for value in entries.values()):
-        _refuse("settings_invalid", "null is not a setting value; use settings unset")
+        _refuse(settings_invalid_problem, "null is not a setting value; use settings unset")
     change = Change("edit", sets=entries)
     try:
         apply_id, diff = settings.authoring.apply_document(change, actor=identity.user_id, dry_run=dry_run)

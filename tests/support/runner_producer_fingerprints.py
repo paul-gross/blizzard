@@ -1,7 +1,7 @@
 """Source-bound change detector; not a reviewed operation/refusal inventory."""
 
 FINGERPRINTS = """\
-src/blizzard/hub/api/admin_settings.py 4 f25efbadb54a7bf99497f86ef2b14c55e78f162782d2b5d5459658a143ece095
+src/blizzard/hub/api/admin_settings.py 4 a7e972fa3687d275722b784b600350a57a9d089cedbee59357d2d081ba2829d8
 src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
 src/blizzard/hub/api/admin_tenants.py 9 dfc8f084e6dfd45c2a25ef48955ce4f58b6eabd1909fc3869de25d7500718757
 src/blizzard/hub/api/analytics.py 12 78121178001f8dfc47d3ca9444023657cd4a0e4c21e6bbfa2bc8fc6d74560f56
@@ -69,6 +69,6 @@ src/blizzard/hub/api/users.py 2 ce9fa82c1d8d280fa4917bb7b82c9ef1b3e6624419ef75d8
 src/blizzard/hub/api/work_item_reads.py 1 1c765dfc14ea5520ebb9e82b327febc59d336c107c061cdbd019e73f2a1594f9
 src/blizzard/hub/api/work_source_params.py 4 729c5f26d5be9bd39ca9f14a15f432730ce8de18797be247ad509f1fe13af638
 src/blizzard/hub/api/work_sources.py 18 1e88bbda06dc8744808adeb86c5c836b333f162429eb16c6ae5449ed7074a01d
-src/blizzard/hub/app.py 9 c529766915087d44b03a9d5a4ad72024e5fc263497d583baf8242f5fb9f7812e
+src/blizzard/hub/app.py 9 51a25d0932614977a9b89ba3c6ecd07f77395717bd02693e313060cf86c74d83
 src/blizzard/hub/forge/internal/github_landing.py 1 36ab294bfe3a29a72e2b57e6a0df515babb6bd9643941f12eebbc7436dc557e1
 """

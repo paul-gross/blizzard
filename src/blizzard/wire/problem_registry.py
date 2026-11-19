@@ -20,6 +20,7 @@ from blizzard.wire.garden_sweeps import GARDEN_SWEEPS_PROBLEM_TYPES
 from blizzard.wire.garden_window import GARDEN_WINDOW_PROBLEM_TYPES
 from blizzard.wire.graph import GRAPH_PROBLEM_TYPES
 from blizzard.wire.host import HOST_PROBLEM_TYPES
+from blizzard.wire.hub_settings import HUB_SETTINGS_PROBLEM_TYPES
 from blizzard.wire.invariants import INVARIANTS_PROBLEM_TYPES
 from blizzard.wire.invitation import INVITATION_PROBLEM_TYPES
 from blizzard.wire.problem import PROBLEM_TYPES
@@ -63,6 +64,7 @@ ALL_PROBLEM_TYPES: frozenset[str] = (
     | GARDEN_WINDOW_PROBLEM_TYPES
     | GRAPH_PROBLEM_TYPES
     | HOST_PROBLEM_TYPES
+    | HUB_SETTINGS_PROBLEM_TYPES
     | INVARIANTS_PROBLEM_TYPES
     | INVITATION_PROBLEM_TYPES
     | PROJECT_PROBLEM_TYPES

@@ -289,7 +289,7 @@ def _raised_problem_factories(source: str) -> set[str]:
 
 
 _RAISED_FACTORIES = {
-    "_problem",
+    "builder",
     "problem",
     *(
         f"problems.{name}"

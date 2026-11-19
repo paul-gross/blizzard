@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +23,40 @@ def setting_keys(registry: ConfigRegistry) -> tuple[str, ...]:
         for key in registry.keys
         if key.lifetime == Lifetime.PASS and not key.deprecated and "[]" not in key.path and key.type != TABLE
     )
+
+
+class SettingUnknown(Exception):
+    """A key the hub does not declare as a settable setting."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"Unknown hub setting {key!r}")
+        self.key = key
+
+
+class SettingNotLive(Exception):
+    """A declared boot setting: edited in the hub's config file, applied on restart."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"{key} is a boot setting; edit blizzard-hub.toml and restart")
+        self.key = key
+
+
+def require_settable(registry: ConfigRegistry, keys: Iterable[str]) -> None:
+    """Refuse the first key, in sorted order, that is not a live setting."""
+    settable = set(setting_keys(registry))
+    for key in sorted(set(keys)):
+        if key in settable:
+            continue
+        declaration = registry.key(key)
+        if (
+            declaration is not None
+            and not declaration.deprecated
+            and declaration.type != TABLE
+            and "[]" not in key
+            and declaration.lifetime != Lifetime.PASS
+        ):
+            raise SettingNotLive(key)
+        raise SettingUnknown(key)
 
 
 def _put(document: dict[str, object], path: str, value: object) -> None:

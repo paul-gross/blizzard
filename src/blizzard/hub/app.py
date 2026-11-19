@@ -52,7 +52,6 @@ from blizzard.hub.api import problems
 from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_invariants import router as admin_invariants_router
 from blizzard.hub.api.admin_settings import router as admin_settings_router
-from blizzard.hub.api.admin_settings import validation_problem as hub_settings_validation_problem
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
@@ -97,6 +96,7 @@ from blizzard.hub.api.members import router as members_router
 from blizzard.hub.api.openapi_problems import install_problem_responses
 from blizzard.hub.api.problem_exceptions import problem_http_exception
 from blizzard.hub.api.problem_rendering import declared_problem_response
+from blizzard.hub.api.problems_admin import settings_invalid_problem
 from blizzard.hub.api.project_params import refuse_project_required
 from blizzard.hub.api.projects import router as projects_router
 from blizzard.hub.api.questions import router as questions_router
@@ -554,7 +554,9 @@ async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
         ("PATCH", "/api/admin/settings"),
         ("POST", "/api/admin/settings/apply"),
     }:
-        response = declared_problem_response(request, hub_settings_validation_problem(instance=request.url.path))
+        response = declared_problem_response(
+            request, settings_invalid_problem("Invalid settings request", {}, instance=request.url.path)
+        )
         assert response is not None
         return response
     if request.url.path == "/api/admin/clock":

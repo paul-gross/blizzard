@@ -9888,45 +9888,6 @@ export type HubSettingsChanges = {
 };
 
 /**
- * HubSettingsInvalidProblem
- *
- * An unrecognized, non-live, contradictory or invalid settings write.
- */
-export type HubSettingsInvalidProblem = {
-    /**
-     * Code
-     */
-    code: string;
-    /**
-     * Detail
-     */
-    detail: string;
-    /**
-     * Errors
-     */
-    errors: {
-        [key: string]: string;
-    };
-    /**
-     * Instance
-     */
-    instance: string;
-    /**
-     * Status
-     */
-    status?: number;
-    /**
-     * Title
-     */
-    title: string;
-    /**
-     * Type
-     */
-    type: string;
-    [key: string]: unknown;
-};
-
-/**
  * HubSettingsView
  */
 export type HubSettingsView = {
@@ -16630,6 +16591,84 @@ export type ServedProjectView = {
 export type SessionMode = 'resume' | 'fresh';
 
 /**
+ * SettingNotLiveProblem
+ *
+ * A settings write names a boot setting, which is edited in the hub's config file and takes a restart.
+ */
+export type SettingNotLiveProblem = {
+    /**
+     * Code
+     */
+    code: 'setting_not_live';
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: {
+        [key: string]: string;
+    };
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:setting-not-live';
+    [key: string]: unknown;
+};
+
+/**
+ * SettingUnknownProblem
+ *
+ * A settings write names a key the hub does not declare as settable.
+ */
+export type SettingUnknownProblem = {
+    /**
+     * Code
+     */
+    code: 'setting_unknown';
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: {
+        [key: string]: string;
+    };
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:setting-unknown';
+    [key: string]: unknown;
+};
+
+/**
  * SettingsEntry
  *
  * The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new
@@ -16640,6 +16679,45 @@ export type SettingsEntry = {
      * Default Urgency
      */
     default_urgency?: string | null;
+};
+
+/**
+ * SettingsInvalidProblem
+ *
+ * A contradictory or invalid settings write; ``errors`` names each offending key.
+ */
+export type SettingsInvalidProblem = {
+    /**
+     * Code
+     */
+    code: 'settings_invalid';
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: {
+        [key: string]: string;
+    };
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:settings-invalid';
+    [key: string]: unknown;
 };
 
 /**

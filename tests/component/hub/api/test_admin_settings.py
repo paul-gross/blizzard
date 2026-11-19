@@ -216,6 +216,23 @@ def test_transcript_caps_show_effective_defaults_and_overrides(tmp_path: Path) -
     assert (row["value"], row["source"]) == (defaults.record_max_bytes, "default")
 
 
+def test_get_omits_and_patch_refuses_a_grouping_key(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    assert "transcripts" not in {r["key"] for r in client.get(path).json()["settings"]}
+    refused = client.patch(path, headers={"If-Match": "1"}, json={"set": {"transcripts": {}}})
+    assert refused.status_code == 422
+    assert (refused.json()["type"], refused.json()["code"]) == (
+        "urn:blizzard:problem:setting-unknown",
+        "setting_unknown",
+    )
+    boot = client.patch(path, headers={"If-Match": "1"}, json={"set": {"host": "x"}})
+    assert (boot.json()["type"], boot.json()["code"]) == (
+        "urn:blizzard:problem:setting-not-live",
+        "setting_not_live",
+    )
+
+
 def test_request_validation_matches_declared_problem(tmp_path: Path) -> None:
     client = _hub(tmp_path).client
     path = "/api/admin/settings"

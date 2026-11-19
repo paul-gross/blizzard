@@ -16520,58 +16520,6 @@
         "title": "HubSettingsChanges",
         "type": "object"
       },
-      "HubSettingsInvalidProblem": {
-        "additionalProperties": true,
-        "description": "An unrecognized, non-live, contradictory or invalid settings write.",
-        "properties": {
-          "code": {
-            "title": "Code",
-            "type": "string"
-          },
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          },
-          "errors": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "default": {},
-            "title": "Errors",
-            "type": "object"
-          },
-          "instance": {
-            "title": "Instance",
-            "type": "string"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Status"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance",
-          "code",
-          "errors"
-        ],
-        "title": "HubSettingsInvalidProblem",
-        "type": "object"
-      },
       "HubSettingsView": {
         "properties": {
           "revision": {
@@ -27314,6 +27262,114 @@
         "title": "SessionMode",
         "type": "string"
       },
+      "SettingNotLiveProblem": {
+        "additionalProperties": true,
+        "description": "A settings write names a boot setting, which is edited in the hub's config file and takes a restart.",
+        "properties": {
+          "code": {
+            "const": "setting_not_live",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Errors",
+            "type": "object"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:setting-not-live",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "code",
+          "errors"
+        ],
+        "title": "SettingNotLiveProblem",
+        "type": "object"
+      },
+      "SettingUnknownProblem": {
+        "additionalProperties": true,
+        "description": "A settings write names a key the hub does not declare as settable.",
+        "properties": {
+          "code": {
+            "const": "setting_unknown",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Errors",
+            "type": "object"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:setting-unknown",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "code",
+          "errors"
+        ],
+        "title": "SettingUnknownProblem",
+        "type": "object"
+      },
       "SettingsEntry": {
         "additionalProperties": false,
         "description": "The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new\nchunk takes when nothing names another; ``null`` is refused.",
@@ -27331,6 +27387,60 @@
           }
         },
         "title": "SettingsEntry",
+        "type": "object"
+      },
+      "SettingsInvalidProblem": {
+        "additionalProperties": true,
+        "description": "A contradictory or invalid settings write; ``errors`` names each offending key.",
+        "properties": {
+          "code": {
+            "const": "settings_invalid",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Errors",
+            "type": "object"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:settings-invalid",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "code",
+          "errors"
+        ],
+        "title": "SettingsInvalidProblem",
         "type": "object"
       },
       "SettingsPatchRequest": {
@@ -33170,7 +33280,17 @@
               },
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HubSettingsInvalidProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SettingUnknownProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingNotLiveProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingsInvalidProblem"
+                    }
+                  ]
                 }
               }
             },
@@ -33267,7 +33387,17 @@
               },
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HubSettingsInvalidProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SettingUnknownProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingNotLiveProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingsInvalidProblem"
+                    }
+                  ]
                 }
               }
             },
