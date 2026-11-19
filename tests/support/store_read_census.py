@@ -300,6 +300,7 @@ from blizzard.runner.usage.repository import (
     IReadHostLaneRepository,
     IReadUsageRepository,
 )
+from tests.support.finding_units import seed_fact
 from tests.support.hub_node_artifacts import record_landing
 from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import record_usage
@@ -1702,7 +1703,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         introduced=None,
         at=_ht(10),
     )
-    finding_store.record_fact(finding_1, kind="add", at=_ht(10))
+    seed_fact(store_connections, finding_1, kind="add", at=_ht(10))
 
     finding_2 = "fin_hub_2"
     finding_store.add(
@@ -1716,7 +1717,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         introduced=None,
         at=_ht(11),
     )
-    finding_store.record_fact(finding_2, kind="add", at=_ht(11))
+    seed_fact(store_connections, finding_2, kind="add", at=_ht(11))
 
     garden_proposal_1 = "gprop_hub_1"
     garden_proposal_store.create(
@@ -1743,8 +1744,14 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(13),
     )
 
-    finding_store.record_fact(
-        finding_2, kind="resolved", at=_ht(14), note="landed", actor="operator", proposal_id=garden_proposal_2
+    seed_fact(
+        store_connections,
+        finding_2,
+        kind="resolved",
+        at=_ht(14),
+        note="landed",
+        actor="operator",
+        proposal_id=garden_proposal_2,
     )
 
     proposal_1 = garden_proposal_store.get(garden_proposal_1)

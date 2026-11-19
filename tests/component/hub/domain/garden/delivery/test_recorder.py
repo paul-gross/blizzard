@@ -13,6 +13,7 @@ from sqlalchemy import insert, select
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
+from tests.support.finding_units import seed_fact
 from tests.support.garden_delivery_world import (
     _EPOCH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
     _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
@@ -322,7 +323,7 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     # is genuinely newest — `derive_liveness` resolves on `recorded_at`, not row order.
     before = hub.clock.now() - timedelta(days=1)
     _seed_finding(hub, finding_id, at=before)
-    FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=before, note="fixed")
+    seed_fact(hub_store_connections(hub.engine), finding_id, kind="gone", at=before, note="fixed")
     assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == []
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
@@ -339,7 +340,8 @@ def _deliver_review_finding(hub: HubHarness, finding_id: str) -> None:
     its `add` and the delivering run's instant."""
     base = hub.clock.now() - timedelta(days=2)
     _seed_review_finding(hub, finding_id, at=base)
-    FindingStore(hub_store_connections(hub.engine)).record_fact(
+    seed_fact(
+        hub_store_connections(hub.engine),
         finding_id,
         kind="delivered",
         at=base + timedelta(days=1),

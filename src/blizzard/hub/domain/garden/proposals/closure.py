@@ -343,19 +343,28 @@ class GardenProposalClosureService:
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
         if not mint:
             return self._accept_declining(proposal, reason=reason, by=by, body=body, urgency=urgency)
-        accept = MintingAccept.of(
+        # The early refusal: a closed proposal is refused before the default graph is resolved or a ref allocated.
+        # The decision is the locked re-read below.
+        early = MintingAccept.of(
             proposal, self._closures.get(proposal.proposal_id), reason=reason, body=body, findings=findings
         )
         drafted = self._items.draft_mint(
             RESERVED_HUB_SOURCE_NAME,
-            title=accept.title,
-            body=accept.body,
+            title=early.title,
+            body=early.body,
             graph=self._default_graph(),
             project_id=ProjectId(proposal.project_id),
             urgency=urgency,
         )
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[*drafted.lock_keys(), garden_proposal_lock(proposal.proposal_id)])
+            accept = MintingAccept.of(
+                proposal,
+                self._closures.get(proposal.proposal_id, transaction=locked),
+                reason=reason,
+                body=body,
+                findings=findings,
+            )
             if not self._closures.record_accept_mint(
                 proposal.proposal_id,
                 pointer=drafted.pointer,

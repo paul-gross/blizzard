@@ -23,6 +23,7 @@ from blizzard.hub.domain.chunk.model import (
     WorkItemAuthor,
     WorkRef,
     draft_chunk,
+    work_item_lock,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository, IWriteChunkRecordRepository
@@ -30,12 +31,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.locks import LockKey
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
-from blizzard.hub.domain.operations.delete import (
-    ChunkHasDependents,
-    ChunkNotDeletable,
-    DeleteService,
-    work_item_lock,
-)
+from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.urgency.services import MintAhead, TenantDefault
@@ -302,7 +298,7 @@ class WorkItemEditService:
 
     def edit(self, item: HubWorkItem, edit: WorkItemEdit) -> HubWorkItem:
         """Write ``edit``'s revision of ``item`` in place, in a unit declaring its
-        :func:`~blizzard.hub.domain.operations.delete.work_item_lock`; raises
+        :func:`~blizzard.hub.domain.chunk.model.work_item_lock`; raises
         :class:`~blizzard.hub.domain.work_items.model.WorkItemNotEditable` when ``item``, re-read under
         that key, carries a closure."""
         require_open_for(item, WorkItemVerb.EDIT)

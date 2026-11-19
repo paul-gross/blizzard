@@ -227,30 +227,6 @@ class FindingStore:
             project_id=project_id,
         )
 
-    def record_fact(
-        self,
-        finding_id: str,
-        *,
-        kind: str,
-        at: datetime,
-        note: str | None = None,
-        actor: str | None = None,
-        proposal_id: str | None = None,
-        superseded_by: str | None = None,
-    ) -> None:
-        entry = FactEntry(
-            finding_id=finding_id,
-            kind=kind,
-            at=at,
-            note=note,
-            actor=actor,
-            proposal_id=proposal_id,
-            superseded_by=superseded_by,
-        )
-        _refuse_unknown_kinds([entry])
-        with self._store.write("record_fact") as conn:
-            self._insert_facts(conn, [entry])
-
     def record_facts(
         self, entries: Sequence[FactEntry], *, transaction: LockedTransaction, expect: Mapping[str, str] | None = None
     ) -> list[str]:

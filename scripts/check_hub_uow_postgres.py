@@ -21,7 +21,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkRef, work_item_lock
 from blizzard.hub.domain.chunk.ports.dependencies import DEPENDENCIES_LOCK
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.domain.config.forges import ForgeId, forge_lock
@@ -30,7 +30,6 @@ from blizzard.hub.domain.garden.findings.model import finding_lock
 from blizzard.hub.domain.garden.proposals.model import garden_proposal_lock
 from blizzard.hub.domain.kernel.locks import LockKey, LockNamespace
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, UsagePosition
-from blizzard.hub.domain.operations.delete import work_item_lock
 from blizzard.hub.domain.tenancy.teardown import CloseOutcome, LastTenant, TenantTeardown
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock

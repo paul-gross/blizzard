@@ -18,6 +18,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
+from tests.support.finding_units import seed_fact
 from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_store_connections, stamp
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
@@ -64,7 +65,7 @@ def _seed_finding(
         at=_NOW,
     )
     if state != "live":
-        FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind=state, at=_NOW, note="n")
+        seed_fact(hub_store_connections(hub.engine), finding_id, kind=state, at=_NOW, note="n")
 
 
 def _seed_proposal(

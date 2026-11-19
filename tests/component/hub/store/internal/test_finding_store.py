@@ -30,7 +30,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support.finding_units import finding_unit
+from tests.support.finding_units import finding_unit, seed_fact
 from tests.support.scaffolding import (
     count_queries,
     default_project,
@@ -133,7 +133,7 @@ def test_get_with_facts_returns_the_row_and_its_whole_chain_together(tmp_path: P
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     _add(store, project)
-    store.record_fact("fin_1", kind="observed", at=_LATER)
+    seed_fact(hub_store_connections(engine), "fin_1", kind="observed", at=_LATER)
 
     result = store.get_with_facts("fin_1")
 
@@ -172,7 +172,7 @@ def test_record_facts_writes_nothing_once_a_guarded_finding_moved_off_its_expect
     project = default_project(engine)
     _add(store, project, finding_id="fin_1")
     _add(store, project, finding_id="fin_2")
-    store.record_fact("fin_1", kind="resolved", at=_LATER, note="n", actor="a")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="resolved", at=_LATER, note="n", actor="a")
 
     with finding_unit(hub_store_connections(engine), "fin_1", "fin_2") as locked:
         moved = store.record_facts(
@@ -232,7 +232,7 @@ def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
     project = default_project(engine)
     _add(store, project)
 
-    store.record_fact("fin_1", kind="observed", at=_LATER)
+    seed_fact(hub_store_connections(engine), "fin_1", kind="observed", at=_LATER)
 
     fetched = _get(store, "fin_1")
     assert fetched.observed_count == 1
@@ -246,7 +246,7 @@ def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
     project = default_project(engine)
     _add(store, project)
 
-    store.record_fact("fin_1", kind="wont-fix", at=_LATER, actor="pgross")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="wont-fix", at=_LATER, actor="pgross")
 
     with engine.connect() as conn:
         row = conn.execute(sa.text("SELECT finding_set_id FROM finding_facts WHERE kind = 'wont-fix'")).one()
@@ -261,7 +261,7 @@ def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Pat
     project = default_project(engine)
     _add(store, project)
 
-    store.record_fact("fin_1", kind="delivered", at=_LATER, actor="pgross")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="delivered", at=_LATER, actor="pgross")
 
     fetched = _get(store, "fin_1")
     assert fetched.actor == "pgross"
@@ -272,7 +272,7 @@ def test_a_gone_finding_is_excluded_from_list_for_unless_include_gone(tmp_path: 
     project = default_project(engine)
     _add(store, project, finding_id="fin_1")
     _add(store, project, finding_id="fin_2")
-    store.record_fact("fin_1", kind="gone", at=_LATER, note="no longer reproduces")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="gone", at=_LATER, note="no longer reproduces")
 
     live = store.list_for(project, "nightly", "blizzard")
     assert [f.finding_id for f in live] == ["fin_2"]
@@ -314,7 +314,7 @@ def test_a_gone_finding_is_excluded_from_list_across_routines_unless_include_gon
     project = default_project(engine)
     _add(store, project, finding_id="fin_1", routine_name="nightly", scope_slug="blizzard")
     _add(store, project, finding_id="fin_2", routine_name="weekly", scope_slug="other-scope")
-    store.record_fact("fin_1", kind="gone", at=_LATER, note="no longer reproduces")
+    seed_fact(hub_store_connections(engine), "fin_1", kind="gone", at=_LATER, note="no longer reproduces")
 
     live = store.list_across_routines(project)
     assert [f.finding_id for f in live] == ["fin_2"]
@@ -342,7 +342,7 @@ def test_fact_summaries_batch_across_a_batch_boundary(tmp_path: Path, monkeypatc
     finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
     for finding_id in finding_ids:
         _add(store, project, finding_id=finding_id)
-        store.record_fact(finding_id, kind="observed", at=_LATER)
+        seed_fact(hub_store_connections(engine), finding_id, kind="observed", at=_LATER)
 
     found = {f.finding_id: f for f in store.list_across_routines(project)}
 
@@ -362,7 +362,7 @@ def test_get_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: p
     finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
     for finding_id in finding_ids:
         _add(store, project, finding_id=finding_id)
-        store.record_fact(finding_id, kind="observed", at=_LATER)
+        seed_fact(hub_store_connections(engine), finding_id, kind="observed", at=_LATER)
 
     found = store.get_many(finding_ids)
 
@@ -449,7 +449,7 @@ def test_list_by_source_excludes_a_gone_finding_unless_include_gone(tmp_path: Pa
     store, engine = _store_and_engine(tmp_path)
     project = default_project(engine)
     _add_review_finding(engine, "fin_review")
-    store.record_fact("fin_review", kind="gone", at=_LATER, note="no longer reproduces")
+    seed_fact(hub_store_connections(engine), "fin_review", kind="gone", at=_LATER, note="no longer reproduces")
 
     assert store.list_by_source(project, scope_slug="blizzard", source="review") == []
     everything = store.list_by_source(project, scope_slug="blizzard", source="review", include_gone=True)

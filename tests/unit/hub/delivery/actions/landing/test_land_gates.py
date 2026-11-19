@@ -16,7 +16,9 @@ from blizzard.hub.delivery.actions.landing import base_merge
 from blizzard.hub.delivery.actions.landing.checks import (
     BOUNCE,
     FAILED,
+    LANDED,
     PUSH,
+    UNLANDED,
     UPDATE,
     WAIT,
     Findings,
@@ -174,30 +176,61 @@ def test_verdict_red_reads_one_named_check_and_is_unknown_on_a_degraded_read() -
 @pytest.mark.parametrize(
     ("route", "decision"),
     [
-        (Route(Mergeability.PENDING, merged=True), PUSH),
+        (Route(Mergeability.PENDING, merged=True, landed_revision="m1"), LANDED),
+        (Route(Mergeability.PENDING, merged=True), UNLANDED),
+        (Route(Mergeability.MERGEABLE, merged=True, landed_revision="m1", verdict=Verdict((_PENDING,))), LANDED),
         (Route(Mergeability.CONFLICTING), BOUNCE),
         (Route(Mergeability.BEHIND), UPDATE),
         (Route(Mergeability.MERGEABLE, verdict=Verdict((_PASSED,))), PUSH),
         (Route(Mergeability.BLOCKED, verdict=Verdict((_PASSED,))), PUSH),
         (Route(Mergeability.MERGEABLE, verdict=Verdict((_PENDING,))), WAIT),
         (Route(Mergeability.MERGEABLE), WAIT),
+        (Route(Mergeability.MERGEABLE, verdict=Verdict(())), WAIT),
+        (Route(Mergeability.MERGEABLE, verdict=Verdict(()), admitted_empty=True), PUSH),
+        (Route(Mergeability.BLOCKED, admitted_empty=True), PUSH),
+        (Route(Mergeability.DRAFT, admitted_empty=True), WAIT),
+        (Route(Mergeability.CONFLICTING, admitted_empty=True), BOUNCE),
         (Route(Mergeability.DRAFT, verdict=Verdict((_PASSED,))), WAIT),
         (Route(Mergeability.PENDING, verdict=Verdict((_PASSED,))), WAIT),
     ],
     ids=[
         "merged",
+        "merged-unlanded",
+        "merged-ignores-verdict",
         "conflicting",
         "behind",
         "mergeable-green",
         "blocked-green",
         "mergeable-pending",
         "mergeable-unread",
+        "mergeable-empty",
+        "mergeable-empty-admitted",
+        "blocked-empty-admitted",
+        "draft-empty-admitted",
+        "conflicting-empty-admitted",
         "draft",
         "pending",
     ],
 )
 def test_a_change_routes_by_its_mergeability_and_verdict(route: Route, decision: str) -> None:
     assert route.decision == decision
+
+
+@pytest.mark.parametrize(
+    ("route", "reads", "asks"),
+    [
+        (Route(Mergeability.MERGEABLE), True, False),
+        (Route(Mergeability.BLOCKED), True, False),
+        (Route(Mergeability.CONFLICTING), False, False),
+        (Route(Mergeability.BEHIND), False, False),
+        (Route(Mergeability.MERGEABLE, merged=True, landed_revision="m1"), False, False),
+        (Route(Mergeability.MERGEABLE, verdict=Verdict(())), True, True),
+        (Route(Mergeability.MERGEABLE, verdict=Verdict(None)), True, False),
+        (Route(Mergeability.MERGEABLE, verdict=Verdict((_PASSED,))), True, False),
+    ],
+)
+def test_a_route_names_which_reads_are_worth_making(route: Route, reads: bool, asks: bool) -> None:
+    assert (route.reads_verdict, route.asks_eligibility) == (reads, asks)
 
 
 def test_findings_names_repo_pr_and_each_failing_check() -> None:

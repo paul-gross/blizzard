@@ -12,10 +12,10 @@ from typing import Any
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.checks import (
     BOUNCE,
-    CI_WATCH_STATES,
     FAILED,
     FOREIGN,
-    PUSH,
+    LANDED,
+    UNLANDED,
     UPDATE,
     WAIT,
     Route,
@@ -311,25 +311,27 @@ async def _checked(pull: PullRequest) -> RepoState:
 async def _routed(pull: PullRequest) -> RepoState:
     repo, run = pull.target, pull.target.run
     head_sha = pull.head_sha
-    if pull.merged:
-        if pull.change.merged_revision is None:
-            return Waiting(f"{pull} merged but no read carries its landed commit")
-
-        async def recovered() -> Landed:
-            assert pull.change.merged_revision is not None
-            return Landed(pull.change.merged_revision)
-
-        return Ready(recovered)
-    state = pull.mergeability
-    # A verdict is only worth reading for the states merge eligibility turns on — read once.
-    verdict = await read_verdict(repo, head_sha) if state in CI_WATCH_STATES else None
-    decision = Route(state, merged=pull.merged, verdict=verdict).decision
-    if verdict is not None and verdict.checks == ():
+    route = Route(pull.mergeability, merged=pull.merged, landed_revision=pull.change.merged_revision)
+    verdict = await read_verdict(repo, head_sha) if route.reads_verdict else None
+    route = replace(route, verdict=verdict)
+    if route.asks_eligibility:
+        assert verdict is not None
         eligible = await eligibility(repo, head_sha, verdict)
         if isinstance(eligible, (Waiting, NeedsPerson)):
             return eligible
-        if eligible is True:
-            decision = PUSH
+        route = replace(route, admitted_empty=eligible is True)
+    decision = route.decision
+    state = route.mergeability
+    if decision == UNLANDED:
+        return Waiting(f"{pull} merged but no read carries its landed commit")
+    if decision == LANDED:
+        revision = route.landed_revision
+        assert revision is not None
+
+        async def recovered() -> Landed:
+            return Landed(revision)
+
+        return Ready(recovered)
     if decision == BOUNCE:
         return Conflict(f"{pull} is dirty (a real merge conflict)")
     if decision == UPDATE:
@@ -355,7 +357,7 @@ async def _routed(pull: PullRequest) -> RepoState:
                 findings = pull.record(WAIT, checks=verdict.running_rows())
         run.say(f"{pull} is {state} — not cleanly mergeable yet; re-polling")
         return Waiting(f"{pull} is {state}", findings)
-    # Already merged, or a green verdict at a mergeable or blocked head — eligible.
+    # A green verdict, or an empty read the policy admits, at a mergeable or blocked head — eligible.
     return Ready(_merge_at(pull, head_sha))
 
 

@@ -7,9 +7,8 @@ from contextlib import contextmanager
 from datetime import datetime
 
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import HubWorkItem, WorkRef
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkRef, work_item_lock
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
-from blizzard.hub.domain.operations.delete import work_item_lock
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
