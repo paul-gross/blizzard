@@ -17,7 +17,7 @@ export interface StateBadge {
  * The one status-light ladder: a hollow mark when never connected, blinking red when offline — the
  * worst news outranks a pause — steady amber while paused, else steady green. A host carries no pause.
  */
-function light(online: boolean, connection: RunnerConnection, paused: boolean): ConnectionLight {
+function light(online: boolean, connection: string, paused: boolean): ConnectionLight {
   if (connection === RunnerConnection.NEVER_CONNECTED) return { kind: 'never' };
   if (!online) return { kind: 'lit', tone: 'red', blink: 'step' };
   if (paused) return { kind: 'lit', tone: 'amber', blink: 'hold' };
@@ -30,12 +30,15 @@ export function runnerLight(row: Pick<RunnerRow, 'online' | 'connection' | 'hub_
 }
 
 /** A host's status light — the runner ladder with no pause. */
-export function hostLight(online: boolean, connection: RunnerConnection): ConnectionLight {
+export function hostLight(online: boolean, connection: string): ConnectionLight {
   return light(online, connection, false);
 }
 
 /** A host's or runner's connection as a detail title bar states it, in its tone. */
-export function connectionState(online: boolean, connection: RunnerConnection): { readonly label: string; readonly tone: Tone } {
+export function connectionState(online: boolean, connection: string): { readonly label: string; readonly tone: Tone } {
+  if (connection !== RunnerConnection.ONLINE && connection !== RunnerConnection.OFFLINE && connection !== RunnerConnection.NEVER_CONNECTED) {
+    return { label: connection, tone: 'idle' };
+  }
   if (online) return { label: 'ONLINE', tone: 'done' };
   return connection === RunnerConnection.NEVER_CONNECTED
     ? { label: 'NEVER CONNECTED', tone: 'idle' }

@@ -2,7 +2,7 @@ import type { ChunkSummary, Urgency } from 'fleet';
 import type { ChunkUrgencyVars } from './urgency.mutations';
 
 /** Show each chunk's most recently requested urgency while its write settles. */
-export function withPendingUrgencies(chunks: readonly ChunkSummary[], pending: readonly ChunkUrgencyVars[], urgencies: readonly Urgency[]): readonly ChunkSummary[] {
+export function withPendingUrgencies<T extends ChunkSummary>(chunks: readonly T[], pending: readonly ChunkUrgencyVars[], urgencies: readonly Urgency[]): readonly T[] {
   const byChunk = new Map(pending.map((v) => [v.chunkId, v.urgencyId]));
   const byId = new Map(urgencies.map((u) => [u.id, u]));
   return chunks.map((chunk) => {

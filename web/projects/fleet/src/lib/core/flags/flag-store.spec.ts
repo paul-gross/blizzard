@@ -2,25 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { flagsApiFlagsGet } from '../../api/hub';
-import type { FlagsResponse } from '../../api/hub';
-import {
-  type RequestClientStub,
-  type StubDetailBody,
-  type StubHttpError,
-  stubError,
-  stubHubClient,
-} from '../../testing/transport/stub-request-client';
+import type { Flags } from '../flags.domain';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
-
-const READ: FlagsRead = {
-  queryKey: ['test', 'flags'],
-  queryFn: async () => {
-    const { data, error } = await flagsApiFlagsGet({ throwOnError: false });
-    if (error) throw error;
-    return data!;
-  },
-};
 
 @Component({
   selector: 'fleet-test-flag-host',
@@ -31,23 +14,26 @@ class FlagHost {
 }
 
 describe('FlagStore', () => {
-  let stub: RequestClientStub;
+  let calls: number;
 
-  const store = async (answer: FlagsResponse | StubHttpError<number, StubDetailBody>) => {
-    stub = stubHubClient({ 'GET /api/flags': () => answer });
+  const store = async (answer: Flags | Error) => {
+    calls = 0;
+    const read: FlagsRead = { queryKey: ['test', 'flags'], queryFn: async () => {
+      calls++;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    } };
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideFlags(READ),
+        provideFlags(read),
       ],
     });
     const flags = TestBed.inject(FlagStore);
     await flags.whenSettled();
     return flags;
   };
-
-  afterEach(() => stub.restore());
 
   it('reads a flag the answer holds on as on, and one it holds off as off', async () => {
     const flags = await store({ flags: { shiny: true, dull: false }, overridden: ['shiny'] });
@@ -65,7 +51,7 @@ describe('FlagStore', () => {
   });
 
   it('leaves every flag off and nothing overridden when the read fails', async () => {
-    const flags = await store(stubError(500, { detail: 'down' }));
+    const flags = await store(new Error('down'));
 
     expect(flags.on('shiny')).toBe(false);
     expect(flags.overridden()).toEqual([]);
@@ -76,7 +62,7 @@ describe('FlagStore', () => {
     await flags.whenSettled();
     await flags.whenSettled();
 
-    expect(stub.forRoute('/api/flags')).toHaveLength(1);
+    expect(calls).toBe(1);
   });
 
   it('shows a templated feature with the flag on and hides it with the flag off', async () => {
@@ -90,7 +76,6 @@ describe('FlagStore', () => {
       await fixture.whenStable();
 
       expect(fixture.nativeElement.querySelector('[data-testid="shiny"]') !== null).toBe(shown);
-      stub.restore();
     }
   });
 });

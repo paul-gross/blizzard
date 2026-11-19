@@ -15,6 +15,7 @@ const CARD: BoardCard = {
   chunkId: 'ch_01costcard00000000000000000',
   shortId: 'C-COST',
   status: 'done',
+  laneStatus: { kind: 'done' },
   terminal: true,
   promotable: false,
   node: 'deliver',

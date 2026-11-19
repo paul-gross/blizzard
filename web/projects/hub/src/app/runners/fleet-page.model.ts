@@ -1,4 +1,4 @@
-import { type KitFact, type RunnerConnection, compactRef, formatAbsolute } from 'fleet';
+import { type KitFact, compactRef, formatAbsolute } from 'fleet';
 
 import { busyAgents, declaredAgents, type HeldChunk, type HostCard, type HostGroups } from './host-rows.model';
 import { type ConnectionLight, hostLight, runnerLight } from './connection-status.model';
@@ -10,7 +10,7 @@ export interface FleetListCard {
   readonly id: string;
   readonly name: string;
   readonly online: boolean;
-  readonly connection: RunnerConnection;
+  readonly connection: string;
   /** The card's status light — a host's, or a host-less runner's with its pause. */
   readonly light: ConnectionLight;
   /** Agents declared across the card's bindings; `null` where none are declared. */

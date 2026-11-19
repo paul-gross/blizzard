@@ -1,8 +1,8 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardHeader, hubApi } from 'fleet';
-import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, stubHubClient } from 'fleet/testing';
+import { BoardHeader, hubApi, type LaneCounts } from 'fleet';
+import { OPERATOR_ME_RESPONSE, fleetSpendView, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { AppNavMenu } from './app-nav-menu';
@@ -45,8 +45,10 @@ class TestHubShell {
   // A busy fleet across every lane plus both spend cells — the header's own
   // widest natural content, so a narrowing sweep tests the tightest fit it
   // ever actually renders rather than an emptier, easier-to-fit board.
-  readonly counts: hubApi.ChunkCountsView = chunkCountsView({
+  readonly counts: LaneCounts = {
     total: 6,
+    terminal: 1,
+    statuses: {
     not_ready: 1,
     ready: 1,
     running: 1,
@@ -56,8 +58,8 @@ class TestHubShell {
     paused: 0,
     stopped: 0,
     done: 1,
-    terminal: 1,
-  });
+    },
+  };
   // Carries its own estimate line too — the header's own widest natural content now
   // includes it, so this sweep still tests the tightest fit the header ever renders.
   readonly spendToday: hubApi.FleetSpendView = fleetSpendView({

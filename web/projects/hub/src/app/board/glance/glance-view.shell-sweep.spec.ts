@@ -23,6 +23,7 @@ const row = (chunkId: string, fields: Partial<GlanceRow>): GlanceRow => ({
   shortId: chunkId,
   lane: 'running',
   status: 'running',
+  laneStatus: { kind: 'running' },
   statusWord: null,
   node: 'build',
   nodeId: '',
@@ -68,8 +69,8 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
     fixture.componentRef.setInput('vitals', VITALS);
     fixture.componentRef.setInput('list', {
       live: [
-        row('ch_needs', { lane: 'needs', status: 'needs_human', lines: [{ label: 'toy-api#4', title: LONG_TITLE }], ask: 'Review the delivery.' }),
-        row('ch_gate', { lane: 'waiting', status: 'waiting_on_human', node: 'approve-a-very-long-gate-node-name-that-must-clip-inside-the-card', gated: true }),
+        row('ch_needs', { lane: 'needs', status: 'needs_human', laneStatus: { kind: 'needs_human' }, lines: [{ label: 'toy-api#4', title: LONG_TITLE }], ask: 'Review the delivery.' }),
+        row('ch_gate', { lane: 'waiting', status: 'waiting_on_human', laneStatus: { kind: 'waiting_on_human' }, node: 'approve-a-very-long-gate-node-name-that-must-clip-inside-the-card', gated: true }),
         row('ch_motion', {
           node: 'deliver-a-very-long-node-name-that-must-clip-inside-the-card',
           lines: [{ label: 'toy-api#4', title: LONG_TITLE }],
@@ -77,9 +78,9 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
           costUsd: 1.25,
         }),
       ],
-      ready: [row('ch_next', { lane: 'ready', status: 'ready', lines: [{ label: 'toy-web#5', title: null }], itemsRead: false })],
+      ready: [row('ch_next', { lane: 'ready', status: 'ready', laneStatus: { kind: 'ready' }, lines: [{ label: 'toy-web#5', title: null }], itemsRead: false })],
       backlog: [row('ch_later', { lane: 'notready', status: 'not_ready' })],
-      done: [row('ch_done', { lane: 'done', status: 'stopped', statusWord: 'stopped', lines: [{ label: 'blizzard#79', title: 'Done item' }] })],
+      done: [row('ch_done', { lane: 'done', status: 'stopped', laneStatus: { kind: 'stopped' }, statusWord: 'stopped', lines: [{ label: 'blizzard#79', title: 'Done item' }] })],
     });
     fixture.componentRef.setInput('listState', 'ready');
     fixture.componentRef.setInput('spendState', 'ready');

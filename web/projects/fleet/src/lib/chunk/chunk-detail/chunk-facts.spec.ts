@@ -4,9 +4,8 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterLink } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 
-import type { ChunkDetail } from '../../api/hub';
-import { chunkDetail, chunkNeighborhoodView, chunkNeighborView, chunkUsageTotalView } from 'fleet/testing';
-import { ChunkFacts } from './chunk-facts';
+import { ChunkFacts, type FactsDetail } from './chunk-facts';
+import { factsDetail, factsNeighbor } from './chunk-facts.fixture';
 import { APP_SCOPE, type InAppLink } from '../../core/app-scope';
 
 @Component({
@@ -15,10 +14,10 @@ import { APP_SCOPE, type InAppLink } from '../../core/app-scope';
 })
 class BoardFactsRoute {
   readonly ids = new Set(['ch_on']);
-  readonly detail = chunkDetail({ neighborhood: chunkNeighborhoodView({
-    prerequisites: [chunkNeighborView({ chunk_id: 'ch_on' })],
-    dependents: [chunkNeighborView({ chunk_id: 'ch_off' })],
-  }) });
+  readonly detail = factsDetail({ neighborhood: {
+    prerequisites: [factsNeighbor({ chunk_id: 'ch_on' })],
+    dependents: [factsNeighbor({ chunk_id: 'ch_off' })],
+  } });
 }
 
 @Component({ template: '' })
@@ -32,7 +31,7 @@ describe('ChunkFacts', () => {
     }).compileComponents();
   });
 
-  async function render(detail: ChunkDetail, chunkLinkBase?: readonly string[]): Promise<HTMLElement> {
+  async function render(detail: FactsDetail, chunkLinkBase?: readonly string[]): Promise<HTMLElement> {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', detail);
     if (chunkLinkBase) fixture.componentRef.setInput('chunkLinkBase', chunkLinkBase);
@@ -45,8 +44,8 @@ describe('ChunkFacts', () => {
 
   it("states the chunk's total session efficiency cost", async () => {
     const el = await render(
-      chunkDetail({
-        cost: chunkUsageTotalView({
+      factsDetail({
+        cost: {
           input_tokens: 20_000,
           cache_create_tokens: 200_000,
           output_tokens: 32_700,
@@ -54,7 +53,7 @@ describe('ChunkFacts', () => {
           cost_usd: 0.3,
           cost_partial: false,
           estimated_cost_usd: null,
-        }),
+        },
       }),
     );
     expect(parts(el)).toEqual(['$0.30', '· 220kI', '/ 32.7kO', '× 2.57%']);
@@ -62,8 +61,8 @@ describe('ChunkFacts', () => {
 
   it('reads `$0.00` alone for a chunk with no recorded usage', async () => {
     const el = await render(
-      chunkDetail({
-        cost: chunkUsageTotalView({
+      factsDetail({
+        cost: {
           cost_usd: 0,
           estimated_cost_usd: null,
           cost_partial: false,
@@ -71,27 +70,27 @@ describe('ChunkFacts', () => {
           output_tokens: 0,
           cache_read_tokens: 0,
           cache_create_tokens: 0,
-        }),
+        },
       }),
     );
     expect(parts(el)).toEqual(['$0.00']);
   });
 
   it('renders no Depends on / Blocks box for a chunk with no edges', async () => {
-    const el = await render(chunkDetail({ neighborhood: chunkNeighborhoodView() }));
+    const el = await render(factsDetail());
     expect(el.querySelector('[data-testid="chunk-deps"]')).toBeNull();
   });
 
   it('names each neighbor by compact ref, linked to its chunk, with its lane icon', async () => {
     const el = await render(
-      chunkDetail({
-        neighborhood: chunkNeighborhoodView({
-          prerequisites: [chunkNeighborView({ chunk_id: 'ch_01prereq00000000000000000', status: 'done', satisfied: true })],
+      factsDetail({
+        neighborhood: {
+          prerequisites: [factsNeighbor({ chunk_id: 'ch_01prereq00000000000000000', laneStatus: { kind: 'done' } })],
           dependents: [
-            chunkNeighborView({ chunk_id: 'ch_01dependent000000000000aa', status: 'not_ready', satisfied: false }),
-            chunkNeighborView({ chunk_id: 'ch_01dependent000000000000bb', status: null, satisfied: false }),
+            factsNeighbor({ chunk_id: 'ch_01dependent000000000000aa', laneStatus: { kind: 'not_ready' } }),
+            factsNeighbor({ chunk_id: 'ch_01dependent000000000000bb', laneStatus: null }),
           ],
-        }),
+        },
       }),
       ['/board', 'chunk'],
     );
@@ -114,8 +113,8 @@ describe('ChunkFacts', () => {
 
   it('reads `—` for the side that has no edge while the other has one', async () => {
     const el = await render(
-      chunkDetail({
-        neighborhood: chunkNeighborhoodView({ prerequisites: [chunkNeighborView({ chunk_id: 'ch_01prereq00000000000000000' })] }),
+      factsDetail({
+        neighborhood: { prerequisites: [factsNeighbor({ chunk_id: 'ch_01prereq00000000000000000' })], dependents: [] },
       }),
     );
     expect(el.querySelector('[data-testid="fact-blocks"] .empty')?.textContent).toBe('—');
@@ -124,11 +123,11 @@ describe('ChunkFacts', () => {
 
   it('merges an in-board neighbor selection and leaves off-board neighbors as standalone links', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', chunkDetail({
-      neighborhood: chunkNeighborhoodView({
-        prerequisites: [chunkNeighborView({ chunk_id: 'ch_on' })],
-        dependents: [chunkNeighborView({ chunk_id: 'ch_off' })],
-      }),
+    fixture.componentRef.setInput('detail', factsDetail({
+      neighborhood: {
+        prerequisites: [factsNeighbor({ chunk_id: 'ch_on' })],
+        dependents: [factsNeighbor({ chunk_id: 'ch_off' })],
+      },
     }));
     fixture.componentRef.setInput('boardChunkIds', new Set(['ch_on']));
     await fixture.whenStable();

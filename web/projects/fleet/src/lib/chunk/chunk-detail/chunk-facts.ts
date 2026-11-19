@@ -2,12 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
-import type { ChunkDetail, ChunkNeighborView, ChunkStatus } from '../../api/hub';
-import { STATUS_LANE } from '../../core/chunk-lanes';
+import { STATUS_LANE, type LaneStatus } from '../../core/chunk-lanes';
 import { compactRef } from '../../core/compact-ref';
+import type { SessionEfficiencyInput } from '../../core/session-efficiency';
 import { AppLink, AppPath } from '../../core/app-scope';
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { LaneIcon } from '../chunk-card/lane-icon';
+
+export interface FactsNeighbor { readonly chunk_id: string; readonly laneStatus: LaneStatus | null; }
+export interface FactsDetail {
+  readonly cost: SessionEfficiencyInput;
+  readonly neighborhood: { readonly prerequisites: readonly FactsNeighbor[]; readonly dependents: readonly FactsNeighbor[] } | null;
+}
 
 /**
  * The chunk's work-item facts box: its total session efficiency cost, then — only where the
@@ -22,7 +28,7 @@ import { LaneIcon } from '../chunk-card/lane-icon';
   styleUrl: './chunk-facts.css',
 })
 export class ChunkFacts {
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<FactsDetail>();
 
   /** The chunk detail route's own path segments, before the chunk id — each neighbor links there. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
@@ -30,16 +36,16 @@ export class ChunkFacts {
   /** Neighbors rendered in the current board, eligible for selection in place. */
   readonly boardChunkIds = input<ReadonlySet<string>>(new Set());
 
-  protected readonly prerequisites = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.prerequisites ?? []);
+  protected readonly prerequisites = computed<readonly FactsNeighbor[]>(() => this.detail().neighborhood?.prerequisites ?? []);
 
-  protected readonly dependents = computed<readonly ChunkNeighborView[]>(() => this.detail().neighborhood?.dependents ?? []);
+  protected readonly dependents = computed<readonly FactsNeighbor[]>(() => this.detail().neighborhood?.dependents ?? []);
 
   protected shortId(chunkId: string): string {
     return compactRef(chunkId);
   }
 
   /** A neighbor's board lane — read only for a neighbor whose status is known. */
-  protected lane(status: ChunkStatus): string {
-    return STATUS_LANE(status);
+  protected lane(status: LaneStatus): string {
+    return STATUS_LANE(status.kind);
   }
 }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
+import type { FactsDetail } from '../chunk-detail/chunk-facts';
 import type { ChunkDetail } from '../../api/hub';
 import { type AwaitingHumanFormActions, ChunkAwaitingHuman, toAwaitingHuman } from '../awaiting-human';
 import {
@@ -43,7 +44,7 @@ import { AppLink } from '../../core/app-scope';
 })
 export class ChunkGeneralTab {
   /** The chunk aggregate to render. */
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<ChunkDetail & FactsDetail>();
 
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });

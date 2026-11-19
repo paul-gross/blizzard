@@ -1,3 +1,4 @@
+import { boardChunk } from '../board.fixture';
 import { signal } from '@angular/core';
 import { provideRouter, withDisabledInitialNavigation } from '@angular/router';
 import { applicationConfig } from '@storybook/angular-vite';
@@ -5,14 +6,13 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { TenantContext } from '../../core/auth/tenant-context';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import type { Urgency as UrgencyRecord } from 'fleet';
-import { chunkSummary } from 'fleet/testing';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { glanceListGroups, glanceVitals } from './glance-board.model';
 import { GlanceView } from './glance-view';
 
 const confirmed = boardDonePolicy([{ chunks: [], next_cursor: null, board_done_policy: { window_seconds: 172800, floor: 10, done_since: '2026-10-30T00:00:00Z' } }]);
 const generic = boardDonePolicy([]);
-const list = glanceListGroups([chunkSummary({ chunk_id: 'ch_done', graph_id: 'gr_1', status: 'done', terminal: true, completed_at: '2026-10-01T00:00:00Z' })], [], [], [], [], new Map(), new Map(), new Map());
+const list = glanceListGroups([boardChunk({ chunk_id: 'ch_done', graph_id: 'gr_1', status: 'done', laneStatus: { kind: 'done' }, terminal: true, completed_at: '2026-10-01T00:00:00Z' })], [], [], [], [], new Map(), new Map(), new Map());
 const empty = { live: [], ready: [], backlog: [], done: [] };
 const meta: Meta<GlanceView> = {
   title: 'Hub board/Glance view', component: GlanceView,
@@ -41,9 +41,9 @@ export const SpendError: Story = { args: { spendState: 'error' } };
 export const SpendEmpty: Story = { args: { spendState: 'empty' } };
 
 const blockedList = glanceListGroups([
-  chunkSummary({ chunk_id: 'ch_blocked_one', graph_id: 'gr_1', status: 'ready', blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 1 } }),
-  chunkSummary({ chunk_id: 'ch_blocked_many', graph_id: 'gr_1', status: 'ready', blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 3 } }),
-  chunkSummary({ chunk_id: 'ch_unblocked', graph_id: 'gr_1', status: 'ready' }),
+  boardChunk({ chunk_id: 'ch_blocked_one', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 1 } }),
+  boardChunk({ chunk_id: 'ch_blocked_many', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, blocked: { prerequisite_chunk_id: 'ch_01M7KSQP45FAZ2X7ZVV0AMNGDA', unmet_count: 3 } }),
+  boardChunk({ chunk_id: 'ch_unblocked', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' } }),
 ], [], [], [], [], new Map(), new Map(), new Map());
 export const Blocked: Story = { args: { list: blockedList, vitals: glanceVitals([], blockedList) } };
 const longBlockerList = { ...empty, ready: [{ ...blockedList.ready[0], blocked: { label: 'a-very-long-blocker-reference-that-exceeds-a-phone-width', title: 'a-very-long-blocker-reference-that-exceeds-a-phone-width' } }] };
@@ -53,5 +53,5 @@ export const EmptyBlocker: Story = { args: { list: emptyBlockerList, vitals: gla
 
 const urgencyProviders = applicationConfig({ providers: [provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
 const urgent = { id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1, revision: 1, openChunks: 0, createdAt: '2026-01-01T00:00:00Z', createdBy: 'u' } satisfies UrgencyRecord;
-const urgentList = glanceListGroups([chunkSummary({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', urgency: { urgency_id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
+const urgentList = glanceListGroups([boardChunk({ chunk_id: 'ch_urgent', graph_id: 'gr_1', status: 'ready', laneStatus: { kind: 'ready' }, urgency: { urgency_id: 'u', slug: 'urgent' } })], [], [], [], [], new Map(), new Map(), new Map());
 export const Urgency: Story = { decorators: [urgencyProviders], args: { list: urgentList, vitals: glanceVitals([], urgentList), urgencies: [urgent] } };

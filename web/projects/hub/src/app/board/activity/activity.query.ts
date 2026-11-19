@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type ActivityView, listActivityApiActivityGet } from 'fleet';
+import { type ActivityFact } from 'fleet/shell';
 import { hubActivityKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -10,6 +11,12 @@ import { injectProjectFilter } from '../../core/project-filter';
  * one number, not two that happen to agree by coincidence.
  */
 export const ACTIVITY_LIMIT = 200;
+
+/** Translate the durable read at the boundary into the same facts the live feed uses. */
+export function translateActivityRow(row: ActivityView): ActivityFact {
+  const { at, type, key, ...data } = row;
+  return { at: Date.parse(at), type, key, data: { ...data, key } };
+}
 
 /**
  * Hub `GET /api/activity` read — the Activity feed panel's backfill-on-load,
@@ -31,13 +38,13 @@ export function injectHubActivityQuery() {
     const project = projectFilter();
     return {
       queryKey: lensedKey(hubActivityKey, project),
-      queryFn: async (): Promise<ActivityView[]> => {
+      queryFn: async (): Promise<ActivityFact[]> => {
         const { data, error } = await listActivityApiActivityGet({
           query: { limit: ACTIVITY_LIMIT, project: project ?? undefined },
           throwOnError: false,
         });
         if (error) throw error;
-        return data?.activity ?? [];
+        return (data?.activity ?? []).map(translateActivityRow);
       },
     };
   });

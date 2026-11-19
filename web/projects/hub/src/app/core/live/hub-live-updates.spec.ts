@@ -77,6 +77,16 @@ describe('HubLiveUpdates', () => {
     vi.useRealTimers();
   });
 
+  it('does not record or invalidate for a malformed raw payload', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(HubLiveUpdates).start());
+    const live = TestBed.inject(HubLiveUpdates);
+    FakeEventSource.instances[0].emitNamed('chunk-changed', 'not json');
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+    expect(live.log()).toEqual([]);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, the events feed, and the env timeline\'s live reads on a chunk-changed event', () => {
     // Rationale: chunkChangedKeys in hub-live-updates.ts.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');

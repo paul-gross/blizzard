@@ -1,5 +1,7 @@
-import { type ChunkSummary } from 'fleet';
-import { chunkSummary } from 'fleet/testing';
+import { boardChunk } from './board.fixture';
+import type { BoardChunk } from '../core/chunks.model';
+import type { LaneStatus } from 'fleet';
+type KnownLaneStatus = Exclude<LaneStatus['kind'], 'unknown'>;
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -11,10 +13,11 @@ import {
   withPendingBoardChanges,
 } from './board-page.model';
 
-const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => (chunkSummary({
+const chunk = (id: string, status: KnownLaneStatus): BoardChunk => (boardChunk({
   chunk_id: id,
   graph_id: 'gr_1',
   status,
+  laneStatus: { kind: status },
   current_node_id: 'nd_build',
   work_refs: [],
 }));
@@ -50,6 +53,13 @@ describe('withPendingBoardChanges', () => {
       ['ch_b', 'ready'],
       ['ch_c', 'running'],
     ]);
+  });
+
+  it('updates projected lane statuses along with optimistic crossings without mutating the read', () => {
+    const projected = [chunk('ch_a', 'not_ready'), chunk('ch_b', 'ready')];
+    const result = withPendingBoardChanges(projected, [{ chunkId: 'ch_a' }], [], [{ chunkId: 'ch_b' }]);
+    expect(result.map((c) => c.laneStatus.kind)).toEqual(['ready', 'not_ready']);
+    expect(projected.map((c) => c.laneStatus.kind)).toEqual(['not_ready', 'ready']);
   });
 
   it('drops a pending delete', () => {
@@ -144,4 +154,3 @@ describe('placedMoves', () => {
     ]);
   });
 });
-

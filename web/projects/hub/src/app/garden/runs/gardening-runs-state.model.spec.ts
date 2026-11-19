@@ -1,16 +1,17 @@
-import type { RoutineView, RunRowView } from 'fleet';
+import type { LaneStatus, RoutineView, RunRowView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 import { runCadenceView } from 'fleet/testing';
 
 import { mintedAtFor, runListRows, summedCounts } from './gardening-runs-state.model';
 
-const DELIVERED_RUN: RunRowView = {
+const DELIVERED_RUN: RunRowView & { laneStatus: LaneStatus } = {
   chunk_id: 'ch_1',
   routine_name: 'nightly',
   scope_slug: 'blizzard',
   mode: 'full',
   minted_at: '2026-01-10T00:00:00Z',
   outcome: 'done',
+  laneStatus: { kind: 'done' },
   escalation: null,
   // Minted by a cadence — the list row reads the same as a hand-started run's.
   cadence: runCadenceView(),
@@ -23,13 +24,14 @@ const DELIVERED_RUN: RunRowView = {
   project_slug: null,
 };
 
-const ESCALATED_RUN: RunRowView = {
+const ESCALATED_RUN: RunRowView & { laneStatus: LaneStatus } = {
   chunk_id: 'ch_2',
   routine_name: 'nightly',
   scope_slug: 'web',
   mode: 'delta',
   minted_at: '2026-01-11T00:00:00Z',
   outcome: 'needs_human',
+  laneStatus: { kind: 'needs_human' },
   escalation: { node_name: 'survey', takeover_command: 'blizzard hub chunk takeover ch_2', wrapped_takeover_command: '' },
   cadence: null,
   delivered: [],
@@ -57,7 +59,7 @@ describe('runListRows', () => {
         scopeSlug: 'blizzard',
         mode: 'full',
         mintedAt: '2026-01-10T00:00:00Z',
-        outcome: 'done',
+        laneStatus: { kind: 'done' },
         escalated: false,
         counts: { added: 1, observed: 11, gone: 2 },
       },
@@ -67,7 +69,7 @@ describe('runListRows', () => {
         scopeSlug: 'web',
         mode: 'delta',
         mintedAt: '2026-01-11T00:00:00Z',
-        outcome: 'needs_human',
+        laneStatus: { kind: 'needs_human' },
         escalated: true,
         counts: null,
       },

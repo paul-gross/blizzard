@@ -1,42 +1,43 @@
-import { ChunkStatus } from '../api/hub';
-import { LANES, STATUS_LANE, STATUS_TONE, UNKNOWN_LANE, laneTone, chunkLane, unknownLane } from './chunk-lanes';
+import { LANES, UNKNOWN_LANE, laneTone, STATUS_LANE, STATUS_TONE, chunkLane, unknownLane } from './chunk-lanes';
 
 /** A status a newer hub may send that this build's generated vocabulary does not list. */
-const NEWER_STATUS = 'newer-status' as ChunkStatus;
+const NEWER_STATUS = 'newer-status';
 
 describe('chunkLane', () => {
   it('sits a chunk the hub flags terminal in DONE, whatever its status', () => {
-    expect(chunkLane({ status: 'paused', terminal: true })).toBe('done');
+    expect(chunkLane({ status: { kind: 'paused' }, terminal: true })).toBe('done');
   });
 
   it('falls back to the status’s lane when the summary omits terminal', () => {
-    expect(chunkLane({ status: 'running', terminal: false })).toBe('running');
-    expect(chunkLane({ status: 'stopped', terminal: true })).toBe('done');
-    expect(chunkLane({ status: 'done', terminal: true })).toBe('done');
+    expect(chunkLane({ status: { kind: 'running' }, terminal: false })).toBe('running');
+    expect(chunkLane({ status: { kind: 'stopped' }, terminal: true })).toBe('done');
+    expect(chunkLane({ status: { kind: 'done' }, terminal: true })).toBe('done');
+    expect(chunkLane({ status: { kind: 'stopped' } })).toBe('done');
+    expect(chunkLane({ status: { kind: 'done' } })).toBe('done');
   });
 
   it('keeps a live status out of DONE when the hub says it is not terminal', () => {
-    expect(chunkLane({ status: 'needs_human', terminal: false })).toBe('needs');
+    expect(chunkLane({ status: { kind: 'needs_human' }, terminal: false })).toBe('needs');
   });
 
   it('sits a chunk with a status this build does not know in the unknown lane', () => {
-    expect(chunkLane({ status: NEWER_STATUS, terminal: false })).toBe(UNKNOWN_LANE);
-    expect(chunkLane({ status: NEWER_STATUS, terminal: true })).toBe('done');
+    expect(chunkLane({ status: { kind: 'unknown', raw: NEWER_STATUS }, terminal: false })).toBe(UNKNOWN_LANE);
+    expect(chunkLane({ status: { kind: 'unknown', raw: NEWER_STATUS }, terminal: true })).toBe('done');
   });
 });
 
 describe('unknownLane', () => {
   it('is absent while every chunk carries a status this build knows', () => {
-    expect(unknownLane([{ status: 'running', terminal: false }, { status: 'ready', terminal: false }])).toBeNull();
+    expect(unknownLane([{ status: { kind: 'running' }, terminal: false }, { status: { kind: 'ready' }, terminal: false }])).toBeNull();
   });
 
   it('heads the lane with each raw status a chunk carries, once each', () => {
-    const lane = unknownLane([{ status: NEWER_STATUS, terminal: false }, { status: 'running', terminal: false }, { status: NEWER_STATUS, terminal: false }, { status: 'other-newer-status' as ChunkStatus, terminal: false }]);
+    const lane = unknownLane([{ status: { kind: 'unknown', raw: NEWER_STATUS }, terminal: false }, { status: { kind: 'running' }, terminal: false }, { status: { kind: 'unknown', raw: NEWER_STATUS }, terminal: false }, { status: { kind: 'unknown', raw: 'other-newer-status' }, terminal: false }]);
     expect(lane).toEqual({ key: UNKNOWN_LANE, label: 'newer-status · other-newer-status', headerLabel: 'newer-status · other-newer-status' });
   });
 
   it('leaves out a chunk the hub flags terminal, which DONE holds', () => {
-    expect(unknownLane([{ status: NEWER_STATUS, terminal: true }])).toBeNull();
+    expect(unknownLane([{ status: { kind: 'unknown', raw: NEWER_STATUS }, terminal: true }])).toBeNull();
   });
 });
 
@@ -59,7 +60,7 @@ describe('laneTone', () => {
   });
 
   it('agrees with STATUS_TONE for every status', () => {
-    for (const status of Object.values(ChunkStatus)) expect(laneTone(STATUS_LANE(status))).toBe(STATUS_TONE(status));
+    for (const status of STATUS_LANE.keys) expect(laneTone(STATUS_LANE(status))).toBe(STATUS_TONE(status));
   });
 
   it('reads idle for the unknown lane and any other key', () => {

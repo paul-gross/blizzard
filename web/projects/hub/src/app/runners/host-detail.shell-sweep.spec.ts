@@ -74,8 +74,8 @@ const RUNNER_NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
 const HOST_URL = `https://${window.location.hostname}:8443`;
 
 const CLAIMS = [
-  { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYNCL01', shortId: 'C-CL01', node: 'build', status: 'running' as const },
-  { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYNCL02', shortId: 'C-CL02', node: 'deliver', status: 'delivering' as const },
+  { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYNCL01', shortId: 'C-CL01', node: 'build', status: { kind: 'running' as const } as const },
+  { chunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYNCL02', shortId: 'C-CL02', node: 'deliver', status: { kind: 'delivering' as const } as const },
 ];
 
 const ROW: RunnerRow = {
@@ -136,7 +136,7 @@ async function render() {
   const blocked = { ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked', prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 2 };
   queryClient.setQueryData([...hubRunnerNextClaimKey, ROW.runner_id], { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 });
   queryClient.setQueryData(hubUrgenciesKey, [{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', icon: null, default: false, retired: false, place: 1, revision: 1, open_chunks: 0, created_at: '2026-01-01T00:00:00Z', created_by: 'operator' }]);
-  queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
+  queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: { kind: 'running' as const } });
   await TestBed.configureTestingModule({
     imports: [HostDetail],
     providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(queryClient)],

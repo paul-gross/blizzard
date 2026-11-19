@@ -24,6 +24,7 @@ const row = (fields: Partial<GlanceRow> = {}): GlanceRow => ({
   shortId: 'C-0001',
   lane: 'running',
   status: 'running',
+  laneStatus: { kind: 'running' },
   statusWord: null,
   node: 'build',
   nodeId: '',

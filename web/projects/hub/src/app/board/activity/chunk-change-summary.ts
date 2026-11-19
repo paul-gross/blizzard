@@ -1,7 +1,5 @@
-import { compactRef, hubApi, runnerDisplayName } from 'fleet';
+import { compactRef, runnerDisplayName } from 'fleet';
 import { type LoggedEvent } from '../../core/live/hub-live-updates';
-
-const { ChunkChangeCause } = hubApi;
 
 /** A `chunk-changed` frame shaped into the Activity feed's two-line block. */
 export interface ChunkChangeSummary {
@@ -19,13 +17,13 @@ export interface ChunkChangeSummary {
  * `C-1NWW → running`. `hostNames` resolves a runner id to its host, so the runner reads `host/name`. The rendered shapes are pinned by `chunk-change-summary.spec.ts`.
  */
 export function summarizeChunkChange(data: LoggedEvent['data'], hostNames: ReadonlyMap<string, string>): ChunkChangeSummary {
-  if (data.cause === ChunkChangeCause.CLAIMED) {
+  if (data.cause === 'claimed') {
     return {
       transition: `${compactRef(data.chunk_id ?? '—')} claimed`,
       ...(data.runner_id ? { runner: runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) } : {}),
     };
   }
-  if (data.cause === ChunkChangeCause.RELEASED) {
+  if (data.cause === 'released') {
     return {
       transition: `${compactRef(data.chunk_id ?? '—')} released${data.reason ? ` (${data.reason})` : ''}`,
       ...(data.runner_id ? { runner: runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) } : {}),
@@ -37,6 +35,6 @@ export function summarizeChunkChange(data: LoggedEvent['data'], hostNames: Reado
   if (data.node) segments.push('→', data.node);
   const summary: ChunkChangeSummary = { transition: segments.join(' ') };
   if (data.runner_id) return { ...summary, runner: runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) };
-  if (data.cause === ChunkChangeCause.DELETED && data.by) return { ...summary, runner: data.by };
+  if (data.cause === 'deleted' && data.by) return { ...summary, runner: data.by };
   return summary;
 }

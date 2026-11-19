@@ -1,6 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { chunkCountsApiChunkCountsGet, type ChunkCountsView, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
+import { chunkCountsApiChunkCountsGet, type ChunkCountsView, laneCountInput, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 import { hubChunkCountsKey, lensedKey } from '../../core/query-keys';
 import { injectProjectFilter } from '../../core/project-filter';
 
@@ -25,6 +25,7 @@ export function injectHubChunkCountsQuery(enabled: () => boolean = () => true) {
         });
         return data;
       },
+      select: laneCountInput,
       // Same backstop as the chunk list it sits beside — the live events refresh it first.
       refetchInterval: LIVE_COVERED_POLL_BACKSTOP_MS,
     };

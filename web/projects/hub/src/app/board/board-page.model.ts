@@ -22,21 +22,21 @@ export function orderedChunkIds(entries: readonly { readonly chunk_id: string }[
  * (a paused chunk in particular) stays as read, since the hub's verdict on it is not known from here.
  * Returns `chunks` itself when no override applies.
  */
-export function withPendingBoardChanges(
-  chunks: readonly ChunkSummary[],
+export function withPendingBoardChanges<T extends ChunkSummary>(
+  chunks: readonly T[],
   pendingPromotes: readonly { readonly chunkId: string }[],
   pendingDeletes: readonly { readonly chunkId: string }[],
   pendingDemotes: readonly { readonly chunkId: string }[] = [],
-): readonly ChunkSummary[] {
+): readonly T[] {
   const deletingIds = new Set(pendingDeletes.map((vars) => vars.chunkId));
   const visible = deletingIds.size === 0 ? chunks : chunks.filter((c) => !deletingIds.has(c.chunk_id));
   if (pendingPromotes.length === 0 && pendingDemotes.length === 0) return visible;
   const promotingIds = new Set(pendingPromotes.map((vars) => vars.chunkId));
   const demotingIds = new Set(pendingDemotes.map((vars) => vars.chunkId));
   return visible.map((chunk) => {
-    if (promotingIds.has(chunk.chunk_id)) return { ...chunk, status: 'ready', promotable: false };
+    if (promotingIds.has(chunk.chunk_id)) return { ...chunk, status: 'ready', promotable: false, ...('laneStatus' in chunk ? { laneStatus: { kind: 'ready' } } : {}) };
     if (demotingIds.has(chunk.chunk_id) && chunk.status === 'ready') {
-      return { ...chunk, status: 'not_ready', promotable: true };
+      return { ...chunk, status: 'not_ready', promotable: true, ...('laneStatus' in chunk ? { laneStatus: { kind: 'not_ready' } } : {}) };
     }
     return chunk;
   });

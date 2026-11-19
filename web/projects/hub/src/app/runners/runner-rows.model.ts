@@ -1,7 +1,7 @@
 import {
-  type ChunkStatus,
+  type LaneStatus,
   DeclaredLever,
-  type HostRegistryView,
+  type HostFact,
   RunnerConnection,
   type RunnerDecliningView,
   type RunnerRegistryView,
@@ -16,6 +16,7 @@ import {
   unlisted,
 } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
+import type { BoardChunk } from '../core/chunks.model';
 
 import { isUnassigned, servedProjects, unresolvedEntries } from '../core/project-serving';
 import { type BindingLine, bindingLines, subscriptionName } from './host-rows.model';
@@ -27,7 +28,7 @@ export interface ClaimLine {
   readonly chunkId: string;
   readonly shortId: string;
   readonly node: string;
-  readonly status: ChunkStatus;
+  readonly status: LaneStatus;
 }
 
 /**
@@ -141,7 +142,7 @@ export function runnerToggleHint(row: RunnerRow): string {
  *
  * No status filter by design: `ChunkSummary.runner_id` is already in-progress-only
  * (see its own docs), so `runner_id` set *is* "currently holds a route on". */
-function claimsByRunner(chunks: readonly ChunkSummary[]): Map<string, ClaimLine[]> {
+function claimsByRunner(chunks: readonly BoardChunk[]): Map<string, ClaimLine[]> {
   const grouped = new Map<string, ClaimLine[]>();
   for (const chunk of chunks) {
     if (!chunk.runner_id) continue;
@@ -150,7 +151,7 @@ function claimsByRunner(chunks: readonly ChunkSummary[]): Map<string, ClaimLine[
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-      status: chunk.status,
+      status: chunk.laneStatus,
     });
     grouped.set(chunk.runner_id, lines);
   }
@@ -176,9 +177,9 @@ function usedByRunner(chunks: readonly ChunkSummary[]): Map<string, number> {
  * each runner's subscription name resolves from. */
 export function foldRunnerRows(
   runners: readonly RunnerRegistryView[],
-  chunks: readonly ChunkSummary[],
+  chunks: readonly BoardChunk[],
   nowMs: number,
-  hosts: readonly HostRegistryView[] = [],
+  hosts: readonly HostFact[] = [],
 ): readonly RunnerRow[] {
   const claims = claimsByRunner(chunks);
   const used = usedByRunner(chunks);

@@ -1,10 +1,10 @@
-import type { HostRegistryView, SubscriptionUsageView } from '../api/hub';
+import type { HostFact, SubscriptionUsage } from '../core/host.domain';
 import { hostSubscriptionPaces, hostWorkspaceRows, hubSubscriptionPaces } from './hub-host.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
 /** A fully-shaped host, defaulting to an online host reporting nothing. */
-function host(over: Partial<HostRegistryView> = {}): HostRegistryView {
+function host(over: Partial<HostFact> = {}): HostFact {
   return {
     host_id: 'hs_1',
     host_name: 'h1',
@@ -14,11 +14,8 @@ function host(over: Partial<HostRegistryView> = {}): HostRegistryView {
     online: true,
     added_by: null,
     last_seen_at: null,
-    redirect_uris: [],
     registered_at: null,
     retired: false,
-    retired_at: null,
-    retired_by: null,
     runner_ids: [],
     subscription_usage: [],
     subscriptions: [],
@@ -31,7 +28,7 @@ function host(over: Partial<HostRegistryView> = {}): HostRegistryView {
 
 describe('hubSubscriptionPaces', () => {
   it('folds a sampled usage to its bars, refreshed label, and freshness tier', () => {
-    const usage: SubscriptionUsageView[] = [
+    const usage: SubscriptionUsage[] = [
       {
         slug: 'anthropic',
         name: 'Anthropic',

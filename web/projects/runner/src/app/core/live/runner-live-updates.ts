@@ -4,11 +4,10 @@ import {
   backoffDelay,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
-  type RunnerEventPayload,
-  type RunnerEventPayloads,
-  type RunnerEventType,
+  type RunnerStreamEvent,
+  translateRunnerStreamEvent,
 } from 'fleet/runner-shell';
-import { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine, openLookup, SseService, type SseStatus } from 'fleet/shell';
+import { INVALIDATION_COALESCE_WINDOW_MS, LiveInvalidationSpine, SseService, type SseStatus, openLookup } from 'fleet/shell';
 
 import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { SessionRecovery } from '../identity/session-recovery';
@@ -23,16 +22,16 @@ export const STREAM_REARM_MAX_ATTEMPTS = 3;
  * chunk stales that chunk's detail on that runner: no runner event proves the
  * hub-sourced pause fact directly, but a frame naming the chunk is the closest local
  * signal that something about it moved. */
-function runnerKeys(data: { readonly runner_id: string; readonly chunk_id?: string | null }): readonly (readonly unknown[])[] {
-  const keys: (readonly unknown[])[] = [runnerDashboardKey(data.runner_id)];
-  if (data.chunk_id) keys.push(runnerChunkDetailKey(data.runner_id, data.chunk_id));
+function runnerKeys(data: RunnerStreamEvent): readonly (readonly unknown[])[] {
+  if (!('runnerId' in data)) return [];
+  const keys: (readonly unknown[])[] = [runnerDashboardKey(data.runnerId)];
+  if (data.chunkId) keys.push(runnerChunkDetailKey(data.runnerId, data.chunkId));
   return keys;
 }
 
 /**
  * The event → query-key invalidation registry (`bzh:frontend-disjoint-diffs`),
- * exhaustive over {@link RUNNER_EVENT_TYPES}: a new event type is a compile error
- * here until it is given a row, and a type a newer host sends before then stales nothing.
+ * over the translated domain; unknown or unusable frames stale nothing.
  *
  * The host serves one stream for every runner it holds. A runner-scoped frame carries
  * its `runner_id` and stales only that runner's keys ({@link runnerKeys});
@@ -41,18 +40,22 @@ function runnerKeys(data: { readonly runner_id: string; readonly chunk_id?: stri
  * which keeps the host page's environments, subscriptions, and runner rows as fresh as
  * every frame.
  */
-const RUNNER_EVENT_INVALIDATION_REGISTRY: { [K in RunnerEventType]: (data: RunnerEventPayloads[K]) => readonly (readonly unknown[])[] } = {
-  'lease-changed': (data) => [runnerLeasesKey(data.runner_id), ...runnerKeys(data), hostKey],
-  'ask-changed': (data) => [...runnerKeys(data), hostKey],
-  'escalation-changed': (data) => [...runnerKeys(data), hostKey],
-  'takeover-changed': (data) => [...runnerKeys(data), hostKey],
-  'environment-changed': () => [hostKey],
-  'fact-changed': (data) => [...runnerKeys(data), hostKey],
-};
+const RUNNER_INVALIDATION_REGISTRY = openLookup<RunnerStreamEvent['kind'], (event: RunnerStreamEvent) => readonly (readonly unknown[])[]>(
+  {
+    lease: (event) => 'runnerId' in event ? [runnerLeasesKey(event.runnerId), ...runnerKeys(event), hostKey] : [],
+    ask: (event) => [...runnerKeys(event), hostKey],
+    escalation: (event) => [...runnerKeys(event), hostKey],
+    takeover: (event) => [...runnerKeys(event), hostKey],
+    fact: (event) => [...runnerKeys(event), hostKey],
+    environment: () => [hostKey],
+    unknown: () => [],
+  },
+  () => () => [],
+);
 
 /**
  * The runner's live-update service: {@link LiveInvalidationSpine} configured with
- * {@link RUNNER_EVENT_INVALIDATION_REGISTRY}.
+ * runner domain invalidations.
  *
  * A stream `401` goes to {@link SessionRecovery.recoverFromUnauthenticated}. Only
  * the `read-failed` outcome re-arms the stream, on a backoff capped at
@@ -67,17 +70,18 @@ export class RunnerLiveUpdates {
   private readonly sessionRecovery = inject(SessionRecovery);
   private rearmAttempt = 0;
   private rearmTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly spine = new LiveInvalidationSpine<RunnerEventPayload, RunnerEventType>({
+  private readonly spine = new LiveInvalidationSpine<RunnerStreamEvent, string>({
     sse: this.sse,
     queryClient: this.queryClient,
     injector: this.injector,
     destroyRef: this.destroyRef,
     streamUrl: RUNNER_EVENT_STREAM_URL,
     eventTypes: RUNNER_EVENT_TYPES,
-    registry: openLookup(
-      RUNNER_EVENT_INVALIDATION_REGISTRY as Record<RunnerEventType, (data: RunnerEventPayload) => readonly (readonly unknown[])[]>,
-      () => () => [],
-    ),
+    mapFrame: (type, data) => {
+      const event = translateRunnerStreamEvent(type, data);
+      return { type: event.kind, data: event };
+    },
+    registry: RUNNER_INVALIDATION_REGISTRY,
     coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
     onAuthFailed: () => void this.handleAuthFailed(),
   });
