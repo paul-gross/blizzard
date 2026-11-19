@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test';
+
 import { type Clock, expect, test, type Wire } from '../../harness/fixtures';
 
 // The Cadences tab on a fresh hub, on the controlled clock: a cadence created on the board, a chore over every linked
@@ -9,6 +11,12 @@ test.use({ isolation: 'fresh-hub', clockMode: 'controlled', timezoneId: 'UTC' })
 
 const GRAPH = 'garden-routine';
 const DAY = 24 * 60 * 60;
+
+/** The zone box is pick-only: search the list for the zone, then pick its row. */
+async function pickZone(page: Page, testid: string, zone: string): Promise<void> {
+  await page.getByTestId(testid).fill(zone);
+  await page.getByRole('option').filter({ has: page.locator('.label', { hasText: new RegExp(`^${zone}$`) }) }).click();
+}
 
 /** The first instant at 20:00 UTC strictly after `after`. */
 function nextEvening(after: Date): Date {
@@ -51,7 +59,7 @@ test('test_gardening_cadences_browser', async ({ api, clock, page, project, wide
   await page.getByTestId('gardening-cadence-create-slug').fill('evening');
   await page.getByTestId('gardening-cadence-create-name').fill('Evening sweep');
   await page.getByTestId('gardening-cadence-create-cron').fill('0 20 * * *');
-  await page.getByTestId('gardening-cadence-create-zone').fill('UTC');
+  await pickZone(page, 'gardening-cadence-create-zone', 'UTC');
   await page.getByTestId('gardening-cadence-create-save').click();
   await expect(page).toHaveURL(new RegExp(`/p/${project.slug}/gardening/cadences/evening$`));
   await expect(page.getByTestId('gardening-cadence-rhythm-evening')).toContainText('0 20 * * * UTC');
@@ -124,7 +132,7 @@ test('test_gardening_cadence_form_refusals_browser', async ({ api, page, project
   await page.getByTestId('gardening-cadence-new').click();
   await expect(field('gardening-cadence-create-slug')).toContainText('*');
   await page.getByTestId('gardening-cadence-create-slug').fill('evening');
-  await page.getByTestId('gardening-cadence-create-zone').fill('UTC');
+  await pickZone(page, 'gardening-cadence-create-zone', 'UTC');
   await page.getByTestId('gardening-cadence-create-save').click();
   await expect(field('gardening-cadence-create-zone')).toContainText('A schedule needs both a cron and a zone');
   expect(posts).toHaveLength(0);
