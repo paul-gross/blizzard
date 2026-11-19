@@ -49,7 +49,7 @@ def test_cli_and_real_settings_routes_round_trip(tmp_path: Path, monkeypatch: py
     )
     runner_seams(app).settings_reader = reader
     runner_seams(app).settings_authoring = RunnerSettingsAuthoring(reader, store, HOST_REGISTRY)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     stepper = RunnerStepper(graph.runners[0].config, process_graph=graph.runners[0])
@@ -125,7 +125,7 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
     host = seed_host(host, {})
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     hosted = build_hosted_app(graph.runners[0].config, graph)

@@ -199,7 +199,7 @@ def test_live_capacity_reduction_keeps_existing_holds_and_resumes_claiming(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -250,7 +250,7 @@ def test_live_budget_edit_gates_claims_at_the_next_snapshot(tmp_path: Path, monk
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]
@@ -307,7 +307,7 @@ def test_stepper_live_budget_and_queue_policy_survive_hub_outage(
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, _NOW)
     )
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]

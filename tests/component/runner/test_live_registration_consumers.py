@@ -41,7 +41,7 @@ def test_registration_holds_name_capacity_and_bindings_through_inflight_edit_and
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host_config.runners[0].name, datetime.now(UTC))
     )
-    ready, halted = seed_runners(host_config, list(host_config.runners), clock=SystemClock())
+    ready, halted = seed_runners(host_config, clock=SystemClock())
     assert not halted
     host = composition.build_host_process(host_config, ready)
     runner = host.runners[0]

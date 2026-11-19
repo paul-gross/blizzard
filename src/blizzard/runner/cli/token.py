@@ -117,8 +117,6 @@ def _set_on_stopped_host(ctx: click.Context, directory: str, door: Door, runner:
         action=f"set runner {entry.name}'s hub token",
         door=door,
         clock=clock,
-        runners={entry.id: entry.name},
-        configured=tuple(item.id for item in config.runners if item.id is not None),
         refuse_foreign=True,
     ):
         engine = create_engine_from_url(config.db_url)

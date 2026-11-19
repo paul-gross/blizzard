@@ -286,8 +286,9 @@ def test_stopped_retire_retains_identity_with_history_until_explicit_reset(
     result = _run(fake_init_hub, "retire", "--runner", "r2", "--dir", str(root))
     assert result.exit_code == 0, result.output
     assert set(named_runners(load_host_config(root), SystemClock())) == {"rn_init1", "rn_init2"}
-    refused = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
-    assert refused.exit_code != 0
+    # Its retired hosted row still accounts for the retained identity, so the store stays the host's.
+    kept = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
+    assert kept.exit_code == 0, kept.output
     reset = _run(fake_init_hub, "store", "reset", str(root), "--runner", "rn_init2")
     assert reset.exit_code == 0, reset.output
     again = _run(fake_init_hub, "init", str(root), "--hub", _HUB)
@@ -337,7 +338,7 @@ def test_standalone_tick_uses_the_stored_runner_settings_revision(
 ) -> None:
     root = _registered(tmp_path, fake_init_hub)
     host = load_host_config(root)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     try:
@@ -437,7 +438,7 @@ def test_standalone_tick_spawn_records_stored_settings_revision(
     root = _registered(tmp_path, fake_init_hub)
     binary = _worker_binary(tmp_path)
     host = load_host_config(root)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     try:
@@ -487,7 +488,7 @@ def test_spawn_after_failed_settings_rebuild_records_last_applied_revision(
     root = _registered(tmp_path, fake_init_hub)
     binary = _worker_binary(tmp_path)
     host = load_host_config(root)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
     runner = graph.runners[0]

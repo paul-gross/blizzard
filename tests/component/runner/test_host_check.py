@@ -78,7 +78,7 @@ def test_check_previews_seed_and_honors_stored_values_without_writing(
 
     layout.config_path.write_text(original.replace("agents = 1", "agents = 3"))
     host = load_host_config(root)
-    ready, halted = seed_runners(host, list(host.runners), clock=SystemClock())
+    ready, halted = seed_runners(host, clock=SystemClock())
     assert ready and not halted
     snapshot = settings.snapshot()
     layout.config_path.write_text(original.replace("agents = 1", 'agents = "invalid"'))

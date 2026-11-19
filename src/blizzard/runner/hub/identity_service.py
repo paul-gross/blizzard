@@ -1,19 +1,16 @@
-"""The runner identity row's writers — what a runner's join records and what its retirement forgets.
+"""The runner identity row's forgetting — what a runner's retirement forgets.
 
-``runner init`` records the row of a runner it joined; ``runner retire`` on a stopped host, and the running host's
-tick, forget the row of a runner the hub retired. The edge and the tick decide nothing about the row: they hand
-this service the fact, and it writes."""
+``runner retire`` on a stopped host, and the running host's tick, forget the row of a runner the hub retired; a
+joined runner's row is written with its hosting, by the runner admission. The edge and the tick decide nothing about
+the row: they hand this service the fact, and it writes."""
 
 from __future__ import annotations
 
-from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.bootstrap import JoinedRunner
 from blizzard.runner.hub.client import HubClientError, ITokenIdentityReader
 from blizzard.runner.hub.identity import (
     IReadRunnerIdentityRepository,
     IWriteRetiredRunnerIdentity,
-    IWriteRunnerIdentityRepository,
     proves_retired,
 )
 
@@ -21,19 +18,10 @@ _log = get_logger("blizzard.runner.host")
 
 
 class RunnerIdentityService:
-    """Records a joined runner's identity row and forgets a retired runner's, over the store bound to that runner."""
+    """Forgets a retired runner's identity row, over the store bound to that runner."""
 
-    def __init__(
-        self, *, recorder: IWriteRunnerIdentityRepository, forgetter: IWriteRetiredRunnerIdentity, clock: IClock
-    ):
-        self._recorder = recorder
+    def __init__(self, *, forgetter: IWriteRetiredRunnerIdentity):
         self._forgetter = forgetter
-        self._clock = clock
-
-    def record(self, joined: JoinedRunner) -> None:
-        """Write the row of ``joined`` from the hub's answer, so a configured runner has its row before it writes
-        anything else."""
-        self._recorder.record_runner_identity(joined.identity_at(self._clock.now()))
 
     def forget(self) -> bool:
         """Forget the bound runner's row if it has no retained settings or history."""

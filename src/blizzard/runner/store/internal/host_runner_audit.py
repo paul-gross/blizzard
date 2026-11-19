@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from sqlalchemy import Connection
 
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.store.schema import binding_releases, env_bindings, runner_identity
+from blizzard.runner.store.schema import binding_releases, env_bindings, hosted_runners, runner_identity
 from blizzard.runner.store.scoped import RUNNER_COLUMN, RUNNER_UNSCOPED_OPTION, RunnerStoreConnections
 
 
@@ -39,6 +39,18 @@ class RunnerAudit:
         """The ids of the runners the store's identity rows name, oldest first."""
         with self.connect() as conn:
             rows = conn.execute(sa.select(runner_identity.c.runner_id).order_by(runner_identity.c.id)).all()
+        return tuple(str(row.runner_id) for row in rows)
+
+    def unhosted_runners(self) -> tuple[str, ...]:
+        """The runners an identity row names and no hosted row accounts for, once the store hosts any runner; none on
+        a store hosting no runner yet."""
+        with self.read_transaction() as conn:
+            if not conn.execute(sa.select(sa.func.count()).select_from(hosted_runners)).scalar_one():
+                return ()
+            identity = runner_identity.c.runner_id
+            rows = conn.execute(
+                sa.select(identity).where(identity.not_in(sa.select(hosted_runners.c.runner_id))).order_by(identity)
+            ).all()
         return tuple(str(row.runner_id) for row in rows)
 
     def held_workspace_bindings(self, workspace_id: str) -> list[EnvBinding]:

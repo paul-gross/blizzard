@@ -382,6 +382,39 @@ def test_init_joins_every_runner_of_a_host_of_several_under_the_one_host(
     assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
 
 
+def _hosted_facts(root: Path) -> list[tuple[str, str, str, str]]:
+    with closing(sqlite3.connect(sqlite_store_file(load_host_config(root).db_url))) as conn:
+        return [
+            (row[0], row[1], row[2], row[3])
+            for row in conn.execute("SELECT runner_id, op, door, actor FROM hosted_runner_facts ORDER BY id")
+        ]
+
+
+def test_init_hosts_each_runner_it_joins_with_its_identity_row(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    root = tmp_path / "host"
+
+    assert _init(fake_init_hub, root).exit_code == 0
+
+    assert _hosted_facts(root) == [("rn_init1", "added", "cli", "operator")]
+
+
+def test_a_scaffold_joined_on_a_hosting_store_is_hosted_with_its_identity_row(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = tmp_path / "host"
+    assert _init(fake_init_hub, root).exit_code == 0
+    _with_a_second_runner(root)
+
+    result = _init(fake_init_hub, root)
+
+    assert result.exit_code == 0, result.output
+    assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
+    assert _hosted_facts(root) == [
+        ("rn_init1", "added", "cli", "operator"),
+        ("rn_init2", "added", "cli", "operator"),
+    ]
+
+
 def test_init_whose_host_the_hub_forgot_stops_without_allow_readd_and_re_adds_host_and_every_runner_with_it(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:

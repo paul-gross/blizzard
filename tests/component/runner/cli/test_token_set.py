@@ -121,7 +121,7 @@ def test_a_stopped_host_refuses_a_store_its_runner_is_foreign_to(
 
 @contextmanager
 def _serving(config: HostConfig) -> Generator[None]:
-    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
+    ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     graph = build_host_process(config, ready)
     served = replace(ready[0].config, port=0)

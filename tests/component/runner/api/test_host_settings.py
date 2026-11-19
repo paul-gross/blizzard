@@ -38,7 +38,7 @@ def hosted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[H
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
     config = seed_host(config, {})
-    ready, halted = seed_runners(config, list(config.runners), clock=SystemClock())
+    ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
     app = build_hosted_app(host.runners[0].config, host)

@@ -112,6 +112,7 @@ from blizzard.runner.host_layout import (
     hold_host,
 )
 from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
+from blizzard.runner.hosting.ports import IRunnerAdmission
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -169,6 +170,7 @@ from blizzard.runner.store.internal.git_commit_declaration_store import GitCommi
 from blizzard.runner.store.internal.host_daemon_liveness_store import DaemonLivenessStore
 from blizzard.runner.store.internal.host_external_usage_store import ExternalUsageStore
 from blizzard.runner.store.internal.host_graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.host_hosted_runner_store import HostHostedRunnerStore
 from blizzard.runner.store.internal.host_hub_token_store import HostHubTokenStore
 from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
@@ -192,6 +194,7 @@ from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.projects_answer_store import ServedProjectsStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.runner_admission_store import RunnerAdmissionStore
 from blizzard.runner.store.internal.runner_transfer_store import RunnerRowRemovalStore, RunnerTransferStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.settings_store import RunnerSettingsStore
@@ -1444,17 +1447,46 @@ def _build_stores(connections: RunnerStoreConnections, clock: IClock | None = No
 
 
 @contextlib.contextmanager
-def build_identity_service(
-    db_url: str, *, runner_id: str, clock: IClock
-) -> Generator[RunnerIdentityService, None, None]:
-    """The identity row's service, bound to ``runner_id``, for ``runner init`` and ``runner retire`` on a stopped host.
+def build_identity_service(db_url: str, *, runner_id: str) -> Generator[RunnerIdentityService, None, None]:
+    """The identity row's service, bound to ``runner_id``, for ``runner retire`` on a stopped host.
     It owns the engine it opens and disposes it on exit, so no verb holds a write repository past its use."""
     engine = create_engine_from_url(db_url)
     try:
         identities = RunnerIdentityStore(
             RunnerStoreConnections(engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), runner_id)
         )
-        yield RunnerIdentityService(recorder=identities, forgetter=identities, clock=clock)
+        yield RunnerIdentityService(forgetter=identities)
+    finally:
+        engine.dispose()
+
+
+def build_runner_admission(
+    engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str, clock: IClock
+) -> IRunnerAdmission:
+    """The admission of ``runner_id`` into the store ``engine`` opens: its runner half bound to it, its host half naming
+    it, the store's identity rows read through the runner audit for a store that hosts no runner yet."""
+    connections = RunnerStoreConnections(engine, errors, runner_id)
+    return RunnerAdmissionStore(
+        connections,
+        clock,
+        hosted=HostHostedRunnerStore(connections),
+        hub_tokens=HostHubTokenStore(connections),
+        named_runners=RunnerAudit(connections).named_runners,
+    )
+
+
+@contextlib.contextmanager
+def runner_admission(db_url: str, *, runner_id: str, clock: IClock) -> Generator[IRunnerAdmission, None, None]:
+    """:func:`build_runner_admission` over its own engine, for ``runner init``'s join on a stopped host; disposes the
+    engine on exit."""
+    engine = create_engine_from_url(db_url)
+    try:
+        yield build_runner_admission(
+            engine,
+            errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")),
+            runner_id=runner_id,
+            clock=clock,
+        )
     finally:
         engine.dispose()
 
@@ -1491,6 +1523,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
         hub_tokens=HostHubTokenStore(connections),
+        hosted_runners=HostHostedRunnerStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
         settings=HostSettingsStore(connections, clock),
         runner_audit=RunnerAudit(connections),
@@ -1508,6 +1541,7 @@ def build_runner_transfer(
         into,
         _build_host_stores(into, clock).host_ingests,
         HostHubTokenStore(into),
+        RunnerAudit(into).named_runners,
     )
 
 
@@ -1584,9 +1618,9 @@ class RunnerBoundStoreFiles:
                 keep_counters=keep_counters
             )
             if drop_hub_token:
-                build_host_stores(engine, errors=self.files.errors, clock=self.files.clock).hub_tokens.drop(
-                    self.runner_id
-                )
+                host = build_host_stores(engine, errors=self.files.errors, clock=self.files.clock)
+                host.hub_tokens.drop(self.runner_id)
+                host.hosted_runners.drop(self.runner_id)
 
     def runner_view(self, url: str) -> RunnerStoreView:
         errors, clock = self.files.errors, self.files.clock

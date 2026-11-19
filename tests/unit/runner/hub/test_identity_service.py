@@ -1,5 +1,5 @@
-"""The runner identity service and the retirement rule (unit tier): a joined runner's row is built and recorded
-through the service, and a runner's row is forgotten on the hub's proof of its retirement alone."""
+"""The runner identity service and the retirement rule (unit tier): a runner's row is forgotten on the hub's proof of
+its retirement alone."""
 
 from __future__ import annotations
 
@@ -8,9 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
-from blizzard.runner.hub.bootstrap import JoinedRunner
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.identity import RunnerIdentity, proves_retired
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
@@ -51,18 +49,9 @@ class _Watched:
         return RetiredRunnerWatch(runner_id="rn_a", rows=self.rows, forgetter=self.rows, token_identity=reader), reader
 
 
-def test_a_joined_runners_row_is_recorded_from_the_join_and_the_clock() -> None:
-    rows = _Rows()
-    joined = JoinedRunner(runner_id="rn_a", runner_name="a", added=True, tenant_id="tn_1", tenant_name="One")
-
-    RunnerIdentityService(recorder=rows, forgetter=rows, clock=FixedClock(_AT)).record(joined)
-
-    assert rows.row == RunnerIdentity("rn_a", "a", _AT, tenant_id="tn_1", tenant_name="One")
-
-
 def test_forgetting_deletes_the_row_and_forgetting_none_is_not_an_error() -> None:
     rows = _Rows(row=RunnerIdentity("rn_a", "a", _AT))
-    service = RunnerIdentityService(recorder=rows, forgetter=rows, clock=FixedClock(_AT))
+    service = RunnerIdentityService(forgetter=rows)
 
     service.forget()
     service.forget()
@@ -101,7 +90,7 @@ def test_retired_runner_with_retained_settings_keeps_its_identity() -> None:
 
     assert watch.forget_if_retired() is False
     assert watched.rows.row is not None
-    service = RunnerIdentityService(recorder=watched.rows, forgetter=watched.rows, clock=FixedClock(_AT))
+    service = RunnerIdentityService(forgetter=watched.rows)
     assert service.forget() is False
     assert watched.rows.row is not None
 

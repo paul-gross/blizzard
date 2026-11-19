@@ -10,15 +10,17 @@ import click
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import InitCollaborators, write_runner_token
 from blizzard.runner.cli.store_guard import named_runners, store_write_guard
-from blizzard.runner.composition import build_identity_service, build_runner_ingest
+from blizzard.runner.composition import build_host_stores, build_identity_service, build_runner_ingest
 from blizzard.runner.config import SCAFFOLD_AGENTS
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import (
@@ -29,6 +31,7 @@ from blizzard.runner.host_config import (
 )
 from blizzard.runner.host_file import append_runner, remove_runner
 from blizzard.runner.host_layout import RUNNERS_DIRNAME, HostHeld, HostLayout, hold_host
+from blizzard.runner.hosting.model import CLI, OPERATOR, HostedRunnerOp, HostingFact
 from blizzard.runner.hub.client import (
     HostRefusalReason,
     HostRefused,
@@ -37,6 +40,7 @@ from blizzard.runner.hub.client import (
     RunnerAddRefused,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.ingest import IngestRequest
 from blizzard.runner.transfer.refusals import IngestRefused
 
@@ -197,13 +201,12 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
             action=f"retire runner {target.name}",
             door=Door.of(ctx),
             clock=clock,
-            runners={},
-            configured=(),
             refuse_foreign=False,
             held=_HostRunning if target.configured else None,
         ):
             released = _retire_at_hub(ctx, config, token, target, force=force)
-            with build_identity_service(config.db_url, runner_id=target.runner_id, clock=clock) as identities:
+            _record_retired(config, target.runner_id, clock)
+            with build_identity_service(config.db_url, runner_id=target.runner_id) as identities:
                 identities.forget()
             _remove_entry(config, target, released)
             click.echo(_retired(config, target, released))
@@ -212,6 +215,19 @@ def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None
         _remove_entry(config, target, released)
         click.echo(_retired(config, target, released))
         click.echo(f"a running host holds {config.root} ({exc}): it halts runner {target.name} at its next tick")
+
+
+def _record_retired(config: HostConfig, runner_id: str, clock: IClock) -> None:
+    """Append the ``retired`` fact of a runner the store hosts, so no later start brings it back."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        hosted = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners
+        if runner_id in hosted.active():
+            hosted.append_fact(runner_id, HostedRunnerOp.RETIRED, HostingFact(actor=OPERATOR, door=CLI, at=clock.now()))
+    finally:
+        engine.dispose()
 
 
 def _retiring(config: HostConfig, runner: str, clock: IClock) -> _Retiring:

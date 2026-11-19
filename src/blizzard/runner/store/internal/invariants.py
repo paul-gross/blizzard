@@ -219,6 +219,22 @@ class RowsNameRegisteredRunner(QueryCheck):
         return violations
 
 
+@dataclass(frozen=True)
+class IdentityRowHosted:
+    """Once the store hosts any runner, every ``runner_identity`` row names a runner with a ``hosted_runners`` row: a
+    store's own hosted rows decide whether it is the host's, so an identity row none accounts for would make the next
+    start judge the store foreign. A store hosting no runner yet, from before hosted runners, holds vacuously. Read
+    through the runner audit, which reaches both kinds of table."""
+
+    audit: IRunnerAudit
+
+    def run(self) -> list[Violation]:
+        return [
+            Violation("runner:identity-row-hosted", f"runner {runner_id} has an identity row and no hosted row")
+            for runner_id in self.audit.unhosted_runners()
+        ]
+
+
 def _holes_by_runner(conn: Connection, table: Table, *, pending_only: bool = False) -> dict[str, list[int]]:
     """Each runner's missing seqs among the ``table`` rows it retains from its own lowest pending seq upward, or among
     its pending rows alone (``pending_only``), in runner order. A runner whose sequence has no hole is absent."""
@@ -524,6 +540,7 @@ class RunnerInvariants:
                 violations.extend(check.run())
             if after_recovery:
                 violations.extend(ActiveLeaseProcessIsLive(conn, self.process).run())
-            # NOT checked, deliberately: "a pause-parked lease has no closure" — it is
-            # false on a legal history; pinned by tests/component/test_pin_foundation.py.
+        violations.extend(IdentityRowHosted(self.audit).run())
+        # NOT checked, deliberately: "a pause-parked lease has no closure" — it is
+        # false on a legal history; pinned by tests/component/test_pin_foundation.py.
         return violations

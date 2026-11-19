@@ -33,6 +33,8 @@ _HOST_TABLES = frozenset(
         "host_setting_entries",
         "host_setting_changes",
         "runner_hub_tokens",
+        "hosted_runners",
+        "hosted_runner_facts",
         "subscription_usage_limits",
         "subscription_floor_clears",
     }
@@ -226,6 +228,8 @@ def test_the_host_transfer_treatments_are_the_declared_ones() -> None:
                 "host_setting_entries",
                 "host_setting_changes",
                 "runner_hub_tokens",
+                "hosted_runners",
+                "hosted_runner_facts",
             ),
             schema.HOST_TRANSFER_NONE,
         ),

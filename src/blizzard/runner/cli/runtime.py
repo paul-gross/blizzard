@@ -53,18 +53,25 @@ from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runne
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
-from blizzard.runner.cli.store_guard import named_runners, store_write_guard
+from blizzard.runner.cli.store_guard import (
+    hosted_runner_ids,
+    judge_store,
+    named_runners,
+    store_reason,
+    store_write_guard,
+)
 from blizzard.runner.composition import (
     HostProcess,
     RunnerProcess,
     build_host_process,
     build_host_read_stores,
     build_host_settings_store,
-    build_identity_service,
+    build_host_stores,
     build_read_stores,
     build_runner_process,
     build_sealing_hub_tokens,
     build_settings_stores,
+    runner_admission,
     stored_hub_token,
 )
 from blizzard.runner.config import (
@@ -99,6 +106,7 @@ from blizzard.runner.host_layout import (
     HostLayout,
 )
 from blizzard.runner.host_settings_reader import HostSettingsReader
+from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostingFact
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -148,8 +156,7 @@ from blizzard.runner.hub.token_seed import RUNNER_SEEDED, import_hub_token
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStoreKind,
-    foreign_store,
-    foreign_store_reason,
+    host_store_verdict,
     reset_hazard,
 )
 from blizzard.runner.listeners import ListenerError, Uds
@@ -541,15 +548,20 @@ def _join_runner(
     if entry.id != joined.runner_id:
         with click_exception_on(ConfigError):
             write_runner_id(config.layout, entry.name, joined.runner_id, strict=config.strict)
-    with build_identity_service(config.db_url, runner_id=joined.runner_id, clock=clock) as identities:
-        identities.record(joined)
+    # The identity row and its hosting land together, so a scaffold joined on a hosting store is never judged stray.
+    now = clock.now()
+    with runner_admission(config.db_url, runner_id=joined.runner_id, clock=clock) as admission:
+        admission.record_joined(joined.identity_at(now), HostingFact(actor=OPERATOR, door=CLI, at=now))
 
 
 def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, clock: IClock) -> None:
     """Stop a kept runner whose store holds a runner neither it nor a sibling ``[[runner]]`` is, before anything is
     written. The configured id is not counted as ours: a store naming a stale one under a re-add is foreign too."""
     siblings = tuple(other.id for other in config.runners if other.name != entry.name and other.id is not None)
-    verdict = foreign_store(named_runners(config, clock), (joined.runner_id, *siblings))
+    # The joined runner counts among the file's ids: its join writes its hosting with its row.
+    verdict = host_store_verdict(
+        named_runners(config, clock), hosted_runner_ids(config, clock), (joined.runner_id, *siblings)
+    )
     if verdict is None:
         return
     held = f"runner {entry.name}'s token belongs to runner {joined.runner_id}"
@@ -1001,25 +1013,22 @@ def host(
             for projection in config.projections()
             if isinstance(projection, HaltedRunner) and projection.id is None
         ]
-        ours = tuple(entry.id for entry in config.runners if entry.id is not None)
+        clock = CliCollaborators.of(ctx).wall_clock
         with store_write_guard(
-            config,
-            action="start the host",
-            door=Door.of(ctx),
-            clock=CliCollaborators.of(ctx).wall_clock,
-            runners={entry.id: entry.name for entry in entries if entry.id is not None},
-            configured=ours,
-            refuse_foreign=False,
-        ) as foreign:
-            kept = [entry for entry in entries if entry.id not in foreign]
-            halted += [
-                HaltedRunner(name=entry.name, id=entry.id, errors=(foreign[entry.id],))
-                for entry in entries
-                if entry.id is not None and entry.id in foreign
-            ]
+            config, action="start the host", door=Door.of(ctx), clock=clock, refuse_foreign=False
+        ) as verdict:
             config = seed_host(config, os.environ)
-            seeded, seed_halted = seed_runners(config, kept, clock=CliCollaborators.of(ctx).wall_clock)
-            halted += seed_halted
+            if verdict.foreign is not None:
+                # A store that is not the host's is left untouched: every runner the file names halts with the reason.
+                halted += [
+                    HaltedRunner(name=entry.name, id=entry.id, errors=(store_reason(verdict, entry.id) or "",))
+                    for entry in entries
+                    if entry.id is not None
+                ]
+                seeded: list[BuiltRunner] = []
+            else:
+                seeded, seed_halted = seed_runners(config, clock=clock)
+                halted += seed_halted
             start(
                 config,
                 seeded,
@@ -1065,12 +1074,64 @@ def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
     return effective
 
 
-def seed_runners(
-    config: HostConfig, runners: Sequence[RunnerEntry], *, clock: IClock
-) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
-    """Seed and resolve identified runners only after the store guard has passed: each runner's token is imported into
-    the store first, then its settings are seeded, then it is projected over its stored token. Mints the host's key
-    when it holds none."""
+def seed_hosted_runners(config: HostConfig, *, clock: IClock) -> None:
+    """Seed step 4, once the store is judged the host's: every ``[[runner]]`` with an id the store neither hosts nor
+    holds retired gets its hosted row and ``added`` fact, all in one transaction, so no crash leaves a hosting store
+    with an identity row and no hosted row. A scaffold is hosted by its join. An entry naming a runner the store holds
+    retired is never started, and is warned about."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        hosted = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        ).hosted_runners
+        retired = hosted.retired()
+        hosted.host(
+            [entry.id for entry in config.runners if entry.id is not None and entry.id not in retired],
+            HostingFact(actor=SEED, door=SEED, at=clock.now()),
+        )
+    finally:
+        engine.dispose()
+    for entry in config.runners:
+        if entry.id is not None and entry.id in retired:
+            click.echo(
+                f"warning: runner {entry.name} ({entry.id}) is retired; its `[[runner]]` is no longer read — remove it"
+            )
+
+
+def hosted_entries(config: HostConfig, *, clock: IClock) -> list[RunnerEntry]:
+    """The entry of every runner the store hosts and has not retired: the ``[[runner]]`` naming it, in file order, then
+    each the file does not name, in the order it was hosted, built from its stored ``name``. Every runner's binding is
+    made from ``hosted_runners``, never from the file's ``id``."""
+    engine = create_engine_from_url(config.db_url)
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    try:
+        active = build_host_stores(engine, errors=errors, clock=clock).hosted_runners.active()
+        named = {entry.id: entry for entry in config.runners if entry.id is not None}
+        entries = [named[runner_id] for runner_id in named if runner_id in active]
+        for runner_id in active:
+            if runner_id not in named:
+                identity, settings = build_settings_stores(engine, errors=errors, runner_id=runner_id)
+                entries.append(config.hosted_entry(runner_id, _stored_name(identity, settings, runner_id)))
+    finally:
+        engine.dispose()
+    return entries
+
+
+def _stored_name(identity: IRunnerIdentityStore, settings: IWriteRunnerSettings, runner_id: str) -> str:
+    """A hosted runner's name: its stored ``name`` entry, else its identity row's, else its id."""
+    stored = settings.snapshot().entries.get("name")
+    if stored is not None and isinstance(stored.value, str) and stored.value.strip():
+        return stored.value.strip()
+    row = identity.runner_identity()
+    return row.runner_name if row is not None else runner_id
+
+
+def seed_runners(config: HostConfig, *, clock: IClock) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
+    """Seed and resolve the store's active hosted runners only after the store guard has passed and seed step 4 has
+    hosted the file's: each runner's token is imported into the store first, then its settings are seeded, then it
+    is projected over its stored token. Mints the host's key when it holds none."""
+    seed_hosted_runners(config, clock=clock)
+    runners = hosted_entries(config, clock=clock)
     engine = create_engine_from_url(config.db_url)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
@@ -1263,11 +1324,11 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
     try:
         ensure_current_revision(config)
         click.echo(f"store: {config.db_url} is at the revision this build expects")
-        named = named_runners(config, CliCollaborators.of(ctx).wall_clock)
+        verdict = judge_store(config, CliCollaborators.of(ctx).wall_clock)
         current = True
     except (RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError) as exc:
         problems.append(f"store: {exc}")
-        named = ()
+        verdict = None
         current = False
     collaborators = InitCollaborators.of(ctx)
     engine = create_engine_from_url(config.db_url) if current else None
@@ -1283,12 +1344,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
         for entry in config.runners:
             sealed = False
             if entry.id is not None and current:
-                problem = foreign_store_reason(
-                    named,
-                    entry.id,
-                    reset_command(config.root),
-                    configured=tuple(item.id for item in config.runners if item.id is not None),
-                )
+                problem = store_reason(verdict, entry.id) if verdict is not None else None
                 if problem:
                     problems.append(f"runner {entry.name} ({entry.id}): {problem}")
                     continue
@@ -1657,17 +1713,15 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         action="run a tick",
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
-        runners={entry.id: entry.name},
-        configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        seeded, seed_halted = seed_runners(
-            config, [item for item in config.runners if item.id is not None], clock=CliCollaborators.of(ctx).wall_clock
-        )
+        seeded, seed_halted = seed_runners(config, clock=CliCollaborators.of(ctx).wall_clock)
         seed_halted += [item for item in config.projections() if isinstance(item, HaltedRunner) and item.id is None]
         if seed_halted:
             raise click.ClickException("\n".join(item.describe() for item in seed_halted))
-        runner_built = next(item for item in seeded if item.id == entry.id)
+        runner_built = next((item for item in seeded if item.id == entry.id), None)
+        if runner_built is None:
+            raise click.ClickException(f"runner {entry.name} ({entry.id}) is retired, so a tick cannot drive it")
         with click_exception_on(ConfigError):
             graph = build_runner_process(
                 runner_built.config,

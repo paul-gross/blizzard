@@ -18,7 +18,7 @@ from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.store_guard import configured_ids, store_write_guard
+from blizzard.runner.cli.store_guard import store_write_guard
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.bundle import BundleSnapshot
@@ -131,8 +131,6 @@ def _transcript_config(
         action=action,
         door=door,
         clock=clock,
-        runners={config.runner_id: config.name},
-        configured=configured_ids(config),
         refuse_foreign=True,
     ):
         yield config

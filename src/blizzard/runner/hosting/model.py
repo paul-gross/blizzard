@@ -1,0 +1,91 @@
+"""A hosted runner and the append-only facts its state derives from."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
+from typing import Final, Literal
+
+from blizzard.foundation.roles import domain_model
+from blizzard.foundation.settings_record.vocabulary import Door, Entry, FieldChange
+from blizzard.runner.hub.identity import RunnerIdentity
+
+#: Where a hosted-runner fact came in: the settings record's doors, plus ``hub`` for a retirement the host notices at
+#: its hub rather than one it performed.
+type HostedRunnerDoor = Literal["seed", "cli", "page", "api", "apply", "hub"]
+
+#: The door and actor a fact the host's seed writes is recorded under.
+SEED: Final = "seed"
+#: The actor an operator's offline verb is recorded under.
+OPERATOR: Final = "operator"
+#: The door a CLI verb's fact is recorded under.
+CLI: Final = "cli"
+
+
+class HostedRunnerOp(StrEnum):
+    """What a hosted-runner fact records."""
+
+    ADDED = "added"
+    RETIRED = "retired"
+
+
+class HostedRunnerState(StrEnum):
+    """A hosted runner's state, its newest fact's: ``active`` while it was last added, ``retired`` once retired."""
+
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostedRunnerFact:
+    """One fact about a hosted runner: what happened, when, who did it and through which door."""
+
+    runner_id: str
+    recorded_at: datetime
+    op: HostedRunnerOp
+    actor: str
+    door: HostedRunnerDoor
+
+
+def state_of(facts: Sequence[HostedRunnerFact]) -> HostedRunnerState | None:
+    """The state ``facts`` (oldest first) leave their runner in, or ``None`` when there are none. Retirement is final:
+    a retired runner stays retired whatever follows."""
+    if not facts:
+        return None
+    if any(fact.op is HostedRunnerOp.RETIRED for fact in facts):
+        return HostedRunnerState.RETIRED
+    return HostedRunnerState.ACTIVE
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostingFact:
+    """Who hosts a runner and through which door, stamped by the writer's injected clock."""
+
+    actor: str
+    door: HostedRunnerDoor
+    at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerAdmission:
+    """Everything one runner's add writes in one transaction: its identity row and first settings revision (the
+    ``entries`` and the ``create`` change naming them), its hosted row and ``added`` fact, and its sealed token —
+    every row stamped ``at``, by ``actor`` through ``door``."""
+
+    identity: RunnerIdentity
+    entries: Mapping[str, Entry]
+    actor: str
+    door: Door
+    at: datetime
+
+    def hosting(self) -> HostingFact:
+        return HostingFact(actor=self.actor, door=self.door, at=self.at)
+
+    def diff(self) -> tuple[FieldChange, ...]:
+        """The ``create`` change: every entry moved from absent, in key order."""
+        return tuple(FieldChange(key, None, self.entries[key]) for key in sorted(self.entries))

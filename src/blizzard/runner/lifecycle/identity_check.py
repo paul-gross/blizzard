@@ -141,24 +141,36 @@ def reset_hazard(reset: str, runner_id: str) -> str:
     )
 
 
-def foreign_store_reason(
-    named: tuple[str, ...], configured_id: str, reset: str, *, configured: tuple[str, ...] = ()
-) -> str | None:
-    """Why a store naming ``named`` is not ``configured_id``'s, or ``None`` when it names only runners this host
-    configures (``configured_id`` and the other ``configured`` ids). A mixed store is restored, never ``reset``; an
+def host_store_verdict(
+    named: Collection[str], hosted: Collection[str], file_ids: Collection[str]
+) -> ForeignStore | None:
+    """Whether a store is the host's, judged once over its identity rows (``named``, oldest first), its hosted runners
+    (``hosted``, added or retired) and the ids its host file's ``[[runner]]`` entries carry (``file_ids``). A store that
+    hosts no runner yet is judged against the file; one hosting runners is foreign when an identity row names a runner
+    it never hosted, or when the file names runners and shares none with it. ``None`` when the store is ours."""
+    ordered = tuple(named)
+    if not hosted:
+        return foreign_store(ordered, set(file_ids))
+    if (stray := foreign_store(ordered, set(hosted))) is not None:
+        return stray
+    if file_ids and not set(file_ids) & set(hosted):
+        held = tuple(sorted(hosted))
+        return ForeignStore(kind=ForeignStoreKind.ALIEN, named=held, foreign=held)
+    return None
+
+
+def foreign_store_reason(verdict: ForeignStore, runner_id: str, reset: str) -> str:
+    """Why the store ``verdict`` judged foreign is not ``runner_id``'s. A mixed store is restored, never ``reset``; an
     alien one is fixed by correcting the id, ``reset`` named there with its hazard."""
-    verdict = foreign_store(named, {configured_id, *configured})
-    if verdict is None:
-        return None
     if verdict.kind is ForeignStoreKind.MIXED:
         return (
-            f"the store names runners {', '.join(named)}, and {', '.join(verdict.foreign)} is configured by no "
-            f"[[runner]] of this host; it cannot be told apart from {configured_id}'s, so it is left untouched — "
+            f"the store names runners {', '.join(verdict.named)}, and {', '.join(verdict.foreign)} is configured by "
+            f"no [[runner]] of this host; it cannot be told apart from {runner_id}'s, so it is left untouched — "
             "stop and restore the right store"
         )
     return (
-        f"the store belongs to runner {', '.join(named)}, not the configured {configured_id}; correct the `id` in "
-        f"the host file to {named[0]}. {reset_hazard(reset, configured_id)}"
+        f"the store belongs to runner {', '.join(verdict.named)}, not the configured {runner_id}; correct the `id` "
+        f"in the host file to {verdict.named[0]}. {reset_hazard(reset, runner_id)}"
     )
 
 

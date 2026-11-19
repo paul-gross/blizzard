@@ -30,6 +30,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.hosting.ports import IReadHostedRunnerRepository, IWriteHostedRunnerRepository
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import (
     IReadRunnerIdentityRepository,
@@ -300,6 +301,11 @@ class IRunnerAudit(Protocol):
         """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
         ...
 
+    def unhosted_runners(self) -> tuple[str, ...]:
+        """The runners an identity row names and no hosted row accounts for, once the store hosts any runner; none on
+        a store hosting no runner yet."""
+        ...
+
     def held_workspace_bindings(self, workspace_id: str) -> list[EnvBinding]:
         """Every runner's held bindings in the workspace's pool, plus every held binding naming no workspace (an
         unknown row only shrinks a pool), oldest first."""
@@ -322,6 +328,8 @@ class HostStores:
     host_ingests: IWriteHostIngestRepository
     #: Each runner's hub token, sealed under the host's key; every statement names its runner.
     hub_tokens: IWriteHubTokenRepository
+    #: The runners this host holds and the facts each one's state derives from; every statement names its runner.
+    hosted_runners: IWriteHostedRunnerRepository
     #: Each subscription's usage-limit marks and floor clears, shared by every runner spending it.
     usage_limits: IWriteSubscriptionUsageLimitRepository
     #: The host's own settings record: its host-level pass and session keys.
@@ -344,6 +352,7 @@ class HostReadStores:
     host_lane: IReadHostLaneRepository
     host_ingests: IReadHostIngestRepository
     hub_tokens: IReadHubTokenRepository
+    hosted_runners: IReadHostedRunnerRepository
     usage_limits: IReadSubscriptionUsageLimitRepository
     settings: IReadHostSettings
 
@@ -358,6 +367,7 @@ class HostReadStores:
             host_lane=stores.host_lane,
             host_ingests=stores.host_ingests,
             hub_tokens=stores.hub_tokens,
+            hosted_runners=stores.hosted_runners,
             usage_limits=stores.usage_limits,
             settings=stores.settings,
         )

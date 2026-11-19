@@ -89,8 +89,12 @@ class IWriteHostIngestRepository(IReadHostIngestRepository, Protocol):
         Raises :class:`WorkspacePromptConflict` when both stores override one workspace's prompt differently."""
         ...
 
-    def record_host_ingest_locked(self, handle: IRunnerTransferHandle, ingest: HostIngest) -> None:
-        """Append ``ingest`` on ``handle``'s transaction."""
+    def record_host_ingest_locked(
+        self, handle: IRunnerTransferHandle, ingest: HostIngest, *, alongside: Sequence[str] = ()
+    ) -> None:
+        """Append ``ingest`` on ``handle``'s transaction, and host the moving runner there unless the destination
+        already holds it. A destination hosting no runner yet first hosts every runner ``alongside`` (the ones its
+        identity rows already name), so no identity row is left unhosted."""
         ...
 
 

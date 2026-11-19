@@ -137,7 +137,7 @@ def seed_host(engine: sa.Engine) -> None:
     seed_tables(
         engine,
         reflect(engine),
-        HOST_TABLES - {"host_ingests", "host_identity", "runner_hub_tokens"},
+        HOST_TABLES - {"host_ingests", "host_identity", "runner_hub_tokens", "hosted_runners", "hosted_runner_facts"},
         values={"failure_reason": None},
     )
 

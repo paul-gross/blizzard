@@ -438,6 +438,28 @@ def test_ingest_reseals_a_sealed_source_token_under_this_hosts_key(tmp_path: Pat
     assert HubTokenFile.of(hosts.there, _VARIABLE).held() == ""
 
 
+def test_ingest_hosts_the_runner_here_with_its_rows_and_drops_its_hosting_there(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    there = _engine(hosts.there)
+    assert MOVING_ID in {r["runner_id"] for r in rows(there, "hosted_runners")}
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    here = _engine(hosts.here)
+    assert [(r["op"], r["door"], r["actor"]) for r in rows(here, "hosted_runner_facts", runner_id=MOVING_ID)] == [
+        ("added", "cli", "operator")
+    ]
+    assert {r["runner_id"] for r in rows(here, "hosted_runners")} == {_HERE_ID, MOVING_ID}
+    assert rows(there, "hosted_runners", runner_id=MOVING_ID) == []
+    assert rows(there, "hosted_runner_facts", runner_id=MOVING_ID) == []
+    assert invariant_violations(here) == []
+    here.dispose()
+    there.dispose()
+
+
 def test_ingest_seals_an_env_only_source_token_under_this_hosts_key(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     assert _stored(hosts.there) == StoredToken.absent()

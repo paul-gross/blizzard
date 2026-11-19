@@ -459,6 +459,17 @@ class HostConfig:
             return ""
         return f"; {UNSUFFIXED_TOKEN_VARIABLE} is set in {where} but a host reads {variable}: rename it to {variable}"
 
+    def hosted_entry(self, runner_id: str, name: str) -> RunnerEntry:
+        """The entry of a runner the store hosts and no ``[[runner]]`` names: an authored body holding only its ``id``
+        and ``name``, which its stored settings entries are laid over."""
+        return parse_runner_entry(
+            ConfigView.unchecked({"id": runner_id, "name": name}),
+            name,
+            root=self.root,
+            db_url=self.db_url,
+            path=self.config_path,
+        )
+
     def sole_runner(self, runner: str | None = None) -> RunnerEntry:
         """The ``[[runner]]`` an offline verb acts on: the one ``runner`` names by name or id, else the host's only
         one. Raises when it holds none, when ``runner`` names none it holds, or when it holds several and ``runner``
