@@ -80,8 +80,6 @@ export function credentialOptions(credentials: readonly CredentialChoice[]): rea
     .map((credential) => ({ value: credential.id, label: `${credential.slug} · ${credential.binding}`, kind: credential.forgeId }));
 }
 
-/** `fields` with its `credential` select's choices filled in. */
-
 /** One operation of a credential check, as the check table shows it. */
 export interface CheckOperationVm {
   readonly operation: string;
