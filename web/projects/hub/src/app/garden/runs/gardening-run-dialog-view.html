@@ -38,73 +38,47 @@
       loadingTestid="run-dialog-loading"
     />
     @if (state() === 'ready') {
-      <app-gardening-run-scope-field
-        [scopes]="scopes()"
-        [sweptSlugs]="sweptSlugs()"
-        [selection]="scopeSelection()"
-        (selectionChange)="scopeSelection.set($event)"
-      />
+      @let f = form();
+      <app-gardening-run-scope-field [field]="f.scope" [scopes]="scopes()" [sweptSlugs]="sweptSlugs()" />
 
-      <fleet-kit-panel class="mode-field" data-testid="run-mode-field" aria-label="Mode" label="Mode">
-        <div class="body">
-          <div role="radiogroup" aria-label="Mode">
-            <fleet-kit-option
-              name="run-mode"
-              [checked]="mode() === RunMode.FULL"
-              (changed)="mode.set(RunMode.FULL)"
-              testid="run-mode-full"
-            >
-              Full
-            </fleet-kit-option>
-            <fleet-kit-option
-              name="run-mode"
-              [checked]="mode() === RunMode.DELTA"
-              [disabled]="!deltaAvailable()"
-              (changed)="mode.set(RunMode.DELTA)"
-              testid="run-mode-delta"
-            >
-              Delta
-            </fleet-kit-option>
-          </div>
-          @if (!deltaAvailable()) {
-            <p class="mode-note" data-testid="run-mode-never-swept">
-              This routine has never swept this scope — delta has no baseline to run against, so only full is offered.
+      <fleet-kit-field class="mode-field" data-testid="run-mode-field" label="Mode" [field]="f.mode">
+        <fleet-kit-option-group [formField]="f.mode" ariaLabel="Mode">
+          <fleet-kit-option value="full" testid="run-mode-full">Full</fleet-kit-option>
+          <fleet-kit-option value="delta" [disabled]="!deltaAvailable()" testid="run-mode-delta">Delta</fleet-kit-option>
+        </fleet-kit-option-group>
+        @if (!deltaAvailable()) {
+          <p class="mode-note" data-testid="run-mode-never-swept">
+            This routine has never swept this scope — delta has no baseline to run against, so only full is offered.
+          </p>
+        }
+        @if (f.mode().value() === 'delta' && baseline(); as baseline) {
+          <div class="baseline" data-testid="run-mode-baseline">
+            <p>
+              Baseline <strong>{{ baseline.finding_set_id }}</strong>, recorded
+              <fleet-when [iso]="baseline.recorded_at" />
             </p>
-          }
-          @if (mode() === RunMode.DELTA && selectedBaseline(); as baseline) {
-            <div class="baseline" data-testid="run-mode-baseline">
-              <p>
-                Baseline <strong>{{ baseline.finding_set_id }}</strong>, recorded
-                <fleet-when [iso]="baseline.recorded_at" />
-              </p>
-              <ul>
-                @for (repo of baseline.repos; track repo.repo) {
-                  <li>{{ repo.repo }}&#64;{{ repo.revision }} — {{ repo.landed_since }} landed since</li>
-                }
-              </ul>
-            </div>
-          }
-        </div>
-      </fleet-kit-panel>
+            <ul>
+              @for (repo of baseline.repos; track repo.repo) {
+                <li>{{ repo.repo }}&#64;{{ repo.revision }} — {{ repo.landed_since }} landed since</li>
+              }
+            </ul>
+          </div>
+        }
+      </fleet-kit-field>
 
-      <fleet-kit-panel aria-label="Urgency" label="Urgency">
-        <div class="body">
-          <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgency()" (choose)="urgency.set($event)" testid="run-urgency" />
-        </div>
-      </fleet-kit-panel>
+      <fleet-kit-field class="urgency-field" label="Urgency" [field]="f.urgency">
+        <fleet-kit-select [formField]="f.urgency" ariaLabel="Urgency" [options]="urgencyOptions()" testid="run-urgency" />
+      </fleet-kit-field>
 
-      <fleet-kit-panel class="note-field" data-testid="run-note-field" aria-label="Charge note" label="Charge note">
-        <div class="body">
-          <fleet-kit-text-input
-            multiline
-            [rows]="3"
-            placeholder="optional — folded into the run's own charge"
-            [value]="note()"
-            (valueChange)="note.set($event)"
-            testid="run-note-input"
-          />
-        </div>
-      </fleet-kit-panel>
+      <fleet-kit-field class="note-field" data-testid="run-note-field" label="Charge note" [field]="f.note">
+        <fleet-kit-text-input
+          multiline
+          [rows]="3"
+          placeholder="optional — folded into the run's own charge"
+          [formField]="f.note"
+          testid="run-note-input"
+        />
+      </fleet-kit-field>
     }
   }
 
@@ -112,15 +86,15 @@
     @if (confirmedRun()) {
       <fleet-kit-button size="cta" variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
     } @else {
-      @if (submitError()) {
-        <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="run-submit-error" />
+      @for (message of formErrors(); track $index) {
+        <fleet-kit-error-line class="submit-error" [message]="message" testid="run-submit-error" />
       }
       <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
       <fleet-kit-button
-      size="cta"
+        size="cta"
         variant="primary"
         [disabled]="!canSubmit()"
-        (click)="onSubmitClick()"
+        (click)="onSaveClick()"
         testid="run-dialog-submit"
       >
         Run

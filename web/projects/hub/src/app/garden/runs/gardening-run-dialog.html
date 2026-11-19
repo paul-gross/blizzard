@@ -1,14 +1,14 @@
 <app-gardening-run-dialog-view
+  [form]="runForm"
   [routineName]="routineName()"
   [urgencies]="urgenciesQuery.data() ?? []"
   [effectiveUrgency]="effectiveUrgency()"
   [scopes]="orderedScopes()"
   [sweptSlugs]="sweptSlugs()"
-  [baselines]="baselinesQuery.data() ?? []"
+  [baseline]="baseline()"
   [state]="state()"
   [submitting]="submitting()"
-  [submitError]="submitError()"
   [confirmedRun]="confirmedRun()"
   (closed)="closed.emit()"
-  (runSubmitted)="onSubmit($event)"
+  (save)="onSave()"
 />

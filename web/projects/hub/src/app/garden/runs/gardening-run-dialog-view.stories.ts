@@ -1,21 +1,50 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { ScopeView, UrgencyView } from 'fleet';
-import { GardeningRunDialogView } from './gardening-run-dialog-view';
+import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
+import type { RoutineBaselineView, ScopeView, UrgencyView } from 'fleet';
 
-const meta: Meta<GardeningRunDialogView> = {
-  title: 'Hub garden/Run routine', component: GardeningRunDialogView,
-  args: { routineName: 'Nightly', state: 'ready', scopes: [{ slug: 'web', description: 'Web' } as ScopeView], sweptSlugs: new Set<string>(), baselines: [], effectiveUrgency: { urgency_id: 'u', slug: 'urgent' }, urgencies: [
-    { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
-    { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
-  ] },
+import { RunDialogStoryHost } from './gardening-run-dialog-view.story-host';
+
+const meta: Meta = {
+  title: 'Hub garden/Run routine',
+  decorators: [moduleMetadata({ imports: [RunDialogStoryHost] })],
 };
 export default meta;
-type Story = StoryObj<GardeningRunDialogView>;
-export const Default: Story = {};
-export const Loading: Story = { args: { state: 'loading' } };
-export const Error: Story = { args: { state: 'error' } };
-export const Empty: Story = { args: { state: 'empty', scopes: [] } };
-export const Phone: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
-export const SubmitError: Story = { args: { submitError: 'The run could not be submitted. Please try again.' } };
-export const Submitting: Story = { args: { submitting: true } };
-export const NoEffectiveUrgency: Story = { args: { effectiveUrgency: null } };
+
+type Story = StoryObj;
+
+const host = (attrs = ''): Story => ({
+  render: (args) => ({
+    props: args,
+    template: `<app-story-run-dialog [scopes]="scopes" [urgencies]="urgencies" [draft]="draft" ${attrs} />`,
+  }),
+  args: {
+    scopes: [
+      { slug: 'web', description: 'Web' } as ScopeView,
+      { slug: 'hub', description: 'Hub' } as ScopeView,
+    ],
+    urgencies: [
+      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
+      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+    ],
+    draft: { scope: 'web' },
+  },
+});
+
+const BASELINE = {
+  scope_slug: 'web',
+  finding_set_id: 'fins_02STORY',
+  recorded_at: '2026-02-01T00:00:00Z',
+  repos: [{ repo: 'blizzard', revision: 'abc123d', landed_since: 3 }],
+} as RoutineBaselineView;
+
+export const Default: Story = host();
+export const Loading: Story = host('state="loading"');
+export const Error: Story = host('state="error"');
+export const Empty: Story = host('state="empty"');
+export const Phone: Story = { ...Default, globals: { viewport: { value: 'phone-sm', isRotated: false } } };
+export const DeltaWithBaseline: Story = {
+  ...host('[swept]="swept" [baseline]="baseline"'),
+  args: { ...Default.args, swept: new Set(['web']), baseline: BASELINE, draft: { scope: 'web', mode: 'delta' } },
+};
+export const SubmitError: Story = host('formError="The run could not be submitted. Please try again."');
+export const ScopeRefused: Story = host(`scopeError="scope 'web' is retired"`);
+export const Submitting: Story = host('[submitting]="true"');

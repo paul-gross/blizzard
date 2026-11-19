@@ -29,3 +29,11 @@ export function orderScopesBySwept(
   const rest = liveScopes.filter((s) => !swept.has(s.slug));
   return [...sweptOrdered, ...rest];
 }
+
+/** The baseline the routine holds for `scope`, or `undefined` for a never-swept scope or none chosen yet. */
+export function baselineForScope(
+  baselines: readonly RoutineBaselineView[],
+  scope: string,
+): RoutineBaselineView | undefined {
+  return baselines.find((b) => b.scope_slug === scope);
+}

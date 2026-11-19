@@ -12,13 +12,11 @@ h2 {
   color: var(--text);
 }
 
-.mode-field {
+.mode-field,
+.urgency-field,
+.note-field {
+  display: block;
   margin: 0 0 12px;
-}
-
-.mode-field .body,
-.note-field .body {
-  padding: 8px;
 }
 
 .mode-note {
@@ -38,10 +36,6 @@ h2 {
 .baseline ul {
   margin: 4px 0 0;
   padding-left: 16px;
-}
-
-.note-field {
-  margin: 0 0 12px;
 }
 
 .footer {

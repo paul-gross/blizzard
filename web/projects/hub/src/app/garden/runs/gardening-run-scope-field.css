@@ -2,10 +2,6 @@
   margin: 0 0 12px;
 }
 
-.body {
-  padding: 8px;
-}
-
 .opt-body {
   display: flex;
   flex-direction: column;
