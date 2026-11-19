@@ -33,6 +33,7 @@ from blizzard.runner.harness.opencode_v2.service import ServiceUnavailableError
 from blizzard.runner.harness.opencode_v2.shapes import ListedModel, Tokens
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.process_launch import LaunchedProcess
+from blizzard.runner.harness.session_settings import SessionEnvironment
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
@@ -610,3 +611,24 @@ def test_the_transcript_source_is_the_one_handed_in(tmp_path: Path) -> None:
     source = FakeTranscriptSource()
     adapter, _ = _adapter(tmp_path, transcript_source=source)
     assert adapter.transcript_source() is source
+
+
+def test_a_resume_rehomes_the_shared_keys_and_opencodes_own_but_no_claude_code_key(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    settings = adapter.launch_settings()
+    keys = (
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "OPENCODE_CONFIG",
+        "OPENCODE_CONFIG_CONTENT",
+        "OPENCODE_CONFIG_DIR",
+    )
+    every = (*keys, "CLAUDE_CONFIG_DIR")
+    origin = replace(settings, environment=SessionEnvironment(tuple((k, "session") for k in every), "/bin/sh"))
+    current = replace(settings, environment=SessionEnvironment(tuple((k, "launch") for k in every), "/bin/sh"))
+
+    assert current.for_session(origin).environment.variables == {
+        **dict.fromkeys(keys, "session"),
+        "CLAUDE_CONFIG_DIR": "launch",
+    }

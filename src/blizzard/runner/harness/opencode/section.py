@@ -26,6 +26,8 @@ from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILEN
 
 # The OpenCode binding's own immutable owner code (harness-selection spec).
 OPENCODE_HARNESS_ID = "opencode"
+# The variables that locate OpenCode's config and session home.
+OPENCODE_CONFIG_VARIABLES = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR")
 DEFAULT_OPENCODE_BINARY = "opencode"
 # The runner-owned OpenCode permission/plugin document `init` scaffolds.
 OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"

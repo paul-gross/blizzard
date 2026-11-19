@@ -1,10 +1,34 @@
-from dataclasses import FrozenInstanceError
+from concurrent.futures import Executor
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
+from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.session_settings import SessionEnvironment, SessionSettings
+from blizzard.runner.process.child_env import AllowlistedEnv
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.claude_code_adapter import adapter as claude_code_adapter
+from tests.support.runner_fakes import FakeProbe
+
+SHARED_HOME_KEYS = ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
+CLAUDE_CODE_HOME_KEYS = ("CLAUDE_CONFIG_DIR",)
+OPENCODE_HOME_KEYS = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR")
+EVERY_HOME_KEY = (*SHARED_HOME_KEYS, *CLAUDE_CODE_HOME_KEYS, *OPENCODE_HOME_KEYS)
+
+
+def rehomed(settings: SessionSettings) -> dict[str, str]:
+    """Resume ``settings`` over a session whose environment set every binding's home key."""
+    origin = replace(settings, environment=SessionEnvironment(tuple((k, "session") for k in EVERY_HOME_KEY), "/bin/sh"))
+    current = replace(settings, environment=SessionEnvironment(tuple((k, "launch") for k in EVERY_HOME_KEY), "/bin/sh"))
+    return current.for_session(origin).environment.variables
+
+
+def expected(own: tuple[str, ...]) -> dict[str, str]:
+    return {key: "session" if key in (*SHARED_HOME_KEYS, *own) else "launch" for key in EVERY_HOME_KEY}
 
 
 def test_session_stamps_are_frozen_values() -> None:
@@ -73,3 +97,29 @@ def test_judge_restores_absent_session_home_variables_without_losing_current_pro
 
     assert judge.environment.variables == {"XDG_DATA_HOME": "/old/data", "PATH": "/new/bin"}
     assert judge.environment.shell == "/new/shell"
+
+
+def test_a_claude_code_resume_rehomes_the_shared_keys_and_its_own_but_no_opencode_key(spawn_executor: Executor) -> None:
+    settings = claude_code_adapter(spawn_executor).launch_settings()
+
+    assert rehomed(settings) == expected(CLAUDE_CODE_HOME_KEYS)
+
+
+def test_an_opencode_resume_rehomes_the_shared_keys_and_its_own_but_no_claude_code_key(
+    spawn_executor: Executor,
+) -> None:
+    probe = FakeProbe()
+    settings = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        binary="opencode",
+        process=probe,
+        monotonic_clock=SystemMonotonicClock(),
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    ).launch_settings()
+
+    assert rehomed(settings) == expected(OPENCODE_HOME_KEYS)
+
+
+def test_a_launch_naming_no_binding_keys_rehomes_only_the_shared_keys() -> None:
+    assert rehomed(SessionSettings(environment=SessionEnvironment((), "/bin/sh"))) == expected(())

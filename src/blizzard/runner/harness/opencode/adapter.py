@@ -48,7 +48,7 @@ from blizzard.runner.harness.opencode.permissions.permission_resolver import (
     IOpenCodePermissionResolver,
     OpenCodePermissionResolveError,
 )
-from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
+from blizzard.runner.harness.opencode.section import OPENCODE_CONFIG_VARIABLES, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -224,9 +224,6 @@ def _instants_of(decoded: JsonObject) -> list[int]:
     return found
 
 
-_OPENCODE_CONFIG_VARIABLES = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR")
-
-
 class OpenCodeAdapter:
     """The OpenCode binding. Dumb: translates the CLI surface, never decides.
 
@@ -315,6 +312,7 @@ class OpenCodeAdapter:
             environment=SessionEnvironment.capture(self._worker_env),
             settings_path=self._worker_config_path,
             harness_id=OPENCODE_HARNESS_ID,
+            home_environment_keys=OPENCODE_CONFIG_VARIABLES,
             transcript_root=self._transcript_root,
             bundle_path=self._bundle_path,
             config_dir=self._effective_config_dir,
@@ -638,7 +636,7 @@ class OpenCodeAdapter:
             elicitation=elicitation,
         )
         config_env = self.config_env(settings)
-        for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR"):
+        for key in OPENCODE_CONFIG_VARIABLES:
             if key in config_env:
                 env[key] = config_env[key]
         return env
@@ -705,7 +703,7 @@ class OpenCodeAdapter:
         return (
             (settings.environment if settings is not None else self._worker_env)
             .tool()
-            .adding({name: env[name] for name in _OPENCODE_CONFIG_VARIABLES if name in env})
+            .adding({name: env[name] for name in OPENCODE_CONFIG_VARIABLES if name in env})
         )
 
     def deny_unanswerable_asks(
