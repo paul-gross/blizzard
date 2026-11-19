@@ -13,7 +13,7 @@ import {
   type TrendView,
 } from 'fleet';
 import type { ScopeRoutine } from './scope.domain';
-import { fromRoutineView } from './scope.translate';
+import { fromRoutineView as toScopeRoutine } from './scope.translate';
 import { injectProjectFilter } from '../../core/project-filter';
 import {
   lensedKey,
@@ -24,7 +24,7 @@ import {
   hubRoutinesKey,
 } from '../../core/query-keys';
 import type { Routine } from './routine.domain';
-import { fromRoutineView } from './routine.translate';
+import { fromRoutineView as toRoutine } from './routine.translate';
 
 async function fetchRoutines(lens: string | null): Promise<RoutineView[]> {
   const { data, error } =
@@ -56,7 +56,7 @@ export function injectHubRoutinesQuery() {
 /** The routine list as {@link ScopeRoutine}s — the same read and cache entry as {@link injectHubRoutinesQuery}. */
 export function injectHubScopeRoutinesDomainQuery() {
   const read = routinesQueryOptions();
-  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(fromRoutineView) }));
+  return injectQuery(() => ({ ...read(), select: (wire: RoutineView[]): readonly ScopeRoutine[] => wire.map(toScopeRoutine) }));
 }
 
 function routinesQueryOptions() {
@@ -67,7 +67,7 @@ function routinesQueryOptions() {
       queryKey: lensedKey(hubRoutinesKey, lens),
       queryFn: () => fetchRoutines(lens),
     };
-  });
+  };
 }
 
 /** The routine list as {@link Routine}s — {@link injectHubRoutinesQuery}'s read, cache, and invalidations, selected
@@ -79,9 +79,9 @@ export function injectHubRoutinesDomainQuery() {
     return {
       queryKey: lensedKey(hubRoutinesKey, lens),
       queryFn: () => fetchRoutines(lens),
-      select: (wire: RoutineView[]): readonly Routine[] => wire.map(fromRoutineView),
+      select: (wire: RoutineView[]): readonly Routine[] => wire.map(toRoutine),
     };
-  };
+  });
 }
 
 /**
