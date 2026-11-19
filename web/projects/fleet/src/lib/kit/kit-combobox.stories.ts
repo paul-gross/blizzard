@@ -3,10 +3,16 @@ import { Component, input, signal } from '@angular/core';
 import { FormField, disabled, form } from '@angular/forms/signals';
 import { moduleMetadata, type Meta, type StoryObj } from '@storybook/angular-vite';
 
-import { zoneOptions } from '../core/zones';
-import { KitCombobox } from './kit-combobox';
+import { type ComboOption, KitCombobox } from './kit-combobox';
 
-const ZONES = zoneOptions(Date.UTC(2026, 0, 15, 12));
+const ZONES: readonly ComboOption[] = [
+  { value: 'America/Chicago', label: 'America/Chicago', meta: 'GMT-6' },
+  { value: 'America/New_York', label: 'America/New_York', meta: 'GMT-5' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo', meta: 'GMT+9' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin', meta: 'GMT+1' },
+  { value: 'Europe/Paris', label: 'Europe/Paris', meta: 'GMT+1' },
+  { value: 'UTC', label: 'UTC', meta: 'GMT' },
+];
 
 /** Form-bound stories render through this host: `form()` needs an injection context; the readout shows the field. */
 @Component({

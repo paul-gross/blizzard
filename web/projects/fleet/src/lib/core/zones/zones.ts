@@ -1,4 +1,4 @@
-import type { ComboOption } from '../kit/kit-combobox';
+import type { ComboOption } from '../../kit/kit-combobox';
 
 /**
  * The IANA time zones this browser knows, as combobox options — `UTC` included even where the
