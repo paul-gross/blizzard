@@ -67,7 +67,7 @@ class CredentialSummary(WireModel):
 class CredentialReferenceView(WireModel):
     """A repository or work source naming the credential, by kind, id and slug."""
 
-    kind: str
+    kind: Annotated[UseKind | Unrecognized, OPEN]
     key: str
     label: str
 

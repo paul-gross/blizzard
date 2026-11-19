@@ -7679,8 +7679,8 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/CredentialUseKind",
+            "x-blizzard-open": true
           },
           "label": {
             "title": "Label",

@@ -4552,10 +4552,7 @@ export type CredentialReferenceView = {
      * Key
      */
     key: string;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: CredentialUseKind;
     /**
      * Label
      */

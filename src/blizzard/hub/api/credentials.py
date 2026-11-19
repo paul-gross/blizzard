@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, status
 
+from blizzard.foundation.credential_check import UseKind
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
@@ -212,8 +213,11 @@ def get_credential(credential: PathCredential, services: Services) -> Credential
     return CredentialDocument(
         **_shown(credential, services).model_dump(),
         referrers=[
-            *(CredentialReferenceView(kind="repository", key=r.repository_id, label=r.slug) for r in repositories),
-            *(CredentialReferenceView(kind="work_source", key=s.work_source_id, label=s.slug) for s in sources),
+            *(
+                CredentialReferenceView(kind=UseKind.REPOSITORY, key=r.repository_id, label=r.slug)
+                for r in repositories
+            ),
+            *(CredentialReferenceView(kind=UseKind.WORK_SOURCE, key=s.work_source_id, label=s.slug) for s in sources),
         ],
     )
 
