@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, input, output, resource }
 import { RouterLink } from '@angular/router';
 import { AppLink } from 'fleet/shell';
 
-import { type EventView, hubApi, compactRef, formatSeenTag, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
+import { fleetIdOf, type HostMembership } from '../core/runners.domain';
+
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, FleetWhen, KitAsyncState, type KitAsyncStateValue, type KitChipOption, KitSelect, KitSkeleton, openLookup } from 'fleet';
 import { eventFingerprints } from './event-detail.model';
 
 /** Each severity's chip label; a severity this build does not know reads raw. */
@@ -44,7 +46,7 @@ const SEVERITY_ICON = openLookup<EventView['severity'], string>(
 @Component({
   selector: 'app-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSelect, KitSkeleton, AppLink, RouterLink],
+  imports: [FleetWhen, KitAsyncState, KitSelect, KitSkeleton, AppLink, RouterLink],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })
@@ -61,8 +63,8 @@ export class EventsView {
 
   /** Each runner's host name by runner id — a runner the map omits shows no host. */
   readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
-  readonly runnerFleetIds = input<ReadonlyMap<string, string>>(new Map());
-  readonly now = input.required<number>();
+  /** The hosts and the runners each lists — what a runner's Fleet link resolves against. */
+  readonly hosts = input<readonly HostMembership[]>([]);
   readonly mobile = input(false);
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
@@ -129,9 +131,7 @@ export class EventsView {
 
   protected iconFor(severity: EventView['severity']): string { return SEVERITY_ICON(severity); }
 
-  protected age(recordedAt: string): string { return formatSeenTag(recordedAt, this.now()); }
-
-  protected fleetId(runnerId: string): string { return this.runnerFleetIds().get(runnerId) ?? runnerId; }
+  protected fleetId(runnerId: string): string { return fleetIdOf(runnerId, this.hosts()); }
 
   protected shortId(id: string): string {
     return compactRef(id);

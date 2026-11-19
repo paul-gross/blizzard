@@ -14,7 +14,7 @@ describe('EventDetailView', () => {
     fixture.componentRef.setInput('event', eventView({ runner_id: 'rn_1', chunk_id: 'ch_1' }));
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('mobile', mobile);
-    fixture.componentRef.setInput('runnerFleetIds', new Map([['rn_1', 'hs_1']]));
+    fixture.componentRef.setInput('hosts', [{ host_id: 'hs_1', runner_ids: ['rn_1'] }]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     const runner = root.querySelector<HTMLAnchorElement>('[data-testid="event-detail-runner"]')!;

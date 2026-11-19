@@ -25,3 +25,14 @@ export function servingProjectRunners(
       ),
   );
 }
+
+/** A host's membership as the fleet-id join reads it: its id and the runners it lists. */
+export interface HostMembership {
+  readonly host_id: string;
+  readonly runner_ids?: readonly string[];
+}
+
+/** The id the Fleet tab selects a runner by: its host's id when a host lists the runner, else the runner's own. */
+export function fleetIdOf(runnerId: string, hosts: readonly HostMembership[]): string {
+  return hosts.find((host) => host.runner_ids?.includes(runnerId))?.host_id ?? runnerId;
+}

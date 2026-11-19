@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitAsyncState, KitButton, KitErrorLine, KitTextInput, type KitAsyncStateValue, type HubSettingRow, type HubSettingsChange } from 'fleet';
+import { FleetWhen, KitAsyncState, KitButton, KitErrorLine, KitSectionHead, KitTextInput, type KitAsyncStateValue, type HubSettingRow, type HubSettingsChange } from 'fleet';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { ConfigRevisions } from '../config-revisions';
 import { ConfigFieldDiff } from '../config-field-diff';
@@ -7,7 +7,7 @@ import type { RevisionRowVm } from '../config-history.model';
 import { recordOf } from './hub-settings.model';
 
 @Component({ selector: 'app-hub-settings-view', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitErrorLine, KitTextInput, ConfigRecordPanel, ConfigRevisions, ConfigFieldDiff], templateUrl: './hub-settings-view.html' })
+  imports: [FleetWhen, KitAsyncState, KitButton, KitErrorLine, KitSectionHead, KitTextInput, ConfigRecordPanel, ConfigRevisions, ConfigFieldDiff], templateUrl: './hub-settings-view.html' })
 export class HubSettingsView {
   readonly allowed = input.required<boolean>();
   readonly identityPending = input.required<boolean>();

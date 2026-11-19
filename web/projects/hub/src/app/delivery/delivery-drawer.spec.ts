@@ -105,7 +105,7 @@ describe('DeliveryDrawer', () => {
     const entry = el.querySelector<HTMLElement>('[data-testid="delivery-history-entry"]')!;
 
     expect(entry.querySelector('.compact-bounce')?.getAttribute('title')).toBe('failure\nchecks failed in test');
-    expect([...entry.querySelectorAll('.detail')].map((each) => each.textContent?.trim())).toEqual(['bounced · unknown failure']);
+    expect([...entry.querySelectorAll('.detail')].map((each) => each.textContent?.trim())).toEqual(['bounced · delivery failed']);
     expect(entry.textContent).not.toContain('exited');
     expect(entry.textContent).not.toContain('out 19');
   });
@@ -128,7 +128,7 @@ describe('DeliveryDrawer', () => {
     const bounce = el.querySelector('.compact-bounce');
     expect(bounce?.getAttribute('title')).toBe(`missing_artifact\n${full}`);
     expect(bounce?.textContent).toContain('org/repo · PR #42');
-    expect(bounce?.textContent).toContain('bounced · unknown failure');
+    expect(bounce?.textContent).toContain('bounced · missing_artifact');
     expect(el.querySelector('a.log')?.getAttribute('href')).toBe(`/board/chunk/${CHUNK}/artifact/log-key`);
     expect(el.querySelector(`a[href="${pr.url}"]`)).not.toBeNull();
   });

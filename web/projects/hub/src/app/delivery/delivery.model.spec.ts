@@ -190,7 +190,7 @@ describe('a row\'s bounce', () => {
       only(inputs([chunk('ch_1', { open_prs: [prView()], latest_bounce: bounceView({ cause: 'failure', envelope: ENVELOPE, recorded_at: fixtureInstant(-50 * MIN), ...bounce }), bounce_count: 1 })], { facts }));
     const row = withdrawn({ withdrawn: true });
     expect(row.bounce?.withdrawn).toBe(true);
-    expect(cardStageLabel(row)).toBe('unknown failure · withdrawn');
+    expect(cardStageLabel(row)).toBe('delivery failed · withdrawn');
     const turn = fact('fl_a', 'ch_1', 'turn-ended', 50 * MIN, 'failure');
     const withdrawal = { ...fact('fl_a', 'ch_1', 'withdrawn', 50 * MIN, 'failure'), at: turn.at };
     expect(withdrawn({ withdrawn: false }, [turn, withdrawal]).bounce?.withdrawn).toBe(false);

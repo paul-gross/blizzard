@@ -1,5 +1,5 @@
 @if (allowed()) {
-  <h1>Hub settings</h1><h2>Keys</h2>
+  <h1>Hub settings</h1><fleet-kit-section-head label="Keys" />
   <fleet-kit-async-state [state]="state()" placement="inline" loadingText="Loading settings…" errorText="Failed to load settings." emptyText="No settings.">
     @for (row of rows(); track row.key) {
       <article>
@@ -18,11 +18,11 @@
       <fleet-kit-button [disabled]="busy()" (click)="cancelled.emit()">Cancel</fleet-kit-button>
     </section>
   }
-  <h2>History</h2>
+  <fleet-kit-section-head label="History" />
   <app-config-revisions [rows]="revisions()" [state]="historyState()" testidPrefix="hub-settings" />
   @for (change of changes(); track change.id) {
     <article><h3>Revision {{ change.revision }} · {{ change.op }}</h3>
-      <p>{{ change.recorded_at }} · {{ change.actor }} via {{ change.door }}</p>
+      <p><fleet-when [iso]="change.recorded_at" /> · {{ change.actor }} via {{ change.door }}</p>
       <app-config-field-diff [diff]="change.diff" />
     </article>
   }

@@ -30,7 +30,7 @@
                 }
               </span>
               <span class="card-content">
-                <span class="headline"><span class="kind" data-testid="events-kind">{{ ev.kind }}</span><span class="time" data-testid="events-time" [title]="ev.recorded_at">{{ age(ev.recorded_at) }}</span></span>
+                <span class="headline"><span class="kind" data-testid="events-kind">{{ ev.kind }}</span><fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" /></span>
                 <span class="msg" data-testid="events-message">{{ ev.message }}</span>
               </span>
               </span>

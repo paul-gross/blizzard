@@ -1,4 +1,4 @@
-import { changesOf, display, recordOf, revisionsOf } from './hub-settings.model';
+import { changesOf, display, parseSettingValue, recordOf, revisionsOf } from './hub-settings.model';
 import type { HubSettingsChange, HubSettingRow } from 'fleet';
 
 it('derives records, revisions and field values', () => {
@@ -9,4 +9,12 @@ it('derives records, revisions and field values', () => {
   expect(recordOf(row).facts).toEqual([{ label: 'Value', value: '60' }, { label: 'Source', value: 'default' }, { label: 'Lifetime', value: 'pass' }]);
   expect(changesOf(undefined)).toEqual([]);
   expect(revisionsOf(changesOf([{ changes: [change] }]))[0].revision).toBe(2);
+});
+
+it('parses an edit by the row type: strings pass through, others are JSON', () => {
+  const str: HubSettingRow = { key: 'name', value: 'a', lifetime: 'pass', source: 'default', revision: null, written_at: null, written_by: null };
+  const num: HubSettingRow = { ...str, key: 'sweep', value: 60 };
+  expect(parseSettingValue(str, '{x')).toEqual({ value: '{x' });
+  expect(parseSettingValue(num, '75')).toEqual({ value: 75 });
+  expect(parseSettingValue(num, '{x')).toEqual({ error: 'Enter a valid JSON value.' });
 });

@@ -35,10 +35,3 @@ export function eventChunkIds(
     selected,
   );
 }
-
-/** Fleet selects hosted runners by host id, and hostless runners by runner id. */
-export function eventRunnerFleetIds(
-  hosts: readonly { readonly host_id: string; readonly runner_ids?: readonly string[] }[],
-): ReadonlyMap<string, string> {
-  return new Map(hosts.flatMap((host) => (host.runner_ids ?? []).map((id) => [id, host.host_id] as const)));
-}

@@ -30,6 +30,10 @@ export const hubFlowsKey = ['hub', 'flows'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
 /** The fleet-wide open-decision read (`GET /api/decisions`) — every gate awaiting a person. */
 export const hubDecisionsKey = ['hub', 'decisions'] as const;
+/** The hub settings read (`GET /api/admin/settings`). */
+export const hubSettingsKey = ['hub', 'admin-settings'] as const;
+/** The hub settings change history, paged. */
+export const hubSettingsHistoryKey = ['hub', 'admin-settings-history'] as const;
 /** The operational event feed's key prefix (`GET /api/events`) — a query
  * appends its filter set, so a filter change is its own cache entry and this prefix
  * closes every one of them on an SSE invalidation (TanStack's default prefix match). */
