@@ -148,9 +148,9 @@ text, a `withdrawn` marker if its submission was withdrawn right after the bounc
 bounced chunk with no other delivery footprint drops off the list after 24 hours. A tenant with nothing delivering or
 delivered reads "Nothing delivering or delivered."
 
-Failure captions use structured evidence: `merge conflict`, `existing check failures`, `timed out`, or
-`unknown failure`. A repository failure without a precise reason stays unknown rather than inheriting a chunk-wide
-timeout.
+Failure captions use structured evidence: `merge conflict`, `existing check failures`, or `timed out`. A reason the
+board has no wording for reads as itself, and a failure with no reason reads `delivery failed`; a repository failure
+without a precise reason never inherits a chunk-wide timeout.
 
 Clicking a row opens the chunk in a drawer beside the list, held in the URL's `?chunk=`; clicking it again, the drawer's
 ✕, or Escape closes it. The drawer lists the chunk's Repositories — each with its delivery state, branch, PRs, landed

@@ -29,7 +29,7 @@ import {
 import { withinDoneWindow } from '../core/done-window';
 import { ordinal, placeInLine } from '../core/flow-place.model';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../core/step-label';
-import { deliveryDiagnostic, deliveryFailureLabel, type DeliveryFailureLabel } from './delivery-failure-label.model';
+import { deliveryDiagnostic, deliveryFailureLabel } from './delivery-failure-label.model';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
 const BOUNCE_WINDOW_MS = 24 * 60 * 60_000;
@@ -111,7 +111,7 @@ function inFlightIcon(chunk: ChunkSummary): DeliveryIcon {
 /** The chunk's latest recorded bounce, as a row names it. */
 export interface DeliveryBounce {
   readonly compact: ReturnType<typeof compactBounce>;
-  readonly label: DeliveryFailureLabel;
+  readonly label: string;
   /** `failure`, `conflict`, `poll-timeout` — the answer that bounced it. */
   readonly cause: string;
   /** Whether the bounce's turn withdrew its submission from its flows, as the hub records it. */

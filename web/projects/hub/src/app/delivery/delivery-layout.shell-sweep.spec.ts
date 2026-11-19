@@ -230,7 +230,7 @@ describe('Delivery drawer and full-screen scroll shell sweep (web:shell-sweep)',
           const history = [...main.querySelectorAll<HTMLElement>('[data-testid="delivery-history-entry"]')];
           expect(repos).toHaveLength(deliveryPrs.length);
           expect(history.map((entry) => entry.querySelector('.compact-bounce .detail')?.textContent?.trim())).toEqual(
-            deliveryBounces.map(() => 'bounced · unknown failure'),
+            deliveryBounces.map(() => 'bounced · delivery failed'),
           );
           const sideRect = side.getBoundingClientRect();
           const mainRect = main.getBoundingClientRect();

@@ -93,7 +93,7 @@ describe('deliveryHistory', () => {
     expect(texts(detail({ flow_record: [fact('fl_a', 'turn-started', 1)] }))).toEqual(['landing attempt started']);
     const withdrawn = [fact('fl_a', 'turn-started', 5), fact('fl_a', 'turn-ended', 4, { outcome: 'failure' }), fact('fl_a', 'withdrawn', 3, { outcome: 'failure' })];
     const history = deliveryHistory(detail({ flow_record: withdrawn }), FORGES, FIXTURE_NOW);
-    expect(history.map((entry) => entry.text)).toEqual(['landing attempt unknown failure · withdrawn']);
+    expect(history.map((entry) => entry.text)).toEqual(['landing attempt delivery failed · withdrawn']);
     expect(history[0].tone).toBe('needs');
     expect(texts(detail({ flow_record: [fact('fl_a', 'turn-ended', 4, { outcome: 'conflict' })] }))).toEqual(['landing attempt merge conflict']);
   });
@@ -143,13 +143,13 @@ describe('deliveryHistory', () => {
     const second = fact('fl_b', 'turn-ended', 5, { outcome: 'failure' });
     const distinct = deliveryHistory(detail({ flow_record: [first, { ...second, outcome: 'future-outcome' }] }), FORGES, FIXTURE_NOW);
     expect(distinct.map((entry) => [entry.text, entry.rawOutcome, entry.repos])).toEqual([
-      ['landing attempt unknown failure', 'failure', 'blizzard'],
-      ['landing attempt unknown failure', 'future-outcome', 'blizzard-context'],
+      ['landing attempt delivery failed', 'failure', 'blizzard'],
+      ['landing attempt future-outcome', 'future-outcome', 'blizzard-context'],
     ]);
 
     const identical = deliveryHistory(detail({ flow_record: [first, second] }), FORGES, FIXTURE_NOW);
     expect(identical.map((entry) => [entry.text, entry.rawOutcome, entry.repos])).toEqual([
-      ['landing attempt unknown failure', 'failure', 'blizzard · blizzard-context'],
+      ['landing attempt delivery failed', 'failure', 'blizzard · blizzard-context'],
     ]);
   });
 
@@ -183,7 +183,7 @@ describe('deliveryHistory', () => {
       assetArtifactView({ name: 'deliver-log', key: 'log-later', recorded_at: fixtureInstant(-MIN) }),
     ];
     const [entry] = deliveryHistory(detail({ bounces: [bounceView({ cause: 'failure', envelope, recorded_at: fixtureInstant(-10 * MIN) })], artifacts }), FORGES, FIXTURE_NOW);
-    expect(entry).toMatchObject({ text: 'bounced · unknown failure', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
+    expect(entry).toMatchObject({ text: 'bounced · delivery failed', tone: 'needs', repos: 'blizzard', detail: 'checks failed in test', logKey: 'log-at', age: '[10m 0s]' });
     expect(entry).not.toHaveProperty('step');
   });
 
@@ -262,19 +262,19 @@ describe('deliveryDrawerView', () => {
       flow_record: [fact('fl_a', 'turn-ended', 5, { outcome: 'failure' })],
       bounces: [bounceView({ cause: 'poll-timeout' })],
     }), FLOWS, REPOSITORIES, FIXTURE_NOW)!;
-    expect(view.repos[0].state).toBe('bounced · unknown failure');
+    expect(view.repos[0].state).toBe('bounced · delivery failed');
     expect(deliveryHistory(detail({ bounces: [bounceView({ cause: 'poll-timeout' })] }), FORGES, FIXTURE_NOW)[0].text)
       .toBe('bounced · timed out');
   });
 
-  it('retains future raw causes and outcomes beside the unknown caption', () => {
+  it('retains future raw causes and outcomes beside the open-vocabulary label', () => {
     const entry = deliveryHistory(detail({
       bounces: [bounceView({ cause: 'future-cause', envelope: JSON.stringify({ detail: 'raw diagnostic' }) })],
       flow_record: [{ ...fact('fl_a', 'turn-ended', 5, { outcome: 'failure' }), outcome: 'future-outcome' }],
     }), FORGES, FIXTURE_NOW);
-    expect(entry.find((item) => item.bounce)?.text).toBe('bounced · unknown failure');
+    expect(entry.find((item) => item.bounce)?.text).toBe('bounced · future-cause');
     expect(entry.find((item) => item.bounce)?.bounce?.full).toBe('future-cause\nraw diagnostic');
-    expect(entry.find((item) => item.rawOutcome === 'future-outcome')?.text).toBe('landing attempt unknown failure');
+    expect(entry.find((item) => item.rawOutcome === 'future-outcome')?.text).toBe('landing attempt future-outcome');
   });
 
   it('reads a turn or bounce the hub marks as rework waiting, in the repo block and the history, and any other bounce stale', () => {
@@ -285,7 +285,7 @@ describe('deliveryDrawerView', () => {
     expect(history.map((entry) => [entry.text, entry.tone])).toEqual([['landing attempt merge conflict', 'waiting']]);
     const bounces = deliveryHistory(detail({ bounces: [bounceView({ cause: 'conflict', rework: true }), bounceView({ cause: 'failure', recorded_at: fixtureInstant(-30) })] }), FORGES, FIXTURE_NOW);
     expect(bounces.map((entry) => [entry.text, entry.tone])).toEqual([
-      ['bounced · unknown failure', 'needs'],
+      ['bounced · delivery failed', 'needs'],
       ['bounced · merge conflict', 'waiting'],
     ]);
   });
