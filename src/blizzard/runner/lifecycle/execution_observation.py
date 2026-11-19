@@ -163,9 +163,7 @@ class ExecutionObservationSweep:
             observation = seam.observe_execution(request)
         except Exception as exc:  # a failed query is no evidence, recorded so the cadence still advances
             observation = ExecutionObservation.unknown(f"observation failed: {exc}")
-        progress = observation.progress_at
-        if state is not None and state.latest_progress_at is not None:
-            progress = state.latest_progress_at if progress is None else max(as_utc(progress), state.latest_progress_at)
+        progress = observation.progress_at if state is None else state.progress_with(observation.progress_at)
         anchor = progress_anchor(spawn=spawned_at, heartbeat=facts.latest_heartbeat, progress=progress)
         warn = warns_no_progress(
             alive=self._evidenced(observation, spawned_at, now),

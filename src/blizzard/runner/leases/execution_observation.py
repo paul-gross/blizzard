@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.harness.observation import ExecutionObservation
 
 __all__ = [
@@ -37,6 +38,14 @@ class ExecutionObservationState:
     last_observed_at: datetime
     latest_progress_at: datetime | None = None
     warned: WarnedStall | None = None
+
+    def progress_with(self, reported: datetime | None) -> datetime | None:
+        """The newer of the recorded progress and the progress this observation ``reported``."""
+        if self.latest_progress_at is None:
+            return reported
+        if reported is None:
+            return self.latest_progress_at
+        return max(as_utc(reported), self.latest_progress_at)
 
 
 class IReadExecutionObservationRepository(Protocol):

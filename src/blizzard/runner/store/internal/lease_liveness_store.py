@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
-from sqlalchemy import Connection, and_, func, join
+from sqlalchemy import ColumnElement, Connection, FromClause, and_, func, join
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -152,6 +152,19 @@ def _open_transcript_segment(
     )
 
 
+_LATER_EVIDENCE = execution_observations.alias("later_evidence")
+
+
+def _qualifying_evidence(observed: FromClause) -> tuple[ColumnElement[bool], ...]:
+    """An observation's evidence counts when it saw the worker alive, at an instant no later than its own
+    sample: evidence produced after its own sample was taken is no evidence at all."""
+    return (
+        observed.c.liveness == ExecutionLiveness.ALIVE.value,
+        observed.c.evidence_at.isnot(None),
+        observed.c.evidence_at <= observed.c.observed_at,
+    )
+
+
 class LeaseLivenessStore:
     """Read-write liveness adapter over the runner store engine."""
 
@@ -203,29 +216,31 @@ class LeaseLivenessStore:
                 )
                 for row in conn.execute(sp_stmt):
                     spawn_by_lease[str(row.lease_id)] = (row.spawned_at, int(row.generation))
+                observed = execution_observations
                 ev_stmt = (
                     self._store.select(
-                        execution_observations,
-                        execution_observations.c.lease_id,
-                        execution_observations.c.generation,
-                        func.max(execution_observations.c.evidence_at).label("evidence_at"),
+                        observed,
+                        observed.c.lease_id,
+                        observed.c.generation,
+                        func.max(observed.c.evidence_at).label("evidence_at"),
                     )
                     .where(
-                        execution_observations.c.lease_id.in_(batch),
-                        execution_observations.c.liveness == ExecutionLiveness.ALIVE.value,
-                        execution_observations.c.evidence_at.isnot(None),
-                        # Evidence produced after its own sample was taken is no evidence at all.
-                        execution_observations.c.evidence_at <= execution_observations.c.observed_at,
+                        observed.c.lease_id.in_(batch),
+                        *_qualifying_evidence(observed),
+                        # Only the newest generation holding qualifying evidence answers for its lease.
+                        ~self._store.exists(
+                            _LATER_EVIDENCE,
+                            _LATER_EVIDENCE.c.lease_id == observed.c.lease_id,
+                            _LATER_EVIDENCE.c.generation > observed.c.generation,
+                            *_qualifying_evidence(_LATER_EVIDENCE),
+                        ),
                     )
-                    .group_by(execution_observations.c.lease_id, execution_observations.c.generation)
+                    .group_by(observed.c.lease_id, observed.c.generation)
                 )
                 for row in conn.execute(ev_stmt):
-                    lease_id = str(row.lease_id)
-                    held = evidence_by_lease.get(lease_id)
-                    if held is None or int(row.generation) > held.generation:
-                        evidence_by_lease[lease_id] = ExecutionEvidence(
-                            generation=int(row.generation), evidence_at=row.evidence_at
-                        )
+                    evidence_by_lease[str(row.lease_id)] = ExecutionEvidence(
+                        generation=int(row.generation), evidence_at=row.evidence_at
+                    )
         facts: dict[str, LeaseLivenessFacts] = {}
         for lease_id in set(heartbeat_by_lease) | set(spawn_by_lease):
             spawn = spawn_by_lease.get(lease_id)
