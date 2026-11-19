@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from functools import partial
-from typing import Annotated, Any, NoReturn, cast
+from typing import Annotated, Any, NoReturn, Protocol, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 
@@ -21,7 +20,7 @@ from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_un
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
-from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, setting_keys
+from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, settable_declarations
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (
@@ -47,9 +46,11 @@ def graph(request: Request) -> HubSettingsGraph:
 Settings = Annotated[HubSettingsGraph, Depends(graph)]
 
 
-def _refuse(
-    builder: Callable[..., ProblemDetails[Any]], message: str, errors: dict[str, str] | None = None
-) -> NoReturn:
+class _ProblemBuilder(Protocol):
+    def __call__(self, message: str, errors: dict[str, str], *, instance: str) -> ProblemDetails[Any]: ...
+
+
+def _refuse(builder: _ProblemBuilder, message: str, errors: dict[str, str] | None = None) -> NoReturn:
     raise ProblemHTTPException(partial(builder, message, errors or {}))
 
 
@@ -65,10 +66,7 @@ def _check_keys(settings: HubSettingsGraph, keys: set[str]) -> None:
 def _view(settings: HubSettingsGraph) -> HubSettingsView:
     snapshot, provenance = settings.store.view()
     rows: list[HubSettingRow] = []
-    registry = settings.footing.key_registry
-    for path in setting_keys(registry):
-        key = registry.key(path)
-        assert key is not None
+    for key in settable_declarations(settings.footing.key_registry):
         entry = snapshot.entries.get(key.path)
         source = "entry" if entry is not None and not entry.at_default else "default"
         metadata = provenance.get(key.path)

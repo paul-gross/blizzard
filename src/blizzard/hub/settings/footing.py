@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from blizzard.foundation.config_keys import TABLE, ConfigRegistry, ConfigView, InvalidConfigValue, Lifetime
+from blizzard.foundation.config_keys import TABLE, ConfigKey, ConfigRegistry, ConfigView, InvalidConfigValue, Lifetime
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.vocabulary import Entry
@@ -17,12 +17,17 @@ from blizzard.hub.config import ConfigError, Env, HubConfig
 from blizzard.hub.settings.values import thaw
 
 
-def setting_keys(registry: ConfigRegistry) -> tuple[str, ...]:
+def settable_declarations(registry: ConfigRegistry) -> tuple[ConfigKey, ...]:
+    """The declarations of every live, settable leaf key."""
     return tuple(
-        key.path
+        key
         for key in registry.keys
         if key.lifetime == Lifetime.PASS and not key.deprecated and "[]" not in key.path and key.type != TABLE
     )
+
+
+def setting_keys(registry: ConfigRegistry) -> tuple[str, ...]:
+    return tuple(key.path for key in settable_declarations(registry))
 
 
 class SettingUnknown(Exception):
