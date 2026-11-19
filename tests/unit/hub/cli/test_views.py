@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import cast
-
-from blizzard.hub.cli.views import Cost, DecliningRow, RunnerLine, RunnerRow, pointer_label
+from blizzard.hub.cli.views import Cost, RunnerLine, pointer_label
+from blizzard.wire.runner import RunnerRegistryView
 
 
 def test_neither_marker_renders_a_bare_figure() -> None:
@@ -58,8 +57,18 @@ def test_a_pointer_with_a_null_slug_falls_through_to_the_source() -> None:
 
 
 def _declining(lever_kind: str, **extra: str) -> str:
-    reason: DecliningRow = cast(DecliningRow, {"lever": "stale", "lever_kind": lever_kind, "detail": "at 95%", **extra})
-    row = cast(RunnerRow, {"runner_id": "rn_1", "online": True, "declining": [reason]})
+    reason = {"lever": "stale", "lever_kind": lever_kind, "detail": "at 95%", **extra}
+    row = RunnerRegistryView.model_validate(
+        {
+            "runner_id": "rn_1",
+            "runner_name": "r",
+            "connection": "online",
+            "online": True,
+            "added_at": "2026-07-16T00:00:00Z",
+            "hub_paused": False,
+            "declining": [reason],
+        }
+    )
     return RunnerLine(row).declining
 
 

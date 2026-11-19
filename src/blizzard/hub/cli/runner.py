@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 
 import click
 from pydantic import TypeAdapter
@@ -16,7 +16,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, RunnerLine, RunnerRow
+from blizzard.hub.cli.views import Listing, RunnerLine
 from blizzard.wire.queue import NextClaimEntry, NextClaimPassedEntry, NextClaimResponse, NextClaimScenario
 from blizzard.wire.runner import (
     RunnerAddResponse,
@@ -52,12 +52,11 @@ class RunnerListing(Listing):
 @dto
 @dataclass(frozen=True)
 class RunnerDetail:
-    row: RunnerRow
     view: RunnerRegistryView
 
     def lines(self) -> Iterator[str]:
-        runner = RunnerLine(self.row)
         view = self.view
+        runner = RunnerLine(view)
         yield f"{view.runner_id}  {runner.name}  {runner.connection}  ws={runner.workspace}"
         yield f"  added={view.added_at or '-'} by {view.added_by or '-'}"
         yield f"  hub_paused={view.hub_paused}  locally_paused={view.locally_paused}"
@@ -194,8 +193,7 @@ def runner_list(cli: CliContext, include_retired: bool) -> None:
     unless --all."""
     params = {"include_retired": "true"} if include_retired else None
     raw, registry = cli.decode(cli.get("/api/runners", "GET /runners", params=params), _REGISTRY, "GET /runners")
-    rows = cast(list[RunnerRow], raw["runners"]) if registry.runners else []
-    cli.show(raw, RunnerListing(rows))
+    cli.show(raw, RunnerListing(registry.runners))
 
 
 @runner_group.command("get", cls=FleetCommand)
@@ -204,7 +202,7 @@ def runner_show(cli: CliContext, runner_id: str) -> None:
     """One runner's connection and paused state, by RUNNER_ID — symmetric with ``runner list``."""
     resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
     raw, view = cli.decode(resp, _RUNNER, "GET /runners/{id}")
-    cli.show(raw, RunnerDetail(cast(RunnerRow, raw), view))
+    cli.show(raw, RunnerDetail(view))
 
 
 @runner_group.command("next", cls=FleetCommand)

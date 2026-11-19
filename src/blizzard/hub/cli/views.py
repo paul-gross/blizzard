@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar, NotRequired, TypedDict, cast
+from typing import Any, ClassVar, cast
 
 from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import collaborator, dto
@@ -14,42 +14,13 @@ from blizzard.foundation.spend import SpendFigure
 from blizzard.wire.chunk import ChunkDetail, ChunkSummary, ChunkUsageTotalView, WorkItemEntry, WorkRefView
 from blizzard.wire.fleet import FleetSpendView
 from blizzard.wire.question import QuestionView
+from blizzard.wire.runner import RunnerDecliningView, RunnerRegistryView
 from blizzard.wire.urgency import UrgencyRef
 
 
-class UrgencyRefRow(TypedDict):
-    urgency_id: str
-    slug: str
-
-
-def urgency_label(urgency: UrgencyRef | UrgencyRefRow | None) -> str:
+def urgency_label(urgency: UrgencyRef | None) -> str:
     """The urgency a chunk view names, by slug; ``-`` from a hub that names none."""
-    if urgency is None:
-        return "-"
-    return urgency.slug if isinstance(urgency, UrgencyRef) else urgency["slug"]
-
-
-class DecliningRow(TypedDict):
-    lever: str
-    lever_kind: str
-    detail: str
-    until: NotRequired[str | None]
-    subscription: NotRequired[str | None]
-
-
-class RunnerRow(TypedDict):
-    runner_id: str
-    runner_name: NotRequired[str | None]
-    connection: NotRequired[str | None]
-    online: NotRequired[bool]
-    workspace_id: NotRequired[str | None]
-    hub_paused: NotRequired[bool]
-    locally_paused: NotRequired[bool]
-    locally_paused_reason: NotRequired[str | None]
-    declining: NotRequired[list[DecliningRow] | None]
-    retired: NotRequired[bool]
-    retired_at: NotRequired[str | None]
-    retired_by: NotRequired[str | None]
+    return "-" if urgency is None else urgency.slug
 
 
 def pointer_label(row: WorkRefView | WorkItemEntry | dict[str, object]) -> str:
@@ -110,14 +81,13 @@ class ChunkLine:
         return f"{self.row.chunk_id}  {self.row.status!s:<16} {urgency}@ {self.node}  {rendered:>10}{marking}"
 
 
-def _declining_reason(reason: DecliningRow) -> str:
+def _declining_reason(reason: RunnerDecliningView) -> str:
     """One declining reason as a line carries it: the floor as ``floor — <subscription> <detail>, resets <instant>``,
     any other lever, and a lever this CLI has no wording for, as ``<lever> — <detail>`` with its ``until`` after."""
-    until = reason.get("until")
-    clock = datetime.fromisoformat(until).strftime("%H:%MZ") if until else None
-    lever, detail = reason["lever_kind"], reason["detail"]
-    if lever == DeclaredLever.FLOOR:
-        named = f"{reason.get('subscription')} {detail}" if reason.get("subscription") else detail
+    clock = datetime.fromisoformat(reason.until).strftime("%H:%MZ") if reason.until else None
+    lever, detail = str(reason.lever_kind), reason.detail
+    if reason.lever_kind == DeclaredLever.FLOOR:
+        named = f"{reason.subscription} {detail}" if reason.subscription else detail
         return f"floor — {named}" + (f", resets {clock}" if clock else "")
     return f"{lever} — {detail}" + (f", until {clock}" if clock else "")
 
@@ -125,7 +95,7 @@ def _declining_reason(reason: DecliningRow) -> str:
 @dto
 @dataclass(frozen=True)
 class RunnerLine:
-    row: RunnerRow
+    row: RunnerRegistryView
     #: The name column's width; a listing widens it to the longest name it shows.
     name_width: int = 16
 
@@ -135,30 +105,30 @@ class RunnerLine:
     @property
     def name(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The runner's display name — not unique, so always rendered beside its id."""
-        return self.row.get("runner_name") or "-"
+        return self.row.runner_name or "-"
 
     @property
     def connection(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """``never-connected`` for a runner added but never registered — never ``offline``,
         which it has not yet been — else ``online`` or ``offline``."""
-        if self.row.get("connection") == RunnerConnection.NEVER_CONNECTED:
+        if self.row.connection == RunnerConnection.NEVER_CONNECTED:
             return "never-connected"
-        return "online" if self.row.get("online") else "offline"
+        return "online" if self.row.online else "offline"
 
     @property
     def workspace(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The workspace the runner registered from; ``-`` before it first registers."""
-        return self.row.get("workspace_id") or "-"
+        return self.row.workspace_id or "-"
 
     @property
     def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Name which brake is on (pinned by
         tests/component/hub/cli/test_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
         brakes: list[str] = []
-        if self.row.get("hub_paused"):
+        if self.row.hub_paused:
             brakes.append("hub")
-        if self.row.get("locally_paused"):
-            reason = self.row.get("locally_paused_reason")
+        if self.row.locally_paused:
+            reason = self.row.locally_paused_reason
             brakes.append(f"local — {reason}" if reason else "local")
         return f" [paused: {'+'.join(brakes)}]" if brakes else ""
 
@@ -166,7 +136,7 @@ class RunnerLine:
     def declining(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The first throttle an online, unbraked runner reported as saying no — the brake wins the slot; nothing for an
         offline runner or one that reported none."""
-        reasons = self.row.get("declining") or []
+        reasons = self.row.declining
         if not reasons or self.brake or self.connection != "online":
             return ""
         return f" [declining: {_declining_reason(reasons[0])}]"
@@ -174,13 +144,13 @@ class RunnerLine:
     @property
     def retirement(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """When and by whom a retired runner was retired; empty for a live one."""
-        if not self.row.get("retired"):
+        if not self.row.retired:
             return ""
-        return f" [retired {self.row.get('retired_at') or '-'} by {self.row.get('retired_by') or '-'}]"
+        return f" [retired {self.row.retired_at or '-'} by {self.row.retired_by or '-'}]"
 
     def line(self) -> str:
         return (
-            f"{self.row['runner_id']}  {self.name:<{self.name_width}} {self.connection:<15} ws={self.workspace}"
+            f"{self.row.runner_id}  {self.name:<{self.name_width}} {self.connection:<15} ws={self.workspace}"
             f"{self.brake}{self.declining}{self.retirement}"
         )
 

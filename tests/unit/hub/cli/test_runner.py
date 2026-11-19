@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import httpx2
 import pytest
@@ -190,10 +190,9 @@ def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none() -> 
 
 def _detail(body: dict[str, Any]) -> list[str]:
     from blizzard.hub.cli.runner import RunnerDetail
-    from blizzard.hub.cli.views import RunnerRow
 
     view = RunnerRegistryView.model_validate(body)
-    return list(RunnerDetail(cast(RunnerRow, view.model_dump(mode="json")), view).lines())
+    return list(RunnerDetail(view).lines())
 
 
 def test_an_active_runner_detail_renders_three_exact_lines() -> None:
