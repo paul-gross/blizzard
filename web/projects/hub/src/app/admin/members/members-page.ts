@@ -1,6 +1,7 @@
+import type { Member, MemberRole } from './members.domain';
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitConfirmDialog, KitErrorLine } from 'fleet';
+import { asyncState, injectPendingMutationVariables, KitConfirmDialog, KitErrorLine } from 'fleet';
 import { injectMeQuery } from '../../core/auth/me.query';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { MembersTable } from './members-table';
@@ -52,16 +53,16 @@ export class MembersPage {
   );
 
   /** The member a revocation is waiting on confirmation for. */
-  protected readonly revoking = signal<MemberView | null>(null);
+  protected readonly revoking = signal<Member | null>(null);
 
   protected readonly revokeConfirm = computed(() => revokePrompt(this.revoking()));
 
-  protected onChangeRole(vars: { userId: string; role: hubApi.Role }): void {
+  protected onChangeRole(vars: { userId: string; role: MemberRole }): void {
     this.revokeMutation.reset();
     this.roleMutation.mutate(vars);
   }
 
-  protected onRevoke(member: MemberView): void {
+  protected onRevoke(member: Member): void {
     this.revoking.set(member);
   }
 
@@ -70,7 +71,7 @@ export class MembersPage {
     this.revoking.set(null);
     if (member === null) return;
     this.roleMutation.reset();
-    this.revokeMutation.mutate({ userId: member.user_id });
+    this.revokeMutation.mutate({ userId: member.userId });
   }
 
   protected onRevokeCancelled(): void {

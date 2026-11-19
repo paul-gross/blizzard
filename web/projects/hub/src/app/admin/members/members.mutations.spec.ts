@@ -1,19 +1,21 @@
+import { memberWire } from './members-fixture.translate';
+import { member } from './members.builders';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { memberView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
+import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectMemberRoleMutation, injectRevokeMemberMutation } from './members.mutations';
 
-const GRACE = memberView({
-  user_id: 'usr_2',
+const GRACE = member({
+  userId: 'usr_2',
   username: 'grace',
-  display_name: 'Grace',
+  displayName: 'Grace',
   email: null,
   role: 'contributor',
-  hub_admin: false,
-  created_at: '2026-07-21T00:00:00Z',
+  hubAdmin: false,
+  createdAt: '2026-07-21T00:00:00Z',
 });
 
 describe('membership mutations', () => {
@@ -34,7 +36,7 @@ describe('membership mutations', () => {
   }
 
   it('PUTs /api/members/{id} with the role and re-reads the listing', async () => {
-    stub = stubHubClient({ 'PUT /api/members/{user_id}': () => GRACE });
+    stub = stubHubClient({ 'PUT /api/members/{user_id}': () => memberWire(GRACE) });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectMemberRoleMutation());
 
@@ -45,6 +47,33 @@ describe('membership mutations', () => {
     expect(requests[0].body).toEqual({ role: 'contributor' });
     expect(result.role).toBe('contributor');
     expect(invalidatedKeys(invalidateSpy)).toContainEqual(['hub', 'members']);
+  });
+
+  it('waits for the listing refresh before settling either mutation', async () => {
+    stub = stubHubClient({
+      'PUT /api/members/{user_id}': () => memberWire(GRACE),
+      'DELETE /api/members/{user_id}': () => undefined,
+    });
+    let finish!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const role = TestBed.runInInjectionContext(() => injectMemberRoleMutation());
+    let settled = false;
+    const changing = role.mutateAsync({ userId: 'usr_2', role: 'guest' }).then(() => { settled = true; });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(settled).toBe(false);
+    finish();
+    await changing;
+    expect(settled).toBe(true);
+
+    const revoke = TestBed.runInInjectionContext(() => injectRevokeMemberMutation());
+    settled = false;
+    finish = undefined!;
+    const revoking = revoke.mutateAsync({ userId: 'usr_2' }).then(() => { settled = true; });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(settled).toBe(false);
+    finish();
+    await revoking;
+    expect(settled).toBe(true);
   });
 
   it('rejects a refused role change (409, the last admin)', async () => {

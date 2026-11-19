@@ -1,27 +1,26 @@
+import { canChangeRole, canRevoke } from './members.domain';
 import { describe, expect, it } from 'vitest';
 
-import type { MemberView } from 'fleet';
+import { member } from './members.builders';
 import {
-  canChangeRole,
-  canRevoke,
   memberChangeErrorText,
   pendingMemberIds,
   revokePrompt,
   roleChoices,
 } from './members-page.model';
 
-const GRACE: MemberView = {
-  user_id: 'usr_guest',
+const GRACE = member({
+  userId: 'usr_guest',
   username: 'grace',
-  display_name: 'Grace',
+  displayName: 'Grace',
   email: null,
   role: 'guest',
-  hub_admin: false,
-  created_at: '2026-07-21T00:00:00Z',
+  hubAdmin: false,
+  createdAt: '2026-07-21T00:00:00Z',
   identities: [],
-  assignable_roles: ['guest', 'contributor', 'admin'],
+  assignableRoles: ['guest', 'contributor', 'admin'],
   revocable: true,
-};
+});
 
 describe('memberChangeErrorText', () => {
   it('is null without an error', () => {
@@ -54,7 +53,7 @@ describe('roleChoices', () => {
   });
 
   it('puts the held role first when the hub does not list it', () => {
-    expect(roleChoices({ ...GRACE, role: 'admin', assignable_roles: ['guest', 'contributor'] })).toEqual([
+    expect(roleChoices({ ...GRACE, role: 'admin', assignableRoles: ['guest', 'contributor'] })).toEqual([
       'admin',
       'guest',
       'contributor',
@@ -74,10 +73,10 @@ describe('canChangeRole / canRevoke', () => {
   });
 
   it('admits neither when the hub offers nothing', () => {
-    const lastAdmin = { ...GRACE, role: 'admin' as const, assignable_roles: ['admin' as const], revocable: false };
+    const lastAdmin = { ...GRACE, role: 'admin' as const, assignableRoles: ['admin' as const], revocable: false };
     expect(canChangeRole(lastAdmin, 'usr_admin')).toBe(false);
     expect(canRevoke(lastAdmin, 'usr_admin')).toBe(false);
-    expect(canChangeRole({ ...GRACE, assignable_roles: [] }, 'usr_admin')).toBe(false);
+    expect(canChangeRole({ ...GRACE, assignableRoles: [] }, 'usr_admin')).toBe(false);
     expect(canRevoke({ ...GRACE, revocable: false }, 'usr_admin')).toBe(false);
   });
 });

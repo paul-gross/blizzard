@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
-import type { MemberView } from 'fleet';
-import { memberView } from 'fleet/testing';
+import type { Member } from './members.domain';
+import { member } from './members.builders';
 import { fn } from 'storybook/test';
 import { MembersTable } from './members-table';
 
@@ -9,7 +9,7 @@ const meta: Meta<MembersTable> = {
   component: MembersTable,
   args: {
     state: 'ready',
-    members: [memberView({ username: 'grace', display_name: 'Grace', role: 'guest', assignable_roles: ['guest', 'contributor'], revocable: true })],
+    members: [member({ username: 'grace', displayName: 'Grace', role: 'guest', assignableRoles: ['guest', 'contributor'], revocable: true })],
     currentUserId: 'usr_self',
     changeRole: fn(),
     revoke: fn(),
@@ -18,15 +18,15 @@ const meta: Meta<MembersTable> = {
 export default meta;
 type Story = StoryObj<MembersTable>;
 export const Ready: Story = {};
-const GUEST: Partial<MemberView> = { role: 'guest', assignable_roles: ['guest', 'contributor'], revocable: true };
+const GUEST: Partial<Member> = { role: 'guest', assignableRoles: ['guest', 'contributor'], revocable: true };
 
 /** Several rows: a static self row, an actionable row, and a row whose change is in flight (its controls disabled). */
 export const PendingRow: Story = {
   args: {
     members: [
-      memberView({ user_id: 'usr_self', username: 'ada', display_name: 'Ada', role: 'admin', assignable_roles: [], revocable: false }),
-      memberView({ user_id: 'usr_grace', username: 'grace', display_name: 'Grace', ...GUEST }),
-      memberView({ user_id: 'usr_otto', username: 'otto', display_name: 'Otto', ...GUEST }),
+      member({ userId: 'usr_self', username: 'ada', displayName: 'Ada', role: 'admin', assignableRoles: [], revocable: false }),
+      member({ userId: 'usr_grace', username: 'grace', displayName: 'Grace', ...GUEST }),
+      member({ userId: 'usr_otto', username: 'otto', displayName: 'Otto', ...GUEST }),
     ],
     pendingUserIds: ['usr_otto'],
   },
@@ -36,8 +36,8 @@ export const PendingRow: Story = {
 export const NoActions: Story = {
   args: {
     members: [
-      memberView({ user_id: 'usr_self', username: 'ada', display_name: 'Ada', role: 'admin', assignable_roles: [], revocable: false }),
-      memberView({ user_id: 'usr_last', username: 'lin', display_name: 'Lin', role: 'admin', assignable_roles: ['admin'], revocable: false }),
+      member({ userId: 'usr_self', username: 'ada', displayName: 'Ada', role: 'admin', assignableRoles: [], revocable: false }),
+      member({ userId: 'usr_last', username: 'lin', displayName: 'Lin', role: 'admin', assignableRoles: ['admin'], revocable: false }),
     ],
   },
 };

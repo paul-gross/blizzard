@@ -1,48 +1,49 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { MemberView } from 'fleet';
+import { member } from './members.builders';
+import type { Member } from './members.domain';
 import { MembersTable } from './members-table';
 
 /** The rows of `GET /api/members` as a tenant admin (`usr_admin`) reads them: the hub's own per-row
- * `assignable_roles` and `revocable`. */
-const MEMBERS: readonly MemberView[] = [
-  {
-    user_id: 'usr_admin',
+ * `assignableRoles` and `revocable`. */
+const MEMBERS: readonly Member[] = [
+  member({
+    userId: 'usr_admin',
     username: 'ada',
-    display_name: 'Ada',
+    displayName: 'Ada',
     email: 'ada@example.com',
     role: 'admin',
-    hub_admin: true,
-    created_at: '2026-07-21T00:00:00Z',
-    identities: [{ provider_name: 'github', handle: 'ada' }],
-    assignable_roles: [],
+    hubAdmin: true,
+    createdAt: '2026-07-21T00:00:00Z',
+    identities: [{ providerName: 'github', handle: 'ada' }],
+    assignableRoles: [],
     revocable: false,
-  },
-  {
-    user_id: 'usr_guest',
+  }),
+  member({
+    userId: 'usr_guest',
     username: 'grace',
-    display_name: 'Grace',
+    displayName: 'Grace',
     email: null,
     role: 'guest',
-    hub_admin: false,
-    created_at: '2026-07-21T00:00:00Z',
+    hubAdmin: false,
+    createdAt: '2026-07-21T00:00:00Z',
     identities: [],
-    assignable_roles: ['guest', 'contributor', 'admin'],
+    assignableRoles: ['guest', 'contributor', 'admin'],
     revocable: true,
-  },
-  {
-    user_id: 'usr_last',
+  }),
+  member({
+    userId: 'usr_last',
     username: 'lin',
-    display_name: 'Lin',
+    displayName: 'Lin',
     email: null,
     role: 'admin',
-    hub_admin: false,
-    created_at: '2026-07-21T00:00:00Z',
+    hubAdmin: false,
+    createdAt: '2026-07-21T00:00:00Z',
     identities: [],
-    assignable_roles: ['admin'],
+    assignableRoles: ['admin'],
     revocable: false,
-  },
+  }),
 ];
 
 describe('MembersTable', () => {
@@ -53,7 +54,7 @@ describe('MembersTable', () => {
     }).compileComponents();
   });
 
-  async function mount(inputs: Partial<{ members: readonly MemberView[]; currentUserId: string | null; label: string }> = {}) {
+  async function mount(inputs: Partial<{ members: readonly Member[]; currentUserId: string | null; label: string }> = {}) {
     const fixture = TestBed.createComponent(MembersTable);
     fixture.componentRef.setInput('members', inputs.members ?? MEMBERS);
     fixture.componentRef.setInput('state', inputs.members?.length === 0 ? 'empty' : 'ready');
@@ -75,7 +76,7 @@ describe('MembersTable', () => {
     expect(ada?.querySelector('[data-testid="members-table-identities"]')?.textContent).toContain('github');
     const when = ada?.querySelector('fleet-when[data-testid="members-table-created-at"]');
     expect(when).toBeTruthy();
-    expect(when?.textContent?.trim()).not.toBe(MEMBERS[0].created_at);
+    expect(when?.textContent?.trim()).not.toBe(MEMBERS[0].createdAt);
   });
 
   it('labels the panel with its label input', async () => {
@@ -139,6 +140,25 @@ describe('MembersTable', () => {
     );
   });
 
+  it('shows an unlisted held role without allowing it to be assigned', async () => {
+    const unknown = member({ userId: 'usr_unknown', role: { unlisted: 'future' }, assignableRoles: ['guest'] });
+    const { fixture, el } = await mount({ members: [unknown] });
+    const emitted: { userId: string; role: string }[] = [];
+    fixture.componentInstance.changeRole.subscribe((event) => emitted.push(event));
+    const select = row(el, 'usr_unknown')!.querySelector<HTMLButtonElement>('[data-testid="members-table-role-select"]')!;
+    expect(select.getAttribute('aria-label')).toContain('future');
+    select.click();
+    await fixture.whenStable();
+    document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="future"]')!.click();
+    await fixture.whenStable();
+    expect(emitted).toEqual([]);
+    select.click();
+    await fixture.whenStable();
+    document.querySelector<HTMLElement>('[role="listbox"] [role="option"][title="guest"]')!.click();
+    await fixture.whenStable();
+    expect(emitted).toEqual([{ userId: 'usr_unknown', role: 'guest' }]);
+  });
+
   it('emits changeRole with the member and the chosen role', async () => {
     const { fixture, el } = await mount();
     const emitted: { userId: string; role: string }[] = [];
@@ -154,17 +174,17 @@ describe('MembersTable', () => {
 
   it('emits revoke with the member whose button was pressed', async () => {
     const { fixture, el } = await mount();
-    const emitted: MemberView[] = [];
+    const emitted: Member[] = [];
     fixture.componentInstance.revoke.subscribe((member) => emitted.push(member));
 
     row(el, 'usr_guest')?.querySelector<HTMLElement>('[data-testid="members-table-revoke"]')?.click();
     await fixture.whenStable();
 
-    expect(emitted.map((m) => m.user_id)).toEqual(['usr_guest']);
+    expect(emitted.map((m) => m.userId)).toEqual(['usr_guest']);
   });
 
   it("disables only the controls of a row whose own change is in flight", async () => {
-    const pendingRow = { ...MEMBERS[1], user_id: 'usr_other', username: 'otto' };
+    const pendingRow = { ...MEMBERS[1], userId: 'usr_other', username: 'otto' };
     const { fixture, el } = await mount({ members: [...MEMBERS, pendingRow] });
     fixture.componentRef.setInput('pendingUserIds', ['usr_guest']);
     await fixture.whenStable();

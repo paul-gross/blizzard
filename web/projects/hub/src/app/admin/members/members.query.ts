@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { type MemberView, listMembersApiMembersGet } from 'fleet';
+import { fromMemberView } from './members.translate';
 import { hubMembersKey } from '../../core/query-keys';
 
 /**
@@ -14,6 +15,7 @@ export function injectMembersQuery(enabled: () => boolean = () => true) {
   return injectQuery(() => ({
     queryKey: hubMembersKey,
     enabled: enabled(),
+    select: (rows: MemberView[]) => rows.map(fromMemberView),
     queryFn: async (): Promise<MemberView[]> => {
       const { data, error } = await listMembersApiMembersGet({ throwOnError: false });
       if (error) throw error;
