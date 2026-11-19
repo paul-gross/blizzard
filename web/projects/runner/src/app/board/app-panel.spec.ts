@@ -61,6 +61,7 @@ function hostRunner(runnerId: string, name: string, project: string): runnerApi.
     bindings: [{ project, workspace_id: 'ws', agents: 4 }],
     agents_in_use: 0,
     max_agents: 4,
+    start_failure: null,
   };
 }
 

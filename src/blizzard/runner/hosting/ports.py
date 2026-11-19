@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.secrets.sealing import SealedValue
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.runner.hosting.model import HostedRunnerFact, HostedRunnerOp, HostingFact, RunnerAdmission
+from blizzard.runner.hub.client import HostRefused, IHostRunnerAdder, RetiredHostRunner
 from blizzard.runner.hub.identity import RunnerIdentity
 
 
@@ -88,3 +90,48 @@ class IRunnerAdmission(Protocol):
         """Write a joined runner's identity row and, unless the store already holds it, its hosted row and ``added``
         fact."""
         ...
+
+
+class IRunnerAdmissions(Protocol):
+    """An admission bound to each runner the hub mints."""
+
+    def admission(self, runner_id: str) -> IRunnerAdmission: ...
+
+
+class INewRunnerSettings(Protocol):
+    """A new runner's settings, judged as a write of them is before anything is minted."""
+
+    def problems(self, name: str, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        """Every failing key of ``entries`` (its ``name`` among them) and why; empty when they would resolve."""
+        ...
+
+
+class IHostedRunnerNames(Protocol):
+    """The names the host's runners go by."""
+
+    def name_of(self, runner_id: str) -> str:
+        """A hosted runner's name: its ``[[runner]]``'s, else its stored ``name`` entry, else its id."""
+        ...
+
+    def unhosted_names(self) -> frozenset[str]:
+        """The names of the ``[[runner]]`` entries no hosted runner stands for yet — a scaffold not yet joined."""
+        ...
+
+
+class IRunnerTokenSealer(Protocol):
+    def seal_first(self, runner_id: str, token: str) -> SealedValue:
+        """``token`` sealed as ``runner_id``'s first row."""
+        ...
+
+
+class IHostRunnerRetirer(Protocol):
+    """The runner retire under the host's token alone."""
+
+    def retire_runner(self, runner_id: str, *, force: bool = False) -> RetiredHostRunner | HostRefused:
+        """Retire a runner under the host; a refusal while it holds chunks raises
+        :class:`~blizzard.runner.hub.client.HostRunnerRetireRefused`."""
+        ...
+
+
+class IHostRunnerHub(IHostRunnerAdder, IHostRunnerRetirer, Protocol):
+    """The host's hub calls that add and retire its runners."""

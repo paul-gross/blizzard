@@ -62,6 +62,8 @@ export interface RunnerOperations {
   'PATCH /runners/{runner_id}/api/settings': { path: T.PatchSettingsRunnersRunnerIdApiSettingsPatchData['path']; responses: T.PatchSettingsRunnersRunnerIdApiSettingsPatchResponses; errors: T.PatchSettingsRunnersRunnerIdApiSettingsPatchErrors };
   'POST /api/auth/callback': { path: T.CallbackApiAuthCallbackPostData['path']; responses: T.CallbackApiAuthCallbackPostResponses; errors: {} };
   'POST /api/auth/logout': { path: T.LogoutApiAuthLogoutPostData['path']; responses: T.LogoutApiAuthLogoutPostResponses; errors: {} };
+  'POST /api/host/runners': { path: T.AddRunnerApiHostRunnersPostData['path']; responses: T.AddRunnerApiHostRunnersPostResponses; errors: T.AddRunnerApiHostRunnersPostErrors };
+  'POST /api/host/runners/{runner_id}/retire': { path: T.RetireRunnerApiHostRunnersRunnerIdRetirePostData['path']; responses: T.RetireRunnerApiHostRunnersRunnerIdRetirePostResponses; errors: T.RetireRunnerApiHostRunnersRunnerIdRetirePostErrors };
   'POST /api/host/subscriptions/{slug}/floor/clear': { path: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostData['path']; responses: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses; errors: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostErrors };
   'POST /api/host/ticks': { path: T.RunHostTickApiHostTicksPostData['path']; responses: T.RunHostTickApiHostTicksPostResponses; errors: T.RunHostTickApiHostTicksPostErrors };
   'POST /runners/{runner_id}/api/chunks/{chunk_id}/pause': { path: T.PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostData['path']; responses: T.PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostResponses; errors: T.PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors };

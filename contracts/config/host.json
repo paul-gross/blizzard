@@ -1826,7 +1826,6 @@
       "mode": "0600",
       "path": ".env",
       "written_by": [
-        "add",
         "host",
         "ingest",
         "init"
@@ -1902,17 +1901,16 @@
       ]
     },
     {
-      "holds": "each runner's own files, by runner name",
+      "holds": "deprecated: each runner's own files, by runner name",
       "mode": null,
       "path": "runners",
       "written_by": []
     },
     {
-      "holds": "one runner's own directory, named for the runner",
+      "holds": "deprecated: one runner's own directory, named for the runner; only an ingest still creates it, for the path files its carried [[runner]] reads",
       "mode": null,
       "path": "runners/<name>",
       "written_by": [
-        "add",
         "ingest"
       ]
     },

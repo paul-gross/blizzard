@@ -33,6 +33,8 @@ from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.hosting.reconcile import RunnerStartFailures
+from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostIdentity
@@ -484,6 +486,14 @@ class RunnerWiring:
 
     def maybe_host_read_stores(self) -> HostReadStores | None:
         return self._seam("host_read_stores")
+
+    def maybe_hosted_runners(self) -> HostedRunnerService | None:
+        """What adds and retires the host's runners — ``None`` on a host holding no host token."""
+        return getattr(self.state, "hosted_runners", None)
+
+    def maybe_start_failures(self) -> RunnerStartFailures | None:
+        """Each runner whose latest start failed — ``None`` on a host whose tick starts no runner."""
+        return getattr(self.state, "start_failures", None)
 
     def require_bound(self) -> None:
         """Refuse with a ``503`` when the store is bound to no runner. The host binds each store to its configured

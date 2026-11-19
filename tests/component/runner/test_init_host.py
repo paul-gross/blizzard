@@ -400,7 +400,7 @@ def test_init_hosts_each_runner_it_joins_with_its_identity_row(tmp_path: Path, f
 
     assert _init(fake_init_hub, root).exit_code == 0
 
-    assert _hosted_facts(root) == [("rn_init1", "added", "cli", "operator")]
+    assert _hosted_facts(root) == [("rn_init1", "added", "cli", "init")]
 
 
 def test_a_scaffold_joined_on_a_hosting_store_is_hosted_with_its_identity_row(
@@ -415,8 +415,8 @@ def test_a_scaffold_joined_on_a_hosting_store_is_hosted_with_its_identity_row(
     assert result.exit_code == 0, result.output
     assert sorted(_identity_rows(root)) == [("rn_init1", "runner-local"), ("rn_init2", "r-two")]
     assert _hosted_facts(root) == [
-        ("rn_init1", "added", "cli", "operator"),
-        ("rn_init2", "added", "cli", "operator"),
+        ("rn_init1", "added", "cli", "init"),
+        ("rn_init2", "added", "cli", "init"),
     ]
 
 

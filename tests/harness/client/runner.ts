@@ -17,7 +17,11 @@ import type {
   DashboardView,
   FloorClearView,
   HeartbeatResponse,
+  HostRunnerAddRequest,
   HostRunnerListResponse,
+  HostRunnerRetiredView,
+  HostRunnerRetireRequest,
+  HostRunnerView,
   HostRegistrationView,
   HostEnvironmentListResponse,
   HostWorkspaceListResponse,
@@ -140,6 +144,10 @@ export interface RunnerHostClient extends HostRoutes {
   registration(): Promise<ApiResponse<HostRegistrationView>>;
   /** `GET /api/host/runners`. */
   runners(): Promise<ApiResponse<HostRunnerListResponse>>;
+  /** `POST /api/host/runners`: add a runner, which the host starts at its next tick. */
+  addRunner(request: HostRunnerAddRequest): Promise<ApiResponse<HostRunnerView>>;
+  /** `POST /api/host/runners/{id}/retire`: retire a runner, which the host drains at its next tick. */
+  retireRunner(runnerId: string, request?: HostRunnerRetireRequest): Promise<ApiResponse<HostRunnerRetiredView>>;
   /** `GET /api/host/environments`: held and free environments grouped by workspace. */
   environments(): Promise<ApiResponse<HostEnvironmentListResponse>>;
   /** `GET /api/host/workspaces`: the host's configured workspace ids. */
@@ -207,6 +215,8 @@ export function runnerHostApi(options: {
     ready: () => host.get('/api/ready'),
     registration: () => host.get('/api/host/registration'),
     runners: () => host.get('/api/host/runners'),
+    addRunner: (request) => host.post('/api/host/runners', { data: request }),
+    retireRunner: (runnerId, request) => host.post(`/api/host/runners/${encodeURIComponent(runnerId)}/retire`, { data: request ?? {} }),
     environments: () => host.get('/api/host/environments'),
     workspaces: () => host.get('/api/host/workspaces'),
     workspacePrompt: (workspaceId) => host.get(`/api/host/workspaces/${encodeURIComponent(workspaceId)}/prompt`),

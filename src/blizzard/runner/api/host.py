@@ -1,5 +1,5 @@
-"""The host's own reads — ``GET /api/host/registration``, ``/runners``, ``/workspaces``, ``/environments`` and
-``/subscriptions``.
+"""The host's own reads — ``GET /api/host/registration``, ``/workspaces``, ``/environments`` and ``/subscriptions``;
+``/runners`` is ``src/blizzard/runner/api/host_runners.py``'s.
 
 Each composes the registered runners' own bound seams, stamping each runner's id; none reads across runners
 (``bzh:runner-scoped-store``). Read-only over their wiring (``bzh:controller-read-only``)."""
@@ -12,12 +12,10 @@ from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.runner.api.control import throttle_view
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import held_workspace_id
-from blizzard.runner.hub.identity import served_runner_state
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.usage.repository import IReadExternalUsageRepository
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
@@ -25,16 +23,12 @@ from blizzard.wire.runner_host import (
     HostEnvironmentListResponse,
     HostEnvironmentView,
     HostRegistrationView,
-    HostRunnerBindingView,
-    HostRunnerListResponse,
-    HostRunnerView,
     HostSubscriptionListResponse,
     HostSubscriptionView,
     HostWorkspaceEnvironmentsView,
     HostWorkspaceListResponse,
     HostWorkspaceView,
 )
-from blizzard.wire.runner_status import PauseStateView
 
 router = APIRouter(prefix="/api/host", tags=["host"])
 
@@ -57,67 +51,6 @@ def host_registration(request: Request) -> HostRegistrationView:
         detail=status.detail,
         buffered_facts=stores.host_lane.host_buffered_count() if stores is not None else 0,
     )
-
-
-@router.get("/runners", response_model=HostRunnerListResponse)
-def list_runners(request: Request) -> HostRunnerListResponse:
-    """Every runner the host holds — a served one with its brake, bindings and agents in use, a halted one with its
-    reasons. A served runner its identity verdict refuses — its token refused or naming another runner, or its hub
-    not holding it under the host — is halted too, naming why."""
-    wiring = RunnerWiring.of(request)
-    registry = wiring.runners()
-    items: list[HostRunnerView] = []
-    for served in registry.served:
-        runner = wiring.for_runner(served)
-        config = runner.config()
-        bindings = [
-            HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=config.agents)
-            for b in config.bindings or ()
-        ]
-        current = runner.maybe_identity_verdict()
-        state, halted_reasons = served_runner_state(current.verdict() if current is not None else None)
-        service = runner.maybe_status()
-        if service is None:
-            # A store-free runner: listed, with nothing of its brake or capacity to read.
-            items.append(
-                HostRunnerView(
-                    runner_id=served.runner_id,
-                    name=served.name,
-                    state=state,
-                    served=True,
-                    halted_reasons=halted_reasons,
-                    bindings=bindings,
-                )
-            )
-            continue
-        summary = service.summary()
-        items.append(
-            HostRunnerView(
-                runner_id=served.runner_id,
-                name=served.name,
-                state=state,
-                served=True,
-                halted_reasons=halted_reasons,
-                pause=PauseStateView(
-                    local=summary.pause.local,
-                    hub=summary.pause.hub,
-                    effective=summary.pause.effective,
-                    local_reason=summary.pause.local_reason,
-                ),
-                throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
-                bindings=[
-                    HostRunnerBindingView(project=b.project, workspace_id=b.workspace_id, agents=b.agents)
-                    for b in summary.capacities.bindings
-                ],
-                agents_in_use=summary.capacities.used,
-                max_agents=summary.capacities.agents,
-            )
-        )
-    items.extend(
-        HostRunnerView(runner_id=halted.id, name=halted.name, state="halted", halted_reasons=list(halted.errors))
-        for halted in registry.halted
-    )
-    return HostRunnerListResponse(items=items)
 
 
 @router.get("/workspaces", response_model=HostWorkspaceListResponse)

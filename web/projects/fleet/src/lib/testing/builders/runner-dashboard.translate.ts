@@ -80,6 +80,7 @@ export function hostRunnerView(overrides: Partial<HostRunnerView> = {}): HostRun
     bindings: [],
     agents_in_use: 0,
     max_agents: 0,
+    start_failure: null,
     ...overrides,
   };
 }

@@ -16,7 +16,6 @@ from blizzard.runner.host_file import (
     append_runner,
     append_subscription,
     append_workspace,
-    remove_runner,
     repoint_workspace_prompt,
     runner_table,
     with_runner_values,
@@ -274,39 +273,6 @@ def test_an_append_that_is_not_one_runner_table_is_refused_leaving_the_file(tmp_
         append_runner(layout, '\n[[workspace]]\nid = "other"\n', strict=STRICT)
     with pytest.raises(ConfigError):
         append_runner(layout, '\n[runner]\nname = "x"\n', strict=STRICT)
-    assert layout.config_path.read_text() == _FILE
-
-
-def test_a_removed_runner_goes_whole_with_its_sub_tables_and_the_others_stay_as_they_were(tmp_path: Path) -> None:
-    layout = HostLayout(tmp_path)
-    layout.config_path.write_text(_FILE + _THIRD)
-    remove_runner(layout, "r-one", strict=STRICT)
-    text = layout.config_path.read_text()
-    runners = tomllib.loads(text)["runner"]
-    assert [r["name"] for r in runners] == ["r-two", "r-three"]
-    assert all("worker" not in r for r in runners)
-    assert text.startswith("# kept comment\n") and "# second" in text
-    remove_runner(layout, "r-three", strict=STRICT)
-    assert layout.config_path.read_text() == _FILE.replace(
-        '[[runner]]\nname = "r-one"\nprojects = []\n\n[runner.worker]\nenv_passthrough = []\n\n', ""
-    )
-
-
-def test_removing_the_last_runner_leaves_the_host_tables(tmp_path: Path) -> None:
-    layout = HostLayout(tmp_path)
-    layout.config_path.write_text(_FILE)
-    remove_runner(layout, "r-two", strict=STRICT)
-    remove_runner(layout, "r-one", strict=STRICT)
-    document = tomllib.loads(layout.config_path.read_text())
-    assert "runner" not in document
-    assert document["workspace"][0]["id"] == "ws"
-
-
-def test_removing_a_runner_the_file_does_not_name_is_refused(tmp_path: Path) -> None:
-    layout = HostLayout(tmp_path)
-    layout.config_path.write_text(_FILE)
-    with pytest.raises(ConfigError, match="r-none"):
-        remove_runner(layout, "r-none", strict=STRICT)
     assert layout.config_path.read_text() == _FILE
 
 

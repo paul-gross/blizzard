@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -24,6 +24,10 @@ OPERATOR: Final = "operator"
 CLI: Final = "cli"
 #: The door and actor a retirement the host notices at its hub is recorded under.
 HUB: Final = "hub"
+#: The door a route's fact is recorded under.
+API: Final = "api"
+#: The actor ``runner init``'s join of a scaffold is recorded under — the one ``cli`` fact a joining scaffold can be.
+JOIN: Final = "init"
 
 
 class HostedRunnerOp(StrEnum):
@@ -62,14 +66,41 @@ def state_of(facts: Sequence[HostedRunnerFact]) -> HostedRunnerState | None:
     return HostedRunnerState.ACTIVE
 
 
-#: The doors a runner is hosted through without a ``[[runner]]`` of the host file: the store is its only record.
-STORE_DOORS: Final = frozenset({"page", "api", "apply"})
-
-
 def hosted_beside_the_file(facts: Sequence[HostedRunnerFact]) -> bool:
-    """Whether ``facts`` (oldest first) say their runner was hosted through a store door, not seeded from the host file
-    nor joined by ``init`` — so no ``[[runner]]`` stands for it, and a joining scaffold is not it."""
-    return bool(facts) and facts[0].op is HostedRunnerOp.ADDED and facts[0].door in STORE_DOORS
+    """Whether ``facts`` (oldest first) say their runner was hosted other than by the seed of a ``[[runner]]`` or
+    ``init``'s join of a scaffold — added by a route, the page, an apply, or a stopped host's ``runner add`` — so a
+    joining scaffold is not it."""
+    if not facts or facts[0].op is not HostedRunnerOp.ADDED:
+        return False
+    first = facts[0]
+    return first.door != SEED and not (first.door == CLI and first.actor == JOIN)
+
+
+@domain_model
+@dataclass(frozen=True)
+class HostedRunner:
+    """One runner the host holds, and the facts (oldest first) its state derives from."""
+
+    runner_id: str
+    facts: tuple[HostedRunnerFact, ...]
+
+    @property
+    def state(self) -> HostedRunnerState | None:
+        return state_of(self.facts)
+
+    def retired(self) -> bool:
+        """Whether it is retired — final: a retire of it writes nothing, and no add or seed brings it back."""
+        return self.state is HostedRunnerState.RETIRED
+
+
+def name_taken(name: str, active_names: Collection[str]) -> str | None:
+    """Why ``name`` cannot be a new runner's: a blank name, or one an active runner of the host holds; ``None`` when it
+    is free. A retired runner's name is free again."""
+    if not name.strip():
+        return "name must be a non-blank string"
+    if name.strip() in active_names:
+        return f"this host already holds a runner named {name.strip()!r}; pick another name"
+    return None
 
 
 @domain_model

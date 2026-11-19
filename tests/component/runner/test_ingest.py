@@ -52,9 +52,11 @@ from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
 from blizzard.runner.transfer.ingest import RunnerIngest
 from tests.support.baseline_floor_trees import make_tree
 from tests.support.config_inputs import STRICT, init_host, load_host_config
+from tests.support.file_runners import add_file_runner
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.runner_ingest import (
     HERE_HOST,
+    HUB,
     MOVING,
     MOVING_ID,
     RUNNER_TABLES,
@@ -315,7 +317,8 @@ def test_ingest_is_refused_while_the_runner_holds_an_open_elicitation_or_takeove
 
 def test_ingest_is_refused_for_a_runner_name_this_host_declares(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
-    ok(fake_init_hub, "add", MOVING, "--project", "default", "--dir", str(hosts.here))
+    with fake_init_hub.host_clients(HUB) as host_clients:
+        add_file_runner(host_clients(load_host_config(hosts.here).host_token.value), hosts.here, MOVING)
     fake_init_hub.admin.held[HERE_HOST].append(MOVING_ID)
     _refuse(fake_init_hub, hosts, "already declares runner r2", "--workspace-id", _NEW_WORKSPACE)
 

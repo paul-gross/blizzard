@@ -75,6 +75,8 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.host_runners import router as host_runners_router
+from blizzard.runner.api.host_runners import writes as host_runner_writes_router
 from blizzard.runner.api.host_settings import router as host_settings_router
 from blizzard.runner.api.hub_proxy import UpstreamRefusal, relay_upstream_refusal
 from blizzard.runner.api.hub_token import router as hub_token_router
@@ -120,6 +122,7 @@ from blizzard.runner.composition import (
     IWiredRunner,
     NoDrivers,
     RunnerProcess,
+    build_hosted_runner_service,
     build_runner_process,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
@@ -213,6 +216,8 @@ _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 _HOST_HUMAN = (
     host_settings_router,
     host_router,
+    host_runners_router,
+    host_runner_writes_router,
     hub_token_router,
     workspace_prompt_router,
     host_floor_router,
@@ -894,6 +899,12 @@ def _wire_hosted_app(
         flags=host.flags,
     )
     app.state.runners = registry
+    app.state.start_failures = reconcile.failures if reconcile is not None else None
+    app.state.hosted_runners = (
+        build_hosted_runner_service(host_config, host.engine, host.host_hub, clock=host.clock)
+        if host_config is not None and host.host_hub is not None
+        else None
+    )
     live = runners.live()
     first = cast(_WiredRunner, live[0].wired) if live else None
     return HostedApp(

@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import tzinfo
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Protocol, cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -43,6 +43,7 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import ISecretCipher, SealedValue
+from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -118,9 +119,11 @@ from blizzard.runner.host_layout import (
     hold_host,
 )
 from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
-from blizzard.runner.hosting.ports import IRunnerAdmission
-from blizzard.runner.hosting.reconcile import reconcile
+from blizzard.runner.hosting.names import stored_name
+from blizzard.runner.hosting.ports import IHostRunnerHub, IReadHostedRunnerRepository, IRunnerAdmission
+from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
+from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -163,7 +166,7 @@ from blizzard.runner.runtime import (
     sqlite_url,
 )
 from blizzard.runner.settings.authoring import HostSettingsAuthoring
-from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
+from blizzard.runner.settings.ports import IReadRunnerSettings, IWriteHostSettings, IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -339,6 +342,8 @@ class HostProcess:
     )
     #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
     host_hub_http_client: httpx2.Client | None = None
+    #: The host's own hub calls over that client — ``None`` on a host with no host token.
+    host_hub: IHostHubClient | None = None
     #: The tool profile every host tool child launches under — the workspaces' ``git`` and ``winter``, credential
     #: renewal, the selftest's scratch ``git`` — set by the host tick from its snapshot.
     tool_profile: ToolProfileHolder = field(default_factory=lambda: ToolProfileHolder(ChildEnv(())))
@@ -1105,12 +1110,6 @@ class HostRunnerSet:
                     closing.callback(runner.wired.close)
 
 
-#: The startup step a runner start failed at, as :class:`RunnerStartFailed` and the panel name it.
-type RunnerStartStep = Literal[
-    "seed", "compose", "worker_shell", "tracing", "worker_scratch", "resume", "takeovers", "sessions", "serve"
-]
-
-
 class RunnerStartFailed(Exception):
     """A runner's start failed at ``step``; nothing of it is served."""
 
@@ -1119,42 +1118,6 @@ class RunnerStartFailed(Exception):
         self.runner_id = runner_id
         self.step: RunnerStartStep = step
         self.error = error
-
-
-@domain_model
-@dataclass(frozen=True)
-class RunnerStartFailure:
-    """Why one runner's latest start failed: the step it stopped at and the error."""
-
-    step: RunnerStartStep
-    error: str
-
-
-class RunnerStartFailures:
-    """Each runner whose latest start failed, by id, until it starts or is no longer to start."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._held: dict[str, RunnerStartFailure] = {}
-
-    def hold(self, runner_id: str, failure: RunnerStartFailure) -> bool:
-        """Hold ``failure`` as ``runner_id``'s; whether it differs from the one held."""
-        with self._lock:
-            changed = self._held.get(runner_id) != failure
-            self._held[runner_id] = failure
-            return changed
-
-    def clear(self, runner_id: str) -> None:
-        with self._lock:
-            self._held.pop(runner_id, None)
-
-    def of(self, runner_id: str) -> RunnerStartFailure | None:
-        with self._lock:
-            return self._held.get(runner_id)
-
-    def failed(self) -> frozenset[str]:
-        with self._lock:
-            return frozenset(self._held)
 
 
 @contextlib.contextmanager
@@ -1501,6 +1464,7 @@ def _build_host_graph(
             host_identity=host_identity,
             host_registration=host_registration,
             host_hub_http_client=host_hub_http_client,
+            host_hub=host_hub,
             tool_profile=tool_profile,
         )
         # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
@@ -1947,6 +1911,109 @@ def runner_admission(db_url: str, *, runner_id: str, clock: IClock) -> Generator
         )
     finally:
         engine.dispose()
+
+
+#: The id a new runner's settings are judged under before its hub mints its own.
+_PROVISIONAL_RUNNER_ID = "rn_provisional"
+
+
+@collaborator
+@dataclass(frozen=True)
+class _RunnerAdmissions:
+    admit: Callable[[str], IRunnerAdmission]
+
+    def admission(self, runner_id: str) -> IRunnerAdmission:
+        return self.admit(runner_id)
+
+
+@dataclass(frozen=True)
+class _HostedRunnerNames:
+    """A hosted runner's ``[[runner]]`` name, else its stored one."""
+
+    host: HostConfig
+    hosted: IReadHostedRunnerRepository
+    stores_of: Callable[[str], tuple[IRunnerIdentityStore, IWriteRunnerSettings]]
+
+    def name_of(self, runner_id: str) -> str:
+        entry = next((entry for entry in self.host.runners if entry.id == runner_id), None)
+        if entry is not None:
+            return entry.name
+        identity, settings = self.stores_of(runner_id)
+        return stored_name(identity, settings, runner_id)
+
+    def unhosted_names(self) -> frozenset[str]:
+        hosted = self.hosted.hosted_runner_ids()
+        return frozenset(entry.name for entry in self.host.runners if entry.id is None or entry.id not in hosted)
+
+
+@dataclass(frozen=True)
+class _NewRunnerSettings:
+    """A new runner's entries resolved as a store-only runner's are, over the host file, under a provisional id."""
+
+    host: HostConfig
+    store: IReadRunnerSettings
+
+    def problems(self, name: str, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        try:
+            entry = self.host.hosted_entry(_PROVISIONAL_RUNNER_ID, name)
+        except (ConfigError, ValueError) as exc:
+            return {"name": str(exc)}
+        return RunnerSettingsReader(self.host, entry, self.store).validate(entries)
+
+
+@collaborator
+@dataclass(frozen=True)
+class _SealingTokens:
+    """Seals each added runner's token under the host's key, minting its first generation when it holds none."""
+
+    tokens: Callable[[], HubTokens]
+
+    def seal_first(self, runner_id: str, token: str) -> SealedValue:
+        return self.tokens().seal_first(runner_id, token)
+
+
+def build_hosted_runner_service(
+    host: HostConfig,
+    engine: Engine,
+    hub: IHostRunnerHub,
+    *,
+    clock: IClock,
+    environ: Mapping[str, str] | None = None,
+) -> HostedRunnerService:
+    """The service that adds and retires ``host``'s runners in the store ``engine`` opens, under the host's token
+    through ``hub``; a running host's routes and a stopped host's CLI build it alike."""
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    hosted = build_host_stores(engine, errors=errors, clock=clock).hosted_runners
+    _, provisional = build_settings_stores(engine, errors=errors, runner_id=_PROVISIONAL_RUNNER_ID)
+    return HostedRunnerService(
+        hosted=hosted,
+        admissions=_RunnerAdmissions(functools.partial(_admission_of, engine, errors=errors, clock=clock)),
+        settings=_NewRunnerSettings(host, provisional),
+        names=_HostedRunnerNames(host, hosted, functools.partial(_settings_stores_of, engine, errors=errors)),
+        tokens=_SealingTokens(
+            functools.partial(
+                build_sealing_hub_tokens,
+                engine,
+                host.root,
+                environ=os.environ if environ is None else environ,
+                clock=clock,
+            )
+        ),
+        hub=hub,
+        clock=clock,
+    )
+
+
+def _admission_of(
+    engine: Engine, runner_id: str, *, errors: RunnerStoreErrorFactory, clock: IClock
+) -> IRunnerAdmission:
+    return build_runner_admission(engine, errors=errors, runner_id=runner_id, clock=clock)
+
+
+def _settings_stores_of(
+    engine: Engine, runner_id: str, *, errors: RunnerStoreErrorFactory
+) -> tuple[IRunnerIdentityStore, IWriteRunnerSettings]:
+    return build_settings_stores(engine, errors=errors, runner_id=runner_id)
 
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:

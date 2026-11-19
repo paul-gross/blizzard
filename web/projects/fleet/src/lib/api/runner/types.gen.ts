@@ -2639,6 +2639,28 @@ export type HostRegistrationView = {
 };
 
 /**
+ * HostRunnerAddRequest
+ *
+ * A runner to add to the host: its name, the projects it serves, and any further runner settings by key.
+ */
+export type HostRunnerAddRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Projects
+     */
+    projects: Array<HostRunnerProjectWrite>;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * HostRunnerBindingView
  *
  * One project a runner serves, the workspace it runs in, and the agents it runs there at once.
@@ -2669,6 +2691,103 @@ export type HostRunnerListResponse = {
 };
 
 /**
+ * HostRunnerProjectWrite
+ *
+ * One project a runner being added serves, and the host's workspace it runs in — the host's only one when
+ * omitted.
+ */
+export type HostRunnerProjectWrite = {
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Workspace
+     */
+    workspace?: string | null;
+};
+
+/**
+ * HostRunnerRetireRequest
+ *
+ * A retire of one of the host's runners; ``force`` releases the chunks it holds.
+ */
+export type HostRunnerRetireRequest = {
+    /**
+     * Force
+     */
+    force?: boolean;
+};
+
+/**
+ * HostRunnerRetiredView
+ *
+ * A runner just retired: the chunks its hub released from it, and whether it was retired already, so the retire
+ * wrote nothing.
+ */
+export type HostRunnerRetiredView = {
+    /**
+     * Agents In Use
+     */
+    agents_in_use: number;
+    /**
+     * Already
+     */
+    already: boolean;
+    /**
+     * Bindings
+     */
+    bindings: Array<HostRunnerBindingView>;
+    /**
+     * Halted Reasons
+     */
+    halted_reasons: Array<string>;
+    /**
+     * Max Agents
+     */
+    max_agents: number;
+    /**
+     * Name
+     */
+    name: string;
+    pause: PauseStateView | null;
+    /**
+     * Released Chunk Ids
+     */
+    released_chunk_ids: Array<string>;
+    /**
+     * Runner Id
+     */
+    runner_id: string | null;
+    /**
+     * Served
+     */
+    served: boolean;
+    start_failure: HostRunnerStartFailureView | null;
+    /**
+     * State
+     */
+    state: 'serving' | 'halted' | 'starting' | 'start_failed' | 'retired';
+    throttle: ThrottleStatusView | null;
+};
+
+/**
+ * HostRunnerStartFailureView
+ *
+ * Why a runner's latest start failed: the startup step it stopped at and the error.
+ */
+export type HostRunnerStartFailureView = {
+    /**
+     * Error
+     */
+    error: string;
+    /**
+     * Step
+     */
+    step: string;
+};
+
+/**
  * HostRunnerStateView
  *
  * One runner as the host's readiness names it.
@@ -2685,7 +2804,7 @@ export type HostRunnerStateView = {
     /**
      * State
      */
-    state: 'serving' | 'halted';
+    state: 'serving' | 'halted' | 'starting' | 'start_failed' | 'retired';
 };
 
 /**
@@ -2725,10 +2844,11 @@ export type HostRunnerView = {
      * Served
      */
     served: boolean;
+    start_failure: HostRunnerStartFailureView | null;
     /**
      * State
      */
-    state: 'serving' | 'halted';
+    state: 'serving' | 'halted' | 'starting' | 'start_failed' | 'retired';
     throttle: ThrottleStatusView | null;
 };
 
@@ -5710,6 +5830,89 @@ export type ListRunnersApiHostRunnersGetResponses = {
 };
 
 export type ListRunnersApiHostRunnersGetResponse = ListRunnersApiHostRunnersGetResponses[keyof ListRunnersApiHostRunnersGetResponses];
+
+export type AddRunnerApiHostRunnersPostData = {
+    body: HostRunnerAddRequest;
+    path?: never;
+    query?: never;
+    url: '/api/host/runners';
+};
+
+export type AddRunnerApiHostRunnersPostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no host token, or its hub refused the add
+     */
+    409: RunnerProblem;
+    /**
+     * The runner's settings would not resolve
+     */
+    422: SettingsProblem;
+    /**
+     * The hub could not be reached
+     */
+    503: RunnerProblem;
+};
+
+export type AddRunnerApiHostRunnersPostError = AddRunnerApiHostRunnersPostErrors[keyof AddRunnerApiHostRunnersPostErrors];
+
+export type AddRunnerApiHostRunnersPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRunnerView;
+};
+
+export type AddRunnerApiHostRunnersPostResponse = AddRunnerApiHostRunnersPostResponses[keyof AddRunnerApiHostRunnersPostResponses];
+
+export type RetireRunnerApiHostRunnersRunnerIdRetirePostData = {
+    body: HostRunnerRetireRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/host/runners/{runner_id}/retire';
+};
+
+export type RetireRunnerApiHostRunnersRunnerIdRetirePostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * No runner of this host has the id
+     */
+    404: RunnerProblem;
+    /**
+     * The hub refused the retire
+     */
+    409: RunnerProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * The hub could not be reached
+     */
+    503: RunnerProblem;
+};
+
+export type RetireRunnerApiHostRunnersRunnerIdRetirePostError = RetireRunnerApiHostRunnersRunnerIdRetirePostErrors[keyof RetireRunnerApiHostRunnersRunnerIdRetirePostErrors];
+
+export type RetireRunnerApiHostRunnersRunnerIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostRunnerRetiredView;
+};
+
+export type RetireRunnerApiHostRunnersRunnerIdRetirePostResponse = RetireRunnerApiHostRunnersRunnerIdRetirePostResponses[keyof RetireRunnerApiHostRunnersRunnerIdRetirePostResponses];
 
 export type SetRunnerTokenApiHostRunnersRunnerIdTokenPutData = {
     body: HubTokenWrite;

@@ -16,6 +16,7 @@ const RUNNER = (overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.Ho
   bindings: [],
   agents_in_use: 0,
   max_agents: 4,
+  start_failure: null,
   ...overrides,
 });
 

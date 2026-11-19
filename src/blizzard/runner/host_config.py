@@ -492,24 +492,6 @@ class HostConfig:
             )
         return first
 
-    def check_new_runner(self, name: str) -> None:
-        """Raises :class:`HostConfigError` when a runner called ``name`` could not join the ``[[runner]]`` entries this
-        host holds — its name, or the token variable it reads, is already taken. It carries no id until the hub
-        assigns one, so the id is not judged."""
-        candidate = RunnerEntry(name=name)
-        clashes = _repeats((*self.runners, candidate))
-        if any(kind == "name" for kind, _ in clashes):
-            raise HostConfigError((f"{self.config_path} already holds a runner named {name!r}; pick another name",))
-        if clashes:
-            variable = hub_token_variable(name)
-            holder = next(entry.name for entry in self.runners if hub_token_variable(entry.name) == variable)
-            raise HostConfigError(
-                (
-                    f"runner {name!r} would read its token from {variable}, which runner {holder!r} already reads; "
-                    "pick another name",
-                )
-            )
-
     def bindings_for(self, projects: tuple[str, ...], workspaces: tuple[str, ...]) -> tuple[ProjectBinding, ...]:
         """One binding per project of ``projects``, each to its workspace. Raises :class:`HostConfigError` when a
         workspace of ``workspaces`` is not one the host declares, or when they are given neither once nor once per

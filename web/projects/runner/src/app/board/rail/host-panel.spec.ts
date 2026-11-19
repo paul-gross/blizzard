@@ -31,6 +31,7 @@ const RUNNERS: runnerApi.HostRunnerView[] = [
     ],
     agents_in_use: 3,
     max_agents: 6,
+    start_failure: null,
   },
   {
     runner_id: 'rn_2',
@@ -43,6 +44,7 @@ const RUNNERS: runnerApi.HostRunnerView[] = [
     bindings: [{ project: 'winter', workspace_id: 'workspace-local', agents: 2 }],
     agents_in_use: 0,
     max_agents: 2,
+    start_failure: null,
   },
 ];
 

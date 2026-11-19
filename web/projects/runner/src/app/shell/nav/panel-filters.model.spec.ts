@@ -16,6 +16,7 @@ function runner(name: string, overrides: Partial<runnerApi.HostRunnerView> = {})
     bindings: [],
     agents_in_use: 0,
     max_agents: 0,
+    start_failure: null,
     ...overrides,
   };
 }

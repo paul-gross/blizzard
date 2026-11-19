@@ -61,7 +61,6 @@ from blizzard.runner.cli.store_guard import (
     store_hosted_runner_ids,
     store_reason,
     store_write_guard,
-    stored_name,
 )
 from blizzard.runner.composition import (
     HostProcess,
@@ -114,7 +113,8 @@ from blizzard.runner.host_layout import (
     HostLayout,
 )
 from blizzard.runner.host_settings_reader import HostSettingsReader
-from blizzard.runner.hosting.model import CLI, OPERATOR, SEED, HostingFact
+from blizzard.runner.hosting.model import CLI, JOIN, SEED, HostingFact
+from blizzard.runner.hosting.names import stored_name
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -348,18 +348,6 @@ def init(
             _join_runner(config, entry, collaborators, HostJoin(host, host_clients(host.token)), store, rerun, clock)
 
 
-def write_runner_token(root: Path, token_env: str, token: str) -> None:
-    """Write ``token`` to the host directory's ``.env`` as ``token_env``, for the verbs outside this composition
-    root."""
-    HubTokenFile.of(root, token_env).write(token)
-
-
-def remove_runner_token(root: Path, token_env: str) -> None:
-    """Remove ``token_env``'s assignment from the host directory's ``.env``, every other line kept — the move of a
-    runner's token out of a host it leaves."""
-    HubTokenFile.of(root, token_env).remove()
-
-
 @dataclass(frozen=True)
 class HostJoin:
     """The host init registered, and its own hub calls under the token it holds."""
@@ -558,7 +546,7 @@ def _join_runner(
     # The identity row and its hosting land together, so a scaffold joined on a hosting store is never judged stray.
     now = clock.now()
     with runner_admission(config.db_url, runner_id=joined.runner_id, clock=clock) as admission:
-        admission.record_joined(joined.identity_at(now), HostingFact(actor=OPERATOR, door=CLI, at=now))
+        admission.record_joined(joined.identity_at(now), HostingFact(actor=JOIN, door=CLI, at=now))
 
 
 def _refuse_unsettled(config: HostConfig, entry: RunnerEntry, joined: JoinedRunner, clock: IClock) -> None:

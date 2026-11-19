@@ -12,6 +12,7 @@ from pydantic import BaseModel, SecretStr
 
 from blizzard.foundation.secrets.value import SecretValueBlank
 from blizzard.runner.api.federation import require_superuser
+from blizzard.runner.api.host_runners import held_runner_ids
 from blizzard.runner.api.problems import problem, reject_worker_credential
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
@@ -46,12 +47,13 @@ def set_runner_token(
     body: HubTokenWrite,
     _session: Annotated[RunnerSession, Depends(require_superuser)],
 ) -> Response:
-    """Seal ``token`` as the runner's hub token at its row's next revision. Any runner a ``[[runner]]`` of this host
-    names counts, halted or served, so a halted runner's token can be set for its next start."""
+    """Seal ``token`` as the runner's hub token at its row's next revision. Any runner the host holds counts —
+    served, halted, or hosted in its store and not started yet — so a halted runner's token can be set for its next
+    start."""
     wiring = RunnerWiring.of(request)
     registry = wiring.runners()
     served = next((runner for runner in registry.served if runner.runner_id == runner_id), None)
-    if served is None and not any(halted.id == runner_id for halted in registry.halted):
+    if served is None and runner_id not in held_runner_ids(wiring):
         return problem(404, "runner_unknown", f"this host holds no runner {runner_id}")
     verdict = wiring.for_runner(served).maybe_identity_verdict() if served is not None else None
     try:

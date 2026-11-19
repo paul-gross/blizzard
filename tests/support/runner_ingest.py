@@ -24,6 +24,7 @@ from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.tools.invariants import runner_invariants
 from tests.support.config_inputs import load_host_config
+from tests.support.file_runners import add_file_runner
 from tests.support.runner_fakes import FakeProbe
 from tests.support.runner_init_fakes import FakeInitHub, init_runner
 from tests.support.runner_scope_seeding import T0, reflect, seed_tables
@@ -64,7 +65,8 @@ def two_hosts(tmp_path: Path, hub: FakeInitHub, *, adopt: bool = True, identifie
     here, there = tmp_path / "here", tmp_path / "there"
     ok(hub, "init", str(here), "--hub", HUB)
     ok(hub, "init", str(there), "--hub", HUB)
-    ok(hub, "add", MOVING, "--project", "default", "--dir", str(there))
+    with hub.host_clients(HUB) as host_clients:
+        add_file_runner(host_clients(load_host_config(there).host_token.value), there, MOVING)
     ok(hub, "init", str(there), "--hub", HUB)
     if adopt:
         hub.admin.held[THERE_HOST].remove(MOVING_ID)
