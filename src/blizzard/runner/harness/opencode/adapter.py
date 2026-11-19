@@ -48,6 +48,7 @@ from blizzard.runner.harness.opencode.permissions.permission_resolver import (
     IOpenCodePermissionResolver,
     OpenCodePermissionResolveError,
 )
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -313,7 +314,7 @@ class OpenCodeAdapter:
             autonomy=self._autonomy,
             environment=SessionEnvironment.capture(self._worker_env),
             settings_path=self._worker_config_path,
-            harness_id="opencode",
+            harness_id=OPENCODE_HARNESS_ID,
             transcript_root=self._transcript_root,
             bundle_path=self._bundle_path,
             config_dir=self._effective_config_dir,

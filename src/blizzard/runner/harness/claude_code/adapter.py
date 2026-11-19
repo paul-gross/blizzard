@@ -34,6 +34,7 @@ from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.claude_code import telemetry
 from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.execution_stream import observe_stream, read_stream_snapshot
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.stdout_target import stdout_target
@@ -251,7 +252,7 @@ class ClaudeCodeAdapter:
             settings_argv=tuple(self.settings_args()),
             permission_override=self._permission_override,
             telemetry=self._harness_telemetry,
-            harness_id="claude_code",
+            harness_id=CLAUDE_CODE_HARNESS_ID,
             transcript_root=self._transcript_root,
             bundle_path=self._bundle_path,
             model_aliases=tuple(self._model_aliases.items()),

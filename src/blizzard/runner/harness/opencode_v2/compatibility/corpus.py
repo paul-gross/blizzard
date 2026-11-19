@@ -10,6 +10,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.runner.harness.json_value import JsonObject, JsonValue
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.compatibility.rows import DECLARED_DEGRADATIONS, ProofReport, classify_row
 
 #: Keys whose values may carry a credential: a model's provider ``settings`` can hold an API key.
@@ -95,7 +96,7 @@ class ProofEvidence:
 
     def manifest(self, report: ProofReport, fixtures: list[JsonValue], *, model: str) -> JsonObject:
         return {
-            "harness": "opencode",
+            "harness": OPENCODE_HARNESS_ID,
             "major_version": 2,
             "version": report.observed_version,
             "admitted_range": report.admitted_range,
