@@ -178,6 +178,14 @@ module.exports = defineConfig([
           selector: "Element[name=/^(button|select|input)$/]",
           message: "Use the fleet kit control; explain a genuinely distinct native interaction in an element-level ESLint suppression.",
         },
+        {
+          selector: "Interpolation > PropertyRead[name=/_at$/]",
+          message: "A wire instant renders through <fleet-when [iso]> or a formatter, never as a raw ISO string.",
+        },
+        {
+          selector: "BoundAttribute[name='title'] > ASTWithSource > PropertyRead[name=/_at$/]",
+          message: "A wire instant's tooltip comes from <fleet-when> or formatAbsolute, never a raw ISO string.",
+        },
       ],
     },
   },

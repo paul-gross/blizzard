@@ -22,7 +22,7 @@
   <app-config-revisions [rows]="revisions()" [state]="historyState()" testidPrefix="hub-settings" />
   @for (change of changes(); track change.id) {
     <article><h3>Revision {{ change.revision }} · {{ change.op }}</h3>
-      <p>{{ change.recorded_at }} · {{ change.actor }} via {{ change.door }}</p>
+      <p><fleet-when [iso]="change.recorded_at" /> · {{ change.actor }} via {{ change.door }}</p>
       <app-config-field-diff [diff]="change.diff" />
     </article>
   }

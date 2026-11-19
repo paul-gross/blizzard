@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { type KitAsyncStateValue, asyncState, injectNowSignal, injectRunnerHostNames, ViewportService } from 'fleet';
+import { type KitAsyncStateValue, asyncState, injectRunnerHostNames, ViewportService } from 'fleet';
 import { injectQueryFilters } from '../core/route-state';
 import { injectHubHostsQuery } from '../core/hosts.query';
 import { EventsView } from './events-view';
@@ -34,7 +34,6 @@ export class EventsPanel {
   protected readonly runnerId = computed(() => this.filters.read('runner'));
   private readonly filters = injectQueryFilters();
   protected readonly runnerHosts = injectRunnerHostNames();
-  protected readonly now = injectNowSignal();
   protected readonly viewport = inject(ViewportService);
   private readonly hostsQuery = injectHubHostsQuery();
   protected readonly hostMemberships = computed(() => this.hostsQuery.data() ?? []);

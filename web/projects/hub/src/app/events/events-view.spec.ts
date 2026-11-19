@@ -16,7 +16,6 @@ describe('EventsView', () => {
       id: 12, kind: 'lease-minted', severity: 'info', recorded_at: '2026-07-16T00:00:00Z',
       runner_id: 'rn_01', chunk_id: 'ch_1234', message: 'Lease minted',
     })]);
-    fixture.componentRef.setInput('now', Date.parse('2026-07-16T00:01:00Z'));
     fixture.componentRef.setInput('state', state);
     fixture.componentRef.setInput('mobile', mobile);
     fixture.componentRef.setInput('hosts', [{ host_id: 'host_01', runner_ids: ['rn_01'] }]);
