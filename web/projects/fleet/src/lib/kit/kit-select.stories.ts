@@ -42,6 +42,7 @@ const meta: Meta<KitSelect> = {
     options: OPTIONS,
     selectedValue: 'gardening',
     disabled: false,
+    wrapOptions: false,
     ariaLabel: 'Routine',
     label: null,
     testid: null,
@@ -49,7 +50,7 @@ const meta: Meta<KitSelect> = {
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-select [options]="options" [selectedValue]="selectedValue" [disabled]="disabled" [ariaLabel]="ariaLabel" [label]="label" [testid]="testid" (choose)="choose($event)" />`,
+    template: `<fleet-kit-select [options]="options" [selectedValue]="selectedValue" [disabled]="disabled" [wrapOptions]="wrapOptions" [ariaLabel]="ariaLabel" [label]="label" [testid]="testid" (choose)="choose($event)" />`,
   }),
 };
 export default meta;
@@ -76,9 +77,29 @@ export const LongValueTruncating: Story = {
     props: args,
     template: `
       <div style="width: 180px">
-        <fleet-kit-select [options]="options" [selectedValue]="selectedValue" [disabled]="disabled" [ariaLabel]="ariaLabel" [label]="label" [testid]="testid" (choose)="choose($event)" />
+        <fleet-kit-select [options]="options" [selectedValue]="selectedValue" [disabled]="disabled" [wrapOptions]="wrapOptions" [ariaLabel]="ariaLabel" [label]="label" [testid]="testid" (choose)="choose($event)" />
       </div>`,
   }),
+};
+/** Open the popup to see long labels wrap within the viewport. */
+export const WrappedOptions: Story = {
+  args: {
+    wrapOptions: true,
+    options: [
+      { value: 'short', label: 'Short option' },
+      { value: 'long', label: 'A routine with a long name that needs to remain readable in the popup at narrow widths' },
+      { value: 'unbroken', label: 'an-extremely-long-unbroken-option-name-that-must-also-remain-readable-within-the-viewport' },
+    ],
+    selectedValue: 'long',
+  },
+};
+export const WrappedOptionsPhone: Story = {
+  ...WrappedOptions,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const WrappedOptionsPhoneSmall: Story = {
+  ...WrappedOptions,
+  globals: { viewport: { value: 'phone-sm', isRotated: false } },
 };
 /** Open the list by hand: forty options scroll inside the popup. */
 export const ManyOptions: Story = {
