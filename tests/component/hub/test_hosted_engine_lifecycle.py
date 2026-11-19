@@ -328,3 +328,92 @@ def test_owned_oauth_client_closes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         with TestClient(app):
             assert not clients[0].is_closed
     assert len(clients) == 1 and clients[0].is_closed
+
+
+@pytest.mark.parametrize("phase", ["acquire", "seed", "bind", "construct", "serve"])
+def test_host_failure_releases_resources_in_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str) -> None:
+    from blizzard.hub.settings.service import HubSettingsAuthoring
+
+    root = tmp_path / "hub"
+    init_hub(root)
+    events: list[str] = []
+    connections: list[sqlite3.Connection] = []
+    original_open = hub_cli.open_hub_store
+    original_stop = ActionLoop.stop
+
+    class Tracing(DisabledPlatformTracing):
+        def shutdown(self, timeout: float) -> None:
+            events.append("tracing")
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError(f"{phase} failed")
+
+    def tracing(*args: object, **kwargs: object) -> Tracing:
+        return Tracing()
+
+    def ignore_signal(*args: object) -> None:
+        pass
+
+    def open_store(url: str, tracing: IPlatformTracing) -> tuple[Engine, HubStoreConnections]:
+        if phase == "acquire":
+            fail()
+        engine, store_connections = original_open(url, tracing)
+        connections.append(_pooled_connection(engine))
+        dispose = engine.dispose
+
+        def close() -> None:
+            events.append("dispose")
+            dispose()
+
+        monkeypatch.setattr(engine, "dispose", close)
+        return engine, store_connections
+
+    def stop(loop: ActionLoop) -> None:
+        connections[0].execute("SELECT 1")
+        original_stop(loop)
+        events.append("stop")
+
+    monkeypatch.setattr(hub_cli, "build_platform_tracing", tracing)
+    monkeypatch.setattr(hub_cli, "open_hub_store", open_store)
+    monkeypatch.setattr(ActionLoop, "stop", stop)
+    if phase == "seed":
+        monkeypatch.setattr(HubSettingsAuthoring, "seed", fail)
+    elif phase == "bind":
+        monkeypatch.setattr(hub_cli, "bound_tcp", fail)
+    elif phase == "construct":
+        monkeypatch.setattr(hub_app, "create_app", fail)
+    elif phase == "serve":
+
+        class Server:
+            def run(self, *, sockets: object) -> None:
+                with TestClient(apps[0]):
+                    connections[0].execute("SELECT 1")
+                    events.append("user")
+                events.append("lifespan finished")
+                fail()
+
+        apps: list[FastAPI] = []
+
+        def server(app: FastAPI, **kwargs: object) -> Server:
+            apps.append(app)
+            return Server()
+
+        monkeypatch.setattr(hub_cli, "build_early_shutdown_server", server)
+        monkeypatch.setattr(hub_cli.signal, "signal", ignore_signal)
+
+    result = CliRunner().invoke(blizzard, ["hub", "host", "--dir", str(root), "--port", "0"])
+    assert isinstance(result.exception, RuntimeError)
+    assert str(result.exception) == f"{phase} failed"
+    if phase == "acquire":
+        assert events == ["tracing"]
+        assert not connections
+    else:
+        assert events[-2:] == ["dispose", "tracing"]
+        assert len(connections) == 1
+        _assert_closed(connections[0])
+        if phase == "construct":
+            assert events == ["stop", "dispose", "tracing"]
+        elif phase == "serve":
+            assert events == ["user", "stop", "lifespan finished", "dispose", "tracing"]
+        else:
+            assert events == ["dispose", "tracing"]
