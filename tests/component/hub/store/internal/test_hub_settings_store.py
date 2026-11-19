@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
-from blizzard.foundation.settings_record.vocabulary import Change, Entry
+from blizzard.foundation.settings_record.vocabulary import Change, Entry, FieldChange
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.schema import hub_setting_changes
@@ -43,7 +43,7 @@ def test_admin_reads_use_one_query_with_entries_and_paginated_history(tmp_path: 
     assert "LIMIT" in statement
     assert parameters[0] == 2  # limit + 1
     assert any(row.detail == "SCAN hub_setting_changes" for row in explain_query_plan(engine, statement, parameters))
-    assert [row["revision"] for row in page] == [2]
+    assert [row.revision for row in page] == [2]
     assert cursor == 2
     assert count_queries(engine, lambda: store.changes(limit=1, before=cursor)) == 1
     with capture_statements(engine) as statements:
@@ -53,8 +53,29 @@ def test_admin_reads_use_one_query_with_entries_and_paginated_history(tmp_path: 
         "SEARCH hub_setting_changes USING INTEGER PRIMARY KEY (rowid<?)" in row.detail
         for row in explain_query_plan(engine, statement, parameters)
     )
-    assert [row["revision"] for row in page] == [1]
+    assert [row.revision for row in page] == [1]
     assert cursor is None
+
+
+def test_changes_read_back_as_domain_entries_with_typed_diffs(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    store = HubSettingsStore(hub_level_connections(engine), FixedClock(now), lambda _: {})
+    store.apply(Change("edit", sets={"x": 1}), if_match=0, door="api", actor="first")
+    store.apply(Change("edit", sets={"x": 2}), if_match=1, door="cli", actor="second")
+    store.apply(Change("edit", unsets=frozenset({"x"})), if_match=2, door="page", actor="third")
+
+    page, _ = store.changes(limit=10, before=None)
+
+    assert [(c.revision, c.actor, c.door, c.op, c.recorded_at) for c in page] == [
+        (3, "third", "page", "edit", now),
+        (2, "second", "cli", "edit", now),
+        (1, "first", "api", "edit", now),
+    ]
+    assert page[2].diff == (FieldChange("x", None, Entry(1)),)
+    assert page[1].diff == (FieldChange("x", Entry(1), Entry(2)),)
+    (unset,) = page[0].diff
+    assert unset.old == Entry(2) and unset.new.at_default
 
 
 def test_write_audit_conflict_and_reader_cache(tmp_path: Path) -> None:

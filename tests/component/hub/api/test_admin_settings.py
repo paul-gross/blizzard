@@ -200,6 +200,20 @@ def test_apply_diff_resolves_defaults_for_absent_and_unset_entries(tmp_path: Pat
     assert (diff["field"], diff["old"], diff["new"]) == ("action_pass_seconds", 300, 6)
 
 
+def test_changes_resolve_absent_and_at_default_sides_to_effective_values(tmp_path: Path) -> None:
+    client = _hub(tmp_path).client
+    path = "/api/admin/settings"
+    assert client.post(path + "/apply", json={"action_pass_seconds": 5}).status_code == 200
+    assert client.patch(path, headers={"If-Match": "1"}, json={"unset": ["action_pass_seconds"]}).status_code == 200
+    unset, applied = client.get(path + "/changes").json()["changes"]
+    assert applied["diff"] == [
+        {"field": "action_pass_seconds", "old": 300, "new": 5, "old_label": None, "new_label": None}
+    ]
+    assert unset["diff"] == [
+        {"field": "action_pass_seconds", "old": 5, "new": 300, "old_label": None, "new_label": None}
+    ]
+
+
 def test_transcript_caps_show_effective_defaults_and_overrides(tmp_path: Path) -> None:
     client = _hub(tmp_path).client
     path = "/api/admin/settings"

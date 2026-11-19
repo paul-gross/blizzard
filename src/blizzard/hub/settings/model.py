@@ -9,7 +9,7 @@ from typing import Protocol
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
+from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
 
 
 @domain_model
@@ -31,6 +31,20 @@ class HubSettingsApply:
     apply_id: str | None = None
 
 
+@domain_model
+@dataclass(frozen=True)
+class HubSettingsChangeEntry:
+    """One recorded settings change, read back: what moved, by whom, through which door."""
+
+    revision: int
+    recorded_at: datetime
+    actor: str
+    door: Door
+    op: Op
+    apply_id: str | None
+    diff: tuple[FieldChange, ...]
+
+
 class IHubSettingsSnapshots(Protocol):
     def snapshot(self) -> HubSettingsSnapshot: ...
 
@@ -42,7 +56,7 @@ class IReadHubSettings(IHubSettingsSnapshots, Protocol):
 class IReadHubSettingsAdmin(Protocol):
     def view(self) -> tuple[HubSettingsSnapshot, dict[str, tuple[int, datetime, str]]]: ...
 
-    def changes(self, limit: int, before: int | None) -> tuple[list[dict[str, object]], int | None]: ...
+    def changes(self, limit: int, before: int | None) -> tuple[list[HubSettingsChangeEntry], int | None]: ...
 
 
 class IWriteHubSettings(Protocol):

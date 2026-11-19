@@ -8,9 +8,9 @@ from typing import Annotated, Any, NoReturn, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from blizzard.foundation.config_keys import TABLE, Lifetime
+from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
-from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry
+from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
@@ -91,6 +91,14 @@ def _invalid(exc: SettingsInvalid) -> NoReturn:
     _refuse(settings_invalid_problem, str(exc), exc.errors)
 
 
+def _field_view(registry: ConfigRegistry, field: FieldChange) -> FieldChangeView:
+    """A moved field with absent and at-default sides resolved to the value in force; a key no longer declared has no
+    default to resolve to."""
+    declaration = registry.key(field.key)
+    default = _default(field.key, declaration.default if declaration is not None else None)
+    return FieldChangeView(field=field.key, old=_effective(field.old, default), new=_effective(field.new, default))
+
+
 def _effective(entry: Entry | None, default: object) -> object:
     return thaw(default if entry is None or entry.at_default else entry.value)
 
@@ -142,7 +150,23 @@ def changes(
     before: Annotated[int | None, Query(ge=1)] = None,
 ) -> HubSettingsChanges:
     rows, next_before = settings.store.changes(limit, before)
-    return HubSettingsChanges(changes=[HubSettingsChange.model_validate(row) for row in rows], next_before=next_before)
+    registry = settings.footing.key_registry
+    return HubSettingsChanges(
+        changes=[
+            HubSettingsChange(
+                id=row.revision,
+                revision=row.revision,
+                recorded_at=iso_utc(row.recorded_at),
+                actor=row.actor,
+                door=row.door,
+                op=row.op,
+                apply_id=row.apply_id,
+                diff=[_field_view(registry, field) for field in row.diff],
+            )
+            for row in rows
+        ],
+        next_before=next_before,
+    )
 
 
 def _document(settings: HubSettingsGraph, document: dict[str, object]) -> dict[str, object]:
@@ -179,23 +203,12 @@ def apply_document(
     outcomes: list[ConfigApplyOutcome] = []
     for key in entries:
         field = moved.get(key)
-        declaration = settings.footing.key_registry.key(key)
-        assert declaration is not None
-
         outcomes.append(
             ConfigApplyOutcome(
                 kind="hub",
                 key=key,
                 op="edit" if field else "unchanged",
-                diff=[
-                    FieldChangeView(
-                        field=key,
-                        old=_effective(field.old, _default(key, declaration.default)),
-                        new=_effective(field.new, _default(key, declaration.default)),
-                    )
-                ]
-                if field
-                else [],
+                diff=[_field_view(settings.footing.key_registry, field)] if field else [],
             )
         )
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=outcomes)

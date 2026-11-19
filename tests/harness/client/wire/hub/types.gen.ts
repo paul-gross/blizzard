@@ -9854,9 +9854,7 @@ export type HubSettingsChange = {
     /**
      * Diff
      */
-    diff: Array<{
-        [key: string]: unknown;
-    }>;
+    diff: Array<FieldChangeView>;
     door: Door;
     /**
      * Id

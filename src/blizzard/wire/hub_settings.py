@@ -11,6 +11,7 @@ from blizzard.foundation.hub_setting_source import HubSettingSource
 from blizzard.foundation.settings_record.vocabulary import Door, Op
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.config import FieldChangeView
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
@@ -44,7 +45,7 @@ class HubSettingsChange(WireModel):
     door: Annotated[Door | Unrecognized, OPEN]
     op: Annotated[Op | Unrecognized, OPEN]
     apply_id: str | None
-    diff: list[dict[str, object]]
+    diff: list[FieldChangeView]
 
 
 class HubSettingsChanges(WireModel):

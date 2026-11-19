@@ -16452,8 +16452,7 @@
           },
           "diff": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/FieldChangeView"
             },
             "title": "Diff",
             "type": "array"

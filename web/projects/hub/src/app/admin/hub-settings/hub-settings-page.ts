@@ -24,7 +24,7 @@ export class HubSettingsPage {
   protected readonly busy = computed(() => this.mutation.isPending() || this.settings.isFetching());
   protected edit(row: HubSettingRow): void {
     const revision = this.settings.data()?.revision;
-    if (this.busy() || revision === undefined || row.lifetime !== 'pass') return;
+    if (this.busy() || revision === undefined) return;
     this.editing.set({ row, revision }); this.value.set(display(row.value)); this.failure.set(null);
   }
   protected cancel(): void { if (!this.busy()) this.editing.set(null); }
