@@ -1,70 +1,67 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { type FieldTree, FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 
 import {
   FleetWhen,
-  hubApi,
   KitAsyncState,
   KitButton,
   KitDialog,
+  KitErrorLine,
+  KitField,
   KitOption,
-  KitPanel,
+  KitOptionGroup,
+  KitSelect,
   KitTextInput,
   type KitAsyncStateValue,
   type RoutineBaselineView,
   type RoutineRunResponse,
   type ScopeView,
-  KitErrorLine,
-  KitSelect,
   type UrgencyView,
 } from 'fleet';
-
-import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
 import { AppLink } from 'fleet/shell';
-import { urgencyOptions } from '../../core/urgency-options.model';
 
-/** What the view asks the container to do once the operator submits. */
-export interface RunSubmission {
-  readonly selection: ScopeSelection;
-  readonly mode: hubApi.RunMode;
-  readonly note: string | null;
-  readonly urgency?: string;
-}
+import type { RunDraft } from '../core/run.domain';
+import { urgencyOptions } from '../../core/urgency-options.model';
+import { GardeningRunScopeField } from './gardening-run-scope-field';
 
 /**
- * The gardening run dialog's presentational view — scope, mode, urgency, and charge note, the delta baseline display, the run
- * submission, and the post-run confirmation, all over inputs and outputs only. No query
- * or client dependency: the container injects the scope reads and the run mutation and
- * maps their async state into `state()`/`submitting()`/`submitError()`/`confirmedRun()`
- * (`bzh:frontend-container-presentational`).
+ * The gardening run dialog's presentational view — scope, mode, urgency, and charge note, the delta baseline display, the
+ * run action, and the post-run confirmation, all over inputs and outputs only. No query or client dependency: the
+ * container injects the scope reads and the run service, owns the draft and its rules, and maps their state into
+ * `form()`/`state()`/`submitting()`/`confirmedRun()` (`bzh:frontend-container-presentational`).
  *
- * Owns every field's live value as local signals — `scopeSelection`/`mode`/`note` —
- * scoped to this instance's lifetime, so a fresh mount starts from fresh values.
+ * Renders the field tree it is handed; a hub refusal arrives as errors on that tree — on a field, or on the root, which
+ * the footer shows.
  */
 @Component({
   selector: 'app-gardening-run-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FleetWhen,
+    FormField,
     GardeningRunScopeField,
     KitAsyncState,
     KitButton,
     KitDialog,
-    KitOption,
-    KitPanel,
-    KitTextInput,
-    RouterLink, AppLink,
     KitErrorLine,
+    KitField,
+    KitOption,
+    KitOptionGroup,
     KitSelect,
+    KitTextInput,
+    RouterLink,
+    AppLink,
   ],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',
 })
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
+  readonly form = input.required<FieldTree<RunDraft>>();
   readonly urgencies = input<readonly UrgencyView[]>([]);
   /** The urgency a run of the routine mints at when it names none; `null` when the hub could not resolve one. */
-  readonly effectiveUrgency = input<hubApi.UrgencyRef | null>(null);
+  readonly effectiveUrgency = input<{ urgency_id: string; slug: string } | null>(null);
 
   /** Every non-retired scope, previously-swept-by-this-routine first;
    * rendered in the order given. */
@@ -72,18 +69,14 @@ export class GardeningRunDialogView {
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
 
-  /** Every scope this routine has swept — looked up by the currently
-   * selected scope to resolve the delta baseline display and the delta-steering rule. */
-  readonly baselines = input.required<readonly RoutineBaselineView[]>();
+  /** The delta baseline for the chosen scope, or `undefined` for a never-swept pair or no choice yet — the one fact
+   * the baseline display and the delta option's availability rest on. */
+  readonly baseline = input<RoutineBaselineView | undefined>(undefined);
 
   /** The scope/baseline reads' combined async state — gates the form body. */
   readonly state = input.required<KitAsyncStateValue>();
 
   readonly submitting = input(false);
-
-  /** Set on a failed scope create or run (a surfaced refusal); `null` between
-   * attempts. */
-  readonly submitError = input<string | null>(null);
 
   /** The completed run, once submitted successfully — flips the dialog from the form
    * to the confirmation. */
@@ -91,58 +84,28 @@ export class GardeningRunDialogView {
 
   readonly closed = output<void>();
 
-  readonly runSubmitted = output<RunSubmission>();
+  /** Run pressed. */
+  readonly save = output<void>();
 
-  protected readonly scopeSelection = signal<ScopeSelection>(EMPTY_SCOPE_SELECTION);
-  protected readonly RunMode = hubApi.RunMode;
-  protected readonly mode = signal<hubApi.RunMode>(hubApi.RunMode.FULL);
-  protected readonly note = signal('');
-  protected readonly urgency = signal('');
+  protected readonly deltaAvailable = computed(() => this.baseline() !== undefined);
+
   protected readonly urgencyOptions = computed(() => {
     const ref = this.effectiveUrgency();
     const name = ref === null ? null : (this.urgencies().find((u) => u.urgency_id === ref.urgency_id)?.name ?? ref.slug);
     return urgencyOptions(this.urgencies(), { key: 'slug', retired: 'exclude', inherit: { label: 'Routine default', name } });
   });
 
-  /** The delta baseline for the currently selected scope, or `undefined` for a
-   * never-swept pair or no selection yet — it is the one fact both this
-   * display and {@link deltaAvailable} rest on. */
-  protected readonly selectedBaseline = computed<RoutineBaselineView | undefined>(() => {
-    const sel = this.scopeSelection();
-    if (!sel) return undefined;
-    return this.baselines().find((b) => b.scope_slug === sel);
-  });
+  protected readonly canSubmit = computed(() => !this.submitting() && this.state() === 'ready');
 
-  protected readonly deltaAvailable = computed(() => this.selectedBaseline() !== undefined);
+  /** What the hub refused the run with that no field owns. */
+  protected readonly formErrors = computed(() =>
+    this.form()()
+      .errors()
+      .map((error) => error.message || 'Run failed.'),
+  );
 
-  protected readonly canSubmit = computed(() => {
-    if (this.submitting() || this.state() !== 'ready') return false;
-    return this.scopes().some((scope) => scope.slug === this.scopeSelection());
-  });
-
-  constructor() {
-    // Defaults the picker to the first (previously-swept-first-ordered) scope the
-    // instant the read resolves — a bare empty selection otherwise leaves nothing
-    // checked until the operator acts.
-    effect(() => {
-      if (this.state() !== 'ready') return;
-      const scopes = this.scopes();
-      if (scopes.length > 0 && !scopes.some((scope) => scope.slug === this.scopeSelection())) {
-        this.scopeSelection.set(scopes[0].slug);
-      }
-    });
-    // The delta-steering rule: a scope that stops carrying a baseline — the
-    // operator switched to a never-swept or new one — steers back to full rather than
-    // leaving delta selected with nothing to run it against.
-    effect(() => {
-      if (!this.deltaAvailable() && this.mode() === hubApi.RunMode.DELTA) this.mode.set(hubApi.RunMode.FULL);
-    });
-  }
-
-  protected onSubmitClick(): void {
-    if (!this.canSubmit()) return;
-    const urgency = this.urgency();
-    this.runSubmitted.emit({ selection: this.scopeSelection(), mode: this.mode(), note: this.note().trim() || null, ...(urgency ? { urgency } : {}) });
+  protected onSaveClick(): void {
+    if (this.canSubmit()) this.save.emit();
   }
 
   /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one

@@ -1,0 +1,11 @@
+<app-gardening-run-dialog-view
+    [form]="runForm"
+    routineName="Nightly"
+    [scopes]="scopes()"
+    [sweptSlugs]="swept()"
+    [baseline]="baseline()"
+    [state]="state()"
+    [submitting]="submitting()"
+    [effectiveUrgency]="{ urgency_id: 'u', slug: 'urgent' }"
+    [urgencies]="urgencies()"
+  />

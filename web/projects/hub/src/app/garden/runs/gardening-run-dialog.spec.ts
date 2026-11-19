@@ -261,6 +261,54 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector('[data-testid="run-submit-error"]')).toBeNull();
   });
 
+  it('marks the scope required from the schema, and not the mode, urgency, or note', async () => {
+    const mounted = await mount();
+    stub = mounted.stub;
+    const required = (testid: string) => mounted.el.querySelector(`[data-testid="${testid}"] .req`) !== null;
+
+    expect(required('run-scope-field')).toBe(true);
+    expect(required('run-mode-field')).toBe(false);
+    expect(required('run-note-field')).toBe(false);
+  });
+
+  it('puts a refusal naming the scope on the scope field and keeps the dialog open for another try', async () => {
+    const mounted = await mount({
+      'POST /api/routines/{routine_id}/run': () =>
+        stubError(422, { detail: [{ loc: ['body', 'scope_slug'], msg: 'scope is retired', type: 'value_error' }] }),
+    });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="run-scope-field"]')?.textContent).toContain('scope is retired');
+    expect(el.querySelector('[data-testid="run-submit-error"]')).toBeNull();
+    expect(el.querySelector('[data-testid="run-confirmation"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-run-dialog"]')).not.toBeNull();
+  });
+
+  it('sends the chosen urgency and the trimmed note', async () => {
+    const mounted = await mount();
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+
+    const note = el.querySelector<HTMLTextAreaElement>('[data-testid="run-note-input"]')!;
+    note.value = '  look at login  ';
+    note.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toEqual({
+      scope_slug: 'web',
+      mode: 'full',
+      note: 'look at login',
+    });
+  });
+
   it('keeps a submitting run mounted through Escape, a backdrop click, and a disabled Cancel', async () => {
     // The run POST hangs until resolved below, so the mutation stays genuinely pending.
     let resolveRun!: (response: RoutineRunResponse) => void;

@@ -1,9 +1,12 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import type { RoutineBaselineView, ScopeView } from 'fleet';
+import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
+import { runRules } from './run.form';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
@@ -62,6 +65,13 @@ const BASELINES: RoutineBaselineView[] = [
   },
 ];
 
+/** The field tree the container hands the view, over `draft`. */
+function runForm(draft: Partial<RunDraft> = {}) {
+  return TestBed.runInInjectionContext(() =>
+    form(signal<RunDraft>({ ...EMPTY_RUN_DRAFT, scope: 'web', ...draft }), runRules(() => new Set(['web']), () => new Set())),
+  );
+}
+
 async function mount(width: number) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -72,7 +82,8 @@ async function mount(width: number) {
   fixture.componentRef.setInput('routineName', 'gardening');
   fixture.componentRef.setInput('scopes', SCOPES);
   fixture.componentRef.setInput('sweptSlugs', new Set(['web']));
-  fixture.componentRef.setInput('baselines', BASELINES);
+  fixture.componentRef.setInput('form', runForm());
+  fixture.componentRef.setInput('baseline', BASELINES[0]);
   fixture.componentRef.setInput('state', 'ready');
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

@@ -1,7 +1,7 @@
 import type { RoutineBaselineView, ScopeView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './gardening-run-dialog.model';
+import { baselineForScope, liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './gardening-run-dialog.model';
 
 function scope(slug: string, retired = false): ScopeView {
   return {
@@ -65,5 +65,14 @@ describe('orderScopesBySwept', () => {
 
   it('keeps the live order with no baselines', () => {
     expect(orderScopesBySwept([BETA, ALPHA], [], new Set())).toEqual([BETA, ALPHA]);
+  });
+});
+
+describe('baselineForScope', () => {
+  it('finds the scope\'s baseline, and none for a never-swept scope or no choice', () => {
+    const web = { scope_slug: 'web' } as RoutineBaselineView;
+    expect(baselineForScope([web], 'web')).toBe(web);
+    expect(baselineForScope([web], 'hub')).toBeUndefined();
+    expect(baselineForScope([web], '')).toBeUndefined();
   });
 });

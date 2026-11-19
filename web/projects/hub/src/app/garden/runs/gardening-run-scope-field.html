@@ -1,25 +1,17 @@
-<fleet-kit-panel class="scope-field" data-testid="run-scope-field" aria-label="Scope" label="Scope">
-  <div class="body">
-    <div role="radiogroup" aria-label="Scope">
-      @for (scope of scopes(); track scope.slug) {
-        <fleet-kit-option
-          alignTop
-          name="run-scope"
-          [checked]="selection() === scope.slug"
-          (changed)="selectExisting(scope.slug)"
-          [testid]="'run-scope-option-' + scope.slug"
-        >
-          <span class="opt-body">
-            <span class="opt-slug">{{ scope.slug }}</span>
-            @if (isSweptSlug(scope.slug)) {
-              <fleet-kit-badge data-testid="run-scope-swept-badge" tone="spawning">previously swept</fleet-kit-badge>
-            }
-            @if (scope.description) {
-              <span class="opt-desc">{{ scope.description }}</span>
-            }
-          </span>
-        </fleet-kit-option>
-      }
-    </div>
-  </div>
-</fleet-kit-panel>
+<fleet-kit-field class="scope-field" data-testid="run-scope-field" label="Scope" [field]="field()">
+  <fleet-kit-option-group [formField]="field()">
+    @for (scope of scopes(); track scope.slug) {
+      <fleet-kit-option alignTop [value]="scope.slug" [testid]="'run-scope-option-' + scope.slug">
+        <span class="opt-body">
+          <span class="opt-slug">{{ scope.slug }}</span>
+          @if (isSweptSlug(scope.slug)) {
+            <fleet-kit-badge data-testid="run-scope-swept-badge" tone="spawning">previously swept</fleet-kit-badge>
+          }
+          @if (scope.description) {
+            <span class="opt-desc">{{ scope.description }}</span>
+          }
+        </span>
+      </fleet-kit-option>
+    }
+  </fleet-kit-option-group>
+</fleet-kit-field>

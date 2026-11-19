@@ -1,8 +1,18 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { form } from '@angular/forms/signals';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { ScopeView } from 'fleet';
-import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dialog-view';
+import { EMPTY_RUN_DRAFT, type RunDraft } from '../core/run.domain';
+import { runRules } from './run.form';
+import { GardeningRunDialogView } from './gardening-run-dialog-view';
+
+/** The field tree the container hands the view, over `draft`. */
+function runForm(draft: Partial<RunDraft> = {}) {
+  return TestBed.runInInjectionContext(() =>
+    form(signal<RunDraft>({ ...EMPTY_RUN_DRAFT, scope: 'web', ...draft }), runRules(() => new Set(['web']), () => new Set())),
+  );
+}
 
 describe('GardeningRunDialogView read states', () => {
   it('blocks submission if a ready read becomes loading, error, or empty', async () => {
@@ -11,11 +21,11 @@ describe('GardeningRunDialogView read states', () => {
     fixture.componentRef.setInput('routineName', 'nightly');
     fixture.componentRef.setInput('scopes', [{ slug: 'web', description: 'web' } as ScopeView]);
     fixture.componentRef.setInput('sweptSlugs', new Set());
-    fixture.componentRef.setInput('baselines', []);
+    fixture.componentRef.setInput('form', runForm());
     fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
-    const submissions: RunSubmission[] = [];
-    fixture.componentInstance.runSubmitted.subscribe((value) => submissions.push(value));
+    let submissions = 0;
+    fixture.componentInstance.save.subscribe(() => (submissions += 1));
     const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
     expect(button.disabled).toBe(false);
     for (const state of ['loading', 'error', 'empty']) {
@@ -24,10 +34,10 @@ describe('GardeningRunDialogView read states', () => {
       expect(button.disabled).toBe(true);
       button.click();
     }
-    expect(submissions).toEqual([]);
+    expect(submissions).toBe(0);
     fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     button.click();
-    expect(submissions).toHaveLength(1);
+    expect(submissions).toBe(1);
   });
 });
