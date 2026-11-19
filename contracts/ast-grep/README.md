@@ -18,6 +18,10 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
   `refusal_of` (a status read under `RunnerDaemon.reach`, which answers no hub refusal, is excluded), and a `$R.json()`
   re-read inside an `if` whose condition calls `refusal_of($R)`. Scoped to the three CLI trees, with the adapter module
   ignored. Its prose home is `blizzard-context:/architecture/system-shape/fleet-wire.md`.
+- **`bzh:hub-cli-answer-decoded`** (`rules/hub-cli-answer-decoded.yml`) — a hub CLI verb reads the hub's success answer
+  through the tree's decoder, validated against the route's response model, and never calls `.json()` itself. Scoped to
+  `src/blizzard/hub/cli/`; the runner and dev CLI trees read through `decode_answer` by their own wrappers. Its prose
+  home is `blizzard-context:/architecture/system-shape/fleet-wire.md`.
 - **`bzh:domain-takes-objects`** (`rules/domain-takes-objects.yml`) — a domain operation takes an already-loaded object,
   never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope` boundary, is
   `blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects`; this

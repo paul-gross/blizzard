@@ -1,0 +1,16 @@
+id: bzh:hub-cli-answer-decoded
+snapshots:
+  ? |
+    body = cli.get(path, operation).json()
+  : labels:
+    - source: cli.get(path, operation).json()
+      style: primary
+      start: 7
+      end: 38
+  ? |
+    rows = resp.json()["rows"]
+  : labels:
+    - source: resp.json()
+      style: primary
+      start: 7
+      end: 18

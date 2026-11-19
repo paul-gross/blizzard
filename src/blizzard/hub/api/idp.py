@@ -37,6 +37,7 @@ from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.domain.runners.federation import FederationClient, UnknownFederationClient
+from blizzard.wire.cli_token import CliTokenResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -307,12 +308,6 @@ class CliTokenRequest(BaseModel):
     code: str
     code_verifier: str
     redirect_uri: str
-
-
-class CliTokenResponse(BaseModel):
-    """The minted hub session token — never a runner-style JWT."""
-
-    token: str
 
 
 @router.post("/cli/token", response_model=CliTokenResponse)

@@ -15,6 +15,9 @@ from blizzard.wire.config import FieldChangeView
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
+#: ``GET /api/admin/settings/export``: the hub's non-default pass-lifetime settings as a nested TOML-shaped document.
+SettingsExportDocument = dict[str, object]
+
 
 class HubSettingRow(WireModel):
     key: str

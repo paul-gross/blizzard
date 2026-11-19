@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:hub-cli-answer-decoded
+language: Python
+severity: error
+message: >-
+  A hub CLI verb reads the hub's success answer through the tree's decoder, `CliContext.decode` over
+  `blizzard.cli.answer.decode_answer`, validated against the route's served response model — never a raw `.json()` read
+  that indexes the body, whose skew surfaces as a traceback (bzh:clients-decode-answers). `--json` prints the raw body
+  the decoder returns.
+files:
+  - src/blizzard/hub/cli/**
+ignores:
+  - src/blizzard/hub/cli/admin.py
+  - src/blizzard/hub/cli/admin_settings.py
+  - src/blizzard/hub/cli/analytics.py
+  - src/blizzard/hub/cli/cadence.py
+  - src/blizzard/hub/cli/chunk.py
+  - src/blizzard/hub/cli/config.py
+  - src/blizzard/hub/cli/credential.py
+  - src/blizzard/hub/cli/decision.py
+  - src/blizzard/hub/cli/egress.py
+  - src/blizzard/hub/cli/events.py
+  - src/blizzard/hub/cli/finding.py
+  - src/blizzard/hub/cli/flag_gate.py
+  - src/blizzard/hub/cli/flow.py
+  - src/blizzard/hub/cli/forge.py
+  - src/blizzard/hub/cli/garden_proposal.py
+  - src/blizzard/hub/cli/garden_run.py
+  - src/blizzard/hub/cli/graph.py
+  - src/blizzard/hub/cli/invite.py
+  - src/blizzard/hub/cli/item.py
+  - src/blizzard/hub/cli/member.py
+  - src/blizzard/hub/cli/project.py
+  - src/blizzard/hub/cli/question.py
+  - src/blizzard/hub/cli/queue.py
+  - src/blizzard/hub/cli/repo.py
+  - src/blizzard/hub/cli/routine.py
+  - src/blizzard/hub/cli/runner_host.py
+  - src/blizzard/hub/cli/runner.py
+  - src/blizzard/hub/cli/scope.py
+  - src/blizzard/hub/cli/secret.py
+  - src/blizzard/hub/cli/settings.py
+  - src/blizzard/hub/cli/source.py
+  - src/blizzard/hub/cli/status.py
+  - src/blizzard/hub/cli/tenant.py
+  - src/blizzard/hub/cli/traces.py
+  - src/blizzard/hub/cli/urgency.py
+rule:
+  pattern: $R.json()

@@ -9,14 +9,18 @@ import secrets
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast
 from urllib.parse import parse_qs, urlencode, urlparse
+
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import ClientFactory
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.pkce import Pkce
+from blizzard.hub.cli.context import decode_answer
+from blizzard.wire.cli_token import CliTokenResponse
 
 _CLIENT_ID = "cli"
+_CLI_TOKEN = TypeAdapter(CliTokenResponse)
 _LOOPBACK_HOST = "127.0.0.1"
 #: The paste-code fallback's out-of-band redirect — its own literal, so this client module imports no server module.
 OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
@@ -135,11 +139,10 @@ class Login:
             raise LoginError(
                 "the hub rejected the login exchange — the code, PKCE verifier, or redirect_uri did not match"
             )
-        body: object = resp.json()
-        token = cast(dict[str, object], body).get("token") if isinstance(body, dict) else None
-        if not isinstance(token, str) or not token:
+        _, answer = decode_answer(resp, _CLI_TOKEN, operation="POST /auth/cli/token", hub_url=self.base_url)
+        if not answer.token:
             raise LoginError("the hub's login exchange response carried no token")
-        return token
+        return answer.token
 
 
 @collaborator

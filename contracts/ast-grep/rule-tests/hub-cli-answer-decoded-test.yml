@@ -1,0 +1,13 @@
+id: bzh:hub-cli-answer-decoded
+valid:
+  # The decoder returns the raw body and the validated value.
+  - |
+    raw, value = cli.decode(resp, TypeAdapter(ChunkView), "GET /chunks/{id}")
+  # A mapping read that is not a response body.
+  - |
+    value = json.dumps(payload)
+invalid:
+  - |
+    rows = resp.json()["rows"]
+  - |
+    body = cli.get(path, operation).json()

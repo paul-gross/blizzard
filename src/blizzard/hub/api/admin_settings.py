@@ -29,6 +29,7 @@ from blizzard.wire.hub_settings import (
     HubSettingsChanges,
     HubSettingsView,
     HubSettingsWrite,
+    SettingsExportDocument,
 )
 from blizzard.wire.problem import ProblemDetails
 
@@ -202,9 +203,9 @@ def apply_document(
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=outcomes)
 
 
-@router.get("/export", response_model=dict[str, object])
-def export_document(identity: Admin, settings: Settings) -> dict[str, object]:
-    document: dict[str, object] = {}
+@router.get("/export", response_model=SettingsExportDocument)
+def export_document(identity: Admin, settings: Settings) -> SettingsExportDocument:
+    document: SettingsExportDocument = {}
     for key, entry in settings.reader.snapshot().entries.items():
         declaration = settings.footing.key_registry.key(key)
         if declaration is not None and declaration.lifetime == Lifetime.PASS and not entry.at_default:
