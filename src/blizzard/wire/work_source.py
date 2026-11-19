@@ -84,7 +84,8 @@ class WorkSourcePatchRequest(MovedFieldsRequest):
     locator: str | None = None
     forge: str | None = None
     annotate: bool | None = None
-    #: Re-points the source at a credential, by id or slug.
+    #: Re-points the source at a credential, by id or slug; an explicit ``null`` clears it only on a provider that
+    #: needs none, and is refused on any other.
     credential: str | None = None
     #: Deprecated: a secret, resolved as on create — send ``credential``.
     secret: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)

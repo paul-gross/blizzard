@@ -44,6 +44,12 @@ KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 #: Providers whose items cannot be read without a credential.
 PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})
 
+
+def may_act_without_credential(provider: str) -> bool:
+    """Whether a work source of ``provider`` may read its tracker with no credential, so a write may clear it."""
+    return provider not in PROVIDERS_NEEDING_CREDENTIAL
+
+
 #: The credential bindings each provider can act with; a provider absent here acts with none.
 PROVIDER_BINDINGS: Mapping[str, frozenset[str]] = {"github": frozenset({"github.token", "github.app-installation"})}
 
@@ -299,7 +305,7 @@ class WorkSourceEdit:
     forge_id: ForgeId | UnsetType = UNSET
     annotate: bool | UnsetType = UNSET
     secret: str | None | UnsetType = UNSET
-    credential_id: CredentialId | UnsetType = UNSET
+    credential_id: CredentialId | None | UnsetType = UNSET
 
 
 def is_built_in(key: str) -> bool:

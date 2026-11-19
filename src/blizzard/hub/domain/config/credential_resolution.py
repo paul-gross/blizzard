@@ -45,10 +45,11 @@ _FALLBACK_SLUG = "credential"
 @domain_model
 @dataclass(frozen=True)
 class CredentialChoice:
-    """What a write says about its credential: ``credential`` names one by id or slug, :data:`UNSET` when the write
-    left it out, and ``named`` is the credential the edge resolved that reference to — ``None`` when it names none."""
+    """What a write says about its credential: ``credential`` names one by id or slug, ``None`` when the write clears
+    it, :data:`UNSET` when the write left it out, and ``named`` is the credential the edge resolved that reference to —
+    ``None`` when it names none."""
 
-    credential: str | UnsetType = UNSET
+    credential: str | None | UnsetType = UNSET
     named: ConfiguredCredential | None = None
 
 
@@ -57,10 +58,12 @@ class CredentialChoice:
 class CredentialDecision:
     """The old-field table's row for one write. ``use`` is the credential it names (rows 1 and 2); ``resolve`` is the
     old field's secret, to resolve to the ``github.token`` credential reading it on the record's forge (row 4). Neither
-    is the write leaving the credential as stored — sending no old field, or one equal to the record's (row 3)."""
+    is the write leaving the credential as stored — sending no old field, or one equal to the record's (row 3) — unless
+    ``clear``: an edit leaving a record that may act with no credential without one."""
 
     use: ConfiguredCredential | None = None
     resolve: str | None = None
+    clear: bool = False
 
 
 def decide_credential(
@@ -70,17 +73,29 @@ def decide_credential(
     current: str | None | UnsetType,
     field: str,
     required: bool,
+    clearable: bool = False,
     forge_moved: bool = False,
 ) -> CredentialDecision:
     """The row of the old-field table a write falls in. ``old_field`` is the old ``field`` the write sent —
     :data:`UNSET` when it sent none — and ``current`` the stored record's, :data:`UNSET` for a create; ``required`` is
     whether a create must name a credential one way or the other. An edit moving the record to another forge
-    (``forge_moved``) reads no old field as the record's own: the record's credential is of the forge it leaves.
+    (``forge_moved``) reads no old field as the record's own: the record's credential is of the forge it leaves. A clear
+    on a create is no choice; on an edit it is the clear outcome when the record is ``clearable`` — it may act with no
+    credential.
 
     :class:`CredentialUnavailable` for a named credential unknown or retired; :class:`CredentialConflict` for an old
     field sent beside it that is not its ``github.token`` secret; :class:`ConfigFieldError` on ``credential`` for a
-    ``required`` create naming neither."""
-    if choice.credential is not UNSET:
+    ``required`` create naming neither or a clear of a record not ``clearable``; :class:`CredentialConflict` for a clear
+    sent beside an old field naming a secret."""
+    if choice.credential is None and current is not UNSET:
+        if not clearable:
+            raise ConfigFieldError(CREDENTIAL_FIELD, "this record needs a credential, so it cannot be cleared")
+        if old_field is not UNSET and old_field is not None:
+            raise CredentialConflict(
+                field, f"{old_field} names a secret, but the credential is cleared; send one of them"
+            )
+        return CredentialDecision(clear=True)
+    if isinstance(choice.credential, str):
         named = available_credential(choice.credential, choice.named)
         if old_field is not UNSET and (
             named.fields.binding != OLD_FIELD_BINDING or old_field != named.fields.secret_name

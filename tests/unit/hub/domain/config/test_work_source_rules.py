@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
+from blizzard.hub.domain.config.credential_naming import CredentialId
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.work_sources import (
@@ -18,6 +19,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceName,
     WorkSourceSlug,
     diff,
+    may_act_without_credential,
     merge,
     validate_fields,
 )
@@ -127,6 +129,17 @@ def test_an_explicit_none_clears_a_nullable_field_and_an_absent_one_is_left() ->
     assert merged.secret is None
     assert merged.annotate is True
     assert merged.locator == _FIELDS.locator
+
+
+def test_a_cleared_credential_clears_the_credential_and_its_mirrored_secret() -> None:
+    linked = replace(_FIELDS, credential_id=CredentialId("crd_deploy"))
+    merged = merge(linked, WorkSourceEdit(credential_id=None, secret=None))
+    assert (merged.credential_id, merged.secret) == (None, None)
+
+
+def test_only_a_provider_needing_no_credential_may_act_without_one() -> None:
+    assert not may_act_without_credential("github")
+    assert may_act_without_credential("anonymous")
 
 
 @pytest.mark.parametrize("field", ["provider", "locator", "annotate"])

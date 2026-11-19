@@ -212,12 +212,12 @@ def patch_repository(
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other
-    field. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until
-    another claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository
-    holds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the
-    repository at a forge, and `credential` at a credential, resolved and refused as on create; a deprecated
-    `secret_name` other than the repository's resolves as on create. Moving the forge, or changing `secret_name`, of a
-    repository acting with a credential needs a `credential` too: 422 `credential_forge_mismatch` or
+    field, `credential` included. A patch that changes nothing writes nothing. A slug that changes keeps resolving to
+    the repository until another claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a
+    slug some repository holds, or a taken `(forge, owner, repo)`; 422 naming the field, coded as on create. `forge`
+    re-points the repository at a forge, and `credential` at a credential, resolved and refused as on create; a
+    deprecated `secret_name` other than the repository's resolves as on create. Moving the forge, or changing
+    `secret_name`, of a repository acting with a credential needs a `credential` too: 422 `credential_forge_mismatch` or
     `credential_conflict` without one."""
     present = request.model_fields_set
     stated = {field: getattr(request, field) for field in present if field not in (FORGE_FIELD, CREDENTIAL_FIELD)}

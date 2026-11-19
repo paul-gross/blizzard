@@ -190,6 +190,32 @@ def test_a_null_old_field_on_an_edit_is_left_to_the_record() -> None:
     assert _decide(CredentialChoice(), None, current="gh", required=False) == CredentialDecision()
 
 
+_CLEAR = CredentialChoice(credential=None)
+
+
+def test_a_clear_of_a_record_that_needs_a_credential_is_refused_naming_it() -> None:
+    with pytest.raises(ConfigFieldError) as caught:
+        _decide(_CLEAR, UNSET, current="gh", required=False)
+    assert (caught.value.code, caught.value.field) == ("value_error", "credential")
+
+
+def test_a_clear_on_a_create_is_no_choice() -> None:
+    assert _decide(_CLEAR, UNSET, current=UNSET, required=False) == CredentialDecision()
+    assert _decide(_CLEAR, "gh", current=UNSET) == CredentialDecision(resolve="gh")
+
+
+def test_a_clear_beside_an_old_field_conflicts() -> None:
+    with pytest.raises(CredentialConflict) as caught:
+        decide_credential(_CLEAR, "gh2", current="gh", field="secret", required=False, clearable=True)
+    assert (caught.value.code, caught.value.field) == ("credential_conflict", "secret")
+
+
+def test_a_clear_of_a_clearable_record_is_the_clear_outcome() -> None:
+    for old in (UNSET, None):
+        decided = decide_credential(_CLEAR, old, current="gh", field="secret", required=False, clearable=True)
+        assert decided == CredentialDecision(clear=True)
+
+
 @pytest.mark.parametrize(
     ("named", "retired"), [(None, False), (_credential(retired=True), True)], ids=["unknown", "retired"]
 )
