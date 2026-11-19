@@ -18,7 +18,7 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await page.getByTestId('admin-urgencies-create-field-slug').fill('expedite');
   await page.getByTestId('admin-urgencies-create-field-name').fill('Expedite');
   await page.getByTestId('admin-urgencies-create-field-mark').fill('🔥');
-  await page.getByTestId('admin-urgencies-create-submit').click();
+  await page.getByTestId('admin-urgencies-create-dialog').getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page.getByTestId('admin-urgency-detail')).toContainText('Expedite');
   const list = async () => (await api.get('/api/urgencies')).body.urgencies as { urgency_id: string; slug: string; name: string; default: boolean; emoji: string | null }[];
   const created = (await list()).find((u) => u.slug === 'expedite')!;
