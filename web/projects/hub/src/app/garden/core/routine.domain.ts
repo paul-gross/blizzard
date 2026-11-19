@@ -43,3 +43,14 @@ export interface RoutineEditDraft {
   readonly graph: string;
   readonly urgency: string;
 }
+
+/** The fields a routine create states, as typed: `urgency` is an urgency slug, `''` for the tenant default. */
+export interface RoutineCreateDraft {
+  readonly slug: string;
+  readonly name: string;
+  readonly graph: string;
+  readonly scope: string;
+  readonly urgency: string;
+}
+
+export const EMPTY_ROUTINE_CREATE_DRAFT: RoutineCreateDraft = { slug: '', name: '', graph: '', scope: '', urgency: '' };

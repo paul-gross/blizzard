@@ -1,6 +1,6 @@
 import { gardenRoutineView } from 'fleet/testing';
 
-import { fromRoutineView, toEditBaseline, toUrgencyRef } from './routine.translate';
+import { fromRoutineView, ROUTINE_CREATE_REFUSALS, toCreateRequest, toEditBaseline, toUrgencyRef } from './routine.translate';
 
 describe('fromRoutineView', () => {
   it('reads every field of a served routine', () => {
@@ -87,5 +87,36 @@ describe('toUrgencyRef', () => {
   it('maps an urgency to its wire reference and null to null', () => {
     expect(toUrgencyRef({ id: 'urg_1', slug: 'high' })).toEqual({ urgency_id: 'urg_1', slug: 'high' });
     expect(toUrgencyRef(null)).toBeNull();
+  });
+});
+
+describe('toCreateRequest', () => {
+  it('trims the definition and states null for a blank name and the tenant default', () => {
+    const draft = { slug: ' nightly ', name: ' ', graph: ' garden ', scope: ' web ', urgency: '' };
+    expect(toCreateRequest(draft)).toEqual({
+      slug: 'nightly',
+      name: null,
+      graph_name: 'garden',
+      default_scope_slug: 'web',
+      default_urgency: null,
+    });
+  });
+
+  it('states a typed name and a chosen urgency', () => {
+    const request = toCreateRequest({ slug: 'a', name: ' Nightly ', graph: 'g', scope: 's', urgency: 'urgent' });
+    expect(request.name).toBe('Nightly');
+    expect(request.default_urgency).toBe('urgent');
+  });
+});
+
+describe('ROUTINE_CREATE_REFUSALS', () => {
+  it('maps each hub field path to its draft field', () => {
+    const paths = ['slug', 'name', 'graph_name', 'default_scope_slug', 'default_urgency'];
+    expect(paths.map((p) => ROUTINE_CREATE_REFUSALS.field(p))).toEqual(['slug', 'name', 'graph', 'scope', 'urgency']);
+    expect(ROUTINE_CREATE_REFUSALS.field('default_model')).toBeNull();
+  });
+
+  it('sends a malformed scope slug to the scope', () => {
+    expect(ROUTINE_CREATE_REFUSALS.kinds['urn:blizzard:problem:scope-slug-invalid']).toBe('scope');
   });
 });

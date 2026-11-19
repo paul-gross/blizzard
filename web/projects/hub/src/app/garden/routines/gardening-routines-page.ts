@@ -1,20 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, KitButton, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, ViewportService } from 'fleet';
+import { form } from '@angular/forms/signals';
+import { asyncState, KitButton, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, submitForm, ViewportService } from 'fleet';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';
-import type { Routine } from '../core/routine.domain';
+import { EMPTY_ROUTINE_CREATE_DRAFT, type Routine, type RoutineCreateDraft } from '../core/routine.domain';
 import { injectHubRoutinesDomainQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
-import { createRoutineRequest, presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
+import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
-import { RoutineCreateForm, type RoutineCreateDraft } from './routine-create-form';
-import { injectCreateRoutineMutation } from './routine-create.mutations';
+import { RoutineCreateForm } from './routine-create-form';
+import { routineCreateRules } from './routine.form';
+import { injectRoutineService } from './routine.service';
 
 /**
  * The `/gardening/routines` sub-tab (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
@@ -41,17 +43,24 @@ import { injectCreateRoutineMutation } from './routine-create.mutations';
 export class GardeningRoutinesPage {
   protected readonly urgenciesQuery = injectUrgenciesQuery();
   private readonly meQuery = injectMeQuery();
-  private readonly createMutation = injectCreateRoutineMutation();
+  private readonly routineService = injectRoutineService();
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
   protected readonly creating = signal(false);
-  protected readonly createError = signal<string | null>(null);
-  protected readonly createPending = computed(() => this.createMutation.isPending());
-  protected onCreate(draft: RoutineCreateDraft): void {
-    this.createError.set(null);
-    this.createMutation.mutate(createRoutineRequest(draft), {
-      onSuccess: (routine) => { this.creating.set(false); this.selectRoutine(routine.slug); },
-      onError: (error: unknown) => this.createError.set(errorMessage(error, 'Create failed.')),
-    });
+  private readonly createDraft = signal<RoutineCreateDraft>(EMPTY_ROUTINE_CREATE_DRAFT);
+  protected readonly createForm = form(this.createDraft, routineCreateRules);
+
+  protected openCreate(): void {
+    this.createForm().reset({ ...EMPTY_ROUTINE_CREATE_DRAFT });
+    this.creating.set(true);
+  }
+
+  /** Saves the create draft; once it settles, closes the form and opens the created routine. */
+  protected async onCreate(): Promise<void> {
+    const slug = this.createDraft().slug.trim();
+    if (await submitForm(this.createForm, (draft) => this.routineService.create(draft))) {
+      this.creating.set(false);
+      this.selectRoutine(slug);
+    }
   }
 
   private readonly lens = inject(ProjectLens);

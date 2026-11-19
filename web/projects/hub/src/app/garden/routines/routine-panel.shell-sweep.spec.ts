@@ -1,10 +1,13 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { form } from '@angular/forms/signals';
 import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
+import { EMPTY_ROUTINE_CREATE_DRAFT } from '../core/routine.domain';
 import { RoutineCreateForm } from './routine-create-form';
+import { routineCreateRules } from './routine.form';
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount —
  * injected so the kit badges' tone colours resolve to real colours. */
@@ -378,31 +381,40 @@ describe('related scopes async layout', () => {
 });
 
 
+@Component({
+  selector: 'app-test-routine-create-host',
+  imports: [RoutineCreateForm],
+  template: '<app-routine-create-form [form]="f" />',
+})
+class CreateHost {
+  readonly f = form(signal(EMPTY_ROUTINE_CREATE_DRAFT), routineCreateRules);
+}
+
 describe('routine create form layout', () => {
   it('keeps fields compact in a tall container', async () => {
-    await TestBed.configureTestingModule({ imports: [RoutineCreateForm], providers: [provideZonelessChangeDetection()] }).compileComponents();
-    const fixture = TestBed.createComponent(RoutineCreateForm);
+    await TestBed.configureTestingModule({ imports: [CreateHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(CreateHost);
     const root = fixture.nativeElement as HTMLElement;
     root.style.cssText = 'display:block;width:320px;height:700px';
     document.body.appendChild(root);
     await fixture.whenStable();
     try {
-      const fields = [...root.querySelectorAll<HTMLElement>('.chf-field')];
+      const fields = [...root.querySelectorAll<HTMLElement>('fleet-kit-field')];
       expect(fields).toHaveLength(5);
       expect(Math.max(...fields.map((field) => field.getBoundingClientRect().height))).toBeLessThan(100);
     } finally { root.remove(); fixture.destroy(); }
   });
 
   it.each([390, 1024])('keeps the urgency selector inside the form at %ipx', async (width) => {
-    await TestBed.configureTestingModule({ imports: [RoutineCreateForm], providers: [provideZonelessChangeDetection()] }).compileComponents();
-    const fixture = TestBed.createComponent(RoutineCreateForm);
+    await TestBed.configureTestingModule({ imports: [CreateHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(CreateHost);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
     await page.viewport(width, 800);
     await fixture.whenStable();
     try {
       const form = root.querySelector<HTMLElement>('[data-testid="gardening-routine-create"]')!;
-      const urgency = root.querySelector<HTMLElement>('[data-testid="routine-create-urgency"]')!;
+      const urgency = root.querySelector<HTMLElement>('[data-testid="gardening-routine-create-urgency"]')!;
       expect(urgency.getBoundingClientRect().right).toBeLessThanOrEqual(form.getBoundingClientRect().right + 1);
       expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth);
     } finally { root.remove(); fixture.destroy(); }
