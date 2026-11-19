@@ -1,29 +1,19 @@
-import type { AsyncStateQuery, GraphSummaryView, RoutineView } from 'fleet';
+import type { AsyncStateQuery, GraphSummaryView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { gardenRoutine, gardenRoutineKeeper } from '../core/routine.builders';
+import type { Routine } from '../core/routine.domain';
 import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 
-const NIGHTLY: RoutineView = {
-  routine_id: 'rtn_1',
+const NIGHTLY: Routine = gardenRoutine({
+  id: 'rtn_1',
   slug: 'nightly',
   name: 'Nightly sweep',
-  graph_name: 'garden-routine',
-  default_scope_slug: 'blizzard',
-  created_at: '2026-01-01T00:00:00Z',
-  default_model: [],
-  default_effort: null,
-  default_harnesses: [],
-  default_urgency: null,
-  effective_urgency: null,
-  kept_by: [],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-  retired: false,
+  graph: 'garden-routine',
   revision: null,
-};
+});
 
-const ORPHAN: RoutineView = { ...NIGHTLY, routine_id: 'rtn_2', slug: 'orphan', name: 'Orphan', graph_name: 'unminted', retired: true };
+const ORPHAN: Routine = { ...NIGHTLY, id: 'rtn_2', slug: 'orphan', name: 'Orphan', graph: 'unminted', retired: true };
 
 const EFFECTIVE_GRAPH: GraphSummaryView = {
   graph_id: 'gr_1',
@@ -74,11 +64,8 @@ describe('routineListRows', () => {
     expect(routineListRows([ORPHAN], [], query('error')).map((row) => row.blocked)).toEqual([false]);
   });
 
-  it('marks a routine kept when its kept_by is non-empty, and not when it is empty', () => {
-    const kept: RoutineView = {
-      ...NIGHTLY,
-      kept_by: [{ cadence_slug: 'evening', cadence_name: 'Evening', chore_key: 'nightly', next_moment: null }],
-    };
+  it('marks a routine kept when its keptBy is non-empty, and not when it is empty', () => {
+    const kept: Routine = { ...NIGHTLY, keptBy: [gardenRoutineKeeper()] };
     expect(routineListRows([kept, ORPHAN], [EFFECTIVE_GRAPH], query('success')).map((r) => r.kept)).toEqual([true, false]);
   });
 

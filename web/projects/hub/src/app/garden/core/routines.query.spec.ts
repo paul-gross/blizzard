@@ -16,6 +16,7 @@ import {
   injectHubRoutineProposalCountsQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
+  injectHubRoutinesDomainQuery,
   injectHubRoutinesQuery,
 } from './routines.query';
 
@@ -26,6 +27,15 @@ import {
 })
 class TestRoutinesQueryHost {
   readonly query = injectHubRoutinesQuery();
+}
+
+@Component({
+  selector: 'app-test-routines-domain-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestRoutinesDomainQueryHost {
+  readonly query = injectHubRoutinesDomainQuery();
 }
 
 @Component({
@@ -114,6 +124,25 @@ describe('injectHubRoutinesQuery', () => {
 
     expect(fixture.componentInstance.query.data()).toHaveLength(1);
     expect(stub.forRoute('/api/routines', 'GET')).toHaveLength(1);
+  });
+});
+
+describe('injectHubRoutinesDomainQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('selects the routine list through the translator', async () => {
+    stub = stubHubClient({
+      'GET /api/routines': () => [gardenRoutineView({ routine_id: 'rtn_1', name: 'nightly', graph_name: 'garden' })],
+    });
+    TestBed.configureTestingModule({
+      imports: [TestRoutinesDomainQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestRoutinesDomainQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()).toMatchObject([{ id: 'rtn_1', slug: 'nightly', graph: 'garden' }]);
   });
 });
 

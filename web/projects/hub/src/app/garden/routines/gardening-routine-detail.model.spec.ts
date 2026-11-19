@@ -5,13 +5,14 @@ import type {
   GraphNodeView,
   GraphSummaryView,
   GraphView,
-   RoutineView,
   RunRowView,
   TrendView,
 } from 'fleet';
 import { describe, expect, it } from 'vitest';
 import { fixtureInstant } from 'fleet/testing';
 
+import { gardenRoutine, gardenRoutineKeeper } from '../core/routine.builders';
+import type { Routine } from '../core/routine.domain';
 import {
   keptByVms,
   modelEffortLabel,
@@ -32,27 +33,17 @@ import {
   type RoutinePanelParts,
 } from './gardening-routine-detail.model';
 
-const ROUTINE: RoutineView = {
-  routine_id: 'rtn_1',
+const ROUTINE: Routine = gardenRoutine({
+  id: 'rtn_1',
   slug: 'nightly',
   name: 'Nightly sweep',
-  graph_name: 'garden-routine',
-  default_scope_slug: 'blizzard',
-  default_model: ['claude-sonnet-5'],
-  default_effort: 'medium',
-  default_harnesses: [],
-  default_urgency: null,
-  effective_urgency: null,
-  kept_by: [],
-  created_at: '2026-01-01T00:00:00Z',
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-  retired: false,
+  graph: 'garden-routine',
+  defaultModel: ['claude-sonnet-5'],
+  defaultEffort: 'medium',
   revision: null,
-};
+});
 
-const OTHER_ROUTINE: RoutineView = { ...ROUTINE, routine_id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep' };
+const OTHER_ROUTINE: Routine = { ...ROUTINE, id: 'rtn_2', slug: 'weekly', name: 'Weekly sweep' };
 
 const EFFECTIVE_GRAPH: GraphSummaryView = {
   graph_id: 'gr_1',
@@ -321,16 +312,16 @@ describe('trendTotals', () => {
 });
 
 describe('keptByVms', () => {
-  it('keeps nothing when the routine carries no kept_by', () => {
+  it('keeps nothing when the routine carries no keptBy', () => {
     expect(keptByVms(ROUTINE)).toEqual([]);
   });
 
   it('maps every keeping chore to a row, in the hub’s order', () => {
-    const routine: RoutineView = {
+    const routine: Routine = {
       ...ROUTINE,
-      kept_by: [
-        { cadence_slug: 'evening', cadence_name: 'Evening', chore_key: 'nightly', next_moment: fixtureInstant(14 * 3600) },
-        { cadence_slug: 'weekly', cadence_name: 'Weekly', chore_key: 'deep', next_moment: null },
+      keptBy: [
+        gardenRoutineKeeper({ nextMoment: fixtureInstant(14 * 3600) }),
+        gardenRoutineKeeper({ cadenceSlug: 'weekly', cadenceName: 'Weekly', choreKey: 'deep' }),
       ],
     };
     expect(keptByVms(routine)).toEqual([
@@ -373,7 +364,7 @@ describe('routinePanelVm', () => {
   });
 
   it('defaults an unset model and effort', () => {
-    const vm = routinePanelVm({ ...ROUTINE, default_model: [], default_effort: null }, PARTS);
+    const vm = routinePanelVm({ ...ROUTINE, defaultModel: [], defaultEffort: null }, PARTS);
     expect(vm?.record.modelEffort).toBe('—');
   });
 

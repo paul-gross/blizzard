@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, KitButton, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
+import { asyncState, errorMessage, KitButton, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, ViewportService } from 'fleet';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';
-import { injectHubRoutinesQuery } from '../core/routines.query';
+import type { Routine } from '../core/routine.domain';
+import { injectHubRoutinesDomainQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { createRoutineRequest, presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
@@ -65,10 +66,10 @@ export class GardeningRoutinesPage {
   /** The project every row listed here belongs to: its name once read, its slug until then. */
   protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
 
-  private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly routinesQuery = injectHubRoutinesDomainQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
 
-  private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
+  private readonly routines = computed<readonly Routine[]>(() => this.routinesQuery.data() ?? []);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
 
   /** The `routineSlug` the active detail child names (`route-state.ts`). */

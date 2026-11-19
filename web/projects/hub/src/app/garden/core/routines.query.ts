@@ -23,6 +23,21 @@ import {
   hubRoutineTrendKey,
   hubRoutinesKey,
 } from '../../core/query-keys';
+import type { Routine } from './routine.domain';
+import { fromRoutineView } from './routine.translate';
+
+async function fetchRoutines(lens: string | null): Promise<RoutineView[]> {
+  const { data, error } =
+    lens === null
+      ? await listRoutinesApiRoutinesGet({ query: { include_retired: true }, throwOnError: false })
+      : await listProjectRoutinesApiProjectsProjectRoutinesGet({
+          path: { project: lens },
+          query: { include_retired: true },
+          throwOnError: false,
+        });
+  if (error) throw error;
+  return data ?? [];
+}
 
 /**
  * The routine list — every routine, newest first, including a retired one marked as such. Under a project lens it is
@@ -30,6 +45,9 @@ import {
  * which only the gardening doorway reads, grouping them by project: every consumer of this one query renders a routine's
  * full history regardless of its lifecycle state. Routines change rarely and carry no
  * SSE event of their own, `injectHubGraphsQuery`'s own standing.
+ *
+ * The wire projection, kept for the readers that have not moved onto {@link Routine}
+ * (`decision:ui-toolkit/incremental-replacement`); no new caller takes it — see {@link injectHubRoutinesDomainQuery}.
  */
 export function injectHubRoutinesQuery() {
   return injectQuery(routinesQueryOptions());
@@ -47,18 +65,21 @@ function routinesQueryOptions() {
     const lens = project();
     return {
       queryKey: lensedKey(hubRoutinesKey, lens),
-      queryFn: async (): Promise<RoutineView[]> => {
-        const { data, error } =
-          lens === null
-            ? await listRoutinesApiRoutinesGet({ query: { include_retired: true }, throwOnError: false })
-            : await listProjectRoutinesApiProjectsProjectRoutinesGet({
-                path: { project: lens },
-                query: { include_retired: true },
-                throwOnError: false,
-              });
-        if (error) throw error;
-        return data ?? [];
-      },
+      queryFn: () => fetchRoutines(lens),
+    };
+  });
+}
+
+/** The routine list as {@link Routine}s — {@link injectHubRoutinesQuery}'s read, cache, and invalidations, selected
+ * through the translator. */
+export function injectHubRoutinesDomainQuery() {
+  const project = injectProjectFilter();
+  return injectQuery(() => {
+    const lens = project();
+    return {
+      queryKey: lensedKey(hubRoutinesKey, lens),
+      queryFn: () => fetchRoutines(lens),
+      select: (wire: RoutineView[]): readonly Routine[] => wire.map(fromRoutineView),
     };
   };
 }

@@ -5,11 +5,11 @@ import {
   type GraphSummaryView,
   type GraphView,
   type KitAsyncStateValue,
-  type RoutineView,
   type RunRowView,
   type TrendView,
   restingAsyncState,
 } from 'fleet';
+import type { Routine } from '../core/routine.domain';
 import { effectiveGraphByName } from './gardening-effective-graph';
 import type { RoutineEditVars } from './routine-edit.mutations';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
@@ -27,38 +27,38 @@ import type { ProposalCountsRowVm } from './routine-proposal-counts';
 
 /** The routine `slug` names, or `null` when `slug` is `null` (the bare child route)
  * or names no loaded routine. Routines are keyed by their immutable `slug`; `name` is only what one reads as. */
-export function routineBySlug(slug: string | null, routines: readonly RoutineView[]): RoutineView | null {
+export function routineBySlug(slug: string | null, routines: readonly Routine[]): Routine | null {
   return slug === null ? null : (routines.find((r) => r.slug === slug) ?? null);
 }
 
 /** The effective graph `routine` runs against — `null` with no routine, or while the
  * graph read is still pending (see {@link effectiveGraphByName}). */
 export function routineEffectiveGraph(
-  routine: RoutineView | null,
+  routine: Routine | null,
   graphs: readonly GraphSummaryView[],
   graphsPending: boolean,
 ): GraphSummaryView | null {
   if (routine === null) return null;
-  return effectiveGraphByName(graphs, graphsPending, routine.graph_name);
+  return effectiveGraphByName(graphs, graphsPending, routine.graph);
 }
 
 /** `routine`'s `retired` flag as it will read once a pending Retire/Enable settles
  * (`bzh:frontend-pending-override`) — `null` with no routine or nothing pending for it. */
 export function routineOverrideRetired(
-  routine: RoutineView | null,
+  routine: Routine | null,
   pending: readonly RoutineLifecycleVars[],
 ): boolean | null {
   if (routine === null) return null;
-  const vars = pending.find((v) => v.routineId === routine.routine_id);
+  const vars = pending.find((v) => v.routineId === routine.id);
   return vars ? vars.retired : null;
 }
 
 /** The edit setting `routine`'s graph to `graphName`, trimmed — `null` with no routine, on a blank name, or on the
  * graph it already runs, so nothing is sent that would change nothing. */
-export function routineGraphEdit(routine: RoutineView | null, graphName: string): RoutineEditVars | null {
+export function routineGraphEdit(routine: Routine | null, graphName: string): RoutineEditVars | null {
   const trimmed = graphName.trim();
-  if (routine === null || trimmed === '' || trimmed === routine.graph_name) return null;
-  return { routineId: routine.routine_id, graphName: trimmed };
+  if (routine === null || trimmed === '' || trimmed === routine.graph) return null;
+  return { routineId: routine.id, graphName: trimmed };
 }
 
 /** The read-only strategy steps of the routine's effective graph, in node order. */
@@ -94,10 +94,10 @@ export function lastSweptRows(sweeps: GardenSweepsView | undefined): readonly La
  * `null` until the related-scopes read resolves, or with no routine. */
 export function relatedScopeRows(
   slugs: readonly string[] | undefined,
-  routine: RoutineView | null,
+  routine: Routine | null,
 ): readonly RelatedScopeVm[] | null {
   if (slugs === undefined || routine === null) return null;
-  return slugs.map((slug) => ({ slug, isDefault: slug === routine.default_scope_slug }));
+  return slugs.map((slug) => ({ slug, isDefault: slug === routine.defaultScope }));
 }
 
 /** The proposal-counts table's rows, one per origin and class. */
@@ -154,13 +154,13 @@ export function routineRunsLabel(recent: readonly RecentRunVm[] | null, windowLa
 }
 
 /** The chores keeping `routine`, one row each, as the hub serves them on its `kept_by`; `null` with no routine selected. */
-export function keptByVms(routine: Pick<RoutineView, 'kept_by'> | null): readonly KeptByVm[] | null {
+export function keptByVms(routine: Pick<Routine, 'keptBy'> | null): readonly KeptByVm[] | null {
   if (routine === null) return null;
-  return (routine.kept_by ?? []).map((k) => ({
-    cadenceSlug: k.cadence_slug,
-    cadenceName: k.cadence_name,
-    choreKey: k.chore_key,
-    nextMoment: k.next_moment,
+  return routine.keptBy.map((k) => ({
+    cadenceSlug: k.cadenceSlug,
+    cadenceName: k.cadenceName,
+    choreKey: k.choreKey,
+    nextMoment: k.nextMoment,
   }));
 }
 
@@ -183,25 +183,25 @@ export interface RoutinePanelParts {
 
 /** The routine panel's view model — `null` with no routine selected. `renderedRetired`
  * reads the pending override while one names this routine, else its real flag. */
-export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelParts): RoutinePanelVm | null {
+export function routinePanelVm(routine: Routine | null, parts: RoutinePanelParts): RoutinePanelVm | null {
   if (routine === null) return null;
   return {
     record: {
       slug: routine.slug,
       name: routine.name,
-      graphName: routine.graph_name,
-      defaultScopeSlug: routine.default_scope_slug,
-      modelEffort: modelEffortLabel(routine.default_model ?? [], routine.default_effort ?? null),
+      graphName: routine.graph,
+      defaultScopeSlug: routine.defaultScope,
+      modelEffort: modelEffortLabel(routine.defaultModel, routine.defaultEffort),
     },
-    blockedReason: parts.blocked ? `graph ${routine.graph_name} has no effective mint` : null,
+    blockedReason: parts.blocked ? `graph ${routine.graph} has no effective mint` : null,
     strategy: parts.strategy,
     trend: parts.trend ? trendTotals(parts.trend) : null,
     measurements: parts.measurements,
     lastSwept: parts.lastSwept,
     windowLabel: parts.windowLabel,
     relatedScopes: parts.relatedScopes,
-    retired: routine.retired ?? false,
-    renderedRetired: parts.overrideRetired ?? (routine.retired ?? false),
+    retired: routine.retired,
+    renderedRetired: parts.overrideRetired ?? (routine.retired),
     recentRuns: parts.recentRuns,
     recentRunsState: parts.recentRunsState,
     measurementsState: parts.measurementsState,
@@ -217,7 +217,7 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
  * never reads as a confident "blocked". */
 export function routinePanelState(
   routineSlug: string | null,
-  selected: RoutineView | null,
+  selected: Routine | null,
   routinesQuery: AsyncStateQuery,
   graphsPending: boolean,
   graphsError: boolean,

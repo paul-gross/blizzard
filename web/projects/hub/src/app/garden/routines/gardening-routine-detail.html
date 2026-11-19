@@ -9,7 +9,7 @@
   [editPending]="editPending()"
   [urgencies]="urgenciesQuery.data() ?? []"
   [urgenciesReady]="urgenciesQuery.isSuccess()"
-  [defaultUrgency]="selectedRoutine()?.default_urgency ?? null"
+  [defaultUrgency]="selectedRoutine()?.defaultUrgency ?? null"
   (run)="run()"
   (editGraph)="onEditGraph($event)"
   (editUrgency)="onEditUrgency($event)"
@@ -23,9 +23,9 @@
 
 @if (runningRoutine(); as routine) {
   <app-gardening-run-dialog
-    [routineId]="routine.routine_id"
+    [routineId]="routine.id"
     [routineName]="routine.name"
-    [effectiveUrgency]="routine.effective_urgency"
+    [effectiveUrgency]="runUrgency()"
     (closed)="closeDialog()"
   />
 }

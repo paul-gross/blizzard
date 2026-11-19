@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue, type RoutineView } from 'fleet';
+import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, isPendingFor, type GraphSummaryView, type KitAsyncStateValue } from 'fleet';
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
@@ -22,7 +22,9 @@ import {
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubGraphQuery, injectHubGraphsQuery } from '../../graphs/graphs.query';
-import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from '../core/routines.query';
+import { injectHubRoutineProposalCountsQuery, injectHubRoutineScopesQuery, injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesDomainQuery } from '../core/routines.query';
+import type { Routine } from '../core/routine.domain';
+import { toUrgencyRef } from '../core/routine.translate';
 import { injectEditRoutineMutation, type RoutineEditVars } from './routine-edit.mutations';
 import { injectRoutineLifecycleMutation, type RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import { editRoutineMutationKey, routineLifecycleMutationKey } from '../../core/mutation-keys';
@@ -67,7 +69,7 @@ export class GardeningRoutineDetail {
   protected readonly urgenciesQuery = injectUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
-  private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly routinesQuery = injectHubRoutinesDomainQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
   private readonly meQuery = injectMeQuery();
   private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();
@@ -86,7 +88,7 @@ export class GardeningRoutineDetail {
    * construction, not re-derived per render; a page reload is what refreshes it. */
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
 
-  private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
+  private readonly routines = computed<readonly Routine[]>(() => this.routinesQuery.data() ?? []);
 
   private readonly project = injectLensedProject();
 
@@ -104,7 +106,7 @@ export class GardeningRoutineDetail {
     { initialValue: null },
   );
 
-  protected readonly selectedRoutine = computed<RoutineView | null>(() =>
+  protected readonly selectedRoutine = computed<Routine | null>(() =>
     routineBySlug(this.routineSlugParam(), this.routines()),
   );
 
@@ -114,7 +116,7 @@ export class GardeningRoutineDetail {
 
   protected readonly blocked = computed<boolean>(() => {
     const routine = this.selectedRoutine();
-    return routine !== null && isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), routine.graph_name);
+    return routine !== null && isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), routine.graph);
   });
 
   /** Whether the current identity may edit or retire/enable a routine (`graph:edit`, the
@@ -138,11 +140,11 @@ export class GardeningRoutineDetail {
     () => this.window.periodDays,
   );
   private readonly sweepsQuery = injectHubRoutineSweepsQuery(
-    () => this.selectedRoutine()?.routine_id ?? null,
+    () => this.selectedRoutine()?.id ?? null,
     () => this.window.since,
     () => this.window.until,
   );
-  private readonly scopesQuery = injectHubRoutineScopesQuery(() => this.selectedRoutine()?.routine_id ?? null);
+  private readonly scopesQuery = injectHubRoutineScopesQuery(() => this.selectedRoutine()?.id ?? null);
   private readonly proposalCountsQuery = injectHubRoutineProposalCountsQuery(
     () => this.selectedRoutine()?.slug ?? null,
     () => this.window.since,
@@ -239,7 +241,10 @@ export class GardeningRoutineDetail {
   /** The routine currently running the dialog against — `null` closes it.
    * Only {@link FleetRoutinePanel}'s own `run` output ever sets it, so it can only
    * ever name the already-selected, already-unblocked routine. */
-  protected readonly runningRoutine = signal<RoutineView | null>(null);
+  protected readonly runningRoutine = signal<Routine | null>(null);
+
+  /** The running routine's effective urgency, in the run dialog's input shape. */
+  protected readonly runUrgency = computed(() => toUrgencyRef(this.runningRoutine()?.effectiveUrgency ?? null));
 
   protected run(): void {
     this.runningRoutine.set(this.selectedRoutine());
@@ -257,12 +262,12 @@ export class GardeningRoutineDetail {
    * {@link FleetRoutinePanel}'s Re-enable/Retire buttons — only one of the two is ever
    * shown for the routine's current lifecycle state. */
   protected readonly lifecyclePending = computed(() =>
-    isPendingFor(this.pendingRoutineLifecycle(), (v) => v.routineId === this.selectedRoutine()?.routine_id),
+    isPendingFor(this.pendingRoutineLifecycle(), (v) => v.routineId === this.selectedRoutine()?.id),
   );
 
   /** Whether a graph edit is in flight for the selected routine — disables the editor's Set. */
   protected readonly editPending = computed(() =>
-    isPendingFor(this.pendingRoutineEdits(), (v) => v.routineId === this.selectedRoutine()?.routine_id),
+    isPendingFor(this.pendingRoutineEdits(), (v) => v.routineId === this.selectedRoutine()?.id),
   );
 
   protected onEditGraph(graphName: string): void {
@@ -278,13 +283,13 @@ export class GardeningRoutineDetail {
     const routine = this.selectedRoutine();
     if (routine === null) return;
     this.lifecycleActionError.set(null);
-    this.editRoutineMutation.mutate({ routineId: routine.routine_id, defaultUrgency: value || null }, {
+    this.editRoutineMutation.mutate({ routineId: routine.id, defaultUrgency: value || null }, {
       onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set urgency failed.')),
     });
   }
 
   protected onRetireRoutine(slug: string): void {
-    const routineId = routineBySlug(slug, this.routines())?.routine_id;
+    const routineId = routineBySlug(slug, this.routines())?.id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
@@ -294,7 +299,7 @@ export class GardeningRoutineDetail {
   }
 
   protected onEnableRoutine(slug: string): void {
-    const routineId = routineBySlug(slug, this.routines())?.routine_id;
+    const routineId = routineBySlug(slug, this.routines())?.id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
