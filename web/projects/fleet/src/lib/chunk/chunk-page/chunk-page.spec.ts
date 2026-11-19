@@ -12,6 +12,7 @@ import {
   chunkUsageView,
   decisionView,
   questionView,
+  recordingAwaitingHumanActions,
   settle,
   stubError,
   stubRunnerClient,
@@ -113,14 +114,11 @@ const ACTIONS: ChunkPageActions = {
   canAnswer: signal(false),
   canResolve: signal(false),
   canReadTranscripts: signal(true),
-  resolvePending: signal(false),
-  pendingAnswerQuestionIds: signal([]),
   actionError: signal(null),
   actionOutcome: signal(null),
   graphLinkBase: [],
   eventsLinkBase: [],
-  answer: () => undefined,
-  resolve: () => undefined,
+  awaitingHuman: recordingAwaitingHumanActions().actions,
 };
 
 const SEGMENT = transcriptSegmentIndexEntry({

@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* The field and its action share a row; the action sits level with the control, below the field's label. */
+.answer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 6px;
+}
+.answer-field {
+  flex: 1;
+  min-width: 0;
+}

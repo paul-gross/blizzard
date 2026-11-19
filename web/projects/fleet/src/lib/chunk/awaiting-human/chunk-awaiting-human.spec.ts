@@ -1,10 +1,43 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { formatWhen } from '../../core/when';
-import { awaitingDecision, awaitingHuman, awaitingQuestion } from 'fleet/testing';
-import type { AwaitingDecision, AwaitingQuestion } from './awaiting-human.domain';
+import { awaitingDecision, awaitingHuman, awaitingQuestion, recordingAwaitingHumanActions } from 'fleet/testing';
+import type { AwaitingDecision, AwaitingHuman, AwaitingHumanFormActions, AwaitingQuestion } from './awaiting-human.domain';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
+
+/** Every section of the composition over one state, as its composition sites place them. Saves land unless a spec
+ * hands its own port. */
+@Component({
+  selector: 'fleet-awaiting-human-all-sections',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ChunkAwaitingHuman],
+  template: `
+    @for (section of sections; track section) {
+      <fleet-chunk-detail-awaiting-human [section]="section" [state]="state()" [canAnswer]="canAnswer()"
+        [canResolve]="canResolve()" [actions]="actions()" />
+    }
+  `,
+})
+class AllSections {
+  protected readonly sections = ['asks', 'answered', 'decisions'] as const;
+  readonly state = input.required<AwaitingHuman>();
+  readonly canAnswer = input(false);
+  readonly canResolve = input(false);
+  readonly actions = input<AwaitingHumanFormActions | null>(recordingAwaitingHumanActions().actions);
+}
+
+/** Types into a text control the way a person does. */
+function type(control: HTMLInputElement, value: string): void {
+  control.value = value;
+  control.dispatchEvent(new Event('input'));
+}
+
+/** Lets a submit's awaited save and the re-render after it run. */
+async function settled(fixture: { whenStable(): Promise<unknown> }): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await fixture.whenStable();
+}
 
 /** What a spec renders the component over: a chunk's questions and gate decision. */
 interface Parts {
@@ -83,7 +116,7 @@ const MULTILINE: Parts = {
 describe('ChunkAwaitingHuman', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ChunkAwaitingHuman],
+      imports: [AllSections, ChunkAwaitingHuman],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
   });
@@ -111,7 +144,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('surfaces a waiting_on_human chunk’s open question and its options (MVP criterion 7)', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
     fixture.componentRef.setInput('canAnswer', true);
     await fixture.whenStable();
@@ -128,7 +161,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('surfaces a waiting_on_human chunk’s open gate decision and its choices (MVP criterion 12)', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     fixture.componentRef.setInput('canResolve', true);
     await fixture.whenStable();
@@ -144,7 +177,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('reads a graph-declared gate as declared by the graph', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -154,7 +187,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('names the runner whose configuration imposed the gate by its display name, titled with its full id', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...WAITING_DECISION,
       decision: {
@@ -175,7 +208,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('names a gating runner with no name by its compact id', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...WAITING_DECISION,
       decision: { ...WAITING_DECISION.decision!, imposed_by_runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' },
@@ -187,7 +220,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('withholds the answer input and option chips without question:answer', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -222,7 +255,7 @@ describe('ChunkAwaitingHuman', () => {
     }
 
     async function render(parts: Parts): Promise<HTMLElement> {
-      const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+      const fixture = TestBed.createComponent(AllSections);
       fixture.componentRef.setInput('state', awaitingHuman(parts));
       fixture.componentRef.setInput('canResolve', true);
       await fixture.whenStable();
@@ -257,7 +290,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('renders a resolved-but-untransitioned gate as "<choice> by <who>, <when>" in place of its choices', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...WAITING_DECISION,
       decision: {
@@ -279,7 +312,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('renders an open gate’s choices and no resolved line', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     fixture.componentRef.setInput('canResolve', true);
     await fixture.whenStable();
@@ -290,7 +323,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('withholds the gate choice chips without gate:resolve', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -300,126 +333,181 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('shows no awaiting-human section when the chunk is not parked', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(REVIEW_FAIL));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="awaiting-human"]')).toBeNull();
   });
 
-  it('emits answerQuestion with the typed answer when Answer is activated (MVP criterion 7)', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+  it('saves the typed answer for its question and chunk when Answer is activated (MVP criterion 7)', async () => {
+    const port = recordingAwaitingHumanActions();
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
     fixture.componentRef.setInput('canAnswer', true);
-    let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
-    fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
+    fixture.componentRef.setInput('actions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
-    input.value = 'rest';
-    input.dispatchEvent(new Event('input'));
+    type(el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!, 'rest');
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settled(fixture);
 
-    expect(emitted).toEqual({
-      questionId: 'qn_01',
-      answer: 'rest',
-      chunkId: 'ch_01ask00000000000000000000000',
-    });
+    expect(port.answers).toEqual([
+      { chunkId: 'ch_01ask00000000000000000000000', questionId: 'qn_01', draft: { answer: 'rest' } },
+    ]);
   });
 
-  it('emits answerQuestion when an option chip is clicked', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+  it('saves a picked option in place of the typed text, even while the typed field is blank', async () => {
+    const port = recordingAwaitingHumanActions();
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
     fixture.componentRef.setInput('canAnswer', true);
-    let emitted: { questionId: string; answer: string } | undefined;
-    fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
+    fixture.componentRef.setInput('actions', port.actions);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')[1].click();
+    await settled(fixture);
+
+    expect(port.answers.map((call) => call.draft)).toEqual([{ answer: 'graphql' }]);
+    expect(el.querySelector('fleet-kit-field fleet-kit-error-line')).toBeNull();
+  });
+
+  it('sends nothing for a blank answer, showing the required error on its field and focusing it', async () => {
+    const port = recordingAwaitingHumanActions();
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('actions', port.actions);
+    document.body.appendChild(fixture.nativeElement);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    try {
+      type(el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!, '   ');
+      el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+      await settled(fixture);
+
+      expect(port.answers).toEqual([]);
+      expect(el.querySelector('fleet-kit-field')?.textContent).toContain('Required');
+      expect(document.activeElement).toBe(el.querySelector('[data-testid="answer-input"]'));
+    } finally {
+      el.remove();
+    }
+  });
+
+  it('keeps a refused answer’s typed text, showing a field refusal on the field and any other on the form line', async () => {
+    const outcomes = [
+      { ok: false as const, fields: { answer: 'too long' }, form: null },
+      { ok: false as const, fields: {}, form: 'question qn_01 is closed' },
+    ];
+    const port = recordingAwaitingHumanActions({ answer: async () => outcomes.shift()! });
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('actions', port.actions);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const input = el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+
+    type(input, 'rest');
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settled(fixture);
+    expect(input.value).toBe('rest');
+    expect(el.querySelector('fleet-kit-field')?.textContent).toContain('too long');
+    expect(el.querySelector('[data-testid="answer-form-error"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settled(fixture);
+    expect(input.value).toBe('rest');
+    expect(el.querySelector('fleet-kit-field')?.textContent).not.toContain('too long');
+    expect(el.querySelector('[data-testid="answer-form-error"]')?.textContent).toContain('is closed');
+  });
+
+  it('lands a picked option’s refusal on the form line, never on the typed field', async () => {
+    const port = recordingAwaitingHumanActions({
+      answer: async () => ({ ok: false, fields: { answer: 'not an offered option' }, form: null }),
+    });
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('actions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="question-option"]')?.click();
-    expect(emitted?.answer).toBe('rest');
+    await settled(fixture);
+
+    expect(el.querySelector('[data-testid="answer-form-error"]')?.textContent).toContain('not an offered option');
+    expect(el.querySelector('fleet-kit-field fleet-kit-error-line')).toBeNull();
   });
 
-  it('does not emit answerQuestion for a blank answer', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
+  it('resolves the gate with the chosen choice and the trimmed-as-typed note', async () => {
+    const port = recordingAwaitingHumanActions();
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
+    fixture.componentRef.setInput('canResolve', true);
+    fixture.componentRef.setInput('actions', port.actions);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    type(el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!, 'fix the flaky test only');
+    await fixture.whenStable();
+    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[1].click();
+    await settled(fixture);
+
+    expect(port.resolves).toEqual([
+      {
+        chunkId: 'ch_01gate0000000000000000000000',
+        decisionId: 'de_01',
+        choice: 'reject',
+        draft: { note: 'fix the flaky test only' },
+      },
+    ]);
+  });
+
+  it('keeps a refused resolution’s note, showing the refusal on the gate’s form line', async () => {
+    const port = recordingAwaitingHumanActions({
+      resolve: async () => ({ ok: false, fields: {}, form: "'ship' is not a choice" }),
+    });
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
+    fixture.componentRef.setInput('canResolve', true);
+    fixture.componentRef.setInput('actions', port.actions);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const note = el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!;
+
+    type(note, 'careful');
+    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[0].click();
+    await settled(fixture);
+
+    expect(note.value).toBe('careful');
+    expect(el.querySelector('[data-testid="decision-form-error"]')?.textContent).toContain('is not a choice');
+  });
+
+  it('renders the question, the trail, and the gate with no control when there is no saving port', async () => {
+    const fixture = TestBed.createComponent(AllSections);
+    fixture.componentRef.setInput('state', awaitingHuman({ ...WAITING_QUESTION, decision: WAITING_DECISION.decision }));
     fixture.componentRef.setInput('canAnswer', true);
-    let emitted = false;
-    fixture.componentInstance.answerQuestion.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
-    expect(emitted).toBe(false);
-  });
-
-  it('emits resolveDecision with the chosen gate choice when a choice button is clicked', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     fixture.componentRef.setInput('canResolve', true);
-    let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
-    fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
+    fixture.componentRef.setInput('actions', null);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const buttons = el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]');
-    buttons[1].click(); // reject
-
-    expect(emitted).toEqual({
-      decisionId: 'de_01',
-      choice: 'reject',
-      chunkId: 'ch_01gate0000000000000000000000',
-    });
-  });
-
-  it('carries a typed note with the chosen gate choice, then clears the draft', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
-    fixture.componentRef.setInput('canResolve', true);
-    const emitted: { note?: string }[] = [];
-    fixture.componentInstance.resolveDecision.subscribe((event) => emitted.push(event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!;
-    input.value = '  fix the flaky test only  ';
-    input.dispatchEvent(new Event('input'));
-    await fixture.whenStable();
-    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[0].click();
-    await fixture.whenStable();
-
-    expect(emitted[0]).toEqual({
-      decisionId: 'de_01',
-      choice: 'approve',
-      chunkId: 'ch_01gate0000000000000000000000',
-      note: 'fix the flaky test only',
-    });
-    expect(input.value).toBe('');
-  });
-
-  it('sends no note when the note field is left blank', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
-    fixture.componentRef.setInput('canResolve', true);
-    const emitted: { note?: string }[] = [];
-    fixture.componentInstance.resolveDecision.subscribe((event) => emitted.push(event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!;
-    input.value = '   ';
-    input.dispatchEvent(new Event('input'));
-    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[0].click();
-
-    expect(emitted[0]).not.toHaveProperty('note');
+    expect(el.querySelector('[data-testid="question-text"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="decision-node"]')).not.toBeNull();
+    for (const id of ['answer-input', 'answer-submit', 'question-option', 'decision-note-input', 'decision-choice']) {
+      expect(el.querySelector(`[data-testid="${id}"]`), id).toBeNull();
+    }
   });
 
   it('shows a resolution’s note under the resolved line, and none without one', async () => {
     const resolved = { resolved_choice: 'approve', resolved_by: 'alice', resolved_at: '2026-07-13T00:02:00Z' };
     const render = async (note: string | null) => {
-      const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+      const fixture = TestBed.createComponent(AllSections);
       fixture.componentRef.setInput('state', awaitingHuman({
         ...WAITING_DECISION,
         decision: { ...WAITING_DECISION.decision!, ...resolved, note },
@@ -433,70 +521,84 @@ describe('ChunkAwaitingHuman', () => {
     expect((await render(null)).querySelector('[data-testid="decision-resolved-note"]')).toBeNull();
   });
 
-  it('disables the gate choice chips while the resolve mutation is pending, re-enabling once it settles', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+  it('disables a gate’s choices while its resolution is in flight, re-enabling once it settles', async () => {
+    let release!: () => void;
+    const port = recordingAwaitingHumanActions({
+      resolve: () => new Promise((resolve) => (release = () => resolve({ ok: false, fields: {}, form: 'Resolve failed.' }))),
+    });
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(WAITING_DECISION));
     fixture.componentRef.setInput('canResolve', true);
-    fixture.componentRef.setInput('resolvePending', true);
+    fixture.componentRef.setInput('actions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
+    const choices = () => [...el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')];
 
-    for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
-      expect(button.getAttribute('aria-disabled')).toBe('true');
-    }
+    choices()[0].click();
+    await settled(fixture);
+    for (const button of choices()) expect(button.getAttribute('aria-disabled')).toBe('true');
+    choices()[1].click();
+    expect(port.resolves).toHaveLength(1);
 
-    fixture.componentRef.setInput('resolvePending', false);
-    await fixture.whenStable();
-
-    for (const button of el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')) {
-      expect(button.getAttribute('aria-disabled')).not.toBe('true');
-    }
+    release();
+    await settled(fixture);
+    for (const button of choices()) expect(button.getAttribute('aria-disabled')).not.toBe('true');
   });
 
-  it('disables the option chips and the Answer button of a question its answer is pending for, re-enabling once it settles', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
-    fixture.componentRef.setInput('state', awaitingHuman(WAITING_QUESTION));
-    fixture.componentRef.setInput('canAnswer', true);
-    fixture.componentRef.setInput('pendingAnswerQuestionIds', ['qn_01']);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
-    for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
-      expect(chip.getAttribute('aria-disabled')).toBe('true');
-    }
-
-    fixture.componentRef.setInput('pendingAnswerQuestionIds', []);
-    await fixture.whenStable();
-
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
-    for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
-      expect(chip.getAttribute('aria-disabled')).not.toBe('true');
-    }
-  });
-
-  it('leaves every other open question answerable while one question’s answer is pending', async () => {
+  it('keeps each open question’s draft, errors, and pending state its own', async () => {
     const [first] = WAITING_QUESTION.questions!;
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    let release!: () => void;
+    const port = recordingAwaitingHumanActions({
+      answer: (call) =>
+        call.questionId === 'qn_02'
+          ? new Promise((resolve) => (release = () => resolve({ ok: true })))
+          : Promise.resolve({ ok: true }),
+    });
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...WAITING_QUESTION,
       questions: [first, { ...first, question_id: 'qn_02' }],
     }));
     fixture.componentRef.setInput('canAnswer', true);
-    fixture.componentRef.setInput('pendingAnswerQuestionIds', ['qn_01']);
+    fixture.componentRef.setInput('actions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
+    const [one, two] = [...el.querySelectorAll<HTMLElement>('[data-testid="open-question"]')];
+    const inputOf = (row: HTMLElement) => row.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!;
+    const submitOf = (row: HTMLElement) => row.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')!;
 
-    const [pending, other] = [...el.querySelectorAll('[data-testid="open-question"]')];
-    expect(pending.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
-    expect(other.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
-    for (const chip of other.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
+    // A blank question 1 refuses locally; question 2's typed text and errors are untouched by it.
+    type(inputOf(two), 'graphql');
+    submitOf(one).click();
+    await settled(fixture);
+    expect(one.querySelector('fleet-kit-field')?.textContent).toContain('Required');
+    expect(two.querySelector('fleet-kit-field')?.textContent).not.toContain('Required');
+    expect(inputOf(two).value).toBe('graphql');
+
+    // Question 2's save in flight disables only its own controls.
+    submitOf(two).click();
+    await settled(fixture);
+    expect(submitOf(two).disabled).toBe(true);
+    expect(submitOf(one).disabled).toBe(false);
+    for (const chip of one.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
       expect(chip.getAttribute('aria-disabled')).not.toBe('true');
     }
+
+    type(inputOf(one), 'rest');
+    submitOf(one).click();
+    await settled(fixture);
+    expect(port.answers.map((call) => [call.questionId, call.draft.answer])).toEqual([
+      ['qn_02', 'graphql'],
+      ['qn_01', 'rest'],
+    ]);
+
+    release();
+    await settled(fixture);
+    expect(submitOf(two).disabled).toBe(false);
   });
 
   it('keeps an answered question visible with its trail instead of dropping it', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(ANSWERED_UNDELIVERED));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -516,7 +618,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('reads “agent resumed” once the delivered fact has landed', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(ANSWERED_UNDELIVERED));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -533,7 +635,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('renders an open question and an already-answered one side by side', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...ANSWERED_UNDELIVERED,
       questions: [
@@ -551,7 +653,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('caps the answered trail at the three most recently answered, newest first', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...ANSWERED_UNDELIVERED,
       // Oldest first, the order the hub sends them in (by asked_at), answered in the
@@ -572,7 +674,7 @@ describe('ChunkAwaitingHuman', () => {
     // taken over — has no delivery row and never will. "Delivering to the agent…" there
     // is the one place this trail asserts something false rather than merely stale: it
     // promises a return trip nothing is left to complete.
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({ ...ANSWERED_UNDELIVERED, terminal: true }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -583,7 +685,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('says a restart-superseded answer was never delivered, on a live chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...ANSWERED_UNDELIVERED,
       questions: [answered({ question_id: 'qn_01', superseded: true })],
@@ -597,7 +699,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('still reads as in flight while the chunk can resume', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({ ...ANSWERED_UNDELIVERED }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -608,7 +710,7 @@ describe('ChunkAwaitingHuman', () => {
   it('reads as delivered on a terminal chunk whose answer did arrive', async () => {
     // The terminal check must not override a real delivery — a chunk reaching `done`
     // after its answer landed is the ordinary happy path, not a failed return trip.
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...ANSWERED_UNDELIVERED,
       terminal: true,
@@ -625,7 +727,7 @@ describe('ChunkAwaitingHuman', () => {
     // is a different order from `answered_at` whenever asks and answers interleave. The
     // panel answers "did *my* answer just land", so sorting on the ask would push the row
     // the operator is looking for out of the cap — q1 here, answered last of all.
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...ANSWERED_UNDELIVERED,
       questions: [
@@ -643,7 +745,7 @@ describe('ChunkAwaitingHuman', () => {
   });
 
   it('renders an ask and its answer as the prose they were written as, keeping the newlines', async () => {
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman(MULTILINE));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -670,7 +772,7 @@ describe('ChunkAwaitingHuman', () => {
   it('preserves indentation and literal markup in open questions, answered questions and answers', async () => {
     const question = 'First paragraph\n\n  1. indented detail\n    <img src=x onerror=alert(1)>\n[unsafe](javascript:alert)';
     const answer = 'Keep the indentation:\n  **literal**\n    <script>alert(1)</script>';
-    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    const fixture = TestBed.createComponent(AllSections);
     fixture.componentRef.setInput('state', awaitingHuman({
       ...MULTILINE,
       questions: MULTILINE.questions!.map((q) => ({ ...q, question, answer: q.answered ? answer : null })),

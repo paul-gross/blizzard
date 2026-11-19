@@ -298,7 +298,7 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toMatchObject({ choice: 'approve' });
   });
 
-  it('surfaces a resolve-decision failure rather than swallowing it', async () => {
+  it('surfaces a resolve-decision failure on the gate’s form line rather than swallowing it', async () => {
     resolveResponse = stubError(400, { detail: "choice 'maybe' is not one of approve, reject" });
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
@@ -309,7 +309,8 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/decisions/de_42/resolutions', 'POST')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('is not one of');
+    expect(el.querySelector('[data-testid="decision-form-error"]')?.textContent).toContain('is not one of');
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
   });
 
@@ -522,7 +523,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');
   });
 
-  it('surfaces a genuine answer failure on the error channel, not the outcome one', async () => {
+  it('surfaces a genuine answer failure on its question’s form line, keeping the typed answer', async () => {
     answerResponse = stubError(404, { detail: 'unknown question qn_77' });
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ask');
@@ -530,7 +531,9 @@ describe('ChunkDetail container', () => {
 
     const el = await answerFrom(fixture);
 
-    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="answer-form-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')?.value).toBe('graphql');
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
     expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
   });
 

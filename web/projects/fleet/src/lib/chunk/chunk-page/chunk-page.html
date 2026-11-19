@@ -38,14 +38,11 @@
           issuePanePlacement="inline"
           [canAnswer]="canAnswer()"
           [canResolve]="canResolve()"
-          [resolvePending]="resolvePending()"
-          [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
+          [awaitingHumanActions]="awaitingHumanActions"
           [graphLinkBase]="graphLinkBase"
           [chunkLinkBase]="chunkLinkBase()"
           [eventsLinkBase]="mobile() ? null : eventsLinkBase"
           [showNodeHistory]="!mobile()"
-          (answerQuestion)="onAnswer($event)"
-          (resolveDecision)="onResolve($event)"
           (pickStep)="onSelectStep($event)"
         />
       </ng-template>

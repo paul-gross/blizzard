@@ -19,8 +19,7 @@
       <section class="d-sec" aria-label="Work item">
         <fleet-chunk-detail-awaiting-human
           section="asks" [state]="awaitingHuman()" [canAnswer]="canAnswer()"
-          [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
-          (answerQuestion)="answerQuestion.emit($event)"
+          [actions]="awaitingHumanActions()"
         />
         @if (detail().escalation) {
           <fleet-chunk-detail-escalation [detail]="detail()" />
@@ -37,7 +36,7 @@
         <fleet-chunk-detail-awaiting-human section="answered" [state]="awaitingHuman()" />
         <fleet-chunk-detail-awaiting-human
           section="decisions" [state]="awaitingHuman()" [canResolve]="canResolve()"
-          [resolvePending]="resolvePending()" (resolveDecision)="resolveDecision.emit($event)"
+          [actions]="awaitingHumanActions()"
         />
       </section>
       <section class="d-sec d-sec--flush" aria-labelledby="chunk-timeline-heading">

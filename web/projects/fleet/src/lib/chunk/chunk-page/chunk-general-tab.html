@@ -4,7 +4,7 @@
   <div class="lhs">
   <fleet-chunk-detail-awaiting-human
     class="open-asks" section="asks" [state]="awaitingHuman()" [canAnswer]="canAnswer()"
-    [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()" (answerQuestion)="answerQuestion.emit($event)"
+    [actions]="awaitingHumanActions()"
   />
   @if (detail().escalation) {
     <fleet-chunk-detail-escalation [detail]="detail()" />
@@ -23,7 +23,7 @@
   <fleet-chunk-detail-awaiting-human class="answered-questions" section="answered" [state]="awaitingHuman()" />
   <fleet-chunk-detail-awaiting-human
     class="decisions" section="decisions" [state]="awaitingHuman()" [canResolve]="canResolve()"
-    [resolvePending]="resolvePending()" (resolveDecision)="resolveDecision.emit($event)"
+    [actions]="awaitingHumanActions()"
   />
   </div>
   @if (showNodeHistory()) {

@@ -1,8 +1,7 @@
-import { type Provider, computed, inject, signal } from '@angular/core';
-import { type AnswerQuestionEvent, type ChunkPageActions, type DaemonTarget, type ResolveDecisionEvent, FLEET_CLOCK, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
+import { type Provider, computed, signal } from '@angular/core';
+import { type ChunkPageActions, type DaemonTarget, hubClient, provideChunkPageDaemon } from 'fleet';
+import { injectAwaitingHumanService } from '../chunks/awaiting-human.service';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
-import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMutation, readAnswerFailure, readDecisionFailure } from '../chunks/human.mutations';
-import { answerQuestionMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectShowProjectColors, projectColorOf } from '../../core/project-lens-colors';
@@ -17,18 +16,13 @@ const EVENTS_LINK_BASE: readonly string[] = ['/events'];
 
 /**
  * The hub's operator-action port for the shared chunk page — its `/api/me` permissions
- * and the two human-loop mutations (answer, resolve). Called from the page's
- * own injection context, so every visit gets fresh notice channels. Failures and
- * outcomes are folded by `readAnswerFailure` and `readDecisionFailure`; both channels
+ * and the awaiting-human saves (answer, resolve). Called from the page's
+ * own injection context, so every visit gets fresh notice channels. Both channels
  * clear at the start of every action, so a stale outcome never sits beside an unrelated
- * failure.
+ * failure; a lost answer or resolve race is said on the outcome channel.
  */
 export function injectHubChunkActions(): ChunkPageActions {
   const meQuery = injectMeQuery();
-  const clock = inject(FLEET_CLOCK);
-  const answerMutation = injectAnswerQuestionMutation();
-  const pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
-  const resolveMutation = injectResolveDecisionMutation();
   const actionError = signal<string | null>(null);
   const actionOutcome = signal<string | null>(null);
 
@@ -42,39 +36,12 @@ export function injectHubChunkActions(): ChunkPageActions {
     canAnswer: computed(() => hasPermission(meQuery.data(), 'question:answer')),
     canResolve: computed(() => hasPermission(meQuery.data(), 'gate:resolve')),
     canReadTranscripts: computed(() => hasPermission(meQuery.data(), 'transcript:read')),
-    resolvePending: computed(() => resolveMutation.isPending()),
-    pendingAnswerQuestionIds: computed(() => pendingAnswers().map((vars) => vars.questionId)),
     actionError: actionError.asReadonly(),
     actionOutcome: actionOutcome.asReadonly(),
     graphLinkBase: GRAPH_LINK_BASE,
     eventsLinkBase: EVENTS_LINK_BASE,
     control: injectHubChunkControl({ beginAction, fail: (message) => actionError.set(message) }),
-    answer(event: AnswerQuestionEvent): void {
-      beginAction();
-      answerMutation.mutate(
-        { questionId: event.questionId, answer: event.answer, chunkId: event.chunkId },
-        {
-          onError: (error) => {
-            const failure = readAnswerFailure(error);
-            if (failure.kind === 'outcome') actionOutcome.set(failure.message);
-            else actionError.set(failure.message);
-          },
-        },
-      );
-    },
-    resolve(event: ResolveDecisionEvent): void {
-      beginAction();
-      resolveMutation.mutate(
-        { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId, note: event.note },
-        {
-          onError: (error) => {
-            const failure = readDecisionFailure(error, new Date(clock()));
-            if (failure.kind === 'outcome') actionOutcome.set(failure.message);
-            else actionError.set(failure.message);
-          },
-        },
-      );
-    },
+    awaitingHuman: injectAwaitingHumanService({ begin: beginAction, outcome: (message) => actionOutcome.set(message) }),
   };
 }
 

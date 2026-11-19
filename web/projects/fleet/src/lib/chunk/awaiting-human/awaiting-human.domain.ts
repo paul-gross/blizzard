@@ -1,3 +1,5 @@
+import type { SaveOutcome } from '../../core/forms/outcome';
+
 /** One question a chunk's worker asked a human — open until answered, then part of the answered trail. */
 export interface AwaitingQuestion {
   readonly question_id: string;
@@ -107,4 +109,28 @@ export function deliveryLine(question: AwaitingQuestion, terminal: boolean): str
   if (question.delivered) return 'Delivered · agent resumed';
   if (question.superseded) return 'Not delivered — the session was restarted';
   return terminal ? 'Not delivered — the chunk ended first' : 'Delivering to the agent…';
+}
+
+/** One open question's answer as its form states it, as typed. */
+export interface AnswerDraft {
+  readonly answer: string;
+}
+
+/** An open gate's optional note as its form states it, as typed; sent with whichever choice is picked. */
+export interface DecisionNoteDraft {
+  readonly note: string;
+}
+
+export const EMPTY_ANSWER_DRAFT: AnswerDraft = { answer: '' };
+
+export const EMPTY_DECISION_NOTE_DRAFT: DecisionNoteDraft = { note: '' };
+
+/**
+ * How an app saves what the awaiting-human forms state. Each call names the chunk, since the saves re-read it.
+ * A refusal is answered as a `SaveOutcome`, never thrown; an outcome that closes the question or gate anyway,
+ * such as losing a race to another answer, is the app's to report and answers ok.
+ */
+export interface AwaitingHumanFormActions {
+  answer(chunkId: string, questionId: string, draft: AnswerDraft): Promise<SaveOutcome<AnswerDraft>>;
+  resolve(chunkId: string, decisionId: string, choice: string, draft: DecisionNoteDraft): Promise<SaveOutcome<DecisionNoteDraft>>;
 }

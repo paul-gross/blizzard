@@ -3,7 +3,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ChunkArtifactsPanel } from '../chunk-artifacts-panel/chunk-artifacts-panel';
-import type { AnswerQuestionEvent, ResolveDecisionEvent } from '../awaiting-human';
 import { deriveWorkItemsState, type WorkItemsState } from '../chunk-detail/work-items-state';
 import { STATUS_TONE } from '../../core/chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../../kit/kit-async-state';
@@ -210,8 +209,8 @@ export class ChunkPage {
 
   protected readonly canAnswer = computed(() => this.actions?.canAnswer() ?? false);
   protected readonly canResolve = computed(() => this.actions?.canResolve() ?? false);
-  protected readonly resolvePending = computed(() => this.actions?.resolvePending() ?? false);
-  protected readonly pendingAnswerQuestionIds = computed(() => this.actions?.pendingAnswerQuestionIds() ?? []);
+  /** How the awaiting-human forms save, or `null` — read-only. */
+  protected readonly awaitingHumanActions = this.actions?.awaitingHuman ?? null;
   protected readonly actionError = computed(() => this.actions?.actionError() ?? null);
   protected readonly actionOutcome = computed(() => this.actions?.actionOutcome() ?? null);
 
@@ -247,12 +246,4 @@ export class ChunkPage {
 
   /** A deleted chunk has no page left to show — back to the board, with nothing selected. */
   protected readonly backToBoard = (): void => void this.router.navigateByUrl(this.appScope.link(this.boardLinkBase()));
-
-  protected onAnswer(event: AnswerQuestionEvent): void {
-    this.actions?.answer(event);
-  }
-
-  protected onResolve(event: ResolveDecisionEvent): void {
-    this.actions?.resolve(event);
-  }
 }

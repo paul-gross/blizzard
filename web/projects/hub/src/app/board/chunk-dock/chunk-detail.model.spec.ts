@@ -1,7 +1,7 @@
 import { type ChunkDetail, type ChunkStatus, type WorkItemsQuery } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
+import { openDetail, openWorkItems, pendingStatusOverride } from './chunk-detail.model';
 
 const detail = (status: ChunkStatus, chunkId = 'ch_a', statusIfPaused?: ChunkStatus): ChunkDetail =>
   ({ chunk_id: chunkId, status, status_if_paused: statusIfPaused }) as ChunkDetail;
@@ -65,12 +65,6 @@ describe('pendingStatusOverride', () => {
 
   it('ignores mutations pending for another chunk', () => {
     expect(pendingStatusOverride(detail('running', 'ch_a', 'paused'), [{ chunkId: 'ch_b' }], [{ chunkId: 'ch_b', paused: true }])).toBeNull();
-  });
-});
-
-describe('pendingQuestionIds', () => {
-  it('lists each pending answer question id in order', () => {
-    expect(pendingQuestionIds([{ questionId: 'q_2' }, { questionId: 'q_1' }])).toEqual(['q_2', 'q_1']);
   });
 });
 

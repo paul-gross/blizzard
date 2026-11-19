@@ -1,10 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkControl, type ChunkDetail, type ChunkStatus, type AnswerQuestionEvent, ChunkAwaitingHuman, type ResolveDecisionEvent, ChunkDelivery, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, toAwaitingHuman, type WorkItemsState, KitErrorLine, KitPanel } from 'fleet';
+import { type ChunkControl, type ChunkDetail, type ChunkStatus, type AwaitingHumanFormActions, ChunkAwaitingHuman, ChunkDelivery, ChunkEscalation, ChunkFacts, ChunkIssuePane, ChunkTimeline, hasDelivery, toAwaitingHuman, type WorkItemsState, KitErrorLine, KitPanel } from 'fleet';
 import { ChunkArtifacts } from './chunk-artifacts';
 import { ChunkDetailHeader } from '../../core/chunk-detail-header/chunk-detail-header';
-
-export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
 
 /**
  * The chunk detail dock — a thin **composition** of presentational regions: the
@@ -12,7 +10,7 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
  * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}),
  * the node-history {@link ChunkTimeline}, and the artifacts column
  * ({@link ChunkArtifacts}). It forwards its inputs down to the regions that need them
- * and re-emits their outputs unchanged.
+ * and re-emits the dismissal unchanged.
  *
  * Presentational only (`bzh:frontend-container-presentational`).
  */
@@ -76,13 +74,8 @@ export class ChunkDetailPanel {
    * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
 
-  /** Whether the resolve-decision mutation is in flight, forwarded to
-   * {@link ChunkAwaitingHuman}. */
-  readonly resolvePending = input(false);
-
-  /** The ids of the questions an answer mutation is in flight for, forwarded to
-   * {@link ChunkAwaitingHuman}. */
-  readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
+  /** How the awaiting-human forms save; `null` (the default) renders them read-only. */
+  readonly awaitingHumanActions = input<AwaitingHumanFormActions | null>(null);
 
   /** The chunk's status as the status chip renders it, forwarded unchanged to
    * {@link ChunkDetailHeader.renderedStatus}. */
@@ -90,12 +83,6 @@ export class ChunkDetailPanel {
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
-
-  /** Emitted when the operator answers an open question. */
-  readonly answerQuestion = output<AnswerQuestionEvent>();
-
-  /** Emitted when the operator resolves an open gate decision. */
-  readonly resolveDecision = output<ResolveDecisionEvent>();
 
   /** Whether the delivery section shows — `hasDelivery`. */
   protected readonly showDelivery = computed(() => hasDelivery(this.detail()));

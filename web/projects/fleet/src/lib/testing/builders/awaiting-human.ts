@@ -1,7 +1,10 @@
 import {
+  type AnswerDraft,
   type AwaitingDecision,
+  type AwaitingHumanFormActions,
   type AwaitingHuman,
   type AwaitingQuestion,
+  type DecisionNoteDraft,
   awaitingHuman as judgeAwaitingHuman,
 } from '../../chunk/awaiting-human/awaiting-human.domain';
 import { fixtureInstant } from './clock';
@@ -74,4 +77,47 @@ export function awaitingHuman(
     questions: parts.questions ?? [],
     decision: parts.decision ?? null,
   });
+}
+
+/** One answer a {@link recordingAwaitingHumanActions} port was asked to save. */
+export interface AnswerCall {
+  readonly chunkId: string;
+  readonly questionId: string;
+  readonly draft: AnswerDraft;
+}
+
+/** One resolution a {@link recordingAwaitingHumanActions} port was asked to save. */
+export interface ResolveCall {
+  readonly chunkId: string;
+  readonly decisionId: string;
+  readonly choice: string;
+  readonly draft: DecisionNoteDraft;
+}
+
+/**
+ * An awaiting-human save port that records every call and answers what it is told to — ok by default. A spec makes a
+ * save pending by answering with a promise it settles later.
+ */
+export function recordingAwaitingHumanActions(answers: {
+  readonly answer?: (call: AnswerCall) => ReturnType<AwaitingHumanFormActions['answer']>;
+  readonly resolve?: (call: ResolveCall) => ReturnType<AwaitingHumanFormActions['resolve']>;
+} = {}): { readonly actions: AwaitingHumanFormActions; readonly answers: AnswerCall[]; readonly resolves: ResolveCall[] } {
+  const answerCalls: AnswerCall[] = [];
+  const resolveCalls: ResolveCall[] = [];
+  return {
+    answers: answerCalls,
+    resolves: resolveCalls,
+    actions: {
+      answer(chunkId, questionId, draft) {
+        const call = { chunkId, questionId, draft };
+        answerCalls.push(call);
+        return answers.answer ? answers.answer(call) : Promise.resolve({ ok: true });
+      },
+      resolve(chunkId, decisionId, choice, draft) {
+        const call = { chunkId, decisionId, choice, draft };
+        resolveCalls.push(call);
+        return answers.resolve ? answers.resolve(call) : Promise.resolve({ ok: true });
+      },
+    },
+  };
 }

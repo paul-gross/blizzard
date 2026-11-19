@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import type { ChunkDetail } from '../../api/hub';
 import { chunkDetail, decisionView, questionView, transitionView, workItemEntry, workRefView } from '../../testing/builders/chunk.translate';
 import type { WorkItemsState } from '../chunk-detail';
+import { recordingAwaitingHumanActions } from '../../testing/builders/awaiting-human';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
 const DETAIL: ChunkDetail = chunkDetail({
@@ -147,7 +148,7 @@ describe('ChunkGeneralTab', () => {
     expect(link?.getAttribute('href')).toBe('/runner/chunk/ch_01prereq00000000000000000');
   });
 
-  it('re-emits answerQuestion from the asks section when canAnswer opts in', async () => {
+  it('saves an answer from the asks section through its port when canAnswer opts in', async () => {
     const waiting: ChunkDetail = {
       ...DETAIL,
       status: 'waiting_on_human',
@@ -168,8 +169,8 @@ describe('ChunkGeneralTab', () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
     fixture.componentRef.setInput('canAnswer', true);
-    let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
-    fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
+    const port = recordingAwaitingHumanActions();
+    fixture.componentRef.setInput('awaitingHumanActions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -178,11 +179,12 @@ describe('ChunkGeneralTab', () => {
     input.dispatchEvent(new Event('input'));
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await vi.waitFor(() => expect(port.answers).toHaveLength(1));
 
-    expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: DETAIL.chunk_id });
+    expect(port.answers[0]).toEqual({ chunkId: DETAIL.chunk_id, questionId: 'qn_01', draft: { answer: 'rest' } });
   });
 
-  it('re-emits resolveDecision from the decisions section when canResolve opts in', async () => {
+  it('saves a resolution from the decisions section through its port when canResolve opts in', async () => {
     const waiting: ChunkDetail = {
       ...DETAIL,
       status: 'waiting_on_human',
@@ -204,15 +206,16 @@ describe('ChunkGeneralTab', () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
     fixture.componentRef.setInput('canResolve', true);
-    let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
-    fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
+    const port = recordingAwaitingHumanActions();
+    fixture.componentRef.setInput('awaitingHumanActions', port.actions);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const buttons = el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]');
     buttons[1].click(); // reject
+    await vi.waitFor(() => expect(port.resolves).toHaveLength(1));
 
-    expect(emitted).toEqual({ decisionId: 'de_01', choice: 'reject', chunkId: DETAIL.chunk_id });
+    expect(port.resolves[0]).toEqual({ chunkId: DETAIL.chunk_id, decisionId: 'de_01', choice: 'reject', draft: { note: '' } });
   });
 
   it('emits pickStep when a row in the node-history summary is activated', async () => {

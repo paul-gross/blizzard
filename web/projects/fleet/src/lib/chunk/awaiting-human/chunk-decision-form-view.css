@@ -1,0 +1,13 @@
+:host {
+  display: block;
+}
+.note-field {
+  display: block;
+  margin: 6px 0 4px;
+}
+.decision-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  --text: var(--cyan);
+}

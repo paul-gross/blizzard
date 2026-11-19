@@ -1,27 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
-import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, FLEET_CLOCK, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, isPendingFor, asyncState, type WorkItemsState, type AnswerQuestionEvent, type ResolveDecisionEvent } from 'fleet';
+import { type ChunkDetail as ChunkDetailAggregate, type ChunkStatus, injectHubChunkDetailQuery, injectHubChunkWorkItemsQuery, injectRunnerHostNames, KitAsyncState, type KitAsyncStateValue, injectPendingMutationVariables, asyncState, type WorkItemsState } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { type CompleteVars } from '../chunks/complete.mutations';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
-import {
-  type AnswerFailure,
-  type AnswerVars,
-  type ResolveVars,
-  injectAnswerQuestionMutation,
-  injectResolveDecisionMutation,
-  readAnswerFailure,
-  readDecisionFailure,
-} from '../chunks/human.mutations';
+import { injectAwaitingHumanService } from '../chunks/awaiting-human.service';
 import { type ChunkPauseVars } from '../chunks/pause.mutations';
-import {
-  answerQuestionMutationKey,
-  chunkCompleteMutationKey,
-  chunkPauseMutationKey,
-  resolveDecisionMutationKey,
-} from '../../core/mutation-keys';
-import { openDetail, openWorkItems, pendingQuestionIds, pendingStatusOverride } from './chunk-detail.model';
+import { chunkCompleteMutationKey, chunkPauseMutationKey } from '../../core/mutation-keys';
+import { openDetail, openWorkItems, pendingStatusOverride } from './chunk-detail.model';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 import { ChunkDetailSkeleton } from './chunk-detail-skeleton';
 import { injectShowProjectColors, openProjectColor } from '../../core/project-lens-colors';
@@ -58,9 +45,6 @@ export class ChunkDetail {
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
-  private readonly answerMutation = injectAnswerQuestionMutation();
-  private readonly pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
-  private readonly resolveMutation = injectResolveDecisionMutation();
   /** The ⋮ menu's chunk-control port — failures land on {@link actionError}, and a
    * confirmed delete of the open chunk dismisses the dock. */
   protected readonly control = injectHubChunkControl({
@@ -72,7 +56,6 @@ export class ChunkDetail {
   });
   private readonly meQuery = injectMeQuery();
   private readonly projectsQuery = injectProjectsQuery();
-  private readonly clock = inject(FLEET_CLOCK);
   protected readonly runnerHosts = injectRunnerHostNames();
 
   /** Whether the current identity may answer an open question (`question:answer`). */
@@ -80,9 +63,6 @@ export class ChunkDetail {
 
   /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
   protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
-
-  /** The same, for Resolve decision. */
-  private readonly pendingResolves = injectPendingMutationVariables<ResolveVars>(resolveDecisionMutationKey);
 
   /** Every chunk id a Pause/Resume mutation is currently pending for, with its variables
    * (`bzh:frontend-pending-override`). */
@@ -102,16 +82,14 @@ export class ChunkDetail {
     return this.overrideStatus() ?? detail.status;
   }
 
-  /** Whether a resolve-decision is in flight for the open chunk. */
-  protected readonly resolvePending = computed(() =>
-    isPendingFor(this.pendingResolves(), (v) => v.chunkId === this.chunkId()),
-  );
-
-  /** The ids of the questions an answer mutation is in flight for. */
-  protected readonly pendingAnswerQuestionIds = computed(() => pendingQuestionIds(this.pendingAnswers()));
-
   /** The open chunk's last operator-action failure, or `null`. */
   protected readonly actionError = signal<string | null>(null);
+
+  /** The awaiting-human saves — a lost race lands on {@link actionOutcome}; every other refusal stays on its form. */
+  protected readonly awaitingHuman = injectAwaitingHumanService({
+    begin: () => this.beginAction(),
+    outcome: (message) => this.actionOutcome.set(message),
+  });
 
   /** The open chunk's last operator-action **outcome** — a non-failure result that still
    * needs saying: a lost answer race, carrying the winning answer. Pinned by
@@ -152,38 +130,4 @@ export class ChunkDetail {
   /** The open chunk's related work items + fetch state for the Issue tab. A failed
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
   protected readonly workItems = computed<WorkItemsState>(() => openWorkItems(this.chunkId(), this.workItemsQuery));
-
-  /** Answer an open question; a lost race reports as an outcome ({@link readAnswerFailure}). */
-  protected onAnswer(event: AnswerQuestionEvent): void {
-    this.beginAction();
-    this.answerMutation.mutate(
-      { questionId: event.questionId, answer: event.answer, chunkId: event.chunkId },
-      { onError: (error) => this.reportAnswerFailure(error) },
-    );
-  }
-
-  /** Route an answer failure to the outcome or error channel — the fold is
-   * {@link readAnswerFailure}'s. */
-  private reportAnswerFailure(error: unknown): void {
-    this.reportFailure(readAnswerFailure(error));
-  }
-
-  /** Route a folded failure to the outcome or error channel. */
-  private reportFailure(failure: AnswerFailure): void {
-    if (failure.kind === 'outcome') this.actionOutcome.set(failure.message);
-    else this.actionError.set(failure.message);
-  }
-
-  protected onResolve(event: ResolveDecisionEvent): void {
-    this.beginAction();
-    this.resolveMutation.mutate(
-      {
-        decisionId: event.decisionId,
-        choice: event.choice,
-        chunkId: event.chunkId,
-        note: event.note,
-      },
-      { onError: (error) => this.reportFailure(readDecisionFailure(error, new Date(this.clock()))) },
-    );
-  }
 }
