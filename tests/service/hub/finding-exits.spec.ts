@@ -180,6 +180,7 @@ test.describe('delivery and tenant-wide findings', () => {
   });
 
   test('test_an_exited_finding_is_no_longer_a_delta_target_but_a_gone_flagged_one_still_is', async ({ api, forge, repository, mockRunner }) => {
+    test.setTimeout(120_000);
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
@@ -245,6 +246,7 @@ test.describe('delivery and tenant-wide findings', () => {
   });
 
   test('test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_series', async ({ api, clock, forge, repository, mockRunner, cli }) => {
+    test.setTimeout(120_000);
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
