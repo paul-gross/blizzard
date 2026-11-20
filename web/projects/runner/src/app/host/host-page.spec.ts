@@ -69,7 +69,7 @@ const REGISTRATION = hostRegistrationView({
 function route(overrides: RunnerRoutes = {}): RunnerRoutes {
   return {
     'GET /api/host/runners': () => RUNNERS,
-    'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 2 }] }),
+    'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 2, revision: null, settings: {}, state: 'active' }] }),
     'GET /api/host/environments': () => ENVIRONMENTS,
     'GET /api/host/subscriptions': () => ({ items: [] }),
     'GET /api/host/registration': () => REGISTRATION,
