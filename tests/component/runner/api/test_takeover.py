@@ -61,7 +61,7 @@ def _app_with_takeover(
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspaces=single_workspace(FakeProvider({})),
-        harnesses=resolved_harnesses,
+        harnesses_for_lease=lambda _lease_id: resolved_harnesses,
     )
     return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), takeover=service

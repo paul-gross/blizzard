@@ -14,7 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
-from blizzard.runner.harness.harness_set import HarnessSet, JudgeInvocation, WorkerInvocation
+from blizzard.runner.harness.harness_set import IOwnedHarnessSet, JudgeInvocation, WorkerInvocation
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import (
     IHarnessLifecycleAndVerdictRegistry,
@@ -273,7 +273,7 @@ class Judgement:
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
         lease = self.lease
         observed = ElicitationExit(elicitation, self.ctx.clock.now(), alive=_elicitation_alive(self.ctx, elicitation))
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         worker = WorkerInvocation(lease.lease_id, generation)
         if not observed.alive and owners is not None and owners.awaiting_recovery(worker, self.session.harness_id):
@@ -382,7 +382,7 @@ class Judgement:
         self._relaunch(elicitation)
 
     def _release_judge(self, generation: int) -> None:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is not None:
             owners.release_judges(self.lease.lease_id, generation)
 
@@ -505,14 +505,14 @@ class Judgement:
             # that closure — no other runner can resume this exact session to relaunch on.
             return
         binding = self.bindings[0]
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         key = JudgeInvocation(lease.lease_id, generation)
         settings = harness.launch_settings(
             lease.resolved_model, lease.resolved_effort, lease.resolved_compaction_window
         )
         observe_version = harness.observe_version
-        launch_set: HarnessSet | None = None
+        launch_set: IOwnedHarnessSet | None = None
         if owners is not None:
             worker = WorkerInvocation(lease.lease_id, generation)
             launch_set = self._launch_set()
@@ -593,16 +593,16 @@ class Judgement:
 
     def current_launch_available(self) -> bool:
         """Defer a judge when current launch values cannot be resolved by exact owner."""
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is None:
             return True
         return self._launch_set() is not None
 
-    def _launch_set(self) -> HarnessSet | None:
+    def _launch_set(self) -> IOwnedHarnessSet | None:
         owners = self.ctx.harness_sets
         assert owners is not None
         try:
-            owners.current.registry.lifecycle_and_verdict(self.session.harness_id)
+            self.ctx.harnesses.lifecycle_and_verdict(self.session.harness_id)
             return owners.current
         except UnknownHarnessError as exc:
             detail = str(exc)
@@ -763,11 +763,8 @@ class Judgement:
             return None
 
     def _judge_harnesses(self) -> IHarnessLifecycleAndVerdictRegistry:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is not None:
             generation = self.ctx.stores.liveness.lease_generation(self.lease.lease_id)
-            owner = owners.find(JudgeInvocation(self.lease.lease_id, generation))
-            if owner is not None:
-                return owner.registry
-        resolve = getattr(self.ctx, "harnesses_for_judge", None)
-        return resolve(self.lease.lease_id) if resolve is not None else self.ctx.harnesses
+            return owners.owner(self.lease.lease_id, generation, judge=True).registry
+        return self.ctx.harnesses_for_judge(self.lease.lease_id)

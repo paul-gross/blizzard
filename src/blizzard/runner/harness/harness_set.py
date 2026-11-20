@@ -17,7 +17,11 @@ from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.declaration import HarnessSection
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.harness.registry import (
+    HarnessRegistry,
+    IHarnessLifecycleAndVerdictRegistry,
+    IHarnessLifecycleRegistry,
+)
 from blizzard.runner.process.child_env import AllowlistedEnv
 
 
@@ -71,32 +75,59 @@ class HarnessSet:
     pending_recovery: frozenset[str] = frozenset()
 
 
+class IOwnedHarnessRegistry(IHarnessLifecycleRegistry, IHarnessLifecycleAndVerdictRegistry, Protocol):
+    """The registry slice a step reaches through an owned set."""
+
+
+class IOwnedHarnessVersions(Protocol):
+    def get(self, harness_id: str, observe: Callable[[], str | None]) -> str | None: ...
+
+    def forget(self, harness_id: str) -> None: ...
+
+
+class IOwnedHarnessHealth(Protocol):
+    def invalidate(self, harness_id: str) -> None: ...
+
+
+class IOwnedHarnessSet(Protocol):
+    """What a step reads off a set it owns; read-only, so the frozen :class:`HarnessSet` satisfies it."""
+
+    @property
+    def registry(self) -> IOwnedHarnessRegistry: ...
+
+    @property
+    def versions(self) -> IOwnedHarnessVersions: ...
+
+    @property
+    def health(self) -> IOwnedHarnessHealth: ...
+
+    @property
+    def recovery_only(self) -> bool: ...
+
+
 class IInvocationHarnesses(Protocol):
     """Ownership of the set selected for an individual in-flight invocation.
 
     The key identifies the invocation, not its harness session: two concurrent
-    invocations can resume the same session. A caller can retain a provisional
-    key before launch and transfer it to the process identity once known.
+    invocations can resume the same session.
     """
 
-    def retain(self, invocation: Hashable) -> HarnessSet: ...
+    def retain(self, invocation: Hashable) -> IOwnedHarnessSet: ...
 
-    def retain_for(self, invocation: Hashable, source: Hashable) -> HarnessSet: ...
+    def retain_for(self, invocation: Hashable, source: Hashable) -> IOwnedHarnessSet: ...
 
     @property
-    def current(self) -> HarnessSet: ...
+    def current(self) -> IOwnedHarnessSet: ...
 
-    def lookup(self, invocation: Hashable) -> HarnessSet: ...
-
-    def transfer(self, invocation: Hashable, process: Hashable) -> None: ...
+    def owner(self, lease_id: str, generation: int | None = None, *, judge: bool = False) -> IOwnedHarnessSet: ...
 
     def release(self, invocation: Hashable) -> None: ...
 
-    def find(self, invocation: Hashable) -> HarnessSet | None: ...
+    def find(self, invocation: Hashable) -> IOwnedHarnessSet | None: ...
 
     def awaiting_recovery(self, invocation: WorkerInvocation, harness_id: str) -> bool: ...
 
-    def worker_for_lease(self, lease_id: str) -> HarnessSet | None: ...
+    def worker_for_lease(self, lease_id: str) -> IOwnedHarnessSet | None: ...
 
     def release_lease(self, lease_id: str) -> None: ...
 
@@ -200,6 +231,18 @@ class HarnessSets:
 
     def lookup(self, invocation: Hashable) -> HarnessSet:
         return self._retained[invocation]
+
+    def owner(self, lease_id: str, generation: int | None = None, *, judge: bool = False) -> HarnessSet:
+        """The set retained for an invocation, else the current set.
+
+        With a generation the lookup is exact, a judge falling back to its
+        generation's worker; with only a lease, the newest retained worker.
+        """
+        if generation is None:
+            return self.worker_for_lease(lease_id) or self.current
+        if judge and (retained := self.find(JudgeInvocation(lease_id, generation))) is not None:
+            return retained
+        return self.find(WorkerInvocation(lease_id, generation)) or self.current
 
     def find(self, invocation: Hashable) -> HarnessSet | None:
         """Find an in-process owner; absence also covers recovery after restart."""

@@ -75,6 +75,8 @@ class UsageLimitHarnesses(SpawnHarnesses, IHarnessUsageLimitsRegistry, Protocol)
 class UsageLimitContext(AttemptContext, Protocol):
     @property
     def harnesses(self) -> UsageLimitHarnesses: ...
+    def harnesses_for_lease(self, lease_id: str) -> UsageLimitHarnesses: ...
+    def harnesses_for_judge(self, lease_id: str) -> UsageLimitHarnesses: ...
     @property
     def stores(self) -> UsageLimitStores: ...
     @property
@@ -201,8 +203,7 @@ def _usage_limit_adapter(
     exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
     escalation to make, not this classifier's."""
     try:
-        resolve = getattr(ctx, "harnesses_for_judge" if judge else "harnesses_for_lease", None)
-        harnesses = resolve(lease_id) if resolve is not None else ctx.harnesses
+        harnesses = ctx.harnesses_for_judge(lease_id) if judge else ctx.harnesses_for_lease(lease_id)
         return harnesses.usage_limits(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):
         return None

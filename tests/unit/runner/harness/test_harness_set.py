@@ -171,3 +171,38 @@ def test_worker_lookup_uses_latest_retained_generation_per_lease() -> None:
     assert sets.worker_for_lease("a") is first
     sets.release_lease("a")
     assert sets.worker_for_lease("a") is None
+
+
+def _replaced_with_retained() -> tuple[HarnessSets, Mock, Mock, Mock]:
+    """Worker gen 1 on the first set, its judge on the second, gen 2 worker on the second, current the third."""
+    first, second, third = Mock(), Mock(), Mock()
+    sets = HarnessSets(Mock(side_effect=[first, second, third]))
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.retain(WorkerInvocation("lease", 1))
+    sets.select(HarnessAssemblyKey((2,)))
+    sets.retain(JudgeInvocation("lease", 1))
+    sets.retain(WorkerInvocation("lease", 2))
+    sets.select(HarnessAssemblyKey((3,)))
+    return sets, first, second, third
+
+
+@pytest.mark.parametrize(
+    ("lease_id", "generation", "judge", "expected"),
+    [
+        pytest.param("lease", 1, False, "first", id="exact-worker"),
+        pytest.param("lease", 1, True, "second", id="exact-judge"),
+        pytest.param("lease", 2, True, "second", id="judge-falls-back-to-same-generation-worker"),
+        pytest.param("lease", None, False, "second", id="lease-only-newest-worker"),
+        pytest.param("lease", None, True, "second", id="lease-only-ignores-judge"),
+        pytest.param("lease", 3, False, "third", id="worker-falls-back-to-current"),
+        pytest.param("lease", 3, True, "third", id="judge-falls-back-to-current"),
+        pytest.param("other", None, False, "third", id="lease-only-falls-back-to-current"),
+    ],
+)
+def test_owner_resolves_the_retained_set_else_current(
+    lease_id: str, generation: int | None, judge: bool, expected: str
+) -> None:
+    sets, first, second, third = _replaced_with_retained()
+    by_name = {"first": first, "second": second, "third": third}
+
+    assert sets.owner(lease_id, generation, judge=judge) is by_name[expected]

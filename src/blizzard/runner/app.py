@@ -947,7 +947,7 @@ def _wire_hosted_app(
 
 def _harnesses_for_lease(graph: RunnerProcess, lease_id: str) -> HarnessRegistry:
     """Use the running worker's assembly, falling back to the current assembly after release or restart."""
-    return (graph.harness_sets.worker_for_lease(lease_id) or graph.harness_sets.current).registry
+    return graph.harness_sets.owner(lease_id).registry
 
 
 class _CurrentHarnessHealth:
@@ -996,7 +996,8 @@ def _wire_runner_clients(
 
     def transcripts_for_invocation(lease_id: str, generation: int) -> HarnessTranscriptRepositories:
         stamp = runner_stores.liveness.spawn_settings(lease_id, generation)
-        return HarnessTranscriptRepositories(harnesses_for_lease(lease_id), stamp.transcripts_root if stamp else None)
+        registry = graph.harness_sets.owner(lease_id, generation).registry
+        return HarnessTranscriptRepositories(registry, stamp.transcripts_root if stamp else None)
 
     clock = host.clock
     process = host.process
@@ -1095,10 +1096,9 @@ def _wire_runner_clients(
         elicitations=runner_stores.elicitations,
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
-        harnesses=harnesses,
+        harnesses_for_lease=harnesses_for_lease,
         workspaces=workspaces,
         events=graph.events,
-        harnesses_for_lease=harnesses_for_lease,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
     attachments = AttachmentService(

@@ -213,7 +213,14 @@ def test_overload_is_classified_by_the_sessions_own_harness(
             OPENCODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=handle, verdict=None)),
         }
     )
-    ctx = cast(LoopContext, SimpleNamespace(harnesses=registry))
+
+    def owner(_lease_id: str) -> HarnessRegistry:
+        return registry
+
+    ctx = cast(
+        LoopContext,
+        SimpleNamespace(harnesses=registry, harnesses_for_lease=owner, harnesses_for_judge=owner),
+    )
 
     def on(harness_id: str) -> Lease:
         return cast(Lease, SimpleNamespace(lease_id="lease_1", session=SessionReference(harness_id, "s")))

@@ -64,8 +64,9 @@ class ExecutionObservationStores(Protocol):
 class ExecutionObservationContext(Protocol):
     @property
     def stores(self) -> ExecutionObservationStores: ...
-    @property
-    def harnesses(self) -> IHarnessExecutionObservationRegistry: ...
+    def execution_observation_harnesses(
+        self, lease_id: str, generation: int
+    ) -> IHarnessExecutionObservationRegistry: ...
     @property
     def worker_files(self) -> IWorkerStdoutFiles: ...
     @property
@@ -138,8 +139,11 @@ class ExecutionObservationSweep:
         spawned_at = facts.latest_spawn
         if session is None or spawned_at is None:
             return
+        generation = facts.generation
         try:
-            seam = ctx.harnesses.execution_observation(session.harness_id)
+            seam = ctx.execution_observation_harnesses(lease.lease_id, generation).execution_observation(
+                session.harness_id
+            )
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             # A read-only side lane: never escalates on its own; its dispatch paths escalate it.
             _log.warning(
@@ -149,7 +153,6 @@ class ExecutionObservationSweep:
                 detail=str(exc),
             )
             return
-        generation = facts.generation
         request = ExecutionObservationRequest(
             session=session,
             generation=generation,

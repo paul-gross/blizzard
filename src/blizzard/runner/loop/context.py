@@ -26,10 +26,15 @@ from blizzard.runner.harness.capability_snapshot import (
     TickCapabilities,
     capability_snapshot,
 )
-from blizzard.runner.harness.harness_set import IInvocationHarnesses, WorkerInvocation
+from blizzard.runner.harness.harness_set import HarnessSets
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessExecutionObservationRegistry,
+    IHarnessRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, IRootedTranscriptSource
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
@@ -38,6 +43,7 @@ from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
 from blizzard.runner.hub.hub_version import HubVersionHolder
 from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentityHolder
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import ICheckRunner
@@ -56,6 +62,25 @@ _log = get_logger("blizzard.runner.loop")
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.
 DEFAULT_RETRIES_MAX = 2
+
+
+def lease_transcript_source(
+    owners: HarnessSets, liveness: IReadLeaseLivenessRepository, lease_id: str, session: SessionReference
+) -> IHarnessTranscriptSource:
+    """The lease's transcript source from its owning set, at the root its latest spawn stamped."""
+    stamp = liveness.latest_spawn_settings([lease_id]).get(lease_id)
+    return transcript_source_at_root(
+        owners.owner(lease_id).registry, session, stamp.transcripts_root if stamp else None
+    )
+
+
+def transcript_source_at_root(
+    registry: IHarnessRegistry, session: SessionReference, root: str | None
+) -> IHarnessTranscriptSource:
+    source = registry.transcript_source(session.harness_id)
+    if root and isinstance(source, IRootedTranscriptSource):
+        return source.at_root(root)
+    return source
 
 
 @domain_model
@@ -229,7 +254,7 @@ class LoopContext:
     #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
     retention_passes: RetentionPasses | None = None
     #: In-memory owners of launched invocations; absent on isolated loop callers.
-    harness_sets: IInvocationHarnesses | None = None
+    harness_sets: HarnessSets | None = None
 
     @property
     def free_environments(self) -> IWorkspaceFreeEnvironment:
@@ -254,40 +279,35 @@ class LoopContext:
         self, session: SessionReference, lease_id: str, generation: int
     ) -> IHarnessTranscriptSource:
         """Resolve a live segment from its invocation, or the composed set after restart."""
-        owner = self.harness_sets.find(WorkerInvocation(lease_id, generation)) if self.harness_sets else None
-        registry = (
-            owner.registry
-            if owner is not None
-            else (self.harness_sets.current.registry if self.harness_sets else self.harnesses)
-        )
-        source = registry.transcript_source(session.harness_id)
         stamp = self.stores.liveness.spawn_settings(lease_id, generation)
-        if stamp is not None and stamp.transcripts_root and isinstance(source, IRootedTranscriptSource):
-            return source.at_root(stamp.transcripts_root)
-        return source
+        return transcript_source_at_root(
+            self._owner_registry(lease_id, generation), session, stamp.transcripts_root if stamp else None
+        )
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
-        owner = self.harness_sets.worker_for_lease(lease_id) if self.harness_sets else None
-        return (
-            owner.registry
-            if owner is not None
-            else (self.harness_sets.current.registry if self.harness_sets else self.harnesses)
-        )
+        return self._owner_registry(lease_id)
 
     def harnesses_for_judge(self, lease_id: str) -> IHarnessRegistry:
-        return self.harnesses_for_lease(lease_id)
+        return self._owner_registry(lease_id, judge=True)
+
+    def execution_observation_harnesses(self, lease_id: str, generation: int) -> IHarnessExecutionObservationRegistry:
+        return self._owner_registry(lease_id, generation)
+
+    def _owner_registry(self, lease_id: str, generation: int | None = None, *, judge: bool = False) -> IHarnessRegistry:
+        if self.harness_sets is None:
+            return self.harnesses
+        return self.harness_sets.owner(lease_id, generation, judge=judge).registry
 
     def lease_transcript_source(self, lease_id: str, session: SessionReference) -> IHarnessTranscriptSource:
+        if self.harness_sets is not None:
+            return lease_transcript_source(self.harness_sets, self.stores.liveness, lease_id, session)
         stamp = self.stores.liveness.latest_spawn_settings([lease_id]).get(lease_id)
         return self.lease_transcript_source_at_root(lease_id, session, stamp.transcripts_root if stamp else None)
 
     def lease_transcript_source_at_root(
         self, lease_id: str, session: SessionReference, root: str | None
     ) -> IHarnessTranscriptSource:
-        source = self.harnesses_for_lease(lease_id).transcript_source(session.harness_id)
-        if root and isinstance(source, IRootedTranscriptSource):
-            return source.at_root(root)
-        return source
+        return transcript_source_at_root(self.harnesses_for_lease(lease_id), session, root)
 
     def resolve_boundary_start(
         self, session: SessionReference, workdir: str | None, workspace_id: str | None, *, lease_id: str | None = None

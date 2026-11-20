@@ -42,7 +42,7 @@ from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverOwnerUnresolvable, TakeoverService
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Resume
-from blizzard.runner.loop_wiring import ResumeMarking, UsageRegistryLookup
+from blizzard.runner.loop_wiring import ResumeMarking
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.service import TranscriptService
@@ -63,6 +63,7 @@ from tests.support.runner_fakes import (
     make_store,
     make_stores,
     single_workspace,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 
@@ -309,18 +310,14 @@ def test_judge_collects_from_retained_set_after_replacement(tmp_path: Path) -> N
     old_harness = FakeHarness(handle=handle, verdict="pass", transcript_source=old_source)
     new_harness = FakeHarness(handle=handle, verdict="fail", transcript_source=new_source)
     ctx, _, _ = _judgement_ctx(store, harness_a=old_harness, harness_b=new_harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     new_registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
     )
-    new = Mock(spec=HarnessSet, registry=new_registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=new_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     key = JudgeInvocation("lease_a", 1)
@@ -340,7 +337,7 @@ def test_lost_judge_relaunch_retains_earlier_owner_until_collection(tmp_path: Pa
     first = FakeHarness(handle=handle, verdict="pass", judge_output_usable=False)
     second = FakeHarness(handle=handle, verdict="pass")
     ctx, _, _ = _judgement_ctx(store, harness_a=first, harness_b=second, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     old_ref = weakref.ref(old)
     new = Mock(
         spec=HarnessSet,
@@ -350,11 +347,7 @@ def test_lost_judge_relaunch_retains_earlier_owner_until_collection(tmp_path: Pa
     remaining = [new, old]
     sets = HarnessSets(lambda _: remaining.pop())
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     sets.select(HarnessAssemblyKey((2,)))
@@ -409,18 +402,14 @@ def test_judge_uses_worker_source_after_replacement(tmp_path: Path, monkeypatch:
     judge_call = Mock(wraps=first.judge)
     monkeypatch.setattr(first, "judge", judge_call)
     ctx, _, _ = _judgement_ctx(store, harness_a=first, harness_b=second, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=second, transcript_source=new_source)})
-    new = Mock(spec=HarnessSet, registry=registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     assert len(first.judged) == 1
@@ -471,16 +460,12 @@ def test_judge_after_restart_anchors_current_session_location_across_relaunch(
     judge_call = Mock(wraps=recovered.judge)
     monkeypatch.setattr(recovered, "judge", judge_call)
     ctx, _, _ = _judgement_ctx(store, harness_a=recovered, harness_b=replacement, probe=FakeProbe())
-    first = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    first = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=replacement)})
-    second = Mock(spec=HarnessSet, registry=registry, versions=None)
+    second = Mock(spec=HarnessSet, health=None, registry=registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[first, second]))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     assert sets.lookup(WorkerInvocation("lease_a", 1)) is first
@@ -517,20 +502,16 @@ def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
     judge_call = Mock(wraps=old_harness.judge)
     monkeypatch.setattr(old_harness, "judge", judge_call)
     ctx, _, _ = _judgement_ctx(store, harness_a=old_harness, harness_b=old_harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding()})
-    new = Mock(spec=HarnessSet, registry=registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=registry, versions=None)
     fresh_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=current_harness)})
-    ready = Mock(spec=HarnessSet, registry=fresh_registry, versions=None)
+    ready = Mock(spec=HarnessSet, health=None, registry=fresh_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new, ready]))
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     assert old_harness.judged == []
@@ -538,6 +519,7 @@ def test_judge_defers_unavailable_current_settings_then_uses_replacement_values(
     assert store.in_flight_elicitation("lease_a", 1) is None
     assert store.active_lease("lease_a") is not None
     sets.select(HarnessAssemblyKey((3,)))
+    ctx = with_harness_sets(ctx, sets)
     Advance(ctx).run()
     assert len(old_harness.judged) == 1
     assert sets.lookup(JudgeInvocation("lease_a", 1)) is old
@@ -556,17 +538,13 @@ def test_disabled_harness_finishes_retained_worker_and_relaunches_judge(tmp_path
     handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     harness = FakeHarness(handle=handle, verdict="pass", judge_output_usable=False)
     ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
-    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), versions=None)
     sets = HarnessSets(Mock(side_effect=[old, disabled]))
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     assert CLAUDE_CODE_HARNESS_ID not in sets.current.registry.known_harnesses
     Advance(ctx).run()
@@ -586,10 +564,10 @@ def test_disabled_harness_without_retained_worker_defers_judgement(tmp_path: Pat
     handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     harness = FakeHarness(handle=handle, verdict="pass")
     ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
-    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), versions=None)
+    disabled = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), versions=None)
     sets = HarnessSets(Mock(return_value=disabled))
     sets.select(HarnessAssemblyKey((1,)))
-    ctx = replace(ctx, harness_sets=sets)
+    ctx = with_harness_sets(ctx, sets)
 
     Advance(ctx).run()
     assert harness.judged == []
@@ -606,16 +584,12 @@ def test_restart_recovers_disabled_session_for_judgement(tmp_path: Path, judge_a
     if judge_already_running:
         Advance(ctx).run()
         assert len(harness.judged) == 1
-    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
-    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    recovery = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=recovery, versions=None)
     sets = HarnessSets(Mock(return_value=disabled))
     sets.select(HarnessAssemblyKey((1,)))
     sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, disabled)
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
     Advance(ctx).run()
     if not judge_already_running:
         assert len(harness.judged) == 1
@@ -633,17 +607,13 @@ def test_exited_judge_waits_for_disabled_owner_then_collects_even_after_stalenes
     Advance(ctx).run()
     assert store.in_flight_elicitation("lease_a", 1) is not None
 
-    recovery = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None, recovery_only=True)
-    missing = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=None, versions=None)
-    available = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=recovery, versions=None)
+    recovery = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None, recovery_only=True)
+    missing = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=None, versions=None)
+    available = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=recovery, versions=None)
     inputs = Mock(spec=HarnessAssemblyInputs, sections=(ClaudeCodeSection(enabled=False),))
     sets = HarnessSets(Mock(side_effect=[missing, available]))
     sets.select(HarnessAssemblyKey((inputs,), ("missing",)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
     Advance(ctx).run()
     assert store.in_flight_elicitation("lease_a", 1) is not None
     assert store.active_lease("lease_a") is not None
@@ -677,21 +647,17 @@ def test_resume_drains_previous_generation_before_releasing_it(tmp_path: Path, m
     resume_call = Mock(wraps=new_harness.resume_with_message)
     monkeypatch.setattr(new_harness, "resume_with_message", resume_call)
     ctx, _, _ = _judgement_ctx(store, harness_a=old_harness, harness_b=new_harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses)
     new_registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
     )
-    new = Mock(spec=HarnessSet, registry=new_registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=new_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
     previous = WorkerInvocation("lease_a", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
     observed: list[str] = []
 
     def pump(_pump: TranscriptPump, lease_id: str, **_kwargs: object) -> bool:
@@ -729,19 +695,15 @@ def test_failed_resume_drain_does_not_block_resume(
     handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     old_harness, new_harness = FakeHarness(handle=handle, verdict=None), FakeHarness(handle=handle, verdict=None)
     ctx, _, _ = _judgement_ctx(store, harness_a=old_harness, harness_b=new_harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses)
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness)})
-    new = Mock(spec=HarnessSet, registry=registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
     previous = WorkerInvocation("lease_a", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     def pump(_pump: TranscriptPump, lease_id: str, **kwargs: object) -> bool:
         assert lease_id == "lease_a"
@@ -770,8 +732,8 @@ def test_unmet_produces_resumes_retained_disabled_harness(tmp_path: Path, restar
     handle = WorkerHandle(session_id=_SHARED_SESSION_ID, pid=100, process_start_time="start-100", pgid=100)
     harness = FakeHarness(handle=handle, verdict=None)
     ctx, _, _ = _judgement_ctx(store, harness_a=harness, harness_b=harness, probe=FakeProbe())
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses, versions=None)
-    disabled = Mock(spec=HarnessSet, registry=HarnessRegistry({}), recovery=old, versions=None)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses, versions=None)
+    disabled = Mock(spec=HarnessSet, health=None, registry=HarnessRegistry({}), recovery=old, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, disabled]))
     sets.select(HarnessAssemblyKey((1,)))
     if not restart:
@@ -779,11 +741,7 @@ def test_unmet_produces_resumes_retained_disabled_harness(tmp_path: Path, restar
     sets.select(HarnessAssemblyKey((2,)))
     if restart:
         sets.recover(WorkerInvocation("lease_a", 1), CLAUDE_CODE_HARNESS_ID, disabled)
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
     lease = store.active_lease("lease_a")
     assert lease is not None
 
@@ -826,7 +784,7 @@ def test_startup_reconciliation_uses_newly_composed_set(tmp_path: Path) -> None:
     stale, current = FakeHarness(handle=handle, verdict=None), FakeHarness(handle=handle, verdict=None)
     old_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=stale)})
     new_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=current)})
-    sets = HarnessSets(Mock(return_value=Mock(spec=HarnessSet, registry=new_registry)))
+    sets = HarnessSets(Mock(return_value=Mock(spec=HarnessSet, health=None, registry=new_registry)))
     sets.select(HarnessAssemblyKey((1,)))
     marking = ResumeMarking(
         make_stores(store),
@@ -896,7 +854,7 @@ def _takeover_service(
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspaces=single_workspace(FakeProvider({})),
-        harnesses=_two_harness_registry(harness_a, harness_b),
+        harnesses_for_lease=lambda _lease_id: _two_harness_registry(harness_a, harness_b),
     )
 
 
@@ -965,7 +923,9 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
         local_api_url="http://127.0.0.1:8431",
         workspaces=single_workspace(FakeProvider({})),
         # Only `claude_code` is bound — `ch_b`'s own `unbound-harness` id resolves nowhere.
-        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness_a)}),
+        harnesses_for_lease=lambda _lease_id: HarnessRegistry(
+            {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness_a)}
+        ),
     )
 
     opened_a = service.open(_open_scope(store, "ch_a"), force=False)
@@ -1005,7 +965,12 @@ def test_hosted_services_follow_retained_then_current_set(tmp_path: Path) -> Non
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
     )
     sets = HarnessSets(
-        Mock(side_effect=[Mock(spec=HarnessSet, registry=old_registry), Mock(spec=HarnessSet, registry=new_registry)])
+        Mock(
+            side_effect=[
+                Mock(spec=HarnessSet, health=None, registry=old_registry),
+                Mock(spec=HarnessSet, health=None, registry=new_registry),
+            ]
+        )
     )
     sets.select(HarnessAssemblyKey((1,)))
     sets.retain(WorkerInvocation("lease_a", 1))
@@ -1030,7 +995,6 @@ def test_hosted_services_follow_retained_then_current_set(tmp_path: Path) -> Non
         takeover=store,
         elicitations=store,
         local_api_url="http://localhost",
-        harnesses=old_registry,
         harnesses_for_lease=resolve,
         workspaces=workspaces,
     )

@@ -30,7 +30,6 @@ from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.loop.steps import Advance, Pull
-from blizzard.runner.loop_wiring import UsageRegistryLookup
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
@@ -50,6 +49,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 
@@ -338,21 +338,17 @@ def test_nudge_continues_after_failed_drain_and_uses_retained_source_boundary(
         worktree_git=FakeWorktreeGit(),
         clock=FixedClock(_NOW),
     )
-    old = Mock(spec=HarnessSet, registry=ctx.harnesses)
+    old = Mock(spec=HarnessSet, health=None, registry=ctx.harnesses)
     registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=new_harness, transcript_source=new_source)}
     )
-    new = Mock(spec=HarnessSet, registry=registry, versions=None)
+    new = Mock(spec=HarnessSet, health=None, registry=registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[old, new]))
     sets.select(HarnessAssemblyKey((1,)))
     previous = WorkerInvocation("lease_r", 1)
     sets.retain(previous)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(
-        ctx,
-        harness_sets=sets,
-        usage=replace(ctx.usage, invocation_registry=UsageRegistryLookup(sets, ctx.usage.harnesses)),
-    )
+    ctx = with_harness_sets(ctx, sets)
 
     def pump(_pump: TranscriptPump, lease_id: str, **kwargs: object) -> bool:
         assert sets.lookup(previous) is old

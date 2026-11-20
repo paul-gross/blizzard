@@ -595,16 +595,14 @@ class TakeoverService:
         takeover: IWriteTakeoverRepository,
         elicitations: IWriteElicitationRepository,
         local_api_url: str,
-        harnesses: IHarnessLifecycleRegistry,
+        harnesses_for_lease: Callable[[str], IHarnessLifecycleRegistry],
         workspaces: IWorkspaceSpawnRoots,
         events: IRunnerEventPublisher | None = None,
-        harnesses_for_lease: Callable[[str], IHarnessLifecycleRegistry] | None = None,
     ) -> None:
         self._takeover = takeover
         self._elicitations = elicitations
         self._workspaces = workspaces
         self._clock = clock
-        self._harnesses = harnesses
         self._harnesses_for_lease = harnesses_for_lease
         self._process = process
         self._local_api_url = local_api_url
@@ -622,7 +620,7 @@ class TakeoverService:
         # Resolve before the fact-before-command write: an unavailable recorded owner blocks
         # this takeover rather than opening it and then offering no usable command.
         try:
-            registry = self._harnesses_for_lease(reference.lease_id) if self._harnesses_for_lease else self._harnesses
+            registry = self._harnesses_for_lease(reference.lease_id)
             harness = registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             raise TakeoverOwnerUnresolvable(str(exc)) from exc

@@ -31,8 +31,7 @@ from blizzard.runner.harness.harness_set import (
     HarnessAssemblyInputs,
     HarnessAssemblyKey,
     HarnessSet,
-    IInvocationHarnesses,
-    JudgeInvocation,
+    HarnessSets,
     WorkerInvocation,
 )
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -57,7 +56,7 @@ from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.session_reconcile import SessionReconcile
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.lifecycle.takeover import TakeoverRecovery
-from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
+from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription, lease_transcript_source
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
 from blizzard.runner.loop.tick import tick
@@ -232,6 +231,7 @@ class LoopWiring:
                 leases=stores.session,
                 harnesses=harnesses,
                 transcripts_wired=True,
+                transcript_for_lease=partial(lease_transcript_source, graph.harness_sets, stores.liveness),
             ),
             harness_selector=HarnessSelector(harnesses=harnesses, health=selected.health),
             env_release=EnvironmentRelease(
@@ -317,33 +317,26 @@ class IVerifiableHubClient(IHubClient, ITokenIdentityReader, Protocol):
 
 @dataclass(frozen=True)
 class UsageRegistryLookup:
-    owners: IInvocationHarnesses | None
+    owners: HarnessSets | None
     fallback: UsageRecorderHarnesses
 
     def __call__(self, lease_id: str, generation: int, judge: bool) -> UsageRecorderHarnesses:
         if self.owners is None:
             return self.fallback
-        key = JudgeInvocation(lease_id, generation) if judge else WorkerInvocation(lease_id, generation)
-        owner = self.owners.find(key)
-        if owner is None and judge:
-            owner = self.owners.find(WorkerInvocation(lease_id, generation))
-        return owner.registry if owner is not None else self.owners.current.registry
+        return self.owners.owner(lease_id, generation, judge=judge).registry
 
 
 @dataclass(frozen=True)
 class _OrphanScope:
     harnesses: IHarnessRegistry
     stores: RunnerStores
-    invocation_harnesses: IInvocationHarnesses | None = None
+    invocation_harnesses: HarnessSets | None = None
 
     def harnesses_for_lease(self, lease_id: str) -> IHarnessRegistry:
+        if self.invocation_harnesses is None:
+            return self.harnesses
         generation = self.stores.liveness.lease_generation(lease_id)
-        owner = (
-            self.invocation_harnesses.find(WorkerInvocation(lease_id, generation))
-            if self.invocation_harnesses is not None
-            else None
-        )
-        return owner.registry if owner is not None else self.harnesses
+        return self.invocation_harnesses.owner(lease_id, generation).registry
 
     def harnesses_for_judge(self, lease_id: str) -> IHarnessRegistry:
         return self.harnesses_for_lease(lease_id)
@@ -363,7 +356,7 @@ class ResumeMarking:
     harnesses: IHarnessRegistry
     #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
     sleep: Callable[[float], None] = time.sleep
-    invocation_harnesses: IInvocationHarnesses | None = None
+    invocation_harnesses: HarnessSets | None = None
 
     def on_shutdown(self) -> int:
         """Mark in-flight leases as the daemon exits gracefully, then drain their workers:

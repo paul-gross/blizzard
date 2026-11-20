@@ -148,6 +148,8 @@ class DormantHarnesses(UsageLimitHarnesses, IHarnessProviderOverloadRegistry, Pr
 class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, ReleaseContext, Protocol):
     @property
     def harnesses(self) -> DormantHarnesses: ...
+    def harnesses_for_lease(self, lease_id: str) -> DormantHarnesses: ...
+    def harnesses_for_judge(self, lease_id: str) -> DormantHarnesses: ...
     @property
     def stores(self) -> DormantStores: ...
     @property
@@ -684,10 +686,9 @@ class DormantSession:
         session = lease.session
         assert session is not None
         try:
-            owners = getattr(self.ctx, "harness_sets", None)
-            registry = owners.current.registry if owners is not None else self.ctx.harnesses
+            owners = self.ctx.harness_sets
             try:
-                return registry.lifecycle(session.harness_id)
+                return self.ctx.harnesses.lifecycle(session.harness_id)
             except UnknownHarnessError:
                 retained = owners.worker_for_lease(lease.lease_id) if owners is not None else None
                 if retained is None:
@@ -700,7 +701,7 @@ class DormantSession:
             return None
 
     def awaiting_recovery(self) -> bool:
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         session = self.lease.session
         if owners is None or session is None:
             return False
@@ -714,8 +715,7 @@ class DormantSession:
         session = lease.session
         assert session is not None
         try:
-            resolve = getattr(self.ctx, "harnesses_for_lease", None)
-            registry = resolve(lease.lease_id) if resolve is not None else self.ctx.harnesses
+            registry = self.ctx.harnesses_for_lease(lease.lease_id)
             return registry.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
@@ -760,7 +760,7 @@ class DormantSession:
         session = lease.session
         assert session is not None
         generation = spawner.generation(lease.lease_id)
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         origin_owner = owners.worker_for_lease(lease.lease_id) if owners is not None else None
         if not transcript_drained:
             self.drain_before_resume()
@@ -790,7 +790,7 @@ class DormantSession:
         invocation = WorkerInvocation(lease.lease_id, generation)
         selected = None
         if owners is not None:
-            if session.harness_id not in owners.current.registry.known_harnesses and origin_owner is not None:
+            if session.harness_id not in self.ctx.harnesses.known_harnesses and origin_owner is not None:
                 selected = owners.retain_for(invocation, WorkerInvocation(lease.lease_id, generation - 1))
             else:
                 selected = owners.retain(invocation)

@@ -43,7 +43,7 @@ from blizzard.runner.harness.adapter import AcquiredEnvironment, WorkerHandle, W
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID, ClaudeCodeSection
-from blizzard.runner.harness.harness_set import HarnessAssemblyKey
+from blizzard.runner.harness.harness_set import HarnessAssemblyKey, HarnessSets
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
@@ -901,6 +901,47 @@ def test_resume_marking_on_shutdown_orphans_a_survivor_through_its_harness_owner
     marking.on_shutdown()
 
     assert probe.killed_groups == [100] and harness.orphaned == ["sess-a"]
+
+
+def test_resume_marking_drain_orphans_an_unretained_lease_through_the_current_set(tmp_path: Path) -> None:
+    """After a replacement, a lease no set retains is orphaned through the published set, not the boot registry."""
+    store = _seeded_running_lease_store(tmp_path)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        pgid=100,
+    )
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})
+    clock = FixedClock(_NOW)
+    handle = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
+    boot, replacement = FakeHarness(handle=handle, verdict=None), FakeHarness(handle=handle, verdict=None)
+    boot_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=boot)})
+    sets = HarnessSets(
+        Mock(
+            side_effect=[
+                Mock(registry=boot_registry),
+                Mock(registry=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=replacement)})),
+            ]
+        )
+    )
+    sets.select(HarnessAssemblyKey((1,)))
+    sets.select(HarnessAssemblyKey((2,)))
+    marking = ResumeMarking(
+        make_stores(store),
+        make_host_stores(store),
+        clock,
+        probe,
+        boot_registry,
+        lambda seconds: clock.advance(timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE + seconds)),
+        sets,
+    )
+
+    marking.on_shutdown()
+
+    assert replacement.orphaned == ["sess-a"] and boot.orphaned == []
 
 
 def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:

@@ -28,7 +28,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
-from blizzard.runner.harness.harness_set import HarnessSet, IInvocationHarnesses, WorkerInvocation
+from blizzard.runner.harness.harness_set import IInvocationHarnesses, IOwnedHarnessSet, WorkerInvocation
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
@@ -369,17 +369,13 @@ class Spawner:
         # candidate. Every other fresh mint, a rotated pool's replacement included, reaches the selector
         # or its no-set fallback.
         owners = self.ctx.harness_sets
-        current = owners.current if owners is not None else None
         source = mint_owner_source(resume_from, harness_id, envelope.node)
         if source is MintOwnerSource.RESUME and resume_from is not None:
             owner = resume_from.harness_id
         elif source is MintOwnerSource.EXPLICIT and harness_id is not None:
             owner = harness_id
         elif source is MintOwnerSource.SELECT:
-            selector = (
-                HarnessSelector(current.registry, current.health) if current is not None else self.ctx.harness_selector
-            )
-            selection = selector.select(envelope.node)
+            selection = self.ctx.harness_selector.select(envelope.node)
             if selection.harness_id is None:
                 self.escalate_no_acceptable_harness(
                     chunk_id,
@@ -393,14 +389,14 @@ class Spawner:
         else:
             # Same registry-order default `capability_snapshot` advertises;
             # `None` (a no-bindings registry) resolves below like any unresolvable owner.
-            owner = default_harness_id(current.registry if current is not None else self.ctx.harnesses) or ""
+            owner = default_harness_id(self.ctx.harnesses) or ""
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
         harness = self._resolve_harness(owner, via=via)
         if harness is None:
             return
         now = self.ctx.clock.now()
-        resumed = self._sessions().resumption(resume_from)
+        resumed = self.ctx.sessions.resumption(resume_from)
         lease = self._mint(chunk_id, envelope, resume=resumed, harness_id=owner, at=now)
         _CP_AFTER_MINT.reached()
         workspace_id = self.lease_workspace(chunk_id)
@@ -597,7 +593,7 @@ class Spawner:
             self.ctx.workspaces.spawn_root(self.lease_workspace(chunk_id)),
             environments[0].workdir if environments else None,
         ).path
-        resume = self._sessions().resolve_resume(chunk_id, envelope.node, spawn_cwd)
+        resume = self.ctx.sessions.resolve_resume(chunk_id, envelope.node, spawn_cwd)
         if resume.owner_unresolvable is not None:
             session, exc = resume.owner_unresolvable
             self._escalate_unresolvable_resume_owner(chunk_id, envelope, session, exc, via=via)
@@ -622,7 +618,7 @@ class Spawner:
         if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it
         now = self.ctx.clock.now()
-        resumed = self._sessions().resumption(session)
+        resumed = self.ctx.sessions.resumption(session)
         minted = self._mint(chunk_id, envelope, resume=resumed, harness_id=session.harness_id, at=now, retries_max=0)
         _CP_AFTER_MINT.reached()
         lease = self.ctx.stores.lease_record.active_lease(minted.lease_id)
@@ -706,9 +702,7 @@ class Spawner:
         moments earlier this same call; what still fails here is only a same-tick race or a
         fresh mint's own default."""
         try:
-            owners = self.ctx.harness_sets
-            registry = owners.current.registry if owners is not None else self.ctx.harnesses
-            return registry.lifecycle(harness_id)
+            return self.ctx.harnesses.lifecycle(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "spawn blocked by unavailable harness owner",
@@ -725,16 +719,11 @@ class Spawner:
         return binding.workspace_id if binding is not None else None
 
     def advertised_version(
-        self, harness_id: str, observe: Callable[[], str | None], *, selected: HarnessSet | None = None
+        self, harness_id: str, observe: Callable[[], str | None], *, selected: IOwnedHarnessSet | None = None
     ) -> str | None:
         """The version this runner advertises for ``harness_id``, which every launch records: the cross-tick cache's
         when the loop wires one, else observed now."""
-        owners = self.ctx.harness_sets
-        versions = (
-            selected.versions
-            if selected is not None
-            else (owners.current.versions if owners is not None else self.ctx.harness_versions)
-        )
+        versions = selected.versions if selected is not None else self.ctx.harness_versions
         return versions.get(harness_id, observe) if versions is not None else observe()
 
     def launching[T](
@@ -743,7 +732,7 @@ class Spawner:
         observe: Callable[[], str | None],
         launch: Callable[[], T],
         *,
-        selected: HarnessSet | None = None,
+        selected: IOwnedHarnessSet | None = None,
     ) -> tuple[T, str | None]:
         """Launch on ``harness_id``'s advertised version, returning the launch with the version it ran on. A launch
         refused because that version changed has the next snapshot observe it afresh and recalculate its
@@ -762,18 +751,9 @@ class Spawner:
             self._forget_version(harness_id, selected=selected)
             raise LaunchVersionRefusedError(harness_id, str(exc)) from exc
 
-    def _forget_version(self, harness_id: str, *, selected: HarnessSet | None = None) -> None:
-        owners = self.ctx.harness_sets
-        versions = (
-            selected.versions
-            if selected is not None
-            else (owners.current.versions if owners is not None else self.ctx.harness_versions)
-        )
-        health = (
-            selected.health
-            if selected is not None
-            else (owners.current.health if owners is not None else self.ctx.harness_health)
-        )
+    def _forget_version(self, harness_id: str, *, selected: IOwnedHarnessSet | None = None) -> None:
+        versions = selected.versions if selected is not None else self.ctx.harness_versions
+        health = selected.health if selected is not None else self.ctx.harness_health
         if versions is not None:
             versions.forget(harness_id)
         if health is not None:
@@ -783,16 +763,6 @@ class Spawner:
         """The spawn generation this lease's next start is about to mint — one past the
         durably-recorded count, read *before* that start's own ``record_spawn`` lands."""
         return self.ctx.stores.liveness.lease_generation(lease_id) + 1
-
-    def _sessions(self) -> SessionResolver:
-        owners = self.ctx.harness_sets
-        if owners is None:
-            return self.ctx.sessions
-        return replace(
-            self.ctx.sessions,
-            harnesses=owners.current.registry,
-            transcript_for_lease=self.ctx.lease_transcript_source,
-        )
 
     def stdout_path(self, lease_id: str) -> str:
         return self.ctx.worker_files.stdout_path(lease_id, self.generation(lease_id))
@@ -837,7 +807,7 @@ class Spawner:
         node = envelope.node
         budget = resolved_retries_max(retries_max, node.retries_max, self.ctx.config.default_retries_max)
         model, effort, compaction_window = (
-            self._sessions().session_stamps(node, resume, harness_id=harness_id)
+            self.ctx.sessions.session_stamps(node, resume, harness_id=harness_id)
             if harness_id is not None
             else (None, None, None)
         )

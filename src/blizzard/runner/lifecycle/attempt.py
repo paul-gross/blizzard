@@ -678,7 +678,7 @@ class Attempt:
         # After the closure commits, never before (decision: a crash between the two leaves at
         # most an orphan the startup sweep collects, never a still-active lease's directory gone).
         self.ctx.worker_scratch.remove(self.lease.lease_id)
-        owners = getattr(self.ctx, "harness_sets", None)
+        owners = self.ctx.harness_sets
         if owners is not None:
             owners.release_lease(self.lease.lease_id)
         if self.ctx.events is not None:
@@ -746,8 +746,7 @@ class Attempt:
         """Resolve ``session``'s recorded owner, logging and returning ``None`` — never
         raising — when it is unknown or unavailable."""
         try:
-            resolve = getattr(self.ctx, "harnesses_for_lease", None)
-            harnesses = resolve(self.lease.lease_id) if resolve is not None else self.ctx.harnesses
+            harnesses = self.ctx.harnesses_for_lease(self.lease.lease_id)
             return harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
@@ -770,9 +769,7 @@ class Attempt:
         if session is None:
             return None
         try:
-            owners = getattr(self.ctx, "harness_sets", None)
-            harnesses = owners.current.registry if owners is not None else self.ctx.harnesses
-            harnesses.lifecycle(session.harness_id)
+            self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             return session, exc
         return None

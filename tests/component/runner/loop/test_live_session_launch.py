@@ -141,7 +141,7 @@ def test_store_edits_reach_next_launch_and_preserve_running_owner(
         )
         after = stepper._context()  # pyright: ignore[reportPrivateUsage]
         assert after.harness_sets is sets
-        assert sets.lookup(owner) is old
+        assert sets.find(owner) is old
         assert sets.current is not old
         second = launch(sets.current.registry, "second")
         assert first["binary"] == str(old_bin) and second["binary"] == str(new_bin)
@@ -376,7 +376,7 @@ def test_live_bundle_enabled_and_auth_changes_reach_consumers(tmp_path: Path, mo
         assert Path(first["directory"]).joinpath("prompts/p.txt").read_text() == "old bundle"
         edit({"opencode.enabled": False})
         stepper._context()  # pyright: ignore[reportPrivateUsage]
-        assert sets.lookup(WorkerInvocation("old", 1)) is old
+        assert sets.find(WorkerInvocation("old", 1)) is old
         assert OPENCODE_HARNESS_ID not in sets.current.probes
         retained = launch(old.registry, old_base)
         assert retained["directory"] == first["directory"]

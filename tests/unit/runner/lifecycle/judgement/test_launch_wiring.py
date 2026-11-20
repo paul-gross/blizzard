@@ -7,7 +7,7 @@ launch/collect shape, and this pins what the launch *passes* — the standing re
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
@@ -40,6 +40,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    with_harness_sets,
 )
 from tests.support.runner_mint import new_mint
 
@@ -210,15 +211,15 @@ def test_judge_launch_uses_worker_location_and_current_settings_then_retains_its
     monkeypatch.setattr(old, "has_usable_output", usable)
     old_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=old)})
     new_registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=current)})
-    first = Mock(spec=HarnessSet, registry=old_registry, versions=None)
-    second = Mock(spec=HarnessSet, registry=new_registry, versions=None)
+    first = Mock(spec=HarnessSet, health=None, registry=old_registry, versions=None)
+    second = Mock(spec=HarnessSet, health=None, registry=new_registry, versions=None)
     sets = HarnessSets(Mock(side_effect=[first, second]))
     sets.select(HarnessAssemblyKey((1,)))
     generation = rig.store.lease_generation("lease_1")
     worker = WorkerInvocation("lease_1", generation)
     sets.retain(worker)
     sets.select(HarnessAssemblyKey((2,)))
-    ctx = replace(rig.ctx, harness_sets=sets)
+    ctx = with_harness_sets(rig.ctx, sets)
     judgement = Judgement.of(ctx, rig.lease)
     assert judgement is not None
 
