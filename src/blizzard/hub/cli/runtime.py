@@ -11,6 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 
 import click
+from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
@@ -25,18 +26,23 @@ from blizzard.cli.runtime import (
     run_migrate,
 )
 from blizzard.foundation.clock import IClock, resolve_clock
-from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
-from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app, open_hub_engine
-from blizzard.hub.composition import HubSettingsGraph, build_hub_settings
+from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
+from blizzard.hub.composition import HubSettingsGraph, build_hub_settings, open_hub_store
 from blizzard.hub.config import ConfigError, HubConfig, bootstrap_document
 from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.domain.observability.tracing.attributes import (
+    PLATFORM_INSTRUMENTATION_SCOPE,
+    PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+    resource_attributes,
+)
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError, check_own_floor
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.hub.settings.footing import HubSettingsFooting, setting_keys
 from blizzard.hub.store import MIGRATIONS_DIR
-from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.errors import HubStoreConnections
 
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
 # then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
@@ -162,29 +168,50 @@ def host(
         document,
     )
     clock = resolve_clock(environ)
-    settings_engine = open_hub_engine(config.db_url)
-    settings = build_hub_settings(
-        HubStoreConnections(settings_engine, HubStoreErrorFactory(get_logger("blizzard.hub.store"))),
-        clock,
-        footing,
+    platform_tracing = build_platform_tracing(
+        config.tracing,
+        environ,
+        resource=resource_attributes(environ, __version__),
+        scope=PLATFORM_INSTRUMENTATION_SCOPE,
+        scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     )
     try:
-        with click_exception_on(ConfigError, SettingsInvalid):
-            settings.authoring.seed(setting_keys(HUB_REGISTRY), footing.file_view(document))
-            config = footing.resolve(settings.reader.snapshot().entries)
-        _serve(config, window, listening_file, settings, clock)
+        engine, connections = open_hub_store(config.db_url, platform_tracing)
+        try:
+            settings = build_hub_settings(connections, clock, footing)
+            with click_exception_on(ConfigError, SettingsInvalid):
+                settings.authoring.seed(setting_keys(HUB_REGISTRY), footing.file_view(document))
+                config = footing.resolve(settings.reader.snapshot().entries)
+            _serve(config, window, listening_file, settings, clock, engine, connections, platform_tracing)
+        finally:
+            engine.dispose()
     finally:
-        settings_engine.dispose()
+        platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
 
 
 def _serve(
-    config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph, clock: IClock
+    config: HubConfig,
+    window: VersionWindow,
+    listening_file: Path | None,
+    settings: HubSettingsGraph,
+    clock: IClock,
+    engine: Engine,
+    connections: HubStoreConnections,
+    platform_tracing: IPlatformTracing,
 ) -> None:
     # Bound before anything is built, so every derivation of the port sees the one actually bound.
     with bound_tcp(config.host, config.port) as sock:
         config = replace(config, port=bound_port(sock))
         with click_exception_on(ConfigError):
-            app = build_hosted_app(config, version_window=window, settings=settings, clock=clock)
+            app = build_hosted_app(
+                config,
+                version_window=window,
+                settings=settings,
+                clock=clock,
+                engine=engine,
+                connections=connections,
+                platform_tracing=platform_tracing,
+            )
         try:
             click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
             server = build_early_shutdown_server(
@@ -205,7 +232,4 @@ def _serve(
             server.run(sockets=[sock])
         finally:
             # Lifespan normally closes the hosted resources; cover servers that never enter it too.
-            try:
-                app.state.hosted_cleanup.close()
-            finally:
-                app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+            app.state.hosted_cleanup.close()

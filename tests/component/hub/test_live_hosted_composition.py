@@ -5,21 +5,23 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import SystemClock
-from blizzard.hub.app import open_hub_engine
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.auth.throttle import LiveIpThrottle
-from blizzard.hub.composition import build_hub_settings
+from blizzard.hub.composition import build_hub_settings, open_hub_store
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.settings.footing import HubSettingsFooting
 from tests.support.config_inputs import FLAG_REGISTRY, build_hosted_hub_app, init_hub
-from tests.support.scaffolding import hub_level_connections
 
 
 def test_hosted_services_follow_committed_settings(tmp_path: Path) -> None:
     config = init_hub(tmp_path / "hub")
-    engine = open_hub_engine(config.db_url)
+    tracing = DisabledPlatformTracing()
+    engine, connections = open_hub_store(config.db_url, tracing)
     footing = HubSettingsFooting(config.root, None, None, False, FLAG_REGISTRY, False, HUB_REGISTRY, {})
-    settings = build_hub_settings(hub_level_connections(engine), SystemClock(), footing)
-    app = build_hosted_hub_app(config, settings=settings)
+    settings = build_hub_settings(connections, SystemClock(), footing)
+    app = build_hosted_hub_app(
+        config, settings=settings, engine=engine, connections=connections, platform_tracing=tracing
+    )
     client = TestClient(app)
     try:
         assert isinstance(app.state.services.auth_throttle, LiveIpThrottle)

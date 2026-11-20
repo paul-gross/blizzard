@@ -22,7 +22,7 @@ from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IResealSecretRepository, Reseal, SealedSecret, SecretRotationConflict
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub import app as hub_app
-from blizzard.hub.composition import TenantStores, build_config_authoring, build_hub_core
+from blizzard.hub.composition import TenantStores, build_config_authoring, build_hub_core, connections_for_engine
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
@@ -77,7 +77,7 @@ class _Hub:
     second: TenantId
 
     def stores(self, tenant: TenantId) -> TenantStores:
-        return build_hub_core(self.engine, clock=FixedClock(_NOW)).open(StoreScope(tenant))
+        return build_hub_core(connections_for_engine(self.engine), clock=FixedClock(_NOW)).open(StoreScope(tenant))
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)

@@ -14,8 +14,7 @@ from blizzard.foundation.invariants import Violation
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import build_hub_invariants
-from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.composition import build_hub_invariants, connections_for_engine, open_hub_store
 from blizzard.hub.store.internal.invariants import HubInvariants
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
@@ -35,7 +34,7 @@ def runner_invariants(engine: Engine, *, process: IProcessProbe | None = None) -
 
 def hub_invariants(engine: Engine, *, clock: IClock | None = None) -> HubInvariants:
     """The hub half over ``engine``, built as the hub's own composition builds it."""
-    connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+    connections = connections_for_engine(engine)
     return build_hub_invariants(connections, clock if clock is not None else SystemClock())
 
 
@@ -57,5 +56,9 @@ class Invariants:
                 runner_invariants(create_engine_from_url(self.runner_db_url)).run(after_recovery=after_recovery)
             )
         if self.hub_db_url is not None:
-            violations.extend(hub_invariants(create_engine_from_url(self.hub_db_url)).run())
+            engine, connections = open_hub_store(self.hub_db_url)
+            try:
+                violations.extend(build_hub_invariants(connections, SystemClock()).run())
+            finally:
+                engine.dispose()
         return violations

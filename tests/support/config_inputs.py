@@ -202,4 +202,35 @@ def build_hosted_hub_app(config: HubConfig, **kwargs: Any) -> FastAPI:
     """:func:`blizzard.hub.app.build_hosted_app`, its version window the packaged one unless ``version_window`` is
     given."""
     kwargs.setdefault("version_window", VERSION_WINDOW)
-    return hub_app.build_hosted_app(config, **kwargs)
+    import os
+    from contextlib import ExitStack
+
+    from blizzard import __version__
+    from blizzard.foundation.platform_tracing.handle import build_platform_tracing
+    from blizzard.hub.composition import open_hub_store
+    from blizzard.hub.domain.observability.tracing.attributes import (
+        PLATFORM_INSTRUMENTATION_SCOPE,
+        PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+        resource_attributes,
+    )
+
+    with ExitStack() as cleanup:
+        tracing = kwargs.get("platform_tracing")
+        if tracing is None:
+            tracing = build_platform_tracing(
+                config.tracing,
+                os.environ,
+                resource=resource_attributes(os.environ, __version__),
+                scope=PLATFORM_INSTRUMENTATION_SCOPE,
+                scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+            )
+            cleanup.callback(tracing.shutdown, hub_app.PLATFORM_TRACING_SHUTDOWN_SECONDS)
+        if "engine" not in kwargs:
+            engine, connections = open_hub_store(config.db_url, tracing)
+            cleanup.callback(engine.dispose)
+            kwargs.update(engine=engine, connections=connections)
+        kwargs["platform_tracing"] = tracing
+        app = hub_app.build_hosted_app(config, **kwargs)
+        cleanup.callback(app.state.hosted_cleanup.close)
+        app.state.hosted_cleanup = cleanup.pop_all()
+        return app

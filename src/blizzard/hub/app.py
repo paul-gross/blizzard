@@ -36,12 +36,10 @@ from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
     IPlatformTracing,
-    build_platform_tracing,
 )
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
@@ -137,6 +135,7 @@ from blizzard.hub.composition import (
     build_hub_flags,
     build_process_core,
     build_services,
+    open_hub_store,
 )
 from blizzard.hub.config import (
     AUTH_MODE_OAUTH,
@@ -159,8 +158,6 @@ from blizzard.hub.domain.observability.egress.event_rows import missing_key_reas
 from blizzard.hub.domain.observability.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
-    PLATFORM_INSTRUMENTATION_SCOPE,
-    PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
 from blizzard.hub.domain.projects.declarations import ImportLinks
@@ -180,9 +177,8 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config, current_pass_config
-from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
-from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -435,19 +431,12 @@ def _log_unhandled_request_error(request: Request, exc: Exception) -> PlainTextR
     return PlainTextResponse("Internal Server Error", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def open_hub_engine(db_url: str) -> Engine:
-    """The hub process's engine, opened after the tenant statement guard is installed — so a hub started with
-    ``BLIZZARD_TENANT_GUARD=1`` checks every statement it runs."""
-    install_tenant_guard()
-    return create_engine_from_url(db_url)
-
-
 def rotate_secret_keys(config: HubConfig, environ: Mapping[str, str]) -> RotationResult:
     """The offline ``rotate-key`` wiring: the store and key source opened directly, no app; every open
     tenant's secrets re-sealed."""
-    engine = open_hub_engine(config.db_url)
+    engine, connections = open_hub_store(config.db_url)
     try:
-        tenants = build_process_core(engine).every_open()
+        tenants = build_process_core(connections).every_open()
         keys = hub_key_provider(environ, data_dir=config.data_dir)
         return rotate_keys([stores.secrets for stores in tenants], keys, secret_cipher)
     finally:
@@ -462,9 +451,9 @@ def import_legacy_config(
     or into the hub's only open tenant when none is named, linking what it creates to that tenant's only project."""
     require_hub_key(environ, data_dir=config.data_dir)
     legacy = read_legacy_keys(config.config_path, environ, strict=config.strict)
-    engine = open_hub_engine(config.db_url)
+    engine, connections = open_hub_store(config.db_url)
     try:
-        core = build_process_core(engine)
+        core = build_process_core(connections)
         target = _legacy_import_tenant(core.open_tenants(), named=tenant)
         stores = core.open(StoreScope(target))
         authoring = build_config_authoring(
@@ -495,7 +484,7 @@ def check_forges(config: HubConfig) -> ForgeCheck:
     path = StoreUrl(config.db_url).path
     if path is not None and not path.exists():
         raise ConfigError(f"{config.root} holds no store at {path}; nothing to check")
-    engine = open_hub_engine(config.db_url)
+    engine, _connections = open_hub_store(config.db_url)
     try:
         with engine.connect() as conn:
             return _forge_check(conn)
@@ -760,42 +749,27 @@ def create_app(
 def build_hosted_app(
     config: HubConfig,
     *,
-    platform_tracing: IPlatformTracing | None = None,
+    engine: Engine,
+    connections: HubStoreConnections,
+    platform_tracing: IPlatformTracing,
     oauth_http_client: httpx2.Client | None = None,
     version_window: VersionWindow,
     settings: HubSettingsGraph | None = None,
     clock: IClock | None = None,
 ) -> FastAPI:
-    """The ``host`` composition root: open the store and wire every fleet seam.
+    """The ``host`` composition root: wire every fleet seam over caller-owned resources.
 
-    ``platform_tracing`` defaults to the handle ``[tracing]`` and the OTLP environment decide.
-    ``oauth_http_client`` replaces the OAuth providers' client. Either way, the engine and every outbound client are
-    instrumented through it. ``version_window`` judges each registering runner's version."""
+    The engine and tracing handle are borrowed; outbound clients are instrumented through the handle.
+    ``oauth_http_client`` replaces the OAuth providers' client.
+    ``version_window`` judges each registering runner's version."""
     resolved_clock = clock if clock is not None else resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
-    owns_tracing = platform_tracing is None
-    platform_tracing = (
-        platform_tracing
-        if platform_tracing is not None
-        else build_platform_tracing(
-            config.tracing,
-            os.environ,
-            resource=resource_attributes(os.environ, __version__),
-            scope=PLATFORM_INSTRUMENTATION_SCOPE,
-            scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
-        )
-    )
-    with contextlib.ExitStack() as tracing_cleanup, contextlib.ExitStack() as cleanup:
-        if owns_tracing:
-            tracing_cleanup.callback(platform_tracing.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
-        engine = open_hub_engine(config.db_url)
-        cleanup.callback(engine.dispose)
-        platform_tracing.instrument_engine(engine)
+    with contextlib.ExitStack() as cleanup:
         reader = SqlAlchemyStoreStatusReader(engine)
         expected = migration_runner(config).script_head()
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-        core = build_hub_core(engine, clock=resolved_clock)
+        core = build_hub_core(connections, clock=resolved_clock)
         # Minted here on first start when no key source exists yet.
         secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
         remove_retired_workdirs(config.data_dir)
@@ -979,7 +953,6 @@ def build_hosted_app(
         # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
         app.state.flow_driver = None if controlled else flow_driver
         app.state.hosted_cleanup = cleanup.pop_all()
-        tracing_cleanup.pop_all()
         return app
 
 

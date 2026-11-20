@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config
+from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.credentials import CredentialUnavailable
@@ -110,7 +110,9 @@ class _World:
         engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = build_hub_core(engine, clock=clock).open(StoreScope(default_tenant(engine)))
+        self.stores = build_hub_core(connections_for_engine(engine), clock=clock).open(
+            StoreScope(default_tenant(engine))
+        )
         self.authoring = config_authoring(engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok", OP)
         self.forge_id = seed_forge(engine, "http://forge.fixture")

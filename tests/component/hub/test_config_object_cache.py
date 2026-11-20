@@ -15,7 +15,7 @@ from sqlalchemy import Engine, update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
+from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config, connections_for_engine
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.credentials import (
     ConfiguredCredential,
@@ -64,7 +64,7 @@ class _World:
         self.engine = create_engine_from_url(db_url)
         self.keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.core = build_hub_core(self.engine, clock=clock)
+        self.core = build_hub_core(connections_for_engine(self.engine), clock=clock)
         self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)

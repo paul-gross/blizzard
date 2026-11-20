@@ -70,6 +70,7 @@ from blizzard.hub.composition import (
     build_flow_driver,
     build_hub_core,
     build_services,
+    connections_for_engine,
     default_forge_registry,
     tenant_transactions,
 )
@@ -1768,7 +1769,7 @@ def build_hub(
     # The built-in `hub` source is seated as a source, an editor and a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
-    core = build_hub_core(engine, clock=clock)
+    core = build_hub_core(connections_for_engine(engine), clock=clock)
     default = StoreScope(default_tenant(engine))
     default_stores = core.open(default)
     hub_source = HubWorkSource(

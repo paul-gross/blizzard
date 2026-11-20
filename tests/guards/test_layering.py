@@ -602,12 +602,12 @@ _HUB_SCOPED_NAMES = frozenset({"HUB_SCOPED_OPTION", "blizzard_hub_scoped"})
 
 def _tenant_seam_breaches(src_root: Path) -> list[str]:
     """Each place under ``src_root`` (a ``blizzard`` package root) that reaches the tenant seam from outside it: an
-    import of the statement guard outside ``hub/store/`` and the hub app that installs it; the hub-scoped exemption
-    named — as an import, a name, an attribute, a keyword argument or a string — anywhere but the exemption's own
+    import of the statement guard outside ``hub/store/`` and the composition module that installs it; the hub-scoped
+    exemption named — as an import, a name, an attribute, a keyword argument or a string — anywhere but its own
     holders (:func:`_holds_hub_scoped_exemption`); ``ScopedConnections`` constructed outside ``hub/store/`` rather
     than opened through ``HubStoreConnections.scoped``."""
     store_dir = src_root / "hub" / "store"
-    guard_importers = (src_root / "hub" / "app.py",)
+    guard_importers = (src_root / "hub" / "composition.py",)
     breaches: list[str] = []
     for path in _production_files(src_root):
         in_store = path.is_relative_to(store_dir)
@@ -662,9 +662,9 @@ def _names_spelled(node: ast.AST) -> list[str]:
 
 def test_the_tenant_seam_is_reached_only_through_its_own_doors() -> None:
     """``bzh:tenant-scoped-store`` and ``bzh:hub-scoped-reads-confined``: the statement guard is installed by the hub
-    app alone, a scoped connections object is opened only through ``HubStoreConnections.scoped``, and the exemption
-    that lets a statement past the guard is named only by the tenant primitives, the guard, ``HubScopedReads``, the
-    invariant checker's cross-tenant audits, and migrations."""
+    composition module alone, a scoped connections object is opened only through ``HubStoreConnections.scoped``, and
+    the exemption that lets a statement past the guard is named only by the tenant primitives, the guard,
+    ``HubScopedReads``, the invariant checker's cross-tenant audits, and migrations."""
     breaches = _tenant_seam_breaches(_SRC_DIR)
     assert not breaches, f"tenant seam — reached from outside its own doors: {breaches}"
 
@@ -682,7 +682,8 @@ def _plant_tenant_seam(tmp_path: Path, rel: str, text: str) -> list[str]:
         ("hub/domain/x.py", "from blizzard.hub.store.tenant_guard import install_tenant_guard\n"),
         ("hub/domain/x.py", "import blizzard.hub.store.tenant_guard\n"),
         ("hub/domain/x.py", "from blizzard.hub.store import tenant_guard\n"),
-        ("hub/composition.py", "from .store.tenant_guard import install_tenant_guard\n"),
+        ("hub/app.py", "from .store.tenant_guard import install_tenant_guard\n"),
+        ("hub/cli/runtime.py", "import blizzard.hub.store.tenant_guard as guard\n"),
         ("hub/domain/x.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
         ("hub/api/x.py", "import blizzard.hub.tenancy as t\nOPTIONS = {t.HUB_SCOPED_OPTION: True}\n"),
         ("hub/api/x.py", 'OPTIONS = {"blizzard_hub_scoped": True}\n'),
@@ -702,7 +703,7 @@ def test_tenant_seam_check_catches_every_breach(tmp_path: Path, rel: str, text: 
 @pytest.mark.parametrize(
     ("rel", "text"),
     [
-        ("hub/app.py", "from blizzard.hub.store.tenant_guard import install_tenant_guard\n"),
+        ("hub/composition.py", "from .store.tenant_guard import install_tenant_guard\n"),
         ("hub/store/scoped.py", "ScopedConnections(e, r, s)\n"),
         ("hub/store/internal/x.py", "from blizzard.hub.store.tenant_guard import install_tenant_guard\n"),
         ("hub/store/internal/hub_scoped_reads.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
@@ -3849,12 +3850,236 @@ def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_root
     no class is constructed twice across the hub's composition-root files."""
     sites: dict[str, list[str]] = {}
     for path in _COMPOSITION_ROOT_FILES:
-        for name, lineno in _blizzard_constructions(path):
+        for name, lineno in _canonical_blizzard_constructions(path, _SRC_DIR):
             sites.setdefault(name, []).append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
     duplicated = {
-        name: where for name, where in sites.items() if len(where) > 1 and name not in _REPEATABLE_CONSTRUCTIONS
+        name: where
+        for name, where in sites.items()
+        if len(where) > 1 and name.rsplit(".", 1)[-1] not in _REPEATABLE_CONSTRUCTIONS
     }
     assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
+
+
+# The hosted graph and the independent offline roots may each acquire a store, but only the hub composition
+# seam may build its connections or open an engine directly. The invariant tool's runner half is unrelated.
+_HUB_STORE_WIRING_ROOTS = (
+    "hub/app.py",
+    "hub/composition.py",
+    "hub/cli/runtime.py",
+    "hub/event_log_opener.py",
+    "tools/invariants.py",
+)
+_HUB_CONNECTIONS_TARGET = "blizzard.hub.store.errors.HubStoreConnections"
+_ENGINE_OPEN_TARGETS = frozenset(
+    {"blizzard.foundation.store.engine.create_engine_from_url", "sqlalchemy.create_engine"}
+)
+
+
+def _wiring_bindings(path: Path, src_root: Path, tree: ast.Module) -> dict[str, str]:
+    bindings: dict[str, str] = {}
+    module = ".".join(path.relative_to(src_root.parent).with_suffix("").parts)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            bindings[node.name] = f"{module}.{node.name}"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
+        elif isinstance(node, ast.ImportFrom):
+            module = _absolute_module(path, src_root, node)
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = f"{module}.{alias.name}"
+    return bindings
+
+
+def _wiring_target(expr: ast.expr, bindings: Mapping[str, str]) -> str | None:
+    parts: list[str] = []
+    while isinstance(expr, ast.Attribute):
+        parts.append(expr.attr)
+        expr = expr.value
+    if not isinstance(expr, ast.Name):
+        return None
+    return ".".join((bindings.get(expr.id, expr.id), *reversed(parts)))
+
+
+def _canonical_blizzard_constructions(path: Path, src_root: Path) -> list[tuple[str, int]]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    bindings = _wiring_bindings(path, src_root, tree)
+    constructions: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and (target := _wiring_target(node.func, bindings)):
+            name = target.rsplit(".", 1)[-1]
+            if target.startswith("blizzard.") and name[:1].isupper() and not name.isupper():
+                constructions.append((target, node.lineno))
+    return constructions
+
+
+def _hub_store_wiring_breaches(src_root: Path) -> list[str]:
+    breaches: list[str] = []
+    constructions: list[str] = []
+    hosted_acquisitions: list[str] = []
+    for relative in _HUB_STORE_WIRING_ROOTS:
+        path = src_root / relative
+        if not path.exists():
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        bindings = _wiring_bindings(path, src_root, tree)
+        parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = _wiring_target(node.func, bindings)
+            where = f"{relative}:{node.lineno}"
+            ancestor: ast.AST = node
+            while ancestor in parents and not isinstance(ancestor, ast.FunctionDef | ast.AsyncFunctionDef):
+                ancestor = parents[ancestor]
+            function = ancestor.name if isinstance(ancestor, ast.FunctionDef | ast.AsyncFunctionDef) else ""
+            if target == _HUB_CONNECTIONS_TARGET:
+                constructions.append(where)
+                if relative != "hub/composition.py":
+                    breaches.append(f"{where} constructs {target} outside composition")
+            if target in _ENGINE_OPEN_TARGETS and relative != "hub/composition.py":
+                # The invariant checker owns a separate runner engine; this exception is not a hub-store opener.
+                runner_url = relative == "tools/invariants.py" and any(
+                    isinstance(n, ast.Attribute) and n.attr == "runner_db_url"
+                    for arg in node.args
+                    for n in ast.walk(arg)
+                )
+                if not runner_url:
+                    breaches.append(f"{where} opens an engine outside hub composition")
+            if target in {
+                "blizzard.hub.composition.open_hub_engine",
+                "blizzard.hub.composition.connections_for_engine",
+            } and (relative == "hub/cli/runtime.py" or (relative == "hub/app.py" and function == "build_hosted_app")):
+                breaches.append(f"{where} bypasses the shared store opener")
+            if (
+                target
+                in {
+                    "blizzard.hub.composition.connections_for_engine",
+                    "blizzard.hub.composition.open_hub_engine",
+                    "blizzard.hub.composition.open_hub_store",
+                }
+                and relative == "hub/composition.py"
+                and function in {"build_hub_core", "build_process_core"}
+            ):
+                breaches.append(f"{where} acquires store resources inside the core")
+            if target == "blizzard.hub.composition.open_hub_store":
+                if relative == "hub/cli/runtime.py":
+                    hosted_acquisitions.append(where)
+                if relative == "hub/app.py" and function == "build_hosted_app":
+                    breaches.append(f"{where} acquires a store inside the hosted app")
+    if len(constructions) > 1:
+        breaches.append(f"HubStoreConnections constructed more than once: {constructions}")
+    if len(hosted_acquisitions) > 1:
+        breaches.append(f"hosted store acquired more than once: {hosted_acquisitions}")
+    return breaches
+
+
+def test_hub_store_wiring_goes_through_composition() -> None:
+    assert not (breaches := _hub_store_wiring_breaches(_SRC_DIR)), breaches
+
+
+@pytest.mark.parametrize(
+    ("relative", "source"),
+    [
+        ("hub/cli/runtime.py", "from blizzard.hub.store.errors import HubStoreConnections as C\nC(e, errors)\n"),
+        ("tools/invariants.py", "import blizzard.hub.store.errors as errors\nerrors.HubStoreConnections(e, err)\n"),
+        (
+            "hub/app.py",
+            "from blizzard.foundation.store.engine import create_engine_from_url as open_engine\nopen_engine(url)\n",
+        ),
+        ("hub/event_log_opener.py", "import sqlalchemy as sa\nsa.create_engine(url)\n"),
+        (
+            "tools/invariants.py",
+            "from blizzard.foundation.store import engine\nengine.create_engine_from_url(self.hub_db_url)\n",
+        ),
+        ("hub/cli/runtime.py", "from blizzard.hub.composition import open_hub_engine as open_it\nopen_it(url)\n"),
+        ("hub/cli/runtime.py", "import blizzard.hub.composition as c\nc.connections_for_engine(engine)\n"),
+        (
+            "hub/app.py",
+            "from .composition import open_hub_store as acquire\ndef build_hosted_app():\n    acquire(url)\n",
+        ),
+        (
+            "hub/cli/runtime.py",
+            "from blizzard.hub.composition import open_hub_store as acquire\nacquire(url)\nacquire(url)\n",
+        ),
+    ],
+)
+def test_hub_store_wiring_catches_bypasses(tmp_path: Path, relative: str, source: str) -> None:
+    src = tmp_path / "blizzard"
+    path = src / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+    assert _hub_store_wiring_breaches(src)
+
+
+def test_hub_store_wiring_catches_duplicate_connections_with_aliases(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "hub/composition.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "from blizzard.hub.store.errors import HubStoreConnections as C\n"
+        "from .store import errors as store_errors\nC(e, err)\nstore_errors.HubStoreConnections(e, err)\n"
+    )
+    assert _hub_store_wiring_breaches(src)
+
+
+def test_hub_store_wiring_catches_core_rebuilding_borrowed_connections(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "hub/composition.py"
+    path.parent.mkdir(parents=True)
+    path.write_text("def connections_for_engine(e): ...\ndef build_hub_core(e):\n    connections_for_engine(e)\n")
+    assert _hub_store_wiring_breaches(src)
+
+
+@pytest.mark.parametrize("builder", ["build_hub_core", "build_process_core"])
+@pytest.mark.parametrize(
+    ("imports", "call"),
+    [
+        ("def open_hub_store(url): ...\n", "open_hub_store(url)"),
+        ("from .composition import open_hub_store as acquire\n", "acquire(url)"),
+        ("import blizzard.hub.composition as composition\n", "composition.open_hub_store(url)"),
+        ("from .composition import open_hub_engine as acquire\n", "acquire(url)"),
+    ],
+)
+def test_hub_store_wiring_catches_core_acquisition(tmp_path: Path, builder: str, imports: str, call: str) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "hub/composition.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(f"{imports}def {builder}():\n    {call}\n")
+    assert any("acquires store resources inside the core" in breach for breach in _hub_store_wiring_breaches(src))
+
+
+def test_blizzard_constructions_resolve_aliases_and_qualified_names(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "hub/composition.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "from blizzard.hub.store.errors import HubStoreConnections as C\n"
+        "from .store import errors as store_errors\nC(e, err)\nstore_errors.HubStoreConnections(e, err)\n"
+    )
+    assert _canonical_blizzard_constructions(path, src) == [(_HUB_CONNECTIONS_TARGET, 3), (_HUB_CONNECTIONS_TARGET, 4)]
+
+
+def test_hub_store_wiring_admits_independent_roots(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    for relative, source in {
+        "hub/composition.py": "from .store.errors import HubStoreConnections\n"
+        "from blizzard.foundation.store.engine import create_engine_from_url\n"
+        "e = create_engine_from_url(url)\nconnections = HubStoreConnections(e, errors)\n"
+        "def open_hub_store(url): ...\ndef build_hub_core(connections): ...\n"
+        "def build_process_core(connections): ...\nopen_hub_store(url)\n",
+        "hub/cli/runtime.py": "from blizzard.hub.composition import open_hub_store\nopen_hub_store(url)\n",
+        "hub/event_log_opener.py": "from blizzard.hub.composition import open_hub_store\nopen_hub_store(url)\n",
+        "tools/invariants.py": "from blizzard.foundation.store.engine import create_engine_from_url\n"
+        "create_engine_from_url(self.runner_db_url)\n",
+    }.items():
+        path = src / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+    assert _hub_store_wiring_breaches(src) == []
 
 
 #: What the runner's composition root builds once, so the served app never builds a second, private copy.

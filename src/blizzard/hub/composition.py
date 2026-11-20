@@ -31,10 +31,12 @@ from blizzard.foundation.flags import (
 )
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -306,6 +308,7 @@ from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, Urgency
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -1027,9 +1030,32 @@ def build_hub_flags(config: HubConfig) -> Flags:
     return resolution.flags
 
 
-def build_process_core(engine: Engine) -> HubCore:
+def connections_for_engine(engine: Engine, platform_tracing: IPlatformTracing | None = None) -> HubStoreConnections:
+    """Build the hub store graph over a borrowed engine."""
+    if platform_tracing is not None:
+        platform_tracing.instrument_engine(engine)
+    return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+
+
+def open_hub_engine(db_url: str) -> Engine:
+    """Open a hub engine only after installing the tenant guard."""
+    install_tenant_guard()
+    return create_engine_from_url(db_url)
+
+
+def open_hub_store(db_url: str, platform_tracing: IPlatformTracing | None = None) -> tuple[Engine, HubStoreConnections]:
+    """Acquire an engine and its shared, instrumented connections graph."""
+    engine = open_hub_engine(db_url)
+    try:
+        return engine, connections_for_engine(engine, platform_tracing)
+    except BaseException:
+        engine.dispose()
+        raise
+
+
+def build_process_core(connections: HubStoreConnections) -> HubCore:
     """:func:`build_hub_core` on the system clock."""
-    return build_hub_core(engine, clock=build_system_clock())
+    return build_hub_core(connections, clock=build_system_clock())
 
 
 def build_system_clock() -> IClock:
@@ -1037,10 +1063,9 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
-def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
+def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
     """Build the :class:`HubCore`."""
-    store_errors = HubStoreErrorFactory(get_logger("blizzard.hub.store"))
-    store_connections = HubStoreConnections(engine, store_errors)
+    store_errors = store_connections.errors
     hub_scoped_reads = build_hub_scoped_reads(store_connections)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     hub_events = HubEventLogStore(store_connections)
