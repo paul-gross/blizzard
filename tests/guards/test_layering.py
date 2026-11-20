@@ -1416,6 +1416,7 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "cli" / "external_usage.py",
         _RUNNER_DIR / "cli" / "runners.py",
         _RUNNER_DIR / "cli" / "host_records.py",
+        _RUNNER_DIR / "cli" / "prompt.py",
         _RUNNER_DIR / "cli" / "store.py",
         _RUNNER_DIR / "cli" / "store_guard.py",
         _RUNNER_DIR / "cli" / "token.py",

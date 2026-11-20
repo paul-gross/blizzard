@@ -128,6 +128,7 @@ from blizzard.runner.composition import (
     build_host_record_services,
     build_runner_process,
     build_running_host_runner_service,
+    host_settings_reader,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.environments.workspaces import IWorkspaceEntries, IWorkspaces
@@ -497,14 +498,17 @@ def create_app(
                 stepper=stepper,
             ),
         )
-    served_workspaces: tuple[ServedWorkspace, ...] | Callable[[], tuple[ServedWorkspace, ...]]
-    if workspaces is not None:
-        served_workspaces = tuple(workspaces)
-    elif workspace_registry is not None:
+    served_workspaces: Callable[[], tuple[ServedWorkspace, ...]]
+    if workspace_registry is not None and workspaces is None:
         # Read at each request, so a workspace the host tick creates or retires is served from the next tick.
         served_workspaces = functools.partial(_served_workspaces, workspace_registry)
     else:
-        served_workspaces = tuple(_served_workspace(workspace, None) for workspace in config.workspaces)
+        fixed = (
+            tuple(workspaces)
+            if workspaces is not None
+            else tuple(_served_workspace(workspace, None) for workspace in config.workspaces)
+        )
+        served_workspaces = functools.partial(tuple, fixed)
 
     # No framework exporters: tests/component/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
@@ -531,7 +535,7 @@ def create_app(
     app.state.subscriptions = (
         subscriptions
         if callable(subscriptions)
-        else tuple(subscriptions if subscriptions is not None else config.subscriptions)
+        else functools.partial(tuple, subscriptions if subscriptions is not None else config.subscriptions)
     )
     # A registered host signs in as itself; an unregistered one as its first runner.
     sign_in: ISignInClient | None = None
@@ -931,10 +935,18 @@ def _wire_hosted_app(
     )
     app.state.runners = registry
     app.state.start_failures = reconcile.failures if reconcile is not None else None
-    # The host's workspace and subscription writes, judged by the host file the host started from.
-    record_host = host_config or (host.host_settings.reader.host if host.host_settings is not None else None)
+    # The host's workspace and subscription writes, judged by the reader its passes resolve through.
+    record_reader = (
+        host.host_settings.reader
+        if host.host_settings is not None
+        else host_settings_reader(host_config, host.host_stores)
+        if host_config is not None
+        else None
+    )
     app.state.host_records = (
-        build_host_record_services(record_host, host.host_stores, clock=host.clock) if record_host is not None else None
+        build_host_record_services(record_reader, host.host_stores, clock=host.clock)
+        if record_reader is not None
+        else None
     )
     app.state.hosted_runners = (
         build_running_host_runner_service(host_config, host, host.host_hub)
@@ -994,8 +1006,6 @@ def _wire_runner_clients(
     connections = graph.connections
     harness_health = graph.health
     workspaces = host.workspaces
-    # The runner's own workspace, as such: the first its bindings name that the host serves, else the host's first.
-    home = workspaces.home(config.bound_workspace_ids)
     harnesses = graph.harnesses
 
     def harnesses_for_lease(lease_id: str) -> HarnessRegistry:
@@ -1077,7 +1087,8 @@ def _wire_runner_clients(
         served_projects=read_stores.served_projects,
         projects=config.projects,
         runner_name=config.name,
-        workspace_id=home,
+        # The runner's own workspace, as such, read on use: the first its bindings name that the host serves now.
+        home_workspace=lambda: workspaces.home(config.bound_workspace_ids),
         bindings=tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings or ()),
         agents=config.agents,
         hub_url=config.hub_url,

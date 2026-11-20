@@ -154,7 +154,7 @@ def _build_app(
         escalations=store,
         identity=identity,
         runner_name=name,
-        workspace_id="workspace-1",
+        home_workspace=lambda: "workspace-1",
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),  # unused by the two routes this test drives

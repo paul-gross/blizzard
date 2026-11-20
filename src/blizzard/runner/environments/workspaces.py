@@ -1,16 +1,7 @@
-"""The host's workspace registry: every workspace the host declares, by id, and the one holder of the current one.
-
-Each workspace has its own provider, the spawn root its workers start in, its resolved standing prompt, and the lock
-that serialises acquisition from its pool. A lease reaches its workspace through the id its ``env_bindings`` row
-names, never through a runner-wide workspace; a row naming none, or one the host does not declare, resolves to no
-provider, an empty spawn root and no prompt.
-
-The host tick rebuilds the registry whenever a workspace record moves; :class:`HostWorkspaces` is what every reader
-holds, reading the registry in force at each use. The acquisition locks are the holder's, by workspace id, so an
-acquisition through a replaced provider and one through its replacement take the same lock
-(``bzh:environment-held-once``). A retired workspace stays in the registry for what it already holds — its provider
-releases and resumes the environments held there — but takes no new acquisition and is not listed among the
-host's workspaces."""
+"""The host's workspace registry — each workspace by id, with its provider, spawn root, standing prompt and pool
+lock — and :class:`HostWorkspaces`, the one holder of the registry in force, which the host tick replaces whenever a
+workspace record moves. A lease reaches its workspace through the id its ``env_bindings`` row names; a row naming
+none, or one the host does not declare, resolves to no provider. A retired workspace serves only what it holds."""
 
 from __future__ import annotations
 
@@ -84,7 +75,7 @@ class IWorkspaceSessions(IWorkspaceSpawnSettings, IWorkspaceProviders, Protocol)
 
 
 class IWorkspaceAcquisitionProviders(Protocol):
-    """The providers a new acquisition may draw from, narrowed for FILL's free-environment hint."""
+    """The providers a new acquisition may draw from."""
 
     def acquisition_provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
         """The workspace's provider while it is active; ``None`` for a retired workspace, an undeclared one or
@@ -107,8 +98,7 @@ class IWorkspaceAcquisition(IWorkspaceSessions, IWorkspaceAcquisitionProviders, 
 
 
 class IWorkspaceEntries(Protocol):
-    """The host's active workspaces as registered, in declaration order — what the routes list and the host
-    reports."""
+    """The host's active workspaces as registered, in declaration order."""
 
     def entries(self) -> tuple[WorkspaceEntry, ...]: ...
 
@@ -147,7 +137,7 @@ class WorkspaceLocks:
 class WorkspaceRegistry:
     """The :class:`IWorkspaces` over the host's active workspaces in declaration order, beside its ``retired`` ones,
     which serve only what they already hold. May be empty: a host with no workspace serves no binding. ``locks`` are
-    the host's; a registry built without them holds its own."""
+    the host's; a registry built without them holds its own, which no :class:`HostWorkspaces` accepts."""
 
     def __init__(
         self,
@@ -160,7 +150,7 @@ class WorkspaceRegistry:
         self._retired: Mapping[str, WorkspaceEntry] = {
             entry.workspace_id: entry for entry in retired if entry.workspace_id not in self._workspaces
         }
-        self._locks = locks if locks is not None else WorkspaceLocks()
+        self.locks = locks if locks is not None else WorkspaceLocks()
 
     def ids(self) -> tuple[str, ...]:
         return tuple(self._workspaces)
@@ -202,7 +192,7 @@ class WorkspaceRegistry:
 
     @contextmanager
     def try_acquisition_lock(self, workspace_id: str) -> Generator[bool, None, None]:
-        lock = self._locks.lock(workspace_id)
+        lock = self.locks.lock(workspace_id)
         taken = lock.acquire(blocking=False)
         try:
             yield taken
@@ -226,14 +216,13 @@ _workspace_registry_conforms: type[IWorkspaces] = WorkspaceRegistry
 
 
 class HostWorkspaces:
-    """The one holder of the host's current :class:`WorkspaceRegistry`, and itself the :class:`IWorkspaces` every
-    reader holds: each read goes to the registry in force at that read, so a registry the host tick sets reaches
-    every runner's process and loop context, the routes, the spawn path and the health probes with no rebuild of
-    theirs. Holds the host's acquisition locks, which every registry it is given is built over."""
+    """The one holder of the host's current :class:`WorkspaceRegistry`, and itself an :class:`IWorkspaces`: each read
+    goes to the registry in force at that read, so a registry set here reaches every reader with no rebuild of theirs.
+    Every registry it is set to is built over its first one's acquisition locks (``bzh:environment-held-once``)."""
 
-    def __init__(self, registry: WorkspaceRegistry | None = None, *, locks: WorkspaceLocks | None = None) -> None:
-        self.locks = locks if locks is not None else WorkspaceLocks()
-        self._registry = registry if registry is not None else WorkspaceRegistry((), locks=self.locks)
+    def __init__(self, registry: WorkspaceRegistry | None = None) -> None:
+        self._registry = registry if registry is not None else WorkspaceRegistry(())
+        self.locks = self._registry.locks
         self._guard = threading.Lock()
 
     def current(self) -> WorkspaceRegistry:
@@ -241,6 +230,9 @@ class HostWorkspaces:
             return self._registry
 
     def set(self, registry: WorkspaceRegistry) -> None:
+        """Put ``registry`` in force; one built over other locks than the host's is refused."""
+        if registry.locks is not self.locks:
+            raise ValueError("a host's workspace registry is built over the host's acquisition locks")
         with self._guard:
             self._registry = registry
 

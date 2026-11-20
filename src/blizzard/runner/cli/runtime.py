@@ -1051,7 +1051,7 @@ def host(
                 ]
                 seeded: list[BuiltRunner] = []
             else:
-                seeded, seed_halted = seed_runners(config, clock=clock)
+                seeded, seed_halted = seed_runners(config, clock=clock, records_seeded=True)
                 halted += seed_halted
             start(
                 config,
@@ -1065,7 +1065,7 @@ def host(
 
 
 def seed_host(config: HostConfig, environ: Mapping[str, str], *, clock: IClock) -> HostConfig:
-    """Seed the host's record from its file, in one write, then its workspaces and subscriptions (seed steps 2-3),
+    """Seed the host's record from its file, in one write, then its workspaces and subscriptions,
     after the store guard has passed and before any runner is built; returns the host configuration the record and
     records resolve to. A key the store holds an entry for, an unset
     included, is never touched. ``tick_seconds`` falls through to the deprecated variable where neither the store nor
@@ -1105,7 +1105,7 @@ def seed_host(config: HostConfig, environ: Mapping[str, str], *, clock: IClock) 
 
 
 def seed_host_records(config: HostConfig, *, clock: IClock) -> HostConfig:
-    """Seed steps 2-3 alone, for a stopped-host verb that judges the host's workspaces or subscriptions under its
+    """Seed the host's workspaces and subscriptions alone, for a stopped-host verb that judges them under its
     store guard: each ``[[workspace]]`` and ``[[subscription]]`` the store holds no record of. Returns ``config``
     with the workspaces and subscriptions the store's records then state (:func:`recorded_host`)."""
     engine = create_engine_from_url(config.db_url)
@@ -1177,12 +1177,16 @@ def hosted_entries(config: HostConfig, *, clock: IClock) -> list[RunnerEntry]:
     return entries
 
 
-def seed_runners(config: HostConfig, *, clock: IClock) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
-    """Seed and resolve the store's active hosted runners only after the store guard has passed and seed step 4 has
-    hosted the file's: each runner's token is imported into the store first, then its settings are seeded, then it
-    is projected over its stored token. Mints the host's key when it holds none. Seed steps 2-3 run first, so each
-    runner resolves against the host's records."""
-    seed_host_records(config, clock=clock)
+def seed_runners(
+    config: HostConfig, *, clock: IClock, records_seeded: bool = False
+) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
+    """Host the file's runners, then seed and resolve the store's active hosted ones, after the store guard has
+    passed: each runner's token is imported into the store first, then its settings are seeded, then it
+    is projected over its stored token. Mints the host's key when it holds none. The host's workspaces and
+    subscriptions are seeded first unless ``records_seeded`` — :func:`seed_host` seeded them — so each runner
+    resolves against the host's records."""
+    if not records_seeded:
+        seed_host_records(config, clock=clock)
     seed_hosted_runners(config, clock=clock)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []

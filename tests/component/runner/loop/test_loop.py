@@ -420,7 +420,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path: Path):
 
 
 def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path: Path):
-    """Scenario 3 — the correctness half of the issue. A workspace prompt rewritten between
+    """Scenario 3: a workspace prompt rewritten between
     two spawns of one session: the replacement reaches the worker announced, not disguised
     as the block it was handed a spawn ago."""
     store = _store(tmp_path)

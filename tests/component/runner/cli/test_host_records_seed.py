@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.runner.cli.runtime import seed_host
-from blizzard.runner.composition import build_host_record_services, host_record_reads
+from blizzard.runner.composition import build_host_record_services, host_record_reads, host_settings_reader
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_records.model import HostRecord, RecordKind
 from blizzard.runner.host_settings_reader import HostSettingsReader
@@ -91,7 +91,9 @@ def test_the_reader_resolves_workspaces_from_records_and_its_version_moves_with_
     config, stores = _host(tmp_path, workspace='root = "/srv/a"\nprovider = "basic"')
     seed_host(config, {}, clock=_CLOCK)
     reader = HostSettingsReader(config, stores.settings, host_record_reads(stores))
-    service = build_host_record_services(config, stores, clock=_CLOCK)[RecordKind.WORKSPACE]
+    service = build_host_record_services(host_settings_reader(config, stores), stores, clock=_CLOCK)[
+        RecordKind.WORKSPACE
+    ]
     before = reader.snapshot_record()
 
     service.create("ws-b", {"root": "/srv/b", "provider": "basic"}, actor="ada", door="api")
@@ -107,7 +109,9 @@ def test_the_reader_resolves_workspaces_from_records_and_its_version_moves_with_
 def test_a_record_write_is_judged_by_the_host_files_parse(tmp_path: Path) -> None:
     config, stores = _host(tmp_path, workspace='root = "/srv/a"\nprovider = "basic"')
     seed_host(config, {}, clock=_CLOCK)
-    service = build_host_record_services(config, stores, clock=_CLOCK)[RecordKind.WORKSPACE]
+    service = build_host_record_services(host_settings_reader(config, stores), stores, clock=_CLOCK)[
+        RecordKind.WORKSPACE
+    ]
 
     with pytest.raises(SettingsInvalid) as provider:
         service.create("ws-b", {"root": "/srv/b", "provider": "nope"}, actor="ada", door="api")

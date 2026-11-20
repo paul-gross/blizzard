@@ -82,13 +82,20 @@ def test_a_stopped_hosts_workspace_takes_every_verb_into_its_store(tmp_path: Pat
     where = ("--dir", str(root))
     b_root = str(tmp_path / "b")
 
+    # Before any write the store holds no record; the reads show what the next start seeds, writing nothing.
+    unseeded = json.loads(_ok(fake_init_hub, "workspace", "list", *where))["items"]
+    assert [(item["workspace_id"], item["revision"]) for item in unseeded] == [("workspace-local", 1)]
+    assert json.loads(_ok(fake_init_hub, "workspace", "get", "workspace-local", *where))["revision"] == 1
+    assert _changes(root, "workspace", "workspace-local") == []
+
     created = _ok(fake_init_hub, "workspace", "create", "ws-b", 'provider="basic"', f'root="{b_root}"', *where)
     assert "workspace ws-b created at revision 1 in the stopped host's store" in created
     edited = _ok(fake_init_hub, "workspace", "edit", "ws-b", "max_environments=2", 'envs=["e1", "e2"]', *where)
     assert "edited at revision 2" in edited
     record = json.loads(_ok(fake_init_hub, "workspace", "get", "ws-b", *where))
     assert record == {
-        "id": "ws-b",
+        "workspace_id": "ws-b",
+        "max_environments": 2,
         "revision": 2,
         "state": "active",
         "settings": {"provider": "basic", "root": b_root, "max_environments": 2, "envs": ["e1", "e2"]},
@@ -101,9 +108,12 @@ def test_a_stopped_hosts_workspace_takes_every_verb_into_its_store(tmp_path: Pat
     again = _ok(fake_init_hub, "workspace", "retire", "ws-b", *where)
     assert "already at revision 4; nothing was written" in again
     listed = json.loads(_ok(fake_init_hub, "workspace", "list", *where))["items"]
-    assert [item["id"] for item in listed] == ["workspace-local"]
+    assert [item["workspace_id"] for item in listed] == ["workspace-local"]
     retired = json.loads(_ok(fake_init_hub, "workspace", "list", "--retired", *where))["items"]
-    assert [(item["id"], item["state"]) for item in retired] == [("workspace-local", "active"), ("ws-b", "retired")]
+    assert [(item["workspace_id"], item["state"]) for item in retired] == [
+        ("workspace-local", "active"),
+        ("ws-b", "retired"),
+    ]
     assert "enabled at revision 5" in _ok(fake_init_hub, "workspace", "enable", "ws-b", *where)
 
     assert _changes(root, "workspace", "ws-b") == [
@@ -136,6 +146,8 @@ def test_a_stopped_host_refuses_what_its_file_would_fail_at_boot(tmp_path: Path,
     immutable = _run(fake_init_hub, "subscription", "edit", "sub-a", 'provider="other"', *where)
     assert immutable.exit_code != 0 and "provider" in immutable.output
     assert [op for _, op, _ in _changes(root, "subscription", "sub-a")] == ["create"]
+    view = json.loads(_ok(fake_init_hub, "subscription", "get", "sub-a", *where))
+    assert (view["slug"], view["name"], view["revision"], view["spenders"]) == ("sub-a", "A", 1, [])
 
 
 def test_a_running_hosts_records_take_every_verb_through_its_routes(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:

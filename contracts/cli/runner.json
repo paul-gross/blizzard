@@ -1,7 +1,7 @@
 {
   "commands": {
     "add": {
-      "help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its\nidentity, settings and sealed token. A running host is asked over its socket and starts it at its next tick; a\nstopped host's store is written directly, and it starts at the host's next start. Neither `.env` nor the host file\nis written.\n\nRefused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,\nor when a --workspace is not one the host declares.",
+      "help": "Add runner NAME to this registered host at its hub and record it in the host store, through a running host's\nsocket or into a stopped host's store; neither `.env` nor the host file is written.\n\nRefused, with nothing added, on a host holding no host token, when NAME is another runner's, or when a\n--workspace is not one the host holds an active record of.",
       "params": [
         {
           "hidden": false,
@@ -64,7 +64,7 @@
         }
       ],
       "path": "runner add",
-      "short_help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its identity, settings and sealed token."
+      "short_help": "Add runner NAME to this registered host at its hub and record it in the host store, through a running host's socket or into a stopped host's store; neither `.env` nor the host file is written."
     },
     "analytics": {
       "commands": {
@@ -1350,7 +1350,7 @@
       ],
       "commands": {
         "clear": {
-          "help": "Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing\nprompt. Through a running host, or into a stopped host's store. Takes effect on subsequent spawns.",
+          "help": "Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing\nprompt. Through a running host, which takes it up at its next tick, or into a stopped host's store, taken up at\nits next start.",
           "params": [
             {
               "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1453,7 +1453,7 @@
           "short_help": "Print packaged sample NAME's prose to stdout."
         },
         "install": {
-          "help": "Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which\n`prompt diff` then checks for drift. Takes effect on the workspace's next spawn.",
+          "help": "Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which\n`prompt diff` then checks for drift. A running host takes it up at its next tick, a stopped one at its next\nstart; a re-install over the copy the record already names takes effect the same way.",
           "params": [
             {
               "hidden": false,

@@ -1,5 +1,4 @@
-"""The runner host's workspace and subscription record state vocabulary — one definition, shared by the host's wire
-and its API."""
+"""The runner host's workspace and subscription record state vocabulary — one definition."""
 
 from __future__ import annotations
 

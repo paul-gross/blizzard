@@ -11,7 +11,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import Column, Connection, Row, Table, select
+from sqlalchemy import Column, Connection, Row, Select, Table, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -95,12 +95,12 @@ class _HostRecordStore:
                 record_kind=str(self._kind),
                 record_key=record.key,
             )
-        _log.info("host record stored", kind=str(self._kind), key=record.key, op=write.op, revision=record.revision)
+        _log.debug("host record stored", kind=str(self._kind), key=record.key, op=write.op, revision=record.revision)
 
     def _key_column(self, table: Table) -> Column[Any]:
         return table.c[self._key]
 
-    def _select(self) -> Any:
+    def _select(self) -> Select[Any]:
         newest = (
             select(self._facts.c.op)
             .where(self._key_column(self._facts) == self._key_column(self._rows))

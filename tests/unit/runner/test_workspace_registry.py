@@ -144,6 +144,12 @@ def test_every_registry_built_over_the_hosts_locks_takes_one_lock_per_workspace(
     assert holder.current() is not first
 
 
+def test_a_registry_built_over_other_locks_is_refused() -> None:
+    holder = HostWorkspaces()
+    with pytest.raises(ValueError, match="acquisition locks"):
+        holder.set(WorkspaceRegistry([WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="")]))
+
+
 def _try(holder: HostWorkspaces, workspace_id: str) -> bool:
     with holder.try_acquisition_lock(workspace_id) as taken:
         return taken

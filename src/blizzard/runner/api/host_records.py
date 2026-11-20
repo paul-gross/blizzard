@@ -60,7 +60,12 @@ _EDIT = {
     409: {"description": "The record is no longer at the If-Match revision", "content": _SETTINGS_PROBLEM},
     **_INVALID,
 }
-_LIFECYCLE = {**_SUPERUSER, **_UNKNOWN}
+_LIFECYCLE = {
+    **_SUPERUSER,
+    **_UNKNOWN,
+    409: {"description": "Another write moved the record first", "content": _SETTINGS_PROBLEM},
+    **_INVALID,
+}
 
 
 def workspace_view(record: HostRecord) -> HostWorkspaceView:
@@ -70,7 +75,7 @@ def workspace_view(record: HostRecord) -> HostWorkspaceView:
         workspace_id=record.key,
         max_environments=cap if isinstance(cap, int) else DEFAULT_MAX_ENVIRONMENTS,
         revision=record.revision,
-        state="retired" if record.retired else "active",
+        state=record.state(),
         settings=dict(record.settings),
     )
 
@@ -82,7 +87,7 @@ def _listed(wiring: RunnerWiring, kind: RecordKind, *, retired: bool) -> tuple[H
     stores = wiring.maybe_host_read_stores()
     if stores is None:
         return None
-    every = (stores.workspaces if kind is RecordKind.WORKSPACE else stores.subscriptions).records(retired=True)
+    every = stores.records_of(kind).records(retired=True)
     if not every:
         return None
     return every if retired else tuple(record for record in every if not record.retired)
@@ -90,7 +95,7 @@ def _listed(wiring: RunnerWiring, kind: RecordKind, *, retired: bool) -> tuple[H
 
 def _record(wiring: RunnerWiring, kind: RecordKind, key: str) -> HostRecord | JSONResponse:
     stores = wiring.host_read_stores()
-    record = (stores.workspaces if kind is RecordKind.WORKSPACE else stores.subscriptions).record(key)
+    record = stores.records_of(kind).record(key)
     if record is None:
         return _unknown(RecordUnknown(kind, key))
     return record
@@ -107,10 +112,10 @@ def _revision(if_match: str | None) -> int | None:
         return None
 
 
-def _write[V](
+def record_write[V](
     write: Callable[[HostRecordService], HostRecord], service: HostRecordService, view: Callable[[HostRecord], V]
 ) -> V | JSONResponse:
-    """``write`` through ``service``, each refusal its problem."""
+    """``write`` through ``service``, viewed by ``view``; each refusal its problem."""
     try:
         return view(write(service))
     except RecordUnknown as exc:
@@ -162,7 +167,7 @@ def create_workspace(
 ) -> HostWorkspaceView | JSONResponse:
     """Create a workspace record at revision 1, judged as the host file's ``[[workspace]]`` is at boot."""
     sets, _ = body.stated()
-    return _write(
+    return record_write(
         lambda service: service.create(body.id, sets, actor=session.username, door=API),
         RunnerWiring.of(request).host_records(RecordKind.WORKSPACE),
         workspace_view,
@@ -179,7 +184,7 @@ def edit_workspace(
 ) -> HostWorkspaceView | JSONResponse:
     """Sparse-merge ``body`` into the workspace at its ``If-Match`` revision; a retired one stays retired."""
     sets, unsets = body.stated()
-    return _write(
+    return record_write(
         lambda service: service.edit(
             service.held(workspace_id),
             sets,
@@ -198,7 +203,7 @@ def retire_workspace(
     request: Request, workspace_id: str, session: Annotated[RunnerSession, Depends(require_superuser)]
 ) -> HostWorkspaceView | JSONResponse:
     """Retire the workspace; of a retired one, writes nothing."""
-    return _write(
+    return record_write(
         lambda service: service.retire(service.held(workspace_id), actor=session.username, door=API),
         RunnerWiring.of(request).host_records(RecordKind.WORKSPACE),
         workspace_view,
@@ -210,7 +215,7 @@ def enable_workspace(
     request: Request, workspace_id: str, session: Annotated[RunnerSession, Depends(require_superuser)]
 ) -> HostWorkspaceView | JSONResponse:
     """Reverse the workspace's retirement; of an enabled one, writes nothing."""
-    return _write(
+    return record_write(
         lambda service: service.enable(service.held(workspace_id), actor=session.username, door=API),
         RunnerWiring.of(request).host_records(RecordKind.WORKSPACE),
         workspace_view,
@@ -260,7 +265,7 @@ def create_subscription(
     """Create a subscription record at revision 1, judged as the host file's ``[[subscription]]`` is at boot."""
     wiring = RunnerWiring.of(request)
     sets, _ = body.stated()
-    return _write(
+    return record_write(
         lambda service: service.create(body.slug, sets, actor=session.username, door=API),
         wiring.host_records(RecordKind.SUBSCRIPTION),
         lambda record: _subscription_view(wiring, record),
@@ -278,7 +283,7 @@ def edit_subscription(
     """Sparse-merge ``body`` into the subscription at its ``If-Match`` revision; a retired one stays retired."""
     wiring = RunnerWiring.of(request)
     sets, unsets = body.stated()
-    return _write(
+    return record_write(
         lambda service: service.edit(
             service.held(slug), sets, unsets, if_match=_revision(if_match), actor=session.username, door=API
         ),
@@ -293,7 +298,7 @@ def retire_subscription(
 ) -> HostSubscriptionView | JSONResponse:
     """Retire the subscription; of a retired one, writes nothing. Its samples and usage-limit marks stay."""
     wiring = RunnerWiring.of(request)
-    return _write(
+    return record_write(
         lambda service: service.retire(service.held(slug), actor=session.username, door=API),
         wiring.host_records(RecordKind.SUBSCRIPTION),
         lambda record: _subscription_view(wiring, record),
@@ -306,7 +311,7 @@ def enable_subscription(
 ) -> HostSubscriptionView | JSONResponse:
     """Reverse the subscription's retirement; of an enabled one, writes nothing."""
     wiring = RunnerWiring.of(request)
-    return _write(
+    return record_write(
         lambda service: service.enable(service.held(slug), actor=session.username, door=API),
         wiring.host_records(RecordKind.SUBSCRIPTION),
         lambda record: _subscription_view(wiring, record),
@@ -328,15 +333,11 @@ def subscription_list(
         attempt = attempts.get(slug)
         renewal = renewals.get(slug)
         sample = samples.get(slug)
+        record: HostRecord | None
         if isinstance(item, HostRecord):
-            name, provider = str(item.setting("name", "")), str(item.setting("provider", ""))
-            record: dict[str, Any] = {
-                "revision": item.revision,
-                "state": "retired" if item.retired else "active",
-                "settings": dict(item.settings),
-            }
+            record, name, provider = item, str(item.setting("name", "")), str(item.setting("provider", ""))
         else:
-            name, provider, record = item.name, item.provider, {}
+            record, name, provider = None, item.name, item.provider
         items.append(
             HostSubscriptionView(
                 slug=slug,
@@ -352,7 +353,9 @@ def subscription_list(
                 windows=[_window_view(w) for w in sample.windows] if sample is not None else [],
                 windows_sampled_at=iso_utc(sample.sampled_at) if sample is not None else None,
                 condition=attempt.condition() if attempt is not None else None,
-                **record,
+                revision=record.revision if record is not None else None,
+                state=record.state() if record is not None else "active",
+                settings=dict(record.settings) if record is not None else {},
             )
         )
     return HostSubscriptionListResponse(items=items)

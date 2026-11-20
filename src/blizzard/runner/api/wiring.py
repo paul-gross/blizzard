@@ -206,10 +206,8 @@ class RunnerWiring:
         return flags if flags is not None else self._refuse("flags")
 
     def workspaces(self) -> tuple[ServedWorkspace, ...]:
-        workspaces: tuple[ServedWorkspace, ...] | Callable[[], tuple[ServedWorkspace, ...]] | None = self._seam(
-            "workspaces"
-        )
-        return (workspaces() if callable(workspaces) else workspaces) or ()
+        workspaces: Callable[[], tuple[ServedWorkspace, ...]] | None = self._seam("workspaces")
+        return workspaces() if workspaces is not None else ()
 
     def workspace(self, workspace_id: str) -> ServedWorkspace:
         """The served workspace ``workspace_id`` names; ``404`` for one the host does not declare."""
@@ -220,10 +218,8 @@ class RunnerWiring:
 
     def subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
         """The subscriptions the host declares."""
-        declared: Sequence[SubscriptionDeclaration] | Callable[[], Sequence[SubscriptionDeclaration]] | None = (
-            self._seam("subscriptions")
-        )
-        return tuple((declared() if callable(declared) else declared) or ())
+        declared: Callable[[], Sequence[SubscriptionDeclaration]] | None = self._seam("subscriptions")
+        return tuple(declared()) if declared is not None else ()
 
     def config(self) -> RunnerConfig:
         config = self.maybe_config()

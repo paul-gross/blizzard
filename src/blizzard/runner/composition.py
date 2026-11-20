@@ -303,8 +303,7 @@ class HostProcess:
     connections: RunnerStoreConnections
     host_stores: HostStores
     listeners: Listeners
-    #: The one holder of the host's current workspace registry — every workspace it serves, each with its own provider,
-    #: spawn root and standing prompt — and of the acquisition locks that outlive each rebuild.
+    #: The one holder of the host's workspace registry in force, and of the pool locks that outlive each rebuild.
     workspaces: HostWorkspaces
     events: EventBroker | None
     clock: IClock
@@ -344,11 +343,9 @@ class HostProcess:
     runners: tuple[RunnerProcess, ...] = ()
     #: The runners the host file declares that were left unbuilt by their own errors; the host serves without them.
     halted: tuple[HaltedRunner, ...] = ()
-    #: The subscriptions the host serves, whichever runners spend them — set again by the host tick whenever a
-    #: subscription record moves.
+    #: The subscriptions the host serves, set again by the host tick whenever a subscription record moves.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
-    #: What the host tick reconciles its workspaces and subscriptions with, each pass; ``None`` for a host keeping no
-    #: records.
+    #: The host tick's per-pass reconcile of its workspaces and subscriptions; ``None`` for a host keeping no records.
     records_reconcile: HostRecordsReconcile | None = None
     #: Who this host is at its hub; seeded from the store at boot, and handed the identity once it is first recorded.
     host_identity: HostIdentityHolder = field(default_factory=HostIdentityHolder)
@@ -596,12 +593,10 @@ def build_workspaces(
     keep: WorkspaceRegistry | None = None,
     retired: Sequence[HostWorkspace] = (),
 ) -> WorkspaceRegistry:
-    """The host's workspace registry: one provider per declared workspace, each with its spawn root and its standing
-    prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. Each provider
-    launches its ``git`` and ``winter`` children through ``launch``. With ``audit``, each provider reads its own
-    pool's held set host-wide. ``revisions`` are the record revisions the workspaces stand at; a workspace ``keep``
-    holds at its revision keeps the provider it has there. ``retired`` are the workspaces that serve only what they
-    hold. Every registry is built over ``locks``, the host's."""
+    """The host's workspace registry over ``locks``: one provider per declared workspace, launching through
+    ``launch``, its spawn root and standing prompt resolved now — an unresolvable prompt raises. With ``audit``, each
+    provider reads its pool's held set host-wide. A workspace ``keep`` holds at its ``revisions`` entry keeps its
+    provider; ``retired`` ones serve only what they hold."""
     revisions = revisions or {}
 
     def entry(workspace: HostWorkspace) -> WorkspaceEntry:
@@ -721,13 +716,10 @@ def _sample_pass(
 
 
 class HostRecordsReconcile:
-    """The host tick's reconcile of its workspaces and subscriptions against the pass's snapshot of their records.
-
-    When any workspace record moved, the host's registry is rebuilt and set in one assignment: an unmoved workspace
-    keeps its provider, a retired one stays to serve what it holds, every one keeps its lock. Each moved
-    subscription's sampler and renewer are rebuilt from its record, an unmoved one's kept; their cadence state is in
-    the store, so nothing is lost. A rebuild that raises keeps what is in force and is logged; the next pass tries
-    again."""
+    """The host tick's reconcile of its workspaces and subscriptions against the pass's snapshot of their records:
+    a moved workspace record rebuilds the registry in one assignment, unmoved workspaces keeping their providers; a
+    moved subscription rebuilds its sampler and renewer. A rebuild that raises keeps what is in force, and the next
+    pass tries again."""
 
     def __init__(
         self,
@@ -751,12 +743,12 @@ class HostRecordsReconcile:
             return
         try:
             self._reconcile_workspaces(effective, snapshot, records)
-        except Exception as exc:  # a prompt file gone, a provider that will not build: keep the registry in force
-            self._log.error("workspace rebuild failed — the host keeps its workspaces", detail=str(exc))
+        except Exception:  # a prompt file gone, a provider that will not build: keep the registry in force
+            self._log.warning("workspace rebuild failed — the host keeps its workspaces", exc_info=True)
         try:
             self._reconcile_subscriptions(effective, records)
-        except Exception as exc:
-            self._log.error("subscription rebuild failed — the host keeps its subscriptions", detail=str(exc))
+        except Exception:
+            self._log.warning("subscription rebuild failed — the host keeps its subscriptions", exc_info=True)
 
     def _reconcile_workspaces(
         self, effective: HostConfig, snapshot: HostSettingsSnapshot, records: HostRecordsSnapshot
@@ -1611,16 +1603,13 @@ def _build_host_graph(
         tool_profile = ToolProfileHolder(
             config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
         )
-        locks = WorkspaceLocks()
         workspaces = HostWorkspaces(
             build_workspaces(
                 config.workspaces,
                 config.root,
                 launch=WorkspaceLaunch(children=children, env=tool_profile),
                 audit=host_stores.runner_audit,
-                locks=locks,
-            ),
-            locks=locks,
+            )
         )
         host_identity = HostIdentityHolder()
         # The one place a host's registration is derived: everything after reads it from the holder.
@@ -2208,12 +2197,17 @@ def host_record_reads(stores: HostStores | HostReadStores) -> HostRecordReads:
     return HostRecordReads(workspaces=stores.workspaces, subscriptions=stores.subscriptions)
 
 
+def host_settings_reader(host: HostConfig, stores: HostStores | HostReadStores) -> HostSettingsReader:
+    """The reader of ``host``'s stored entries and records over ``stores``."""
+    return HostSettingsReader(host, stores.settings, host_record_reads(stores))
+
+
 def build_host_record_services(
-    host: HostConfig, stores: HostStores, *, clock: IClock
+    reader: HostSettingsReader, stores: HostStores, *, clock: IClock
 ) -> Mapping[RecordKind, HostRecordService]:
-    """Each record kind's service over ``stores``, judging a write by ``host``'s file parse beside the host's stored
-    entries and records."""
-    validation = HostRecordValidation(HostSettingsReader(host, stores.settings, host_record_reads(stores)))
+    """Each record kind's service over ``stores``, judging a write by ``reader``'s host file parse beside the host's
+    stored entries and records — a running host's own reader, so one resolution serves its passes and its writes."""
+    validation = HostRecordValidation(reader)
     return {
         RecordKind.WORKSPACE: HostRecordService(RecordKind.WORKSPACE, stores.workspaces, validation, clock),
         RecordKind.SUBSCRIPTION: HostRecordService(RecordKind.SUBSCRIPTION, stores.subscriptions, validation, clock),
@@ -2250,7 +2244,7 @@ def seed_record_tables(config: HostConfig, stores: HostStores, *, clock: IClock)
     """Seed steps 2-3: each ``[[workspace]]`` and ``[[subscription]]`` table with no record becomes one
     (:func:`_file_records`), each its own write under the seed's door and actor; a record the store holds, retired
     or not, is never touched."""
-    services = build_host_record_services(config, stores, clock=clock)
+    services = build_host_record_services(host_settings_reader(config, stores), stores, clock=clock)
     for record in _file_records(config, stores):
         services[record.kind].seed(record.key, record.settings)
 
@@ -2275,6 +2269,20 @@ def seeded_records(config: HostConfig, stores: HostStores | HostReadStores) -> H
         subscriptions=ordered([*subscriptions, *(r for r in unseeded if r.kind is RecordKind.SUBSCRIPTION)]),
         retired_workspaces=tuple(r for r in workspaces if r.retired),
     )
+
+
+def held_records(config: HostConfig, stores: HostStores | HostReadStores, kind: RecordKind) -> tuple[HostRecord, ...]:
+    """Every record of ``kind`` the host holds, retired ones included, once its file's tables are seeded — each one
+    the store holds none of at the revision its seed writes — read with no write, so a stopped host's reads show what
+    its next start serves."""
+    held = stores.records_of(kind).records(retired=True)
+    keys = {record.key for record in held}
+    unseeded = [
+        replace(record, revision=1)
+        for record in _file_records(config, stores)
+        if record.kind is kind and record.key not in keys
+    ]
+    return tuple(sorted((*held, *unseeded), key=lambda record: record.key))
 
 
 def recorded_host_config(

@@ -16,18 +16,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.auth_core import Role
-from blizzard.foundation.clock import SystemClock
-from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.app import HostedApp
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
-from blizzard.runner.cli.runtime import seed_host, seed_runners
-from blizzard.runner.composition import HostProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.hub.identity import RunnerIdentity
-from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
-from tests.support.config_inputs import create_runner_app, load_host_config
-from tests.support.host_files import TEST_RUNNER_ID, TEST_WORKSPACE_ID, one_workspace, write_minimal_host
-from tests.support.runner_fakes import make_store
+from tests.support.config_inputs import create_runner_app
+from tests.support.host_files import TEST_RUNNER_ID, TEST_WORKSPACE_ID, one_workspace
+from tests.support.seeded_host import seeded_host
 
 _WORKSPACES = "/api/host/workspaces"
 _SUBSCRIPTIONS = "/api/host/subscriptions"
@@ -36,24 +31,8 @@ _CHANGES = "/api/host/settings/changes"
 
 @pytest.fixture
 def hosted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[HostedApp]:
-    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
-    url = f"sqlite:///{tmp_path / 'runner.db'}"
-    write_minimal_host(tmp_path, top=f'db_url = "{url}"', workspace='prompt = "SEEDED"')
-    store = make_store(url, TEST_RUNNER_ID)
-    config = load_host_config(tmp_path)
-    RunnerIdentityStore(store.connections).record_runner_identity(
-        RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
-    )
-    config = seed_host(config, {}, clock=SystemClock())
-    ready, halted = seed_runners(config, clock=SystemClock())
-    assert not halted
-    host: HostProcess = build_host_process(config, ready)
-    app = build_hosted_app(host.runners[0].config, host)
-    try:
+    with seeded_host(tmp_path, monkeypatch, workspace='prompt = "SEEDED"') as (_, app):
         yield app
-    finally:
-        app.close()
-        host.close()
 
 
 def _ok(response: httpx2.Response) -> Any:

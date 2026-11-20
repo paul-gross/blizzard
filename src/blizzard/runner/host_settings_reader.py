@@ -207,7 +207,7 @@ class HostSettingsReader:
         for record in snapshot.records.retired_workspaces:
             config, errors = self._resolve(snapshot.entries, replace(snapshot.records, workspaces=(record,)))
             if errors:
-                _log.error(
+                _log.warning(
                     "retired workspace unreadable — what it holds waits", workspace=record.key, detail="; ".join(errors)
                 )
                 continue

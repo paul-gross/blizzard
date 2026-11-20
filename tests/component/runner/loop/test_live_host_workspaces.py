@@ -20,26 +20,23 @@ import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.sweep_passes import SweepPassOutcome
-from blizzard.runner.app import HostedApp, build_hosted_app
-from blizzard.runner.cli.runtime import seed_host, seed_runners
-from blizzard.runner.composition import HostProcess, build_host_process, build_host_record_services, host_report
+from blizzard.runner.app import HostedApp
+from blizzard.runner.composition import HostProcess, build_host_record_services, host_report
 from blizzard.runner.config import ProjectBinding
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.environments.factory import HeldIds, WorkspaceLaunch, WorkspaceSettings
 from blizzard.runner.environments.provider import AcquiredEnvironment, IWorkspaceProvider
 from blizzard.runner.host_records.model import RecordKind
 from blizzard.runner.host_records.service import HostRecordService
-from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
-from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.throttle.gate import ThrottleGate
-from tests.support.config_inputs import load_host_config
-from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
-from tests.support.runner_fakes import FakeProvider, make_store
+from tests.support.host_files import TEST_WORKSPACE_ID
+from tests.support.runner_fakes import FakeProvider
+from tests.support.seeded_host import seeded_host
 
-_HOME = "workspace-local"
+_HOME = TEST_WORKSPACE_ID
 _SUBSCRIPTION = '[[subscription]]\nslug = "team"\nname = "Team"\nprovider = "anthropic"\n'
 
 
@@ -67,7 +64,7 @@ class _Host:
     def records(self, kind: RecordKind) -> HostRecordService:
         config = self.process.host_settings
         assert config is not None
-        return build_host_record_services(config.reader.host, self.process.host_stores, clock=SystemClock())[kind]
+        return build_host_record_services(config.reader, self.process.host_stores, clock=SystemClock())[kind]
 
     def tick(self) -> None:
         stepper = self.app.host_stepper
@@ -88,30 +85,15 @@ def providers(monkeypatch: pytest.MonkeyPatch) -> _Providers:
 def _host(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, providers: _Providers, *, top: str = "", runner: str = ""
 ) -> Generator[_Host]:
-    monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
-    url = f"sqlite:///{tmp_path / 'runner.db'}"
-    write_minimal_host(
+    with seeded_host(
         tmp_path,
-        top=f'db_url = "{url}"\n{top}',
+        monkeypatch,
+        top=top,
         workspace=f'root = "{tmp_path / "home"}"',
         runner=runner,
-        projects='[{ project = "p", workspace = "workspace-local" }]',
-    )
-    store = make_store(url, TEST_RUNNER_ID)
-    config = load_host_config(tmp_path)
-    RunnerIdentityStore(store.connections).record_runner_identity(
-        RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
-    )
-    config = seed_host(config, {}, clock=SystemClock())
-    ready, halted = seed_runners(config, clock=SystemClock())
-    assert not halted
-    process = build_host_process(config, ready)
-    app = build_hosted_app(process.runners[0].config, process)
-    try:
+        projects=f'[{{ project = "p", workspace = "{_HOME}" }}]',
+    ) as (process, app):
         yield _Host(process, app, providers)
-    finally:
-        app.close()
-        process.close()
 
 
 @pytest.fixture
@@ -229,6 +211,17 @@ def test_a_retired_workspace_refuses_its_runners_next_write_while_the_other_bind
             {"projects": both}, frozenset(), if_match=runner.stores.settings.snapshot().revision, door="api", actor="t"
         )
 
+        # A chunk holds ws-b's one environment before the retirement.
+        host.tick()
+        b_root = str(tmp_path / "b")
+        runner.stores.environments.record_binding(
+            chunk_id="chunk-b",
+            environment_id="e1",
+            workdir=f"{b_root}/e1",
+            bound_at=datetime.now(UTC),
+            workspace_id="ws-b",
+        )
+
         _retire(host.records(RecordKind.WORKSPACE), "ws-b")
         host.tick()
         held_b = host.process.workspaces.provider("ws-b")
@@ -242,10 +235,12 @@ def test_a_retired_workspace_refuses_its_runners_next_write_while_the_other_bind
         assert ctx.free_environments.has_free_environment(_HOME)
         assert not ctx.free_environments.has_free_environment("ws-b")
         assert ctx.workspaces.acquisition_provider("ws-b") is None
-        # The chunk held there finishes there: its environment goes back to the provider it was drawn from.
-        assert ctx.workspaces.provider("ws-b") is held_b
+        # The chunk held there stays under ws-b, and finishes there: its environment goes back to ws-b's pool.
+        assert ctx.workspaces.held("ws-b", (_HOME, "ws-b")) == "ws-b"
+        assert held_b is not None and isinstance(held_b, FakeProvider) and held_b.spawn_root() == b_root
         ctx.env_release.release_binding("chunk-b", "ws-b", [AcquiredEnvironment(environment_id="e1", workdir="/x")])
-        assert held_b is not None and isinstance(held_b, FakeProvider) and held_b.released == ["e1"]
+        assert held_b.released == ["e1"]
+        assert [b.chunk_id for b in runner.stores.environments.held_bindings()] == []
 
         fixed = [{"project": "p", "workspace": _HOME}]
         authoring.edit(

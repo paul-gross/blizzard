@@ -98,7 +98,7 @@ def _app_with_status(
         identity_verdict=identity_verdict,
         hub_version=hub_version,
         runner_name=config.name,
-        workspace_id=TEST_WORKSPACE_ID,
+        home_workspace=lambda: TEST_WORKSPACE_ID,
         bindings=serving() if bindings is None else bindings,
         agents=agents,
         hub_url=config.hub_url,
@@ -718,7 +718,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         escalations=store,
         identity=registered_identity("rn_status"),
         runner_name="runner-local",
-        workspace_id="workspace-local",
+        home_workspace=lambda: "workspace-local",
         hub_url="http://hub",
         workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
         harnesses=HarnessRegistry(

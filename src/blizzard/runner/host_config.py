@@ -742,7 +742,7 @@ class HostConfig:
     @classmethod
     def scaffold(cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None) -> HostConfig:
         """The default host for a fresh directory (used by ``init``): one ``[[runner]]`` naming the one
-        ``[[subscription]]`` the old default synthesized, its projects bound to :data:`_SCAFFOLD_WORKSPACE_ID`,
+        default ``[[subscription]]``, its projects bound to :data:`_SCAFFOLD_WORKSPACE_ID`,
         which the host serves once the operator declares or creates it. The scaffold declares no ``[[workspace]]``.
         The runner has no ``id`` until it joins."""
         layout = HostLayout(root)
