@@ -22,6 +22,7 @@ from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
     DeclaredSubscription,
     DeclaredWorkspace,
+    HeldRecords,
     HostDeclarations,
     IngestHost,
     ISourceHosts,
@@ -362,6 +363,16 @@ def _nothing_answers(_socket: Path) -> str | None:
 
 
 @dataclass
+class FakeHereRecords:
+    """This host's records as the test states them: none by default."""
+
+    held_records: HeldRecords = field(default_factory=HeldRecords)
+
+    def held(self) -> HeldRecords:
+        return self.held_records
+
+
+@dataclass
 class IngestWorld:
     """One ingest into ``HERE`` over the fakes above, every port journaling into ``journal``."""
 
@@ -372,6 +383,7 @@ class IngestWorld:
     host_file: FakeHostFileEditor
     tokens: FakeTokenFiles
     ciphers: FakeHostCiphers
+    records: FakeHereRecords = field(default_factory=lambda: FakeHereRecords())
 
     def ingest(self) -> RunnerIngest:
         return RunnerIngest(
@@ -394,6 +406,7 @@ class IngestWorld:
             files=self.files,
             clock=FixedClock(T0),
             migrations=_migrations,
+            records=self.records,
         )
 
 

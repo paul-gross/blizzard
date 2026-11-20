@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import click
 
@@ -73,7 +73,6 @@ from blizzard.runner.composition import (
     StartupNote,
     build_host_process,
     build_host_read_stores,
-    build_host_record_services,
     build_host_settings_store,
     build_host_stores,
     build_read_stores,
@@ -81,8 +80,10 @@ from blizzard.runner.composition import (
     build_sealing_hub_tokens,
     build_settings_stores,
     host_record_reads,
+    recorded_host_config,
     run_startup_steps,
     runner_admission,
+    seed_record_tables,
     stored_hub_token,
 )
 from blizzard.runner.config import (
@@ -117,8 +118,6 @@ from blizzard.runner.host_layout import (
     WORKER_SCRATCH_DIRNAME,
     HostLayout,
 )
-from blizzard.runner.host_records.model import RecordKind
-from blizzard.runner.host_records.prompt import PromptChange
 from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.hosting.model import CLI, JOIN, SEED, HostingFact
 from blizzard.runner.hosting.names import stored_name
@@ -1094,7 +1093,7 @@ def seed_host(config: HostConfig, environ: Mapping[str, str], *, clock: IClock) 
             source["tools"] = {"path_prepend": list(profile[0]), "env_passthrough": list(profile[1])}
         try:
             store.seed(ConfigView.unchecked(source), tuple(reader.keys), validate=reader.validate)
-            _seed_records(config, stores, clock=clock)
+            seed_record_tables(config, stores, clock=clock)
             _, effective = reader.snapshot()
         except (SettingsInvalid, ValueError) as exc:
             raise click.ClickException(f"host: {exc}") from exc
@@ -1105,42 +1104,34 @@ def seed_host(config: HostConfig, environ: Mapping[str, str], *, clock: IClock) 
     return effective
 
 
-def seed_host_records(config: HostConfig, *, clock: IClock) -> None:
+def seed_host_records(config: HostConfig, *, clock: IClock) -> HostConfig:
     """Seed steps 2-3 alone, for a stopped-host verb that judges the host's workspaces or subscriptions under its
-    store guard: each ``[[workspace]]`` and ``[[subscription]]`` the store holds no record of."""
+    store guard: each ``[[workspace]]`` and ``[[subscription]]`` the store holds no record of. Returns ``config``
+    with the workspaces and subscriptions the store's records then state (:func:`recorded_host`)."""
     engine = create_engine_from_url(config.db_url)
     try:
         stores = build_host_stores(
             engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
         )
-        _seed_records(config, stores, clock=clock)
+        seed_record_tables(config, stores, clock=clock)
+        return recorded_host(config, stores)
     finally:
         engine.dispose()
 
 
-def _seed_records(config: HostConfig, stores: HostStores, *, clock: IClock) -> None:
-    """Each ``[[workspace]]`` and ``[[subscription]]`` table with no record becomes one, whole from its table, each
-    its own write under the seed's door and actor; a record the store holds, retired or not, is never touched. A
-    deprecated ``workspace_prompt`` override for a seeded workspace is its ``prompt``, with ``prompt_file`` and
-    ``prompt_package`` at their defaults, since the override already won over every file prompt."""
-    authored = config.authored
-    if authored is None:
-        return
-    services = build_host_record_services(config, stores, clock=clock)
-    for kind in (RecordKind.WORKSPACE, RecordKind.SUBSCRIPTION):
-        tables = cast(object, authored.get(str(kind), []))
-        for table in cast(list[object], tables) if isinstance(tables, list) else []:
-            if not isinstance(table, dict):
-                continue
-            entry = cast(dict[str, object], table)
-            if not isinstance(key := entry.get(kind.key_name), str):
-                continue
-            settings = {name: value for name, value in entry.items() if name != kind.key_name}
-            if kind is RecordKind.WORKSPACE:
-                override = stores.workspace_prompt.workspace_prompt_override(key.strip())
-                if override is not None:
-                    settings = PromptChange.stating("prompt", override).applied_to(settings)
-            services[kind].seed(key.strip(), settings)
+def recorded_host(config: HostConfig, stores: HostStores | HostReadStores) -> HostConfig:
+    """``config`` with its workspaces and subscriptions the store's active records, over its stored entries — what a
+    verb judges a workspace or subscription against, never the file's tables."""
+    try:
+        return recorded_host_config(config, stores)
+    except ValueError as exc:
+        raise click.ClickException(f"host: {exc}") from exc
+
+
+def read_recorded_host(config: HostConfig) -> HostConfig:
+    """:func:`recorded_host` read from the store with no write, for a running host, which seeded at its start."""
+    with read_host_stores(config) as stores:
+        return recorded_host(config, stores)
 
 
 def seed_hosted_runners(config: HostConfig, *, clock: IClock) -> None:

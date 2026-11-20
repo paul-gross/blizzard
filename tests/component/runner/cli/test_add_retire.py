@@ -485,6 +485,24 @@ def test_add_refuses_what_the_host_does_not_allow_before_reaching_the_hub(
     assert set(_row_ids(root)) == {"rn_init1"}
 
 
+def test_add_binds_a_workspace_only_the_store_holds_and_refuses_a_retired_one(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    created = _run(fake_init_hub, "workspace", "create", "ws-api", f'root="{tmp_path / "api"}"', "--dir", str(root))
+    assert created.exit_code == 0, created.output
+    retired = _run(fake_init_hub, "workspace", "retire", "workspace-local", "--dir", str(root))
+    assert retired.exit_code == 0, retired.output
+
+    refused = _run(fake_init_hub, "add", "r2", "--project", "p", "--workspace", "workspace-local", "--dir", str(root))
+    assert refused.exit_code != 0 and "workspace-local" in refused.output
+    assert len(fake_init_hub.admin.added) == 1
+
+    added = _run(fake_init_hub, "add", "r2", "--project", "p", "--workspace", "ws-api", "--dir", str(root))
+    assert added.exit_code == 0, added.output
+    assert _entries(root, "rn_init2")["projects"] == [{"project": "p", "workspace": "ws-api"}]
+
+
 def test_add_refuses_a_name_an_added_runner_already_holds(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
     root = _registered(tmp_path, fake_init_hub)
     assert _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root)).exit_code == 0

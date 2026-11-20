@@ -943,9 +943,13 @@ class RunnerConfig:
 
     @property
     def home_workspace(self) -> HostWorkspace:
-        """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`)."""
+        """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`); raises
+        :class:`ConfigError` when the host declares none this runner could be addressed by."""
         by_id = {workspace.id: workspace for workspace in self.workspaces}
-        return by_id[home_workspace_id(self.bound_workspace_ids, tuple(by_id))]
+        home = by_id.get(home_workspace_id(self.bound_workspace_ids, tuple(by_id)))
+        if home is None:
+            raise ConfigError("the host declares no workspace")
+        return home
 
     @property
     def bound_workspace_ids(self) -> tuple[str, ...]:

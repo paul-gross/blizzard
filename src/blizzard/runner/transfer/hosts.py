@@ -97,6 +97,17 @@ class HostDeclarations:
 
 @domain_model
 @dataclass(frozen=True)
+class HeldRecords:
+    """A host's workspaces and subscriptions as its store's records state them: the active ones, and the ids of its
+    retired workspaces, which no other workspace may take."""
+
+    workspaces: tuple[DeclaredWorkspace, ...] = ()
+    subscriptions: tuple[DeclaredSubscription, ...] = ()
+    retired_workspace_ids: frozenset[str] = frozenset()
+
+
+@domain_model
+@dataclass(frozen=True)
 class IngestHost:
     """The host an ingest runs into: where its files are, its store, its hub, and what its file declares."""
 

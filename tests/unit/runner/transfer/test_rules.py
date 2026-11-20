@@ -272,3 +272,14 @@ def test_a_graduated_source_older_than_the_scope_revision_is_refused() -> None:
 @pytest.mark.parametrize(("ungraduated", "runner_scoped"), [(True, False), (False, True)])
 def test_an_ungraduated_or_scoped_source_is_accepted(ungraduated: bool, runner_scoped: bool) -> None:
     _unscoped(_view(), ungraduated=ungraduated, runner_scoped=runner_scoped)
+
+
+def test_a_workspace_id_this_host_holds_retired_is_taken_by_none() -> None:
+    with pytest.raises(WorkspaceConflict, match="retired"):
+        place_workspaces(
+            ("ws",), runner_name="r", workspace_id=None, offered={"ws": _SHAPE}, held={}, retired=frozenset({"ws"})
+        )
+    placed = place_workspaces(
+        ("ws",), runner_name="r", workspace_id="ws-new", offered={"ws": _SHAPE}, held={}, retired=frozenset({"ws"})
+    )
+    assert [(p.target, p.appended) for p in placed] == [("ws-new", True)]

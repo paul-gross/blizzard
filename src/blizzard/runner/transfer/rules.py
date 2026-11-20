@@ -176,9 +176,11 @@ def place_workspaces(
     workspace_id: str | None,
     offered: Mapping[str, WorkspaceShape],
     held: Mapping[str, WorkspaceShape],
+    retired: frozenset[str] = frozenset(),
 ) -> tuple[WorkspacePlacement, ...]:
     """Where each workspace ``names`` lists — the ones the runner binds — lands here. ``offered`` is the source's
-    workspaces by id, ``held`` this host's, in its file's order. Raises :class:`WorkspaceConflict` when one cannot
+    workspaces by id, ``held`` this host's active ones, in key order, and ``retired`` the ids of its retired ones,
+    which none takes. Raises :class:`WorkspaceConflict` when one cannot
     stand beside this host's under the id it would take."""
     if workspace_id is not None and len(names) != 1:
         raise WorkspaceConflict(
@@ -191,6 +193,9 @@ def place_workspaces(
         if shape is None:
             raise WorkspaceConflict(f"runner {runner_name} binds workspace {name!r}, which the source does not declare")
         target = workspace_id or name
+        if target in retired:
+            hint = "enable it, or re-run with --workspace-id <new id>" if workspace_id is None else "pick another id"
+            raise WorkspaceConflict(f"this host holds workspace {target!r} retired: {hint}")
         ours = held.get(target)
         if ours is not None and ours != shape:
             if workspace_id is None:
