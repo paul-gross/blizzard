@@ -1,9 +1,20 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 
-import { type ChunkDetail, KitAsyncState, type KitAsyncStateValue, KitCloseButton, KitSkeleton, toneColor } from 'fleet';
-import { AppLink } from 'fleet/shell';
+import {
+  type ChunkDetail,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitCloseButton,
+  KitSkeleton,
+  toneColor,
+} from 'fleet';
 import { ChunkDetailHeader } from '../core/chunk-detail-header/chunk-detail-header';
+import { DeliveryHistoryList } from './delivery-history-list';
 import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.model';
 
 /**
@@ -14,7 +25,13 @@ import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.m
 @Component({
   selector: 'app-delivery-drawer-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkDetailHeader, KitAsyncState, KitCloseButton, KitSkeleton, AppLink, RouterLink],
+  imports: [
+    ChunkDetailHeader,
+    KitAsyncState,
+    KitCloseButton,
+    KitSkeleton,
+    DeliveryHistoryList,
+  ],
   templateUrl: './delivery-drawer-view.html',
   styleUrl: './delivery-drawer-view.css',
 })
@@ -33,7 +50,6 @@ export class DeliveryDrawerView {
   readonly dismiss = output<void>();
 
   protected readonly toneColor = toneColor;
-  /** The loading skeleton's bar widths, in percent: two repository cards, six history rows. */
+  /** The loading skeleton's bar widths, in percent: two repository cards. */
   protected readonly skRepos = [70, 55];
-  protected readonly skHistory = [62, 48, 70, 40, 56, 66];
 }

@@ -258,11 +258,6 @@
   color: var(--amber-hi);
   font-size: var(--fs-sm);
 }
-.sub {
-  color: var(--text);
-  font-size: var(--fs-xs);
-  overflow-wrap: anywhere;
-}
 .num {
   margin-left: auto;
   color: var(--amber-hi);
