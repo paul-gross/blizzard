@@ -76,13 +76,21 @@ def prompt_show(name: str) -> None:
 @click.pass_context
 def prompt_install(ctx: click.Context, name: str, directory: str, force: bool, runner: str | None) -> None:
     """Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which
-    `prompt diff` then checks for drift. Takes effect on the workspace's next spawn."""
+    `prompt diff` then checks for drift. A running host takes it up at its next tick, a stopped one at its next
+    start; a re-install over the copy the record already names takes effect the same way."""
     text = _packaged_sample(name)
     config, workspace = _home_record(directory, runner)
     destination = config.root / WORKSPACE_PROMPT_FILENAME
     if destination.exists() and not force:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
+    named = workspace.setting("prompt_file")
+    if isinstance(named, str) and named and config.root / named == destination:
+        # Naming the copy again would move nothing, so no rebuild would read it: the same text inline first, so
+        # both writes move the record and each leaves the sample's text in force.
+        edit_record(
+            ctx, WORKSPACE, directory, workspace.key, PromptChange.stating("prompt", text).body(), verb="prompt install"
+        )
     body = PromptChange.stating("prompt_file", str(destination)).body()
     edit_record(ctx, WORKSPACE, directory, workspace.key, body, verb="prompt install")
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")

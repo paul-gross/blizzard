@@ -3,6 +3,7 @@ running host or into a stopped host's store."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -78,3 +79,19 @@ def test_the_prompt_verbs_refuse_a_host_holding_no_workspace(tmp_path: Path) -> 
     status = _run("prompt", "status", "--dir", str(root))
 
     assert status.exit_code == 1 and "holds no active workspace" in status.output
+
+
+def test_a_reinstall_over_the_copy_the_record_names_moves_the_record(tmp_path: Path) -> None:
+    root = init_runner_home(tmp_path)
+    sample = PACKAGED.names[0]
+    workspace_id = load_runner_config(root).home_workspace.id
+    assert _run("prompt", "install", sample, "--dir", str(root)).exit_code == 0
+    first = json.loads(_run("workspace", "get", workspace_id, "--dir", str(root)).output)
+
+    again = _run("prompt", "install", sample, "--force", "--dir", str(root))
+
+    assert again.exit_code == 0, again.output
+    assert "nothing was written" not in again.output
+    second = json.loads(_run("workspace", "get", workspace_id, "--dir", str(root)).output)
+    assert second["revision"] == first["revision"] + 2
+    assert second["settings"] == first["settings"]
