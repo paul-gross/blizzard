@@ -21,7 +21,7 @@ from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.listeners import Listeners, Uds
 from tests.support.config_inputs import load_host_config
-from tests.support.host_files import load_runner_config
+from tests.support.host_files import declare_test_workspace, load_runner_config
 from tests.support.runner_client import runner_seams
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support.runner_init_fakes import init_runner
@@ -46,7 +46,7 @@ def registered_store(root: Path) -> SqlAlchemyRunnerStore:
     return store
 
 
-def _edit_host_file(root: Path, old: str, new: str) -> None:
+def _edit_host_file(root: Path, old: str, new: str) -> None:  # pyright: ignore[reportUnusedFunction]
     """Replace ``old`` with ``new`` in the host directory's host file, which must hold it."""
     path = root / "blizzard-host.toml"
     text = path.read_text()
@@ -58,9 +58,9 @@ def init_runner_home(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
     result = init_runner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
-    # These fixtures seed winter-style /ws/e* workdirs, rather than the new basic
-    # provider's per-chunk folders. Pin the provider so takeover cwd stays /ws/e*.
-    _edit_host_file(root, 'provider = "basic"', 'provider = "winter"')
+    # These fixtures seed winter-style /ws/e* workdirs, rather than the basic provider's per-chunk folders, so the
+    # workspace the scaffolded runner binds is declared on the winter provider and takeover cwd stays /ws/e*.
+    declare_test_workspace(root, provider="winter")
     return root
 
 

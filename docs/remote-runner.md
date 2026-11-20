@@ -58,6 +58,11 @@ On the runner machine, `init` registers the host, adds its runner under it, and 
 blizzard-runner init /var/lib/blizzard/runner --hub https://hub.example.net
 ```
 
+`init` binds the runner to a workspace named `workspace-local` and declares none. Declare it as a `[[workspace]]` with
+`id = "workspace-local"` in `/var/lib/blizzard/runner/blizzard-host.toml` before the host's first start, or create it on
+the running host with `blizzard runner workspace create workspace-local …`; a runner whose workspace the host does not
+serve runs and claims nothing.
+
 init uses the host token it finds — `BZ_HOST_TOKEN` in the environment, the host file's `host_token`, then the runtime
 dir's `.env` — and adds a host otherwise, named after the first `[[runner]]`, writing its token to `.env` as
 `BZ_HOST_TOKEN`. Every runner it adds is added under the host. When the hub's data was reset and it no longer knows the

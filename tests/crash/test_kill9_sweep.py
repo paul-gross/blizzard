@@ -36,7 +36,6 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.composition import build_host_stores, stored_hub_token
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
@@ -101,7 +100,7 @@ from tests.support.config_inputs import init_host, load_host_config, load_hub_co
 from tests.support.crash_points import discover_crash_points
 from tests.support.file_runners import add_file_runner
 from tests.support.fleet_world import BUILD_BRANCH, world_repos
-from tests.support.host_files import load_runner_config, with_runner
+from tests.support.host_files import TEST_WORKSPACE_ID, load_runner_config, with_runner
 from tests.support.hub_tokens import host_hub_tokens
 from tests.support.opencode2_store import seed_store
 from tests.support.otlp_sink import OtlpSink, otlp_sink
@@ -1054,7 +1053,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         environment_id=_DECLARE_COMMIT_ENV,
         workdir=acquired.workdir,
         bound_at=_DECLARE_COMMIT_NOW,
-        workspace_id=DEFAULT_WORKSPACE_ID,
+        workspace_id=TEST_WORKSPACE_ID,
     )
     store.record_ask(
         lease_id="lease_declare_commit",
@@ -3456,7 +3455,7 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, refu
             environment_id="e1",
             workdir=str(tmp_path),
             bound_at=_TAKEOVER_NOW,
-            workspace_id=DEFAULT_WORKSPACE_ID,
+            workspace_id=TEST_WORKSPACE_ID,
         )
         engine.dispose()
 

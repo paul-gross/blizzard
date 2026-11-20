@@ -14,7 +14,7 @@ from blizzard.foundation.roles import domain_model
 class SpawnCwd:
     """The cwd a worker was spawned into: ``workspace_root`` if set, else the fallback.
 
-    An empty ``workspace_root`` (``BZ_WORKSPACE_ROOT`` unset) means the spawn cwd *is* the
+    An empty ``workspace_root`` (the workspace declares no ``root``) means the spawn cwd *is* the
     fallback, itself ``None`` when the caller has none to supply."""
 
     workspace_root: str

@@ -13,16 +13,28 @@ The host serves one origin. What belongs to the host answers at the root:
 - `GET /api/events/stream` — the host's one event stream.
 - `/api/host/*` — the host's own reads: `runners` (each runner's brake, bindings, and agents in use, or a halted one's
   reasons, a starting one, or a failed start's step and error), `workspaces`, `environments` (grouped by workspace, each
-  held one naming its runner and project), and `subscriptions` (each naming the runners that spend it); and
-  `workspaces/{workspace_id}/prompt`, the runtime workspace-prompt override (`GET`, `PUT`, `DELETE`), which answers
-  `404` for a workspace the host does not declare; and `PUT /api/host/runners/{runner_id}/token`, which seals a runner's
-  hub token in the host's store and answers `204`, or `404 runner_unknown` for an id the host does not hold,
-  `409 runner_retired` for a runner whose hub refused its token as retired, and `422 token_blank` for a blank value — it
-  needs superuser authority, never echoes the token, and backs `blizzard runner token set`
-  ([runner-auth.md](./runner-auth.md#the-hosts-token-store)); and `POST /api/host/runners`, which adds a runner from
-  `{name, projects, settings}` — `settings` names its `agents` — under the host's token and answers its view as
-  `starting`, or `422 settings_invalid` with every failing key, `409 host_unregistered` on a host holding no host token,
-  `409 hub_refused` naming the hub's refusal, and `503 hub_unreachable`; and
+  held one naming its runner and project), and `subscriptions` (each naming the runners that spend it), each list
+  carrying every record's `revision`, `state` and settings, and `?retired=true` listing the retired ones too; and the
+  host's workspace and subscription records' verbs — `POST /api/host/workspaces` and `POST /api/host/subscriptions`
+  create one from its key and settings, named as the host file's `[[workspace]]` and `[[subscription]]` name them;
+  `GET /api/host/workspaces/{workspace_id}` and `GET /api/host/subscriptions/{slug}` read one; `PATCH` on the same path
+  edits one under `If-Match: <revision>`, absent keys unchanged and `null` returning a key to its default; and
+  `POST …/retire` and `POST …/enable` retire and enable one, a retire of a retired record or an enable of an enabled one
+  writing nothing. A create or edit the host file would fail at boot answers `422 settings_invalid`, an existing key
+  `409 workspace_exists` or `409 subscription_exists`, an unknown one `404 workspace_unknown` or
+  `404 subscription_unknown`, and a stale `If-Match` `409 revision_conflict`. Each write needs superuser authority and
+  backs `blizzard runner workspace` and `blizzard runner subscription`
+  ([runner-auth.md](./runner-auth.md#the-hosts-workspaces-and-subscriptions)); the host takes a write up at its next
+  tick, with no restart. And `workspaces/{workspace_id}/prompt` (`GET`, `PUT`, `DELETE`) reads and writes the workspace
+  record's prompt, `PUT` setting `prompt` and `DELETE` returning it, `prompt_file` and `prompt_package` to their
+  defaults; it answers `404` for a workspace the host does not hold, and takes no `If-Match`; and
+  `PUT /api/host/runners/{runner_id}/token`, which seals a runner's hub token in the host's store and answers `204`, or
+  `404 runner_unknown` for an id the host does not hold, `409 runner_retired` for a runner whose hub refused its token
+  as retired, and `422 token_blank` for a blank value — it needs superuser authority, never echoes the token, and backs
+  `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)); and `POST /api/host/runners`,
+  which adds a runner from `{name, projects, settings}` — `settings` names its `agents` — under the host's token and
+  answers its view as `starting`, or `422 settings_invalid` with every failing key, `409 host_unregistered` on a host
+  holding no host token, `409 hub_refused` naming the hub's refusal, and `503 hub_unreachable`; and
   `POST /api/host/runners/{runner_id}/retire`, which retires one from `{force}` and answers its view as `retired` with
   `released_chunk_ids` and `already`, true for a runner already retired, of which nothing is written; or
   `404 runner_unknown`, `409 host_unregistered`, `409 hub_refused` and `503 hub_unreachable` — both need superuser

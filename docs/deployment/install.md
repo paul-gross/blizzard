@@ -43,9 +43,13 @@
    token it prints in that `.env` as `BZ_HUB_TOKEN_RUNNER_LOCAL=…`, created owner-only (`0600`) as the service account
    ([remote-runner.md](../remote-runner.md#add)); init then keeps the token
    ([runner-auth.md](./runner-auth.md#adding-a-runner)). Re-running init keeps the runner while the hub still knows the
-   token. Then `systemctl enable --now blizzard-runner`: its first start seals the token in the host's store under the
-   key in `/var/lib/blizzard/runner/data/secret-keys/`, which you back up with the store, and later token changes go
-   through `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)).
+   token. `init` binds the runner to a workspace named `workspace-local` but declares none: add its `[[workspace]]` to
+   `/var/lib/blizzard/runner/blizzard-host.toml` (`id = "workspace-local"`, its `provider`, and its `[[workspace.repo]]`
+   entries) before the first start, or create it once the host runs with
+   `blizzard runner workspace create workspace-local provider='"basic"'`; until then the runner runs and claims nothing.
+   Then `systemctl enable --now blizzard-runner`: its first start seals the token in the host's store under the key in
+   `/var/lib/blizzard/runner/data/secret-keys/`, which you back up with the store, and later token changes go through
+   `blizzard runner token set` ([runner-auth.md](./runner-auth.md#the-hosts-token-store)).
 
 ## Configuration and credentials
 

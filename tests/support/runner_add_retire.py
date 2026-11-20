@@ -7,6 +7,7 @@ from pathlib import Path
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
+from tests.support.host_files import declare_test_workspace
 from tests.support.runner_init_fakes import FakeInitHub, init_runner
 
 _HUB = "http://hub.test:8421"
@@ -20,4 +21,5 @@ def _registered(tmp_path: Path, hub: FakeInitHub) -> Path:  # pyright: ignore[re
     root = tmp_path / "host"
     result = _run(hub, "init", str(root), "--hub", _HUB)
     assert result.exit_code == 0, result.output
+    declare_test_workspace(root)
     return root

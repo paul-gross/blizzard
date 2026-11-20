@@ -38,6 +38,7 @@ from blizzard.runner.loop.steps import Advance, ContextSample, Fill, Pull, Spend
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.status.view import RunnerStatusService
 from tests.support.config_inputs import create_runner_app
+from tests.support.host_files import one_workspace
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -284,7 +285,7 @@ def test_asks_api_route_publishes_ask_asked(tmp_path: Path) -> None:
     _seed_lease(store, retries_max=2)
     token = "the-lease-token"
     store.record_lease_token("lease_1", TokenHash(token).hex, _NOW)
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", workspaces=one_workspace())
     app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), events=events
     )
@@ -702,7 +703,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
     above is pinned, but nothing drove `PATCH /api/runner` itself before this."""
     store = _store(tmp_path)
     events = EventBroker()
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", workspaces=one_workspace())
     status = RunnerStatusService(
         FixedClock(_NOW),
         pause=store,

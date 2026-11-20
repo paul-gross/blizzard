@@ -11,7 +11,7 @@ from pathlib import Path
 
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -20,7 +20,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.support.host_files import one_workspace
+from tests.support.host_files import TEST_WORKSPACE_ID, one_workspace
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 from tests.support.runner_mint import new_mint
@@ -73,7 +73,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
                 environment_id=environment_id,
                 workdir=workdir,
                 bound_at=_NOW,
-                workspace_id=DEFAULT_WORKSPACE_ID,
+                workspace_id=TEST_WORKSPACE_ID,
             )
         store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
         store.record_closure(
@@ -81,7 +81,7 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
         )
 
         # The directory the loop spawns a worker in for this environment.
-        loop_cwd = SpawnCwd.of_session(ctx.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), workdir)
+        loop_cwd = SpawnCwd.of_session(ctx.workspaces.spawn_root(TEST_WORKSPACE_ID), workdir)
         assert loop_cwd == workdir
 
         with runner_client(hosted.app) as client:

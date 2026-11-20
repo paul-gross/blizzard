@@ -17,7 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli.runtime import read_host_stores
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
 from blizzard.runner.host_records.model import HostRecord
-from tests.support.host_files import load_runner_config
+from tests.support.host_files import declare_test_workspace, load_runner_config
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support.runner_init_fakes import init_runner
 
@@ -27,6 +27,7 @@ def _runtime(tmp_path: Path) -> Path:
     root.mkdir()
     result = init_runner().invoke(blizzard, ["runner", "init", str(root)])
     assert result.exit_code == 0, result.output
+    declare_test_workspace(root)
     return root
 
 
