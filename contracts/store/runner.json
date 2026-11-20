@@ -4069,7 +4069,7 @@
           "type": "String"
         }
       },
-      "deprecated": null,
+      "deprecated": "0.5",
       "foreign_keys": [],
       "primary_key": [
         "workspace_id"
