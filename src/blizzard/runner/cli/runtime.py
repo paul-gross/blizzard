@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import click
 
@@ -73,12 +73,14 @@ from blizzard.runner.composition import (
     StartupNote,
     build_host_process,
     build_host_read_stores,
+    build_host_record_services,
     build_host_settings_store,
     build_host_stores,
     build_read_stores,
     build_runner_process,
     build_sealing_hub_tokens,
     build_settings_stores,
+    host_record_reads,
     run_startup_steps,
     runner_admission,
     stored_hub_token,
@@ -115,6 +117,7 @@ from blizzard.runner.host_layout import (
     WORKER_SCRATCH_DIRNAME,
     HostLayout,
 )
+from blizzard.runner.host_records.model import RecordKind
 from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.hosting.model import CLI, JOIN, SEED, HostingFact
 from blizzard.runner.hosting.names import stored_name
@@ -192,7 +195,7 @@ from blizzard.runner.settings.ports import IWriteRunnerSettings
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.stores import HostReadStores, RunnerReadStores
+from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores
 
 #: Bounds each of ``init``'s hub calls, so an unresponsive hub fails the command instead of hanging it.
 _INIT_HUB_TIMEOUT_SECONDS = 15.0
@@ -1038,7 +1041,7 @@ def host(
         with store_write_guard(
             config, action="start the host", door=Door.of(ctx), clock=clock, refuse_foreign=False
         ) as verdict:
-            config = seed_host(config, os.environ)
+            config = seed_host(config, os.environ, clock=clock)
             if verdict.foreign is not None:
                 # A store that is not the host's is left untouched: every runner the file names halts with the reason.
                 halted += [
@@ -1061,15 +1064,19 @@ def host(
             )
 
 
-def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
-    """Seed the host's record from its file, in one write, after the store guard has passed and before any runner is
-    built; returns the host configuration the record resolves to. A key the store holds an entry for, an unset
+def seed_host(config: HostConfig, environ: Mapping[str, str], *, clock: IClock) -> HostConfig:
+    """Seed the host's record from its file, in one write, then its workspaces and subscriptions (seed steps 2-3),
+    after the store guard has passed and before any runner is built; returns the host configuration the record and
+    records resolve to. A key the store holds an entry for, an unset
     included, is never touched. ``tick_seconds`` falls through to the deprecated variable where neither the store nor
     the file states one. A file with no ``[tools]`` seeds the profile its runners agree on, while it is not empty."""
     engine = create_engine_from_url(config.db_url)
     try:
-        store = build_host_settings_store(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        reader = HostSettingsReader(config, store)
+        stores = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        )
+        store = stores.settings
+        reader = HostSettingsReader(config, store, host_record_reads(stores))
         held = store.snapshot().entries
         tools = tuple(key for key in reader.keys if key.startswith("tools."))
         if config.tool_profile_conflict is not None and not any(key in held for key in tools):
@@ -1086,6 +1093,7 @@ def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
             source["tools"] = {"path_prepend": list(profile[0]), "env_passthrough": list(profile[1])}
         try:
             store.seed(ConfigView.unchecked(source), tuple(reader.keys), validate=reader.validate)
+            _seed_records(config, stores, clock=clock)
             _, effective = reader.snapshot()
         except (SettingsInvalid, ValueError) as exc:
             raise click.ClickException(f"host: {exc}") from exc
@@ -1094,6 +1102,46 @@ def seed_host(config: HostConfig, environ: Mapping[str, str]) -> HostConfig:
     if tick.warning is not None:
         click.echo(f"warning: {tick.warning}")
     return effective
+
+
+def seed_host_records(config: HostConfig, *, clock: IClock) -> None:
+    """Seed steps 2-3 alone, for a stopped-host verb that judges the host's workspaces or subscriptions under its
+    store guard: each ``[[workspace]]`` and ``[[subscription]]`` the store holds no record of."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        stores = build_host_stores(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
+        )
+        _seed_records(config, stores, clock=clock)
+    finally:
+        engine.dispose()
+
+
+def _seed_records(config: HostConfig, stores: HostStores, *, clock: IClock) -> None:
+    """Each ``[[workspace]]`` and ``[[subscription]]`` table with no record becomes one, whole from its table, each
+    its own write under the seed's door and actor; a record the store holds, retired or not, is never touched. A
+    deprecated ``workspace_prompt`` override for a seeded workspace is its ``prompt``, with ``prompt_file`` and
+    ``prompt_package`` at their defaults, since the override already won over every file prompt."""
+    authored = config.authored
+    if authored is None:
+        return
+    services = build_host_record_services(config, stores, clock=clock)
+    for kind in (RecordKind.WORKSPACE, RecordKind.SUBSCRIPTION):
+        tables = cast(object, authored.get(str(kind), []))
+        for table in cast(list[object], tables) if isinstance(tables, list) else []:
+            if not isinstance(table, dict):
+                continue
+            entry = cast(dict[str, object], table)
+            if not isinstance(key := entry.get(kind.key_name), str):
+                continue
+            settings = {name: value for name, value in entry.items() if name != kind.key_name}
+            if kind is RecordKind.WORKSPACE:
+                override = stores.workspace_prompt.workspace_prompt_override(key.strip())
+                if override is not None:
+                    settings = {**settings, "prompt": override}
+                    settings.pop("prompt_file", None)
+                    settings.pop("prompt_package", None)
+            services[kind].seed(key.strip(), settings)
 
 
 def seed_hosted_runners(config: HostConfig, *, clock: IClock) -> None:
@@ -1142,7 +1190,9 @@ def hosted_entries(config: HostConfig, *, clock: IClock) -> list[RunnerEntry]:
 def seed_runners(config: HostConfig, *, clock: IClock) -> tuple[list[BuiltRunner], list[HaltedRunner]]:
     """Seed and resolve the store's active hosted runners only after the store guard has passed and seed step 4 has
     hosted the file's: each runner's token is imported into the store first, then its settings are seeded, then it
-    is projected over its stored token. Mints the host's key when it holds none."""
+    is projected over its stored token. Mints the host's key when it holds none. Seed steps 2-3 run first, so each
+    runner resolves against the host's records."""
+    seed_host_records(config, clock=clock)
     seed_hosted_runners(config, clock=clock)
     ready: list[BuiltRunner] = []
     halted: list[HaltedRunner] = []
@@ -1163,7 +1213,8 @@ def _seed_entries(
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
     projections: list[BuiltRunner | HaltedRunner] = []
     try:
-        host_settings = HostSettingsReader(config, build_host_settings_store(engine, errors=errors))
+        host_stores = build_host_stores(engine, errors=errors, clock=clock)
+        host_settings = HostSettingsReader(config, host_stores.settings, host_record_reads(host_stores))
         with click_exception_on(ConfigError):
             tokens = build_sealing_hub_tokens(engine, config.root, environ=os.environ, clock=clock)
         for entry in entries:
@@ -1778,7 +1829,9 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
                 graph.stores.settings,
                 deferred_seed=graph.stores.settings if identity_store.runner_identity() is None else None,
                 identity_present=lambda: identity_store.runner_identity() is not None,
-                host_settings=HostSettingsReader(config, graph.host.host_stores.settings),
+                host_settings=HostSettingsReader(
+                    config, graph.host.host_stores.settings, host_record_reads(graph.host.host_stores)
+                ),
             ),
         )
         try:

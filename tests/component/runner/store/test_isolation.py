@@ -42,6 +42,7 @@ from blizzard.runner.harness.observation import ExecutionObservation
 from blizzard.runner.harness.selftest_result import IWriteSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IWriteWorkspacePromptRepository
+from blizzard.runner.host_records.ports import IWriteHostRecordRepository
 from blizzard.runner.hosting.model import RunnerAdmission
 from blizzard.runner.hosting.ports import (
     IWriteAdmittedHosting,
@@ -638,6 +639,8 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteHostIdentityRepository, "record_host_identity"): _HOST_ONLY + " (host_identity)",
     (IWriteHostSettings, "seed"): _HOST_ONLY + " (host_settings, host_setting_entries, host_setting_changes)",
     (IWriteHostSettings, "write"): _HOST_ONLY + " (host_settings, host_setting_entries, host_setting_changes)",
+    (IWriteHostRecordRepository, "apply"): _HOST_ONLY
+    + " (host_workspaces, host_subscriptions, their facts, host_setting_changes)",
     (IWriteHostIngestRepository, "merge_host_rows_locked"): _HOST_ONLY + " (every carried host table)",
     (IWriteHostIngestRepository, "record_host_ingest_locked"): _HOST_ONLY + " (host_ingests)",
     (IWriteHubTokenRepository, "seal_if_absent"): _HOST_ONLY + " (runner_hub_tokens)",

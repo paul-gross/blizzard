@@ -39,7 +39,7 @@ def _entries(store: HostSettingsStore) -> dict[str, Entry]:
 def test_the_files_tick_seconds_is_seeded_over_the_variable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config, store = _host(tmp_path, "tick_seconds = 2")
 
-    effective = seed_host(config, {"BZ_RUNNER_TICK_SECONDS": "9"})
+    effective = seed_host(config, {"BZ_RUNNER_TICK_SECONDS": "9"}, clock=SystemClock())
 
     assert _entries(store)["tick_seconds"] == Entry(2)
     assert effective.tick_seconds == 2.0
@@ -51,13 +51,13 @@ def test_the_variable_is_seeded_where_neither_the_store_nor_the_file_states_one(
 ) -> None:
     config, store = _host(tmp_path)
 
-    effective = seed_host(config, {"BZ_RUNNER_TICK_SECONDS": "0.5"})
+    effective = seed_host(config, {"BZ_RUNNER_TICK_SECONDS": "0.5"}, clock=SystemClock())
 
     assert _entries(store)["tick_seconds"] == Entry(0.5)
     assert effective.tick_seconds == 0.5
     assert "seeded as tick_seconds = 0.5" in capsys.readouterr().out
     # A later start finds the store's entry, and ignores the variable rather than seeding it again.
-    seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "7"})
+    seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "7"}, clock=SystemClock())
     assert _entries(store)["tick_seconds"] == Entry(0.5)
     assert "ignored: the store holds tick_seconds" in capsys.readouterr().out
 
@@ -65,7 +65,7 @@ def test_the_variable_is_seeded_where_neither_the_store_nor_the_file_states_one(
 def test_the_default_stands_and_nothing_is_written_where_none_states_one(tmp_path: Path) -> None:
     config, store = _host(tmp_path)
 
-    effective = seed_host(config, {})
+    effective = seed_host(config, {}, clock=SystemClock())
 
     assert store.snapshot().revision == 0
     assert "tick_seconds" not in _entries(store)
@@ -75,13 +75,13 @@ def test_the_default_stands_and_nothing_is_written_where_none_states_one(tmp_pat
 
 def test_the_stores_entry_wins_and_an_edited_seeded_key_in_the_file_changes_nothing(tmp_path: Path) -> None:
     config, store = _host(tmp_path, "tick_seconds = 2\n[transcripts]\nship = false")
-    seed_host(config, {})
+    seed_host(config, {}, clock=SystemClock())
     revision = store.snapshot().revision
 
     write_minimal_host(
         tmp_path, top=f'db_url = "{config.db_url}"\ntick_seconds = 3\n[transcripts]\nship = true', runner=""
     )
-    effective = seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "9"})
+    effective = seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "9"}, clock=SystemClock())
 
     assert store.snapshot().revision == revision
     assert effective.tick_seconds == 2.0
@@ -90,13 +90,13 @@ def test_the_stores_entry_wins_and_an_edited_seeded_key_in_the_file_changes_noth
 
 def test_an_unset_survives_a_restart_against_a_file_stating_the_key(tmp_path: Path) -> None:
     config, store = _host(tmp_path, "tick_seconds = 2")
-    seed_host(config, {})
+    seed_host(config, {}, clock=SystemClock())
     reader = HostSettingsReader(config, store)
     HostSettingsAuthoring(reader, store, HOST_REGISTRY).edit(
         {}, frozenset({"tick_seconds"}), if_match=store.revision(), door="cli", actor="test"
     )
 
-    effective = seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "9"})
+    effective = seed_host(_load(tmp_path), {"BZ_RUNNER_TICK_SECONDS": "9"}, clock=SystemClock())
 
     assert _entries(store)["tick_seconds"] == Entry(None, at_default=True)
     assert effective.tick_seconds is None
@@ -109,7 +109,7 @@ def test_the_implicit_tool_profile_is_seeded_when_the_file_has_no_tools(tmp_path
         tmp_path, runner=f'[runner.worker]\npath_prepend = ["{tools}"]\nenv_passthrough = ["SSH_AUTH_SOCK"]'
     )
 
-    effective = seed_host(config, {})
+    effective = seed_host(config, {}, clock=SystemClock())
 
     entries = _entries(store)
     assert entries["tools.path_prepend"] == Entry([str(tools)])
@@ -121,7 +121,7 @@ def test_the_implicit_tool_profile_is_seeded_when_the_file_has_no_tools(tmp_path
 def test_an_empty_implicit_tool_profile_seeds_no_entry(tmp_path: Path) -> None:
     config, store = _host(tmp_path)
 
-    seed_host(config, {})
+    seed_host(config, {}, clock=SystemClock())
 
     assert not any(key.startswith("tools.") for key in _entries(store))
 
@@ -142,17 +142,17 @@ def test_disagreeing_runners_refuse_a_start_until_the_store_holds_the_hosts_prof
     second.mkdir()
     _two_runners(tmp_path, str(first), str(first))
     store = HostSettingsStore(make_store(f"sqlite:///{tmp_path / 'runner.db'}").connections, SystemClock())
-    seed_host(_load(tmp_path), {})
+    seed_host(_load(tmp_path), {}, clock=SystemClock())
     assert _entries(store)["tools.path_prepend"] == Entry([str(first)])
 
     # One runner's seeded worker key edited in the file: the host's profile is the store's, so the start goes on.
     _two_runners(tmp_path, str(first), str(second))
     assert _load(tmp_path).tool_profile_conflict is not None
-    effective = seed_host(_load(tmp_path), {})
+    effective = seed_host(_load(tmp_path), {}, clock=SystemClock())
     assert effective.tool_path_prepend == (str(first),)
 
     # A store holding no profile of the host's still refuses the disagreement, as a boot always has.
     (tmp_path / "runner.db").unlink()
     make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     with pytest.raises(click.ClickException, match=r"\[tools\]"):
-        seed_host(_load(tmp_path), {})
+        seed_host(_load(tmp_path), {}, clock=SystemClock())
