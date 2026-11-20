@@ -8,6 +8,7 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -75,7 +76,7 @@ def _target(state: DoubleRepo | None = None, *, commit: str = "sha1") -> _Target
     )
     double = GitHubDouble({_REPO: state or DoubleRepo()})
     return _Target(
-        run=cast(_Run, None),
+        run=cast(_Run, SimpleNamespace(visit=SimpleNamespace(markers=()))),
         repo=_REPO,
         branch=_BRANCH,
         commit=commit,

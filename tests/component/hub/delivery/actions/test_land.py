@@ -53,6 +53,7 @@ from blizzard.hub.forge.landing import (
     Check,
     CheckOutcome,
     CheckSource,
+    CommitEvidence,
     CommitSummary,
     ComparisonStatus,
     FileChange,
@@ -62,11 +63,13 @@ from blizzard.hub.forge.landing import (
     ForgeRateLimited,
     ForgeRejected,
     ForgeUnavailable,
+    LandingOptions,
     Mergeability,
     MergeMethod,
     RepositoryForge,
     Rerun,
     RerunOutcome,
+    TreeEntry,
     Update,
     UpdateMethod,
     UpdateOutcome,
@@ -1741,3 +1744,199 @@ def test_an_app_installation_withholding_checks_read_escalates_naming_its_creden
     with hub.engine.begin() as conn:
         rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
     assert "does not offer `checks.read` to credential app (github.app-installation), which" in rows[0].detail
+
+
+def test_method_incompatibility_falls_back_at_the_same_checked_head() -> None:
+    def landed(**_: object) -> str:
+        return "landed-rebase"
+
+    double = _forge(
+        replies={
+            "landing_options": [LandingOptions((MergeMethod.MERGE, MergeMethod.REBASE), UpdateMethod.MERGE)],
+            "merge": [ForgeRejected(ForgeRejected.METHOD, "merge disabled by policy"), landed],
+        }
+    )
+    answer, sink = _land(double)
+    assert answer.choice == "landed"
+    calls = [call for _, call in double.named("merge")]
+    assert [call["method"] for call in calls] == [MergeMethod.MERGE, MergeMethod.REBASE]
+    assert all(call["expected_head"] == _SUBMITTED for call in calls)
+    assert sink.landings()[0].revision == "landed-rebase"
+
+
+def test_empty_allowed_methods_escalate_without_attempting_a_merge() -> None:
+    double = _forge(replies={"landing_options": [LandingOptions((), UpdateMethod.REBASE)]})
+    answer, sink = _land(double)
+    assert answer.escalation is not None
+    assert answer.escalation.cause == EscalationCause.MERGE_METHOD_REFUSED
+    assert "allows no merge methods" in answer.escalation.detail
+    assert not double.named("merge") and not sink.landings()
+
+
+@pytest.mark.parametrize("mergeability", [Mergeability.MERGEABLE, Mergeability.BEHIND])
+def test_refused_settings_read_waits_without_treating_methods_as_exhausted(mergeability: Mergeability) -> None:
+    double = _forge(mergeability=mergeability, replies={"landing_options": [ForgeRejected("settings unavailable")]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending" and answer.escalation is None
+    assert not double.named("merge") and not double.named("update_from_base") and not sink.landings()
+
+
+def test_refused_update_waits_without_method_fallback() -> None:
+    double = _forge(mergeability=Mergeability.BEHIND, replies={"update_from_base": [ForgeRejected("protected")]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending" and answer.escalation is None
+    assert not double.named("merge") and not sink.landings()
+
+
+def test_uncertain_merge_at_a_different_head_does_not_record_a_landing() -> None:
+    double = _forge(replies={"merge": [ForgeRejected("uncertain")]})
+    opened = change(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeability=Mergeability.MERGEABLE)
+    double.repos[_WIDGET].replies["change"] = [
+        opened,
+        replace(opened, state=ChangeState.MERGED, head_revision="foreign", merged_revision="m1"),
+    ]
+    answer, sink = _land(double)
+    assert answer.choice == "pending" and not sink.landings()
+
+
+def test_rebase_intent_survives_response_loss_and_checks_the_rewritten_head() -> None:
+    double = _forge(
+        mergeability=Mergeability.BEHIND,
+        replies={
+            "landing_options": [LandingOptions((MergeMethod.REBASE,), UpdateMethod.REBASE)],
+            "update_from_base": [ForgeUnavailable("response lost")],
+        },
+    )
+    state = double.repos[_WIDGET]
+    state.compares[("base-tip", _SUBMITTED)] = comparison(
+        commits=(CommitSummary(_SUBMITTED, ("old",)),), merge_base="old"
+    )
+    commits = {
+        "old": CommitEvidence("old", "old-tree", (), "a", "a@x", "date", "old"),
+        "base-tip": CommitEvidence("base-tip", "base-tree", ("old",), "b", "b@x", "date", "base"),
+        _SUBMITTED: CommitEvidence(_SUBMITTED, "work-tree", ("old",), "a", "a@x", "date", "work"),
+        "rewritten": CommitEvidence("rewritten", "result-tree", ("base-tip",), "a", "a@x", "date", "work"),
+        "base-two": CommitEvidence("base-two", "base-two-tree", ("base-tip",), "b", "b@x", "date", "base two"),
+        "rewritten-two": CommitEvidence("rewritten-two", "result-two-tree", ("base-two",), "a", "a@x", "date", "work"),
+        "foreign": CommitEvidence("foreign", "foreign-tree", ("base-tip",), "x", "x@x", "date", "foreign"),
+        "reverted": CommitEvidence("reverted", "result-tree", ("foreign",), "a", "a@x", "date", "work"),
+    }
+    trees = {
+        "old-tree": (),
+        "base-tree": (TreeEntry("base", "100644", "blob", "base-blob"),),
+        "work-tree": (TreeEntry("work", "100644", "blob", "work-blob"),),
+        "result-tree": (
+            TreeEntry("base", "100644", "blob", "base-blob"),
+            TreeEntry("work", "100644", "blob", "work-blob"),
+        ),
+        "base-two-tree": (
+            TreeEntry("base", "100644", "blob", "base-blob"),
+            TreeEntry("upstream", "100644", "blob", "upstream-blob"),
+        ),
+        "result-two-tree": (
+            TreeEntry("base", "100644", "blob", "base-blob"),
+            TreeEntry("upstream", "100644", "blob", "upstream-blob"),
+            TreeEntry("work", "100644", "blob", "work-blob"),
+        ),
+        "foreign-tree": (
+            TreeEntry("base", "100644", "blob", "base-blob"),
+            TreeEntry("evil", "100644", "blob", "evil-blob"),
+        ),
+    }
+
+    def commit_evidence(revision: str) -> CommitEvidence:
+        return commits[revision]
+
+    def tree_evidence(revision: str) -> tuple[TreeEntry, ...]:
+        return trees[revision]
+
+    def blob_evidence(revision: str) -> bytes:
+        return revision.encode()
+
+    state.replies.update(
+        {
+            "commit_evidence": [commit_evidence],
+            "tree_evidence": [tree_evidence],
+            "blob_evidence": [blob_evidence],
+        }
+    )
+    for call in ("commit_evidence", "tree_evidence", "blob_evidence"):
+        original = state.replies[call]
+        for refusal in (ForgeRejected("protected"), ForgeNotFound(ForgeObject.REVISION), ForgeUnavailable("offline")):
+            state.replies[call] = [refusal]
+            waiting, refused_sink = _land(double)
+            assert waiting.choice == "pending" and not refused_sink.landings()
+            assert not double.named("update_from_base")
+            assert not any(name.startswith("rewrite-intent/") for name in refused_sink.markers())
+        state.replies[call] = [ForgeRejected(ForgeRejected.AUTH)]
+        refused, _ = _land(double)
+        assert refused.escalation is not None and refused.escalation.cause is EscalationCause.FORGE_AUTH
+        state.replies[call] = original
+    first, sink = _land(double)
+    assert first.choice == "pending"
+    intent = next((name, data) for name, data in sink.markers().items() if name.startswith("rewrite-intent/"))
+    assert double.named("update_from_base")
+    state.heads["feat/x"] = "rewritten"
+    state.mergeability = Mergeability.MERGEABLE
+    marker = _row(ArtifactKind.ASSET, *intent)
+    visit = replace(_visit(), markers=(marker,))
+
+    for call in ("commit_evidence", "tree_evidence", "blob_evidence"):
+        original = state.replies[call]
+        for refusal in (ForgeRejected("protected"), ForgeNotFound(ForgeObject.REVISION), ForgeUnavailable("offline")):
+            state.replies[call] = [refusal]
+            waiting, refused_sink = _land(double, visit)
+            assert waiting.choice == "pending" and not refused_sink.landings()
+            assert not any("findings" in name for name in refused_sink.markers())
+            assert not double.named("merge")
+        state.replies[call] = [ForgeRejected(ForgeRejected.AUTH)]
+        refused, _ = _land(double, visit)
+        assert refused.escalation is not None and refused.escalation.cause is EscalationCause.FORGE_AUTH
+        state.replies[call] = original
+
+    # A foreign add followed by a revert has the same final tree, but not the committed chain.
+    state.heads["feat/x"] = "reverted"
+    rejected, rejected_sink = _land(double, visit)
+    assert rejected.choice != "landed" and not rejected_sink.landings()
+    assert not double.named("merge")
+
+    # A result replayed onto a newer, uncommitted base is not retroactively authorized.
+    state.heads["feat/x"] = "rewritten-two"
+    rejected, rejected_sink = _land(double, visit)
+    assert rejected.choice != "landed" and not rejected_sink.landings()
+    assert not double.named("merge")
+
+    # A later base advance can extend only the already proven rewrite.
+    state.heads["feat/x"] = "rewritten"
+    state.mergeability = Mergeability.BEHIND
+    state.base_tip = "base-two"
+    state.heads["main"] = "base-two"
+    state.compares[("base-two", "rewritten")] = comparison(
+        commits=(CommitSummary("rewritten", ("base-tip",)),), merge_base="base-tip"
+    )
+    pending, next_sink = _land(double, visit)
+    assert pending.choice == "pending"
+    next_intent = next((name, data) for name, data in next_sink.markers().items() if name.startswith("rewrite-intent/"))
+    next_marker = _row(ArtifactKind.ASSET, *next_intent)
+    state.heads["feat/x"] = "rewritten-two"
+    state.mergeability = Mergeability.MERGEABLE
+    visit = replace(_visit(), markers=(marker, next_marker))
+    state.checks["rewritten-two"] = (_pending(),)
+    waiting, waiting_sink = _land(double, visit)
+    assert waiting.choice == "pending" and not waiting_sink.landings()
+    assert not double.named("merge")
+    state.checks["rewritten-two"] = GREEN
+    second, landed = _land(double, visit)
+    assert second.choice == "landed"
+    assert landed.landings()
+    assert double.named("merge")[-1][1]["expected_head"] == "rewritten-two"
+    assert any(call[1].get("ref") == "rewritten-two" for call in double.named("checks"))
+
+    # The recorded PR identity still locates a merged rewrite after the forge deletes its branch.
+    del state.heads["feat/x"]
+    pr_name = f"delivery-pr/{_WIDGET}/1"
+    pr = _row(ArtifactKind.ASSET, pr_name, sink.markers()[pr_name])
+    recovered, recovered_sink = _land(double, replace(_visit(), markers=(marker, next_marker, pr)))
+    assert recovered.choice == "landed"
+    assert recovered_sink.landings()[0].revision == landed.landings()[0].revision
+    assert len(double.named("merge")) == 1

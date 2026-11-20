@@ -342,7 +342,7 @@ describe('ChunkEscalation', () => {
       ],
       ['change-closed', 'repo#42 closed without merging', 'The change was closed without merging (epoch 3).'],
       ['branch-protected', 'repo: branch main: protected branch hook declined', 'The forge refused to update a protected branch (epoch 3).'],
-      ['merge-method-refused', 'repo#42: merge method disabled', 'The forge refused the configured merge method (epoch 3).'],
+      ['merge-method-refused', 'repo#42: allowed methods merge, rebase; merge: refused; rebase: incompatible', 'No allowed merge method could be used (epoch 3).'],
       ['park-timeout', 'repo#42 exceeded its 168 hour review timeout', 'The wait for the change to merge timed out (epoch 3).'],
     ])(
       'renders the hub-authored cause %s with its detail',

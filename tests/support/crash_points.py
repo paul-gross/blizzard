@@ -38,6 +38,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.delivery.action_pass",
     "blizzard.hub.delivery.actions.landing.fast_forward",
     "blizzard.hub.delivery.actions.landing.park",
+    "blizzard.hub.delivery.actions.landing.merge_on_checks",
     "blizzard.hub.domain.execution.claim",
     "blizzard.hub.domain.execution.apply",
     "blizzard.hub.domain.work_items.closure",
