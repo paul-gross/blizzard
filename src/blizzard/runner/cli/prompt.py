@@ -149,13 +149,14 @@ def prompt_status(directory: str, runner: str | None) -> None:
 @click.pass_context
 def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
     """Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing
-    prompt. Through a running host, or into a stopped host's store. Takes effect on subsequent spawns."""
+    prompt. Through a running host, which takes it up at its next tick, or into a stopped host's store, taken up at
+    its next start."""
     workspace_id = _home_record(directory, runner)[1].key
     if runner_url is not None:
         with RunnerDaemon.reach("prompt clear", directory, runner_url, Door.of(ctx)) as daemon:
             route = f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt"
             daemon.send_to_host("delete", route).raise_for_status()
-        click.echo("workspace prompt cleared — the workspace carries no standing prompt on subsequent spawns")
+        click.echo("workspace prompt cleared — from the host's next tick the workspace carries no standing prompt")
         return
     edit_record(ctx, WORKSPACE, directory, workspace_id, PromptChange.cleared().body(), verb="prompt clear")
 

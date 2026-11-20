@@ -71,7 +71,7 @@ def _app_with_status(
         escalations=store,
         identity=registered_identity("rn_status", config.name),
         runner_name=config.name,
-        workspace_id=config.home_workspace.id,
+        home_workspace=lambda: config.home_workspace.id,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),

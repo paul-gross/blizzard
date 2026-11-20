@@ -292,8 +292,8 @@ export const enableWorkspaceApiHostWorkspacesWorkspaceIdEnablePost = <ThrowOnErr
 /**
  * Clear Workspace Prompt
  *
- * Return the workspace's three prompt settings to their defaults, so it carries no standing prompt — effective
- * on subsequent spawns.
+ * Return the workspace's three prompt settings to their defaults, so it carries no standing prompt — the host's
+ * next pass rebuilds the workspace, and every spawn after it carries none.
  */
 export const clearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDelete = <ThrowOnError extends boolean = false>(options: Options<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData, ThrowOnError>): RequestResult<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors, ThrowOnError> => (options.client ?? client).delete<ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteResponses, ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors, ThrowOnError>({ url: '/api/host/workspaces/{workspace_id}/prompt', ...options });
 
@@ -307,8 +307,8 @@ export const readWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGet = <ThrowOn
 /**
  * Replace Workspace Prompt
  *
- * Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults —
- * effective on subsequent spawns.
+ * Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults — the host's
+ * next pass rebuilds the workspace, and every spawn after it reads the new prompt.
  */
 export const replaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData, ThrowOnError>): RequestResult<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses, ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors, ThrowOnError>({
     url: '/api/host/workspaces/{workspace_id}/prompt',

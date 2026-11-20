@@ -716,7 +716,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
         escalations=store,
         identity=registered_identity("rn_patch", config.name),
         runner_name=config.name,
-        workspace_id=config.home_workspace.id,
+        home_workspace=lambda: config.home_workspace.id,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),

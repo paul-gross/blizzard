@@ -100,13 +100,11 @@ def add(
     workspaces: tuple[str, ...],
     agents: tuple[int, ...],
 ) -> None:
-    """Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store — its
-    identity, settings and sealed token. A running host is asked over its socket and starts it at its next tick; a
-    stopped host's store is written directly, and it starts at the host's next start. Neither `.env` nor the host file
-    is written.
+    """Add runner NAME to this registered host at its hub and record it in the host store, through a running host's
+    socket or into a stopped host's store; neither `.env` nor the host file is written.
 
-    Refused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,
-    or when a --workspace is not one the host holds an active record of."""
+    Refused, with nothing added, on a host holding no host token, when NAME is another runner's, or when a
+    --workspace is not one the host holds an active record of."""
     config = load_host(directory)
     token = _host_token(config)
     door = Door.of(ctx)

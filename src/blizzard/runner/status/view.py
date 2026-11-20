@@ -298,7 +298,7 @@ class RunnerStatusService:
         served_projects: IReadServedProjectsRepository | None = None,
         projects: tuple[str, ...] | None = None,
         runner_name: str,
-        workspace_id: str,
+        home_workspace: Callable[[], str],
         bindings: tuple[BindingDeclaration, ...] = (),
         agents: int = 0,
         hub_url: str,
@@ -329,7 +329,7 @@ class RunnerStatusService:
         self._served_projects = served_projects
         self._projects = projects
         self._runner_name = runner_name
-        self._workspace_id = workspace_id
+        self._home_workspace = home_workspace
         self._bindings = bindings
         self._agents = agents
         self._hub_url = hub_url
@@ -361,7 +361,7 @@ class RunnerStatusService:
         return RunnerStatusSummary(
             runner_id=identity.runner_id if identity is not None else None,
             runner_name=identity.runner_name if identity is not None else self._runner_name,
-            workspace_id=self._workspace_id,
+            workspace_id=self._home_workspace(),
             pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
             capacities=Capacities.of(bindings, routing, self._environments.open_lease_holds(), agents),
             hub=HubConnectivity.of(

@@ -506,7 +506,7 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
         escalations=store,
         identity=registered_identity("r1"),
         runner_name="r1",
-        workspace_id="ws1",
+        home_workspace=lambda: "ws1",
         bindings=serving(),
         agents=10,
         hub_url="http://hub",

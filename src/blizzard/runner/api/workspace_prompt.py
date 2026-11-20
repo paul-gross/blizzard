@@ -13,25 +13,24 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.federation import require_human_api
+from blizzard.runner.api.host_records import record_write
 from blizzard.runner.api.problems import problem
-from blizzard.runner.api.settings import settings_problem
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import record_prompt
 from blizzard.runner.host_records.model import HostRecord, RecordKind, RecordUnknown
 from blizzard.runner.host_records.prompt import PromptChange
+from blizzard.runner.host_records.service import HostRecordService
 from blizzard.runner.hosting.model import API
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
 
 router = APIRouter(prefix="/api/host/workspaces/{workspace_id}", tags=["host"])
 
-#: Where an effective workspace prompt came from: the workspace record's prompt settings (``config``), or none of
-#: them stated (``default``). ``override`` is answered only by a host that predates workspace records.
+#: The effective prompt's source: its record's settings, none stated, or (from an older host) its override row.
 WorkspacePromptSource = Literal["override", "config", "default"]
 
 
@@ -43,19 +42,32 @@ class WorkspacePromptResponse(WireModel):
 
 
 class WorkspacePromptReplacement(BaseModel):
-    """A replacement workspace prompt — applies to subsequent spawns with no restart."""
+    """A replacement workspace prompt — taken up with no restart at the host's next pass, by every spawn after it."""
 
     prompt: str
 
 
 _PROBLEM = {"application/problem+json": {"schema": {"$ref": "#/components/schemas/RunnerProblem"}}}
 _SETTINGS_PROBLEM = {"application/problem+json": {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}}
-_UNKNOWN: dict[int | str, dict[str, Any]] = {
+_READ: dict[int | str, dict[str, Any]] = {
     404: {"description": "The host holds no record of the workspace", "content": _PROBLEM},
     409: {"description": "The workspace's prompt does not resolve", "content": _PROBLEM},
 }
 _WRITE: dict[int | str, dict[str, Any]] = {
-    **_UNKNOWN,
+    **_READ,
+    409: {
+        "description": "The workspace's prompt does not resolve, or another write moved the record first",
+        "content": {
+            "application/problem+json": {
+                "schema": {
+                    "anyOf": [
+                        {"$ref": "#/components/schemas/RunnerProblem"},
+                        {"$ref": "#/components/schemas/SettingsProblem"},
+                    ]
+                }
+            }
+        },
+    },
     422: {
         "description": "The host file would fail at boot with it, or the request is malformed",
         "content": {
@@ -78,32 +90,17 @@ def _write(
     request: Request, workspace_id: str, change: PromptChange, session: RunnerSession
 ) -> WorkspacePromptResponse | JSONResponse:
     wiring = RunnerWiring.of(request)
-    service = wiring.host_records(RecordKind.WORKSPACE)
-    try:
+
+    def write(service: HostRecordService) -> HostRecord:
         record = service.held(workspace_id)
-        written = service.edit(
-            record,
-            change.sets,
-            change.unsets,
-            if_match=record.revision,
-            actor=session.username,
-            door=API,
+        return service.edit(
+            record, change.sets, change.unsets, if_match=record.revision, actor=session.username, door=API
         )
-    except RecordUnknown as exc:
-        return problem(404, "workspace_unknown", str(exc))
-    except SettingsRevisionConflict as exc:
-        return settings_problem(409, "revision_conflict", str(exc), current=exc.current)
-    except SettingsInvalid as exc:
-        return settings_problem(
-            422,
-            "settings_invalid",
-            str(exc),
-            errors=[{"key": key, "message": message} for key, message in exc.errors.items()],
-        )
-    return _response(wiring, written)
+
+    return record_write(write, wiring.host_records(RecordKind.WORKSPACE), lambda written: _response(wiring, written))
 
 
-@router.get("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
+@router.get("/prompt", response_model=WorkspacePromptResponse, responses=_READ)
 def read_workspace_prompt(workspace_id: str, request: Request) -> WorkspacePromptResponse | JSONResponse:
     """The effective spawn preamble prompt the workspace's record resolves to."""
     wiring = RunnerWiring.of(request)
@@ -121,8 +118,8 @@ def replace_workspace_prompt(
     request: Request,
     session: Annotated[RunnerSession, Depends(require_human_api)],
 ) -> WorkspacePromptResponse | JSONResponse:
-    """Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults —
-    effective on subsequent spawns."""
+    """Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults — the host's
+    next pass rebuilds the workspace, and every spawn after it reads the new prompt."""
     return _write(request, workspace_id, PromptChange.stating("prompt", request_body.prompt), session)
 
 
@@ -130,6 +127,6 @@ def replace_workspace_prompt(
 def clear_workspace_prompt(
     workspace_id: str, request: Request, session: Annotated[RunnerSession, Depends(require_human_api)]
 ) -> WorkspacePromptResponse | JSONResponse:
-    """Return the workspace's three prompt settings to their defaults, so it carries no standing prompt — effective
-    on subsequent spawns."""
+    """Return the workspace's three prompt settings to their defaults, so it carries no standing prompt — the host's
+    next pass rebuilds the workspace, and every spawn after it carries none."""
     return _write(request, workspace_id, PromptChange.cleared(), session)

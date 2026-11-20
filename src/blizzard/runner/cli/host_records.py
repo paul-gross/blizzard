@@ -20,12 +20,18 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.api.host_records import subscription_list, workspace_view
 from blizzard.runner.cli.daemon import Door, RunnerDaemon
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import host_answers, read_host_stores, seed_host_records
 from blizzard.runner.cli.store_guard import store_write_guard
-from blizzard.runner.composition import build_host_record_services, build_host_stores
+from blizzard.runner.composition import (
+    build_host_record_services,
+    build_host_stores,
+    held_records,
+    host_settings_reader,
+)
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, decode_host_text
 from blizzard.runner.host_records.model import HostRecord, RecordExists, RecordKind, RecordUnknown
@@ -98,15 +104,6 @@ def _echo(value: object) -> None:
     click.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 
-def _record_json(record: HostRecord) -> dict[str, object]:
-    return {
-        record.kind.key_name: record.key,
-        "revision": record.revision,
-        "state": "retired" if record.retired else "active",
-        "settings": dict(record.settings),
-    }
-
-
 def _refused(response: Response) -> str:
     """The host's refusal, in words: its message, each failing setting, and its type."""
     refusal = refusal_of(response)
@@ -133,11 +130,21 @@ class _Host:
         self.door = Door.of(ctx)
         self.running = host_answers(self.config.layout.socket_path, self.door)
 
-    def records(self, kind: _Kind) -> tuple[HostRecord, ...]:
-        """The stopped host's records of ``kind``, retired ones included."""
+    def views(self, kind: _Kind, *, retired: bool, key: str | None = None) -> list[dict[str, Any]]:
+        """The stopped host's records of ``kind`` — only ``key``'s when given, the retired ones only when
+        ``retired`` — as its routes view them once its next start seeds its file's tables; a stopped host's runners
+        spend nothing, so no subscription names a spender."""
         with read_host_stores(self.config) as stores:
-            records = stores.workspaces if kind.kind is RecordKind.WORKSPACE else stores.subscriptions
-            return records.records(retired=True)
+            records = [
+                record
+                for record in held_records(self.config, stores, kind.kind)
+                if (key is None or record.key == key) and (retired or not record.retired)
+            ]
+            if kind.kind is RecordKind.WORKSPACE:
+                views: list[BaseModel] = [workspace_view(record) for record in records]
+            else:
+                views = list(subscription_list(records, stores.external_usage, {}).items)
+        return [view.model_dump(mode="json") for view in views]
 
     def write(
         self, kind: _Kind, what: str, act: Callable[[HostRecordService], tuple[HostRecord, HostRecord | None]]
@@ -153,7 +160,8 @@ class _Host:
                 stores = build_host_stores(
                     engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock
                 )
-                service = build_host_record_services(self.config, stores, clock=clock)[kind.kind]
+                reader = host_settings_reader(self.config, stores)
+                service = build_host_record_services(reader, stores, clock=clock)[kind.kind]
                 try:
                     return act(service)
                 except (RecordUnknown, RecordExists, SettingsRevisionConflict) as exc:
@@ -256,7 +264,7 @@ def _record_group(kind: _Kind, name: str, metavar: str, noun: str) -> click.Grou
                 suffix = "?retired=true" if retired else ""
                 _echo(_answer(daemon, daemon.send_to_host("get", kind.route() + suffix), f"list {noun}s"))
             return
-        _echo({"items": [_record_json(r) for r in host.records(kind) if retired or not r.retired]})
+        _echo({"items": host.views(kind, retired=retired)})
 
     @group.command("get", help=f"Print {noun} {metavar}, retired or not.")
     @click.argument("key", metavar=metavar)
@@ -268,10 +276,10 @@ def _record_group(kind: _Kind, name: str, metavar: str, noun: str) -> click.Grou
             with host.reach(f"{name} get") as daemon:
                 _echo(_answer(daemon, daemon.send_to_host("get", kind.route(key)), f"read {kind.kind} {key}"))
             return
-        record = next((r for r in host.records(kind) if r.key == key), None)
-        if record is None:
+        views = host.views(kind, retired=True, key=key)
+        if not views:
             raise click.ClickException(f"the stopped host's store holds no {kind.kind} {key!r}")
-        _echo(_record_json(record))
+        _echo(views[0])
 
     @group.command(
         "edit",

@@ -5825,7 +5825,7 @@ export type WorkerArtifact = {
 /**
  * WorkspacePromptReplacement
  *
- * A replacement workspace prompt — applies to subsequent spawns with no restart.
+ * A replacement workspace prompt — taken up with no restart at the host's next pass, by every spawn after it.
  */
 export type WorkspacePromptReplacement = {
     /**
@@ -6416,9 +6416,13 @@ export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors = {
      */
     404: RunnerProblem;
     /**
-     * Validation Error
+     * Another write moved the record first
      */
-    422: HttpValidationError;
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
 };
 
 export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostError = EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors[keyof EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors];
@@ -6488,9 +6492,13 @@ export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors = {
      */
     404: RunnerProblem;
     /**
-     * Validation Error
+     * Another write moved the record first
      */
-    422: HttpValidationError;
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
 };
 
 export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostError = RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors[keyof RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors];
@@ -6694,9 +6702,13 @@ export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors = {
      */
     404: RunnerProblem;
     /**
-     * Validation Error
+     * Another write moved the record first
      */
-    422: HttpValidationError;
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
 };
 
 export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostError = EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors[keyof EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors];
@@ -6728,9 +6740,9 @@ export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors =
      */
     404: RunnerProblem;
     /**
-     * The workspace's prompt does not resolve
+     * The workspace's prompt does not resolve, or another write moved the record first
      */
-    409: RunnerProblem;
+    409: RunnerProblem | SettingsProblem;
     /**
      * The host file would fail at boot with it, or the request is malformed
      */
@@ -6804,9 +6816,9 @@ export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors = 
      */
     404: RunnerProblem;
     /**
-     * The workspace's prompt does not resolve
+     * The workspace's prompt does not resolve, or another write moved the record first
      */
-    409: RunnerProblem;
+    409: RunnerProblem | SettingsProblem;
     /**
      * The host file would fail at boot with it, or the request is malformed
      */
@@ -6846,9 +6858,13 @@ export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors = {
      */
     404: RunnerProblem;
     /**
-     * Validation Error
+     * Another write moved the record first
      */
-    422: HttpValidationError;
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
 };
 
 export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostError = RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors[keyof RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors];

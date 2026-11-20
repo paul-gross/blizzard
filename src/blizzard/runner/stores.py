@@ -30,6 +30,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.host_records.model import RecordKind
 from blizzard.runner.host_records.ports import IReadHostRecordRepository, IWriteHostRecordRepository
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository, IWriteHostedRunnerRepository
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
@@ -348,6 +349,10 @@ class HostStores:
     #: pool's held read.
     runner_audit: IRunnerAudit
 
+    def records_of(self, kind: RecordKind) -> IWriteHostRecordRepository:
+        """The host's records of ``kind``."""
+        return self.workspaces if kind is RecordKind.WORKSPACE else self.subscriptions
+
 
 @dataclass(frozen=True)
 class HostReadStores:
@@ -367,6 +372,10 @@ class HostReadStores:
     settings: IReadHostSettings
     workspaces: IReadHostRecordRepository
     subscriptions: IReadHostRecordRepository
+
+    def records_of(self, kind: RecordKind) -> IReadHostRecordRepository:
+        """The host's records of ``kind``."""
+        return self.workspaces if kind is RecordKind.WORKSPACE else self.subscriptions
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:

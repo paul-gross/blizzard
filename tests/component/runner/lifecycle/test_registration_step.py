@@ -78,7 +78,7 @@ def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
         escalations=ctx.stores.escalations,
         identity=ctx.identity,
         runner_name=ctx.config.runner_name,
-        workspace_id="ws1",
+        home_workspace=lambda: "ws1",
         bindings=serving(),
         agents=1,
         hub_url="http://hub.example",

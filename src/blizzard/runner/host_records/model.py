@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from blizzard.foundation.host_record_state import HostRecordState
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.decision import decide
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
@@ -88,6 +89,9 @@ class HostRecord:
     revision: int
     settings: Mapping[str, object] = field(default_factory=dict[str, object])
     retired: bool = False
+
+    def state(self) -> HostRecordState:
+        return "retired" if self.retired else "active"
 
     def setting(self, name: str, default: object = None) -> object:
         """The setting ``name`` as the record states it; ``default`` when it states none."""

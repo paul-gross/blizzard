@@ -9839,7 +9839,7 @@
         "type": "object"
       },
       "WorkspacePromptReplacement": {
-        "description": "A replacement workspace prompt \u2014 applies to subsequent spawns with no restart.",
+        "description": "A replacement workspace prompt \u2014 taken up with no restart at the host's next pass, by every spawn after it.",
         "properties": {
           "prompt": {
             "title": "Prompt",
@@ -10803,15 +10803,25 @@
             },
             "description": "The host holds no such record"
           },
-          "422": {
+          "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/SettingsProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Another write moved the record first"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
           }
         },
         "summary": "Enable Subscription",
@@ -10915,15 +10925,25 @@
             },
             "description": "The host holds no such record"
           },
-          "422": {
+          "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/SettingsProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Another write moved the record first"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
           }
         },
         "summary": "Retire Subscription",
@@ -11235,15 +11255,25 @@
             },
             "description": "The host holds no such record"
           },
-          "422": {
+          "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/SettingsProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Another write moved the record first"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
           }
         },
         "summary": "Enable Workspace",
@@ -11254,7 +11284,7 @@
     },
     "/api/host/workspaces/{workspace_id}/prompt": {
       "delete": {
-        "description": "Return the workspace's three prompt settings to their defaults, so it carries no standing prompt \u2014 effective\non subsequent spawns.",
+        "description": "Return the workspace's three prompt settings to their defaults, so it carries no standing prompt \u2014 the host's\nnext pass rebuilds the workspace, and every spawn after it carries none.",
         "operationId": "clear_workspace_prompt_api_host_workspaces__workspace_id__prompt_delete",
         "parameters": [
           {
@@ -11292,11 +11322,18 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunnerProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingsProblem"
+                    }
+                  ]
                 }
               }
             },
-            "description": "The workspace's prompt does not resolve"
+            "description": "The workspace's prompt does not resolve, or another write moved the record first"
           },
           "422": {
             "content": {
@@ -11381,7 +11418,7 @@
         ]
       },
       "put": {
-        "description": "Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults \u2014\neffective on subsequent spawns.",
+        "description": "Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults \u2014 the host's\nnext pass rebuilds the workspace, and every spawn after it reads the new prompt.",
         "operationId": "replace_workspace_prompt_api_host_workspaces__workspace_id__prompt_put",
         "parameters": [
           {
@@ -11429,11 +11466,18 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunnerProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SettingsProblem"
+                    }
+                  ]
                 }
               }
             },
-            "description": "The workspace's prompt does not resolve"
+            "description": "The workspace's prompt does not resolve, or another write moved the record first"
           },
           "422": {
             "content": {
@@ -11496,15 +11540,25 @@
             },
             "description": "The host holds no such record"
           },
-          "422": {
+          "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/SettingsProblem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Another write moved the record first"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
           }
         },
         "summary": "Retire Workspace",

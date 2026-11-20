@@ -491,7 +491,7 @@ def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_bo
         identity=registered_identity(),
         served_projects=store,
         runner_name="r1",
-        workspace_id="ws_a",
+        home_workspace=lambda: "ws_a",
         bindings=bindings,
         hub_url="http://hub",
         harnesses=HarnessRegistry(
@@ -525,7 +525,7 @@ def test_status_counts_capacity_across_every_bound_workspace(tmp_path: Path) -> 
         identity=registered_identity(),
         served_projects=store,
         runner_name="r1",
-        workspace_id="ws_a",
+        home_workspace=lambda: "ws_a",
         bindings=_bindings(),
         agents=2,
         hub_url="http://hub",
