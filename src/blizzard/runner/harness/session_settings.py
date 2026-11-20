@@ -8,6 +8,9 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.process.child_env import CLAUDE_CODE_SHELL_VARIABLE, AllowlistedEnv, ChildEnv
 
+# The environment keys that locate any harness's session/config home; a binding names its own beside them.
+_SHARED_HOME_KEYS = ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -59,23 +62,14 @@ class SessionSettings:
     effort_aliases: tuple[tuple[str, str], ...] = ()
     supported_models: tuple[str, ...] = ()
     prompt_prefix: str = ""
+    #: The binding's own environment keys that, beside the shared ones, locate its session/config home.
+    home_environment_keys: tuple[str, ...] = ()
 
     def for_session(self, origin: "SessionSettings") -> "SessionSettings":
         """Use a session's original locating values with this launch's other values."""
-        # These environment entries locate the harness's session/config home;
-        # the rest of the allowlisted worker profile belongs to this launch.
-        home_keys = (
-            "HOME",
-            "CLAUDE_CONFIG_DIR",
-            "XDG_CONFIG_HOME",
-            "XDG_DATA_HOME",
-            "OPENCODE_CONFIG_DIR",
-            "OPENCODE_CONFIG",
-            "OPENCODE_CONFIG_CONTENT",
-        )
         env = self.environment.variables
         original = origin.environment.variables
-        for key in home_keys:
+        for key in (*_SHARED_HOME_KEYS, *self.home_environment_keys):
             if key in original:
                 env[key] = original[key]
             else:

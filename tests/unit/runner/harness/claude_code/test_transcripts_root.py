@@ -16,7 +16,7 @@ from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.wiring import shared_inputs
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.support.child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.config_inputs import init_host
 from tests.support.harness_sections import claude_code
 from tests.support.runner_fakes import NO_TRACING, FakeProbe
@@ -40,6 +40,7 @@ def _projects_root(tmp_path: Path, spawn_executor: Executor, *, transcripts_root
         monotonic_clock=SystemMonotonicClock(),
         health_roots=("",),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     ).binding.transcript_source
     assert isinstance(source, ClaudeCodeTranscriptSource)
     return source._projects_root  # pyright: ignore[reportPrivateUsage]

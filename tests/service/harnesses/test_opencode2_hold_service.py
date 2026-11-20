@@ -32,7 +32,7 @@ from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.support.child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.mock_fleet import require_mock_fleet, service_gate
 from tests.support.runner_fakes import make_envelope
 
@@ -162,6 +162,7 @@ def _compose(
         monotonic_clock=SystemMonotonicClock(),
         health_roots=(str(root),),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     )
     adapter = assembly.binding.adapter
     (probe,) = assembly.health_probes

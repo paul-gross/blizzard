@@ -27,7 +27,7 @@ from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
-from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env, version_probe
 from tests.support.mock_fleet import require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -102,6 +102,7 @@ def _assembly(
         monotonic_clock=SystemMonotonicClock(),
         health_roots=(str(root),),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     )
 
 

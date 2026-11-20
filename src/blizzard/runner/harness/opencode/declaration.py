@@ -15,7 +15,6 @@ from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
@@ -100,7 +99,7 @@ class OpenCodeDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        versions: IVersionProbe | None = None,
+        versions: IVersionProbe,
     ) -> HarnessAssembly:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
         receives, and the one health probe every root shares."""
@@ -135,7 +134,7 @@ class OpenCodeDeclaration:
             permission_resolver=SubprocessOpenCodePermissionResolver(binary=section.binary, children=children),
             process=process,
             launcher=launcher,
-            versions=versions or VersionProbe(children, tool_env),
+            versions=versions,
             monotonic_clock=monotonic_clock,
         )
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
@@ -148,7 +147,7 @@ class OpenCodeDeclaration:
             binary=section.binary,
             auth_path=auth_path,
             corpus=corpus,
-            versions=versions or VersionProbe(children, shared.worker_env.tool()),
+            versions=versions,
             store_path=resolve_opencode_store_path(shared.worker_env.variables),
         )
         return HarnessAssembly(

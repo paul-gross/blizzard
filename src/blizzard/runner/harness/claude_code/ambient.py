@@ -13,6 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.claude_code.section import CLAUDE_CONFIG_DIR_VARIABLE
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 
 BYPASS_PERMISSIONS = "bypassPermissions"
@@ -82,7 +83,7 @@ RULES = (
 def user_config_dir(env: Mapping[str, str]) -> Path | None:
     """Claude Code's user config dir as the process owning ``env`` would resolve it:
     ``CLAUDE_CONFIG_DIR`` when non-empty, otherwise ``HOME/.claude``."""
-    configured = env.get("CLAUDE_CONFIG_DIR")
+    configured = env.get(CLAUDE_CONFIG_DIR_VARIABLE)
     if configured:
         return Path(configured)
     home = env.get("HOME")

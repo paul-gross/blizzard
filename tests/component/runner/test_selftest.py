@@ -677,6 +677,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
         monotonic_clock=SystemMonotonicClock(),
         spawn_roots=(),
         corpus=CommittedCorpus(),
+        versions=version_probe(),
     )
     client = runner_client(create_runner_app(config, harnesses=harnesses))
 

@@ -60,6 +60,7 @@ from blizzard.runner.process.child_processes import (
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
+from tests.support.config_inputs import FakeVersionProbe
 from tests.support.harness_sections import claude_code, with_claude_code, with_opencode
 from tests.support.runner_fakes import NO_TRACING
 
@@ -207,7 +208,7 @@ class _RecordingDeclaration:
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        versions: IVersionProbe | None = None,
+        versions: IVersionProbe,
     ) -> HarnessAssembly:
         self._calls.append(_Assembled(self.harness_id, health_roots, corpus, monotonic_clock))
         roots = (*health_roots, *health_roots[:1] * self._extra_probes)
@@ -276,6 +277,7 @@ def _build(
         monotonic_clock=monotonic_clock or ManualMonotonicClock(),
         spawn_roots=spawn_roots,
         corpus=corpus or CommittedCorpus(),
+        versions=FakeVersionProbe(),
     )
 
 
@@ -426,6 +428,7 @@ def test_real_claude_code_assembles_one_ambient_probe_per_distinct_root(
         monotonic_clock=ManualMonotonicClock(),
         health_roots=roots,
         corpus=CommittedCorpus(),
+        versions=FakeVersionProbe(),
     )
 
     assert all(isinstance(probe, ClaudeCodeHealthProbe) for probe in assembly.health_probes)

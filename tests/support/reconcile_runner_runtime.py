@@ -6,6 +6,7 @@ from pathlib import Path
 from sys import argv
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.cli.runtime import select_runner_bindings
 from blizzard.runner.harness.opencode.declaration import OpenCodeDeclaration
 from blizzard.runner.harness.opencode.plugin import (
@@ -18,6 +19,7 @@ from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode.worker_config import render_worker_config
 from blizzard.runner.harness.wiring import declared
 from blizzard.runner.host_config import HostConfig
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
 
 def write_missing(root: Path, path: Path, content: str) -> None:
@@ -33,7 +35,10 @@ def main() -> None:
     config = HostConfig.load(root, flag_registry=packaged_flag_registry(), strict=strict_config())
     for entry in config.runners:
         if entry.own is not None:
-            for declaration, section in declared(entry.own.harness_sections, select_runner_bindings(entry.own)):
+            for declaration, section in declared(
+                entry.own.harness_sections,
+                select_runner_bindings(entry.own, SubprocessChildProcesses(SystemMonotonicClock())),
+            ):
                 if (
                     not isinstance(declaration, OpenCodeDeclaration)
                     or not isinstance(section, OpenCodeSection)

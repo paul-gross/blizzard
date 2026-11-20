@@ -202,7 +202,7 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         monotonic_clock: IMonotonicClock,
         health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        versions: IVersionProbe | None = None,
+        versions: IVersionProbe,
     ) -> HarnessAssembly:
         """The binding's adapter and transcript source, and one health probe per root of ``health_roots`` in its
         order, built once for one harness set so what they share is one object; ``launcher`` starts its worker, judge

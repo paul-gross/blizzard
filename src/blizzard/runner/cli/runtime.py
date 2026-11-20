@@ -30,7 +30,7 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
-from blizzard.foundation.clock import IClock, SystemMonotonicClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
@@ -49,6 +49,7 @@ from blizzard.foundation.store.migrations import (
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
+from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -95,6 +96,7 @@ from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import BundleSnapshot
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, select_harness_bindings
 from blizzard.runner.host_config import (
     BuiltRunner,
@@ -173,8 +175,8 @@ from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, RunnerStepper, host_pass_stepper
+from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.scratch_binding_files import ScratchBindingFiles
-from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.scratch_binding import RunnerScratchLeases, ScratchSweeperFactory, bind_scratch_root
 from blizzard.runner.process.scratch_cleanup import ClosedLeaseLookup
@@ -221,6 +223,13 @@ def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Generator
         yield lambda token: HttpHostHubClient(http, token=token)
 
 
+class ISelectRunnerBindings(Protocol):
+    """Choosing a runner's bindings, its binaries' versions run through ``children``, as
+    :func:`select_runner_bindings` does."""
+
+    def __call__(self, config: RunnerConfig, children: IChildProcesses) -> BindingSelection: ...
+
+
 class IPublishHarnessBundle(Protocol):
     """Publishing the operator's harness-config bundle, as :func:`publish_harness_bundle` does."""
 
@@ -233,6 +242,16 @@ class IPublishHarnessBundle(Protocol):
         autonomy: Autonomy = ...,
         sections: HarnessSections | None = ...,
     ) -> BundleSnapshot: ...
+
+
+def select_runner_bindings(config: RunnerConfig, children: IChildProcesses) -> BindingSelection:
+    """The bindings ``config``'s binaries choose, each version-chosen one's ``--version`` run once through
+    ``children``."""
+    tool_env = config.worker_env(TracingSettings.of(os.environ)).tool()
+    return select_harness_bindings(
+        config.harness_sections,
+        versions=VersionProbe(children, tool_env),
+    )
 
 
 @dataclass(frozen=True)
@@ -250,7 +269,7 @@ class InitCollaborators:
     build_host_process: Callable[..., HostProcess] = build_host_process
     publish_harness_bundle: IPublishHarnessBundle = publish_harness_bundle
     #: The bindings a runner's configured binaries choose, probed once as it starts.
-    select_bindings: Callable[[RunnerConfig], BindingSelection] = lambda config: select_runner_bindings(config)
+    select_bindings: ISelectRunnerBindings = select_runner_bindings
 
     @classmethod
     def of(cls, ctx: click.Context) -> InitCollaborators:
@@ -327,7 +346,9 @@ def init(
         if allow_readd and (aside := runtime.set_aside_pre_host_store(now=clock.now())) is not None:
             for path in aside.moved:
                 click.echo(f"set the pre-host store aside as {path}")
-        initialized.append(runtime.init(InitCollaborators.of(ctx).select_bindings))
+        initialized.append(
+            runtime.init(partial(InitCollaborators.of(ctx).select_bindings, children=command_children(ctx)))
+        )
         return initialized[0]
 
     run_init(
@@ -1432,16 +1453,6 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
     if judged(built.id, answer.runner_id) is IdentityState.MISMATCHED:
         return f"its token resolves to runner {answer.runner_id}, not the configured {built.id}"
     return None
-
-
-def select_runner_bindings(config: RunnerConfig) -> BindingSelection:
-    """The bindings ``config``'s binaries choose, each version-chosen one's ``--version`` run once."""
-    worker_env = config.worker_env(TracingSettings.of(os.environ))
-    return select_harness_bindings(
-        config.harness_sections,
-        worker_env=worker_env,
-        children=SubprocessChildProcesses(SystemMonotonicClock()),
-    )
 
 
 def publish_runner_bundle(

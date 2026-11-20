@@ -28,6 +28,8 @@ from blizzard.runner.harness.declaration import RunnerPathKey, RuntimeFile
 # The immutable owner code every existing production session binds.
 CLAUDE_CODE_HARNESS_ID = "claude_code"
 DEFAULT_HARNESS_BINARY = "claude"
+# The variable that relocates Claude Code's config and session home.
+CLAUDE_CONFIG_DIR_VARIABLE = "CLAUDE_CONFIG_DIR"
 # Injected per feature env, so a fresh `runner init` names the env's harness binary.
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 # The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.

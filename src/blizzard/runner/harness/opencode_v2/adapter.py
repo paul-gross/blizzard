@@ -29,6 +29,7 @@ from blizzard.runner.harness.binding_selection import IVersionProbe
 from blizzard.runner.harness.internal.stdout_target import stdout_target
 from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.observation import ExecutionObservation, ExecutionObservationRequest
+from blizzard.runner.harness.opencode.section import OPENCODE_CONFIG_VARIABLES, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
@@ -146,7 +147,8 @@ class OpenCodeTwoAdapter:
             autonomy=self._autonomy,
             environment=SessionEnvironment.capture(self._worker_env),
             runner_id=self._runner_id,
-            harness_id="opencode",
+            harness_id=OPENCODE_HARNESS_ID,
+            home_environment_keys=OPENCODE_CONFIG_VARIABLES,
             transcript_root=self._transcript_root,
             bundle_path=self._bundle_path,
             driver_command=self._driver_command,
