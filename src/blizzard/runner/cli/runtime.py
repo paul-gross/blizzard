@@ -1887,7 +1887,7 @@ def read_stores(config: RunnerConfig) -> Generator[RunnerReadStores, None, None]
 
 
 @contextmanager
-def read_host_stores(config: RunnerConfig) -> Generator[HostReadStores, None, None]:
+def read_host_stores(config: RunnerConfig | HostConfig) -> Generator[HostReadStores, None, None]:
     """:func:`read_stores`'s host-scoped twin, for a short-lived CLI verb reading a host table."""
     engine = create_engine_from_url(config.db_url)
     try:

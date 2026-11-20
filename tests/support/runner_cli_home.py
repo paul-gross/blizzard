@@ -20,6 +20,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.listeners import Listeners, Uds
+from tests.support.config_inputs import load_host_config
 from tests.support.host_files import load_runner_config
 from tests.support.runner_client import runner_seams
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
@@ -72,7 +73,7 @@ def serve_local_api(
     version_refused: str | None = None,
 ) -> Generator[tuple[Path, str]]:
     config = load_runner_config(root, port=0)
-    app = build_hosted_app(config).app
+    app = build_hosted_app(config, host_config=load_host_config(root)).app
     if refusing is not None:  # (store runner, token runner): the verdict the loop's check would hold
         runner_seams(app).identity_verdict.record(
             IdentityState.MISMATCHED,

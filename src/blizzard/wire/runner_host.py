@@ -4,9 +4,9 @@ an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
@@ -109,11 +109,68 @@ class HostRegistrationView(WireModel):
     buffered_facts: int = 0
 
 
-class HostWorkspaceView(BaseModel):
-    """One workspace the host declares, with the environments it may hold at once."""
+#: Whether a workspace or subscription record stands active or retired.
+HostRecordState = Literal["active", "retired"]
+
+
+class HostWorkspaceView(WireModel):
+    """One workspace the host declares, with the environments it may hold at once; on a host keeping records, its
+    record's revision, state, and settings — every key of its ``[[workspace]]`` table but ``id``, as stated."""
 
     workspace_id: str
     max_environments: int
+    #: The record's revision, an edit's ``If-Match``; ``None`` on a host keeping no records.
+    revision: int | None = None
+    state: Annotated[HostRecordState | Unrecognized, OPEN] = "active"
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
+class HostWorkspaceRepoWrite(BaseModel):
+    """One ``[[workspace.repo]]``: a repository a workspace's environments clone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    url: str
+
+
+class _HostRecordFields(BaseModel):
+    """A record's settings as a write states them: a field absent stands unchanged, one given takes its whole value,
+    and an explicit ``null`` returns it to its default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    def stated(self) -> tuple[dict[str, Any], frozenset[str]]:
+        """The settings set, by their table key, and those returned to their defaults."""
+        dumped = self.model_dump(mode="json", exclude_unset=True)
+        sets = {name: value for name, value in dumped.items() if value is not None}
+        return sets, frozenset(name for name, value in dumped.items() if value is None)
+
+
+class HostWorkspacePatchRequest(_HostRecordFields):
+    """A sparse edit of a workspace record, its keys named as the ``[[workspace]]`` table names them."""
+
+    root: str | None = None
+    provider: str | None = None
+    envs: list[str] | None = None
+    max_environments: int | None = None
+    repo: list[HostWorkspaceRepoWrite] | None = None
+    base_branch: str | None = None
+    prompt: str | None = None
+    prompt_file: str | None = None
+    prompt_package: str | None = None
+
+
+class HostWorkspaceCreateRequest(HostWorkspacePatchRequest):
+    """A new workspace record: its immutable ``id`` and any of its table's other keys; an absent key takes its
+    default."""
+
+    id: str
+
+    def stated(self) -> tuple[dict[str, Any], frozenset[str]]:
+        sets, _ = super().stated()
+        sets.pop("id", None)
+        return sets, frozenset()
 
 
 class HostWorkspaceListResponse(WireModel):
@@ -151,7 +208,41 @@ class HostSubscriptionView(SubscriptionView):
     windows_sampled_at: str | None = None
     #: ``"credential_lapsed"`` when the newest attempt is a miss for that reason; ``None`` otherwise.
     condition: Annotated[SampleMissReason | Unrecognized, OPEN] | None = None
+    #: The record's revision, an edit's ``If-Match``; ``None`` on a host keeping no records.
+    revision: int | None = None
+    state: Annotated[HostRecordState | Unrecognized, OPEN] = "active"
+    #: Every key of its ``[[subscription]]`` table but ``slug``, as stated.
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
 class HostSubscriptionListResponse(WireModel):
     items: list[HostSubscriptionView] = []
+
+
+class _HostSubscriptionSettings(_HostRecordFields):
+    """The ``[[subscription]]`` keys a subscription record states beside its ``slug``, ``name`` and ``provider``."""
+
+    credentials_path: str | None = None
+    sample_interval_seconds: int | None = None
+    usage_api_base: str | None = None
+
+
+class HostSubscriptionPatchRequest(_HostSubscriptionSettings):
+    """A sparse edit of a subscription record, its keys named as the ``[[subscription]]`` table names them; its
+    ``slug`` and ``provider`` are immutable, and its required ``name`` refuses ``null``."""
+
+    name: str | None = None
+
+
+class HostSubscriptionCreateRequest(_HostSubscriptionSettings):
+    """A new subscription record: its immutable ``slug`` and ``provider``, its ``name``, and any further key of its
+    table."""
+
+    slug: str
+    name: str
+    provider: str
+
+    def stated(self) -> tuple[dict[str, Any], frozenset[str]]:
+        sets, _ = super().stated()
+        sets.pop("slug", None)
+        return sets, frozenset()

@@ -356,7 +356,7 @@ def test_host_workspaces_lists_each_declared_workspace(tmp_path: Path) -> None:
     app, _a, _b = _two_runner_app(tmp_path)
 
     assert TestClient(app).get("/api/host/workspaces").json() == {
-        "items": [{"workspace_id": "ws-1", "max_environments": 3}]
+        "items": [{"workspace_id": "ws-1", "max_environments": 3, "revision": None, "state": "active", "settings": {}}]
     }
 
 

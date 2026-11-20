@@ -3784,36 +3784,6 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
     assert "| environment name | `e1` |" in preamble.prompt_prefix
 
 
-def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path: Path):
-    """A store override (the PUT /api/host/workspaces/{id}/prompt write) wins over static at the next spawn."""
-    store = _store(tmp_path)
-    # Simulate the local-API replace landing before this spawn.
-    store.set_workspace_prompt("ws1", prompt="OVERRIDDEN", at=datetime(2026, 7, 13, tzinfo=UTC))
-    hub = FakeHub()
-    env = _build_envelope()
-    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
-    hub.claim_outcome = claimed_outcome("ch_1", env)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    ctx = make_context(
-        store,
-        hub=hub,
-        provider=FakeProvider({"e1": "/ws/e1"}),
-        harness=harness,
-        probe=FakeProbe(),
-        config=LoopConfig(
-            runner_name="r1",
-            runner_id=FIXTURE_RUNNER_ID,
-        ),
-        workspace_prompt="STATIC-PROMPT",
-    )
-
-    Fill(ctx).run()
-
-    _, preamble = harness.spawns[0]
-    assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
-    assert "STATIC-PROMPT" not in preamble.prompt_prefix
-
-
 def _engine_for(tmp_path: Path):
     """A migrated engine for the counting store below (mirrors `make_store`)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
