@@ -1,7 +1,7 @@
 """``merge-on-checks`` — lands a repository's commit on its base branch through a change, self-healing: ``behind``
-updates the change from its base, ``conflicting`` is a conflict, a head beyond the submitted commit and its base merges
-is a failure, and anything else unsettled waits. A proven head is checked before landing using a forge-offered
-method."""
+updates the change from its base, ``conflicting`` is a conflict, an unadmitted head is a failure, and anything else
+unsettled waits. A head admitted by the shared gate or durable rewrite proof is checked before landing using a
+forge-offered method."""
 
 from __future__ import annotations
 
@@ -335,7 +335,7 @@ class MergeOnChecks:
             run.say(f"{pull}: could not read rewrite evidence: {exc}; re-polling")
             return Waiting(str(exc))
         if not rewrite_admitted:
-            run.say(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges")
+            run.say(f"{pull}'s head {pull.head_sha} is not admitted as submitted work or a proven automatic update")
             foreign = pull.record(FOREIGN, submitted=repo.commit, head=pull.head_sha, offenders=gate.offenders)
             return Failure((foreign,), foreign_head=True)
         return Admitted(lambda: _checked(pull))

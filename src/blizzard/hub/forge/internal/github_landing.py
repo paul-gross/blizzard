@@ -536,13 +536,12 @@ class GitHubLanding:
         merged = as_table(result)
         if merged is not None and merged.get("merged") and isinstance(sha := merged.get("sha"), str) and sha:
             return sha
-        landed = await self.change(number)
-        if landed.merged_revision is None:
-            raise ForgeRejected(
-                _message(response) or f"pull request {number} did not merge",
-                diagnostic=self._diagnostic(response, _MERGE),
-            )
-        return landed.merged_revision
+        # An ambiguous response must be reconciled by delivery, which checks that
+        # the merged PR's head is still the exact revision it admitted and checked.
+        raise ForgeRejected(
+            _message(response) or f"pull request {number} merge response did not name a landed revision",
+            diagnostic=self._diagnostic(response, _MERGE),
+        )
 
     # IForgeChecks
 

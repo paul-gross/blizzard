@@ -361,15 +361,17 @@ def test_merge_refused_is_rejected_with_the_forges_message_and_never_retried(sta
     assert len(harness.recorded.requests) == 1
 
 
-def test_a_merge_answer_without_its_revision_reads_the_change_for_it() -> None:
+@pytest.mark.parametrize("answer", [{"merged": True}, {"merged": False, "sha": "other"}])
+def test_an_ambiguous_merge_answer_is_reconciled_by_the_caller(answer: dict[str, object]) -> None:
     harness = Harness(
         {
-            ("PUT", f"{REPO}/pulls/7/merge"): [reply(200, {"merged": True})],
-            ("GET", f"{REPO}/pulls/7"): [reply(200, pull(state="closed", merged_at="2026-10-04T11:00:00Z"))],
+            ("PUT", f"{REPO}/pulls/7/merge"): [reply(200, answer)],
         }
     )
 
-    assert harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg")) == "m1"
+    with pytest.raises(ForgeRejected):
+        harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg"))
+    assert len(harness.recorded.requests) == 1
 
 
 @pytest.mark.parametrize(

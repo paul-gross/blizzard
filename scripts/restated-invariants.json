@@ -478,16 +478,23 @@
     },
     {
       "id": "fleet-pr-merge-commit-policy",
-      "statement": "On the `land-pr-ci` path, repositories with work land by pull request only after green checks, using a merge commit that preserves branch history.",
-      "owner": "blizzard-context:/workflows/feature-delivery.md#what-the-platform-owns",
+      "statement": "GitHub automatic delivery prefers merge commits, then rebase merge, then squash among allowed methods; updated heads require their own checks.",
+      "owner": "blizzard-context:/domain/artifacts/delivery.md#delivery",
       "owner_kind": "doc-section",
       "owner_assert": {
-        "quote": "the hub merges it with a merge commit only after a terminal-green check verdict"
+        "quote": "commit, rebase-merge, then squash"
       },
       "markers": [
-        "merge commit that preserves branch history"
+        "merge commit first then rebase merge then squash"
       ],
-      "sites": []
+      "sites": [
+        {
+          "file": "docs/deployment/delivery-policy.md",
+          "symbol": "automatic-pull-request-landing",
+          "role": "allowed",
+          "reason": "Published operator guidance needs the method preference at the point of configuring and diagnosing delivery."
+        }
+      ]
     },
     {
       "id": "web-live-update-reread-poll-backstop",

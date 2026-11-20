@@ -17,12 +17,32 @@ for creating and deleting refs and merging into a branch. Configuration refuses 
 are missing; a missing capability discovered during delivery escalates. Consult the forge capabilities before selecting
 the policy.
 
+## Automatic pull request landing
+
+On GitHub, `merge-on-checks` chooses among the repository's allowed merge methods: merge commit first, then rebase
+merge, then squash. If a method is specifically refused as incompatible, it tries the next allowed method at the same
+checked head. Repository settings govern availability; they are not additional Blizzard policy settings or changes to
+the forge's capabilities.
+
+When a PR is behind, the hub updates it by merge when merge commits are enabled, otherwise by rebase, including for a
+squash-only repository. An automatic rebase is admitted only when the hub can prove the rewritten commits correspond to
+the authorized work; an unsupported or unprovable rewrite does not land. A rewritten head must pass its own checks
+before landing. Rebase merge and squash can produce a different landed revision; the hub records that actual revision
+without running checks again on it.
+
+If no allowed method can be used, `merge-method-refused` names the allowed set and the individual refusals, or says that
+none are allowed. Inspect those details and the repository's GitHub settings before requeueing. Permission, protection,
+mergeability and conflict problems have their own diagnostics and are not treated as method fallback. After an
+interrupted update or merge, delivery recovers using durable evidence and verifies the head rather than assuming the
+operation succeeded. Inspect the PR and diagnostic before intervening.
+
 ## Checks and missing CI
 
-`merge-on-checks` and `fast-forward` require at least one check on the revision to land, with every check passed or
-neutral. GitHub check runs and commit statuses both count. Pending checks wait and failing checks follow the failure
-path; an unavailable or refused check read is not evidence that CI is absent. Ensure the repository's forge token can
-read both kinds of GitHub result ([forge token](./repositories.md#the-forge-token)).
+`merge-on-checks` requires checks on the admitted PR head; `fast-forward` requires them on the revision to advance. Both
+require at least one check, with every check passed or neutral. GitHub check runs and commit statuses both count.
+Pending checks wait and failing checks follow the failure path; an unavailable or refused check read is not evidence
+that CI is absent. Ensure the repository's forge token can read both kinds of GitHub result
+([forge token](./repositories.md#the-forge-token)).
 
 By default `allow_no_ci` is false, including on existing repositories migrated to this version. If a successful read
 finds no checks, the hub records the first observation for that repository and SHA, then waits ten minutes for CI to
