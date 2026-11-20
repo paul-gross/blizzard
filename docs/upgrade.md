@@ -107,7 +107,10 @@ seeded `[[workspace]]` or `[[subscription]]` in the file changes nothing, and re
 with `blizzard runner workspace` or `blizzard runner subscription` and their `create`, `edit`, `retire` and `enable`
 verbs, or the host's routes ([runner-auth.md](./deployment/runner-auth.md#the-hosts-workspaces-and-subscriptions)). A
 running host takes each change up at its next tick, with no restart. A workspace prompt set through the panel or
-`blizzard runner prompt` before the upgrade becomes that workspace's `prompt` at the first seed.
+`blizzard runner prompt` before the upgrade becomes that workspace's `prompt` at the first seed — only for a workspace
+the host file declares. A host that relied on the default `workspace-local` and creates it after the upgrade loses its
+override: before upgrading, read it with `blizzard runner prompt status` and state it in the `[[workspace]]` you add, or
+set it again once the workspace is created.
 
 There is no default workspace any more. A host whose file declares no `[[workspace]]` used to serve `workspace-local`
 anyway; it now serves none, and a runner bound to a workspace the host does not serve keeps running and claims nothing
