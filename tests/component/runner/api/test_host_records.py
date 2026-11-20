@@ -151,6 +151,38 @@ def test_a_workspace_the_host_file_would_refuse_is_refused_whole(hosted: HostedA
         ]
 
 
+def test_a_workspace_whose_prompt_would_not_resolve_is_refused(hosted: HostedApp, tmp_path: Path) -> None:
+    with TestClient(hosted.app) as client:
+        root = str(tmp_path / "b")
+        missing = client.post(_WORKSPACES, json={"id": "ws-b", "root": root, "prompt_file": str(tmp_path / "gone.md")})
+        assert "prompt_file" in _problem(missing, 422, "settings_invalid")["errors"][0]["key"]
+        unknown = client.post(_WORKSPACES, json={"id": "ws-b", "root": root, "prompt_package": "no-such-sample"})
+        assert _problem(unknown, 422, "settings_invalid")["errors"][0]["key"] == "prompt_package"
+        both = client.post(_WORKSPACES, json={"id": "ws-b", "root": root, "prompt_package": "x", "prompt": "y"})
+        _problem(both, 422, "settings_invalid")
+        assert [i["workspace_id"] for i in _ok(client.get(f"{_WORKSPACES}?retired=true"))["items"]] == [
+            "workspace-local"
+        ]
+        created = _ok(client.post(_WORKSPACES, json={"id": "ws-b", "root": root}))
+        gone = client.patch(
+            f"{_WORKSPACES}/ws-b",
+            headers={"If-Match": str(created["revision"])},
+            json={"prompt_file": str(tmp_path / "gone.md")},
+        )
+        _problem(gone, 422, "settings_invalid")
+
+
+def test_an_enable_that_would_collide_with_an_active_workspace_is_refused(hosted: HostedApp, tmp_path: Path) -> None:
+    with TestClient(hosted.app) as client:
+        root = str(tmp_path / "shared")
+        _ok(client.post(_WORKSPACES, json={"id": "ws-a", "provider": "basic", "root": root}))
+        _ok(client.post(f"{_WORKSPACES}/ws-a/retire"))
+        _ok(client.post(_WORKSPACES, json={"id": "ws-b", "provider": "basic", "root": root}))
+
+        _problem(client.post(f"{_WORKSPACES}/ws-a/enable"), 422, "settings_invalid")
+        assert _ok(client.get(f"{_WORKSPACES}/ws-a"))["state"] == "retired"
+
+
 def test_a_subscription_round_trips_every_verb_and_keeps_its_diagnostics(hosted: HostedApp) -> None:
     with TestClient(hosted.app) as client:
         assert _ok(client.get(_SUBSCRIPTIONS))["items"] == []
