@@ -43,6 +43,7 @@ _COMMANDS = {
     "finding": f"{_CLI}.finding:finding_group",
     "garden-proposal": f"{_CLI}.garden_proposal:garden_proposal_group",
     "queue": f"{_CLI}.queue:queue_group",
+    "backlog": f"{_CLI}.backlog:backlog_group",
     "decision": f"{_CLI}.decision:decision_group",
     "question": f"{_CLI}.question:question_group",
     "analytics": f"{_CLI}.analytics:analytics_group",

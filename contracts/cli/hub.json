@@ -992,6 +992,192 @@
       "path": "hub analytics",
       "short_help": "Read analytics derived from worker transcripts."
     },
+    "backlog": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "get": {
+          "help": "Show the whole backlog, front first, at its whole-list positions.",
+          "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub backlog get",
+          "short_help": "Show the whole backlog, front first, at its whole-list positions."
+        },
+        "move": {
+          "help": "Move CHUNK_ID to POSITION in the backlog (``0`` is the front).\n\nNo other chunk changes place. Refused when CHUNK_ID is not in the backlog, a ready chunk included.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "position",
+              "opts": [
+                "position"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub backlog move",
+          "short_help": "Move CHUNK_ID to POSITION in the backlog (``0`` is the front)."
+        },
+        "set": {
+          "help": "Replace the whole backlog order with CHUNK_IDS, front to back.\n\nBacklog chunks not named keep their relative order after the named ones. Refused when an\nid is not in the backlog (a ready chunk included) or repeats.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_ids",
+              "opts": [
+                "chunk_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub backlog set",
+          "short_help": "Replace the whole backlog order with CHUNK_IDS, front to back."
+        }
+      },
+      "help": "Read and reorder the backlog of not-ready chunks.\n\nBacklog order never makes a chunk runnable: none of these commands promotes or demotes work.",
+      "params": [],
+      "path": "hub backlog",
+      "short_help": "Read and reorder the backlog of not-ready chunks."
+    },
     "cadence": {
       "aliases": [
         "show",
