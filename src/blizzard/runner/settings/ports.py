@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -21,6 +21,10 @@ class SettingsSnapshot:
     revision: int
     entries: Mapping[str, Entry]
 
+    def version(self) -> Hashable:
+        """What moves whenever anything this snapshot resolves from moves: its revision."""
+        return self.revision
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -33,6 +37,10 @@ class SettingsPair:
 
     def host_revision(self) -> int | None:
         return self.host.revision if self.host is not None else None
+
+    def host_version(self) -> Hashable:
+        """What moves whenever anything the host's side of the pair resolves from moves."""
+        return self.host.version() if self.host is not None else None
 
 
 @domain_model

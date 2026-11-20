@@ -44,7 +44,7 @@ def _host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, top: str = "") -> Hos
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    config = seed_host(config, {})
+    config = seed_host(config, {}, clock=SystemClock())
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     return build_host_process(config, ready)
@@ -182,7 +182,7 @@ def test_an_edited_seeded_host_key_in_the_file_changes_nothing_after_a_restart(
     host.close()
     url = f"sqlite:///{tmp_path / 'runner.db'}"
     write_minimal_host(tmp_path, top=f'db_url = "{url}"\n[worker_stdout]\nretention_days = 8')
-    config = seed_host(load_host_config(tmp_path), {})
+    config = seed_host(load_host_config(tmp_path), {}, clock=SystemClock())
     ready, _ = seed_runners(config, clock=SystemClock())
     restarted = build_host_process(config, ready)
     try:

@@ -37,7 +37,7 @@ def hosted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[H
     RunnerIdentityStore(store.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, config.runners[0].name, datetime.now(UTC))
     )
-    config = seed_host(config, {})
+    config = seed_host(config, {}, clock=SystemClock())
     ready, halted = seed_runners(config, clock=SystemClock())
     assert not halted
     host = build_host_process(config, ready)
@@ -170,7 +170,7 @@ def test_host_changes_page_newest_first_and_filter_by_record(hosted: tuple[HostP
             )
             assert response.status_code == 200, response.text
             revision += 1
-        first = client.get(f"{_ROUTE}/changes?limit=2").json()
+        first = client.get(f"{_ROUTE}/changes?limit=2&record_kind=host").json()
         assert [c["revision"] for c in first["changes"]] == [revision, revision - 1]
         newest = first["changes"][0]
         assert (newest["record_kind"], newest["record_key"], newest["door"], newest["op"]) == (
@@ -186,14 +186,16 @@ def test_host_changes_page_newest_first_and_filter_by_record(hosted: tuple[HostP
                 "new": {"value": 13, "at_default": False},
             }
         ]
-        rest = client.get(f"{_ROUTE}/changes?limit=2&before={first['next_before']}").json()
+        rest = client.get(f"{_ROUTE}/changes?limit=2&record_kind=host&before={first['next_before']}").json()
         assert [c["revision"] for c in rest["changes"]] == [revision - 2, revision - 3]
-        last = client.get(f"{_ROUTE}/changes?limit=2&before={rest['next_before']}").json()
+        last = client.get(f"{_ROUTE}/changes?limit=2&record_kind=host&before={rest['next_before']}").json()
         # The seed wrote one row per key the file states.
         assert [(c["revision"], c["door"]) for c in last["changes"]] == [(1, "seed")]
         assert last["next_before"] is None
         assert len(client.get(f"{_ROUTE}/changes?record_kind=host").json()["changes"]) == revision
-        assert client.get(f"{_ROUTE}/changes?record_kind=workspace").json()["changes"] == []
+        # The seed wrote one row for the file's one workspace, under its own kind and key.
+        seeded = client.get(f"{_ROUTE}/changes?record_kind=workspace").json()["changes"]
+        assert [(c["revision"], c["op"], c["door"]) for c in seeded] == [(1, "seed", "seed")]
         assert client.get(f"{_ROUTE}/changes?record_key=ws_1").json()["changes"] == []
         assert client.get(f"{_ROUTE}/changes?limit=0").status_code == 422
         spec = app.app.openapi()

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
@@ -433,7 +433,8 @@ class RunnerStepper:
         self._client_timeout: float | None = None
         self._retired: list[httpx2.Client] = []
         self._closed = False
-        self._revision: tuple[int | None, int | None] | None = None
+        #: The host side's version and the runner's revision the held context was built at.
+        self._revision: tuple[Hashable, int | None] | None = None
         self.failed_revision: int | None = None
         self.settings_in_force_revision: int | None = None
         self.settings_in_force_since: str | None = None
@@ -579,14 +580,16 @@ class RunnerStepper:
             reader = self._graph.settings_reader
             revision = None
             host_revision: int | None = None
+            host_version: Hashable = None
             client: httpx2.Client | None = None
             new_client = False
             try:
                 if reader is not None:
-                    # Rebuilt when either revision of the pair moves: the host's record or the runner's.
+                    # Rebuilt when either side of the pair moves: the host's record or records, or the runner's record.
                     pair = reader.pair_record()
                     revision = pair.runner.revision
                     host_revision = pair.host_revision()
+                    host_version = pair.host_version()
                     config = reader.resolve_pair(pair)
                 else:
                     config = self._wiring.config
@@ -632,7 +635,7 @@ class RunnerStepper:
                 if (
                     self._ctx is not None
                     and self._client_timeout == timeout
-                    and self._revision == (host_revision, revision)
+                    and self._revision == (host_version, revision)
                     and self._ctx_harness_set is selected
                 ):
                     self.failed_revision = None
@@ -691,7 +694,7 @@ class RunnerStepper:
             self._ctx_harness_key = key
             self._next_recovery_retry = now + _RECOVERY_RETRY_SECONDS
             self._wiring = wiring
-            self._revision = (host_revision, revision)
+            self._revision = (host_version, revision)
             if self.settings_in_force_revision != revision or self.settings_in_force_since is None:
                 from blizzard.foundation.store.utc import iso_utc
 

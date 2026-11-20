@@ -14,6 +14,7 @@ files:
   - src/blizzard/runner/environments/**
   - src/blizzard/runner/events/**
   - src/blizzard/runner/harness/**
+  - src/blizzard/runner/host_records/**
   - src/blizzard/runner/hosting/**
   - src/blizzard/runner/hub/**
   - src/blizzard/runner/leases/**

@@ -30,6 +30,7 @@ from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
+from blizzard.runner.host_records.ports import IReadHostRecordRepository, IWriteHostRecordRepository
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository, IWriteHostedRunnerRepository
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
 from blizzard.runner.hub.identity import (
@@ -339,6 +340,10 @@ class HostStores:
     usage_limits: IWriteSubscriptionUsageLimitRepository
     #: The host's own settings record: its host-level pass and session keys.
     settings: IWriteHostSettings
+    #: The host's workspace records and their lifecycle facts, each change row beside the host's own.
+    workspaces: IWriteHostRecordRepository
+    #: The host's subscription records and their lifecycle facts, each change row beside the host's own.
+    subscriptions: IWriteHostRecordRepository
     #: Exempt: reads every runner's rows at once — the invariant audit, ``init``'s which-runners read, and a workspace
     #: pool's held read.
     runner_audit: IRunnerAudit
@@ -360,6 +365,8 @@ class HostReadStores:
     hosted_runners: IReadHostedRunnerRepository
     usage_limits: IReadSubscriptionUsageLimitRepository
     settings: IReadHostSettings
+    workspaces: IReadHostRecordRepository
+    subscriptions: IReadHostRecordRepository
 
     @classmethod
     def of(cls, stores: HostStores) -> HostReadStores:
@@ -375,4 +382,6 @@ class HostReadStores:
             hosted_runners=stores.hosted_runners,
             usage_limits=stores.usage_limits,
             settings=stores.settings,
+            workspaces=stores.workspaces,
+            subscriptions=stores.subscriptions,
         )

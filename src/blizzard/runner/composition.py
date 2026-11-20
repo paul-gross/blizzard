@@ -118,7 +118,14 @@ from blizzard.runner.host_layout import (
     HostLayout,
     hold_host,
 )
-from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
+from blizzard.runner.host_records.model import RecordKind
+from blizzard.runner.host_records.service import HostRecordService
+from blizzard.runner.host_settings_reader import (
+    HostRecordReads,
+    HostRecordValidation,
+    HostSettingsInForce,
+    HostSettingsReader,
+)
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
 from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
@@ -186,6 +193,7 @@ from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
+from blizzard.runner.store.internal.host_record_store import HostSubscriptionStore, HostWorkspaceStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
@@ -772,7 +780,7 @@ def build_host_process(
     )
     try:
         graph.host_settings = HostSettingsInForce(
-            HostSettingsReader(host, graph.host_stores.settings),
+            HostSettingsReader(host, graph.host_stores.settings, host_record_reads(graph.host_stores)),
             tool_profile=graph.tool_profile,
             tracing=TracingSettings.of(os.environ if environ is None else environ),
             clock=graph.clock,
@@ -2012,6 +2020,23 @@ class _SealingTokens:
         return self.tokens().seal_first(runner_id, token)
 
 
+def host_record_reads(stores: HostStores | HostReadStores) -> HostRecordReads:
+    """The host's workspace and subscription records, as the host's settings reader reads them every pass."""
+    return HostRecordReads(workspaces=stores.workspaces, subscriptions=stores.subscriptions)
+
+
+def build_host_record_services(
+    host: HostConfig, stores: HostStores, *, clock: IClock
+) -> Mapping[RecordKind, HostRecordService]:
+    """Each record kind's service over ``stores``, judging a write by ``host``'s file parse beside the host's stored
+    entries and records."""
+    validation = HostRecordValidation(HostSettingsReader(host, stores.settings, host_record_reads(stores)))
+    return {
+        RecordKind.WORKSPACE: HostRecordService(RecordKind.WORKSPACE, stores.workspaces, validation, clock),
+        RecordKind.SUBSCRIPTION: HostRecordService(RecordKind.SUBSCRIPTION, stores.subscriptions, validation, clock),
+    }
+
+
 def build_hosted_runner_service(
     host: HostConfig,
     engine: Engine,
@@ -2118,6 +2143,8 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         hosted_runners=HostHostedRunnerStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
         settings=HostSettingsStore(connections, clock),
+        workspaces=HostWorkspaceStore(connections, clock),
+        subscriptions=HostSubscriptionStore(connections, clock),
         runner_audit=RunnerAudit(connections),
     )
 
