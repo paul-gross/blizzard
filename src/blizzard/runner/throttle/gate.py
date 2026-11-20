@@ -250,19 +250,20 @@ class ThrottleGate:
         settings = ctx.config.throttle
         if settings is None:
             return ()
-        slug = subscription.slug if subscription is not None else "its subscription"
-        interval = subscription.sample_interval_seconds if subscription is not None else 0
         answers: list[LeverAnswer] = []
-        if settings.pace is not None:
-            answers.append(
-                pace_answer(settings.pace, sample=sample, slug=slug, sample_interval_seconds=interval, now=now)
-            )
-        if settings.utilization is not None:
-            answers.append(
-                utilization_answer(
-                    settings.utilization, sample=sample, slug=slug, sample_interval_seconds=interval, now=now
+        # A runner whose subscription the host does not serve spends none, so no subscription's usage throttles it.
+        if subscription is not None:
+            slug, interval = subscription.slug, subscription.sample_interval_seconds
+            if settings.pace is not None:
+                answers.append(
+                    pace_answer(settings.pace, sample=sample, slug=slug, sample_interval_seconds=interval, now=now)
                 )
-            )
+            if settings.utilization is not None:
+                answers.append(
+                    utilization_answer(
+                        settings.utilization, sample=sample, slug=slug, sample_interval_seconds=interval, now=now
+                    )
+                )
         if settings.budget is not None:
             window = timedelta(hours=settings.budget.window_hours)
             answers.append(budget_answer(settings.budget, spend=ctx.stores.usage.usage_since(now - window)))
