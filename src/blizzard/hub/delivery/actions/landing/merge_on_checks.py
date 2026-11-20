@@ -1,7 +1,7 @@
 """``merge-on-checks`` — lands a repository's commit on its base branch through a change, self-healing: ``behind``
 updates the change from its base, ``conflicting`` is a conflict, a head beyond the submitted commit and its base merges
-is a failure, and anything else unsettled waits. Proven, it is ready, and its landing is the change's merge with a merge
-commit at the head its checks passed on."""
+is a failure, and anything else unsettled waits. A proven head is checked before landing using a forge-offered
+method."""
 
 from __future__ import annotations
 
@@ -39,18 +39,21 @@ from blizzard.hub.delivery.actions.landing.repo import (
     RepoState,
     Waiting,
 )
+from blizzard.hub.delivery.actions.landing.rewrite_admission import admits, record_intent
 from blizzard.hub.domain.actions.effects import ActionEscalation
-from blizzard.hub.domain.chunk.pr_markers import pr_marker_content, pr_marker_name
+from blizzard.hub.domain.chunk.pr_markers import latest_pr_marker, pr_marker_content, pr_marker_name, pr_marker_number
 from blizzard.hub.forge.landing import (
+    OPERATION_CAPABILITY,
     Change,
     ChangeListing,
     ChangeState,
+    ForgeCapabilityMissing,
     ForgeNotFound,
     ForgeRejected,
     ForgeUnavailable,
     Mergeability,
-    MergeMethod,
     Update,
+    UpdateMethod,
     UpdateOutcome,
 )
 
@@ -77,7 +80,7 @@ class MergeDidNotLand(Exception):
 
 
 class MergeMethodRefused(Exception):
-    """The forge does not permit the configured merge method."""
+    """All repository-allowed landing methods are unusable."""
 
 
 def pr_title(repo: RepoLanding) -> str:
@@ -183,6 +186,18 @@ class PullRequest:
         """The already-merged change that landed the submitted commit — else the branch's live tip — into the
         target's own base, or ``None`` when the read confirms there is none: never a same-name change merged
         into a different base, and never a refused read, which raises :class:`PullRequestLookupError`."""
+        marker = latest_pr_marker(target.run.visit.markers, target.repo)
+        if marker is not None:
+            try:
+                recorded_change = await target.ask(target.forge.changes.change(pr_marker_number(marker)))
+                if (
+                    recorded_change.state is ChangeState.MERGED
+                    and recorded_change.head == target.branch
+                    and recorded_change.base == target.base_branch
+                ):
+                    return recorded_change
+            except (ForgeRejected, ForgeNotFound, ValueError) as exc:
+                raise PullRequestLookupError(f"could not read recorded PR for {target.repo}: {exc}") from exc
         candidates = [c for c in await cls._listed(target, ChangeListing.CLOSED) if c.state is ChangeState.MERGED]
         if not candidates:
             return None
@@ -231,33 +246,55 @@ class PullRequest:
         except (ForgeRejected, ForgeNotFound) as exc:
             raise PullRequestLookupError(f"could not read {self}: {exc}") from exc
 
-    async def update_from_base(self, expected_head: str) -> Update | None:
+    async def update_from_base(self, expected_head: str, method: UpdateMethod) -> Update | None:
         """Ask the forge to bring the change up to its base — guarded on ``expected_head``, so updates never
         stack; ``None`` when the forge no longer knows the change."""
         try:
-            return await self.target.ask(self.target.forge.changes.update_from_base(self.number, expected_head))
+            return await self.target.ask(self.target.forge.changes.update_from_base(self.number, expected_head, method))
         except ForgeNotFound:
             return None
 
     async def merge(self, revision: str) -> str:
-        """Merge at ``revision`` with a merge commit and return the landed commit. A refused merge re-reads the
+        """Merge at ``revision`` using a forge-offered method and return the landed commit. A refused merge re-reads the
         change: one already merged is not remerged, one still open raises :class:`MergeDidNotLand`, and one
         merged at an unknown revision :class:`LandedRevisionUnknown`."""
         try:
-            return await self.target.ask(
-                self.target.forge.changes.merge(self.number, revision, MergeMethod.MERGE, _merge_message(self.target))
-            )
+            options = await self.target.ask(self.target.forge.changes.landing_options())
         except (ForgeRejected, ForgeNotFound) as exc:
-            refusal = str(exc)
-            method_refused = isinstance(exc, ForgeRejected) and exc.reason == ForgeRejected.METHOD
-        landed = await self.reread()
-        if not landed.merged:
-            if method_refused:
-                raise MergeMethodRefused(refusal)
-            raise MergeDidNotLand(refusal)
-        if landed.change.merged_revision is None:
-            raise LandedRevisionUnknown(f"{self} merged but no read carries its landed commit")
-        return landed.change.merged_revision
+            raise MergeDidNotLand(f"could not read landing options: {exc}") from exc
+        refusals: list[str] = []
+        for method in options.methods:
+            capability = OPERATION_CAPABILITY[f"merge.{method}"]
+            if capability not in self.target.forge.offered:
+                raise ForgeEscalation(
+                    ActionEscalation(
+                        EscalationCause.FORGE_CONFIG, f"{self}: forge does not offer {capability} for {method}"
+                    )
+                )
+            try:
+                return await self.target.ask(
+                    self.target.forge.changes.merge(self.number, revision, method, _merge_message(self.target))
+                )
+            except ForgeCapabilityMissing as exc:
+                raise ForgeEscalation(ActionEscalation(EscalationCause.FORGE_CONFIG, f"{self}: {exc}")) from exc
+            except (ForgeRejected, ForgeNotFound) as exc:
+                refusal = str(exc)
+                method_refused = isinstance(exc, ForgeRejected) and exc.reason == ForgeRejected.METHOD
+                diagnostic = exc.diagnostic if isinstance(exc, ForgeRejected) else None
+            landed = await self.reread()
+            if landed.merged:
+                # A raced merge at another head is never evidence for the checked revision.
+                if landed.head_sha != revision:
+                    raise MergeDidNotLand(f"merged at a different head {landed.head_sha}")
+                if landed.change.merged_revision is None:
+                    raise LandedRevisionUnknown(f"{self} merged but no read carries its landed commit")
+                return landed.change.merged_revision
+            if not method_refused or landed.head_sha != revision:
+                raise MergeDidNotLand(refusal)
+            refusals.append(f"{method}: {refusal}" + (f" ({diagnostic})" if diagnostic else ""))
+        allowed = ", ".join(str(method) for method in options.methods) or "none"
+        reasons = "; ".join(refusals) if refusals else "the repository allows no merge methods"
+        raise MergeMethodRefused(f"allowed methods: {allowed}; {reasons}")
 
 
 class MergeOnChecks:
@@ -289,11 +326,15 @@ class MergeOnChecks:
         # A merged PR is gated too: one recovered by the live-tip fallback may carry foreign content.
         try:
             gate = await gate_head(repo, pull.head_sha)
+            rewrite_admitted = gate.admitted() or await admits(repo, pull.number, pull.head_sha)
         except ForgeUnavailable as exc:
             run.hold(exc)
             run.say(f"{pull}: the forge did not answer: {exc}; re-polling")
             return Waiting(str(exc))
-        if not gate.admitted():
+        except (ForgeRejected, ForgeNotFound) as exc:
+            run.say(f"{pull}: could not read rewrite evidence: {exc}; re-polling")
+            return Waiting(str(exc))
+        if not rewrite_admitted:
             run.say(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges")
             foreign = pull.record(FOREIGN, submitted=repo.commit, head=pull.head_sha, offenders=gate.offenders)
             return Failure((foreign,), foreign_head=True)
@@ -337,10 +378,27 @@ async def _routed(pull: PullRequest) -> RepoState:
     if decision == UPDATE:
         # Any refusal other than a named conflict waits — the next poll's state is authoritative.
         try:
-            update = await pull.update_from_base(head_sha)
+            options = await repo.ask(repo.forge.changes.landing_options())
+            if not options.methods:
+                return NeedsPerson(
+                    ActionEscalation(
+                        EscalationCause.MERGE_METHOD_REFUSED,
+                        f"{pull}: allowed methods: none; the repository allows no merge methods",
+                    )
+                )
+            if options.update_method is UpdateMethod.REBASE:
+                base = await repo.base_tip()
+                if not await record_intent(repo, pull.number, head_sha, base):
+                    return Conflict(f"{pull} cannot safely prove a rebase onto {base}")
+            update = await pull.update_from_base(head_sha, options.update_method)
+        except LandedRevisionUnknown as exc:
+            return Waiting(str(exc))
         except ForgeUnavailable as exc:
             run.hold(exc)
             run.say(f"{pull} behind — the forge did not answer its update: {exc}; re-polling")
+            return Waiting(str(exc))
+        except (ForgeRejected, ForgeNotFound) as exc:
+            run.say(f"{pull} behind — could not read settings or request an update: {exc}; re-polling")
             return Waiting(str(exc))
         if update is not None and update.outcome is UpdateOutcome.CONFLICT:
             return Conflict(f"{pull} could not be updated from its base without a conflict")

@@ -95,7 +95,7 @@ const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
     [EscalationCause.FORGE_CAPABILITY_MISSING]: "The repository's forge does not offer what the hub node's action needs",
     [EscalationCause.CHANGE_CLOSED]: 'The change was closed without merging',
     [EscalationCause.BRANCH_PROTECTED]: 'The forge refused to update a protected branch',
-    [EscalationCause.MERGE_METHOD_REFUSED]: 'The forge refused the configured merge method',
+    [EscalationCause.MERGE_METHOD_REFUSED]: 'No allowed merge method could be used',
     [EscalationCause.MISSING_CHECKS]: 'No CI checks were observed for the revision',
     [EscalationCause.PARK_TIMEOUT]: 'The wait for the change to merge timed out',
     [EscalationCause.ESCALATE_CHOICE]: 'The worker judged the work cannot be completed by a fleet worker',

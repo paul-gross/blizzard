@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Protocol
 
+from blizzard.foundation.crash import crashpoint
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository, resolve_credential
@@ -55,8 +56,11 @@ from blizzard.hub.forge.landing import (
     TreeEntry,
     Update,
     UpdateMethod,
+    UpdateOutcome,
 )
 from blizzard.hub.live_config import ConfigObjectCache
+
+_REBASE_UPDATED = crashpoint("rebase.after-update.before-record", "rebase update accepted before recovery poll")
 
 
 class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
@@ -382,7 +386,10 @@ class _ChangesHandle:
         _admit(self.offered, "update_from_base", self.gate, self.cut_off)
         if method == UpdateMethod.MERGE:
             return await self.gate.spending(self.adapter.update_from_base(number, expected_head))
-        return await self.gate.spending(self.adapter.update_from_base(number, expected_head, method))
+        result = await self.gate.spending(self.adapter.update_from_base(number, expected_head, method))
+        if method is UpdateMethod.REBASE and result.outcome is UpdateOutcome.ACCEPTED:
+            _REBASE_UPDATED.reached()
+        return result
 
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
         _admit(self.offered, f"merge.{method}", self.gate, self.cut_off)

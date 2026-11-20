@@ -154,6 +154,7 @@ _DEDICATED_PREFIXES = (
     "seed.",
     "release.",
     "policy.",
+    "rebase.",
     "escalate.",
     "answer.",
     "takeover.",
@@ -217,6 +218,7 @@ _SEED_POINTS = [p for p in _ALL_POINTS if p.startswith("seed.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
 _POLICY_POINTS = [p for p in _ALL_POINTS if p.startswith("policy.")]
+_REBASE_POINTS = [p for p in _ALL_POINTS if p.startswith("rebase.")]
 # `escalate.*` fires in the RUNNER's one escalating close, which every escalation site goes
 # through. Swept by `test_kill9_at_escalate_crash_point` through the retries-exhausted site.
 _ESCALATE_POINTS = [p for p in _ALL_POINTS if p.startswith("escalate.")]
@@ -323,6 +325,7 @@ _SEED_CI_SUBSET = ("seed.after-runner.before-next-runner",)
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
 _TAKEOVER_CI_SUBSET = ("takeover.after-open.before-kill",)
 _POLICY_CI_SUBSET = ("policy.after-advance.before-marker", "policy.after-open-change.before-marker")
+_REBASE_CI_SUBSET = ("rebase.after-update.before-record",)
 
 # The escalate CI subset: the later window, where the closure and its escalation are durable together.
 _ESCALATE_CI_SUBSET = ("escalate.after-close.before-resume-clear",)
@@ -367,6 +370,7 @@ _HOSTRUNNER_SWEEP = _select(_HOSTRUNNER_POINTS, _HOSTRUNNER_CI_SUBSET)
 _SEED_SWEEP = _select(_SEED_POINTS, _SEED_CI_SUBSET)
 _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 _POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
+_REBASE_SWEEP = _select(_REBASE_POINTS, _REBASE_CI_SUBSET)
 _ESCALATE_SWEEP = _select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET)
 _ANSWER_SWEEP = _select(_ANSWER_POINTS, _ANSWER_CI_SUBSET)
 _TAKEOVER_SWEEP = _select(_TAKEOVER_POINTS, _TAKEOVER_CI_SUBSET)
@@ -382,6 +386,11 @@ def test_policy_sweep_covers_all_six_windows(monkeypatch: pytest.MonkeyPatch) ->
         "policy.after-open-change.before-marker",
         "policy.after-merged-read.before-marker",
     }
+
+
+def test_rebase_sweep_covers_update_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
+    assert set(_select(_REBASE_POINTS, _REBASE_CI_SUBSET)) == {"rebase.after-update.before-record"}
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -415,6 +424,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_SEED_POINTS, _SEED_CI_SUBSET))
         | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
         | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
+        | set(_select(_REBASE_POINTS, _REBASE_CI_SUBSET))
         | set(_select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET))
         | set(_select(_ANSWER_POINTS, _ANSWER_CI_SUBSET))
         | set(_select(_TAKEOVER_POINTS, _TAKEOVER_CI_SUBSET))
@@ -3042,6 +3052,82 @@ def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
+
+
+@pytest.mark.parametrize("point", _REBASE_SWEEP)
+def test_kill9_at_rebase_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """Lose the update response after the forge rewrites the head; recover and land once."""
+    import yaml
+
+    landed_file = f"REBASE-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    origin = crash_env.origins / f"{REPO_NAME}.git"
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=point)
+    runner_proc = None
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
+    # The mock reports a mergeable diverged branch as clean unless told that
+    # the repository requires an up-to-date head.
+    levers = ("merge_commits_disallowed", "squash_merge_disallowed", "stale_branch")
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        for lever in levers:
+            response = crash_env.forge.post(f"/_levers/{lever}", json={"repo": REPO})
+            assert response.status_code == 200, response.text
+        pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
+        graph = yaml.safe_load(landing_graph_yaml(landed_file, (REPO_NAME,), poll_interval=1, record_findings=False))
+        # The worker's declared work is on the old base. Advance main with an independent
+        # commit before delivery, so the adapter must perform a rebase update.
+        graph["nodes"]["build"]["prompt"] += (
+            f"path = str(root / {REPO_NAME!r})\n"
+            "subprocess.run(['git', '-C', path, 'fetch', 'origin', 'main'], check=True)\n"
+            "subprocess.run(['git', '-C', path, 'switch', '-C', 'base-update', 'origin/main'], check=True)\n"
+            f"(pathlib.Path(path) / {('BASE-' + landed_file)!r}).write_text('base moved\\n')\n"
+            "subprocess.run(['git', '-C', path, 'add', '-A'], check=True)\n"
+            "subprocess.run(['git', '-C', path, '-c', 'user.email=mock@blizzard.local', "
+            "'-c', 'user.name=Mock Harness', 'commit', '-m', 'base update'], check=True)\n"
+            "subprocess.run(['git', '-C', path, 'push', 'origin', 'HEAD:main'], check=True)\n"
+        )
+        minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
+        assert minted.status_code == 201, minted.text
+        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "rebase sweep"})
+        assert issue.status_code == 201, issue.text
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_url=daemon_url(hub_dir)
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        code = wait_death(hub_proc, timeout=180.0)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        pulls = crash_env.forge.get(f"/repos/{REPO}/pulls", params={"state": "open"})
+        assert pulls.status_code == 200, pulls.text
+        matching = [p for p in pulls.json() if landed_file in p["title"]]
+        assert len(matching) == 1, matching
+        head = matching[0]["head"]["sha"]
+        base = git_bare(origin, "rev-parse", "main")
+        assert git_bare(origin, "rev-parse", f"{head}^") == base
+        assert _landed_repos(hub_dir, chunk_id) == []
+
+        hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=180.0)
+        assert status == "done", f"chunk did not converge after {point}: {status}"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        assert _open_turns(hub_dir) == 0
+        assert _landed_repos(hub_dir, chunk_id) == [REPO]
+        assert _merged_markers(hub, chunk_id) == [f"merged/{REPO}"]
+        tree = git_bare(origin, "log", "--oneline", "--", landed_file)
+        assert len(tree.splitlines()) == 1, tree
+        assert _repo_pull_count(crash_env.forge, REPO_NAME) - pulls_before == 1
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+        for lever in levers:
+            crash_env.forge.delete(f"/_levers/{lever}", params={"repo": REPO})
 
 
 # --- Operator chunk restart (#370) — the preempt kill→closure crash point ---

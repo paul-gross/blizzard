@@ -6,6 +6,7 @@ from __future__ import annotations
 import itertools
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -39,7 +40,7 @@ def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:
             forge_id=ForgeId("frg_example"), owner="acme", base_branch="main", secret_name="s", record="re_widget"
         )
         target = _Target(
-            run=cast(_Run, None),
+            run=cast(_Run, SimpleNamespace(visit=SimpleNamespace(markers=()))),
             repo="acme/widget",
             branch="feature-branch",
             commit="sha1",
