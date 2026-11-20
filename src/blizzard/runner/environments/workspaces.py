@@ -1,9 +1,16 @@
-"""The host's workspace registry: every workspace the host declares, by id.
+"""The host's workspace registry: every workspace the host declares, by id, and the one holder of the current one.
 
 Each workspace has its own provider, the spawn root its workers start in, its resolved standing prompt, and the lock
 that serialises acquisition from its pool. A lease reaches its workspace through the id its ``env_bindings`` row
 names, never through a runner-wide workspace; a row naming none, or one the host does not declare, resolves to no
-provider, an empty spawn root and no prompt."""
+provider, an empty spawn root and no prompt.
+
+The host tick rebuilds the registry whenever a workspace record moves; :class:`HostWorkspaces` is what every reader
+holds, reading the registry in force at each use. The acquisition locks are the holder's, by workspace id, so an
+acquisition through a replaced provider and one through its replacement take the same lock
+(``bzh:environment-held-once``). A retired workspace stays in the registry for what it already holds — its provider
+releases and resumes the environments held there — but takes no new acquisition and is not listed among the
+host's workspaces."""
 
 from __future__ import annotations
 
@@ -18,8 +25,9 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 
 def home_workspace_id(bound: Sequence[str], declared: Sequence[str]) -> str:
     """The workspace a runner is reported and addressed by as such: the first workspace its bindings name that the
-    host declares, else the host's first. ``declared`` is never empty."""
-    return next((workspace_id for workspace_id in bound if workspace_id in declared), declared[0])
+    host declares, else the host's first; on a host declaring none, the first its bindings name, else ``""``."""
+    fallback = declared[0] if declared else (bound[0] if bound else "")
+    return next((workspace_id for workspace_id in bound if workspace_id in declared), fallback)
 
 
 def held_workspace_id(held: str | None, bound: Sequence[str], declared: Sequence[str]) -> str:
@@ -75,7 +83,16 @@ class IWorkspaceSessions(IWorkspaceSpawnSettings, IWorkspaceProviders, Protocol)
     environments are read through."""
 
 
-class IWorkspaceAcquisition(IWorkspaceSessions, Protocol):
+class IWorkspaceAcquisitionProviders(Protocol):
+    """The providers a new acquisition may draw from, narrowed for FILL's free-environment hint."""
+
+    def acquisition_provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
+        """The workspace's provider while it is active; ``None`` for a retired workspace, an undeclared one or
+        none — which serves no binding."""
+        ...
+
+
+class IWorkspaceAcquisition(IWorkspaceSessions, IWorkspaceAcquisitionProviders, Protocol):
     """A claim's reach into a workspace: the lock serialising acquisition from its pool and the workspace a held row is
     claimed under, beside the session reads of the spawn it starts."""
 
@@ -89,41 +106,90 @@ class IWorkspaceAcquisition(IWorkspaceSessions, Protocol):
         ...
 
 
-class IWorkspaces(IWorkspaceAcquisition, IWorkspaceHomes, IWorkspaceEnvironmentWorkdirs, Protocol):
+class IWorkspaceEntries(Protocol):
+    """The host's active workspaces as registered, in declaration order — what the routes list and the host
+    reports."""
+
+    def entries(self) -> tuple[WorkspaceEntry, ...]: ...
+
+
+class IWorkspaces(IWorkspaceAcquisition, IWorkspaceHomes, IWorkspaceEnvironmentWorkdirs, IWorkspaceEntries, Protocol):
     """The host's workspaces, each looked up by its id — every slice composed, for the bundles that hand them on."""
 
 
 @dataclass(frozen=True)
 class WorkspaceEntry:
-    """What one workspace is registered with: its id, provider, spawn root and resolved standing prompt."""
+    """What one workspace is registered with: its id, provider, spawn root and resolved standing prompt, its
+    environment cap, and the record revision it was built at (``None`` for one built from no record)."""
 
     workspace_id: str
     provider: IWorkspaceProvider
     _: KW_ONLY
     spawn_root: str
     prompt: str = ""
+    max_environments: int = 0
+    revision: int | None = None
+
+
+class WorkspaceLocks:
+    """The host's acquisition locks, one per workspace id, made on first use and kept for the host's life — so every
+    registry the host builds hands out the same lock for one workspace."""
+
+    def __init__(self) -> None:
+        self._locks: dict[str, threading.RLock] = {}
+        self._guard = threading.Lock()
+
+    def lock(self, workspace_id: str) -> threading.RLock:
+        with self._guard:
+            return self._locks.setdefault(workspace_id, threading.RLock())
 
 
 class WorkspaceRegistry:
-    """The :class:`IWorkspaces` a host builds once, over its declared workspaces in declaration order."""
+    """The :class:`IWorkspaces` over the host's active workspaces in declaration order, beside its ``retired`` ones,
+    which serve only what they already hold. May be empty: a host with no workspace serves no binding. ``locks`` are
+    the host's; a registry built without them holds its own."""
 
-    def __init__(self, entries: Sequence[WorkspaceEntry]) -> None:
-        if not entries:
-            raise ValueError("a workspace registry needs at least one workspace")
+    def __init__(
+        self,
+        entries: Sequence[WorkspaceEntry],
+        *,
+        retired: Sequence[WorkspaceEntry] = (),
+        locks: WorkspaceLocks | None = None,
+    ) -> None:
         self._workspaces: Mapping[str, WorkspaceEntry] = {entry.workspace_id: entry for entry in entries}
-        self._locks: Mapping[str, threading.RLock] = {entry.workspace_id: threading.RLock() for entry in entries}
+        self._retired: Mapping[str, WorkspaceEntry] = {
+            entry.workspace_id: entry for entry in retired if entry.workspace_id not in self._workspaces
+        }
+        self._locks = locks if locks is not None else WorkspaceLocks()
 
     def ids(self) -> tuple[str, ...]:
         return tuple(self._workspaces)
+
+    def entries(self) -> tuple[WorkspaceEntry, ...]:
+        return tuple(self._workspaces.values())
+
+    def entry(self, workspace_id: str) -> WorkspaceEntry | None:
+        """The workspace's entry, active or retired; ``None`` for one the registry holds neither way."""
+        return self._get(workspace_id)
+
+    def retired_entries(self) -> tuple[WorkspaceEntry, ...]:
+        return tuple(self._retired.values())
 
     def home(self, bound: Sequence[str]) -> str:
         return home_workspace_id(bound, self.ids())
 
     def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        # A row held in a retired workspace stays under it until its claim releases it.
+        if workspace_id is not None and workspace_id in self._retired:
+            return workspace_id
         return held_workspace_id(workspace_id, bound, self.ids())
 
     def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
         workspace = self._get(workspace_id)
+        return workspace.provider if workspace is not None else None
+
+    def acquisition_provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
+        workspace = self._workspaces.get(workspace_id) if workspace_id is not None else None
         return workspace.provider if workspace is not None else None
 
     def spawn_root(self, workspace_id: str | None) -> str:
@@ -136,7 +202,7 @@ class WorkspaceRegistry:
 
     @contextmanager
     def try_acquisition_lock(self, workspace_id: str) -> Generator[bool, None, None]:
-        lock = self._locks[workspace_id]
+        lock = self._locks.lock(workspace_id)
         taken = lock.acquire(blocking=False)
         try:
             yield taken
@@ -147,11 +213,66 @@ class WorkspaceRegistry:
     def environment_workdirs(self) -> dict[str, dict[str, str]]:
         return {
             workspace_id: workspace.provider.environment_workdirs()
-            for workspace_id, workspace in self._workspaces.items()
+            for workspace_id, workspace in {**self._retired, **self._workspaces}.items()
         }
 
     def _get(self, workspace_id: str | None) -> WorkspaceEntry | None:
-        return self._workspaces.get(workspace_id) if workspace_id is not None else None
+        if workspace_id is None:
+            return None
+        return self._workspaces.get(workspace_id) or self._retired.get(workspace_id)
 
 
 _workspace_registry_conforms: type[IWorkspaces] = WorkspaceRegistry
+
+
+class HostWorkspaces:
+    """The one holder of the host's current :class:`WorkspaceRegistry`, and itself the :class:`IWorkspaces` every
+    reader holds: each read goes to the registry in force at that read, so a registry the host tick sets reaches
+    every runner's process and loop context, the routes, the spawn path and the health probes with no rebuild of
+    theirs. Holds the host's acquisition locks, which every registry it is given is built over."""
+
+    def __init__(self, registry: WorkspaceRegistry | None = None, *, locks: WorkspaceLocks | None = None) -> None:
+        self.locks = locks if locks is not None else WorkspaceLocks()
+        self._registry = registry if registry is not None else WorkspaceRegistry((), locks=self.locks)
+        self._guard = threading.Lock()
+
+    def current(self) -> WorkspaceRegistry:
+        with self._guard:
+            return self._registry
+
+    def set(self, registry: WorkspaceRegistry) -> None:
+        with self._guard:
+            self._registry = registry
+
+    def ids(self) -> tuple[str, ...]:
+        return self.current().ids()
+
+    def entries(self) -> tuple[WorkspaceEntry, ...]:
+        return self.current().entries()
+
+    def home(self, bound: Sequence[str]) -> str:
+        return self.current().home(bound)
+
+    def held(self, workspace_id: str | None, bound: Sequence[str]) -> str:
+        return self.current().held(workspace_id, bound)
+
+    def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
+        return self.current().provider(workspace_id)
+
+    def acquisition_provider(self, workspace_id: str | None) -> IWorkspaceProvider | None:
+        return self.current().acquisition_provider(workspace_id)
+
+    def spawn_root(self, workspace_id: str | None) -> str:
+        return self.current().spawn_root(workspace_id)
+
+    def prompt(self, workspace_id: str | None) -> str:
+        return self.current().prompt(workspace_id)
+
+    def try_acquisition_lock(self, workspace_id: str) -> AbstractContextManager[bool]:
+        return self.current().try_acquisition_lock(workspace_id)
+
+    def environment_workdirs(self) -> dict[str, dict[str, str]]:
+        return self.current().environment_workdirs()
+
+
+_host_workspaces_conform: type[IWorkspaces] = HostWorkspaces

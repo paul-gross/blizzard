@@ -397,13 +397,21 @@ class HostConfig:
         )
 
     def runner_problems(self, entry: RunnerEntry) -> list[str]:
-        """The runner errors only the host's declarations show."""
+        """The runner errors that leave it unbuilt: its own entry's, and the host's declarations show beside them.
+        A binding or subscription the host does not serve is not among them (:meth:`binding_problems`)."""
         errors = list(entry.errors)
+        errors.extend(self._unsampled_levers(entry))
+        return errors
+
+    def binding_problems(self, entry: RunnerEntry) -> list[str]:
+        """Each workspace a binding names and the subscription the runner names that the host does not serve. A write
+        of the runner's settings is refused while any stands; a running runner is not halted by one — it claims
+        nothing through the binding and resolves as naming no subscription."""
+        errors: list[str] = []
         declared = {subscription.slug for subscription in self.subscriptions}
         if entry.subscription is not None and entry.subscription not in declared:
             errors.append(f"names subscription {entry.subscription!r}, which the host does not declare")
-        errors.extend(self._unsampled_levers(entry))
-        workspaces = {workspace.id: workspace for workspace in self.workspaces}
+        workspaces = {workspace.id for workspace in self.workspaces}
         for binding in entry.bindings:
             if binding.workspace not in workspaces:
                 errors.append(
@@ -537,7 +545,9 @@ class HostConfig:
         hub_token: str,
     ) -> RunnerConfig:
         declared = {subscription.slug: subscription for subscription in self.subscriptions}
-        chosen = (declared[entry.subscription],) if entry.subscription is not None else ()
+        # A subscription the host does not serve — retired, or never declared — resolves as naming none.
+        named = declared.get(entry.subscription) if entry.subscription is not None else None
+        chosen = (named,) if named is not None else ()
         return replace(
             self._shared(own),
             name=entry.name,

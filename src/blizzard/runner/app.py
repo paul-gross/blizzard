@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 import secrets
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
@@ -129,7 +130,7 @@ from blizzard.runner.composition import (
     build_running_host_runner_service,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceEntries, IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health import HarnessHealthResult
@@ -395,7 +396,7 @@ def create_app(
     runners: Sequence[ServedRunner] | None = None,
     halted: Sequence[HaltedRunner] = (),
     workspaces: Sequence[ServedWorkspace] | None = None,
-    subscriptions: Sequence[SubscriptionDeclaration] | None = None,
+    subscriptions: Sequence[SubscriptionDeclaration] | Callable[[], Sequence[SubscriptionDeclaration]] | None = None,
     readiness: ReadinessService | None = None,
     workspace_registry: IWorkspaces | None = None,
     harnesses: IHarnessRegistry | None = None,
@@ -496,8 +497,14 @@ def create_app(
                 stepper=stepper,
             ),
         )
-    if workspaces is None:
-        workspaces = tuple(_served_workspace(workspace, workspace_registry) for workspace in config.workspaces)
+    served_workspaces: tuple[ServedWorkspace, ...] | Callable[[], tuple[ServedWorkspace, ...]]
+    if workspaces is not None:
+        served_workspaces = tuple(workspaces)
+    elif workspace_registry is not None:
+        # Read at each request, so a workspace the host tick creates or retires is served from the next tick.
+        served_workspaces = functools.partial(_served_workspaces, workspace_registry)
+    else:
+        served_workspaces = tuple(_served_workspace(workspace, None) for workspace in config.workspaces)
 
     # No framework exporters: tests/component/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
@@ -520,8 +527,12 @@ def create_app(
     app.state.host_settings_authoring = host_settings_authoring
     app.state.flags = flags
     app.state.runners = HostRunnerRegistry(RunnerRegistry(tuple(runners), tuple(halted)))
-    app.state.workspaces = tuple(workspaces)
-    app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
+    app.state.workspaces = served_workspaces
+    app.state.subscriptions = (
+        subscriptions
+        if callable(subscriptions)
+        else tuple(subscriptions if subscriptions is not None else config.subscriptions)
+    )
     # A registered host signs in as itself; an unregistered one as its first runner.
     sign_in: ISignInClient | None = None
     if host_registration is not None and host_identity is not None and host_registration.current().registered():
@@ -898,7 +909,7 @@ def _wire_hosted_app(
         config,
         runners=(),
         halted=host.halted,
-        subscriptions=host.subscriptions,
+        subscriptions=host.current_subscriptions,
         platform_tracing=host.platform_tracing,
         identity=_FirstServedIdentity(registry),
         readiness=host.readiness,
@@ -983,8 +994,8 @@ def _wire_runner_clients(
     connections = graph.connections
     harness_health = graph.health
     workspaces = host.workspaces
-    # The runner's own workspace, as such: the first its bindings name, else the host's first.
-    home = config.home_workspace.id
+    # The runner's own workspace, as such: the first its bindings name that the host serves, else the host's first.
+    home = workspaces.home(config.bound_workspace_ids)
     harnesses = graph.harnesses
 
     def harnesses_for_lease(lease_id: str) -> HarnessRegistry:
@@ -1167,6 +1178,18 @@ def _wire_runner_clients(
             graph.settings_reader, graph.stores.settings, HOST_REGISTRY
         )
     return _WiredRunner(served, stepper, harness_health, (archived_transcript_client, hub_proxy_client))
+
+
+def _served_workspaces(registry: IWorkspaceEntries) -> tuple[ServedWorkspace, ...]:
+    """The host's active workspaces as its registry holds them now, each over its provider's pool."""
+    return tuple(
+        ServedWorkspace(
+            workspace_id=entry.workspace_id,
+            env_pool=entry.provider.pool(),
+            max_environments=entry.max_environments,
+        )
+        for entry in registry.entries()
+    )
 
 
 def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) -> ServedWorkspace:

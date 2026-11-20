@@ -1299,7 +1299,7 @@ def _seed_runner(
         else:
             assert entry.authored is not None
             settings.seed(
-                entry.authored, (*reader.keys, *reader.aliases), validate=reader.validate, aliases=reader.aliases
+                entry.authored, (*reader.keys, *reader.aliases), validate=reader.seed_validate, aliases=reader.aliases
             )
             _, resolved = reader.snapshot()
     except (SettingsInvalid, ValueError) as exc:

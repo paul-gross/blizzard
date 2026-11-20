@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
@@ -206,8 +206,10 @@ class RunnerWiring:
         return flags if flags is not None else self._refuse("flags")
 
     def workspaces(self) -> tuple[ServedWorkspace, ...]:
-        workspaces: tuple[ServedWorkspace, ...] | None = self._seam("workspaces")
-        return workspaces or ()
+        workspaces: tuple[ServedWorkspace, ...] | Callable[[], tuple[ServedWorkspace, ...]] | None = self._seam(
+            "workspaces"
+        )
+        return (workspaces() if callable(workspaces) else workspaces) or ()
 
     def workspace(self, workspace_id: str) -> ServedWorkspace:
         """The served workspace ``workspace_id`` names; ``404`` for one the host does not declare."""
@@ -218,8 +220,10 @@ class RunnerWiring:
 
     def subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
         """The subscriptions the host declares."""
-        declared: tuple[SubscriptionDeclaration, ...] | None = self._seam("subscriptions")
-        return declared or ()
+        declared: Sequence[SubscriptionDeclaration] | Callable[[], Sequence[SubscriptionDeclaration]] | None = (
+            self._seam("subscriptions")
+        )
+        return tuple((declared() if callable(declared) else declared) or ())
 
     def config(self) -> RunnerConfig:
         config = self.maybe_config()

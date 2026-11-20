@@ -153,7 +153,9 @@ def test_every_runner_error_and_the_store_revision_are_reported_together(
     root = _joined(tmp_path, fake_init_hub)
     layout = HostLayout(root)
     layout.config_path.write_text(
-        layout.config_path.read_text().replace('subscription = "anthropic"', 'subscription = "nope"')
+        layout.config_path.read_text().replace(
+            'subscription = "anthropic"', 'subscription = "anthropic"\nmax_agents = 3'
+        )
     )
     migration_runner(host_runtime_of(root).init(selector_over())).downgrade("20261015_1000_host_ingests")
 
@@ -161,7 +163,7 @@ def test_every_runner_error_and_the_store_revision_are_reported_together(
 
     assert result.exit_code != 0
     assert "store:" in result.output
-    assert "runner runner-local" in result.output and "names subscription 'nope'" in result.output
+    assert "runner runner-local" in result.output and "'max_agents' has no home" in result.output
 
 
 def test_every_host_error_is_named_and_a_file_that_is_refused_goes_no_further(
