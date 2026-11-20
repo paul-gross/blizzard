@@ -308,7 +308,8 @@ the hub is asked. A name another of the host's active runners holds is refused t
 runner under the host (`POST /api/fleet/host/runners`), and `add` writes its identity, first settings revision, hosted
 row, `added` fact and sealed token in one store transaction. `--project` repeats; `--workspace` names the host's
 workspace each project runs in — once for all, or once per `--project` — and defaults to the host's only one; `--agents`
-likewise, defaulting to `1`. A `--workspace` the host file does not declare refuses the add before it reaches the hub.
+likewise, defaulting to `1`. A `--workspace` the host does not hold as an active workspace record refuses the add before
+it reaches the hub.
 
 `blizzard runner retire --runner <name|id>` retires the runner at the hub under the host's token, with `--force`
 releasing the chunks it holds, then records the `retired` fact. Without `--force`, a runner still holding chunks is
@@ -344,6 +345,23 @@ the error, and is retried at the next tick. Both verbs refuse a host holding no 
 The host page of the panel shows it. A served runner its hub halts is listed by `GET /api/host/runners` as `halted`,
 naming why, and its own views still read. A runner the store hosts that the host has not started yet is listed as
 `starting`, and one whose latest start failed as `start_failed`, with the step and the error.
+
+### The host's workspaces and subscriptions
+
+A host's workspaces and subscriptions are records in its store, each seeded once from the host file's `[[workspace]]`
+and `[[subscription]]` at the first start that finds no record of that key. From then on a file edit to a seeded one
+changes nothing; change it with `blizzard runner workspace` or `blizzard runner subscription` — `create`, `list`, `get`,
+`edit`, `retire` and `enable`, settings given as `KEY=VALUE` with each value a TOML value — or the host's routes
+([runner-doors.md](./runner-doors.md#the-hosts-routes-and-each-runners)). On a running host the verbs go through those
+routes and the host takes the write up at its next tick; on a stopped host they write the store under its write guard.
+Each says which it did.
+
+Every write — create, edit, retire and enable — needs superuser authority and refuses a worker credential. The workspace
+prompt routes, `GET`, `PUT` and `DELETE /api/host/workspaces/{workspace_id}/prompt`, do not: any signed-in panel user
+may set or clear a workspace's prompt, as before.
+
+A runner bound to a workspace the host does not serve, or naming a subscription it does not hold, keeps running: it
+claims nothing through that binding, and declares no subscription. A runner settings write that names either is refused.
 
 ### Ingesting a runner from another store
 

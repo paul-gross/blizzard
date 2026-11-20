@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
+from tests.support.host_files import declare_test_workspace
 from tests.support.runner_init_fakes import init_runner
 
 
@@ -28,6 +29,7 @@ def _no_ambient_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 def _runtime(tmp_path: Path, *, edit: tuple[str, str] | None = None) -> Path:
     runtime = tmp_path / "runner"
     assert init_runner().invoke(runner_group, ["init", str(runtime)]).exit_code == 0
+    declare_test_workspace(runtime)
     if edit is not None:
         path = runtime / HOST_CONFIG_FILENAME
         path.write_text(path.read_text().replace(edit[0], edit[1], 1))

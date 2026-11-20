@@ -21,12 +21,12 @@ from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.cli.runtime import seed_host, seed_runners
 from blizzard.runner.composition import HostProcess, build_host_process
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.support.config_inputs import create_runner_app, load_host_config
-from tests.support.host_files import TEST_RUNNER_ID, one_workspace, write_minimal_host
+from tests.support.host_files import TEST_RUNNER_ID, TEST_WORKSPACE_ID, one_workspace, write_minimal_host
 from tests.support.runner_fakes import make_store
 
 _WORKSPACES = "/api/host/workspaces"
@@ -258,6 +258,6 @@ def test_an_app_without_the_hosts_store_refuses_every_record_write(tmp_path: Pat
     """The store-free app (OpenAPI export, unit boot) refuses a write rather than pretend."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", workspaces=one_workspace(prompt="STATIC"))
     with TestClient(create_runner_app(config)) as client:
-        assert client.put(f"{_WORKSPACES}/{DEFAULT_WORKSPACE_ID}/prompt", json={"prompt": "x"}).status_code == 503
+        assert client.put(f"{_WORKSPACES}/{TEST_WORKSPACE_ID}/prompt", json={"prompt": "x"}).status_code == 503
         assert client.post(_WORKSPACES, json={"id": "ws-x"}).status_code == 503
-        assert [i["workspace_id"] for i in _ok(client.get(_WORKSPACES))["items"]] == [DEFAULT_WORKSPACE_ID]
+        assert [i["workspace_id"] for i in _ok(client.get(_WORKSPACES))["items"]] == [TEST_WORKSPACE_ID]

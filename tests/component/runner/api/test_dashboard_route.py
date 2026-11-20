@@ -27,6 +27,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.status.view import RunnerStatusService
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
+from tests.support.host_files import one_workspace
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
     FakeHarness,
@@ -52,7 +53,9 @@ def _app_with_status(
     tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_proxy_client: httpx2.Client | None = None
 ) -> tuple[TestClient, SqlAlchemyRunnerStore]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
+    config = RunnerConfig(
+        root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "", workspaces=one_workspace()
+    )
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1), verdict=None
     )

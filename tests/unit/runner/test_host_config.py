@@ -27,6 +27,7 @@ from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.settings.ports import SettingsSnapshot
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from tests.support.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
+from tests.support.host_files import TEST_WORKSPACE_ID
 
 _TOKEN = {"BZ_HUB_TOKEN_R_ONE": "tok-one"}
 
@@ -215,8 +216,8 @@ def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
     assert entry.id is None
     assert (entry.name, entry.subscription) == (runner_config.DEFAULT_RUNNER_NAME, "anthropic")
     assert [(b.project, b.workspace) for b in entry.bindings] == [
-        ("alpha", runner_config.DEFAULT_WORKSPACE_ID),
-        ("beta", runner_config.DEFAULT_WORKSPACE_ID),
+        ("alpha", TEST_WORKSPACE_ID),
+        ("beta", TEST_WORKSPACE_ID),
     ]
     assert entry.own is not None and entry.own.agents == 1
     assert [s.slug for s in reloaded.subscriptions] == ["anthropic"]
@@ -262,20 +263,23 @@ def test_a_runner_with_no_hub_token_at_all_names_no_rename(tmp_path: Path) -> No
 
 
 @pytest.mark.usefixtures("clean_seeds")
-def test_a_scaffold_seeds_its_workspace_and_runner_from_the_environment(
+def test_a_scaffold_seeds_its_runner_from_the_environment_and_declares_no_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(runner_config.ENV_WORKSPACE_ROOT, "/ws")
-    monkeypatch.setenv(runner_config.ENV_WORKSPACE_ENVS, "x1, x2")
+    monkeypatch.setenv("BZ_WORKSPACE_ROOT", "/ws")
+    monkeypatch.setenv("BZ_WORKSPACE_ENVS", "x1, x2")
     monkeypatch.setenv(runner_config.ENV_GATES, "review")
     monkeypatch.setenv(runner_config.ENV_PORT, "8500")
     scaffold = HostConfig.scaffold(tmp_path / "host")
-    reloaded = load_host_config(_write(tmp_path / "host", scaffold.to_toml()))
-    (workspace,) = reloaded.workspaces
-    assert (workspace.root, workspace.provider, workspace.envs) == ("/ws", "winter", ("x1", "x2"))
+    text = scaffold.to_toml()
+    reloaded = load_host_config(_write(tmp_path / "host", text))
+    assert reloaded.workspaces == ()
+    assert "[[workspace]]" not in text and "/ws" not in text
     assert reloaded.port == 8500
     assert reloaded.runners[0].own is not None and reloaded.runners[0].own.gates == ("review",)
-    assert [b.project for b in reloaded.runners[0].bindings] == list(runner_config.SCAFFOLD_PROJECTS)
+    assert [(b.project, b.workspace) for b in reloaded.runners[0].bindings] == [
+        (project, TEST_WORKSPACE_ID) for project in runner_config.SCAFFOLD_PROJECTS
+    ]
 
 
 @pytest.mark.parametrize(

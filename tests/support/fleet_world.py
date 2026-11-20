@@ -20,9 +20,9 @@ from typing import NamedTuple
 import pytest
 import yaml
 
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, HostWorkspace, RunnerConfig
+from blizzard.runner.config import HostWorkspace, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
-from tests.support.host_files import with_workspace, write_host_file
+from tests.support.host_files import TEST_WORKSPACE_ID, with_workspace, write_host_file
 
 #: The fixture project repo the platform tiers drive and the env keying the disposable fixture world.
 REPO_NAME = "toy-api"
@@ -130,7 +130,7 @@ def world_repos(workspace: Path) -> tuple[WorkspaceRepo, ...]:
 def basic_workspace(workspace: Path, *, repos: tuple[WorkspaceRepo, ...] | None = None) -> HostWorkspace:
     """The runner's one workspace over ``workspace`` on the basic provider, one environment at a time."""
     return HostWorkspace(
-        DEFAULT_WORKSPACE_ID,
+        TEST_WORKSPACE_ID,
         root=str(workspace),
         provider="basic",
         max_environments=1,

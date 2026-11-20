@@ -212,6 +212,11 @@ one. The runner's `[[runner]]` in `blizzard-host.toml` names them as bindings, e
 `[[workspace]]` it works in. The runner's own `agents` count is shared by every binding:
 
 ```toml
+# The workspace the runner's binding names; a binding to a workspace the host does not serve claims nothing.
+[[workspace]]
+id = "workspace-local"
+provider = "basic"
+
 [[runner]]
 # How many agents may work at once, across every project below.
 agents = 1
@@ -235,12 +240,13 @@ A binding carries no `agents` of its own: every binding shares `[[runner]] agent
 binding halts that runner at load, its error naming `[[runner]] agents`, and a runner with bindings and no effective
 `agents` setting halts the same way.
 
-`blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on its
-first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is added
-serving them; a project the tenant does not hold refuses the add, and nothing is added. `blizzard hub runner add
-<name>`
-takes the same repeatable `--project`. Without one, the runner is added serving the tenant's project when the tenant
-holds one, and serving nothing when it holds several.
+`blizzard-runner init` writes a binding of `default` to the workspace `workspace-local` into a fresh host file, but no
+`[[workspace]]`: a new runner registers and is offered work on its first registration once that workspace is declared in
+the file or created with `blizzard runner workspace create`. A repeated `--project <id|slug>` names other projects
+instead, and the runner is added serving them; a project the tenant does not hold refuses the add, and nothing is added.
+`blizzard hub runner add
+<name>` takes the same repeatable `--project`. Without one, the runner is added serving the
+tenant's project when the tenant holds one, and serving nothing when it holds several.
 
 Registration never refuses over the declaration, because it is also the runner's heartbeat. An entry no project of the
 tenant answers to serves nothing, and is looked up again at every registration, so it starts serving once a project

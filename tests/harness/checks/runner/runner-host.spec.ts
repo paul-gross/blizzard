@@ -392,7 +392,10 @@ test.describe('no ambient credentials', () => {
     expect(environ.CODEX_HOME?.startsWith(host.home)).toBe(true);
     expect(environ.XDG_CONFIG_HOME?.startsWith(host.home)).toBe(true);
     expect(environ.BLIZZARD_MOCK_HARNESS_FENCE).toBe('1');
-    expect(Object.keys(environ).filter((name) => /^BZ_(HOST_TOKEN|HUB_TOKEN|WORKSPACE_ROOT)/.test(name))).toEqual([]);
+    expect(Object.keys(environ).filter((name) => /^BZ_(HOST_TOKEN|HUB_TOKEN)/.test(name))).toEqual([]);
+    // `init` reads no `BZ_WORKSPACE_*`: the ambient root reaches neither the scaffold nor the host file.
+    expect(host.initHostFile).not.toContain(ambient.BZ_WORKSPACE_ROOT);
+    expect(host.hostFile()).not.toContain(ambient.BZ_WORKSPACE_ROOT);
     expect((await host.stepHost()).outcome).toBe('completed');
     expect(vendorUsage.requests).toEqual([]);
   });

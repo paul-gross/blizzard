@@ -21,7 +21,7 @@ from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_host_stores, build_runner_admission
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
+from blizzard.runner.config import ProjectBinding
 from blizzard.runner.host_config import runner_toml, scaffold_runner
 from blizzard.runner.host_file import append_runner
 from blizzard.runner.host_layout import HostLayout
@@ -31,7 +31,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
 from tests.support.config_inputs import STRICT, load_host_config
-from tests.support.host_files import load_runner_config
+from tests.support.host_files import TEST_WORKSPACE_ID, load_runner_config
 from tests.support.runner_fakes import runner_store_errors
 from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
 from tests.support.session_store_fakes import InMemorySessionStore
@@ -304,7 +304,7 @@ def _with_a_second_runner(root: Path, name: str = "r-two") -> None:
     """Append a ``[[runner]]`` with no id to ``root``'s host file, as an operator adding one by hand would."""
     append_runner(
         HostLayout(root),
-        runner_toml(scaffold_runner(root, name, bindings=(ProjectBinding("default", DEFAULT_WORKSPACE_ID),))),
+        runner_toml(scaffold_runner(root, name, bindings=(ProjectBinding("default", TEST_WORKSPACE_ID),))),
         strict=STRICT,
     )
 
