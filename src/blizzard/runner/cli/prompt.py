@@ -8,20 +8,22 @@ import click
 from blizzard.cli.get_group import GetGroup
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
-from blizzard.runner.cli.directory import load_runner
+from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.host_records import WORKSPACE, edit_record
 from blizzard.runner.cli.runtime import read_host_stores
-from blizzard.runner.config import HostWorkspace, RunnerConfig
+from blizzard.runner.composition import seeded_records
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
+from blizzard.runner.environments.workspaces import home_workspace_id
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
     WORKSPACE_PROMPT_FILENAME,
     UnknownWorkspacePromptSample,
 )
 from blizzard.runner.host_config import record_prompt
-from blizzard.runner.host_records.model import HostRecord, RecordKind
-from blizzard.runner.host_records.prompt import PROMPT_SETTINGS, EffectiveWorkspacePrompt, PromptChange
+from blizzard.runner.host_records.model import HostRecord
+from blizzard.runner.host_records.prompt import EffectiveWorkspacePrompt, PromptChange
 from blizzard.runner.store.errors import RunnerStoreError
 
 
@@ -76,13 +78,13 @@ def prompt_install(ctx: click.Context, name: str, directory: str, force: bool, r
     """Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which
     `prompt diff` then checks for drift. Takes effect on the workspace's next spawn."""
     text = _packaged_sample(name)
-    config = load_runner(directory, runner=runner)
+    config, workspace = _home_record(directory, runner)
     destination = config.root / WORKSPACE_PROMPT_FILENAME
     if destination.exists() and not force:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
     body = PromptChange.stating("prompt_file", str(destination)).body()
-    edit_record(ctx, WORKSPACE, directory, config.home_workspace.id, body, verb="prompt install")
+    edit_record(ctx, WORKSPACE, directory, workspace.key, body, verb="prompt install")
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
 
 
@@ -96,7 +98,7 @@ def prompt_diff(name: str, directory: str, runner: str | None) -> None:
     Effective means the prompt a new worker starts with: the one the workspace's record resolves to. Exits 1 when
     they differ, so a deploy can check a forked copy for drift."""
     sample = _packaged_sample(name)
-    effective = _effective_prompt(load_runner(directory, runner=runner))
+    effective = _effective_prompt(*_home_record(directory, runner))
     lines = list(
         difflib.unified_diff(
             sample.splitlines(keepends=True),
@@ -120,7 +122,7 @@ def prompt_status(directory: str, runner: str | None) -> None:
 
     Exits 1 when a setting is stated but resolves to nothing — the shape a rollback to a wheel that does not read
     the stated setting produces."""
-    effective = _effective_prompt(load_runner(directory, runner=runner))
+    effective = _effective_prompt(*_home_record(directory, runner))
     click.echo(f"workspace prompt: {len(effective.prompt)} characters, from {effective.origin}")
     if effective.source != "default" and not effective.prompt.strip():
         raise click.ClickException(f"{effective.origin} is configured but the workspace prompt resolves to nothing")
@@ -140,7 +142,7 @@ def prompt_status(directory: str, runner: str | None) -> None:
 def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None) -> None:
     """Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing
     prompt. Through a running host, or into a stopped host's store. Takes effect on subsequent spawns."""
-    workspace_id = load_runner(directory, runner=runner).home_workspace.id
+    workspace_id = _home_record(directory, runner)[1].key
     if runner_url is not None:
         with RunnerDaemon.reach("prompt clear", directory, runner_url, Door.of(ctx)) as daemon:
             route = f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt"
@@ -150,23 +152,30 @@ def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, run
     edit_record(ctx, WORKSPACE, directory, workspace_id, PromptChange.cleared().body(), verb="prompt clear")
 
 
-def _effective_prompt(config: RunnerConfig) -> EffectiveWorkspacePrompt:
-    """The prompt a spawn in the runner's workspace would read, from the workspace's record. A read-only store
-    query, so a live daemon is no bar."""
-    workspace_id = config.home_workspace.id
+def _home_record(directory: str, runner: str | None) -> tuple[RunnerConfig, HostRecord]:
+    """The runner and its home workspace's record: the first workspace its bindings name that the host holds an
+    active record of, else the host's first — judged against the store's records as they stand once the file's
+    tables are seeded, never the file's tables alone. A read-only store query, so a live daemon is no bar."""
+    host = load_host(directory)
     try:
-        with read_host_stores(config) as stores:
-            record = stores.workspaces.record(workspace_id)
-        if record is None:
-            # A host never started holds no record yet: its file's table is what its first start seeds.
-            workspace = config.home_workspace
-            record = HostRecord(RecordKind.WORKSPACE, workspace_id, 0, _prompt_settings(workspace))
-        return record_prompt(record, config.root)
-    except RunnerStoreError as exc:
-        raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
+        config = host.runner_config(runner=runner)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
+    try:
+        with read_host_stores(host) as stores:
+            held = seeded_records(host, stores).workspaces
+    except RunnerStoreError as exc:
+        raise click.ClickException(f"could not read the runner store at {host.db_url}: {exc}") from exc
+    by_key = {record.key: record for record in held}
+    chosen = by_key.get(home_workspace_id(config.bound_workspace_ids, tuple(by_key)))
+    if chosen is None:
+        raise click.ClickException("the host holds no active workspace, so no workspace prompt is in force")
+    return config, chosen
 
 
-def _prompt_settings(workspace: HostWorkspace) -> dict[str, object]:
-    return {name: value for name in PROMPT_SETTINGS if (value := getattr(workspace, name))}
+def _effective_prompt(config: RunnerConfig, record: HostRecord) -> EffectiveWorkspacePrompt:
+    """The prompt a spawn in ``record``'s workspace would read."""
+    try:
+        return record_prompt(record, config.root)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc

@@ -32,6 +32,7 @@ from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
     DeclaredSubscription,
     DeclaredWorkspace,
+    HeldRecords,
     IngestHost,
     ISourceHosts,
     RunnerDeclaration,
@@ -119,6 +120,15 @@ class IngestOutcome:
     runner_name: str
     resumed: bool
     set_aside: tuple[Path, ...] = ()
+
+
+class IHereRecords(Protocol):
+    """This host's workspaces and subscriptions as its store's records state them — never its file's tables."""
+
+    def held(self) -> HeldRecords:
+        """Seed each of the file's tables the store holds no record of, then the active records; asked only while
+        this host is held."""
+        ...
 
 
 class IIngestStores(IRunnerBoundReadsFactory, IRunnerBoundStoresFactory, Protocol):
@@ -222,6 +232,8 @@ class RunnerIngest:
     clock: IClock
     #: The migrations of the runner store at a source copy's URL.
     migrations: Callable[[str], MigrationRunner]
+    #: This host's workspace and subscription records, which the moving runner's are placed against.
+    records: IHereRecords
 
     def run(self, request: IngestRequest) -> IngestOutcome:
         """Ingest the runner ``request`` names, or complete an ingest of it interrupted part-way. Raises an
@@ -456,8 +468,9 @@ class RunnerIngest:
             refuse_archive_rename(workspace_id)
             return _ConfigPlan()
         theirs = source.declared
-        workspaces, ids = self._workspace_plan(theirs.workspaces, theirs.root, entry, workspace_id)
-        declared = {subscription.slug for subscription in self.host.declared.subscriptions}
+        held = self.records.held()
+        workspaces, ids = self._workspace_plan(theirs.workspaces, theirs.root, entry, workspace_id, held)
+        declared = {subscription.slug for subscription in held.subscriptions}
         subscription = (
             next((s for s in theirs.subscriptions if s.slug == entry.subscription), None)
             if entry.subscription is not None and entry.subscription not in declared
@@ -478,15 +491,17 @@ class RunnerIngest:
         source_root: Path,
         entry: RunnerDeclaration,
         workspace_id: str | None,
+        held: HeldRecords,
     ) -> tuple[tuple[DeclaredWorkspace, ...], dict[str, str]]:
-        """The workspaces to append and the ids the runner's workspaces take here."""
+        """The workspaces to append and the ids the runner's workspaces take here, beside the ``held`` ones."""
         theirs = {workspace.id: workspace for workspace in offered}
         placements = place_workspaces(
             tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
             runner_name=entry.name,
             workspace_id=workspace_id,
             offered={held_id: _shape(workspace) for held_id, workspace in theirs.items()},
-            held={workspace.id: _shape(workspace) for workspace in self.host.declared.workspaces},
+            held={workspace.id: _shape(workspace) for workspace in held.workspaces},
+            retired=held.retired_workspace_ids,
         )
         appended: list[DeclaredWorkspace] = []
         for placement in placements:

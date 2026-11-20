@@ -156,6 +156,23 @@ def test_an_invalid_add_names_every_failing_key_with_nothing_minted(
     assert _hosted(config) == ((_RUNNER,), frozenset())
 
 
+def test_an_add_binds_a_workspace_the_host_took_up_live_and_refuses_a_retired_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _host(tmp_path, monkeypatch)
+    hub = _Hub()
+    with _served(config, hub) as client:
+        created = client.post("/api/host/workspaces", json={"id": "ws-api", "root": str(tmp_path / "api")})
+        assert created.status_code == 200, created.text
+        assert client.post("/api/host/workspaces/workspace-local/retire").status_code == 200
+
+        status, problem = _add(client, projects=[{"project": "default", "workspace": "workspace-local"}])
+        assert status == 422, problem
+        status, body = _add(client, projects=[{"project": "default", "workspace": "ws-api"}])
+        assert status == 200, body
+    assert hub.added == [("night-1", ("default",))]
+
+
 def test_an_unregistered_host_refuses_an_add(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = _host(tmp_path, monkeypatch)
     with _served(config, _Hub(), registered=False) as client:

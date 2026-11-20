@@ -136,13 +136,28 @@ def _global_key_columns(shapes: sa.MetaData) -> frozenset[str]:
     return frozenset(names)
 
 
+#: The host's settings and its workspace and subscription records: read and judged by an ingest, never carried.
+_HOST_RECORD_TABLES = frozenset(
+    {
+        "host_setting_entries",
+        "host_workspaces",
+        "host_workspace_facts",
+        "host_subscriptions",
+        "host_subscription_facts",
+    }
+)
+
+
 def seed_host(engine: sa.Engine) -> None:
-    """One row in every host table an ingest carries or leaves but its own record, and the runners' sealed hub tokens,
-    whose content must be a real seal."""
+    """One row in every host table an ingest carries or leaves but its own record and the host's settings and its
+    workspace and subscription records, whose rows an ingest parses; and the runners' sealed hub tokens, whose content
+    must be a real seal."""
     seed_tables(
         engine,
         reflect(engine),
-        HOST_TABLES - {"host_ingests", "host_identity", "runner_hub_tokens", "hosted_runners", "hosted_runner_facts"},
+        HOST_TABLES
+        - {"host_ingests", "host_identity", "runner_hub_tokens", "hosted_runners", "hosted_runner_facts"}
+        - _HOST_RECORD_TABLES,
         values={"failure_reason": None},
     )
 

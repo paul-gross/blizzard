@@ -21,7 +21,13 @@ from blizzard.foundation.store.migrations import StoreBelowFloorError
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.runtime import InitCollaborators, host_answers, seed_hosted_runners
+from blizzard.runner.cli.runtime import (
+    InitCollaborators,
+    host_answers,
+    read_recorded_host,
+    seed_host_records,
+    seed_hosted_runners,
+)
 from blizzard.runner.cli.store_guard import (
     StoreVerdict,
     hosted_runner_ids,
@@ -100,36 +106,32 @@ def add(
     is written.
 
     Refused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,
-    or when a --workspace is not one the host declares."""
+    or when a --workspace is not one the host holds an active record of."""
     config = load_host(directory)
     token = _host_token(config)
-    try:
-        bindings = config.bindings_for(projects, workspaces)
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
-    settings: dict[str, object] = {"agents": _runner_agents(projects, agents)}
-    if SCAFFOLD_SUBSCRIPTION.slug in {subscription.slug for subscription in config.subscriptions}:
-        settings["subscription"] = SCAFFOLD_SUBSCRIPTION.slug
     door = Door.of(ctx)
     if host_answers(config.layout.socket_path, door):
+        bindings, settings = _new_runner(read_recorded_host(config), projects, workspaces, agents)
         _add_on_running_host(config, door, name, bindings, settings)
         return
-    new = NewRunner.of(
-        name,
-        [(b.project, b.workspace) for b in bindings],
-        settings,
-        workspaces=[workspace.id for workspace in config.workspaces],
-    )
     clock = CliCollaborators.of(ctx).wall_clock
     hub = config.hub_url
     with store_write_guard(config, action=f"add runner {name}", door=door, clock=clock, refuse_foreign=True):
         # The file's runners hosted first, as the host's next start would, so the new runner's hosted row leaves none
-        # of them unhosted.
+        # of them unhosted; its workspaces and subscriptions seeded, so the runner is judged against their records.
         seed_hosted_runners(config, clock=clock)
+        recorded = seed_host_records(config, clock=clock)
+        bindings, settings = _new_runner(recorded, projects, workspaces, agents)
+        new = NewRunner.of(
+            name,
+            [(b.project, b.workspace) for b in bindings],
+            settings,
+            workspaces=[workspace.id for workspace in recorded.workspaces],
+        )
         engine = create_engine_from_url(config.db_url)
         try:
             with InitCollaborators.of(ctx).host_clients(hub) as host_clients:
-                service = build_hosted_runner_service(config, engine, host_clients(token), clock=clock)
+                service = build_hosted_runner_service(recorded, engine, host_clients(token), clock=clock)
                 try:
                     added = service.add(new, actor=OPERATOR, door=CLI)
                 except RunnerSettingsInvalid as exc:
@@ -146,6 +148,20 @@ def add(
         f"added runner {name} ({added.runner_id}) at {hub} into the stopped host's store at {config.db_url}; it "
         "starts at the host's next start"
     )
+
+
+def _new_runner(
+    host: HostConfig, projects: tuple[str, ...], workspaces: tuple[str, ...], agents: tuple[int, ...]
+) -> tuple[tuple[ProjectBinding, ...], dict[str, object]]:
+    """The new runner's bindings and first settings, judged against ``host``'s workspace and subscription records."""
+    try:
+        bindings = host.bindings_for(projects, workspaces)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    settings: dict[str, object] = {"agents": _runner_agents(projects, agents)}
+    if SCAFFOLD_SUBSCRIPTION.slug in {subscription.slug for subscription in host.subscriptions}:
+        settings["subscription"] = SCAFFOLD_SUBSCRIPTION.slug
+    return bindings, settings
 
 
 def _add_on_running_host(

@@ -119,7 +119,8 @@ from blizzard.runner.host_layout import (
     HostLayout,
     hold_host,
 )
-from blizzard.runner.host_records.model import HostRecordsSnapshot, RecordKind
+from blizzard.runner.host_records.model import HostRecord, HostRecordsSnapshot, RecordKind
+from blizzard.runner.host_records.prompt import PromptChange
 from blizzard.runner.host_records.service import HostRecordService
 from blizzard.runner.host_settings_reader import (
     HostRecordReads,
@@ -257,13 +258,14 @@ from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
     DeclaredSubscription,
     DeclaredWorkspace,
+    HeldRecords,
     HostDeclarations,
     IngestHost,
     ISourceHosts,
     RunnerDeclaration,
     SourceHost,
 )
-from blizzard.runner.transfer.ingest import IHostCiphers, IIngestStores, ITokenFiles, RunnerIngest
+from blizzard.runner.transfer.ingest import IHereRecords, IHostCiphers, IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.transfer.internal.host_files import HostFiles
 from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
@@ -2176,16 +2178,18 @@ class _HostedRunnerNames:
 @collaborator
 @dataclass(frozen=True)
 class _NewRunnerSettings:
-    """A new runner's entries judged as a store-only runner's are, over the host file, before its hub mints its id."""
+    """A new runner's entries judged as a store-only runner's are, over the host as ``host`` reads it at the add —
+    its workspaces and subscriptions as their records state them — before its hub mints its id."""
 
-    host: HostConfig
+    host: Callable[[], HostConfig]
 
     def problems(self, name: str, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        host = self.host()
         try:
-            entry = self.host.hosted_entry(None, name)
+            entry = host.hosted_entry(None, name)
         except (ConfigError, ValueError) as exc:
             return {"name": str(exc)}
-        return RunnerEntriesJudge(self.host, entry).validate(entries)
+        return RunnerEntriesJudge(host, entry).validate(entries)
 
 
 @collaborator
@@ -2216,6 +2220,75 @@ def build_host_record_services(
     }
 
 
+def _file_records(config: HostConfig, stores: HostStores | HostReadStores) -> tuple[HostRecord, ...]:
+    """Each ``[[workspace]]`` and ``[[subscription]]`` table as the record a seed makes of it, whole from its table,
+    the first of a key only. A deprecated ``workspace_prompt`` override for a workspace is its ``prompt``, with
+    ``prompt_file`` and ``prompt_package`` at their defaults, since the override already won over every file
+    prompt."""
+    authored = config.authored
+    if authored is None:
+        return ()
+    records: dict[tuple[RecordKind, str], HostRecord] = {}
+    for kind in (RecordKind.WORKSPACE, RecordKind.SUBSCRIPTION):
+        tables = cast(object, authored.get(str(kind), []))
+        for table in cast(list[object], tables) if isinstance(tables, list) else []:
+            if not isinstance(table, dict):
+                continue
+            entry = cast(dict[str, object], table)
+            if not isinstance(key := entry.get(kind.key_name), str) or (kind, key.strip()) in records:
+                continue
+            settings = {name: value for name, value in entry.items() if name != kind.key_name}
+            if kind is RecordKind.WORKSPACE:
+                override = stores.workspace_prompt.workspace_prompt_override(key.strip())
+                if override is not None:
+                    settings = PromptChange.stating("prompt", override).applied_to(settings)
+            records[kind, key.strip()] = HostRecord(kind, key.strip(), 0, settings)
+    return tuple(records.values())
+
+
+def seed_record_tables(config: HostConfig, stores: HostStores, *, clock: IClock) -> None:
+    """Seed steps 2-3: each ``[[workspace]]`` and ``[[subscription]]`` table with no record becomes one
+    (:func:`_file_records`), each its own write under the seed's door and actor; a record the store holds, retired
+    or not, is never touched."""
+    services = build_host_record_services(config, stores, clock=clock)
+    for record in _file_records(config, stores):
+        services[record.kind].seed(record.key, record.settings)
+
+
+def seeded_records(config: HostConfig, stores: HostStores | HostReadStores) -> HostRecordsSnapshot:
+    """The host's records as they stand once its file's tables are seeded (:func:`seed_record_tables`), read with no
+    write: for a verb that judges against them and must leave the store as it found it when it refuses."""
+    workspaces = stores.workspaces.records(retired=True)
+    subscriptions = stores.subscriptions.records()
+    held = {(record.kind, record.key) for record in workspaces} | {
+        (RecordKind.SUBSCRIPTION, record.key) for record in stores.subscriptions.records(retired=True)
+    }
+    unseeded = [record for record in _file_records(config, stores) if (record.kind, record.key) not in held]
+
+    def ordered(records: Sequence[HostRecord]) -> tuple[HostRecord, ...]:
+        return tuple(sorted(records, key=lambda record: record.key))
+
+    return HostRecordsSnapshot(
+        workspaces=ordered(
+            [r for r in workspaces if not r.retired] + [r for r in unseeded if r.kind is RecordKind.WORKSPACE]
+        ),
+        subscriptions=ordered([*subscriptions, *(r for r in unseeded if r.kind is RecordKind.SUBSCRIPTION)]),
+        retired_workspaces=tuple(r for r in workspaces if r.retired),
+    )
+
+
+def recorded_host_config(
+    config: HostConfig, stores: HostStores | HostReadStores, records: HostRecordsSnapshot | None = None
+) -> HostConfig:
+    """``config`` with its workspaces and subscriptions the store's active records — or ``records`` — over its stored
+    entries; raises :class:`ValueError` when they do not resolve."""
+    reader = HostSettingsReader(config, stores.settings, host_record_reads(stores))
+    if records is None:
+        return reader.current()
+    held = stores.settings.snapshot()
+    return reader.resolve(HostSettingsSnapshot(held.revision, held.entries, records))
+
+
 def build_hosted_runner_service(
     host: HostConfig,
     engine: Engine,
@@ -2225,7 +2298,8 @@ def build_hosted_runner_service(
     environ: Mapping[str, str] | None = None,
 ) -> HostedRunnerService:
     """The service that adds and retires a stopped host's runners in the store ``engine`` opens, under the host's
-    token through ``hub``, over host stores and a token sealer of its own."""
+    token through ``hub``, over host stores and a token sealer of its own; a new runner is judged against ``host``,
+    resolved from the store's records."""
     stores = build_host_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock)
     sealer = functools.partial(
         _sealing_hub_tokens,
@@ -2234,7 +2308,7 @@ def build_hosted_runner_service(
         environ=os.environ if environ is None else environ,
         clock=clock,
     )
-    return _hosted_runner_service(host, engine, hub, stores, sealer, clock)
+    return _hosted_runner_service(host, engine, hub, stores, sealer, clock, judged=lambda: host)
 
 
 def build_running_host_runner_service(
@@ -2251,6 +2325,7 @@ def build_running_host_runner_service(
             _running_host_tokens, host, host_config.root, environ=os.environ if environ is None else environ
         ),
         host.clock,
+        judged=host.host_settings.reader.current if host.host_settings is not None else lambda: host_config,
     )
 
 
@@ -2268,12 +2343,14 @@ def _hosted_runner_service(
     stores: HostStores,
     tokens: Callable[[], HubTokens],
     clock: IClock,
+    *,
+    judged: Callable[[], HostConfig],
 ) -> HostedRunnerService:
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
     return HostedRunnerService(
         hosted=stores.hosted_runners,
         admissions=_RunnerAdmissions(functools.partial(_admission_of, engine, errors=errors, clock=clock)),
-        settings=_NewRunnerSettings(host),
+        settings=_NewRunnerSettings(judged),
         names=_HostedRunnerNames(host, stores.runner_audit),
         tokens=_SealingTokens(tokens),
         hub=hub,
@@ -2709,6 +2786,34 @@ class ConfigSourceHosts:
 _source_hosts_conforms: type[ISourceHosts] = ConfigSourceHosts
 
 
+@collaborator
+@dataclass(frozen=True)
+class SeededHereRecords:
+    """This host's workspaces and subscriptions from its store, as they stand once its file's tables are seeded."""
+
+    host: HostConfig
+
+    def held(self) -> HeldRecords:
+        engine = create_engine_from_url(self.host.db_url)
+        try:
+            stores = build_host_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+            records = seeded_records(self.host, stores)
+            try:
+                recorded = recorded_host_config(self.host, stores, records)
+            except ValueError as exc:
+                raise ConfigError(str(exc)) from exc
+        finally:
+            engine.dispose()
+        return HeldRecords(
+            workspaces=tuple(declared_workspace(workspace, recorded.root) for workspace in recorded.workspaces),
+            subscriptions=tuple(declared_subscription(subscription) for subscription in recorded.subscriptions),
+            retired_workspace_ids=frozenset(record.key for record in records.retired_workspaces),
+        )
+
+
+_here_records_conforms: type[IHereRecords] = SeededHereRecords
+
+
 def build_runner_ingest(
     host: HostConfig,
     hub: IHostHubClient,
@@ -2743,4 +2848,5 @@ def build_runner_ingest(
         ),
         clock=resolved,
         migrations=migrations,
+        records=SeededHereRecords(host),
     )
