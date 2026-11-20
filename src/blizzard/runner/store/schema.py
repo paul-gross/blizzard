@@ -538,8 +538,8 @@ local_pause_facts = Table(
     info={"scope": "runner"},
 )
 
-# --- Workspace prompt override (runtime-settable spawn preamble) --
-# A present row, empty ``prompt`` included, wins over config; no row falls back to it.
+# --- Workspace prompt override (deprecated) --------------------------
+# A present row, empty ``prompt`` included, is its workspace's ``prompt`` when the record is first seeded.
 
 workspace_prompt = Table(
     "workspace_prompt",
@@ -547,7 +547,7 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
-    info={"scope": "host", "transfer": HOST_TRANSFER_WORKSPACE},
+    info={"scope": "host", "transfer": HOST_TRANSFER_WORKSPACE, "deprecated": "0.5"},
 )
 
 # --- Daemon liveness (when the runner was last known alive) -------
@@ -1273,8 +1273,7 @@ hosted_runner_facts = Table(
 Index("ix_hosted_runner_facts_runner_id_id", hosted_runner_facts.c.runner_id, hosted_runner_facts.c.id)
 
 # --- Host workspaces and subscriptions (configured records, seeded once from the host file) ---
-# A row per record the host ever held, never deleted, and its append-only lifecycle facts: a record is retired while
-# its newest fact is ``retired``. Each write's change row is in host_setting_changes under its kind and key.
+# A row per record ever held, never deleted, retired while its newest append-only fact is ``retired``.
 
 host_workspaces = Table(
     "host_workspaces",

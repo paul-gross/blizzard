@@ -59,8 +59,7 @@ PACKAGED = PackagedWorkspacePrompts(Path(__file__).resolve().parent / "prompts" 
 
 
 class IReadWorkspacePromptRepository(Protocol):
-    """The deprecated runtime workspace-prompt override, read only by the seed, which makes it its workspace record's
-    prompt — distinct from :class:`PackagedWorkspacePrompts` above."""
+    """The deprecated runtime workspace-prompt override — distinct from :class:`PackagedWorkspacePrompts` above."""
 
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
         """The runtime workspace-prompt override for this workspace, or ``None``.
