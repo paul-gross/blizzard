@@ -1,0 +1,196 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.sk-when {
+  gap: 4px;
+  padding-top: 2px;
+}
+.sk-day {
+  width: 6ch;
+}
+.sk-time {
+  width: 5ch;
+}
+.sk-what {
+  gap: 5px;
+  align-self: stretch;
+  align-items: stretch;
+  padding-top: 2px;
+}
+.sk-dim {
+  opacity: 0.6;
+}
+.sk-age {
+  justify-self: end;
+  width: 6ch;
+  margin-top: 2px;
+}
+/* One grid for the history, each entry a subgrid row, styled as the node history's rows: the stamp, the
+   description, and the age at the right. */
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+}
+.entry {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  column-gap: 10px;
+  align-items: start;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  line-height: 1.5;
+}
+.entry:hover {
+  background: var(--surface-hover);
+}
+.when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--text);
+  white-space: nowrap;
+}
+.day {
+  color: var(--label);
+}
+.what {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.summary-line {
+  min-width: 0;
+  max-width: 100%;
+}
+.text {
+  overflow-wrap: anywhere;
+  color: var(--tone, var(--text));
+}
+.compact-bounce {
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+  color: var(--tone, var(--text));
+}
+/* A graph transition framing a delivery event: set as the node history sets a judgement: the node engraved, the choice in amber, where it went dim; its stamp and age dimmed. */
+/* A move or a repo list is a wrapping row of parts on one baseline: a name, or a separator with the part it leads,
+   never breaks inside, a line breaks only between parts, and a part wider than the whole row clips with an ellipsis,
+   its title carrying the whole. */
+.move,
+.repos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.6ch;
+  min-width: 0;
+  max-width: 100%;
+}
+.part {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.move {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.move .nd {
+  color: var(--text);
+  letter-spacing: 0.1em;
+}
+.move .sep {
+  color: var(--label-dim);
+}
+.move .verdict {
+  color: var(--amber);
+  white-space: nowrap;
+}
+/* The graph the move happened in, before each node. */
+.move .gr {
+  color: var(--label-dim);
+}
+/* The arrow into the node the choice routed to: drawn, so it centres on the caps rather than sitting on a glyph's
+   own baseline; the part is a flex row so the name beside it still clips with an ellipsis. */
+.move .jg-to {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6ch;
+}
+.move .arr {
+  flex: none;
+  align-self: center;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--label-dim);
+}
+.move .jg-to .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Where the choice routed the chunk — a consequence, so it reads dim. */
+.move .jg-to {
+  color: var(--label-dim);
+}
+.entry.transition .when,
+.entry.transition .age {
+  opacity: 0.7;
+}
+/* A bounce's reason, dim and wrapping, clamped at five lines; its title carries the whole of it. */
+.detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.history .empty {
+  color: var(--label);
+  grid-column: 1 / -1;
+  margin: 2px 8px;
+}
+.log {
+  margin-left: 8px;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.log:hover {
+  text-decoration: underline;
+}
+.dim {
+  color: var(--label);
+}
+.age {
+  color: var(--label);
+  white-space: nowrap;
+}
+.sk-bar {
+  display: block;
+  --kit-skeleton-height: 12px;
+}
+.sk-small {
+  --kit-skeleton-height: 10px;
+}
+:host-context(.mobile) .entry {
+  column-gap: 8px;
+}
+@media (max-width: 900px) {
+  .entry {
+    column-gap: 8px;
+  }
+}
