@@ -28,8 +28,11 @@ const UNREPORTED = {
   renewal_attempted_at: null,
   renewal_failure_reason: null,
   renewal_result: null,
+  revision: null,
   sampled_at: null,
+  settings: {},
   spenders: [],
+  state: 'active',
   windows: [],
   windows_sampled_at: null,
   condition: null,
@@ -102,8 +105,8 @@ describe('runnerWorkspaceRows', () => {
   it('renders one row per declared workspace with its capacity and held count', () => {
     const rows = runnerWorkspaceRows(
       [
-        { workspace_id: 'ws-a', max_environments: 3 },
-        { workspace_id: 'ws-b', max_environments: 1 },
+        { workspace_id: 'ws-a', max_environments: 3, revision: null, settings: {}, state: 'active' },
+        { workspace_id: 'ws-b', max_environments: 1, revision: null, settings: {}, state: 'active' },
       ],
       [
         {
