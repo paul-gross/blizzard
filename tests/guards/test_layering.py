@@ -2904,6 +2904,7 @@ _ACTION_STDLIB = frozenset(
         "contextlib",
         "dataclasses",
         "datetime",
+        "difflib",
         "enum",
         "functools",
         "hashlib",
@@ -3198,6 +3199,7 @@ def _plant_actions(tmp_path: Path, files: Mapping[str, str]) -> list[str]:
         ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation import roles", False),
         ("blizzard/hub/delivery/actions/a.py", "from .clean import take", False),
         ("blizzard/hub/delivery/actions/a.py", "import asyncio\n\nasyncio.sleep(0)", False),
+        ("blizzard/hub/delivery/actions/a.py", "from difflib import SequenceMatcher", False),
     ],
 )
 def test_the_hub_action_purity_gate_judges_each_planted_module(

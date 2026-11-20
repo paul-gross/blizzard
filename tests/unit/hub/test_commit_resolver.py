@@ -44,6 +44,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.landing import (
+    CommitEvidence,
     CommitPresence,
     Comparison,
     ForgeAuthRefused,
@@ -51,6 +52,7 @@ from blizzard.hub.forge.landing import (
     ForgeObject,
     ForgeUnavailable,
     IForgeRefs,
+    TreeEntry,
 )
 
 _SHA = "deadbeef"
@@ -196,6 +198,15 @@ class _Refs:
         raise NotImplementedError
 
     async def compare(self, base: str, head: str) -> Comparison:
+        raise NotImplementedError
+
+    async def commit_evidence(self, revision: str) -> CommitEvidence:
+        raise NotImplementedError
+
+    async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+        raise NotImplementedError
+
+    async def blob_evidence(self, revision: str) -> bytes:
         raise NotImplementedError
 
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
