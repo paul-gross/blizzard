@@ -317,8 +317,9 @@ test.describe('an unstarted host', () => {
     runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'missing' } });
     await runnerHost.restart();
     expect((await runnerHost.api.health()).status).toBe(200);
-    expect((await runnerHost.api.ready()).body.detail).toContain("names subscription 'missing'");
-    expect((await runnerHost.runners[name]?.expecting(503).status())?.status).toBe(503);
+    // The prepared file took: the runner names a subscription the host does not hold, so it runs as naming none.
+    expect(runnerHost.hostFile()).toContain('subscription = "missing"');
+    expect((await runnerHost.runners[name]?.status())?.status).toBe(200);
     expect(() => runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'anthropic' } })).toThrow(/stop the host/);
     await runnerHost.stop();
     runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'anthropic' } });

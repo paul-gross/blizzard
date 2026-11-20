@@ -92,7 +92,9 @@ async function scenario(fixtures: {
       (leases) => leases.some((lease) => lease.node_name === 'review'), { stallPasses: 80, progress: leaseProgress });
     expect(reviews.filter((lease) => lease.node_name === 'build')).toHaveLength(1);
     expect((await host.api.replaceWorkspacePrompt(workspaceId, { prompt: REPLACEMENT_PROMPT })).body)
-      .toMatchObject({ prompt: REPLACEMENT_PROMPT, source: 'override' });
+      .toMatchObject({ prompt: REPLACEMENT_PROMPT, source: 'config' });
+    // The record's new prompt reaches a spawn once the host's own pass has taken the record up.
+    expect((await host.stepHost()).outcome).toBe('completed');
   }
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${id}`)).body,
     (body) => body.status === 'done' || body.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
