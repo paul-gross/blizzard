@@ -92,7 +92,7 @@ def test_retire_and_enable_bump_the_revision_and_append_their_fact() -> None:
     retired = _WORKSPACE.retire()
     assert retired is not None
     assert (retired.op, retired.fact, retired.diff, retired.record.revision) == ("retire", RecordFactOp.RETIRED, (), 4)
-    assert retired.record.retired and not retired.settings_moved()
+    assert retired.record.retired
 
     enabled = retired.record.enable()
     assert enabled is not None

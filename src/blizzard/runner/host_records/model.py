@@ -180,10 +180,6 @@ class RecordWrite:
     def creates(self) -> bool:
         return self.prior == 0
 
-    def settings_moved(self) -> bool:
-        """Whether the write moves a setting, so the candidate is judged as the host file would be."""
-        return self.creates() or bool(self.diff)
-
 
 @domain_model
 @dataclass(frozen=True)

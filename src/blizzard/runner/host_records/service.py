@@ -15,6 +15,7 @@ from blizzard.runner.host_records.model import (
     HostRecord,
     RecordActor,
     RecordExists,
+    RecordFactOp,
     RecordKind,
     RecordUnknown,
     RecordWrite,
@@ -86,7 +87,8 @@ class HostRecordService:
         return True
 
     def _write(self, write: RecordWrite, *, actor: str, door: Door) -> HostRecord:
-        if write.settings_moved() and (problems := self.validator.problems(self.kind, write.record)):
+        # Every write but a retire puts a record in force, so each is judged as the host would serve it after.
+        if write.fact is not RecordFactOp.RETIRED and (problems := self.validator.problems(self.kind, write.record)):
             raise SettingsInvalid(problems)
         self.records.apply(write, RecordActor(actor=actor, door=door, at=self.clock.now()))
         _log.info(

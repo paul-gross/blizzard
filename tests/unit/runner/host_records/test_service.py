@@ -94,7 +94,7 @@ def test_an_unknown_key_is_refused() -> None:
         _service(_Records()).held("ws-z")
 
 
-def test_a_second_retire_and_an_enable_of_an_enabled_record_reach_no_store_and_no_validator() -> None:
+def test_a_second_retire_and_an_enable_of_an_enabled_record_write_nothing_while_the_enable_is_judged() -> None:
     records, validator = _Records({"ws-a": HostRecord(RecordKind.WORKSPACE, "ws-a", 1)}), _Validator()
     service = _service(records, validator)
 
@@ -106,7 +106,8 @@ def test_a_second_retire_and_an_enable_of_an_enabled_record_reach_no_store_and_n
     assert [write.op for write, _ in records.applied] == ["retire", "enable"]
     assert again is retired and still is enabled
     assert enabled.revision == 3 and not enabled.retired
-    assert validator.judged == []
+    # The enable puts the record back in force, so it alone is judged.
+    assert validator.judged == [enabled]
 
 
 def test_an_edit_that_moves_nothing_writes_nothing() -> None:

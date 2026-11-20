@@ -167,18 +167,29 @@ class HostSettingsReader:
         return found or set(entries) or set(self.keys)
 
     def record_problems(self, kind: RecordKind, candidate: HostRecord) -> Mapping[str, str]:
-        """Each failing setting of ``candidate`` and why, judged by the host file's parse beside the host's current
-        entries and its other active records — so a create or edit refuses exactly what the file would fail at
-        boot."""
+        """Each failing setting of ``candidate`` and why, judged by the host file's parse — an active candidate beside
+        the host's current entries and its other active records, a retired one on its own as it is served — and, for
+        a workspace, its prompt resolved as its provider's build resolves it. So a write refuses exactly what the
+        file would fail at boot and what the next rebuild would fail at."""
         current = self.records.snapshot() if self.records is not None else HostRecordsSnapshot()
         mine = current.workspaces if kind is RecordKind.WORKSPACE else current.subscriptions
-        placed = (*(record for record in mine if record.key != candidate.key), candidate)
+        if candidate.retired:
+            placed: tuple[HostRecord, ...] = (candidate,)
+        else:
+            placed = (*(record for record in mine if record.key != candidate.key), candidate)
         records = (
             replace(current, workspaces=placed)
             if kind is RecordKind.WORKSPACE
             else replace(current, subscriptions=placed)
         )
-        _, errors = self._resolve(self.store.snapshot().entries, records)
+        parsed, errors = self._resolve(self.store.snapshot().entries, records)
+        if not errors and kind is RecordKind.WORKSPACE:
+            for workspace in parsed.workspaces:
+                if workspace.id == candidate.key:
+                    try:
+                        workspace.resolved_prompt(self.host.root)
+                    except ConfigError as exc:
+                        errors.append(str(exc))
         names = (kind.key_name, *candidate.settings)
         result: dict[str, str] = {}
         for error in errors:
