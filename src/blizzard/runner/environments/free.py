@@ -31,7 +31,7 @@ class IWorkspaceFreeEnvironment(Protocol):
 
 
 class IWorkspaceProviderLookup(Protocol):
-    def provider(self, workspace_id: str | None) -> IWorkspaceProvider | None: ...
+    def acquisition_provider(self, workspace_id: str | None) -> IWorkspaceProvider | None: ...
 
 
 class IPoolHeld(Protocol):
@@ -39,14 +39,15 @@ class IPoolHeld(Protocol):
 
 
 class FreeEnvironments:
-    """:class:`IWorkspaceFreeEnvironment` over the registry's providers and the pool-held read."""
+    """:class:`IWorkspaceFreeEnvironment` over the registry's providers and the pool-held read; a workspace that takes
+    no new acquisition — retired, or not the host's — has none free."""
 
     def __init__(self, providers: IWorkspaceProviderLookup, pool: IPoolHeld) -> None:
         self._providers = providers
         self._pool = pool
 
     def has_free_environment(self, workspace_id: str) -> bool:
-        provider = self._providers.provider(workspace_id)
+        provider = self._providers.acquisition_provider(workspace_id)
         pool = provider.pool() if provider is not None else None
         held = self._pool.held_workspace_bindings(workspace_id) if pool else []
         return has_free_environment(pool, held)

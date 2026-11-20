@@ -4,10 +4,11 @@ an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.foundation.host_record_state import HostRecordState
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.subscription_miss import SampleMissReason
@@ -107,10 +108,6 @@ class HostRegistrationView(WireModel):
     held_runner_ids: list[str] = Field(default_factory=list)
     detail: str | None = None
     buffered_facts: int = 0
-
-
-#: Whether a workspace or subscription record stands active or retired.
-HostRecordState = Literal["active", "retired"]
 
 
 class HostWorkspaceView(WireModel):

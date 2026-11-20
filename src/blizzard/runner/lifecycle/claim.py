@@ -265,8 +265,11 @@ class ReadyQueue:
 
     def _acquire(self, entry: QueueEntry) -> list[AcquiredEnvironment] | None:
         held = list(dict.fromkeys(binding.environment_id for binding in self._pool_held()))
-        provider = self.ctx.workspaces.provider(self._workspace_id())
-        assert provider is not None  # a binding naming a workspace the host does not declare halts its runner
+        provider = self.ctx.workspaces.acquisition_provider(self._workspace_id())
+        if provider is None:
+            # The binding's workspace is retired or not the host's: it serves no new claim.
+            _log.info("acquire skipped — the binding's workspace takes no acquisition", chunk_id=entry.chunk_id)
+            return None
         _CP_BEFORE_ACQUIRE.reached()
         try:
             return provider.acquire(

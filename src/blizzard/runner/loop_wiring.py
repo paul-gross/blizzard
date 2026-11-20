@@ -707,9 +707,10 @@ class RunnerStepper:
 
 
 def host_pass_stepper(host: HostProcess, reconcile: Callable[[], None] | None = None) -> HostPassStepper:
-    """The host's pass: the host record's snapshot, then ``reconcile`` of its live runners against its hosted ones,
-    then the host tick — reconciling again right after the registration step whenever that step recorded a runner
-    retired, so a hub-side retirement drains in the pass that notices it."""
+    """The host's pass: the host record's snapshot and the reconcile of its workspaces and subscriptions with it, then
+    ``reconcile`` of its live runners against its hosted ones, then the host tick — reconciling again right after
+    the registration step whenever that step recorded a runner retired, so a hub-side retirement drains in the pass
+    that notices it."""
 
     def after_report() -> None:
         if reconcile is not None and host.retirements.take():
@@ -718,7 +719,12 @@ def host_pass_stepper(host: HostProcess, reconcile: Callable[[], None] | None = 
     def run() -> None:
         # The host record's snapshot first: its tool profile is in force for every tool child this pass launches.
         if host.host_settings is not None:
-            host.host_settings.take()
+            effective = host.host_settings.take()
+            records = host.host_settings.records
+            # Then the host's workspaces and subscriptions, so this pass's report and every runner's next tick
+            # read them as the records stand.
+            if host.records_reconcile is not None and records is not None:
+                host.records_reconcile.run(effective, records)
         if reconcile is not None:
             host.retirements.take()
             reconcile()

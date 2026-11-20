@@ -15,6 +15,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.vocabulary import Entry
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.config import HostWorkspace
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, HostConfigError
@@ -181,6 +182,20 @@ class HostSettingsReader:
                 result[name] = f"{result[name]}; {error}" if name in result else error
         return result
 
+    def retired_workspaces(self, records: HostRecordsSnapshot) -> tuple[HostWorkspace, ...]:
+        """The host's retired workspaces, each parsed from its record as it stands now beside ``records``' active
+        subscriptions; none for a host keeping no records, or when their tables no longer parse."""
+        if self.records is None:
+            return ()
+        retired = tuple(record for record in self.records.workspaces.records(retired=True) if record.retired)
+        if not retired:
+            return ()
+        parsed, errors = self._resolve(self.store.snapshot().entries, replace(records, workspaces=retired))
+        if errors:
+            _log.error("retired workspaces unreadable — what they hold waits", detail="; ".join(errors))
+            return ()
+        return parsed.workspaces
+
     def _resolve(
         self, entries: Mapping[str, Entry], records: HostRecordsSnapshot | None
     ) -> tuple[HostConfig, list[str]]:
@@ -248,6 +263,9 @@ class HostSettingsInForce:
         self.since: str | None = None
         #: The revision that failed to resolve, its error, and since when; ``None`` while the latest resolves.
         self.failure: tuple[int, str, str] | None = None
+        #: The workspace and subscription records of the snapshot last put in force; ``None`` before the first, or for
+        #: a host keeping no records.
+        self.records: HostRecordsSnapshot | None = None
 
     def status[T](self, read: Callable[[], T]) -> tuple[T, int | None, str | None, tuple[int, str, str] | None]:
         """``read`` of the store beside the host tick's published state, the three read as one."""
@@ -267,6 +285,7 @@ class HostSettingsInForce:
             return self.reader.resolve_last()
         self._tool_profile.hold(effective.host_view().tool_env(self._tracing))
         with self._lock:
+            self.records = snapshot.records
             if self.revision != snapshot.revision or self.since is None:
                 self.revision = snapshot.revision
                 self.since = iso_utc(self._clock.now())
