@@ -284,12 +284,6 @@ class HostSettingsInForce:
         #: The snapshot last put in force; ``None`` before the first.
         self.taken: HostSettingsSnapshot | None = None
 
-    @property
-    def records(self) -> HostRecordsSnapshot | None:
-        """The workspace and subscription records of the snapshot last put in force; ``None`` before the first, or
-        for a host keeping no records."""
-        return self.taken.records if self.taken is not None else None
-
     def status[T](self, read: Callable[[], T]) -> tuple[T, int | None, str | None, tuple[int, str, str] | None]:
         """``read`` of the store beside the host tick's published state, the three read as one."""
         with self._lock:
