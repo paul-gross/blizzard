@@ -90,6 +90,8 @@ from blizzard.runner.host_layout import (
     HostLayout,
     migrate_remedy,
 )
+from blizzard.runner.host_records.model import HostRecord
+from blizzard.runner.host_records.prompt import EffectiveWorkspacePrompt
 from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, StoredToken, StoredTokenState
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.loop.mode import LoopMode
@@ -1158,6 +1160,23 @@ def _workspaces(document: ConfigView, *, root: Path, errors: _Errors) -> tuple[H
                 )
         workspaces.append(workspace)
     return tuple(workspaces)
+
+
+def record_prompt(record: HostRecord, host_root: Path) -> EffectiveWorkspacePrompt:
+    """The prompt workspace ``record``'s settings resolve to, a relative ``prompt_file`` against ``host_root``;
+    raises :class:`ConfigError` for a file or packaged sample that is not there."""
+    workspace = HostWorkspace(
+        id=record.key,
+        prompt=str(record.settings.get("prompt", "")),
+        prompt_file=str(record.settings.get("prompt_file", "")),
+        prompt_package=str(record.settings.get("prompt_package", "")),
+    )
+    origin = workspace.prompt_source()
+    return EffectiveWorkspacePrompt(
+        prompt=workspace.resolved_prompt(host_root),
+        source="default" if origin == "none" else "config",
+        origin=origin,
+    )
 
 
 def _workspace(entry: ConfigView) -> HostWorkspace:

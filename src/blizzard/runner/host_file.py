@@ -46,19 +46,6 @@ def write_runner_id(layout: HostLayout, runner_name: str, runner_id: str, *, str
     _set_table_keys(layout, "runner", "name", runner_name, {"id": json.dumps(runner_id)}, strict=strict)
 
 
-def repoint_workspace_prompt(layout: HostLayout, workspace_id: str, *, file_path: str, strict: bool) -> None:
-    """Point the ``[[workspace]]`` ``workspace_id`` at an installed prompt copy: ``prompt_file`` names it
-    and ``prompt_package`` is cleared, since the two are exclusive."""
-    _set_table_keys(
-        layout,
-        "workspace",
-        "id",
-        workspace_id,
-        {"prompt_file": json.dumps(file_path), "prompt_package": '""'},
-        strict=strict,
-    )
-
-
 def append_runner(layout: HostLayout, table: str, *, strict: bool) -> None:
     """Append the ``[[runner]]`` whose TOML ``table`` holds — its header, keys, and ``[runner.*]`` sub-tables —
     after everything the file holds."""

@@ -40,6 +40,7 @@ from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.settings.model import IReadHubSettingsAdmin
+from blizzard.runner.host_records.ports import IReadHostRecordRepository
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.hub.sealed_tokens import IReadHubTokenRepository
@@ -257,6 +258,14 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
             ("retired", "hosted_runners"),
         )
     ],
+    # The host's subscription records — the census reads them — one row per record it ever held, read whole to list them.
+    MethodScopedAllowance(
+        IReadHostRecordRepository,
+        "records",
+        "host_subscriptions",
+        200,
+        "the host holds one row per subscription it ever declared, a handful by lifetime",
+    ),
     # --- the named six (src/blizzard/runner/store/schema.py, beside `asks`) --------------------------------
     TableWideAllowance("asks", 50, _SCHEMA_520_REASON),
     TableWideAllowance("park_facts", 50, _SCHEMA_520_REASON),

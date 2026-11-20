@@ -4836,6 +4836,64 @@
         "title": "HostRunnerView",
         "type": "object"
       },
+      "HostSubscriptionCreateRequest": {
+        "additionalProperties": false,
+        "description": "A new subscription record: its immutable ``slug`` and ``provider``, its ``name``, and any further key of its\ntable.",
+        "properties": {
+          "credentials_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials Path"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "sample_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Interval Seconds"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "usage_api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Api Base"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "provider"
+        ],
+        "title": "HostSubscriptionCreateRequest",
+        "type": "object"
+      },
       "HostSubscriptionListResponse": {
         "properties": {
           "items": {
@@ -4851,6 +4909,58 @@
           "items"
         ],
         "title": "HostSubscriptionListResponse",
+        "type": "object"
+      },
+      "HostSubscriptionPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of a subscription record, its keys named as the ``[[subscription]]`` table names them; its\n``slug`` and ``provider`` are immutable, and its required ``name`` refuses ``null``.",
+        "properties": {
+          "credentials_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials Path"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sample_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Interval Seconds"
+          },
+          "usage_api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Api Base"
+          }
+        },
+        "title": "HostSubscriptionPatchRequest",
         "type": "object"
       },
       "HostSubscriptionView": {
@@ -4930,6 +5040,17 @@
               }
             ]
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "sampled_at": {
             "anyOf": [
               {
@@ -4941,6 +5062,11 @@
             ],
             "title": "Sampled At"
           },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -4951,6 +5077,16 @@
             },
             "title": "Spenders",
             "type": "array"
+          },
+          "state": {
+            "default": "active",
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "State",
+            "type": "string",
+            "x-blizzard-open": true
           },
           "windows": {
             "items": {
@@ -4984,9 +5120,132 @@
           "spenders",
           "windows",
           "windows_sampled_at",
-          "condition"
+          "condition",
+          "revision",
+          "state",
+          "settings"
         ],
         "title": "HostSubscriptionView",
+        "type": "object"
+      },
+      "HostWorkspaceCreateRequest": {
+        "additionalProperties": false,
+        "description": "A new workspace record: its immutable ``id`` and any of its table's other keys; an absent key takes its\ndefault.",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "envs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envs"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_environments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Environments"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "prompt_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt File"
+          },
+          "prompt_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Package"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HostWorkspaceRepoWrite"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          },
+          "root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "HostWorkspaceCreateRequest",
         "type": "object"
       },
       "HostWorkspaceEnvironmentsView": {
@@ -5028,12 +5287,171 @@
         "title": "HostWorkspaceListResponse",
         "type": "object"
       },
+      "HostWorkspacePatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of a workspace record, its keys named as the ``[[workspace]]`` table names them.",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "envs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envs"
+          },
+          "max_environments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Environments"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "prompt_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt File"
+          },
+          "prompt_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Package"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HostWorkspaceRepoWrite"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          },
+          "root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root"
+          }
+        },
+        "title": "HostWorkspacePatchRequest",
+        "type": "object"
+      },
+      "HostWorkspaceRepoWrite": {
+        "additionalProperties": false,
+        "description": "One ``[[workspace.repo]]``: a repository a workspace's environments clone.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "HostWorkspaceRepoWrite",
+        "type": "object"
+      },
       "HostWorkspaceView": {
-        "description": "One workspace the host declares, with the environments it may hold at once.",
+        "description": "One workspace the host declares, with the environments it may hold at once; on a host keeping records, its\nrecord's revision, state, and settings \u2014 every key of its ``[[workspace]]`` table but ``id``, as stated.",
         "properties": {
           "max_environments": {
             "title": "Max Environments",
             "type": "integer"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "state": {
+            "default": "active",
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "title": "State",
+            "type": "string",
+            "x-blizzard-open": true
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -5042,7 +5460,10 @@
         },
         "required": [
           "workspace_id",
-          "max_environments"
+          "max_environments",
+          "revision",
+          "state",
+          "settings"
         ],
         "title": "HostWorkspaceView",
         "type": "object"
@@ -9442,7 +9863,8 @@
             "default": "config",
             "enum": [
               "override",
-              "config"
+              "config",
+              "default"
             ],
             "title": "Source",
             "type": "string",
@@ -10104,8 +10526,20 @@
     },
     "/api/host/subscriptions": {
       "get": {
-        "description": "Every declared subscription's own newest sampling attempt and credential renewal, with the runners that spend\nit.",
+        "description": "Every subscription the host holds, each with its own newest sampling attempt and credential renewal, the\nrunners that spend it, and its record's revision, state and settings; ``?retired=true`` lists the retired ones\nbeside the active.",
         "operationId": "list_subscriptions_api_host_subscriptions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10116,9 +10550,271 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Subscriptions",
+        "tags": [
+          "host"
+        ]
+      },
+      "post": {
+        "description": "Create a subscription record at revision 1, judged as the host file's ``[[subscription]]`` is at boot.",
+        "operationId": "create_subscription_api_host_subscriptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostSubscriptionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "A record of the kind already holds the key"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
+          }
+        },
+        "summary": "Create Subscription",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/subscriptions/{slug}": {
+      "get": {
+        "description": "One subscription record, retired or not, with its diagnostics.",
+        "operationId": "get_subscription_api_host_subscriptions__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Subscription",
+        "tags": [
+          "host"
+        ]
+      },
+      "patch": {
+        "description": "Sparse-merge ``body`` into the subscription at its ``If-Match`` revision; a retired one stays retired.",
+        "operationId": "edit_subscription_api_host_subscriptions__slug__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostSubscriptionPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The record is no longer at the If-Match revision"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
+          }
+        },
+        "summary": "Edit Subscription",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/subscriptions/{slug}/enable": {
+      "post": {
+        "description": "Reverse the subscription's retirement; of an enabled one, writes nothing.",
+        "operationId": "enable_subscription_api_host_subscriptions__slug__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Subscription",
         "tags": [
           "host"
         ]
@@ -10180,6 +10876,62 @@
         ]
       }
     },
+    "/api/host/subscriptions/{slug}/retire": {
+      "post": {
+        "description": "Retire the subscription; of a retired one, writes nothing. Its samples and usage-limit marks stay.",
+        "operationId": "retire_subscription_api_host_subscriptions__slug__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSubscriptionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Subscription",
+        "tags": [
+          "host"
+        ]
+      }
+    },
     "/api/host/ticks": {
       "post": {
         "operationId": "run_host_tick_api_host_ticks_post",
@@ -10206,8 +10958,20 @@
     },
     "/api/host/workspaces": {
       "get": {
-        "description": "Every workspace the host declares.",
+        "description": "Every workspace the host holds, each with its record's revision, state and settings; ``?retired=true`` lists\nthe retired ones beside the active.",
         "operationId": "list_workspaces_api_host_workspaces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10218,9 +10982,271 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Workspaces",
+        "tags": [
+          "host"
+        ]
+      },
+      "post": {
+        "description": "Create a workspace record at revision 1, judged as the host file's ``[[workspace]]`` is at boot.",
+        "operationId": "create_workspace_api_host_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostWorkspaceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "A record of the kind already holds the key"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
+          }
+        },
+        "summary": "Create Workspace",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/workspaces/{workspace_id}": {
+      "get": {
+        "description": "One workspace record, retired or not.",
+        "operationId": "get_workspace_api_host_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workspace",
+        "tags": [
+          "host"
+        ]
+      },
+      "patch": {
+        "description": "Sparse-merge ``body`` into the workspace at its ``If-Match`` revision; a retired one stays retired.",
+        "operationId": "edit_workspace_api_host_workspaces__workspace_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostWorkspacePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The record is no longer at the If-Match revision"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it"
+          }
+        },
+        "summary": "Edit Workspace",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/workspaces/{workspace_id}/enable": {
+      "post": {
+        "description": "Reverse the workspace's retirement; of an enabled one, writes nothing.",
+        "operationId": "enable_workspace_api_host_workspaces__workspace_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Workspace",
         "tags": [
           "host"
         ]
@@ -10228,7 +11254,7 @@
     },
     "/api/host/workspaces/{workspace_id}/prompt": {
       "delete": {
-        "description": "Drop the runtime override so the workspace's configured prompt resolves again.\n\nDistinct from overriding with empty text, which is itself a standing override; the response\ncarries whatever the config now resolves to, effective on subsequent spawns.",
+        "description": "Return the workspace's three prompt settings to their defaults, so it carries no standing prompt \u2014 effective\non subsequent spawns.",
         "operationId": "clear_workspace_prompt_api_host_workspaces__workspace_id__prompt_delete",
         "parameters": [
           {
@@ -10253,7 +11279,24 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "The host declares no such workspace."
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no record of the workspace"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The workspace's prompt does not resolve"
           },
           "422": {
             "content": {
@@ -10261,9 +11304,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "The host file would fail at boot with it, or the request is malformed"
           }
         },
         "summary": "Clear Workspace Prompt",
@@ -10272,7 +11320,7 @@
         ]
       },
       "get": {
-        "description": "The effective spawn preamble prompt: the runtime override if set, else static config.",
+        "description": "The effective spawn preamble prompt the workspace's record resolves to.",
         "operationId": "read_workspace_prompt_api_host_workspaces__workspace_id__prompt_get",
         "parameters": [
           {
@@ -10297,7 +11345,24 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "The host declares no such workspace."
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no record of the workspace"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The workspace's prompt does not resolve"
           },
           "422": {
             "content": {
@@ -10316,7 +11381,7 @@
         ]
       },
       "put": {
-        "description": "Replace the runtime workspace-prompt override \u2014 effective on subsequent spawns.",
+        "description": "Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults \u2014\neffective on subsequent spawns.",
         "operationId": "replace_workspace_prompt_api_host_workspaces__workspace_id__prompt_put",
         "parameters": [
           {
@@ -10351,7 +11416,85 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "The host declares no such workspace."
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no record of the workspace"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The workspace's prompt does not resolve"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "The host file would fail at boot with it, or the request is malformed"
+          }
+        },
+        "summary": "Replace Workspace Prompt",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/workspaces/{workspace_id}/retire": {
+      "post": {
+        "description": "Retire the workspace; of a retired one, writes nothing.",
+        "operationId": "retire_workspace_api_host_workspaces__workspace_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostWorkspaceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerProblem"
+                }
+              }
+            },
+            "description": "The host holds no such record"
           },
           "422": {
             "content": {
@@ -10364,7 +11507,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Replace Workspace Prompt",
+        "summary": "Retire Workspace",
         "tags": [
           "host"
         ]

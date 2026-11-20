@@ -35,7 +35,6 @@ from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessKnownRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, WorkspacePromptReader
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import HubClientError, IHubClient
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
@@ -173,8 +172,6 @@ class SpawnHostStores(GateHostStores, Protocol):
 
     @property
     def graph_artifacts(self) -> IWriteGraphArtifactRepository: ...
-    @property
-    def workspace_prompt(self) -> IReadWorkspacePromptRepository: ...
 
 
 class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
@@ -871,16 +868,13 @@ class Spawner:
         node_name: str,
         resume: ResumedSession | None,
     ) -> Preamble:
-        # The lease's workspace's runtime override when set, else its configured prompt — read here so a
-        # replace applies to the next spawn with no restart. A binding naming no workspace has no prompt.
-        effective = WorkspacePromptReader(self.ctx.host_stores.workspace_prompt, self.ctx.workspaces).effective(
-            workspace_id
-        )
+        # The lease's workspace's standing prompt; a binding naming no workspace has none.
+        workspace_prompt = self.ctx.workspaces.prompt(workspace_id)
         # `prior` is read ONLY when this spawn resumes a session, so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
             runner_prompt=self.ctx.config.runner_prompt,
-            workspace_prompt=effective.prompt,
+            workspace_prompt=workspace_prompt,
             environments=environments,
             lease_id=lease_id,
             runner_id=registered_runner_id(self.ctx.identity),

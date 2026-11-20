@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
@@ -31,8 +32,9 @@ from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
-from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
+from blizzard.runner.host_records.model import RecordKind
+from blizzard.runner.host_records.service import HostRecordService
 from blizzard.runner.hosting.reconcile import RunnerStartFailures
 from blizzard.runner.hosting.service import HostedRunnerService
 from blizzard.runner.hub.client import ITokenIdentityReader
@@ -425,13 +427,10 @@ class RunnerWiring:
         """The host's workspace registry; ``None`` on an app built without one."""
         return getattr(self.state, "workspace_registry", None)
 
-    def workspace_prompts(self) -> WorkspacePromptService:
-        service: WorkspacePromptService | None = self._seam("workspace_prompts")
-        return service if service is not None else self._refuse("workspace prompt service")
-
-    def workspace_prompt_reader(self) -> WorkspacePromptReader:
-        reader: WorkspacePromptReader | None = self._seam("workspace_prompt_reader")
-        return reader if reader is not None else self._refuse("workspace prompt reader")
+    def host_records(self, kind: RecordKind) -> HostRecordService:
+        """What writes the host's ``kind`` records; refused ``503`` on an app built without the host's store."""
+        services: Mapping[RecordKind, HostRecordService] | None = getattr(self.state, "host_records", None)
+        return services[kind] if services is not None else self._refuse("host records")
 
     def events(self) -> IRunnerEventPublisher | None:
         """The publish seam, typed against :mod:`~blizzard.runner.events.publisher`'s Protocol.

@@ -88,6 +88,10 @@ class HostRecord:
     settings: Mapping[str, object] = field(default_factory=dict[str, object])
     retired: bool = False
 
+    def setting(self, name: str, default: object = None) -> object:
+        """The setting ``name`` as the record states it; ``default`` when it states none."""
+        return self.settings.get(name, default)
+
     def table(self) -> dict[str, object]:
         """The record as its host-file table: its key under the kind's key name, then its settings."""
         return {self.kind.key_name: self.key, **deepcopy(dict(self.settings))}

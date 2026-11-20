@@ -251,6 +251,7 @@ from blizzard.runner.harness.observation import ExecutionActivity, ExecutionLive
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.host_records.ports import IReadHostRecordRepository
 from blizzard.runner.hosting.ports import IReadHostedRunnerRepository
 from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
 from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
@@ -1073,6 +1074,8 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadHubTokenRepository, "held_runner_ids"): lambda w: w.host_read.hub_tokens.held_runner_ids(),
     (IReadHostedRunnerRepository, "hosted_runner_ids"): lambda w: w.host_read.hosted_runners.hosted_runner_ids(),
     (IReadHostedRunnerRepository, "roster"): lambda w: w.host_read.hosted_runners.roster(),
+    (IReadHostRecordRepository, "record"): lambda w: w.host_read.workspaces.record("ws_census"),
+    (IReadHostRecordRepository, "records"): lambda w: w.host_read.subscriptions.records(retired=True),
     (IReadHostedRunnerRepository, "active"): lambda w: w.host_read.hosted_runners.active(),
     (IReadHostedRunnerRepository, "retired"): lambda w: w.host_read.hosted_runners.retired(),
     (IReadHostedRunnerRepository, "facts"): lambda w: w.host_read.hosted_runners.facts("rn_x"),

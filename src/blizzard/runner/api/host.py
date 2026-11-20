@@ -1,5 +1,6 @@
-"""The host's own reads — ``GET /api/host/registration``, ``/workspaces``, ``/environments`` and ``/subscriptions``;
-``/runners`` is ``src/blizzard/runner/api/host_runners.py``'s.
+"""The host's own reads — ``GET /api/host/registration`` and ``/environments``; ``/runners`` is
+``src/blizzard/runner/api/host_runners.py``'s, ``/workspaces`` and ``/subscriptions``
+``src/blizzard/runner/api/host_records.py``'s.
 
 Each composes the registered runners' own bound seams, stamping each runner's id; none reads across runners
 (``bzh:runner-scoped-store``). Read-only over their wiring (``bzh:controller-read-only``)."""
@@ -11,23 +12,14 @@ from collections.abc import Sequence
 from fastapi import APIRouter, Request
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
-from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import held_workspace_id
-from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
-from blizzard.runner.usage.repository import IReadExternalUsageRepository
-from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_host import (
     HostEnvironmentListResponse,
     HostEnvironmentView,
     HostRegistrationView,
-    HostSubscriptionListResponse,
-    HostSubscriptionView,
     HostWorkspaceEnvironmentsView,
-    HostWorkspaceListResponse,
-    HostWorkspaceView,
 )
 
 router = APIRouter(prefix="/api/host", tags=["host"])
@@ -50,17 +42,6 @@ def host_registration(request: Request) -> HostRegistrationView:
         held_runner_ids=list(status.held_runner_ids),
         detail=status.detail,
         buffered_facts=stores.host_lane.host_buffered_count() if stores is not None else 0,
-    )
-
-
-@router.get("/workspaces", response_model=HostWorkspaceListResponse)
-def list_workspaces(request: Request) -> HostWorkspaceListResponse:
-    """Every workspace the host declares."""
-    return HostWorkspaceListResponse(
-        items=[
-            HostWorkspaceView(workspace_id=w.workspace_id, max_environments=w.max_environments)
-            for w in RunnerWiring.of(request).workspaces()
-        ]
     )
 
 
@@ -117,59 +98,4 @@ def _held_view(runner_id: str, binding: EnvBinding) -> HostEnvironmentView:
         held=True,
         runner_id=runner_id,
         project=binding.project_id,
-    )
-
-
-@router.get("/subscriptions", response_model=HostSubscriptionListResponse)
-def list_subscriptions(request: Request) -> HostSubscriptionListResponse:
-    """Every declared subscription's own newest sampling attempt and credential renewal, with the runners that spend
-    it."""
-    wiring = RunnerWiring.of(request)
-    spenders: dict[str, list[str]] = {}
-    for served in wiring.runners().served:
-        for declaration in wiring.for_runner(served).config().resolved_subscriptions():
-            spenders.setdefault(declaration.slug, []).append(served.runner_id)
-    return subscription_list(wiring.subscriptions(), wiring.host_read_stores().external_usage, spenders)
-
-
-def subscription_list(
-    declarations: Sequence[SubscriptionDeclaration],
-    usage: IReadExternalUsageRepository,
-    spenders: dict[str, list[str]],
-) -> HostSubscriptionListResponse:
-    slugs = [d.slug for d in declarations]
-    attempts = usage.latest_external_usage_attempts_by_slug(slugs)
-    renewals = usage.latest_credential_renewals_by_slug(slugs)
-    samples = usage.latest_external_usage_samples_by_slug(slugs)
-    items: list[HostSubscriptionView] = []
-    for declaration in declarations:
-        attempt = attempts.get(declaration.slug)
-        renewal = renewals.get(declaration.slug)
-        sample = samples.get(declaration.slug)
-        items.append(
-            HostSubscriptionView(
-                slug=declaration.slug,
-                name=declaration.name,
-                provider=declaration.provider,
-                sampled_at=iso_utc(attempt.sampled_at) if attempt is not None else None,
-                ok=attempt.ok if attempt is not None else None,
-                miss_reason=SampleMissReason.recognized(attempt.miss_reason) if attempt is not None else None,
-                renewal_attempted_at=iso_utc(renewal.attempted_at) if renewal is not None else None,
-                renewal_result=renewal.result if renewal is not None else None,
-                renewal_failure_reason=renewal.failure_reason if renewal is not None else None,
-                spenders=spenders.get(declaration.slug, []),
-                windows=[_window_view(w) for w in sample.windows] if sample is not None else [],
-                windows_sampled_at=iso_utc(sample.sampled_at) if sample is not None else None,
-                condition=attempt.condition() if attempt is not None else None,
-            )
-        )
-    return HostSubscriptionListResponse(items=items)
-
-
-def _window_view(window: ExternalSubscriptionUsageWindow) -> ExternalSubscriptionUsageWindowView:
-    return ExternalSubscriptionUsageWindowView(
-        window=window.window,
-        utilization_pct=window.utilization_pct,
-        resets_at=iso_utc(window.resets_at),
-        window_seconds=window.window_seconds,
     )

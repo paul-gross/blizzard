@@ -323,8 +323,10 @@ def _reenter_node(
     pid: int,
     at: datetime,
     config: LoopConfig | None = None,
+    workspace_prompt: str = "WORKSPACE-POLICY",
 ):
-    """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
+    """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session, its workspace standing
+    on ``workspace_prompt``."""
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=env)]
     harness = FakeHarness(
@@ -339,7 +341,7 @@ def _reenter_node(
         clock=FixedClock(at),
         config=config if config is not None else _preamble_config(),
         spawn_root="/ws",
-        workspace_prompt="WORKSPACE-POLICY",
+        workspace_prompt=workspace_prompt,
     )
     Advance(ctx).run()  # launches the detached elicitation
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
@@ -418,7 +420,7 @@ def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path: Path):
 
 
 def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path: Path):
-    """Scenario 3 — the correctness half of the issue. `PUT /api/host/workspaces/{id}/prompt` between
+    """Scenario 3 — the correctness half of the issue. A workspace prompt rewritten between
     two spawns of one session: the replacement reaches the worker announced, not disguised
     as the block it was handed a spawn ago."""
     store = _store(tmp_path)
@@ -428,10 +430,17 @@ def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tm
 
     _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
 
-    # The local API's write, landing between the two spawns.
-    store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
-
-    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    # The workspace's prompt, rewritten between the two spawns.
+    second = _reenter_node(
+        store,
+        hub,
+        provider,
+        env,
+        session="sess-build-1",
+        pid=200,
+        at=_NOW + timedelta(minutes=1),
+        workspace_prompt="REPLACED-POLICY",
+    )
 
     prefix = second.spawns[0][1].prompt_prefix
     assert prefix.startswith(RESUME_UPDATED_NOTICE)
@@ -518,10 +527,27 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path: Path):
     env = _resuming_build_env()
 
     _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
-    store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
-
-    second = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
-    third = _reenter_node(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+    replaced = "REPLACED-POLICY"
+    second = _reenter_node(
+        store,
+        hub,
+        provider,
+        env,
+        session="sess-build-1",
+        pid=200,
+        at=_NOW + timedelta(minutes=1),
+        workspace_prompt=replaced,
+    )
+    third = _reenter_node(
+        store,
+        hub,
+        provider,
+        env,
+        session="sess-build-1",
+        pid=300,
+        at=_NOW + timedelta(minutes=2),
+        workspace_prompt=replaced,
+    )
 
     p2 = second.spawns[0][1].prompt_prefix
     p3 = third.spawns[0][1].prompt_prefix

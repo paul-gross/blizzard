@@ -54,6 +54,9 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "windows": [],
                 "windows_sampled_at": None,
                 "condition": None,
+                "revision": None,
+                "state": "active",
+                "settings": {},
             }
         ]
     }

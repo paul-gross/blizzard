@@ -148,24 +148,6 @@ def test_a_lease_bound_in_the_second_workspace_spawns_in_its_root_under_its_prom
     assert segment.spawn_cwd == "/root-b"
 
 
-def test_a_workspace_prompt_override_applies_only_to_leases_bound_in_that_workspace(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store.set_workspace_prompt("ws_a", prompt="A-OVERRIDE", at=_NOW)
-    store.set_workspace_prompt("ws_b", prompt="B-OVERRIDE", at=_NOW)
-    _bind_in_b(store)
-    harness = FakeHarness(handle=_HANDLE, verdict="pass")
-
-    Spawner(_ctx(store, _Host(), harness)).spawn(
-        "ch_1",
-        make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES),
-        [AcquiredEnvironment(environment_id="e1", workdir=_WORKDIR_B)],
-        via="test",
-    )
-
-    (_, preamble) = harness.spawns[0]
-    assert "B-OVERRIDE" in preamble.prompt_prefix and "A-OVERRIDE" not in preamble.prompt_prefix
-
-
 def test_a_row_naming_no_workspace_spawns_in_its_workdir_with_no_workspace_prompt(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir=_WORKDIR_B, bound_at=_NOW)

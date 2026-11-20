@@ -74,6 +74,8 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.host_records import router as host_records_router
+from blizzard.runner.api.host_records import writes as host_record_writes_router
 from blizzard.runner.api.host_runners import router as host_runners_router
 from blizzard.runner.api.host_runners import writes as host_runner_writes_router
 from blizzard.runner.api.host_settings import router as host_settings_router
@@ -122,6 +124,7 @@ from blizzard.runner.composition import (
     NoDrivers,
     RunnerProcess,
     StartupNote,
+    build_host_record_services,
     build_runner_process,
     build_running_host_runner_service,
 )
@@ -132,7 +135,6 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
-from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner, HostConfig
 from blizzard.runner.host_settings_reader import HostSettingsInForce
 from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
@@ -216,6 +218,8 @@ _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 _HOST_HUMAN = (
     host_settings_router,
     host_router,
+    host_records_router,
+    host_record_writes_router,
     host_runners_router,
     host_runner_writes_router,
     hub_token_router,
@@ -416,7 +420,6 @@ def create_app(
     pause: PauseService | None = None,
     lease_liveness: LeaseLivenessService | None = None,
     lease_sessions: LeaseSessionService | None = None,
-    workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx2.Client | None = None,
     hub_proxy_client: httpx2.Client | None = None,
     hub_retry_clock: IMonotonicClock | None = None,
@@ -551,14 +554,6 @@ def create_app(
     app.state.clock = clock
     # The worker telemetry receiver, built once by the composition root and shared by every runner.
     app.state.telemetry_receiver = telemetry_receiver
-    app.state.workspace_prompts = workspace_prompts or (
-        WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores is not None else None
-    )
-    app.state.workspace_prompt_reader = (
-        WorkspacePromptReader(host_stores.workspace_prompt, workspace_registry)
-        if host_stores is not None and workspace_registry is not None
-        else None
-    )
     app.state.subscription_floor_clears = (
         SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
     )
@@ -925,6 +920,11 @@ def _wire_hosted_app(
     )
     app.state.runners = registry
     app.state.start_failures = reconcile.failures if reconcile is not None else None
+    # The host's workspace and subscription writes, judged by the host file the host started from.
+    record_host = host_config or (host.host_settings.reader.host if host.host_settings is not None else None)
+    app.state.host_records = (
+        build_host_record_services(record_host, host.host_stores, clock=host.clock) if record_host is not None else None
+    )
     app.state.hosted_runners = (
         build_running_host_runner_service(host_config, host, host.host_hub)
         if host_config is not None and host.host_hub is not None
