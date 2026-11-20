@@ -128,3 +128,15 @@ def test_the_snapshots_versions_move_with_any_records_revision() -> None:
     assert before.versions() == (("workspace:ws-a", 3), ("subscription:sub-a", 1))
     assert after.versions() != before.versions()
     assert HostRecordsSnapshot(subscriptions=(_SUBSCRIPTION,)).versions() != before.versions()
+
+
+def test_the_snapshots_versions_move_with_a_retired_workspaces_revision() -> None:
+    retired = _WORKSPACE.retire()
+    assert retired is not None
+    edited = retired.record.edit({"max_environments": 9}, if_match=retired.record.revision)
+    assert edited is not None
+
+    before = HostRecordsSnapshot(retired_workspaces=(retired.record,))
+    after = HostRecordsSnapshot(retired_workspaces=(edited.record,))
+
+    assert after.versions() != before.versions()

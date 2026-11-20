@@ -49,8 +49,13 @@ class HostRecordReads:
     subscriptions: IReadHostRecordRepository
 
     def snapshot(self) -> HostRecordsSnapshot:
-        """The active records of both kinds, one read of each."""
-        return HostRecordsSnapshot(workspaces=self.workspaces.records(), subscriptions=self.subscriptions.records())
+        """The active records of both kinds and the retired workspaces, one read of each kind."""
+        workspaces = self.workspaces.records(retired=True)
+        return HostRecordsSnapshot(
+            workspaces=tuple(record for record in workspaces if not record.retired),
+            subscriptions=self.subscriptions.records(),
+            retired_workspaces=tuple(record for record in workspaces if record.retired),
+        )
 
 
 class HostSettingsReader:
@@ -182,19 +187,21 @@ class HostSettingsReader:
                 result[name] = f"{result[name]}; {error}" if name in result else error
         return result
 
-    def retired_workspaces(self, records: HostRecordsSnapshot) -> tuple[HostWorkspace, ...]:
-        """The host's retired workspaces, each parsed from its record as it stands now beside ``records``' active
-        subscriptions; none for a host keeping no records, or when their tables no longer parse."""
-        if self.records is None:
+    def retired_workspaces(self, snapshot: HostSettingsSnapshot) -> tuple[HostWorkspace, ...]:
+        """The snapshot's retired workspaces, each parsed from its record on its own beside the snapshot's active
+        subscriptions; one whose table no longer parses is left out and logged, the others served."""
+        if snapshot.records is None:
             return ()
-        retired = tuple(record for record in self.records.workspaces.records(retired=True) if record.retired)
-        if not retired:
-            return ()
-        parsed, errors = self._resolve(self.store.snapshot().entries, replace(records, workspaces=retired))
-        if errors:
-            _log.error("retired workspaces unreadable — what they hold waits", detail="; ".join(errors))
-            return ()
-        return parsed.workspaces
+        parsed: list[HostWorkspace] = []
+        for record in snapshot.records.retired_workspaces:
+            config, errors = self._resolve(snapshot.entries, replace(snapshot.records, workspaces=(record,)))
+            if errors:
+                _log.error(
+                    "retired workspace unreadable — what it holds waits", workspace=record.key, detail="; ".join(errors)
+                )
+                continue
+            parsed.extend(config.workspaces)
+        return tuple(parsed)
 
     def _resolve(
         self, entries: Mapping[str, Entry], records: HostRecordsSnapshot | None
@@ -263,9 +270,14 @@ class HostSettingsInForce:
         self.since: str | None = None
         #: The revision that failed to resolve, its error, and since when; ``None`` while the latest resolves.
         self.failure: tuple[int, str, str] | None = None
-        #: The workspace and subscription records of the snapshot last put in force; ``None`` before the first, or for
-        #: a host keeping no records.
-        self.records: HostRecordsSnapshot | None = None
+        #: The snapshot last put in force; ``None`` before the first.
+        self.taken: HostSettingsSnapshot | None = None
+
+    @property
+    def records(self) -> HostRecordsSnapshot | None:
+        """The workspace and subscription records of the snapshot last put in force; ``None`` before the first, or
+        for a host keeping no records."""
+        return self.taken.records if self.taken is not None else None
 
     def status[T](self, read: Callable[[], T]) -> tuple[T, int | None, str | None, tuple[int, str, str] | None]:
         """``read`` of the store beside the host tick's published state, the three read as one."""
@@ -285,7 +297,7 @@ class HostSettingsInForce:
             return self.reader.resolve_last()
         self._tool_profile.hold(effective.host_view().tool_env(self._tracing))
         with self._lock:
-            self.records = snapshot.records
+            self.taken = snapshot
             if self.revision != snapshot.revision or self.since is None:
                 self.revision = snapshot.revision
                 self.since = iso_utc(self._clock.now())

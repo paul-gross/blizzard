@@ -720,11 +720,11 @@ def host_pass_stepper(host: HostProcess, reconcile: Callable[[], None] | None = 
         # The host record's snapshot first: its tool profile is in force for every tool child this pass launches.
         if host.host_settings is not None:
             effective = host.host_settings.take()
-            records = host.host_settings.records
+            taken = host.host_settings.taken
             # Then the host's workspaces and subscriptions, so this pass's report and every runner's next tick
             # read them as the records stand.
-            if host.records_reconcile is not None and records is not None:
-                host.records_reconcile.run(effective, records)
+            if host.records_reconcile is not None and taken is not None:
+                host.records_reconcile.run(effective, taken)
         if reconcile is not None:
             host.retirements.take()
             reconcile()
