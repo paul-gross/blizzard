@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/angular-vite';
+import { ROUTES } from '@angular/router';
+import { applicationConfig, type Meta, type StoryObj } from '@storybook/angular-vite';
 
 import { ChunkFacts } from './chunk-facts';
 import { factsDetail, factsNeighbor } from './chunk-facts.fixture';
@@ -6,13 +7,16 @@ import { factsDetail, factsNeighbor } from './chunk-facts.fixture';
 const meta: Meta<ChunkFacts> = {
   title: 'Chunk/Facts',
   component: ChunkFacts,
+  // The workshop has no router outlet; accept both selection and standalone links in its iframe.
+  decorators: [applicationConfig({ providers: [{ provide: ROUTES, multi: true, useValue: [{ path: '**', children: [] }] }] })],
   args: {
     detail: factsDetail(),
     chunkLinkBase: ['/board', 'chunk'],
+    boardChunkIds: new Set(['ch_01neighbor00000000000000000']),
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-chunk-detail-facts [detail]="detail" [chunkLinkBase]="chunkLinkBase" />`,
+    template: `<fleet-chunk-detail-facts [detail]="detail" [chunkLinkBase]="chunkLinkBase" [boardChunkIds]="boardChunkIds" />`,
   }),
 };
 export default meta;
