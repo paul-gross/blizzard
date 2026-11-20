@@ -126,6 +126,7 @@ from blizzard.runner.host_settings_reader import (
     HostRecordValidation,
     HostSettingsInForce,
     HostSettingsReader,
+    HostSettingsSnapshot,
 )
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
 from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
@@ -731,7 +732,7 @@ class HostRecordsReconcile:
         host: HostProcess,
         root: Path,
         *,
-        retired_workspaces: Callable[[HostRecordsSnapshot], tuple[HostWorkspace, ...]],
+        retired_workspaces: Callable[[HostSettingsSnapshot], tuple[HostWorkspace, ...]],
     ) -> None:
         self._host = host
         self._root = root
@@ -742,9 +743,12 @@ class HostRecordsReconcile:
         self._sampled: dict[str, SampledSubscription] = {}
         self._renewable: dict[str, RenewableSubscription | None] = {}
 
-    def run(self, effective: HostConfig, records: HostRecordsSnapshot) -> None:
+    def run(self, effective: HostConfig, snapshot: HostSettingsSnapshot) -> None:
+        records = snapshot.records
+        if records is None:
+            return
         try:
-            self._reconcile_workspaces(effective, records)
+            self._reconcile_workspaces(effective, snapshot, records)
         except Exception as exc:  # a prompt file gone, a provider that will not build: keep the registry in force
             self._log.error("workspace rebuild failed — the host keeps its workspaces", detail=str(exc))
         try:
@@ -752,8 +756,10 @@ class HostRecordsReconcile:
         except Exception as exc:
             self._log.error("subscription rebuild failed — the host keeps its subscriptions", detail=str(exc))
 
-    def _reconcile_workspaces(self, effective: HostConfig, records: HostRecordsSnapshot) -> None:
-        at = tuple((record.key, record.revision) for record in records.workspaces)
+    def _reconcile_workspaces(
+        self, effective: HostConfig, snapshot: HostSettingsSnapshot, records: HostRecordsSnapshot
+    ) -> None:
+        at = tuple((record.key, record.revision) for record in (*records.workspaces, *records.retired_workspaces))
         if at == self._workspaces_at:
             return
         host = self._host
@@ -767,7 +773,7 @@ class HostRecordsReconcile:
             revisions=dict(at),
             # The registry the host was composed with carries no record revisions, so the first pass builds each anew.
             keep=current if self._workspaces_at is not None else None,
-            retired=self._retired_workspaces(records),
+            retired=self._retired_workspaces(snapshot),
         )
         host.workspaces.set(registry)
         if self._workspaces_at is not None:
@@ -955,8 +961,8 @@ def build_host_process(
         if graph.readiness.evaluate().ready:
             effective = graph.host_settings.take()
             # Before any runner resumes: a retired workspace's provider releases what it holds.
-            if graph.records_reconcile is not None and graph.host_settings.records is not None:
-                graph.records_reconcile.run(effective, graph.host_settings.records)
+            if graph.records_reconcile is not None and graph.host_settings.taken is not None:
+                graph.records_reconcile.run(effective, graph.host_settings.taken)
         # Host entries read on use: each worker export is admitted under the host record's current revision.
         graph.telemetry_receiver = replace(
             graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)

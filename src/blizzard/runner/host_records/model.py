@@ -190,14 +190,17 @@ class RecordWrite:
 @domain_model
 @dataclass(frozen=True)
 class HostRecordsSnapshot:
-    """The host's active workspaces and subscriptions as one pass read them, each in key order."""
+    """The host's workspaces and subscriptions as one pass read them, each in key order: the active ones, and the
+    retired workspaces beside them, which still serve what they hold."""
 
     workspaces: tuple[HostRecord, ...] = ()
     subscriptions: tuple[HostRecord, ...] = ()
+    retired_workspaces: tuple[HostRecord, ...] = ()
 
     def versions(self) -> tuple[tuple[str, int], ...]:
-        """Each active record's kind-qualified key and revision: moves whenever any record is written, created,
-        retired or enabled."""
+        """Each record's kind-qualified key and revision, retired workspaces included: moves whenever any record is
+        written, created, retired or enabled."""
         return tuple(
-            (f"{record.kind}:{record.key}", record.revision) for record in (*self.workspaces, *self.subscriptions)
+            (f"{record.kind}:{record.key}", record.revision)
+            for record in (*self.workspaces, *self.subscriptions, *self.retired_workspaces)
         )

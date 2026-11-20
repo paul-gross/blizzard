@@ -34,6 +34,7 @@ from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.settings.authoring import RunnerSettingsAuthoring
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from blizzard.runner.throttle.gate import ThrottleGate
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 from tests.support.runner_fakes import FakeProvider, make_store
@@ -252,12 +253,36 @@ def test_a_retired_workspace_refuses_its_runners_next_write_while_the_other_bind
         )
 
 
+def test_an_edit_to_a_retired_workspace_rebuilds_the_provider_it_releases_through(host: _Host, tmp_path: Path) -> None:
+    runner = host.process.runners[0]
+    release = EnvironmentRelease(runner.stores.environments, SystemClock(), runner.workspaces)
+    service = host.records(RecordKind.WORKSPACE)
+    service.create("ws-b", {"root": str(tmp_path / "b")}, actor="test", door="api")
+    host.tick()
+    _retire(service, "ws-b")
+    host.tick()
+    retired = host.process.workspaces.provider("ws-b")
+
+    _edit(service, "ws-b", root=str(tmp_path / "b-moved"))
+    host.tick()
+
+    moved = host.process.workspaces.provider("ws-b")
+    assert moved is not retired and moved is not None
+    assert moved.spawn_root() == str(tmp_path / "b-moved")
+    assert host.process.workspaces.acquisition_provider("ws-b") is None
+    release.release_binding("chunk-b", "ws-b", [AcquiredEnvironment(environment_id="e1", workdir="/x")])
+    assert isinstance(moved, FakeProvider) and moved.released == ["e1"]
+
+
 def test_a_retired_subscription_leaves_its_runner_unthrottled_by_it_and_declaring_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, providers: _Providers
 ) -> None:
-    for host in _host(tmp_path, monkeypatch, providers, top=_SUBSCRIPTION, runner='subscription = "team"'):
+    runner = 'subscription = "team"\n[runner.throttle.pace]\n'
+    for host in _host(tmp_path, monkeypatch, providers, top=_SUBSCRIPTION, runner=runner):
         ctx = host.context()
         assert ctx.config.subscription == "team" and [s.slug for s in ctx.subscriptions] == ["team"]
+        # Unsampled, its pace says no.
+        assert not ThrottleGate(ctx).verdict().admits_claim
         assert host.process.host_tick.external_usage_sample is not None
         sampled_at = datetime.now(UTC)
         host.process.runners[0].external_usage_attempts.record_external_usage_attempt(
@@ -269,6 +294,8 @@ def test_a_retired_subscription_leaves_its_runner_unthrottled_by_it_and_declarin
 
         ctx = host.context()
         assert ctx.config.subscription is None and ctx.subscriptions == ()
+        # No subscription's usage throttles it: its pace is not asked.
+        assert ThrottleGate(ctx).verdict().levers == ()
         assert host.process.subscriptions == ()
         assert host.process.host_tick.external_usage_sample is None
         assert TestClient(host.app.app).get("/api/host/subscriptions").json()["items"] == []
