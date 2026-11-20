@@ -8,7 +8,7 @@ import base64
 import binascii
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -945,11 +945,7 @@ class RunnerConfig:
     def home_workspace(self) -> HostWorkspace:
         """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`); raises
         :class:`ConfigError` when the host declares none this runner could be addressed by."""
-        by_id = {workspace.id: workspace for workspace in self.workspaces}
-        home = by_id.get(home_workspace_id(self.bound_workspace_ids, tuple(by_id)))
-        if home is None:
-            raise ConfigError("the host declares no workspace")
-        return home
+        return _home_workspace(self.workspaces, self.bound_workspace_ids)
 
     @property
     def bound_workspace_ids(self) -> tuple[str, ...]:
@@ -1045,3 +1041,11 @@ def resolve_tick_seconds(
             "host file states one — unset it"
         ),
     )
+
+
+def _home_workspace(workspaces: Sequence[HostWorkspace], bound: Sequence[str]) -> HostWorkspace:
+    by_id = {workspace.id: workspace for workspace in workspaces}
+    home = by_id.get(home_workspace_id(bound, tuple(by_id)))
+    if home is None:
+        raise ConfigError("the host declares no workspace")
+    return home
