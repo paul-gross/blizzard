@@ -13,8 +13,9 @@ from datetime import datetime
 from enum import StrEnum
 
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
-from blizzard.foundation.settings_record.vocabulary import Door, Entry, FieldChange, Op
+from blizzard.foundation.settings_record.decision import decide
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
+from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
 
 
 class RecordKind(StrEnum):
@@ -117,29 +118,29 @@ class HostRecord:
         """A sparse merge: each of ``sets`` takes its whole value, each of ``unsets`` returns to its default, every
         other key stands. Refused on a missing or stale revision, and on naming the key or an immutable setting.
         Legal on a retired record, which stays retired. ``None`` when nothing moves."""
-        if if_match is None or if_match != self.revision:
-            raise SettingsRevisionConflict(self.revision, if_match)
         both = sorted(unsets & sets.keys())
         if both:
             raise SettingsInvalid(dict.fromkeys(both, "both set and unset in one edit"))
+        decision = decide(
+            self.revision,
+            {name: Entry(value) for name, value in self.settings.items()},
+            Change("edit", deepcopy(dict(sets)), unsets),
+            if_match=if_match,
+        )
         fixed = {self.kind.key_name, *self.kind.immutable}
         named = sorted(fixed & (sets.keys() | unsets))
         if named:
             raise SettingsInvalid(dict.fromkeys(named, "is immutable; it cannot be edited"))
-        candidate = {**deepcopy(dict(self.settings)), **deepcopy(dict(sets))}
-        for name in unsets:
-            candidate.pop(name, None)
+        # A record states no default: an unset leaves the setting absent, and unsetting an absent one moves nothing.
         diff = tuple(
-            FieldChange(
-                name,
-                Entry(self.settings[name]) if name in self.settings else None,
-                Entry(candidate[name]) if name in candidate else Entry(None, at_default=True),
+            sorted(
+                (change for change in decision.diff if change.old is not None or not change.new.at_default),
+                key=lambda change: change.key,
             )
-            for name in sorted(self.settings.keys() | candidate.keys())
-            if self.settings.get(name, _ABSENT) != candidate.get(name, _ABSENT)
         )
         if not diff:
             return None
+        candidate = {name: deepcopy(entry.value) for name, entry in decision.candidate.items() if not entry.at_default}
         return RecordWrite(
             record=HostRecord(self.kind, self.key, self.revision + 1, candidate, self.retired),
             prior=self.revision,
@@ -162,9 +163,6 @@ class HostRecord:
     def _lifecycle(self, op: Op, fact: RecordFactOp, *, retired: bool) -> RecordWrite:
         record = HostRecord(self.kind, self.key, self.revision + 1, self.settings, retired)
         return RecordWrite(record=record, prior=self.revision, op=op, diff=(), fact=fact)
-
-
-_ABSENT = object()
 
 
 @domain_model
