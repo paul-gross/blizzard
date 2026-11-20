@@ -118,6 +118,7 @@ from blizzard.runner.host_layout import (
     HostLayout,
 )
 from blizzard.runner.host_records.model import RecordKind
+from blizzard.runner.host_records.prompt import PromptChange
 from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.hosting.model import CLI, JOIN, SEED, HostingFact
 from blizzard.runner.hosting.names import stored_name
@@ -1138,9 +1139,7 @@ def _seed_records(config: HostConfig, stores: HostStores, *, clock: IClock) -> N
             if kind is RecordKind.WORKSPACE:
                 override = stores.workspace_prompt.workspace_prompt_override(key.strip())
                 if override is not None:
-                    settings = {**settings, "prompt": override}
-                    settings.pop("prompt_file", None)
-                    settings.pop("prompt_package", None)
+                    settings = PromptChange.stating("prompt", override).applied_to(settings)
             services[kind].seed(key.strip(), settings)
 
 
