@@ -21,7 +21,7 @@ from blizzard.runner.harness.workspace_prompts import (
 )
 from blizzard.runner.host_config import record_prompt
 from blizzard.runner.host_records.model import HostRecord, RecordKind
-from blizzard.runner.host_records.prompt import PROMPT_SETTINGS, EffectiveWorkspacePrompt
+from blizzard.runner.host_records.prompt import PROMPT_SETTINGS, EffectiveWorkspacePrompt, PromptChange
 from blizzard.runner.store.errors import RunnerStoreError
 
 
@@ -81,7 +81,7 @@ def prompt_install(ctx: click.Context, name: str, directory: str, force: bool, r
     if destination.exists() and not force:
         raise click.ClickException(f"{destination} already exists — pass --force to overwrite it")
     destination.write_text(text)
-    body: dict[str, object] = {"prompt_file": str(destination), "prompt": None, "prompt_package": None}
+    body = PromptChange.stating("prompt_file", str(destination)).body()
     edit_record(ctx, WORKSPACE, directory, config.home_workspace.id, body, verb="prompt install")
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
 
@@ -147,7 +147,7 @@ def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, run
             daemon.send_to_host("delete", route).raise_for_status()
         click.echo("workspace prompt cleared — the workspace carries no standing prompt on subsequent spawns")
         return
-    edit_record(ctx, WORKSPACE, directory, workspace_id, dict.fromkeys(PROMPT_SETTINGS), verb="prompt clear")
+    edit_record(ctx, WORKSPACE, directory, workspace_id, PromptChange.cleared().body(), verb="prompt clear")
 
 
 def _effective_prompt(config: RunnerConfig) -> EffectiveWorkspacePrompt:

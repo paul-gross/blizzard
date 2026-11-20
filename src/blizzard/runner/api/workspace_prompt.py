@@ -23,7 +23,7 @@ from blizzard.runner.auth.session import RunnerSession
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import record_prompt
 from blizzard.runner.host_records.model import HostRecord, RecordKind, RecordUnknown
-from blizzard.runner.host_records.prompt import PROMPT_SETTINGS
+from blizzard.runner.host_records.prompt import PromptChange
 from blizzard.runner.hosting.model import API
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
@@ -75,7 +75,7 @@ def _response(wiring: RunnerWiring, record: HostRecord) -> WorkspacePromptRespon
 
 
 def _write(
-    request: Request, workspace_id: str, sets: dict[str, object], session: RunnerSession
+    request: Request, workspace_id: str, change: PromptChange, session: RunnerSession
 ) -> WorkspacePromptResponse | JSONResponse:
     wiring = RunnerWiring.of(request)
     service = wiring.host_records(RecordKind.WORKSPACE)
@@ -83,8 +83,8 @@ def _write(
         record = service.held(workspace_id)
         written = service.edit(
             record,
-            sets,
-            PROMPT_SETTINGS - sets.keys(),
+            change.sets,
+            change.unsets,
             if_match=record.revision,
             actor=session.username,
             door=API,
@@ -123,7 +123,7 @@ def replace_workspace_prompt(
 ) -> WorkspacePromptResponse | JSONResponse:
     """Set the workspace's ``prompt``, returning ``prompt_file`` and ``prompt_package`` to their defaults —
     effective on subsequent spawns."""
-    return _write(request, workspace_id, {"prompt": request_body.prompt}, session)
+    return _write(request, workspace_id, PromptChange.stating("prompt", request_body.prompt), session)
 
 
 @router.delete("/prompt", response_model=WorkspacePromptResponse, responses=_WRITE)
@@ -132,4 +132,4 @@ def clear_workspace_prompt(
 ) -> WorkspacePromptResponse | JSONResponse:
     """Return the workspace's three prompt settings to their defaults, so it carries no standing prompt — effective
     on subsequent spawns."""
-    return _write(request, workspace_id, {}, session)
+    return _write(request, workspace_id, PromptChange.cleared(), session)
