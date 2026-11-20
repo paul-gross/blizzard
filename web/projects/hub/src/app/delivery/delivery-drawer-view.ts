@@ -1,18 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import {
-  type ChunkDetail,
-  KitAsyncState,
-  type KitAsyncStateValue,
-  KitCloseButton,
-  KitSkeleton,
-  toneColor,
-} from 'fleet';
+import { type ChunkDetail, KitAsyncState, type KitAsyncStateValue, KitCloseButton, KitSkeleton, toneColor } from 'fleet';
 import { ChunkDetailHeader } from '../core/chunk-detail-header/chunk-detail-header';
 import { DeliveryHistoryList } from './delivery-history-list';
 import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.model';
@@ -25,13 +13,7 @@ import type { DeliveryDrawerView as DrawerViewValue } from './delivery-history.m
 @Component({
   selector: 'app-delivery-drawer-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ChunkDetailHeader,
-    KitAsyncState,
-    KitCloseButton,
-    KitSkeleton,
-    DeliveryHistoryList,
-  ],
+  imports: [ChunkDetailHeader, KitAsyncState, KitCloseButton, KitSkeleton, DeliveryHistoryList],
   templateUrl: './delivery-drawer-view.html',
   styleUrl: './delivery-drawer-view.css',
 })

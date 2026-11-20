@@ -1,55 +1,37 @@
 @let id = chunkId();
-<section
-  class="drawer"
-  data-testid="delivery-drawer"
-  [attr.aria-label]="'Delivery of ' + id"
->
+<section class="drawer" data-testid="delivery-drawer" [attr.aria-label]="'Delivery of ' + id">
   @if (detail(); as d) {
-  <app-chunk-detail-header
-    [detail]="d"
-    [renderedStatus]="d.status"
-    [projectColor]="projectColor()"
-    [runnerHosts]="runnerHosts()"
-    [closable]="closable()"
-    (dismiss)="dismiss.emit()"
-  />
+    <app-chunk-detail-header
+      [detail]="d"
+      [renderedStatus]="d.status"
+      [projectColor]="projectColor()"
+      [runnerHosts]="runnerHosts()"
+      [closable]="closable()"
+      (dismiss)="dismiss.emit()"
+    />
   } @else {
-  <!-- Loading: the header, the repositories and the history drawn as bars on their real layout; the close stays real. -->
-  <header class="head" data-testid="delivery-drawer-skeleton">
-    <span class="sk-title">
-      <fleet-kit-skeleton class="sk-id" [rows]="1" />
-      <fleet-kit-skeleton class="sk-sub" [rows]="1" />
-    </span>
-    @if (closable()) {
-    <fleet-kit-close-button testid="detail-close" (click)="dismiss.emit()" />
-    }
-  </header>
+    <!-- Loading: the header, the repositories and the history drawn as bars on their real layout; the close stays real. -->
+    <header class="head" data-testid="delivery-drawer-skeleton">
+      <span class="sk-title">
+        <fleet-kit-skeleton class="sk-id" [rows]="1" />
+        <fleet-kit-skeleton class="sk-sub" [rows]="1" />
+      </span>
+      @if (closable()) {
+        <fleet-kit-close-button testid="detail-close" (click)="dismiss.emit()" />
+      }
+    </header>
   }
 
-  <fleet-kit-async-state
-    [state]="state()"
-    loadingMode="content"
-    placement="inline"
-    errorText="Couldn't read this chunk's detail."
-    errorTestid="delivery-drawer-error"
-  >
+  <fleet-kit-async-state [state]="state()" loadingMode="content" placement="inline" errorText="Couldn't read this chunk's detail." errorTestid="delivery-drawer-error">
     <div loading class="body">
       <div class="side">
         <h3 class="h">Repositories</h3>
         @for (w of skRepos; track $index) {
-        <div class="repo sk-repo">
-          <fleet-kit-skeleton class="sk-bar" [style.width.%]="w" [rows]="1" />
-          <fleet-kit-skeleton
-            class="sk-bar sk-small"
-            [style.width.%]="w - 20"
-            [rows]="1"
-          />
-          <fleet-kit-skeleton
-            class="sk-bar sk-small"
-            [style.width.%]="35"
-            [rows]="1"
-          />
-        </div>
+          <div class="repo sk-repo">
+            <fleet-kit-skeleton class="sk-bar" [style.width.%]="w" [rows]="1" />
+            <fleet-kit-skeleton class="sk-bar sk-small" [style.width.%]="w - 20" [rows]="1" />
+            <fleet-kit-skeleton class="sk-bar sk-small" [style.width.%]="35" [rows]="1" />
+          </div>
         }
       </div>
       <div class="main">
@@ -58,51 +40,39 @@
       </div>
     </div>
     @if (view(); as v) {
-    <div class="body">
-      <div class="side">
-        <h3 class="h">Repositories</h3>
-        @for (repo of v.repos; track repo.forge) {
-        <div
-          class="repo"
-          data-testid="delivery-drawer-repo"
-          [style.--tone]="toneColor(repo.tone)"
-        >
-          <div class="repo-head">
-            <span class="repo-name" [title]="repo.forge">{{ repo.name }}</span>
-            <span class="repo-state">{{ repo.state }}</span>
-          </div>
-          @if (repo.branch; as branch) {
-          <span class="dim mono" [title]="branch">{{ branch }}</span>
+      <div class="body">
+        <div class="side">
+          <h3 class="h">Repositories</h3>
+          @for (repo of v.repos; track repo.forge) {
+            <div class="repo" data-testid="delivery-drawer-repo" [style.--tone]="toneColor(repo.tone)">
+              <div class="repo-head">
+                <span class="repo-name" [title]="repo.forge">{{ repo.name }}</span>
+                <span class="repo-state">{{ repo.state }}</span>
+              </div>
+              @if (repo.branch; as branch) {
+                <span class="dim mono" [title]="branch">{{ branch }}</span>
+              }
+              <span class="repo-links">
+                @for (pr of repo.prs; track pr.text) {
+                  <a [href]="pr.url" target="_blank" rel="noopener noreferrer">PR {{ pr.text }}</a>
+                }
+                @if (repo.commit; as commit) {
+                  <a class="commit" [href]="commit.url" target="_blank" rel="noopener noreferrer">{{ commit.text }}</a>
+                }
+                @if (repo.lastAttempt; as last) {
+                  <span class="last age" [title]="'last updated ' + last.title">{{ last.age }}</span>
+                }
+              </span>
+            </div>
+          } @empty {
+            <p class="empty">Not delivering to any repository yet.</p>
           }
-          <span class="repo-links">
-            @for (pr of repo.prs; track pr.text) {
-            <a [href]="pr.url" target="_blank" rel="noopener noreferrer"
-              >PR {{ pr.text }}</a
-            >
-            } @if (repo.commit; as commit) {
-            <a
-              class="commit"
-              [href]="commit.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              >{{ commit.text }}</a
-            >
-            } @if (repo.lastAttempt; as last) {
-            <span class="last age" [title]="'last updated ' + last.title"
-              >{{ last.age }}</span
-            >
-            }
-          </span>
         </div>
-        } @empty {
-        <p class="empty">Not delivering to any repository yet.</p>
-        }
+        <div class="main">
+          <h3 class="h">Delivery history</h3>
+          <app-delivery-history-list [entries]="v.history" [chunkId]="id" />
+        </div>
       </div>
-      <div class="main">
-        <h3 class="h">Delivery history</h3>
-        <app-delivery-history-list [entries]="v.history" [chunkId]="id" />
-      </div>
-    </div>
     }
   </fleet-kit-async-state>
 </section>
