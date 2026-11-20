@@ -32,7 +32,15 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.kernel.forge_refusals import AuthRefusal, ClassifiedRefusal, ForgeDiagnostic
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
-from blizzard.hub.forge.landing import CommitPresence, Comparison, ForgeAuthRefused, ForgeUnavailable, VisitForges
+from blizzard.hub.forge.landing import (
+    CommitEvidence,
+    CommitPresence,
+    Comparison,
+    ForgeAuthRefused,
+    ForgeUnavailable,
+    TreeEntry,
+    VisitForges,
+)
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle, TurnCutOff
 from blizzard.hub.store import schema as s
@@ -376,6 +384,15 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
 
         async def commit_exists(self, revision: str) -> CommitPresence:
             raise AssertionError("not called")
+
+        async def commit_evidence(self, revision: str) -> CommitEvidence:
+            raise NotImplementedError
+
+        async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+            raise NotImplementedError
+
+        async def blob_evidence(self, revision: str) -> bytes:
+            raise NotImplementedError
 
         async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
             raise AssertionError("not called")

@@ -78,6 +78,30 @@ class MergeMethod(StrEnum):
     REBASE = "rebase"
 
 
+@domain_model
+@dataclass(frozen=True)
+class LandingOptions:
+    """Repository-allowed landing methods in forge preference order, and the native update method."""
+
+    methods: tuple[MergeMethod, ...]
+    update_method: UpdateMethod
+
+
+@domain_model
+@dataclass(frozen=True)
+class MethodRefusal:
+    method: MergeMethod
+    reason: str
+    diagnostic: ForgeDiagnostic | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class MethodExhaustion:
+    allowed: tuple[MergeMethod, ...]
+    refusals: tuple[MethodRefusal, ...]
+
+
 class CheckOutcome(StrEnum):
     """The only part of a check ever routed on; ``neutral`` counts as green wherever ``passed`` does."""
 
@@ -144,6 +168,27 @@ class Comparison:
 class CommitPresence:
     exists: bool
     authored_at: datetime | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class CommitEvidence:
+    revision: str
+    tree: str
+    parents: tuple[str, ...]
+    author_name: str
+    author_email: str
+    author_date: str
+    message: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class TreeEntry:
+    path: str
+    mode: str
+    kind: str
+    revision: str
 
 
 @domain_model
@@ -259,8 +304,12 @@ OPERATION_CAPABILITY: Mapping[str, Capability] = {
     "branch_tip": Capability.REFS_READ,
     "compare": Capability.COMPARE,
     "commit_exists": Capability.COMMITS_READ,
+    "commit_evidence": Capability.COMMITS_READ,
+    "tree_evidence": Capability.COMMITS_READ,
+    "blob_evidence": Capability.COMMITS_READ,
     "changes": Capability.CHANGES_READ,
     "change": Capability.CHANGES_READ,
+    "landing_options": Capability.CHANGES_READ,
     "open_change": Capability.CHANGES_OPEN,
     "update_from_base": Capability.CHANGES_UPDATE_FROM_BASE,
     f"merge.{MergeMethod.MERGE}": Capability.CHANGES_MERGE_MERGE,
@@ -289,6 +338,14 @@ class IForgeRefs(Protocol):
     async def commit_exists(self, revision: str) -> CommitPresence:
         """:class:`ForgeUnavailable` when the forge could say neither."""
         ...
+
+    async def commit_evidence(self, revision: str) -> CommitEvidence: ...
+
+    async def tree_evidence(self, revision: str) -> tuple[TreeEntry, ...]:
+        """All non-tree entries in an immutable tree; incomplete answers are unavailable."""
+        ...
+
+    async def blob_evidence(self, revision: str) -> bytes: ...
 
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
         """Fast-forward ``branch`` from ``expected`` to ``revision``; ``ForgeRejected("stale")`` when it was not at
@@ -325,7 +382,13 @@ class IForgeChanges(Protocol):
 
     async def change(self, number: int) -> Change: ...
 
-    async def update_from_base(self, number: int, expected_head: str) -> Update: ...
+    async def landing_options(self) -> LandingOptions:
+        """The repository's current landing and update choices, independent of credential capabilities."""
+        ...
+
+    async def update_from_base(
+        self, number: int, expected_head: str, method: UpdateMethod = UpdateMethod.MERGE
+    ) -> Update: ...
 
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
         """The landed revision."""
