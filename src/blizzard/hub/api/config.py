@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 from starlette.concurrency import run_in_threadpool
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
@@ -26,7 +27,7 @@ from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission, may_admit
+from blizzard.hub.auth.permissions import may_admit
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, CadenceEdit, Spacing

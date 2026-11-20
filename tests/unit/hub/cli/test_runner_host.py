@@ -12,6 +12,7 @@ import pytest
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.runner_host import token_lines
+from blizzard.wire.host import HostRegistryView
 from tests.support.hub_cli_runner import ENV, HUB_URL
 from tests.support.worker_http import Bound, bind_stubs
 
@@ -41,7 +42,17 @@ def _stub(verb: str, response: httpx2.Response) -> tuple[Bound, list[dict[str, A
 
 
 def _row(host_id: str, name: str, **fields: Any) -> dict[str, Any]:
-    return {"host_id": host_id, "host_name": name, "connection": "never_connected", "online": False, **fields}
+    """A ``HostRegistryView`` body, ``fields`` over a never-connected host's."""
+    base: dict[str, Any] = {
+        "host_id": host_id,
+        "host_name": name,
+        "connection": "never_connected",
+        "online": False,
+        "added_at": "2026-10-12T00:00:00Z",
+        "urls": [],
+        "enrolled": False,
+    }
+    return HostRegistryView.model_validate({**base, **fields}).model_dump(mode="json")
 
 
 def test_add_posts_the_name_and_adoptions_and_prints_the_id_and_the_token_once() -> None:
@@ -200,17 +211,22 @@ def test_a_full_host_detail_renders_every_line() -> None:
     body = {
         "host_id": "hs_a",
         "host_name": "box",
+        "connection": "online",
         "online": True,
+        "urls": ["http://box:9000"],
         "runner_ids": ["rn_1", "rn_2"],
         "added_at": "2026-09-01T00:00:00Z",
         "added_by": "op",
         "url": "http://box:9000",
         "enrolled": True,
         "workspaces": [{"workspace_id": "ws_1"}, {"workspace_id": "ws_2"}],
-        "subscriptions": [{"slug": "max"}, {"slug": "pro"}],
+        "subscriptions": [
+            {"slug": "max", "name": "Max", "provider": "anthropic"},
+            {"slug": "pro", "name": "Pro", "provider": "anthropic"},
+        ],
     }
 
-    assert list(HostDetail(body).lines()) == [
+    assert list(HostDetail(HostRegistryView.model_validate(body)).lines()) == [
         "hs_a  box              online          runners=2",
         "  added=2026-09-01T00:00:00Z by op",
         "  url=http://box:9000  enrolled=True",
@@ -223,17 +239,12 @@ def test_a_full_host_detail_renders_every_line() -> None:
 def test_an_empty_host_detail_dashes_every_absent_field() -> None:
     from blizzard.hub.cli.runner_host import HostDetail
 
-    body: dict[str, object] = {
-        "host_id": "hs_a",
-        "connection": "never_connected",
-        "workspaces": [],
-        "subscriptions": None,
-    }
+    body = _row("hs_a", "", added_at="")
 
-    assert list(HostDetail(body).lines()) == [
+    assert list(HostDetail(HostRegistryView.model_validate(body)).lines()) == [
         "hs_a  -                never-connected runners=0",
         "  added=- by -",
-        "  url=-  enrolled=None",
+        "  url=-  enrolled=False",
         "  workspaces=-",
         "  subscriptions=-",
         "  runners=-",

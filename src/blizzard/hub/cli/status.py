@@ -4,31 +4,37 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import NotRequired, TypedDict, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.pages import read_pages
 from blizzard.hub.cli.project_option import project_query
-from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, CostRow, QuestionLine, QuestionRow, RunnerLine, RunnerRow
+from blizzard.hub.cli.views import ChunkLine, Cost, QuestionLine, RunnerLine
+from blizzard.wire.chunk import ChunksPageView, ChunkSummary
+from blizzard.wire.fleet import FleetSpendView
+from blizzard.wire.question import QuestionView
+from blizzard.wire.runner import RunnerRegistryListResponse, RunnerRegistryView
+
+_CHUNKS = TypeAdapter(ChunksPageView)
+_RUNNERS = TypeAdapter(RunnerRegistryListResponse)
+_QUESTIONS = TypeAdapter(list[QuestionView])
+_SPEND = TypeAdapter(FleetSpendView)
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``.
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
 
 
-class RunnersResponse(TypedDict):
-    runners: NotRequired[list[RunnerRow]]
-
-
 @dto
 @dataclass(frozen=True)
 class FleetStatus:
-    chunks: list[ChunkRow]
-    runners: list[RunnerRow]
-    questions: list[QuestionRow]
-    spend: CostRow
+    chunks: list[ChunkSummary]
+    runners: list[RunnerRegistryView]
+    questions: list[QuestionView]
+    spend: FleetSpendView
 
     def lines(self) -> Iterator[str]:
         yield f"chunks ({len(self.chunks)}):"
@@ -55,18 +61,18 @@ class FleetStatus:
 def status(cli: CliContext, project: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions."""
     lens = project_query(project)
-    chunks = cast(list[ChunkRow], cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=lens))
-    runners = cli.get("/api/runners", "GET /runners")
-    questions = cast(list[QuestionRow], cli.get("/api/questions", "GET /questions", params=lens).json())
-    spend = cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE} | lens)
-
+    raw_chunks, pages = read_pages(cli, "/api/chunks", "GET /chunks", page=_CHUNKS, key="chunks", params=lens)
+    raw_runners, registry = cli.decode(cli.get("/api/runners", "GET /runners"), _RUNNERS, "GET /runners")
+    raw_questions, questions = cli.decode(
+        cli.get("/api/questions", "GET /questions", params=lens), _QUESTIONS, "GET /questions"
+    )
+    raw_spend, spend = cli.decode(
+        cli.get("/api/spend", "GET /spend", params={"since": _FLEET_SPEND_SINCE} | lens), _SPEND, "GET /spend"
+    )
     view = FleetStatus(
-        chunks=chunks,
-        runners=cast(RunnersResponse, runners.json()).get("runners", []),
+        chunks=[row for page in pages for row in page.chunks],
+        runners=registry.runners,
         questions=questions,
-        spend=cast(CostRow, spend.json()),
+        spend=spend,
     )
-    cli.show(
-        {"chunks": view.chunks, "runners": runners.json(), "questions": view.questions, "spend": view.spend},
-        view,
-    )
+    cli.show({"chunks": raw_chunks, "runners": raw_runners, "questions": raw_questions, "spend": raw_spend}, view)

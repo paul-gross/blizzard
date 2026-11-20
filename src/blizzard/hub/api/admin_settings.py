@@ -7,6 +7,7 @@ from typing import Annotated, Any, NoReturn, Protocol, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.config_keys import TABLE, ConfigRegistry, Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
@@ -18,7 +19,6 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, settable_declarations
 from blizzard.hub.settings.values import thaw
@@ -29,6 +29,7 @@ from blizzard.wire.hub_settings import (
     HubSettingsChanges,
     HubSettingsView,
     HubSettingsWrite,
+    SettingsExportDocument,
 )
 from blizzard.wire.problem import ProblemDetails
 
@@ -202,9 +203,9 @@ def apply_document(
     return ConfigApplyResponse(dry_run=dry_run, apply_id=apply_id, outcomes=outcomes)
 
 
-@router.get("/export", response_model=dict[str, object])
-def export_document(identity: Admin, settings: Settings) -> dict[str, object]:
-    document: dict[str, object] = {}
+@router.get("/export", response_model=SettingsExportDocument)
+def export_document(identity: Admin, settings: Settings) -> SettingsExportDocument:
+    document: SettingsExportDocument = {}
     for key, entry in settings.reader.snapshot().entries.items():
         declaration = settings.footing.key_registry.key(key)
         if declaration is not None and declaration.lifetime == Lifetime.PASS and not entry.at_default:

@@ -11,6 +11,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.runner import RunnerRegistryView
 from tests.support.hub_cli_runner import ENV, HUB_URL
 from tests.support.worker_http import Bound, bind_stubs
 
@@ -187,12 +188,18 @@ def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none() -> 
     assert "None" not in result.output
 
 
-def test_an_active_runner_detail_renders_three_exact_lines() -> None:
+def _detail(body: dict[str, Any]) -> list[str]:
     from blizzard.hub.cli.runner import RunnerDetail
 
+    view = RunnerRegistryView.model_validate(body)
+    return list(RunnerDetail(view).lines())
+
+
+def test_an_active_runner_detail_renders_three_exact_lines() -> None:
     body = {
         "runner_id": "rn_1",
         "runner_name": "xps",
+        "connection": "online",
         "online": True,
         "workspace_id": "ws_1",
         "added_at": "2026-09-01T00:00:00Z",
@@ -201,7 +208,7 @@ def test_an_active_runner_detail_renders_three_exact_lines() -> None:
         "locally_paused": True,
     }
 
-    assert list(RunnerDetail(body).lines()) == [
+    assert _detail(body) == [
         "rn_1  xps  online  ws=ws_1",
         "  added=2026-09-01T00:00:00Z by op",
         "  hub_paused=False  locally_paused=True",
@@ -209,30 +216,38 @@ def test_an_active_runner_detail_renders_three_exact_lines() -> None:
 
 
 def test_a_sparse_runner_detail_falls_back_to_dashes() -> None:
-    from blizzard.hub.cli.runner import RunnerDetail
+    body = {
+        "runner_id": "rn_1",
+        "runner_name": "",
+        "connection": "online",
+        "online": False,
+        "added_at": "",
+        "hub_paused": False,
+    }
 
-    assert list(RunnerDetail({"runner_id": "rn_1"}).lines()) == [
+    assert _detail(body) == [
         "rn_1  -  offline  ws=-",
         "  added=- by -",
-        "  hub_paused=None  locally_paused=None",
+        "  hub_paused=False  locally_paused=False",
     ]
 
 
 def test_a_retired_runner_detail_adds_its_retirement_line() -> None:
-    from blizzard.hub.cli.runner import RunnerDetail
-
     body = {
         "runner_id": "rn_1",
         "runner_name": "xps",
         "connection": "never_connected",
+        "online": False,
+        "added_at": "2026-09-01T00:00:00Z",
+        "hub_paused": False,
         "retired": True,
         "retired_at": "2026-10-01T00:00:00Z",
         "retired_by": "op",
     }
 
-    assert list(RunnerDetail(body).lines()) == [
+    assert _detail(body) == [
         "rn_1  xps  never-connected  ws=-",
-        "  added=- by -",
-        "  hub_paused=None  locally_paused=None",
+        "  added=2026-09-01T00:00:00Z by -",
+        "  hub_paused=False  locally_paused=False",
         "  retired=2026-10-01T00:00:00Z by op",
     ]

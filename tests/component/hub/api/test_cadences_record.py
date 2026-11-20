@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api import auth_session
-from blizzard.hub.auth.permissions import Permission, permissions_for
+from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem

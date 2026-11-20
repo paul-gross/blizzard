@@ -20,8 +20,11 @@ def _decision(checks: Sequence[Mapping[str, object]]) -> dict[str, object]:
     return {
         "decision_id": "dec_1",
         "chunk_id": "ch_1",
+        "node_id": "n_build",
         "node_name": "build",
-        "choices": [{"name": "pass"}, {"name": "fail"}],
+        "epoch": 1,
+        "submitted_at": "2026-08-12T09:00:00Z",
+        "choices": [{"name": "pass", "description": "it passed"}, {"name": "fail", "description": "it failed"}],
         "check_results": checks,
     }
 
@@ -44,7 +47,13 @@ def test_the_list_summarizes_a_decisions_red_checks() -> None:
 
 @pytest.mark.parametrize(("overrode", "suffix"), [(True, " — overrode red checks"), (False, "")])
 def test_resolve_reports_an_override(overrode: bool, suffix: str) -> None:
-    body = {"decision_id": "dec_1", "choice": "pass", "resolved_by": "operator", "overrode_red_checks": overrode}
+    body = {
+        "decision_id": "dec_1",
+        "choice": "pass",
+        "resolved_by": "operator",
+        "resolved_at": "2026-08-12T09:00:00Z",
+        "overrode_red_checks": overrode,
+    }
 
     def post(url: str, **_: object) -> httpx2.Response:
         return _ok(body)

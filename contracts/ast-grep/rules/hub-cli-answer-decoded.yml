@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:hub-cli-answer-decoded
+language: Python
+severity: error
+message: >-
+  A hub CLI verb reads the hub's success answer through the tree's decoder, `CliContext.decode` over
+  `blizzard.cli.answer.decode_answer`, validated against the route's served response model — never a raw `.json()` read
+  that indexes the body, whose skew surfaces as a traceback (bzh:clients-decode-answers). `--json` prints the raw body
+  the decoder returns.
+files:
+  - src/blizzard/hub/cli/**
+rule:
+  pattern: $R.json()

@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
@@ -15,10 +16,27 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, RunnerLine, RunnerRow, urgency_label
+from blizzard.hub.cli.views import Listing, RunnerLine
+from blizzard.wire.queue import NextClaimEntry, NextClaimPassedEntry, NextClaimResponse, NextClaimScenario
+from blizzard.wire.runner import (
+    RunnerAddResponse,
+    RunnerEnrollmentResponse,
+    RunnerRegistryListResponse,
+    RunnerRegistryView,
+    RunnerRetireResponse,
+    RunnerTokenRevocationResponse,
+)
 
 #: How a hub from before ``hub runner add`` answers ``POST /api/runners`` — with no detail worth showing.
 _PREDATES_ADD = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED})
+
+_ADDED = TypeAdapter(RunnerAddResponse)
+_ENROLLED = TypeAdapter(RunnerEnrollmentResponse)
+_REGISTRY = TypeAdapter(RunnerRegistryListResponse)
+_RUNNER = TypeAdapter(RunnerRegistryView)
+_NEXT_CLAIM = TypeAdapter(NextClaimResponse)
+_RETIRED = TypeAdapter(RunnerRetireResponse)
+_REVOKED = TypeAdapter(RunnerTokenRevocationResponse)
 
 
 class RunnerListing(Listing):
@@ -34,29 +52,31 @@ class RunnerListing(Listing):
 @dto
 @dataclass(frozen=True)
 class RunnerDetail:
-    body: dict[str, Any]
+    view: RunnerRegistryView
 
     def lines(self) -> Iterator[str]:
-        runner = RunnerLine(cast(RunnerRow, self.body))
-        yield f"{self.body['runner_id']}  {runner.name}  {runner.connection}  ws={runner.workspace}"
-        yield f"  added={self.body.get('added_at') or '-'} by {self.body.get('added_by') or '-'}"
-        yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"
-        if self.body.get("retired"):
-            yield f"  retired={self.body.get('retired_at')} by {self.body.get('retired_by')}"
+        view = self.view
+        runner = RunnerLine(view)
+        yield f"{view.runner_id}  {runner.name}  {runner.connection}  ws={runner.workspace}"
+        yield f"  added={view.added_at or '-'} by {view.added_by or '-'}"
+        yield f"  hub_paused={view.hub_paused}  locally_paused={view.locally_paused}"
+        if view.retired:
+            yield f"  retired={view.retired_at} by {view.retired_by}"
 
 
-def _claim_entry(entry: dict[str, Any]) -> str:
-    return f"{entry['position']}  {entry['chunk_id']}  urgency={urgency_label(entry.get('urgency'))}"
+def _claim_entry(entry: NextClaimEntry) -> str:
+    urgency = entry.urgency.slug if entry.urgency else "-"
+    return f"{entry.position}  {entry.chunk_id}  urgency={urgency}"
 
 
-def _pass_reason(entry: dict[str, Any]) -> str:
+def _pass_reason(entry: NextClaimPassedEntry) -> str:
     """Why the walk passed a chunk; a blocked one names its first prerequisite and how many more it has."""
-    reason = entry["reason"]
-    if reason != "blocked" or not entry.get("prerequisite"):
+    reason = str(entry.reason)
+    if reason != "blocked" or not entry.prerequisite:
         return reason
-    others = entry.get("prerequisite_count", 1) - 1
+    others = entry.prerequisite_count - 1
     more = f" (+{others} more)" if others > 0 else ""
-    return f"blocked by {entry['prerequisite']}{more}"
+    return f"blocked by {entry.prerequisite}{more}"
 
 
 @dto
@@ -65,35 +85,35 @@ class NextClaimDetail:
     """A runner's next claim as the hub accounts for it: the chunk it reaches for, then each chunk passed on the way,
     and how many more were passed than are listed."""
 
-    body: dict[str, Any]
+    body: NextClaimResponse
 
     def lines(self) -> Iterator[str]:
         yield "preparing at repository targets:"
         yield from _scenario_lines(self.body)
         yield "not preparing at repository targets:"
-        alternative = self.body.get("without_repository_targets")
+        alternative = self.body.without_repository_targets
         if alternative is None:
             yield "  not reported by this hub"
             return
-        excluded = alternative.get("excluded", 0)
+        excluded = alternative.excluded
         if excluded > 0:
             yield f"  {excluded} ahead never offered at repository targets"
         for line in _scenario_lines(alternative):
             yield f"  {line}"
 
 
-def _scenario_lines(scenario: dict[str, Any]) -> Iterator[str]:
+def _scenario_lines(scenario: NextClaimResponse | NextClaimScenario) -> Iterator[str]:
     """One scenario's account: the chunk it reaches for, each chunk passed on the way, and how many more were passed
     than are listed."""
-    upcoming = scenario.get("next")
+    upcoming = scenario.next
     if upcoming:
         yield f"next  {_claim_entry(upcoming)}"
     else:
         yield "next  - (nothing in claim order this runner can use)"
-    passed = scenario.get("passed", [])
+    passed = scenario.passed
     for entry in passed:
         yield f"  passed  {_claim_entry(entry)}  {_pass_reason(entry)}"
-    remainder = scenario.get("passed_total", 0) - len(passed)
+    remainder = scenario.passed_total - len(passed)
     if remainder > 0:
         yield f"  ... and {remainder} more passed"
 
@@ -155,12 +175,12 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
         resp,
         "POST /runners",
     )
-    body = resp.json()
+    raw, added = cli.decode(resp, _ADDED, "POST /runners")
     cli.show_lines(
-        body,
-        f"added runner {body['runner_id']} ({body['runner_name']}) — never connected",
+        raw,
+        f"added runner {added.runner_id} ({added.runner_name}) — never connected",
         # A just-added runner's host declares it by name; its id lands in the host file only once it joins.
-        *_token_lines(body["runner_name"], body["token"], selector=body["runner_name"]),
+        *_token_lines(added.runner_name, added.token, selector=added.runner_name),
     )
 
 
@@ -172,8 +192,8 @@ def runner_list(cli: CliContext, include_retired: bool) -> None:
     A runner added but never registered shows as never-connected. Excludes a retired runner
     unless --all."""
     params = {"include_retired": "true"} if include_retired else None
-    body = cli.get("/api/runners", "GET /runners", params=params).json()
-    cli.show(body, RunnerListing(body.get("runners", [])))
+    raw, registry = cli.decode(cli.get("/api/runners", "GET /runners", params=params), _REGISTRY, "GET /runners")
+    cli.show(raw, RunnerListing(registry.runners))
 
 
 @runner_group.command("get", cls=FleetCommand)
@@ -181,8 +201,8 @@ def runner_list(cli: CliContext, include_retired: bool) -> None:
 def runner_show(cli: CliContext, runner_id: str) -> None:
     """One runner's connection and paused state, by RUNNER_ID — symmetric with ``runner list``."""
     resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
-    body = resp.json()
-    cli.show(body, RunnerDetail(body))
+    raw, view = cli.decode(resp, _RUNNER, "GET /runners/{id}")
+    cli.show(raw, RunnerDetail(view))
 
 
 @runner_group.command("next", cls=FleetCommand)
@@ -190,8 +210,9 @@ def runner_show(cli: CliContext, runner_id: str) -> None:
 def runner_next(cli: CliContext, runner_id: str) -> None:
     """The chunk RUNNER_ID reaches for next, and each chunk it passes on the way with its urgency and why — the hub's
     best account from what it holds of the runner, not a promise of what the runner claims."""
-    body = cli.get(f"/api/runners/{runner_id}/next-claim", "GET /runners/{id}/next-claim").json()
-    cli.show(body, NextClaimDetail(body))
+    resp = cli.get(f"/api/runners/{runner_id}/next-claim", "GET /runners/{id}/next-claim")
+    raw, claim = cli.decode(resp, _NEXT_CLAIM, "GET /runners/{id}/next-claim")
+    cli.show(raw, NextClaimDetail(claim))
 
 
 @runner_group.command("pause", cls=FleetCommand)
@@ -216,13 +237,13 @@ def _set_runner_pause(cli: CliContext, runner_id: str, *, verb: str, by: str) ->
         f"POST /runners/{{id}}/{verb}",
         json_body={"by": by},
     )
-    body = resp.json()
-    state = "paused" if body.get("hub_paused") else "running"
+    raw, runner = cli.decode(resp, _RUNNER, f"POST /runners/{{id}}/{verb}")
+    state = "paused" if runner.hub_paused else "running"
     lines = [f"runner {runner_id} is now {state} (at the hub)"]
-    if body.get("locally_paused"):
+    if runner.locally_paused:
         # Resuming here cannot clear the runner's own brake, so don't imply it did.
         lines.append(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")
-    cli.show_lines(body, *lines)
+    cli.show_lines(raw, *lines)
 
 
 @runner_group.command("enroll", cls=FleetCommand)
@@ -234,16 +255,16 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
     RUNNER_ID is unknown or retired — `reinstate` it first."""
     # Read first, so a failed read leaves the token unrotated:
     # test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read.
-    entry = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
+    _, entry = cli.decode(cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}"), _RUNNER, "GET /runners/{id}")
     resp = cli.post(
         f"/api/runners/{runner_id}/enrollments",
         "POST /runners/{id}/enrollments",
     )
-    body = resp.json()
+    raw, enrolled = cli.decode(resp, _ENROLLED, "POST /runners/{id}/enrollments")
     cli.show_lines(
-        body,
+        raw,
         f"enrolled {runner_id} — its previous token no longer resolves",
-        *_token_lines(entry.json()["runner_name"], body["token"], selector=runner_id),
+        *_token_lines(entry.runner_name, enrolled.token, selector=runner_id),
     )
 
 
@@ -261,12 +282,11 @@ def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None
         "POST /runners/{id}/retire",
         json_body={"by": by, "force": force},
     )
-    body = resp.json()
+    raw, retired = cli.decode(resp, _RETIRED, "POST /runners/{id}/retire")
     lines = [f"runner {runner_id} is retired"]
-    released: list[str] = body.get("released_chunk_ids") or []
-    if released:
-        lines.append(f"released: {', '.join(released)}")
-    cli.show_lines(body, *lines)
+    if retired.released_chunk_ids:
+        lines.append(f"released: {', '.join(retired.released_chunk_ids)}")
+    cli.show_lines(raw, *lines)
 
 
 @runner_group.command("reinstate", cls=FleetCommand)
@@ -279,8 +299,8 @@ def runner_reinstate(cli: CliContext, runner_id: str, by: str) -> None:
         "POST /runners/{id}/reinstate",
         json_body={"by": by},
     )
-    body = resp.json()
-    cli.show_lines(body, f"runner {runner_id} is reinstated — enroll it to mint a fresh token")
+    raw, _ = cli.decode(resp, _RUNNER, "POST /runners/{id}/reinstate")
+    cli.show_lines(raw, f"runner {runner_id} is reinstated — enroll it to mint a fresh token")
 
 
 @runner_group.command("revoke-token", cls=FleetCommand)
@@ -293,5 +313,5 @@ def runner_revoke_token(cli: CliContext, runner_id: str, by: str) -> None:
         "POST /runners/{id}/token-revocations",
         json_body={"by": by},
     )
-    body = resp.json()
-    cli.show_lines(body, f"revoked {runner_id}'s token — enroll it to mint a fresh one")
+    raw, _ = cli.decode(resp, _REVOKED, "POST /runners/{id}/token-revocations")
+    cli.show_lines(raw, f"revoked {runner_id}'s token — enroll it to mint a fresh one")

@@ -12,6 +12,7 @@ from functools import partial
 
 from fastapi import APIRouter, Depends
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import problems_runners
@@ -20,7 +21,6 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
-from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.fleet import FleetSpendView
 
 router = APIRouter(

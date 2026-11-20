@@ -5,10 +5,10 @@ Callers supply the already-sanitized instance and detail.
 
 from __future__ import annotations
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,

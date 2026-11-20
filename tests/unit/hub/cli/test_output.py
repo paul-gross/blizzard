@@ -35,10 +35,10 @@ def test_json_on_a_read_verb_prints_the_raw_response_body() -> None:
     payload: list[dict[str, object]] = [
         {
             "chunk_id": "ch_1",
+            "graph_id": "gr_1",
             "status": "ready",
             "current_node_id": None,
             "default_model": ["blizzard:basic"],
-            "cost": {},
         }
     ]
 
@@ -53,7 +53,13 @@ def test_json_on_a_read_verb_prints_the_raw_response_body() -> None:
 
 
 def test_json_on_a_write_verb_prints_the_raw_response_body() -> None:
-    payload = {"chunk_id": "ch_42", "status": "ready", "graph_id": "gr_1", "default_model": ["blizzard:basic"]}
+    payload = {
+        "chunk_id": "ch_42",
+        "status": "ready",
+        "graph_id": "gr_1",
+        "current_node_id": None,
+        "default_model": ["blizzard:basic"],
+    }
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)

@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.user import MemberView
+
+_MEMBER = TypeAdapter(MemberView)
+_MEMBERS = TypeAdapter(list[MemberView])
 
 
 class MemberListing(Listing):
     empty = "no members"
 
-    def line(self, row: Any) -> str:
-        hub_admin = "  [hub admin]" if row.get("hub_admin") else ""
-        return f"{row['user_id']}  {row['username']}  {row['role']}  email={row.get('email') or '-'}{hub_admin}"
+    def line(self, row: MemberView) -> str:
+        hub_admin = "  [hub admin]" if row.hub_admin else ""
+        return f"{row.user_id}  {row.username}  {row.role}  email={row.email or '-'}{hub_admin}"
 
 
 @click.group("member")
@@ -28,8 +31,8 @@ def member_group() -> None:
 @member_group.command("list", cls=FleetCommand)
 def member_list(cli: CliContext) -> None:
     """Every member of the tenant: user id, username, role, email, and whether they are also a hub administrator."""
-    rows = cli.get("/api/members", "GET /members").json()
-    cli.show(rows, MemberListing(rows))
+    raw, rows = cli.decode(cli.get("/api/members", "GET /members"), _MEMBERS, "GET /members")
+    cli.show(raw, MemberListing(rows))
 
 
 @member_group.command("grant", cls=FleetCommand)
@@ -44,8 +47,8 @@ def member_grant(cli: CliContext, user_id: str, role: str) -> None:
         "PUT /members/{user_id}",
         json_body={"role": role},
     )
-    body = resp.json()
-    cli.show_lines(body, f"{body['user_id']} ({body['username']}) is now {body['role']}")
+    raw, member = cli.decode(resp, _MEMBER, "PUT /members/{user_id}")
+    cli.show_lines(raw, f"{member.user_id} ({member.username}) is now {member.role}")
 
 
 @member_group.command("revoke", cls=FleetCommand)

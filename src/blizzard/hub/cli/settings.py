@@ -3,18 +3,20 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
-from blizzard.hub.cli.config import ChangeListing
+from blizzard.hub.cli.config import CHANGES_PAGE, ChangeListing, ChangesPageAnswer
 from blizzard.hub.cli.context import CliContext
+from blizzard.wire.urgency import SettingsView
 
 #: The keys the configuration document spells under ``settings``. ``default_urgency`` is the only one.
 _DEFAULT_URGENCY = "default_urgency"
 _KEYS = (_DEFAULT_URGENCY,)
+
+_SETTINGS = TypeAdapter(SettingsView)
 
 
 @click.group("settings", cls=GetGroup)
@@ -28,16 +30,17 @@ def _known(key: str) -> str:
     return key
 
 
-def _value(body: Any, key: str) -> str:
-    return str(body[key]["slug"])
+def _value(settings: SettingsView, key: str) -> str:
+    """KEY's value as the configuration document spells it; ``default_urgency`` is the only key."""
+    return settings.default_urgency.slug
 
 
-def _record(body: Any) -> tuple[str, str]:
-    return f"revision {body['revision']}", f"updated {body['updated_at']} by {body['updated_by']}"
+def _record(settings: SettingsView) -> tuple[str, str]:
+    return f"revision {settings.revision}", f"updated {settings.updated_at} by {settings.updated_by}"
 
 
-def _show_key(cli: CliContext, body: Any, key: str) -> None:
-    cli.show_lines({"key": key, "value": _value(body, key)}, f"{key} {_value(body, key)}")
+def _show_key(cli: CliContext, settings: SettingsView, key: str) -> None:
+    cli.show_lines({"key": key, "value": _value(settings, key)}, f"{key} {_value(settings, key)}")
 
 
 @settings_group.command("get", cls=FleetCommand)
@@ -47,11 +50,11 @@ def settings_get(cli: CliContext, key: str | None) -> None:
     names another."""
     if key is not None:
         _known(key)
-    body = cli.get("/api/settings", "GET /settings").json()
+    raw, settings = cli.decode(cli.get("/api/settings", "GET /settings"), _SETTINGS, "GET /settings")
     if key is not None:
-        _show_key(cli, body, key)
+        _show_key(cli, settings, key)
         return
-    cli.show_lines(body, *(f"{k} {_value(body, k)}" for k in _KEYS), *_record(body))
+    cli.show_lines(raw, *(f"{k} {_value(settings, k)}" for k in _KEYS), *_record(settings))
 
 
 @settings_group.command("set", cls=FleetCommand)
@@ -60,9 +63,10 @@ def settings_get(cli: CliContext, key: str | None) -> None:
 def settings_set(cli: CliContext, key: str, value: str) -> None:
     """Set KEY to VALUE. No chunk moves; a new default decides only what is minted from then on."""
     _known(key)
-    revision = cli.get("/api/settings", "GET /settings").json()["revision"]
-    resp = cli.patch("/api/settings", "PATCH /settings", json_body={key: value}, if_match=revision, door=True)
-    _show_key(cli, resp.json(), key)
+    _, current = cli.decode(cli.get("/api/settings", "GET /settings"), _SETTINGS, "GET /settings")
+    resp = cli.patch("/api/settings", "PATCH /settings", json_body={key: value}, if_match=current.revision, door=True)
+    _, settings = cli.decode(resp, _SETTINGS, "PATCH /settings")
+    _show_key(cli, settings, key)
 
 
 @settings_group.command("unset", cls=FleetCommand)
@@ -84,9 +88,10 @@ def settings_changes(cli: CliContext, everything: bool) -> None:
     rows, _ = cli.get_before_pages(
         "/api/config/changes",
         "GET /config/changes",
-        key="changes",
+        page=CHANGES_PAGE,
+        rows_of=ChangesPageAnswer.rows,
         params={"record_kind": "tenant_settings"},
         want=None,
         first_page_only=not everything,
     )
-    cli.show({"changes": rows}, ChangeListing(rows))
+    cli.show({"changes": [raw for raw, _ in rows]}, ChangeListing([row for _, row in rows]))

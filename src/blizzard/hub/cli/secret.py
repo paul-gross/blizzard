@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.get_group import GetGroup
@@ -17,15 +18,19 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.secret import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
+from blizzard.wire.secret import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND, SecretView
+
+_SECRET = TypeAdapter(SecretView)
+_SECRETS = TypeAdapter(list[SecretView])
 
 
 class SecretListing(Listing):
     empty = "no secrets yet"
 
     def line(self, row: Any) -> str:
-        marker = "retired" if row["retired"] else "enabled"
-        return f"{row['name']}  r{row['revision']}  {marker}"
+        secret = cast(SecretView, row)
+        marker = "retired" if secret.retired else "enabled"
+        return f"{secret.name}  r{secret.revision}  {marker}"
 
 
 @click.group("secret", cls=GetGroup)
@@ -55,8 +60,8 @@ def secret_create(cli: CliContext, name: str) -> None:
             f"{refusal.message or f'secret {name} already exists'} — replace it with `secret set`"
         )
     cli.check(resp, "POST /secrets")
-    body = resp.json()
-    cli.show_lines(body, f"secret {name} created at revision {body['revision']}")
+    raw, secret = cli.decode(resp, _SECRET, "POST /secrets")
+    cli.show_lines(raw, f"secret {name} created at revision {secret.revision}")
 
 
 @secret_group.command("set", cls=FleetCommand)
@@ -71,8 +76,8 @@ def secret_set(cli: CliContext, name: str) -> None:
     if refusal_of(resp).type == SECRET_NOT_FOUND:
         raise click.ClickException(f"unknown secret {name} — create it with `secret create`")
     cli.check(resp, "PUT /secrets/{name}/value")
-    body = resp.json()
-    cli.show_lines(body, f"secret {name} set at revision {body['revision']}")
+    raw, secret = cli.decode(resp, _SECRET, "PUT /secrets/{name}/value")
+    cli.show_lines(raw, f"secret {name} set at revision {secret.revision}")
 
 
 @secret_group.command("rotate-key")
@@ -107,22 +112,22 @@ def secret_rotate_key(directory: str) -> None:
 def secret_list(cli: CliContext, include_retired: bool) -> None:
     """List secrets — name, revision, retired. Never a value."""
     params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/secrets", "GET /secrets", params=params).json()
-    cli.show(rows, SecretListing(rows))
+    raw, secrets = cli.decode(cli.get("/api/secrets", "GET /secrets", params=params), _SECRETS, "GET /secrets")
+    cli.show(raw, SecretListing(secrets))
 
 
 @secret_group.command("get", cls=FleetCommand)
 @click.argument("name")
 def secret_show(cli: CliContext, name: str) -> None:
     """Show NAME's metadata — revision, who replaced it and when. Never its value."""
-    body = cli.get(f"/api/secrets/{name}", "GET /secrets/{name}").json()
-    state = "retired" if body["retired"] else "enabled"
-    used_by = ", ".join(f"{r['kind']} {r.get('label') or r['key']}" for r in body["references"]) or "-"
+    raw, secret = cli.decode(cli.get(f"/api/secrets/{name}", "GET /secrets/{name}"), _SECRET, "GET /secrets/{name}")
+    state = "retired" if secret.retired else "enabled"
+    used_by = ", ".join(f"{r.kind} {r.label or r.key}" for r in secret.references) or "-"
     cli.show_lines(
-        body,
-        f"{body['name']}  revision {body['revision']}  {state}",
-        f"created {body['created_at']}",
-        f"replaced {body['replaced_at']} by {body['replaced_by']}",
+        raw,
+        f"{secret.name}  revision {secret.revision}  {state}",
+        f"created {secret.created_at}",
+        f"replaced {secret.replaced_at} by {secret.replaced_by}",
         f"used by {used_by}",
     )
 
@@ -144,11 +149,8 @@ def secret_enable(cli: CliContext, name: str) -> None:
 
 
 def _set_lifecycle(cli: CliContext, name: str, *, verb: str) -> None:
-    resp = cli.post(
-        f"/api/secrets/{name}/{verb}",
-        f"POST /secrets/{{name}}/{verb}",
-        door=True,
-    )
-    body = resp.json()
-    state = "retired" if body.get("retired") else "enabled"
-    cli.show_lines(body, f"secret {name} is now {state}")
+    operation = f"POST /secrets/{{name}}/{verb}"
+    resp = cli.post(f"/api/secrets/{name}/{verb}", operation, door=True)
+    raw, secret = cli.decode(resp, _SECRET, operation)
+    state = "retired" if secret.retired else "enabled"
+    cli.show_lines(raw, f"secret {name} is now {state}")

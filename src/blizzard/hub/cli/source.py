@@ -5,11 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.work_source import WorkSourcesListView, WorkSourceSummary
+
+_SOURCE = TypeAdapter(WorkSourceSummary)
+_SOURCES = TypeAdapter(WorkSourcesListView)
 
 _CLEARABLE = click.Choice(["secret"])
 _IF_MATCH = click.option(
@@ -21,21 +26,21 @@ _IF_MATCH = click.option(
 )
 
 
-def _state(row: Any) -> str:
-    if row.get("built_in"):
+def _state(row: WorkSourceSummary) -> str:
+    if row.built_in:
         return "built-in"
-    return "retired" if row["retired"] else "enabled"
+    return "retired" if row.retired else "enabled"
 
 
 class SourceListing(Listing):
     empty = "no work sources yet"
 
-    def line(self, row: Any) -> str:
-        if row.get("built_in"):
-            return f"{row['name']}  built-in"
+    def line(self, row: WorkSourceSummary) -> str:
+        if row.built_in:
+            return f"{row.name}  built-in"
         return (
-            f"{row['slug']}  {row['name']}  {row['work_source_id']}  r{row['revision']}  {_state(row)}  "
-            f"{row['provider']}  {row['locator']}"
+            f"{row.slug}  {row.name}  {row.work_source_id}  r{row.revision}  {_state(row)}  "
+            f"{row.provider}  {row.locator}"
         )
 
 
@@ -86,9 +91,9 @@ def source_create(
     }
     body.update({k: v for k, v in (("name", name), ("forge", forge), ("credential", credential)) if v is not None})
     resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, door=True)
-    out = resp.json()
-    cli.warn(out)
-    cli.show_lines(out, f"work source {out['slug']} created at revision 1 — id {out['work_source_id']}")
+    raw, out = cli.decode(resp, _SOURCE, "POST /work-sources")
+    cli.warn(raw)
+    cli.show_lines(raw, f"work source {out.slug} created at revision 1 — id {out.work_source_id}")
 
 
 @source_group.command("list", cls=FleetCommand)
@@ -96,8 +101,9 @@ def source_create(
 def source_list(cli: CliContext, include_retired: bool) -> None:
     """List the built-in hub source and every work source — slug, name, id, revision, state, provider, locator."""
     params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/work-sources", "GET /work-sources", params=params).json()["sources"]
-    cli.show(rows, SourceListing(rows))
+    resp = cli.get("/api/work-sources", "GET /work-sources", params=params)
+    raw, listing = cli.decode(resp, _SOURCES, "GET /work-sources")
+    cli.show(raw["sources"], SourceListing(listing.sources))
 
 
 @source_group.command("get", cls=FleetCommand)
@@ -105,21 +111,19 @@ def source_list(cli: CliContext, include_retired: bool) -> None:
 def source_show(cli: CliContext, source: str) -> None:
     """Show SOURCE — named by its id, its slug, or a slug it has left — with its fields, revision, and who created it
     and when."""
-    body = cli.get(
-        f"/api/work-sources/{source}",
-        "GET /work-sources/{source}",
-    ).json()
-    if body["built_in"]:
-        cli.show_lines(body, f"{body['name']}  built-in  annotate={str(body['annotate']).lower()}")
+    resp = cli.get(f"/api/work-sources/{source}", "GET /work-sources/{source}")
+    raw, body = cli.decode(resp, _SOURCE, "GET /work-sources/{source}")
+    if body.built_in:
+        cli.show_lines(raw, f"{body.name}  built-in  annotate={str(body.annotate).lower()}")
         return
     cli.show_lines(
-        body,
-        f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
-        f"id {body['work_source_id']}",
-        f"provider {body['provider']}  locator {body['locator']}",
-        f"forge {body['forge_slug']}  credential {body['credential_slug'] or '-'}",
-        f"secret {body['secret'] or '-'}  annotate {str(body['annotate']).lower()}",
-        f"created {body['created_at']} by {body['created_by']}",
+        raw,
+        f"{body.slug}  {body.name}  revision {body.revision}  {_state(body)}",
+        f"id {body.work_source_id}",
+        f"provider {body.provider}  locator {body.locator}",
+        f"forge {body.forge_slug}  credential {body.credential_slug or '-'}",
+        f"secret {body.secret or '-'}  annotate {str(body.annotate).lower()}",
+        f"created {body.created_at} by {body.created_by}",
     )
 
 
@@ -186,9 +190,9 @@ def source_edit(
         if_match=if_match,
         door=True,
     )
-    out = resp.json()
-    cli.warn(out)
-    cli.show_lines(out, f"work source {out['slug']} is at revision {out['revision']}")
+    raw, out = cli.decode(resp, _SOURCE, "PATCH /work-sources/{source}")
+    cli.warn(raw)
+    cli.show_lines(raw, f"work source {out.slug} is at revision {out.revision}")
 
 
 @source_group.command("retire", cls=FleetCommand)
@@ -208,11 +212,7 @@ def source_enable(cli: CliContext, source: str, if_match: int | None) -> None:
 
 
 def _set_lifecycle(cli: CliContext, source: str, verb: str, if_match: int | None) -> None:
-    resp = cli.post(
-        f"/api/work-sources/{source}/{verb}",
-        f"POST /work-sources/{{source}}/{verb}",
-        if_match=if_match,
-        door=True,
-    )
-    body = resp.json()
-    cli.show_lines(body, f"work source {body['slug']} is now {_state(body)} at revision {body['revision']}")
+    operation = f"POST /work-sources/{{source}}/{verb}"
+    resp = cli.post(f"/api/work-sources/{source}/{verb}", operation, if_match=if_match, door=True)
+    raw, body = cli.decode(resp, _SOURCE, operation)
+    cli.show_lines(raw, f"work source {body.slug} is now {_state(body)} at revision {body.revision}")

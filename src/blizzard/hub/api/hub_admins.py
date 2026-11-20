@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
+from blizzard.auth_core import Permission
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
@@ -18,7 +19,6 @@ from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.hub_admins import LastHubAdminKept
 from blizzard.hub.auth.models import ResolvedIdentity, User
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import HubServices
 from blizzard.wire.user import HubAdminView
 

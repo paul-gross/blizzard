@@ -19,6 +19,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_garden
@@ -34,7 +35,6 @@ from blizzard.hub.api.project_params import CallProject, PathProject, QueryProje
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.kept_by import KeptBy
 from blizzard.hub.domain.chunk.ingest import IngestConflict

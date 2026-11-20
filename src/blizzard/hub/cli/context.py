@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from http import HTTPStatus
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Protocol, cast
 
 import click
+from pydantic import TypeAdapter
 
+from blizzard.cli.answer import decode_answer as _decode_answer
 from blizzard.cli.collaborators import ClientFactory, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.refusal import refusal_of
@@ -18,6 +20,7 @@ from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
 from blizzard.wire.auth import AUTHENTICATION_TYPES
 from blizzard.wire.flags import FLAG_OFF
+from blizzard.wire.me import MeResponse, MeTenant
 from blizzard.wire.problem_reading import ProblemReading, is_kind
 from blizzard.wire.project import PROJECT_REQUIRED
 from blizzard.wire.tenant import NO_SUCH_TENANT, TENANT_NOT_FOUND, TENANT_REQUIRED
@@ -27,8 +30,19 @@ class View(Protocol):
     def lines(self) -> Iterable[str]: ...
 
 
-class PaginationCursor(TypedDict, total=False):
-    next_cursor: str | None
+class _CursorPage(Protocol):
+    @property
+    def next_cursor(self) -> str | None: ...
+
+
+class _BeforePage(Protocol):
+    @property
+    def next_before(self) -> Any: ...
+
+
+#: Accepts any JSON value — for a write whose answer ``--json`` echoes and no verb reads.
+_ANY_JSON: TypeAdapter[Any] = TypeAdapter(Any)
+_ME = TypeAdapter(MeResponse)
 
 
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the colocated default (band +2).
@@ -51,6 +65,14 @@ TENANT_HEADER = "X-Blizzard-Tenant"
 _LEGACY_TENANT_REQUIRED = "tenant_required"
 _LEGACY_PROJECT_REQUIRED = "project_required"
 _LEGACY_FLAG_OFF = "flag_off"
+
+
+def decode_answer[T](response: Response, adapter: TypeAdapter[T], *, operation: str, hub_url: str) -> tuple[Any, T]:
+    """The hub's success answer as ``(raw body, value)``: the value validated against the route's served response
+    model, the raw body for ``--json`` to print unchanged. An answer that is not JSON or does not fit the model raises
+    the one sanitized ``<operation>: unreadable answer from the hub at <origin>`` line
+    (``bzh:clients-decode-answers``)."""
+    return _decode_answer(response, adapter, verb=operation, peer="the hub", where=hub_url)
 
 
 @dto
@@ -103,43 +125,48 @@ class CliContext:
     ) -> Response:
         return self._verb("get", path, operation, params=params)
 
-    def get_all(
+    def decode[T](self, response: Response, adapter: TypeAdapter[T], operation: str) -> tuple[Any, T]:
+        """:func:`decode_answer` for this context's hub: ``(raw body, value)``."""
+        return decode_answer(response, adapter, operation=operation, hub_url=self.hub_url)
+
+    def get_all[P: _CursorPage](
         self,
         path: str,
         operation: str,
         *,
-        key: str,
+        page: TypeAdapter[P],
         params: dict[str, str] | None = None,
-    ) -> list[dict[str, object]]:
-        """Every row of a cursor-paginated list read: ``key``'s rows concatenated across
-        pages of up to 1000, following ``next_cursor`` until it is absent."""
+    ) -> list[P]:
+        """Every page of a cursor-paginated list read, decoded against ``page``'s model: pages of up to 1000,
+        following ``next_cursor`` until it is absent. The caller reads the rows off each page."""
         page_params = dict(params or {})
         page_params["limit"] = "1000"
-        rows: list[dict[str, object]] = []
+        pages: list[P] = []
         cursor: str | None = None
         while True:
             if cursor is not None:
                 page_params["cursor"] = cursor
-            body: dict[str, object] = self.get(path, operation, params=page_params).json()
-            rows.extend(cast(list[dict[str, object]], body[key]))
-            cursor = cast(PaginationCursor, body).get("next_cursor")
+            _, value = self.decode(self.get(path, operation, params=page_params), page, operation)
+            pages.append(value)
+            cursor = value.next_cursor
             if cursor is None:
-                return rows
+                return pages
 
-    def get_before_pages(
+    def get_before_pages[P: _BeforePage](
         self,
         path: str,
         operation: str,
         *,
-        key: str,
+        page: TypeAdapter[P],
+        rows_of: Callable[[P], Sequence[Any]],
         params: dict[str, str] | None = None,
         want: int | None,
         first_page_only: bool = False,
     ) -> tuple[list[Any], Any]:
-        """Rows of a keyset-paginated read (``next_before`` fed back as ``before``), newest first: ``key``'s rows
-        concatenated across pages until ``want`` are held (``None``: every page), and the walk stops early when
-        ``next_before`` is ``None``. ``first_page_only`` reads the first page alone, sending ``params`` as given.
-        Returns the rows and the last ``next_before``.
+        """Rows of a keyset-paginated read (``next_before`` fed back as ``before``), newest first: each page decoded
+        against ``page``'s model and ``rows_of`` its rows, concatenated until ``want`` are held (``None``: every page),
+        and the walk stops early when ``next_before`` is ``None``. ``first_page_only`` reads the first page alone,
+        sending ``params`` as given. Returns the rows and the last ``next_before``.
 
         With ``want`` set, each page asks for ``limit`` = what is still wanted, capped at the ``limit`` in
         ``params`` when one is given."""
@@ -150,9 +177,9 @@ class CliContext:
             if want is not None and not first_page_only:
                 remaining = want - len(rows)
                 page_params["limit"] = str(remaining if cap is None else min(remaining, cap))
-            body = self.get(path, operation, params=page_params).json()
-            rows.extend(body[key])
-            next_before = body["next_before"]
+            _, value = self.decode(self.get(path, operation, params=page_params), page, operation)
+            rows.extend(rows_of(value))
+            next_before = value.next_before
             if next_before is None or first_page_only or (want is not None and len(rows) >= want):
                 return rows, next_before
             page_params["before"] = str(next_before)
@@ -335,11 +362,12 @@ class CliContext:
         for warning in warnings:
             click.echo(f"warning: {warning['message']}", err=True)
 
-    def finish(self, resp: Response, message: str) -> None:
-        """Echo a write verb's result: the raw body under ``--json``, else a static
-        success line that never has to parse the body at all."""
+    def finish(self, resp: Response, message: str, operation: str, *, answer: TypeAdapter[Any] = _ANY_JSON) -> None:
+        """Echo a write verb's result: the raw body under ``--json`` — read through the decoder as ``operation``'s
+        answer against the route's model ``answer`` — else a static success line that never has to parse the body."""
         if self.as_json:
-            self.echo_json(resp.json())
+            raw, _ = self.decode(resp, answer, operation)
+            self.echo_json(raw)
             return
         click.echo(message)
 
@@ -400,12 +428,21 @@ class CliContext:
         """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
         refused tenant's header, which would refuse it too."""
         me = replace(self, tenant=None).send("get", "/api/me")
-        tenants = _tenants_of(me) if me.status_code == HTTPStatus.OK else []
+        tenants = self._tenants_of(me) if me.status_code == HTTPStatus.OK else []
         lines = [headline]
         if tenants:
             lines.append("your tenants:")
-            lines.extend(f"  {t['tenant_id']}  {t['name']}  ({t['role']})" for t in tenants)
+            lines.extend(f"  {t.tenant_id}  {t.name}  ({t.role})" for t in tenants)
         return click.ClickException("\n".join(lines))
+
+    def _tenants_of(self, me: Response) -> list[MeTenant]:
+        """The tenants of an ``/api/me`` answer. An answer this CLI cannot read lists none: the refusal that asked
+        for them keeps its own headline."""
+        try:
+            _, value = self.decode(me, _ME, "GET /me")
+        except click.ClickException:
+            return []
+        return value.tenants
 
     def _headers(self, *, door: bool = False) -> dict[str, str]:
         """``X-Blizzard-Door: cli`` when ``door``; the ``Authorization: Bearer`` header
@@ -432,25 +469,6 @@ def project_required(projects: list[dict[str, str]]) -> click.ClickException:
         lines.append("its projects:")
         lines.extend(f"  {p['project_id']}  {p['slug']}  {p['name']}" for p in projects)
     return click.ClickException("\n".join(lines))
-
-
-def _tenants_of(me: Response) -> list[dict[str, str]]:
-    """The ``tenants`` rows of an ``/api/me`` body that carry an id, a name and a role."""
-    try:
-        body = me.json()
-    except ValueError:
-        return []
-    rows = cast(dict[str, object], body).get("tenants") if isinstance(body, dict) else None
-    if not isinstance(rows, list):
-        return []
-    keys = ("tenant_id", "name", "role")
-    return [
-        {k: str(row[k]) for k in keys}
-        for entry in cast(list[object], rows)
-        if isinstance(entry, dict)
-        for row in [cast(dict[str, object], entry)]
-        if all(row.get(k) for k in keys)
-    ]
 
 
 def _projects_of(reading: ProblemReading) -> list[dict[str, str]]:

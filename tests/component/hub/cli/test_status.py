@@ -50,13 +50,17 @@ def _cost(cost_usd: float, *, partial: bool) -> dict[str, Any]:
     }
 
 
+def _chunk(chunk_id: str, cost: dict[str, Any]) -> dict[str, Any]:
+    return {"chunk_id": chunk_id, "graph_id": "gr_1", "status": "running", "current_node_id": "nd_1", "cost": cost}
+
+
 def _responses(
     chunk_cost: dict[str, Any], fleet_cost: dict[str, Any], runners: list[dict[str, Any]] | None = None
 ) -> dict[str, object]:
     return {
         f"{DEFAULT_HUB_URL}/api/chunks": {
             "chunks": [
-                {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": chunk_cost},
+                _chunk("ch_1", chunk_cost),
             ],
             "next_cursor": None,
         },
@@ -77,6 +81,9 @@ def _runner(
 ) -> dict[str, Any]:
     return {
         "runner_id": "r1",
+        "runner_name": "r-one",
+        "connection": "online" if online else "offline",
+        "added_at": "2026-10-01T00:00:00Z",
         "workspace_id": "ws1",
         "online": online,
         "hub_paused": hub_paused,
@@ -198,13 +205,13 @@ def test_status_drains_every_page_of_chunks() -> None:
     cost = _cost(0.0, partial=False)
     page_1 = {
         "chunks": [
-            {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": cost},
+            _chunk("ch_1", cost),
         ],
         "next_cursor": "cursor-1",
     }
     page_2 = {
         "chunks": [
-            {"chunk_id": "ch_2", "status": "running", "current_node_id": "nd_1", "cost": cost},
+            _chunk("ch_2", cost),
         ],
         "next_cursor": None,
     }
@@ -226,9 +233,10 @@ def test_status_drains_every_page_of_chunks() -> None:
 
 
 def test_status_json_keeps_raw_fields_across_pages_and_old_server_defaults() -> None:
-    first = {"chunk_id": "one", "extra": {"untouched": [1, None]}}
-    second = {"chunk_id": "two", "extra": False}
-    responses = _responses({}, {})
+    cost = _cost(0.0, partial=False)
+    first = _chunk("one", cost) | {"extra": {"untouched": [1, None]}}
+    second = _chunk("two", cost) | {"extra": False}
+    responses = _responses(cost, cost)
     responses[f"{DEFAULT_HUB_URL}/api/runners"] = {"server_extra": [1, 2]}
     calls: list[dict[str, str]] = []
 

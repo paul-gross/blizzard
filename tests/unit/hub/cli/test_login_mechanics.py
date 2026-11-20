@@ -10,6 +10,7 @@ import threading
 from collections.abc import Callable
 from urllib.parse import parse_qs, urlparse
 
+import click
 import httpx2
 import pytest
 
@@ -169,23 +170,23 @@ def test_the_authorize_url_does_not_double_a_trailing_slash() -> None:
     assert login.authorize_url.startswith("http://hub.example/api/auth/authorize?")
 
 
-@pytest.mark.parametrize("body", [{}, {"token": ""}, {"token": 5}, {"token": None}])
-def test_a_malformed_token_in_a_successful_exchange_is_refused(body: dict[str, object]) -> None:
+def test_an_empty_token_in_a_successful_exchange_is_refused() -> None:
+    login = _paste_login("http://hub.example", _answering(200, {"token": ""}))
+
+    with pytest.raises(cli_login.LoginError) as raised:
+        login.token()
+
+    assert str(raised.value) == "the hub's login exchange response carried no token"
+
+
+@pytest.mark.parametrize("body", [{}, {"token": 5}, {"token": None}, ["t"]])
+def test_an_exchange_body_the_token_model_rejects_is_an_unreadable_answer(body: object) -> None:
     login = _paste_login("http://hub.example", _answering(200, body))
 
-    with pytest.raises(cli_login.LoginError) as raised:
+    with pytest.raises(click.ClickException) as raised:
         login.token()
 
-    assert str(raised.value) == "the hub's login exchange response carried no token"
-
-
-def test_a_non_object_exchange_body_is_refused_as_carrying_no_token() -> None:
-    login = _paste_login("http://hub.example", _answering(200, ["t"]))
-
-    with pytest.raises(cli_login.LoginError) as raised:
-        login.token()
-
-    assert str(raised.value) == "the hub's login exchange response carried no token"
+    assert raised.value.message.startswith("POST /auth/cli/token: unreadable answer from the hub at http://hub.example")
 
 
 def test_a_rejected_exchange_says_what_did_not_match() -> None:

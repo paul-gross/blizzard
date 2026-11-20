@@ -6,12 +6,12 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
 
 

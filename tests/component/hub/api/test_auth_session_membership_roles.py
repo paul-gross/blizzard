@@ -13,11 +13,11 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.models import User
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (

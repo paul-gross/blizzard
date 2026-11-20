@@ -7,7 +7,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from blizzard.hub.cli.chunk import ChunkDetail
+from blizzard.hub.cli.chunk import ChunkDetailLines
+from blizzard.wire.chunk import ChunkDetail
 from tests.support.scaffolding import HubHarness, build_hub, default_project, make_ready, pointer_token
 
 _REPOSITORY = "acme-widget"
@@ -101,6 +102,8 @@ def test_chunk_get_renders_each_target_with_its_origin_and_capture() -> None:
         "chunk_id": "ch_1",
         "graph_id": "g1",
         "status": "ready",
+        "current_node_id": None,
+        "latest_epoch": None,
         "repository_targets": [
             {
                 "repository_id": "repo_1",
@@ -119,7 +122,7 @@ def test_chunk_get_renders_each_target_with_its_origin_and_capture() -> None:
         ],
     }
 
-    lines = list(ChunkDetail(body).lines())
+    lines = list(ChunkDetailLines(ChunkDetail.model_validate(body)).lines())
 
     assert "  repository acme-widget: rust-rewrite (override, captured 2026-11-11T09:00:00Z)" in lines
     assert "  repository acme-lib: main (inherited, preview)" in lines

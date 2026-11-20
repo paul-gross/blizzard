@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
@@ -11,6 +12,10 @@ from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
 from blizzard.wire.chunk import POINTER_ALREADY_HELD
+from blizzard.wire.work_source import WorkItemCreateResponse, WorkItemView
+
+_CREATED = TypeAdapter(WorkItemCreateResponse)
+_ITEM = TypeAdapter(WorkItemView)
 
 
 class WorkToken(click.ParamType[tuple[str, str]]):
@@ -94,8 +99,8 @@ def item_create(
         resp,
         "POST /work-sources/{source}/items",
     )
-    body_json = resp.json()
-    cli.show_lines(body_json, f"created {body_json['label']} → chunk {body_json['chunk_id']}")
+    raw, created = cli.decode(resp, _CREATED, "POST /work-sources/{source}/items")
+    cli.show_lines(raw, f"created {created.label} → chunk {created.chunk_id}")
 
 
 @item_group.command("edit", cls=FleetCommand)
@@ -122,8 +127,8 @@ def item_edit(
         "PATCH /work-sources/{source}/items/{ref}",
         json_body=json_body,
     )
-    body_json = resp.json()
-    cli.show_lines(body_json, f"edited {body_json['label']}")
+    raw, item = cli.decode(resp, _ITEM, "PATCH /work-sources/{source}/items/{ref}")
+    cli.show_lines(raw, f"edited {item.label}")
 
 
 @item_group.command("delete", cls=FleetCommand)
@@ -138,5 +143,5 @@ def item_delete(cli: CliContext, token: tuple[str, str], yes: bool) -> None:
         f"/api/work-sources/{source}/items/{ref}",
         "DELETE /work-sources/{source}/items/{ref}",
     )
-    body_json = resp.json()
-    cli.show_lines(body_json, f"withdrew {body_json['label']}")
+    raw, item = cli.decode(resp, _ITEM, "DELETE /work-sources/{source}/items/{ref}")
+    cli.show_lines(raw, f"withdrew {item.label}")

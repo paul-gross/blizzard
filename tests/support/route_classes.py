@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
-from blizzard.hub.auth.permissions import Permission
+from blizzard.auth_core import Permission
 
 
 @runtime_checkable

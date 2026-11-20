@@ -6,11 +6,28 @@ from __future__ import annotations
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
+from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.project import (
+    ProjectsListView,
+    ProjectView,
+    RepositoryLinksView,
+    RepositoryLinkView,
+    SourceLinksView,
+    SourceLinkView,
+)
+
+_PROJECT = TypeAdapter(ProjectView)
+_PROJECTS = TypeAdapter(ProjectsListView)
+_SOURCE_LINK = TypeAdapter(SourceLinkView)
+_SOURCE_LINKS = TypeAdapter(SourceLinksView)
+_REPOSITORY_LINK = TypeAdapter(RepositoryLinkView)
+_REPOSITORY_LINKS = TypeAdapter(RepositoryLinksView)
 
 _IF_MATCH = click.option(
     "--if-match",
@@ -40,46 +57,45 @@ _REPOSITORY = click.option(
 class ProjectListing(Listing):
     empty = "no projects"
 
-    def line(self, row: Any) -> str:
-        return f"{row['slug']}  {row['name']}  {row['color']}  {row['project_id']}  r{row['revision']}"
+    def line(self, row: ProjectView) -> str:
+        return f"{row.slug}  {row.name}  {row.color}  {row.project_id}  r{row.revision}"
 
 
-def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
-    sources = [
-        f"{row['name']} (built in)" if row.get("built_in") else row.get("slug") or row["name"] for row in source_links
-    ]
+def _linked(source_links: list[SourceLinkView], repository_links: list[RepositoryLinkView]) -> list[str]:
+    sources = [f"{row.name} (built in)" if row.built_in else row.slug or row.name for row in source_links]
     return [f"sources {', '.join(sources) or '-'}", *_landing_order(repository_links)]
 
 
-def _landing_order(repository_links: list[Any]) -> list[str]:
+def _landing_order(repository_links: list[RepositoryLinkView]) -> list[str]:
     """The project's repositories in landing order, as the hub lists them, each with its position or "unranked" and
     its effective base branch, inherited from the repository or the link's own."""
     if not repository_links:
         return ["repositories -"]
     return [
         "repositories, in landing order:",
-        *(f"  {row['slug']}  {_position(row.get('position'))}  {_branch(row)}" for row in repository_links),
+        *(f"  {row.slug}  {_position(row.position)}  {_branch(row)}" for row in repository_links),
     ]
 
 
-def _branch(row: Any) -> str:
+def _branch(row: RepositoryLinkView) -> str:
     """A link's effective base branch, and whether it is inherited from the repository or the link's own."""
-    source = "inherited" if row.get("base_branch") is None else "override"
-    return f"branch {row['effective_base_branch']} ({source})"
+    source = "inherited" if row.base_branch is None else "override"
+    return f"branch {row.effective_base_branch} ({source})"
 
 
 def _position(position: float | None) -> str:
     return "unranked" if position is None else f"{position:g}"
 
 
-def _target(source: str | None, repository: str | None) -> tuple[str, str, str]:
-    """The link collection, the record's name and its kind in operator words, for exactly one of the two options."""
+def _target(source: str | None, repository: str | None) -> tuple[str, str, str, TypeAdapter[Any]]:
+    """The link collection, the record's name, its kind in operator words and the link's answer model, for exactly one
+    of the two options."""
     if (source is None) == (repository is None):
         raise click.UsageError("name exactly one of --source or --repository")
     if source is not None:
-        return "source-links", source, "work source"
+        return "source-links", source, "work source", _SOURCE_LINK
     assert repository is not None
-    return "repository-links", repository, "repository"
+    return "repository-links", repository, "repository", _REPOSITORY_LINK
 
 
 @click.group("project", cls=GetGroup)
@@ -101,15 +117,15 @@ def project_create(cli: CliContext, slug: str, name: str | None, description: st
     if color is not None:
         body["color"] = color
     resp = cli.post("/api/projects", "POST /projects", json_body=body, door=True)
-    out = resp.json()
-    cli.show_lines(out, f"project {out['slug']} created at revision 1 — id {out['project_id']}")
+    raw, out = cli.decode(resp, _PROJECT, "POST /projects")
+    cli.show_lines(raw, f"project {out.slug} created at revision 1 — id {out.project_id}")
 
 
 @project_group.command("list", cls=FleetCommand)
 def project_list(cli: CliContext) -> None:
     """List the tenant's projects — slug, name, color, id, revision."""
-    rows = cli.get("/api/projects", "GET /projects").json()["projects"]
-    cli.show(rows, ProjectListing(rows))
+    raw, listing = cli.decode(cli.get("/api/projects", "GET /projects"), _PROJECTS, "GET /projects")
+    cli.show(raw["projects"], ProjectListing(listing.projects))
 
 
 @project_group.command("get", cls=FleetCommand)
@@ -118,20 +134,27 @@ def project_show(cli: CliContext, project: str) -> None:
     """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources linked to it and the
     repositories linked to it, in landing order, each with its position or "unranked" and its base branch, inherited
     from the repository or the link's own."""
-    body = cli.get(f"/api/projects/{project}", "GET /projects/{project}").json()
-    sources = cli.get(f"/api/projects/{project}/source-links", "GET /projects/{project}/source-links").json()[
-        "source_links"
-    ]
-    repositories = cli.get(
-        f"/api/projects/{project}/repository-links", "GET /projects/{project}/repository-links"
-    ).json()["repository_links"]
+    project_op = "GET /projects/{project}"
+    raw, body = cli.decode(cli.get(f"/api/projects/{project}", project_op), _PROJECT, project_op)
+    sources_op = "GET /projects/{project}/source-links"
+    sources_raw, sources = cli.decode(
+        cli.get(f"/api/projects/{project}/source-links", sources_op), _SOURCE_LINKS, sources_op
+    )
+    repositories_op = "GET /projects/{project}/repository-links"
+    repositories_raw, repositories = cli.decode(
+        cli.get(f"/api/projects/{project}/repository-links", repositories_op), _REPOSITORY_LINKS, repositories_op
+    )
     cli.show_lines(
-        {**body, "source_links": sources, "repository_links": repositories},
-        f"{body['slug']}  {body['name']}  revision {body['revision']}",
-        f"id {body['project_id']}  created {body['created_at']}",
-        f"color {body['color']}",
-        f"description {body['description'] or '-'}",
-        *_linked(sources, repositories),
+        {
+            **raw,
+            "source_links": sources_raw["source_links"],
+            "repository_links": repositories_raw["repository_links"],
+        },
+        f"{body.slug}  {body.name}  revision {body.revision}",
+        f"id {body.project_id}  created {body.created_at}",
+        f"color {body.color}",
+        f"description {body.description or '-'}",
+        *_linked(sources.source_links, repositories.repository_links),
     )
 
 
@@ -165,8 +188,8 @@ def project_edit(
         if_match=if_match,
         door=True,
     )
-    out = resp.json()
-    cli.show_lines(out, f"project {out['slug']} is at revision {out['revision']}")
+    raw, out = cli.decode(resp, _PROJECT, "PATCH /projects/{project}")
+    cli.show_lines(raw, f"project {out.slug} is at revision {out.revision}")
 
 
 @project_group.command("link", cls=FleetCommand)
@@ -180,14 +203,16 @@ def project_link(
     """Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source
     can belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link
     already standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again."""
-    collection, record, kind = _target(source, repository)
+    collection, record, kind, answer = _target(source, repository)
+    operation = f"PUT /projects/{{project}}/{collection}/{{name}}"
     resp = cli.put(
         f"/api/projects/{project}/{collection}/{record}",
-        f"PUT /projects/{{project}}/{collection}/{{name}}",
+        operation,
         if_match=if_match,
         door=True,
     )
-    cli.show_lines(resp.json(), f"project {project} is linked to {kind} {record}")
+    raw, _ = cli.decode(resp, answer, operation)
+    cli.show_lines(raw, f"project {project} is linked to {kind} {record}")
 
 
 @project_group.command("unlink", cls=FleetCommand)
@@ -202,14 +227,16 @@ def project_unlink(
     no longer goes to PROJECT, and PROJECT's work no longer lands in that repository. Unlinking an unlinked link
     changes nothing; link it again to restore it. Refused for the built-in hub source, which every project draws
     from."""
-    collection, record, kind = _target(source, repository)
+    collection, record, kind, answer = _target(source, repository)
+    operation = f"POST /projects/{{project}}/{collection}/{{name}}/retire"
     resp = cli.post(
         f"/api/projects/{project}/{collection}/{record}/retire",
-        f"POST /projects/{{project}}/{collection}/{{name}}/retire",
+        operation,
         if_match=if_match,
         door=True,
     )
-    cli.show_lines(resp.json(), f"project {project} is unlinked from {kind} {record}")
+    raw, _ = cli.decode(resp, answer, operation)
+    cli.show_lines(raw, f"project {project} is unlinked from {kind} {record}")
 
 
 @project_group.command("base", cls=FleetCommand)
@@ -236,12 +263,13 @@ def project_base(
         if_match=if_match,
         door=True,
     )
-    out = resp.json()
-    cli.show_lines(out, f"project {project} lands in {out['slug']} on {_branch(out)}, at revision {out['revision']}")
+    raw, out = cli.decode(resp, _REPOSITORY_LINK, "PATCH /projects/{project}/repository-links/{repository}")
+    cli.show_lines(raw, f"project {project} lands in {out.slug} on {_branch(out)}, at revision {out.revision}")
 
 
-def _show_order(cli: CliContext, project: str, body: Any) -> None:
-    cli.show_lines(body, f"project {project}", *_landing_order(body["repository_links"]))
+def _show_order(cli: CliContext, project: str, resp: Response, operation: str) -> None:
+    raw, body = cli.decode(resp, _REPOSITORY_LINKS, operation)
+    cli.show_lines(raw, f"project {project}", *_landing_order(body.repository_links))
 
 
 @project_group.command("order", cls=FleetCommand)
@@ -257,7 +285,7 @@ def project_order(cli: CliContext, project: str, repositories: tuple[str, ...]) 
         json_body={"repositories": list(repositories)},
         door=True,
     )
-    _show_order(cli, project, resp.json())
+    _show_order(cli, project, resp, "PUT /projects/{project}/landing-order")
 
 
 @project_group.command("position", cls=FleetCommand)
@@ -280,4 +308,4 @@ def project_position(
         json_body=body,
         door=True,
     )
-    _show_order(cli, project, resp.json())
+    _show_order(cli, project, resp, "POST /projects/{project}/landing-order/position")

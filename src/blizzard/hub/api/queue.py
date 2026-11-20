@@ -14,6 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_pass_reason import ClaimPassReason
 from blizzard.foundation.queue_policy import QueueMatchPolicy
@@ -27,7 +28,6 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.urgency_refs import urgency_ref
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.chunk.errors import ChunkNotFound

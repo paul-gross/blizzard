@@ -5,11 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.repository import RepositoriesListView, RepositorySummary
+
+_REPOSITORY = TypeAdapter(RepositorySummary)
+_REPOSITORIES = TypeAdapter(RepositoriesListView)
 
 _CLEARABLE = click.Choice(["park-timeout"])
 _POLICY = click.option(
@@ -37,17 +42,17 @@ _IF_MATCH = click.option(
 )
 
 
-def _state(row: Any) -> str:
-    return "retired" if row["retired"] else "enabled"
+def _state(row: RepositorySummary) -> str:
+    return "retired" if row.retired else "enabled"
 
 
 class RepoListing(Listing):
     empty = "no repositories yet"
 
-    def line(self, row: Any) -> str:
+    def line(self, row: RepositorySummary) -> str:
         return (
-            f"{row['slug']}  {row['name']}  {row['repository_id']}  r{row['revision']}  {_state(row)}  "
-            f"{row['owner']}/{row['repo']}  {row['base_branch']}"
+            f"{row.slug}  {row.name}  {row.repository_id}  r{row.revision}  {_state(row)}  "
+            f"{row.owner}/{row.repo}  {row.base_branch}"
         )
 
 
@@ -108,9 +113,9 @@ def repo_create(
         **({} if allow_no_ci is None else {"allow_no_ci": allow_no_ci}),
     }
     resp = cli.post("/api/repositories", "POST /repositories", json_body=body, door=True)
-    out = resp.json()
-    cli.warn(out)
-    cli.show_lines(out, f"repository {out['slug']} created at revision 1 — id {out['repository_id']}")
+    raw, out = cli.decode(resp, _REPOSITORY, "POST /repositories")
+    cli.warn(raw)
+    cli.show_lines(raw, f"repository {out.slug} created at revision 1 — id {out.repository_id}")
 
 
 @repo_group.command("list", cls=FleetCommand)
@@ -120,8 +125,9 @@ def repo_create(
 def repo_list(cli: CliContext, include_retired: bool) -> None:
     """List every repository — slug, name, id, revision, state, owner/repo, base branch."""
     params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/repositories", "GET /repositories", params=params).json()["repositories"]
-    cli.show(rows, RepoListing(rows))
+    resp = cli.get("/api/repositories", "GET /repositories", params=params)
+    raw, listing = cli.decode(resp, _REPOSITORIES, "GET /repositories")
+    cli.show(raw["repositories"], RepoListing(listing.repositories))
 
 
 @repo_group.command("get", cls=FleetCommand)
@@ -129,18 +135,16 @@ def repo_list(cli: CliContext, include_retired: bool) -> None:
 def repo_show(cli: CliContext, repository: str) -> None:
     """Show REPOSITORY — named by its id, its slug, or a slug it has left — with its fields, revision, and who created
     it and when."""
-    body = cli.get(
-        f"/api/repositories/{repository}",
-        "GET /repositories/{repository}",
-    ).json()
+    resp = cli.get(f"/api/repositories/{repository}", "GET /repositories/{repository}")
+    raw, body = cli.decode(resp, _REPOSITORY, "GET /repositories/{repository}")
     cli.show_lines(
-        body,
-        f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
-        f"id {body['repository_id']}",
-        f"forge {body['forge_slug']}  {body['owner']}/{body['repo']}",
-        f"base_branch {body['base_branch']}  credential {body['credential_slug'] or '-'}  secret {body['secret_name']}",
-        f"policy {body['landing_policy']}{_timeout(body)}  allow no CI {body['allow_no_ci']}",
-        f"created {body['created_at']} by {body['created_by']}",
+        raw,
+        f"{body.slug}  {body.name}  revision {body.revision}  {_state(body)}",
+        f"id {body.repository_id}",
+        f"forge {body.forge_slug}  {body.owner}/{body.repo}",
+        f"base_branch {body.base_branch}  credential {body.credential_slug or '-'}  secret {body.secret_name}",
+        f"policy {body.landing_policy}{_timeout(body)}  allow no CI {body.allow_no_ci}",
+        f"created {body.created_at} by {body.created_by}",
     )
 
 
@@ -214,9 +218,9 @@ def repo_edit(
         if_match=if_match,
         door=True,
     )
-    out = resp.json()
-    cli.warn(out)
-    cli.show_lines(out, f"repository {out['slug']} is at revision {out['revision']}")
+    raw, out = cli.decode(resp, _REPOSITORY, "PATCH /repositories/{repository}")
+    cli.warn(raw)
+    cli.show_lines(raw, f"repository {out.slug} is at revision {out.revision}")
 
 
 def _landing(policy: str | None, park_timeout: int | None) -> dict[str, Any]:
@@ -229,8 +233,8 @@ def _landing(policy: str | None, park_timeout: int | None) -> dict[str, Any]:
     return stated
 
 
-def _timeout(body: Any) -> str:
-    hours = body.get("park_timeout_hours")
+def _timeout(body: RepositorySummary) -> str:
+    hours = body.park_timeout_hours
     return "" if hours is None else f"  park timeout {hours}h"
 
 
@@ -251,11 +255,7 @@ def repo_enable(cli: CliContext, repository: str, if_match: int | None) -> None:
 
 
 def _set_lifecycle(cli: CliContext, repository: str, verb: str, if_match: int | None) -> None:
-    resp = cli.post(
-        f"/api/repositories/{repository}/{verb}",
-        f"POST /repositories/{{repository}}/{verb}",
-        if_match=if_match,
-        door=True,
-    )
-    body = resp.json()
-    cli.show_lines(body, f"repository {body['slug']} is now {_state(body)} at revision {body['revision']}")
+    operation = f"POST /repositories/{{repository}}/{verb}"
+    resp = cli.post(f"/api/repositories/{repository}/{verb}", operation, if_match=if_match, door=True)
+    raw, body = cli.decode(resp, _REPOSITORY, operation)
+    cli.show_lines(raw, f"repository {body.slug} is now {_state(body)} at revision {body.revision}")

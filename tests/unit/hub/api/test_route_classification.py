@@ -16,8 +16,8 @@ from types import FunctionType
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.routing import APIRoute
 
+from blizzard.auth_core import Permission
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
-from blizzard.hub.auth.permissions import Permission
 from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, api_routes, dependency_names, live_routes
 from tests.support.scaffolding import build_hub
 

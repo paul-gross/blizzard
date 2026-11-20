@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.refusal import refusal_of
@@ -15,10 +15,13 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.wire.traces import TRACE_REPLAY_FAILED
+from blizzard.wire.traces import TRACE_REPLAY_FAILED, TraceReplayResponse, TraceStatusResponse
 
 #: A replay runs inside the request, and a week-long window outlasts the default client timeout.
 _REPLAY_TIMEOUT = 600.0
+
+_STATUS = TypeAdapter(TraceStatusResponse)
+_REPLAY = TypeAdapter(TraceReplayResponse)
 
 _COLLECTOR_HINT = "point the hub at an OpenTelemetry Collector that receives OTLP over HTTP, and fan out from there"
 
@@ -26,31 +29,31 @@ _COLLECTOR_HINT = "point the hub at an OpenTelemetry Collector that receives OTL
 @dto
 @dataclass(frozen=True)
 class StatusView:
-    status: dict[str, Any]
+    status: TraceStatusResponse
 
     def lines(self) -> list[str]:
         s = self.status
-        if s["state"] == "enabled":
-            lines = [f"tracing: on, exporting to {s['endpoint']}"]
-        elif s["state"] == "rejected":
+        if s.state == "enabled":
+            lines = [f"tracing: on, exporting to {s.endpoint}"]
+        elif s.state == "rejected":
             lines = [
-                f"tracing: off — {s['rejected_setting']}={s['rejected_value']!r} is not supported",
+                f"tracing: off — {s.rejected_setting}={s.rejected_value!r} is not supported",
                 _COLLECTOR_HINT,
             ]
         else:
             return ["tracing: off"]
-        cursor = s["cursor_at"] or "none yet"
-        lag = "none waiting" if s["lag_seconds"] is None else f"{s['lag_seconds']:.0f}s"
+        cursor = s.cursor_at or "none yet"
+        lag = "none waiting" if s.lag_seconds is None else f"{s.lag_seconds:.0f}s"
         lines.append(f"cursor: {cursor}  lag: {lag}")
-        if s["last_export_at"] is None:
+        if s.last_export_at is None:
             lines.append("last export: none")
         else:
-            lines.append(f"last export: {s['last_export_at']}  ({s['last_export_span_count']} spans)")
-        if s["last_error_at"] is None:
+            lines.append(f"last export: {s.last_export_at}  ({s.last_export_span_count} spans)")
+        if s.last_error_at is None:
             lines.append("last error: none")
         else:
-            ongoing = "ongoing" if s["last_error_ongoing"] else "recovered"
-            lines.append(f"last error: {s['last_error_at']}  ({ongoing})  {s['last_error_message']}")
+            ongoing = "ongoing" if s.last_error_ongoing else "recovered"
+            lines.append(f"last error: {s.last_error_at}  ({ongoing})  {s.last_error_message}")
         return lines
 
 
@@ -63,8 +66,8 @@ def traces_group() -> None:
 def traces_status(cli: CliContext) -> None:
     """Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the
     last error. A credential in the endpoint is never shown."""
-    status = cli.get("/api/traces/status", "GET /traces/status").json()
-    cli.show(status, StatusView(status))
+    raw, status = cli.decode(cli.get("/api/traces/status", "GET /traces/status"), _STATUS, "GET /traces/status")
+    cli.show(raw, StatusView(status))
 
 
 @traces_group.command("replay", cls=AdminCommand)
@@ -76,8 +79,8 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
     were first exported with, so the trace backend can drop duplicates, and ongoing export is unaffected. A range
     over the hub's replay_max_window is sent in windows; a failure names the --since to resume from."""
     refuse_bad_window(since, until, CliCollaborators.of(click.get_current_context()).wall_clock)
-    status = cli.get("/api/traces/status", "GET /traces/status").json()
-    windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
+    _, status = cli.decode(cli.get("/api/traces/status", "GET /traces/status"), _STATUS, "GET /traces/status")
+    windows = replay_windows(since, until, status.replay_max_window_seconds)
     total = {"steps": 0, "chunks": 0, "spans": 0, "batches": 0, "windows": 0}
     for number, (start, stop) in enumerate(windows, 1):
         body = {"since": iso_utc(start), "until": iso_utc(stop), "dry_run": dry_run}
@@ -98,14 +101,16 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
             cli.check(resp, "POST /traces/replay")
         except click.ClickException as exc:
             raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
-        result = resp.json()
-        for key in ("steps", "chunks", "spans", "batches"):
-            total[key] += result.get(key, 0)
+        _, result = cli.decode(resp, _REPLAY, "POST /traces/replay")
+        total["steps"] += result.steps
+        total["chunks"] += result.chunks
+        total["spans"] += result.spans
+        total["batches"] += result.batches
         total["windows"] = number
         if len(windows) > 1 and not cli.as_json:
             click.echo(
                 f"window {number} of {len(windows)} [{iso_utc(start)}, {iso_utc(stop)}): "
-                f"{result['steps']} steps, {result.get('chunks', 0)} chunks, {result['spans']} spans",
+                f"{result.steps} steps, {result.chunks} chunks, {result.spans} spans",
                 err=True,
             )
     verb = "would tell" if dry_run else "told"

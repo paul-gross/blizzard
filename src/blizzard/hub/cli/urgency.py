@@ -10,38 +10,44 @@ from pathlib import Path
 from typing import Any
 
 import click
+from pydantic import TypeAdapter
 
+from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.urgency import URGENCY_IN_USE
+from blizzard.wire.urgency import URGENCY_IN_USE, UrgenciesListView, UrgencyRetireView, UrgencyView
 
 #: The icon media types the hub accepts, by the file's suffix.
 _ICON_TYPES = {".png": "image/png", ".webp": "image/webp"}
 
+_URGENCY = TypeAdapter(UrgencyView)
+_URGENCIES = TypeAdapter(UrgenciesListView)
+_RETIRED = TypeAdapter(UrgencyRetireView)
 
-def _mark(row: Any) -> str:
-    if row.get("emoji"):
-        return f"  {row['emoji']}"
-    if row.get("icon"):
+
+def _mark(row: UrgencyView) -> str:
+    if row.emoji:
+        return f"  {row.emoji}"
+    if row.icon:
         return "  icon"
     return ""
 
 
-def _place(row: Any) -> str:
-    return "retired" if row["place"] is None else f"{row['place']}."
+def _place(row: UrgencyView) -> str:
+    return "retired" if row.place is None else f"{row.place}."
 
 
 class UrgencyListing(Listing):
     empty = "no urgencies"
 
-    def line(self, row: Any) -> str:
-        default = "  default" if row["default"] else ""
+    def line(self, row: UrgencyView) -> str:
+        default = "  default" if row.default else ""
         return (
-            f"{_place(row)}  {row['slug']}  name={row['name']}  color={row['color']}{_mark(row)}  "
-            f"open={row['open_chunks']}{default}"
+            f"{_place(row)}  {row.slug}  name={row.name}  color={row.color}{_mark(row)}  "
+            f"open={row.open_chunks}{default}"
         )
 
 
@@ -57,22 +63,24 @@ def _icon_document(path: Path) -> dict[str, str]:
     return {"media_type": media_type, "data": base64.b64encode(path.read_bytes()).decode("ascii")}
 
 
-def _show_one(cli: CliContext, body: Any, headline: str) -> None:
-    default = "  default" if body["default"] else ""
+def _show_one(cli: CliContext, resp: Response, operation: str, headline: str) -> None:
+    raw, urgency = cli.decode(resp, _URGENCY, operation)
+    default = "  default" if urgency.default else ""
     cli.show_lines(
-        body,
-        f"{headline}  {body['slug']}  {body['urgency_id']}{default}",
-        f"name {body['name']}",
-        f"color {body['color']}",
-        f"mark {_mark(body).strip() or '-'}",
-        f"place {_place(body)}",
-        f"open chunks {body['open_chunks']}",
-        f"revision {body['revision']}",
+        raw,
+        f"{headline}  {urgency.slug}  {urgency.urgency_id}{default}",
+        f"name {urgency.name}",
+        f"color {urgency.color}",
+        f"mark {_mark(urgency).strip() or '-'}",
+        f"place {_place(urgency)}",
+        f"open chunks {urgency.open_chunks}",
+        f"revision {urgency.revision}",
     )
 
 
-def _show_order(cli: CliContext, body: Any) -> None:
-    cli.show(body, UrgencyListing(body["urgencies"]))
+def _show_order(cli: CliContext, resp: Response, operation: str) -> None:
+    raw, order = cli.decode(resp, _URGENCIES, operation)
+    cli.show(raw, UrgencyListing(order.urgencies))
 
 
 _ICON = click.Path(exists=True, dir_okay=False, path_type=Path)
@@ -112,7 +120,7 @@ def urgency_create(
     if first:
         body["after"] = None
     resp = cli.post("/api/urgencies", "POST /urgencies", json_body=body, door=True)
-    _show_one(cli, resp.json(), "created urgency")
+    _show_one(cli, resp, "POST /urgencies", "created urgency")
 
 
 @urgency_group.command("list", cls=FleetCommand)
@@ -120,14 +128,14 @@ def urgency_create(
 def urgency_list(cli: CliContext, include_retired: bool) -> None:
     """List the urgencies in order, most urgent first, the default marked, each with its open-chunk count."""
     params = {"retired": "true"} if include_retired else None
-    _show_order(cli, cli.get("/api/urgencies", "GET /urgencies", params=params).json())
+    _show_order(cli, cli.get("/api/urgencies", "GET /urgencies", params=params), "GET /urgencies")
 
 
 @urgency_group.command("get", cls=FleetCommand)
 @click.argument("slug")
 def urgency_get(cli: CliContext, slug: str) -> None:
     """Show SLUG's fields, its place in the order, and how many open chunks carry it."""
-    _show_one(cli, cli.get(f"/api/urgencies/{slug}", "GET /urgencies/{key}").json(), "urgency")
+    _show_one(cli, cli.get(f"/api/urgencies/{slug}", "GET /urgencies/{key}"), "GET /urgencies/{key}", "urgency")
 
 
 @urgency_group.command("edit", cls=FleetCommand)
@@ -163,7 +171,7 @@ def urgency_edit(
     if not body:
         raise click.UsageError("nothing to edit: give --name, --color, --emoji, --icon or --clear-mark")
     resp = cli.patch(f"/api/urgencies/{slug}", "PATCH /urgencies/{key}", json_body=body, door=True)
-    _show_one(cli, resp.json(), "edited urgency")
+    _show_one(cli, resp, "PATCH /urgencies/{key}", "edited urgency")
 
 
 def _move_to_command(cli: CliContext, slug: str) -> str:
@@ -192,8 +200,8 @@ def urgency_retire(cli: CliContext, slug: str, move_to: str | None) -> None:
             f"urgency {slug} carries {count} open chunks; name where they go:\n  {_move_to_command(cli, slug)}"
         )
     cli.check(resp, "POST /urgencies/{key}/retire")
-    body = resp.json()
-    cli.show_lines(body, f"retired urgency {slug}; moved {body['moved_chunks']} open chunks")
+    raw, retired = cli.decode(resp, _RETIRED, "POST /urgencies/{key}/retire")
+    cli.show_lines(raw, f"retired urgency {slug}; moved {retired.moved_chunks} open chunks")
 
 
 @urgency_group.command("enable", cls=FleetCommand)
@@ -201,7 +209,7 @@ def urgency_retire(cli: CliContext, slug: str, move_to: str | None) -> None:
 def urgency_enable(cli: CliContext, slug: str) -> None:
     """Bring a retired SLUG back at its standing place in the order; no chunk moves back to it."""
     resp = cli.post(f"/api/urgencies/{slug}/enable", "POST /urgencies/{key}/enable", door=True)
-    _show_one(cli, resp.json(), "enabled urgency")
+    _show_one(cli, resp, "POST /urgencies/{key}/enable", "enabled urgency")
 
 
 @urgency_group.command("order", cls=FleetCommand)
@@ -210,7 +218,7 @@ def urgency_order(cli: CliContext, urgencies: tuple[str, ...]) -> None:
     """Set the whole live order, most urgent first: URGENCIES names every live urgency once. Setting the order that
     already stands writes nothing."""
     resp = cli.put("/api/urgencies/order", "PUT /urgencies/order", json_body={"urgencies": list(urgencies)}, door=True)
-    _show_order(cli, resp.json())
+    _show_order(cli, resp, "PUT /urgencies/order")
 
 
 @urgency_group.command("position", cls=FleetCommand)
@@ -227,4 +235,4 @@ def urgency_position(cli: CliContext, slug: str, after: str | None, first: bool)
         json_body={"urgency": slug, "after": after},
         door=True,
     )
-    _show_order(cli, resp.json())
+    _show_order(cli, resp, "POST /urgencies/order/position")

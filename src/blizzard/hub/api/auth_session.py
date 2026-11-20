@@ -28,7 +28,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.api import problems
@@ -50,7 +50,7 @@ from blizzard.hub.api.problems import (
 )
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission, permissions_for
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant

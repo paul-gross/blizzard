@@ -4,16 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
-from blizzard.hub.auth.permissions import (
-    HUB_PERMISSIONS,
-    ROLE_PERMISSIONS,
-    Permission,
-    expand,
-    may_edit_chunks,
-    permissions_for,
-)
+from blizzard.hub.auth.permissions import HUB_PERMISSIONS, ROLE_PERMISSIONS, expand, may_edit_chunks, permissions_for
 
 
 def test_pending_holds_no_permissions() -> None:

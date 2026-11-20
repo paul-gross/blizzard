@@ -18,6 +18,7 @@ from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
+from blizzard.wire.egress import EgressStatusResponse
 from tests.support.egress_world import (
     _PLANTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.egress_world
     OLD_VERSION,
@@ -193,7 +194,10 @@ def test_a_hashing_policy_without_its_key_keeps_exporting_everything_but_events(
         "BZ_EGRESS_PATH_KEY",
     )
     assert {d["name"] for d in status["datasets"]} == {"steps", "invocations"}
-    assert "events: off — egress.path_key_env='BZ_EGRESS_PATH_KEY' names no key" in StatusView(status).lines()
+    assert (
+        "events: off — egress.path_key_env='BZ_EGRESS_PATH_KEY' names no key"
+        in StatusView(EgressStatusResponse.model_validate(status)).lines()
+    )
     now = hub.clock.now()
     for path, body in (
         ("/api/egress/reset", {"dataset": "events", "to": iso_utc(now)}),

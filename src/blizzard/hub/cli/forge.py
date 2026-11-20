@@ -2,29 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.forge import ForgeDetail, ForgesListView, ForgeSummary
+
+_FORGE = TypeAdapter(ForgeDetail)
+_FORGES = TypeAdapter(ForgesListView)
 
 _IF_MATCH = click.option(
     "--if-match", type=int, default=None, help="Refuse the change unless the forge is still at this revision."
 )
 
 
-def _state(row: Any) -> str:
-    return "retired" if row["retired"] else "enabled"
+def _state(row: ForgeSummary) -> str:
+    return "retired" if row.retired else "enabled"
 
 
 class ForgeListing(Listing):
     empty = "no forges yet"
 
-    def line(self, row: Any) -> str:
-        return f"{row['slug']}  {row['name']}  {row['forge_id']}  r{row['revision']}  {_state(row)}  {row['api_base']}"
+    def line(self, row: ForgeSummary) -> str:
+        return f"{row.slug}  {row.name}  {row.forge_id}  r{row.revision}  {_state(row)}  {row.api_base}"
 
 
 @click.group("forge", cls=GetGroup)
@@ -41,8 +44,9 @@ def forge_group() -> None:
 def forge_create(cli: CliContext, slug: str, name: str | None, kind: str, api_base: str, web_base: str | None) -> None:
     """Add forge SLUG at revision 1."""
     body = {"slug": slug, "name": name, "kind": kind, "api_base": api_base, "web_base": web_base}
-    row = cli.post("/api/forges", "POST /forges", json_body=body, door=True).json()
-    cli.show_lines(row, f"forge {row['slug']} created at revision 1 — id {row['forge_id']}")
+    resp = cli.post("/api/forges", "POST /forges", json_body=body, door=True)
+    raw, row = cli.decode(resp, _FORGE, "POST /forges")
+    cli.show_lines(raw, f"forge {row.slug} created at revision 1 — id {row.forge_id}")
 
 
 @forge_group.command("list", cls=FleetCommand)
@@ -50,8 +54,8 @@ def forge_create(cli: CliContext, slug: str, name: str | None, kind: str, api_ba
 def forge_list(cli: CliContext, include_retired: bool) -> None:
     """List forges by slug with their id, revision, state and API origin."""
     params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/forges", "GET /forges", params=params).json()["forges"]
-    cli.show(rows, ForgeListing(rows))
+    raw, listing = cli.decode(cli.get("/api/forges", "GET /forges", params=params), _FORGES, "GET /forges")
+    cli.show(raw["forges"], ForgeListing(listing.forges))
 
 
 @forge_group.command("get", cls=FleetCommand)
@@ -59,20 +63,19 @@ def forge_list(cli: CliContext, include_retired: bool) -> None:
 def forge_show(cli: CliContext, forge: str) -> None:
     """Show FORGE by id, current slug or former slug, with the capabilities it offers, its linked records and each rate
     budget's last reading."""
-    row = cli.get(f"/api/forges/{forge}", "GET /forges/{forge}").json()
+    raw, row = cli.decode(cli.get(f"/api/forges/{forge}", "GET /forges/{forge}"), _FORGE, "GET /forges/{forge}")
     cli.show_lines(
-        row,
-        f"{row['slug']}  {row['name']}  revision {row['revision']}  {_state(row)}",
-        f"id {row['forge_id']}  kind {row['kind']}",
-        f"api_base {row['api_base']}  web_base {row['web_base']}  web_origin {row['web_origin']}",
-        f"created {row['created_at']} by {row['created_by']}",
-        f"offers {', '.join(row.get('offered', [])) or '-'}",
-        *(f"repository {r['label']}  {r['key']}" for r in row["repositories"]),
-        *(f"work source {s['label']}  {s['key']}" for s in row["work_sources"]),
+        raw,
+        f"{row.slug}  {row.name}  revision {row.revision}  {_state(row)}",
+        f"id {row.forge_id}  kind {row.kind}",
+        f"api_base {row.api_base}  web_base {row.web_base}  web_origin {row.web_origin}",
+        f"created {row.created_at} by {row.created_by}",
+        f"offers {', '.join(row.offered) or '-'}",
+        *(f"repository {r.label}  {r.key}" for r in row.repositories),
+        *(f"work source {s.label}  {s.key}" for s in row.work_sources),
         *(
-            f"budget {b['secret_name'] or '(anonymous)'}  {b['bucket']}  {b['remaining']}/{b['limit']}  "
-            f"resets {b['reset']}"
-            for b in row["budgets"]
+            f"budget {b.secret_name or '(anonymous)'}  {b.bucket}  {b.remaining}/{b.limit}  resets {b.reset}"
+            for b in row.budgets
         ),
     )
 
@@ -107,14 +110,15 @@ def forge_edit(
         body["web_base"] = None
     if not body:
         raise click.UsageError("nothing to change — give a field to set")
-    row = cli.patch(
+    resp = cli.patch(
         f"/api/forges/{forge}",
         "PATCH /forges/{forge}",
         json_body=body,
         if_match=if_match,
         door=True,
-    ).json()
-    cli.show_lines(row, f"forge {row['slug']} is at revision {row['revision']}")
+    )
+    raw, row = cli.decode(resp, _FORGE, "PATCH /forges/{forge}")
+    cli.show_lines(raw, f"forge {row.slug} is at revision {row.revision}")
 
 
 @forge_group.command("retire", cls=FleetCommand)
@@ -134,10 +138,7 @@ def forge_enable(cli: CliContext, forge: str, if_match: int | None) -> None:
 
 
 def _lifecycle(cli: CliContext, forge: str, verb: str, if_match: int | None) -> None:
-    row = cli.post(
-        f"/api/forges/{forge}/{verb}",
-        f"POST /forges/{{forge}}/{verb}",
-        if_match=if_match,
-        door=True,
-    ).json()
-    cli.show_lines(row, f"forge {row['slug']} is now {_state(row)} at revision {row['revision']}")
+    operation = f"POST /forges/{{forge}}/{verb}"
+    resp = cli.post(f"/api/forges/{forge}/{verb}", operation, if_match=if_match, door=True)
+    raw, row = cli.decode(resp, _FORGE, operation)
+    cli.show_lines(raw, f"forge {row.slug} is now {_state(row)} at revision {row.revision}")

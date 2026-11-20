@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.hub.cli.admin_settings import admin_settings_group
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.user import HubAdminView
+
+_ADMIN = TypeAdapter(HubAdminView)
+_ADMINS = TypeAdapter(list[HubAdminView])
 
 
 class HubAdminListing(Listing):
     empty = "no hub administrators"
 
     def line(self, row: Any) -> str:
-        return f"{row['user_id']}  {row['username']}  email={row.get('email') or '-'}"
+        admin = cast(HubAdminView, row)
+        return f"{admin.user_id}  {admin.username}  email={admin.email or '-'}"
 
 
 @click.group("admin")
@@ -27,8 +33,9 @@ def admin_group() -> None:
 @admin_group.command("list", cls=AdminCommand)
 def admin_list(cli: CliContext) -> None:
     """Every hub administrator: user id, username, email."""
-    rows = cli.get("/api/admin/hub-admins", "GET /admin/hub-admins").json()
-    cli.show(rows, HubAdminListing(rows))
+    resp = cli.get("/api/admin/hub-admins", "GET /admin/hub-admins")
+    raw, admins = cli.decode(resp, _ADMINS, "GET /admin/hub-admins")
+    cli.show(raw, HubAdminListing(admins))
 
 
 @admin_group.command("grant", cls=AdminCommand)
@@ -39,8 +46,8 @@ def admin_grant(cli: CliContext, user_id: str) -> None:
         f"/api/admin/hub-admins/{user_id}",
         "PUT /admin/hub-admins/{user_id}",
     )
-    body = resp.json()
-    cli.show_lines(body, f"{body['user_id']} ({body['username']}) is a hub administrator")
+    raw, admin = cli.decode(resp, _ADMIN, "PUT /admin/hub-admins/{user_id}")
+    cli.show_lines(raw, f"{admin.user_id} ({admin.username}) is a hub administrator")
 
 
 @admin_group.command("revoke", cls=AdminCommand)

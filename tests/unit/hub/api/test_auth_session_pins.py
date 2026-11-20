@@ -11,10 +11,10 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
+from blizzard.auth_core import Permission
 from blizzard.hub.api.auth import RunnerPrincipal
 from blizzard.hub.api.auth_session import refuse_closed_tenant, require
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.config import HubConfig
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 from blizzard.wire.auth import AUTHENTICATION_UNRESOLVED

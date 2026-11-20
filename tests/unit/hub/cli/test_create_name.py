@@ -6,6 +6,9 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.project import ProjectView
+from blizzard.wire.repository import RepositorySummary
+from blizzard.wire.work_source import WorkSourceSummary
 from tests.support.worker_http import bind_stubs
 
 
@@ -22,8 +25,43 @@ class _Response:
         return None
 
 
+_PROJECT = ProjectView(
+    project_id="pr_1",
+    slug="alpha",
+    name="alpha",
+    description="",
+    color="blue",
+    revision=1,
+    created_at="t0",
+).model_dump(mode="json")
+_REPOSITORY = RepositorySummary(
+    repository_id="re_1",
+    slug="alpha",
+    name="alpha",
+    forge_id="fo_1",
+    forge_slug="github",
+    forge_name="GitHub",
+    owner="o",
+    repo="r",
+    base_branch="main",
+    secret_name="s",
+    landing_policy="merge-on-checks",
+    revision=1,
+    created_at="t0",
+    created_by="operator",
+).model_dump(mode="json")
+_SOURCE = WorkSourceSummary(
+    work_source_id="ws_1",
+    slug="alpha",
+    name="alpha",
+    annotate=False,
+    edit=False,
+    provider="github",
+    locator="o/r",
+).model_dump(mode="json")
+
 _CREATES: list[tuple[list[str], dict[str, object]]] = [
-    (["project", "create", "alpha"], {"slug": "alpha", "project_id": "pr_1"}),
+    (["project", "create", "alpha"], _PROJECT),
     (
         [
             "repo",
@@ -40,11 +78,11 @@ _CREATES: list[tuple[list[str], dict[str, object]]] = [
             "--secret",
             "s",
         ],
-        {"slug": "alpha", "repository_id": "re_1"},
+        _REPOSITORY,
     ),
     (
         ["source", "create", "alpha", "--provider", "github", "--locator", "o/r", "--secret", "s"],
-        {"slug": "alpha", "work_source_id": "ws_1"},
+        _SOURCE,
     ),
 ]
 

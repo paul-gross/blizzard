@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.foundation.invitations import DEFAULT_LIFETIME_DAYS, MAX_LIFETIME_DAYS, MIN_LIFETIME_DAYS
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.invitation import InvitationCreateResponse, InvitationListResponse, InvitationView
+
+_CREATED = TypeAdapter(InvitationCreateResponse)
+_INVITATIONS = TypeAdapter(InvitationListResponse)
+_INVITATION = TypeAdapter(InvitationView)
 
 
 class InvitationListing(Listing):
@@ -18,13 +22,13 @@ class InvitationListing(Listing):
 
     empty = "no invitations"
 
-    def line(self, row: Any) -> str:
-        state = row["state"]
-        if row.get("accepted_by"):
-            state = f"{state} by {row['accepted_by']}"
+    def line(self, row: InvitationView) -> str:
+        state = str(row.state)
+        if row.accepted_by:
+            state = f"{state} by {row.accepted_by}"
         return (
-            f"{row['invitation_id']}  {row['email']}  {row['role']}  {state}  issued by {row['created_by']}"
-            f"  expires_at={row['expires_at']}"
+            f"{row.invitation_id}  {row.email}  {row.role}  {state}  issued by {row.created_by}"
+            f"  expires_at={row.expires_at}"
         )
 
 
@@ -55,13 +59,13 @@ def invite_create(cli: CliContext, email: str, role: str, expires_in: int) -> No
         "POST /invitations",
         json_body={"email": email, "role": role, "expires_in": expires_in},
     )
-    body = resp.json()
-    invitation = body["invitation"]
+    raw, created = cli.decode(resp, _CREATED, "POST /invitations")
+    invitation = created.invitation
     cli.show_lines(
-        body,
-        f"invited {invitation['email']} as {invitation['role']} — {invitation['invitation_id']}, "
-        f"live until {invitation['expires_at']}",
-        f"{cli.hub_url.rstrip('/')}/invite/{body['token']}",
+        raw,
+        f"invited {invitation.email} as {invitation.role} — {invitation.invitation_id}, "
+        f"live until {invitation.expires_at}",
+        f"{cli.hub_url.rstrip('/')}/invite/{created.token}",
         "this link is shown once and cannot be printed again: hand it to the person it invites",
     )
 
@@ -70,8 +74,8 @@ def invite_create(cli: CliContext, email: str, role: str, expires_in: int) -> No
 def invite_list(cli: CliContext) -> None:
     """Every invitation of the tenant, oldest first: email, role, state (live, accepted by whom, expired, revoked),
     who issued it — never its link."""
-    body = cli.get("/api/invitations", "GET /invitations").json()
-    cli.show(body, InvitationListing(body["invitations"]))
+    raw, listing = cli.decode(cli.get("/api/invitations", "GET /invitations"), _INVITATIONS, "GET /invitations")
+    cli.show(raw, InvitationListing(listing.invitations))
 
 
 @invite_group.command("revoke", cls=FleetCommand)
@@ -83,5 +87,5 @@ def invite_revoke(cli: CliContext, invitation_id: str) -> None:
         "POST /invitations/{id}/revocations",
         json_body={},
     )
-    body = resp.json()
-    cli.show_lines(body, f"revoked invitation {body['invitation_id']} for {body['email']}")
+    raw, revoked = cli.decode(resp, _INVITATION, "POST /invitations/{id}/revocations")
+    cli.show_lines(raw, f"revoked invitation {revoked.invitation_id} for {revoked.email}")

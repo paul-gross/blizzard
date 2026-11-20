@@ -11,7 +11,9 @@ from typing import cast
 import click
 import httpx2
 import pytest
+from pydantic import BaseModel, TypeAdapter
 
+from blizzard.cli.collaborators import Response
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.hub.cli.context import TENANT_HEADER, CliContext
 from tests.support.worker_http import Bound, bind_stubs
@@ -160,12 +162,27 @@ def test_check_refuses_an_unfollowed_redirect_rather_than_reporting_success(stat
 
 _BRAVO = "ten_01BRAVO"
 _TENANT_REQUIRED = {"detail": {"code": "tenant_required", "message": "name the tenant to act in"}}
-_ME: dict[str, list[dict[str, object]]] = {
-    "tenants": [
-        {"tenant_id": "ten_01ALPHA", "name": "alpha", "role": "admin", "permissions": []},
-        {"tenant_id": _BRAVO, "name": "bravo", "role": "guest", "permissions": []},
-    ]
-}
+
+
+def _me(*tenants: dict[str, object]) -> dict[str, object]:
+    """A valid ``/api/me`` answer holding ``tenants``."""
+    return {
+        "user_id": "usr_1",
+        "username": "u",
+        "display_name": "U",
+        "role": None,
+        "permissions": [],
+        "assignable_roles": [],
+        "tenants": list(tenants),
+        "hub_admin": False,
+    }
+
+
+def _tenant(tenant_id: str, name: str, role: str) -> dict[str, object]:
+    return {"tenant_id": tenant_id, "name": name, "role": role, "permissions": []}
+
+
+_ME = _me(_tenant("ten_01ALPHA", "alpha", "admin"), _tenant(_BRAVO, "bravo", "guest"))
 
 
 def _get_answering(answers: dict[str, _FakeResponse], sent: list[dict[str, object]]):
@@ -267,6 +284,18 @@ def test_stream_surfaces_tenant_required_with_the_callers_tenants() -> None:
     assert f"  {_BRAVO}  bravo  (guest)" in exc_info.value.message.splitlines()
 
 
+class _KeysetPage(BaseModel):
+    rows: list[int]
+    next_before: int | None
+
+
+_KEYSET = TypeAdapter(_KeysetPage)
+
+
+def _rows_of(page: _KeysetPage) -> list[int]:
+    return page.rows
+
+
 def _keyset_ctx(pages: list[tuple[list[int], int | None]]) -> tuple[CliContext, list[dict[str, str]]]:
     """A context over a ``rows``/``next_before`` read that serves ``pages`` in order, recording each request's params."""
     calls: list[dict[str, str]] = []
@@ -282,7 +311,9 @@ def _keyset_ctx(pages: list[tuple[list[int], int | None]]) -> tuple[CliContext, 
 def test_get_before_pages_stops_at_the_wanted_row_count() -> None:
     ctx, calls = _keyset_ctx([([1, 2], 10), ([3, 4], 20), ([5, 6], 30)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", params={"limit": "2"}, want=4)
+    rows, next_before = ctx.get_before_pages(
+        "/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, params={"limit": "2"}, want=4
+    )
 
     assert rows == [1, 2, 3, 4]
     assert next_before == 20
@@ -293,7 +324,7 @@ def test_get_before_pages_stops_at_the_wanted_row_count() -> None:
 def test_get_before_pages_shrinks_the_last_page_to_what_is_still_wanted() -> None:
     ctx, calls = _keyset_ctx([([1, 2], 10), ([3], 20)])
 
-    rows, _ = ctx.get_before_pages("/api/x", "GET /x", key="rows", params={"limit": "2"}, want=3)
+    rows, _ = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, params={"limit": "2"}, want=3)
 
     assert rows == [1, 2, 3]
     assert [c["limit"] for c in calls] == ["2", "1"]
@@ -302,7 +333,7 @@ def test_get_before_pages_shrinks_the_last_page_to_what_is_still_wanted() -> Non
 def test_get_before_pages_without_a_want_reads_every_page() -> None:
     ctx, calls = _keyset_ctx([([1], 10), ([2], 20), ([3], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=None)
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=None)
 
     assert rows == [1, 2, 3]
     assert next_before is None
@@ -313,7 +344,7 @@ def test_get_before_pages_without_a_want_reads_every_page() -> None:
 def test_get_before_pages_stops_exactly_when_next_before_is_none() -> None:
     ctx, calls = _keyset_ctx([([1, 2], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=50)
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=50)
 
     assert rows == [1, 2]
     assert next_before is None
@@ -323,7 +354,9 @@ def test_get_before_pages_stops_exactly_when_next_before_is_none() -> None:
 def test_get_before_pages_first_page_only_reads_one_page() -> None:
     ctx, calls = _keyset_ctx([([1], 10), ([2], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=None, first_page_only=True)
+    rows, next_before = ctx.get_before_pages(
+        "/api/x", "GET /x", page=_KEYSET, rows_of=_rows_of, want=None, first_page_only=True
+    )
 
     assert rows == [1]
     assert next_before == 10
@@ -343,7 +376,6 @@ _NO_TENANTS_HEADLINE = "you belong to several tenants — name the one to act in
         {"other": []},
         {"tenants": ["not a row", 7]},
         {"tenants": [{"tenant_id": "ten_1", "name": "alpha"}]},
-        {"tenants": [{"tenant_id": "", "name": "alpha", "role": "admin"}]},
     ],
 )
 def test_an_me_body_without_readable_tenant_rows_lists_none(me_body: object) -> None:
@@ -366,14 +398,8 @@ def test_an_unparseable_me_body_lists_no_tenants() -> None:
     assert exc_info.value.message == _NO_TENANTS_HEADLINE
 
 
-def test_only_complete_tenant_rows_are_listed_and_rendered_as_strings() -> None:
-    me = {
-        "tenants": [
-            {"tenant_id": "ten_1", "name": "alpha", "role": "admin"},
-            {"tenant_id": "ten_2", "name": "", "role": "guest"},
-            {"tenant_id": "ten_3", "name": "gamma", "role": "guest"},
-        ]
-    }
+def test_tenant_rows_are_listed_with_their_ids_names_and_roles() -> None:
+    me = _me(_tenant("ten_1", "alpha", "admin"), _tenant("ten_3", "gamma", "guest"))
     answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(200, me)}
     bound = bind_stubs(get=_get_answering(answers, []))
 
@@ -391,8 +417,8 @@ def test_only_complete_tenant_rows_are_listed_and_rendered_as_strings() -> None:
 def test_get_all_follows_the_cursor_across_pages_and_asks_for_a_thousand() -> None:
     sent: list[dict[str, object]] = []
     pages = [
-        _FakeResponse(200, {"rows": [{"n": 1}, {"n": 2}], "next_cursor": "c1"}),
-        _FakeResponse(200, {"rows": [{"n": 3}], "next_cursor": None}),
+        _FakeResponse(200, {"rows": [1, 2], "next_cursor": "c1"}),
+        _FakeResponse(200, {"rows": [3], "next_cursor": None}),
     ]
 
     def fake_get(url: str, **kwargs: object) -> _FakeResponse:
@@ -400,9 +426,9 @@ def test_get_all_follows_the_cursor_across_pages_and_asks_for_a_thousand() -> No
         sent.append({**kwargs, "params": dict(params)})
         return pages[len(sent) - 1]
 
-    rows = _ctx(bind_stubs(get=fake_get)).get_all("/api/x", "GET /x", key="rows", params={"project": "p"})
+    decoded = _ctx(bind_stubs(get=fake_get)).get_all("/api/x", "GET /x", page=_CURSOR, params={"project": "p"})
 
-    assert rows == [{"n": 1}, {"n": 2}, {"n": 3}]
+    assert [row for page in decoded for row in page.rows] == [1, 2, 3]
     assert [s["params"] for s in sent] == [
         {"project": "p", "limit": "1000"},
         {"project": "p", "limit": "1000", "cursor": "c1"},
@@ -413,6 +439,50 @@ def test_get_all_names_its_operation_when_a_page_fails() -> None:
     bound = bind_stubs(get=_get_answering({"/api/x": _FakeResponse(500)}, []))
 
     with pytest.raises(click.ClickException) as exc_info:
-        _ctx(bound).get_all("/api/x", "GET /the-label", key="rows")
+        _ctx(bound).get_all("/api/x", "GET /the-label", page=_CURSOR)
 
     assert exc_info.value.message.startswith("GET /the-label failed: ")
+
+
+class _CursorPageModel(BaseModel):
+    rows: list[int]
+    next_cursor: str | None
+
+
+_CURSOR = TypeAdapter(_CursorPageModel)
+
+
+# --- CliContext.decode -------------------------------------------------------------
+
+
+def test_decode_returns_the_raw_body_beside_the_validated_value() -> None:
+    raw, value = _CTX.decode(
+        cast(Response, _FakeResponse(200, {"rows": [1], "next_cursor": None, "extra": 1})), _CURSOR, "GET /x"
+    )
+
+    assert raw == {"rows": [1], "next_cursor": None, "extra": 1}
+    assert value.rows == [1]
+
+
+def test_decode_names_invalid_json_without_the_body() -> None:
+    with pytest.raises(click.ClickException) as exc_info:
+        _CTX.decode(cast(Response, _FakeResponse(200)), _CURSOR, "GET /x")
+
+    assert exc_info.value.message == f"GET /x: unreadable answer from the hub at {_HUB_URL} (invalid JSON)"
+
+
+def test_decode_counts_validation_errors_without_echoing_values() -> None:
+    with pytest.raises(click.ClickException) as exc_info:
+        _CTX.decode(cast(Response, _FakeResponse(200, {"rows": ["secret"], "next_cursor": 5})), _CURSOR, "GET /x")
+
+    assert exc_info.value.message == f"GET /x: unreadable answer from the hub at {_HUB_URL} (2 validation errors)"
+
+
+def test_decode_strips_credentials_from_the_origin() -> None:
+    ctx = replace(_CTX, hub_url="http://user:pw@hub.local:8421")
+
+    with pytest.raises(click.ClickException) as exc_info:
+        ctx.decode(cast(Response, _FakeResponse(200)), _CURSOR, "GET /x")
+
+    assert "pw" not in exc_info.value.message
+    assert "at http://hub.local:8421 " in exc_info.value.message

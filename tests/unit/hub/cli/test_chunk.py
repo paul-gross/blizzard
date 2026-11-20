@@ -17,6 +17,7 @@ from blizzard.wire.chunk import (
     DEPENDENT_NOT_EDITABLE,
     NO_STANDING_DEPENDENCY,
     PREREQUISITE_EPHEMERAL,
+    ChunkDetail,
 )
 from tests.support.worker_http import bind_stubs
 
@@ -37,6 +38,21 @@ class _FakeResponse:
             raise httpx2.HTTPStatusError(
                 "error", request=request, response=httpx2.Response(self.status_code, request=request)
             )
+
+
+def _cost(
+    cost_usd: float = 0.0, *, cost_partial: bool = False, estimated_cost_usd: float | None = None
+) -> dict[str, object]:
+    """A chunk's whole usage total as the hub serves it."""
+    return {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_create_tokens": 0,
+        "cost_usd": cost_usd,
+        "cost_partial": cost_partial,
+        "estimated_cost_usd": estimated_cost_usd,
+    }
 
 
 def _patch_response(chunk_id: str, intended_migration: object | None) -> _FakeResponse:
@@ -195,7 +211,16 @@ def test_migrate_json_prints_the_raw_response_body() -> None:
 
 
 def _summary(chunk_id: str, node_name: str) -> _FakeResponse:
-    return _FakeResponse(202, {"chunk_id": chunk_id, "status": "running", "current_node_name": node_name})
+    return _FakeResponse(
+        202,
+        {
+            "chunk_id": chunk_id,
+            "graph_id": "gr_1",
+            "status": "running",
+            "current_node_id": "nd_1",
+            "current_node_name": node_name,
+        },
+    )
 
 
 def test_restart_without_a_node_posts_a_null_target() -> None:
@@ -379,10 +404,12 @@ def test_show_reads_both_defaults_back_in_text_mode() -> None:
                 "chunk_id": "ch_1",
                 "status": "not_ready",
                 "graph_id": "gr_1",
+                "current_node_id": "nd_build",
+                "latest_epoch": 1,
                 "current_node_name": "build",
                 "default_model": ["blizzard:advanced", "blizzard:basic"],
                 "default_effort": "high",
-                "cost": {},
+                "cost": _cost(),
             },
         )
 
@@ -405,10 +432,12 @@ def test_show_dashes_a_chunk_expressing_no_preference() -> None:
                 "chunk_id": "ch_1",
                 "status": "not_ready",
                 "graph_id": "gr_1",
+                "current_node_id": "nd_build",
+                "latest_epoch": 1,
                 "current_node_name": "build",
                 "default_model": [],
                 "default_effort": None,
-                "cost": {},
+                "cost": _cost(),
             },
         )
 
@@ -427,11 +456,13 @@ def test_show_reads_default_harnesses_back_in_text_mode() -> None:
                 "chunk_id": "ch_1",
                 "status": "not_ready",
                 "graph_id": "gr_1",
+                "current_node_id": "nd_build",
+                "latest_epoch": 1,
                 "current_node_name": "build",
                 "default_model": [],
                 "default_effort": None,
                 "default_harnesses": ["claude_code", "codex"],
-                "cost": {},
+                "cost": _cost(),
             },
         )
 
@@ -450,8 +481,8 @@ class _DetailFields(TypedDict, total=False):
     status: str
     blocked: dict[str, str] | None
     neighborhood: dict[str, list[dict[str, str | bool]]]
-    route: dict[str, str | list[str]]
-    cost: dict[str, float | bool]
+    route: dict[str, object]
+    cost: dict[str, object]
     urgency: dict[str, str]
 
 
@@ -462,10 +493,12 @@ def _detail(chunk_id: str, **extra: Unpack[_DetailFields]) -> _FakeResponse:
             "chunk_id": chunk_id,
             "status": "not_ready",
             "graph_id": "gr_1",
+            "current_node_id": "nd_build",
+            "latest_epoch": 1,
             "current_node_name": "build",
             "default_model": [],
             "default_effort": None,
-            "cost": {},
+            "cost": _cost(),
             **extra,
         },
     )
@@ -518,7 +551,7 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
 
 @pytest.mark.parametrize(("status", "shown"), [("running", True), ("done", False), ("stopped", False)])
 def test_show_prints_the_runner_only_while_the_chunk_holds_its_claim(status: str, shown: bool) -> None:
-    route = {"runner_id": "rn_1", "environment_ids": ["env_1"]}
+    route: dict[str, object] = {"runner_id": "rn_1", "workspace_id": "ws_1", "environment_ids": ["env_1"]}
     bound = bind_stubs(get=lambda *a, **k: _detail("ch_1", status=status, route=route))
     result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
@@ -528,7 +561,7 @@ def test_show_prints_the_runner_only_while_the_chunk_holds_its_claim(status: str
 
 def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _detail("ch_1", cost={"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.03})
+        return _detail("ch_1", cost=_cost(estimated_cost_usd=0.03))
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
@@ -539,7 +572,7 @@ def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde() -> None:
 
 def test_show_marks_no_estimate_when_none_was_reported() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _detail("ch_1", cost={"cost_usd": 0.10, "cost_partial": False})
+        return _detail("ch_1", cost=_cost(0.10))
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
@@ -744,11 +777,18 @@ def test_chunk_list_marks_a_blocked_chunk() -> None:
                     {
                         "chunk_id": "ch_1",
                         "status": "not_ready",
+                        "graph_id": "gr_1",
                         "current_node_id": "nd_1",
-                        "cost": dict[str, float](),
+                        "cost": _cost(),
                         "blocked": {"prerequisite_chunk_id": "ch_prereq"},
                     },
-                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": dict[str, float]()},
+                    {
+                        "chunk_id": "ch_2",
+                        "status": "ready",
+                        "graph_id": "gr_1",
+                        "current_node_id": "nd_1",
+                        "cost": _cost(),
+                    },
                 ],
                 "next_cursor": None,
             },
@@ -772,11 +812,18 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure() -> None:
                     {
                         "chunk_id": "ch_1",
                         "status": "running",
+                        "graph_id": "gr_1",
                         "current_node_id": "nd_1",
-                        "cost": {"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.12},
+                        "cost": _cost(estimated_cost_usd=0.12),
                         "blocked": {"prerequisite_chunk_id": "ch_prereq"},
                     },
-                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {"cost_usd": 0.5}},
+                    {
+                        "chunk_id": "ch_2",
+                        "status": "ready",
+                        "graph_id": "gr_1",
+                        "current_node_id": "nd_1",
+                        "cost": _cost(0.5),
+                    },
                 ],
                 "next_cursor": None,
             },
@@ -794,14 +841,14 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure() -> None:
 def test_chunk_list_drains_every_page() -> None:
     page_1: dict[str, object] = {
         "chunks": [
-            {"chunk_id": "ch_1", "status": "ready", "current_node_id": "nd_1", "cost": {}},
-            {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+            {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "current_node_id": "nd_1", "cost": _cost()},
+            {"chunk_id": "ch_2", "status": "ready", "graph_id": "gr_1", "current_node_id": "nd_1", "cost": _cost()},
         ],
         "next_cursor": "cursor-1",
     }
     page_2: dict[str, object] = {
         "chunks": [
-            {"chunk_id": "ch_3", "status": "ready", "current_node_id": "nd_1", "cost": {}},
+            {"chunk_id": "ch_3", "status": "ready", "graph_id": "gr_1", "current_node_id": "nd_1", "cost": _cost()},
         ],
         "next_cursor": None,
     }
@@ -826,7 +873,9 @@ def test_placement_verbs_post_the_anchor_when_named(verb: str) -> None:
 
     def fake_post(url: str, *, json: object = None, timeout: float) -> _FakeResponse:
         calls.append((url, json))
-        return _FakeResponse(202, {"chunk_id": "ch_1", "status": "not_ready"})
+        return _FakeResponse(
+            202, {"chunk_id": "ch_1", "graph_id": "gr_1", "status": "not_ready", "current_node_id": None}
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -850,11 +899,18 @@ def test_chunk_list_renders_each_chunks_urgency_and_dashes_one_naming_none() -> 
                     {
                         "chunk_id": "ch_1",
                         "status": "ready",
+                        "graph_id": "gr_1",
                         "current_node_id": "nd_1",
-                        "cost": dict[str, float](),
+                        "cost": _cost(),
                         "urgency": {"urgency_id": "urg_1", "slug": "urgent"},
                     },
-                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": dict[str, float]()},
+                    {
+                        "chunk_id": "ch_2",
+                        "status": "ready",
+                        "graph_id": "gr_1",
+                        "current_node_id": "nd_1",
+                        "cost": _cost(),
+                    },
                 ],
                 "next_cursor": None,
             },
@@ -918,11 +974,11 @@ def test_set_urgency_sends_it_alone_and_echoes_the_slug_the_hub_resolved() -> No
 
 
 def test_a_bare_chunk_detail_falls_back_to_graph_id_and_dashes() -> None:
-    from blizzard.hub.cli.chunk import ChunkDetail
+    from blizzard.hub.cli.chunk import ChunkDetailLines
 
-    body = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1"}
+    body = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "current_node_id": None, "latest_epoch": None}
 
-    assert list(ChunkDetail(body).lines()) == [
+    assert list(ChunkDetailLines(ChunkDetail.model_validate(body)).lines()) == [
         "ch_1  status=ready  urgency=-  graph=gr_1",
         "  node: -",
         "  default model: -   default effort: -",
@@ -932,13 +988,15 @@ def test_a_bare_chunk_detail_falls_back_to_graph_id_and_dashes() -> None:
 
 
 def test_a_full_chunk_detail_renders_every_line_in_order() -> None:
-    from blizzard.hub.cli.chunk import ChunkDetail
+    from blizzard.hub.cli.chunk import ChunkDetailLines
 
     body = {
         "chunk_id": "ch_1",
         "status": "in_progress",
         "graph_id": "gr_1",
         "graph_name": "basic",
+        "current_node_id": "nd_build",
+        "latest_epoch": 1,
         "urgency": {"urgency_id": "ur_1", "slug": "high"},
         "current_node_name": "build",
         "default_model": ["opus", "sonnet"],
@@ -946,24 +1004,24 @@ def test_a_full_chunk_detail_renders_every_line_in_order() -> None:
         "default_harnesses": ["claude_code", "codex"],
         "work_refs": [
             {"label": "Fix it", "slug": "gh", "source": "github", "ref": "1"},
-            {"slug": "gh", "source": "github", "ref": "2"},
+            {"source": "github", "ref": "2"},
             {"source": "github", "ref": "3"},
         ],
-        "route": {"runner_id": "rn_1", "environment_ids": ["e1", "e2"]},
+        "route": {"runner_id": "rn_1", "workspace_id": "ws_1", "environment_ids": ["e1", "e2"]},
         "blocked": {"prerequisite_chunk_id": "ch_0"},
         "neighborhood": {
             "prerequisites": [{"chunk_id": "ch_0", "satisfied": True}, {"chunk_id": "ch_9", "satisfied": False}],
             "dependents": [{"chunk_id": "ch_2", "satisfied": False}],
         },
-        "cost": {"cost_usd": 1.5},
+        "cost": _cost(1.5),
     }
 
-    assert list(ChunkDetail(body).lines()) == [
+    assert list(ChunkDetailLines(ChunkDetail.model_validate(body)).lines()) == [
         "ch_1  status=in_progress  urgency=high  graph=basic",
         "  node: build",
         "  default model: opus, sonnet   default effort: high",
         "  default harnesses: claude_code, codex",
-        "  pointers: Fix it, gh#2, github#3",
+        "  pointers: Fix it, github#2, github#3",
         "  runner: rn_1  environments: 2",
         "  blocked: waiting on ch_0",
         "  prerequisites: ch_0 (satisfied), ch_9 (unsatisfied)",
@@ -973,18 +1031,19 @@ def test_a_full_chunk_detail_renders_every_line_in_order() -> None:
 
 
 def test_a_route_on_a_terminal_chunk_is_not_rendered_and_a_route_without_environments_counts_zero() -> None:
-    from blizzard.hub.cli.chunk import ChunkDetail
+    from blizzard.hub.cli.chunk import ChunkDetailLines
 
-    route = {"runner_id": "rn_1"}
-    done = {"chunk_id": "ch_1", "status": "done", "graph_id": "gr_1", "route": route}
-    live = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "route": route}
+    route = {"runner_id": "rn_1", "workspace_id": "ws_1"}
+    bare = {"chunk_id": "ch_1", "graph_id": "gr_1", "current_node_id": None, "latest_epoch": None, "route": route}
+    done = bare | {"status": "done"}
+    live = bare | {"status": "ready"}
 
-    assert not any("runner:" in line for line in ChunkDetail(done).lines())
-    assert "  runner: rn_1  environments: 0" in list(ChunkDetail(live).lines())
+    assert not any("runner:" in line for line in ChunkDetailLines(ChunkDetail.model_validate(done)).lines())
+    assert "  runner: rn_1  environments: 0" in list(ChunkDetailLines(ChunkDetail.model_validate(live)).lines())
 
 
 def test_a_chunk_detail_names_its_flow_places() -> None:
-    from blizzard.hub.cli.chunk import ChunkDetail
+    from blizzard.hub.cli.chunk import ChunkDetailLines
 
     place = {
         "flow_id": "fl_1",
@@ -992,11 +1051,19 @@ def test_a_chunk_detail_names_its_flow_places() -> None:
         "resource": "r",
         "branch": "b",
         "state": "polling",
+        "in_line": True,
         "position": 2,
         "next_poll_at": "2026-10-01T00:00:00Z",
     }
-    body = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "flow_places": [place]}
+    body = {
+        "chunk_id": "ch_1",
+        "status": "ready",
+        "graph_id": "gr_1",
+        "current_node_id": None,
+        "latest_epoch": None,
+        "flow_places": [place],
+    }
 
     assert "  on blizzard@b (fl_1): polling  position 2  next poll 2026-10-01T00:00:00Z" in list(
-        ChunkDetail(body).lines()
+        ChunkDetailLines(ChunkDetail.model_validate(body)).lines()
     )

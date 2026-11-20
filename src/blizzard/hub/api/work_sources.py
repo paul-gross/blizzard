@@ -15,6 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events, problems, problems_admin
@@ -32,7 +33,6 @@ from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict

@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Response, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
@@ -24,7 +25,6 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.authoring import Authored
 from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD, CredentialId

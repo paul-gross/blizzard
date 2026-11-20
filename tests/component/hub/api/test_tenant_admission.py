@@ -14,7 +14,7 @@ from typing import Annotated, Any
 import pytest
 from fastapi import APIRouter, Depends
 
-from blizzard.auth_core import Role
+from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import (
     TENANT_HEADER,
     TenantBoundAdmitting,
@@ -25,7 +25,6 @@ from blizzard.hub.api.auth_session import (
     tenant_bound,
 )
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (

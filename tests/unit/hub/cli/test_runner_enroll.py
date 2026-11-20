@@ -36,7 +36,17 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token() -> None
         return _FakeResponse(201, {"runner_id": "runner-a", "token": "sekrit-token"})
 
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
-        return _FakeResponse(200, {"runner_id": "runner-a", "runner_name": "runner-a"})
+        return _FakeResponse(
+            200,
+            {
+                "runner_id": "runner-a",
+                "runner_name": "runner-a",
+                "connection": "online",
+                "online": True,
+                "added_at": "2026-09-01T00:00:00Z",
+                "hub_paused": False,
+            },
+        )
 
     bound = bind_stubs(post=fake_post, get=fake_get)
     result = bound.runner.invoke(

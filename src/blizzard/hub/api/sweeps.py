@@ -12,13 +12,13 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantRequest, require, require_hub, resolve_tenant, tenant_bound
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.roster import SweepPassResult, SweepServesNoTenant, UnknownSweep
 from blizzard.wire.sweep_passes import SweepPassResponse

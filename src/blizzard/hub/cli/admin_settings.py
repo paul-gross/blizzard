@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+from pydantic import BaseModel, TypeAdapter, model_validator
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import AdminCommand
@@ -16,8 +17,47 @@ from blizzard.hub.cli.config import ApplyListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.config import ConfigError, HubConfig, json_literal
+from blizzard.wire.config import ConfigApplyResponse
+from blizzard.wire.hub_settings import (
+    HubSettingRow,
+    HubSettingsChange,
+    HubSettingsChanges,
+    HubSettingsView,
+    SettingsExportDocument,
+)
 
 _PATH = "/api/admin/settings"
+
+_SETTINGS = TypeAdapter(HubSettingsView)
+_APPLIED = TypeAdapter(ConfigApplyResponse)
+_EXPORT: TypeAdapter[SettingsExportDocument] = TypeAdapter(SettingsExportDocument)
+
+
+class ChangesAnswer(BaseModel):
+    """A settings change-log page as the hub answered it: decoded against :class:`HubSettingsChanges`, its rows also
+    kept as sent so ``--json`` prints them unchanged."""
+
+    raw_changes: list[Any]
+    page: HubSettingsChanges
+
+    @model_validator(mode="before")
+    @classmethod
+    def _of_answer(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            answer = cast(dict[str, Any], value)
+            return {"raw_changes": answer.get("changes"), "page": answer}
+        return value
+
+    @property
+    def next_before(self) -> int | None:
+        return self.page.next_before
+
+    def rows(self) -> list[tuple[Any, HubSettingsChange]]:
+        """Each row as sent beside its decoded form."""
+        return list(zip(self.raw_changes, self.page.changes, strict=True))
+
+
+_CHANGES = TypeAdapter(ChangesAnswer)
 
 
 def _json_value(value: object, *, what: str) -> None:
@@ -37,14 +77,16 @@ class SettingsListing(Listing):
     empty = "no settings"
 
     def line(self, row: Any) -> str:
-        return f"{row['key']} = {json.dumps(row['value'])}  ({row['source']}, {row['lifetime']})"
+        setting = cast(HubSettingRow, row)
+        return f"{setting.key} = {json.dumps(setting.value)}  ({setting.source}, {setting.lifetime})"
 
 
 class ChangesListing(Listing):
     empty = "no settings changes yet"
 
     def line(self, row: Any) -> str:
-        return f"#{row['id']}  {row['recorded_at']}  {row['actor']}  {row['door']}  r{row['revision']}  {row['op']}"
+        change = cast(HubSettingsChange, row)
+        return f"#{change.id}  {change.recorded_at}  {change.actor}  {change.door}  r{change.revision}  {change.op}"
 
 
 @click.group("settings", cls=GetGroup)
@@ -52,28 +94,29 @@ def admin_settings_group() -> None:
     """Show or edit the hub's operational settings."""
 
 
-def _show(cli: CliContext, body: Any) -> None:
-    cli.show(body, SettingsListing(body["settings"]))
+def _show(cli: CliContext, raw: Any, view: HubSettingsView) -> None:
+    cli.show(raw, SettingsListing(view.settings))
 
 
 @admin_settings_group.command("get", cls=AdminCommand)
 @click.argument("key", required=False)
 def settings_get(cli: CliContext, key: str | None) -> None:
     """Show all settings, or the row for KEY."""
-    body = cli.get(_PATH, "GET /admin/settings").json()
+    raw, view = cli.decode(cli.get(_PATH, "GET /admin/settings"), _SETTINGS, "GET /admin/settings")
     if key is None:
-        _show(cli, body)
+        _show(cli, raw, view)
         return
-    row = next((row for row in body["settings"] if row["key"] == key), None)
-    if row is None:
+    index = next((i for i, row in enumerate(view.settings) if row.key == key), None)
+    if index is None:
         raise click.ClickException(f"no setting named {key}")
-    cli.show(row, SettingsListing([row]))
+    cli.show(raw["settings"][index], SettingsListing([view.settings[index]]))
 
 
 def _write(cli: CliContext, body: dict[str, object]) -> None:
-    revision = cli.get(_PATH, "GET /admin/settings").json()["revision"]
-    response = cli.patch(_PATH, "PATCH /admin/settings", json_body=body, if_match=revision, door=True)
-    _show(cli, response.json())
+    _, current = cli.decode(cli.get(_PATH, "GET /admin/settings"), _SETTINGS, "GET /admin/settings")
+    response = cli.patch(_PATH, "PATCH /admin/settings", json_body=body, if_match=current.revision, door=True)
+    raw, view = cli.decode(response, _SETTINGS, "PATCH /admin/settings")
+    _show(cli, raw, view)
 
 
 @admin_settings_group.command("set", cls=AdminCommand)
@@ -101,9 +144,14 @@ def settings_unset(cli: CliContext, key: str) -> None:
 def settings_changes(cli: CliContext, everything: bool) -> None:
     """List settings changes, newest first."""
     rows, _ = cli.get_before_pages(
-        f"{_PATH}/changes", "GET /admin/settings/changes", key="changes", want=None, first_page_only=not everything
+        f"{_PATH}/changes",
+        "GET /admin/settings/changes",
+        page=_CHANGES,
+        rows_of=ChangesAnswer.rows,
+        want=None,
+        first_page_only=not everything,
     )
-    cli.show({"changes": rows}, ChangesListing(rows))
+    cli.show({"changes": [raw for raw, _ in rows]}, ChangesListing([row for _, row in rows]))
 
 
 @admin_settings_group.command("apply", cls=AdminCommand)
@@ -116,13 +164,14 @@ def settings_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     _json_value(document, what=str(file))
-    body = cli.post(
+    resp = cli.post(
         f"{_PATH}/apply",
         "POST /admin/settings/apply",
         json_body=document,
         params={"dry_run": "true"} if dry_run else None,
-    ).json()
-    cli.show(body, ApplyListing(body["outcomes"]))
+    )
+    raw, applied = cli.decode(resp, _APPLIED, "POST /admin/settings/apply")
+    cli.show(raw, ApplyListing(applied.outcomes))
 
 
 def _literal(value: object) -> str:
@@ -164,8 +213,9 @@ def _toml(document: dict[str, object], prefix: tuple[str, ...] = ()) -> list[str
 @admin_settings_group.command("export", cls=AdminCommand)
 def settings_export(cli: CliContext) -> None:
     """Export the settings document as TOML (or JSON with --json)."""
-    document = cli.get(f"{_PATH}/export", "GET /admin/settings/export").json()
+    resp = cli.get(f"{_PATH}/export", "GET /admin/settings/export")
+    raw, document = cli.decode(resp, _EXPORT, "GET /admin/settings/export")
     if cli.as_json:
-        cli.show_lines(document)
+        cli.show_lines(raw)
     else:
         click.echo("\n".join(_toml(document)).lstrip())

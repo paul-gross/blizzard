@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.scope import ScopeView
+
+_SCOPE = TypeAdapter(ScopeView)
+_SCOPES = TypeAdapter(list[ScopeView])
 
 
 class ScopeListing(Listing):
     empty = "no scopes yet"
 
-    def line(self, row: Any) -> str:
-        marker = "retired" if row["retired"] else "enabled"
-        description = f"  {row['description']}" if row.get("description") else ""
-        return f"{row['slug']}  {marker}{description}"
+    def line(self, row: ScopeView) -> str:
+        marker = "retired" if row.retired else "enabled"
+        description = f"  {row.description}" if row.description else ""
+        return f"{row.slug}  {marker}{description}"
 
 
 @click.group("scope", cls=GetGroup)
@@ -42,16 +45,17 @@ def scope_create(cli: CliContext, slug: str, description: str, project: str | No
         json_body={"slug": slug, "description": description},
         door=True,
     )
-    body = resp.json()
-    cli.show_lines(body, f"scope {body['slug']} ready")
+    raw, body = cli.decode(resp, _SCOPE, "POST /scopes")
+    cli.show_lines(raw, f"scope {body.slug} ready")
 
 
 @scope_group.command("list", cls=FleetCommand)
 @project_option(required_by_hub=False)
 def scope_list(cli: CliContext, project: str | None) -> None:
     """List every scope, newest first — slug, retired, description."""
-    rows = cli.get("/api/scopes", "GET /scopes", params=project_query(project) or None).json()
-    cli.show(rows, ScopeListing(rows))
+    resp = cli.get("/api/scopes", "GET /scopes", params=project_query(project) or None)
+    raw, rows = cli.decode(resp, _SCOPES, "GET /scopes")
+    cli.show(raw, ScopeListing(rows))
 
 
 @scope_group.command("get", cls=FleetCommand)
@@ -59,14 +63,15 @@ def scope_list(cli: CliContext, project: str | None) -> None:
 @project_option(required_by_hub=True)
 def scope_show(cli: CliContext, slug: str, project: str | None) -> None:
     """Show SLUG's record — state, description, revision, and when it was created."""
-    body = cli.get(project_path(project, f"/scopes/{slug}"), "GET /scopes/{slug}").json()
-    state = "retired" if body["retired"] else "enabled"
+    resp = cli.get(project_path(project, f"/scopes/{slug}"), "GET /scopes/{slug}")
+    raw, body = cli.decode(resp, _SCOPE, "GET /scopes/{slug}")
+    state = "retired" if body.retired else "enabled"
     cli.show_lines(
-        body,
-        f"{body['slug']}  {state}",
-        f"description {body['description'] or '-'}",
-        f"revision {body['revision'] if body['revision'] is not None else '-'}",
-        f"created {body['created_at']}",
+        raw,
+        f"{body.slug}  {state}",
+        f"description {body.description or '-'}",
+        f"revision {body.revision if body.revision is not None else '-'}",
+        f"created {body.created_at}",
     )
 
 
@@ -82,8 +87,8 @@ def scope_edit(cli: CliContext, slug: str, description: str, project: str | None
         json_body={"description": description},
         door=True,
     )
-    body = resp.json()
-    cli.show_lines(body, f"scope {slug} updated")
+    raw, _ = cli.decode(resp, _SCOPE, "PATCH /scopes/{slug}")
+    cli.show_lines(raw, f"scope {slug} updated")
 
 
 @scope_group.command("retire", cls=FleetCommand)
@@ -105,12 +110,13 @@ def scope_enable(cli: CliContext, slug: str, by: str, project: str | None) -> No
 
 
 def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: str | None) -> None:
+    operation = f"POST /scopes/{{slug}}/{verb}"
     resp = cli.post(
         project_path(project, f"/scopes/{slug}/{verb}"),
-        f"POST /scopes/{{slug}}/{verb}",
+        operation,
         json_body={"by": by},
         door=True,
     )
-    body = resp.json()
-    state = "retired" if body.get("retired") else "enabled"
-    cli.show_lines(body, f"scope {slug} is now {state}")
+    raw, body = cli.decode(resp, _SCOPE, operation)
+    state = "retired" if body.retired else "enabled"
+    cli.show_lines(raw, f"scope {slug} is now {state}")

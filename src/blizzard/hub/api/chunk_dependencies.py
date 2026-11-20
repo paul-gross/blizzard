@@ -9,6 +9,7 @@ from functools import partial
 
 from fastapi import APIRouter, Depends, Request, status
 
+from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
@@ -16,7 +17,6 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
     DependencyWouldCloseCycle,

@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.domain.config.credential_bindings import CREDENTIAL_BINDINGS
+from blizzard.wire.credential import (
+    CredentialCheckView,
+    CredentialDocument,
+    CredentialsListView,
+    CredentialSummary,
+    OperationResultView,
+)
+
+_SUMMARY = TypeAdapter(CredentialSummary)
+_LIST = TypeAdapter(CredentialsListView)
+_DOCUMENT = TypeAdapter(CredentialDocument)
+_CHECK = TypeAdapter(CredentialCheckView)
 
 _VARIANT = click.option(
     "--variant",
@@ -32,17 +45,18 @@ _IF_MATCH = click.option(
 )
 
 
-def _state(row: Any) -> str:
-    return "retired" if row["retired"] else "enabled"
+def _state(row: CredentialSummary) -> str:
+    return "retired" if row.retired else "enabled"
 
 
 class CredentialListing(Listing):
     empty = "no credentials yet"
 
     def line(self, row: Any) -> str:
+        credential = cast(CredentialSummary, row)
         return (
-            f"{row['slug']}  {row['name']}  {row['credential_id']}  r{row['revision']}  {_state(row)}  "
-            f"{row['forge_slug']}  {row['binding']}  {row['authority']}"
+            f"{credential.slug}  {credential.name}  {credential.credential_id}  r{credential.revision}  "
+            f"{_state(credential)}  {credential.forge_slug}  {credential.binding}  {credential.authority}"
         )
 
 
@@ -87,8 +101,9 @@ def credential_create(
         "secret": secret,
         "settings": _settings(variant, app_id, installation_id),
     }
-    row = cli.post("/api/credentials", "POST /credentials", json_body=body, door=True).json()
-    cli.show_lines(row, f"credential {row['slug']} created at revision 1 — id {row['credential_id']}")
+    resp = cli.post("/api/credentials", "POST /credentials", json_body=body, door=True)
+    raw, row = cli.decode(resp, _SUMMARY, "POST /credentials")
+    cli.show_lines(raw, f"credential {row.slug} created at revision 1 — id {row.credential_id}")
 
 
 @credential_group.command("list", cls=FleetCommand)
@@ -96,8 +111,9 @@ def credential_create(
 def credential_list(cli: CliContext, include_retired: bool) -> None:
     """List credentials by slug with their id, revision, state, forge, binding and authority."""
     params = {"include_retired": "true"} if include_retired else None
-    rows = cli.get("/api/credentials", "GET /credentials", params=params).json()["credentials"]
-    cli.show(rows, CredentialListing(rows))
+    resp = cli.get("/api/credentials", "GET /credentials", params=params)
+    raw, listed = cli.decode(resp, _LIST, "GET /credentials")
+    cli.show(raw["credentials"], CredentialListing(listed.credentials))
 
 
 @credential_group.command("get", cls=FleetCommand)
@@ -105,16 +121,17 @@ def credential_list(cli: CliContext, include_retired: bool) -> None:
 def credential_show(cli: CliContext, credential: str) -> None:
     """Show CREDENTIAL — named by its id, its slug, or a slug it has left — with its fields and every repository and
     work source naming it."""
-    row = cli.get(f"/api/credentials/{credential}", "GET /credentials/{credential}").json()
+    resp = cli.get(f"/api/credentials/{credential}", "GET /credentials/{credential}")
+    raw, row = cli.decode(resp, _DOCUMENT, "GET /credentials/{credential}")
     cli.show_lines(
-        row,
-        f"{row['slug']}  {row['name']}  revision {row['revision']}  {_state(row)}",
-        f"id {row['credential_id']}",
-        f"forge {row['forge_slug']}  binding {row['binding']}  secret {row['secret_name']}",
-        f"authority {row['authority']}",
-        *(f"setting {key} {value}" for key, value in sorted(row["settings"].items())),
-        f"created {row['created_at']} by {row['created_by']}",
-        *(f"{r['kind']} {r['label']}  {r['key']}" for r in row["referrers"]),
+        raw,
+        f"{row.slug}  {row.name}  revision {row.revision}  {_state(row)}",
+        f"id {row.credential_id}",
+        f"forge {row.forge_slug}  binding {row.binding}  secret {row.secret_name}",
+        f"authority {row.authority}",
+        *(f"setting {key} {value}" for key, value in sorted(row.settings.items())),
+        f"created {row.created_at} by {row.created_by}",
+        *(f"{r.kind} {r.label}  {r.key}" for r in row.referrers),
     )
 
 
@@ -149,14 +166,15 @@ def credential_edit(
         body["settings"] = settings
     if not body:
         raise click.UsageError("nothing to change — give a field to set")
-    row = cli.patch(
+    resp = cli.patch(
         f"/api/credentials/{credential}",
         "PATCH /credentials/{credential}",
         json_body=body,
         if_match=if_match,
         door=True,
-    ).json()
-    cli.show_lines(row, f"credential {row['slug']} is at revision {row['revision']}")
+    )
+    raw, row = cli.decode(resp, _SUMMARY, "PATCH /credentials/{credential}")
+    cli.show_lines(raw, f"credential {row.slug} is at revision {row.revision}")
 
 
 @credential_group.command("retire", cls=FleetCommand)
@@ -200,45 +218,44 @@ def credential_check(
         body["repositories"] = list(repositories)
     if work_sources:
         body["work_sources"] = list(work_sources)
-    check = cli.post(
+    resp = cli.post(
         f"/api/credentials/{credential}/checks",
         "POST /credentials/{credential}/checks",
         json_body=body,
         timeout=_CHECK_TIMEOUT,
-    ).json()
-    cli.show_lines(check, *_check_lines(check))
+    )
+    raw, check = cli.decode(resp, _CHECK, "POST /credentials/{credential}/checks")
+    cli.show_lines(raw, *_check_lines(check))
     if _failed(check):
         raise SystemExit(1)
 
 
-def _check_lines(check: dict[str, Any]) -> list[str]:
-    lines = [
-        f"credential {check['credential']}  {check['binding']}" + (f"  {check['variant']}" if check["variant"] else "")
-    ]
-    if check["variant_contradicted"]:
+def _check_lines(check: CredentialCheckView) -> list[str]:
+    lines = [f"credential {check.credential}  {check.binding}" + (f"  {check.variant}" if check.variant else "")]
+    if check.variant_contradicted:
         lines.append("warning: the declared variant contradicts the token the secret holds")
-    if check["mint"] is not None:
-        lines.append(_operation_line(check["mint"]))
-    for use in check["uses"]:
-        reached = "" if use["reached"] else "  (not reached)"
-        lines.append(f"{use['kind']} {use['slug']}  {use['id']}{reached}")
-        lines.extend(f"  {_operation_line(operation)}" for operation in use["operations"])
-    if check["unreached_reason"] is not None:
-        lines.append(f"no use reached: {check['unreached_reason']}")
-    lines.append(check["not_evaluated"])
+    if check.mint is not None:
+        lines.append(_operation_line(check.mint))
+    for use in check.uses:
+        reached = "" if use.reached else "  (not reached)"
+        lines.append(f"{use.kind} {use.slug}  {use.id}{reached}")
+        lines.extend(f"  {_operation_line(operation)}" for operation in use.operations)
+    if check.unreached_reason is not None:
+        lines.append(f"no use reached: {check.unreached_reason}")
+    lines.append(check.not_evaluated)
     return lines
 
 
-def _operation_line(operation: dict[str, Any]) -> str:
-    line = f"{operation['operation']}  {operation['outcome']}"
-    return f"{line}  {operation['detail']}" if operation["detail"] else line
+def _operation_line(operation: OperationResultView) -> str:
+    line = f"{operation.operation}  {operation.outcome}"
+    return f"{line}  {operation.detail}" if operation.detail else line
 
 
-def _failed(check: dict[str, Any]) -> bool:
-    mint = [check["mint"]] if check["mint"] is not None else []
-    operations = [*mint, *(operation for use in check["uses"] for operation in use["operations"])]
-    unreached = bool(check["uses"]) and not any(use["reached"] for use in check["uses"])
-    return unreached or any(operation["outcome"] in _FAILING for operation in operations)
+def _failed(check: CredentialCheckView) -> bool:
+    mint = [check.mint] if check.mint is not None else []
+    operations = [*mint, *(operation for use in check.uses for operation in use.operations)]
+    unreached = bool(check.uses) and not any(use.reached for use in check.uses)
+    return unreached or any(str(operation.outcome) in _FAILING for operation in operations)
 
 
 def _settings(variant: str | None, app_id: int | None, installation_id: int | None) -> dict[str, object]:
@@ -247,10 +264,7 @@ def _settings(variant: str | None, app_id: int | None, installation_id: int | No
 
 
 def _lifecycle(cli: CliContext, credential: str, verb: str, if_match: int | None) -> None:
-    row = cli.post(
-        f"/api/credentials/{credential}/{verb}",
-        f"POST /credentials/{{credential}}/{verb}",
-        if_match=if_match,
-        door=True,
-    ).json()
-    cli.show_lines(row, f"credential {row['slug']} is now {_state(row)} at revision {row['revision']}")
+    operation = f"POST /credentials/{{credential}}/{verb}"
+    resp = cli.post(f"/api/credentials/{credential}/{verb}", operation, if_match=if_match, door=True)
+    raw, row = cli.decode(resp, _SUMMARY, operation)
+    cli.show_lines(raw, f"credential {row.slug} is now {_state(row)} at revision {row.revision}")
