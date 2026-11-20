@@ -4,9 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import httpx2
+
 from blizzard.hub.cli import hub as hub_group
 from tests.support.worker_http import bind_stubs
-from tests.unit.hub.cli.test_queue import _FakeResponse as FakeResponse  # pyright: ignore[reportPrivateUsage]
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload: object | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> object:
+        if self._payload is None:
+            raise ValueError("no JSON body")
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            request = httpx2.Request("GET", "http://hub.test")
+            raise httpx2.HTTPStatusError(
+                "error", request=request, response=httpx2.Response(self.status_code, request=request)
+            )
 
 
 def _page(ids: list[str], *, start: int = 0, next_cursor: str | None = None) -> FakeResponse:
