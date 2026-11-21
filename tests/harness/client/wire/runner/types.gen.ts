@@ -2691,7 +2691,7 @@ export type HostRunnerView = {
  * HostSettingsApplyResponse
  *
  * What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``. ``apply_id`` groups the
- * change rows a real apply wrote; ``null`` for a dry run.
+ * change rows a real apply wrote; ``null`` for a dry run, or for a document that writes nothing.
  */
 export type HostSettingsApplyResponse = {
     /**

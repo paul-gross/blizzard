@@ -129,7 +129,8 @@ class HostSettingsApplication:
     def apply(
         self, document: Mapping[str, object], *, actor: str, dry_run: bool
     ) -> tuple[str | None, HostSettingsPlan]:
-        """The apply's id — ``None`` on a dry run — and its plan. Raises :class:`ApplyRefusal` or
+        """The apply's id — ``None`` on a dry run, or when the document writes nothing, since no change row carries it —
+        and its plan. Raises :class:`ApplyRefusal` or
         :class:`ApplyInvalid`, writing nothing."""
         apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, self._clock).value
         plan = self._unit.apply(
@@ -141,7 +142,7 @@ class HostSettingsApplication:
         moved = {outcome.key for outcome in plan.outcomes if outcome.kind == HOST_KIND and outcome.op != "unchanged"}
         if not dry_run and self._drivers is not None and moved & INTERVAL_KEYS:
             self._drivers.wake()
-        return apply_id, plan
+        return (apply_id if plan.writes() else None), plan
 
     def export(self) -> dict[str, object]:
         """The document stating every entry not at its default, which applies back moving nothing."""

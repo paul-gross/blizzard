@@ -87,6 +87,13 @@ def test_a_runner_the_host_does_not_hold_is_refused(runner_id: str) -> None:
     )
 
 
+def test_a_runner_stated_twice_is_invalid_naming_the_second_table() -> None:
+    document = {"runner": [{"id": "rn_1", "agents": 2}, {"id": "rn_1", "name": "x"}]}
+    with pytest.raises(ApplyInvalid) as invalid:
+        plan_host_settings(document, _STATE, HOST_REGISTRY)
+    assert list(invalid.value.errors) == ["runner[1].id"]
+
+
 def test_an_equal_immutable_key_names_the_record_and_an_unequal_one_is_refused() -> None:
     assert _ops({"subscription": [{"slug": "max", "provider": "anthropic"}]}) == [("subscription", "max", "unchanged")]
     with pytest.raises(ApplyRefusal) as refused:

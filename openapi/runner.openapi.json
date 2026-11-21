@@ -4859,7 +4859,7 @@
         "type": "object"
       },
       "HostSettingsApplyResponse": {
-        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``. ``apply_id`` groups the\nchange rows a real apply wrote; ``null`` for a dry run.",
+        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``. ``apply_id`` groups the\nchange rows a real apply wrote; ``null`` for a dry run, or for a document that writes nothing.",
         "properties": {
           "apply_id": {
             "anyOf": [

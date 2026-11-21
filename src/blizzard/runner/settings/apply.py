@@ -155,8 +155,12 @@ def plan_host_settings(
     runners: list[RunnerWrite] = []
     held = {runner.runner_id: runner for runner in state.runners}
     writable = set(runner_keys(registry))
+    stated: set[str] = set()
     for index, table in enumerate(tables[_RUNNER_ARRAY]):
         runner_id = _selector(table, _RUNNER_KEY, f"{_RUNNER_ARRAY}[{index}]")
+        if runner_id in stated:
+            raise ApplyInvalid({f"{_RUNNER_ARRAY}[{index}].{_RUNNER_KEY}": f"runner {runner_id!r} is stated twice"})
+        stated.add(runner_id)
         runner = held.get(runner_id)
         if runner is None:
             raise ApplyRefusal(

@@ -100,6 +100,16 @@ def test_a_refused_entry_fails_the_whole_document_and_writes_nothing(
         assert _state(client) == before
 
 
+def test_an_apply_that_writes_nothing_answers_no_apply_id(hosted: tuple[HostProcess, HostedApp, Path]) -> None:
+    _, app, _ = hosted
+    with TestClient(app.app) as client:
+        before = _state(client)
+        applied = client.post(_APPLY, json={"tick_seconds": 5})
+        assert applied.status_code == 200, applied.text
+        assert applied.json()["apply_id"] is None
+        assert _state(client) == before
+
+
 def test_a_dry_run_answers_the_outcomes_and_writes_nothing(hosted: tuple[HostProcess, HostedApp, Path]) -> None:
     _, app, tmp_path = hosted
     with TestClient(app.app) as client:

@@ -110,7 +110,7 @@ host does not hold (`runner_unknown`), a boot key (`setting_not_live`), an undec
 immutable key that differs from the record's (`setting_immutable`), and a malformed document or a value that leaves the
 host's file invalid (`settings_invalid`). Each refusal names the entry by `record_kind` and `record_key`. Every change
 row an apply writes carries door `apply` and one `apply_id`; `--dry-run` answers the same outcomes, with a `null`
-`apply_id`, and writes nothing.
+`apply_id`, and writes nothing. A document that writes nothing answers a `null` `apply_id` too.
 
 Export states every entry not at its default: the host's, each hosted runner's under its `id`, and every active
 workspace and subscription whole. It is not a backup of boot settings. Applying an export back answers every outcome
