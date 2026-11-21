@@ -271,6 +271,10 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
     "blizzard.foundation.secrets.rotation": (
         "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
     ),
+    "blizzard.foundation.registry.interface": (
+        "the registry interface every area's wiring imports; no daemon root registers through it until a process "
+        "activates its container"
+    ),
 }
 
 
