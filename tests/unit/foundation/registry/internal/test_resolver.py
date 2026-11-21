@@ -192,3 +192,30 @@ def test_inject_sync_resolves_a_component_keyed_dependency_positionally() -> Non
     assert seen[0] is process.resolver.get(_Named, "c")
     assert process.resolver.get(_Named, component="c") is seen[0]
     process.close()
+
+
+def test_a_child_cannot_open_beneath_a_parent_whose_close_has_begun() -> None:
+    gate = threading.Event()
+    entered = threading.Event()
+    provider = Provider()
+
+    def slow_parent() -> Iterator[_ParentThing]:
+        entered.set()
+        gate.wait(timeout=10)
+        yield _ParentThing()
+
+    provider.provide(slow_parent, scope=_Scopes.PROCESS)
+    process = _owner(provider)
+    in_flight = threading.Thread(target=lambda: process.resolver.get(_ParentThing))
+    in_flight.start()
+    assert entered.wait(timeout=10)
+    closer = threading.Thread(target=process.close)
+    closer.start()
+    wait = threading.Event()
+    while not process._guard.closing:  # pyright: ignore[reportPrivateUsage]  # the test waits for the close to begin
+        wait.wait(0.01)
+    with pytest.raises(ScopeClosed):
+        process.open_child(lifetime=Lifetime.TENANT, owner="t1", values={})
+    gate.set()
+    in_flight.join(timeout=10)
+    closer.join(timeout=10)

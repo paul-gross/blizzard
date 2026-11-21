@@ -25,7 +25,7 @@ from blizzard.foundation.registry.internal.recording import (
     keys_by_lifetime,
     merged,
 )
-from blizzard.foundation.registry.internal.resolver import ContainerOwner, ScopeValuesRefused
+from blizzard.foundation.registry.internal.resolver import ContainerOwner, refuse_unregistered_values
 from blizzard.foundation.roles import adapter_model, domain_model
 
 
@@ -131,10 +131,7 @@ def build_container(
         _provide(provider, entry, lifetimes)
     contexts = keys_by_lifetime(entries, Kind.CONTEXT)
     context = values.as_context()
-    registered = contexts.get(lifetimes.path[0], frozenset())
-    unregistered = [key for key in context if key not in registered]
-    if unregistered:
-        raise ScopeValuesRefused(f"no context registered at {lifetimes.path[0].value} for {unregistered!r}")
+    refuse_unregistered_values(contexts, lifetimes.path[0], context)
     try:
         container = make_container(
             provider,

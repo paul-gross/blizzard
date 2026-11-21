@@ -8,7 +8,8 @@ operation resolves through."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import Any, cast, overload
 
 from dishka import Container
@@ -19,6 +20,18 @@ from blizzard.foundation.registry.interface import Lifetime, ScopeClosed
 
 class ScopeValuesRefused(ValueError):
     """Values supplied to a lifetime that did not register them as context."""
+
+
+def refuse_unregistered_values(
+    contexts: Mapping[Lifetime, frozenset[object]] | None, lifetime: Lifetime, values: Mapping[object, object]
+) -> None:
+    """Refuse a value whose key is no context registered at ``lifetime``, when the registered contexts are known."""
+    if contexts is None:
+        return
+    registered = contexts.get(lifetime, frozenset())
+    unregistered = [key for key in values if key not in registered]
+    if unregistered:
+        raise ScopeValuesRefused(f"no context registered at {lifetime.value} for {unregistered!r}")
 
 
 class OwnerGuard:
@@ -101,24 +114,16 @@ class ContainerOwner:
         return GuardedResolver(self)
 
     def open_child(self, *, lifetime: Lifetime, owner: str, values: Mapping[object, object]) -> ContainerOwner:
-        """Open the next lifetime beneath this owner with a locked container; never closes this owner."""
+        """Open the next lifetime beneath this owner with a locked container; never closes this owner.
+
+        The owner chain is held shared while the child opens, so a close cannot slip in between."""
         following = self._depth + 1
         if following >= len(self._lifetimes) or self._lifetimes[following] is not lifetime:
             raise ValueError(f"the {self.lifetime.value} scope opens only its next lifetime, not {lifetime.value}")
-        if self._guard.closing:
-            raise ScopeClosed(self.lifetime, self._owner)
-        self.check_values(lifetime, values)
-        child = self._container(context=dict(values), lock_factory=threading.Lock)
+        refuse_unregistered_values(self._contexts, lifetime, values)
+        with self._held():
+            child = self._container(context=dict(values), lock_factory=threading.Lock)
         return ContainerOwner(child, lifetimes=self._lifetimes, owner=owner, parent=self, contexts=self._contexts)
-
-    def check_values(self, lifetime: Lifetime, values: Mapping[object, object]) -> None:
-        """Refuse a value whose key is no context registered at ``lifetime``, when the registered contexts are known."""
-        if self._contexts is None:
-            return
-        registered = self._contexts.get(lifetime, frozenset())
-        unregistered = [key for key in values if key not in registered]
-        if unregistered:
-            raise ScopeValuesRefused(f"no context registered at {lifetime.value} for {unregistered!r}")
 
     def close(self, exception: BaseException | None = None) -> None:
         """Close once: wait out active resolutions, then finalize outside the guards; later calls do nothing."""
@@ -132,13 +137,18 @@ class ContainerOwner:
 
     def get(self, dependency_type: Any, component: str | None = "") -> Any:
         """Resolve through every owner's shared guard, ancestor to child; refuse the first closing owner on the path."""
+        with self._held():
+            return self._container.get(dependency_type, component)
+
+    @contextmanager
+    def _held(self) -> Generator[None]:
         held: list[ContainerOwner] = []
         try:
             for owner in self._chain():
                 if not owner._guard.enter_shared():
                     raise ScopeClosed(owner.lifetime, owner.owner)
                 held.append(owner)
-            return self._container.get(dependency_type, component)
+            yield
         finally:
             for owner in reversed(held):
                 owner._guard.exit_shared()
