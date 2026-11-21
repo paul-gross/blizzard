@@ -72,6 +72,8 @@ _HUMAN: set[tuple[str, str]] = {
     ("GET", "/api/host/settings"),
     ("GET", "/api/host/settings/changes"),
     ("PATCH", "/api/host/settings"),
+    ("POST", "/api/host/settings/apply"),
+    ("GET", "/api/host/settings/export"),
     ("GET", "/api/host/environments"),
     ("GET", "/api/host/registration"),
     ("GET", "/api/host/runners"),

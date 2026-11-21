@@ -71,11 +71,13 @@ class RecordExists(Exception):
 @domain_model
 @dataclass(frozen=True)
 class RecordActor:
-    """Who writes, through which door, stamped by the writer's injected clock."""
+    """Who writes, through which door, stamped by the writer's injected clock; ``apply_id`` groups the change rows one
+    document apply writes, ``None`` for any other write."""
 
     actor: str
     door: Door
     at: datetime
+    apply_id: str | None = None
 
 
 @domain_model

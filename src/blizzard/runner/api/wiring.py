@@ -71,7 +71,11 @@ if TYPE_CHECKING:
     from blizzard.runner.api.federation import FederationSettings
     from blizzard.runner.host_settings_reader import HostSettingsInForce
     from blizzard.runner.loop_wiring import RunnerStepper
-    from blizzard.runner.settings.authoring import HostSettingsAuthoring, RunnerSettingsAuthoring
+    from blizzard.runner.settings.authoring import (
+        HostSettingsApplication,
+        HostSettingsAuthoring,
+        RunnerSettingsAuthoring,
+    )
     from blizzard.runner.settings_reader import RunnerSettingsReader
 
 _STORE = "runner store"
@@ -316,6 +320,10 @@ class RunnerWiring:
     def host_settings_authoring(self) -> HostSettingsAuthoring:
         service: HostSettingsAuthoring | None = self._seam("host_settings_authoring")
         return service if service is not None else self._refuse("host settings authoring")
+
+    def host_settings_application(self) -> HostSettingsApplication:
+        service: HostSettingsApplication | None = self._seam("host_settings_application")
+        return service if service is not None else self._refuse("host settings apply")
 
     def stepper(self) -> RunnerStepper:
         stepper: RunnerStepper | None = self._seam("stepper")

@@ -25,6 +25,8 @@ from blizzard.runner.host_records.model import (
     RecordWrite,
 )
 from blizzard.runner.host_records.ports import IWriteHostRecordRepository
+from blizzard.runner.settings.ports import IApplyHandle, IApplyHostRecords
+from blizzard.runner.store.internal.apply_handle import apply_of
 from blizzard.runner.store.internal.host_settings_record import HostSettingsRecord
 from blizzard.runner.store.schema import (
     host_subscription_facts,
@@ -62,39 +64,54 @@ class _HostRecordStore:
         return tuple(record for record in map(self._record, rows) if retired or not record.retired)
 
     def apply(self, write: RecordWrite, by: RecordActor) -> None:
+        with self._store.begin() as conn:
+            self._apply(conn, write, by)
+
+    def lock_locked(self, handle: IApplyHandle) -> None:
+        """Lock every record of the kind on the apply's transaction."""
+        apply_of(handle).conn.execute(self._rows.update().values(revision=self._rows.c.revision))
+
+    def records_locked(self, handle: IApplyHandle) -> tuple[HostRecord, ...]:
+        rows = apply_of(handle).conn.execute(self._select().order_by(self._key_column(self._rows))).all()
+        return tuple(map(self._record, rows))
+
+    def apply_locked(self, handle: IApplyHandle, write: RecordWrite, by: RecordActor) -> None:
+        self._apply(apply_of(handle).conn, write, by)
+
+    def _apply(self, conn: Connection, write: RecordWrite, by: RecordActor) -> None:
+        """Write ``write`` on ``conn``: the row, its fact and its change row."""
         record = write.record
         key_column = self._key_column(self._rows)
-        with self._store.begin() as conn:
-            if write.creates():
-                if conn.execute(select(key_column).where(key_column == record.key)).first() is not None:
-                    raise RecordExists(self._kind, record.key)
-                conn.execute(
-                    self._rows.insert().values(
-                        {self._key: record.key, "created_at": by.at, "revision": record.revision, **self._row(record)}
-                    )
+        if write.creates():
+            if conn.execute(select(key_column).where(key_column == record.key)).first() is not None:
+                raise RecordExists(self._kind, record.key)
+            conn.execute(
+                self._rows.insert().values(
+                    {self._key: record.key, "created_at": by.at, "revision": record.revision, **self._row(record)}
                 )
-            else:
-                moved = conn.execute(
-                    self._rows.update()
-                    .where(key_column == record.key, self._rows.c.revision == write.prior)
-                    .values(revision=record.revision, **self._row(record))
-                ).rowcount
-                if not moved:
-                    held = conn.execute(select(self._rows.c.revision).where(key_column == record.key)).scalar()
-                    raise SettingsRevisionConflict(int(held or 0), write.prior)
-            if write.fact is not None:
-                self._append_fact(conn, record.key, write.fact, by)
-            self._changes.append_change(
-                conn,
-                diff=write.diff,
-                op=write.op,
-                door=by.door,
-                actor=by.actor,
-                apply_id=None,
-                revision=record.revision,
-                record_kind=str(self._kind),
-                record_key=record.key,
             )
+        else:
+            moved = conn.execute(
+                self._rows.update()
+                .where(key_column == record.key, self._rows.c.revision == write.prior)
+                .values(revision=record.revision, **self._row(record))
+            ).rowcount
+            if not moved:
+                held = conn.execute(select(self._rows.c.revision).where(key_column == record.key)).scalar()
+                raise SettingsRevisionConflict(int(held or 0), write.prior)
+        if write.fact is not None:
+            self._append_fact(conn, record.key, write.fact, by)
+        self._changes.append_change(
+            conn,
+            diff=write.diff,
+            op=write.op,
+            door=by.door,
+            actor=by.actor,
+            apply_id=by.apply_id,
+            revision=record.revision,
+            record_kind=str(self._kind),
+            record_key=record.key,
+        )
         _log.debug("host record stored", kind=str(self._kind), key=record.key, op=write.op, revision=record.revision)
 
     def _key_column(self, table: Table) -> Column[Any]:
@@ -157,3 +174,5 @@ class HostSubscriptionStore(_HostRecordStore):
 
 _workspace_store_conforms: type[IWriteHostRecordRepository] = HostWorkspaceStore
 _subscription_store_conforms: type[IWriteHostRecordRepository] = HostSubscriptionStore
+_workspace_apply_member_conforms: type[IApplyHostRecords] = HostWorkspaceStore
+_subscription_apply_member_conforms: type[IApplyHostRecords] = HostSubscriptionStore

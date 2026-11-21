@@ -146,10 +146,14 @@ class HostSettingsReader:
             return self._resolved[1] if self._resolved is not None else self.host
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        return self.validate_with(entries, self.records.snapshot() if self.records is not None else None)
+
+    def validate_with(self, entries: Mapping[str, Entry], records: HostRecordsSnapshot | None) -> Mapping[str, str]:
+        """``entries`` judged beside ``records`` rather than the records the store holds now."""
         unknown = {key: "not a writable host setting" for key in entries if key not in self.keys}
         if unknown:
             return unknown
-        _, errors = self._resolve(entries, self.records.snapshot() if self.records is not None else None)
+        _, errors = self._resolve(entries, records)
         result: dict[str, str] = {}
         for error in errors:
             for key in self._error_keys(error, entries):
@@ -166,23 +170,44 @@ class HostSettingsReader:
             found = found & set(entries) or found
         return found or set(entries) or set(self.keys)
 
-    def record_problems(self, kind: RecordKind, candidate: HostRecord) -> Mapping[str, str]:
+    def resolve_with(self, entries: Mapping[str, Entry], records: HostRecordsSnapshot | None) -> HostConfig:
+        """The effective configuration ``entries`` and ``records`` resolve to, uncached; :class:`ValueError` naming
+        every error when they fail."""
+        resolved, errors = self._resolve(entries, records)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return resolved
+
+    def record_problems(
+        self,
+        kind: RecordKind,
+        candidate: HostRecord,
+        *,
+        entries: Mapping[str, Entry] | None = None,
+        records: HostRecordsSnapshot | None = None,
+    ) -> Mapping[str, str]:
         """Each failing setting of ``candidate`` and why, judged by the host file's parse — an active candidate beside
         the host's current entries and its other active records, a retired one on its own as it is served — and, for
         a workspace, its prompt resolved as its provider's build resolves it. So a write refuses exactly what the
-        file would fail at boot and what the next rebuild would fail at."""
-        current = self.records.snapshot() if self.records is not None else HostRecordsSnapshot()
+        file would fail at boot and what the next rebuild would fail at. ``entries`` and ``records`` judge it beside
+        those instead of what the store holds now."""
+        if records is not None:
+            current = records
+        else:
+            current = self.records.snapshot() if self.records is not None else HostRecordsSnapshot()
         mine = current.workspaces if kind is RecordKind.WORKSPACE else current.subscriptions
         if candidate.retired:
             placed: tuple[HostRecord, ...] = (candidate,)
         else:
             placed = (*(record for record in mine if record.key != candidate.key), candidate)
-        records = (
+        placed_records = (
             replace(current, workspaces=placed)
             if kind is RecordKind.WORKSPACE
             else replace(current, subscriptions=placed)
         )
-        parsed, errors = self._resolve(self.store.snapshot().entries, records)
+        parsed, errors = self._resolve(
+            entries if entries is not None else self.store.snapshot().entries, placed_records
+        )
         if not errors and kind is RecordKind.WORKSPACE:
             for workspace in parsed.workspaces:
                 if workspace.id == candidate.key:

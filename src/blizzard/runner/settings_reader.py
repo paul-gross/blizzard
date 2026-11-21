@@ -13,9 +13,11 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig, RunnerEntry, parse_runner_entry
+from blizzard.runner.host_records.model import HostRecord, HostRecordsSnapshot, RecordKind
 from blizzard.runner.host_settings_reader import HostSettingsReader
 from blizzard.runner.settings.keys import runner_keys
 from blizzard.runner.settings.ports import (
+    IJudgeHostApply,
     IReadRunnerSettings,
     IWriteRunnerSettings,
     SettingsChange,
@@ -260,3 +262,34 @@ class RunnerSettingsReader(RunnerEntriesJudge):
         effective = host if host is not None else self._host_at(None)
         # The token is the held token's, opened from the store — never a settings input.
         return effective.config_for_runner(entry, entry.own, "")
+
+
+class HostApplyJudge:
+    """A document apply's writes judged through the host's reader and each held runner's file entry, beside the
+    state the apply leaves rather than the state the store holds now."""
+
+    def __init__(self, host: HostSettingsReader, runners: Callable[[], Mapping[str, RunnerEntry]]) -> None:
+        self._host = host
+        self._runners = runners
+
+    def host(self, entries: Mapping[str, Entry], records: HostRecordsSnapshot) -> Mapping[str, str]:
+        return self._host.validate_with(entries, records if self._host.records is not None else None)
+
+    def record(
+        self, kind: RecordKind, candidate: HostRecord, entries: Mapping[str, Entry], records: HostRecordsSnapshot
+    ) -> Mapping[str, str]:
+        return self._host.record_problems(kind, candidate, entries=entries, records=records)
+
+    def runner(
+        self,
+        runner_id: str,
+        entries: Mapping[str, Entry],
+        *,
+        host_entries: Mapping[str, Entry],
+        records: HostRecordsSnapshot,
+    ) -> Mapping[str, str]:
+        host = self._host.resolve_with(host_entries, records if self._host.records is not None else None)
+        return RunnerEntriesJudge(host, self._runners()[runner_id]).validate(entries)
+
+
+_judge_conforms: type[IJudgeHostApply] = HostApplyJudge

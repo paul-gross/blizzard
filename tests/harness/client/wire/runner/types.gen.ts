@@ -115,6 +115,27 @@ export type AnalyticsSpendView = {
 };
 
 /**
+ * AppliedFieldChange
+ *
+ * One key an apply moves, each side its stated value — ``null`` for absent or at its default. Shaped as the
+ * hub's apply diff.
+ */
+export type AppliedFieldChange = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * New
+     */
+    new: unknown;
+    /**
+     * Old
+     */
+    old: unknown;
+};
+
+/**
  * ArtifactKind
  *
  * The union discriminator.
@@ -2667,6 +2688,53 @@ export type HostRunnerView = {
 };
 
 /**
+ * HostSettingsApplyResponse
+ *
+ * What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``. ``apply_id`` groups the
+ * change rows a real apply wrote; ``null`` for a dry run, or for a document that writes nothing.
+ */
+export type HostSettingsApplyResponse = {
+    /**
+     * Apply Id
+     */
+    apply_id: string | null;
+    /**
+     * Dry Run
+     */
+    dry_run: boolean;
+    /**
+     * Outcomes
+     */
+    outcomes: Array<HostSettingsOutcome>;
+};
+
+/**
+ * HostSettingsOutcome
+ *
+ * One entry's outcome: ``kind`` ``host``, ``runner``, ``workspace`` or ``subscription``; ``key`` the host key,
+ * runner id, workspace id or subscription slug; ``op`` ``create``, ``edit`` or ``enable`` for a change written and
+ * ``unchanged`` for one that needed none.
+ */
+export type HostSettingsOutcome = {
+    /**
+     * Diff
+     */
+    diff: Array<AppliedFieldChange>;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Op
+     */
+    op: 'create' | 'edit' | 'retire' | 'enable' | 'replace' | 'unchanged';
+};
+
+/**
  * HostSubscriptionCreateRequest
  *
  * A new subscription record: its immutable ``slug`` and ``provider``, its ``name``, and any further key of its
@@ -4499,6 +4567,14 @@ export type SettingsProblem = {
      */
     key: string | null;
     /**
+     * Record Key
+     */
+    record_key: string | null;
+    /**
+     * Record Kind
+     */
+    record_kind: string | null;
+    /**
      * Status
      */
     status: number;
@@ -5818,6 +5894,45 @@ export type PatchHostSettingsApiHostSettingsPatchResponses = {
 
 export type PatchHostSettingsApiHostSettingsPatchResponse = PatchHostSettingsApiHostSettingsPatchResponses[keyof PatchHostSettingsApiHostSettingsPatchResponses];
 
+export type ApplyHostSettingsApiHostSettingsApplyPostData = {
+    /**
+     * Document
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Dry Run
+         */
+        dry_run?: boolean;
+    };
+    url: '/api/host/settings/apply';
+};
+
+export type ApplyHostSettingsApiHostSettingsApplyPostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * A refused, malformed or invalid document entry; nothing is written
+     */
+    422: SettingsProblem;
+};
+
+export type ApplyHostSettingsApiHostSettingsApplyPostError = ApplyHostSettingsApiHostSettingsApplyPostErrors[keyof ApplyHostSettingsApiHostSettingsApplyPostErrors];
+
+export type ApplyHostSettingsApiHostSettingsApplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSettingsApplyResponse;
+};
+
+export type ApplyHostSettingsApiHostSettingsApplyPostResponse = ApplyHostSettingsApiHostSettingsApplyPostResponses[keyof ApplyHostSettingsApiHostSettingsApplyPostResponses];
+
 export type HostSettingsChangesApiHostSettingsChangesGetData = {
     body?: never;
     path?: never;
@@ -5859,6 +5974,26 @@ export type HostSettingsChangesApiHostSettingsChangesGetResponses = {
 };
 
 export type HostSettingsChangesApiHostSettingsChangesGetResponse = HostSettingsChangesApiHostSettingsChangesGetResponses[keyof HostSettingsChangesApiHostSettingsChangesGetResponses];
+
+export type ExportHostSettingsApiHostSettingsExportGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host/settings/export';
+};
+
+export type ExportHostSettingsApiHostSettingsExportGetResponses = {
+    /**
+     * Response Export Host Settings Api Host Settings Export Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ExportHostSettingsApiHostSettingsExportGetResponse = ExportHostSettingsApiHostSettingsExportGetResponses[keyof ExportHostSettingsApiHostSettingsExportGetResponses];
 
 export type ListSubscriptionsApiHostSubscriptionsGetData = {
     body?: never;

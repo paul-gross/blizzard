@@ -13,6 +13,7 @@ export interface RunnerOperations {
   'GET /api/host/runners': { path: T.ListRunnersApiHostRunnersGetData['path']; responses: T.ListRunnersApiHostRunnersGetResponses; errors: {} };
   'GET /api/host/settings': { path: T.GetHostSettingsApiHostSettingsGetData['path']; responses: T.GetHostSettingsApiHostSettingsGetResponses; errors: {} };
   'GET /api/host/settings/changes': { path: T.HostSettingsChangesApiHostSettingsChangesGetData['path']; responses: T.HostSettingsChangesApiHostSettingsChangesGetResponses; errors: T.HostSettingsChangesApiHostSettingsChangesGetErrors };
+  'GET /api/host/settings/export': { path: T.ExportHostSettingsApiHostSettingsExportGetData['path']; responses: T.ExportHostSettingsApiHostSettingsExportGetResponses; errors: {} };
   'GET /api/host/subscriptions': { path: T.ListSubscriptionsApiHostSubscriptionsGetData['path']; responses: T.ListSubscriptionsApiHostSubscriptionsGetResponses; errors: T.ListSubscriptionsApiHostSubscriptionsGetErrors };
   'GET /api/host/subscriptions/{slug}': { path: T.GetSubscriptionApiHostSubscriptionsSlugGetData['path']; responses: T.GetSubscriptionApiHostSubscriptionsSlugGetResponses; errors: T.GetSubscriptionApiHostSubscriptionsSlugGetErrors };
   'GET /api/host/workspaces': { path: T.ListWorkspacesApiHostWorkspacesGetData['path']; responses: T.ListWorkspacesApiHostWorkspacesGetResponses; errors: T.ListWorkspacesApiHostWorkspacesGetErrors };
@@ -68,6 +69,7 @@ export interface RunnerOperations {
   'POST /api/auth/logout': { path: T.LogoutApiAuthLogoutPostData['path']; responses: T.LogoutApiAuthLogoutPostResponses; errors: {} };
   'POST /api/host/runners': { path: T.AddRunnerApiHostRunnersPostData['path']; responses: T.AddRunnerApiHostRunnersPostResponses; errors: T.AddRunnerApiHostRunnersPostErrors };
   'POST /api/host/runners/{runner_id}/retire': { path: T.RetireRunnerApiHostRunnersRunnerIdRetirePostData['path']; responses: T.RetireRunnerApiHostRunnersRunnerIdRetirePostResponses; errors: T.RetireRunnerApiHostRunnersRunnerIdRetirePostErrors };
+  'POST /api/host/settings/apply': { path: T.ApplyHostSettingsApiHostSettingsApplyPostData['path']; responses: T.ApplyHostSettingsApiHostSettingsApplyPostResponses; errors: T.ApplyHostSettingsApiHostSettingsApplyPostErrors };
   'POST /api/host/subscriptions': { path: T.CreateSubscriptionApiHostSubscriptionsPostData['path']; responses: T.CreateSubscriptionApiHostSubscriptionsPostResponses; errors: T.CreateSubscriptionApiHostSubscriptionsPostErrors };
   'POST /api/host/subscriptions/{slug}/enable': { path: T.EnableSubscriptionApiHostSubscriptionsSlugEnablePostData['path']; responses: T.EnableSubscriptionApiHostSubscriptionsSlugEnablePostResponses; errors: T.EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors };
   'POST /api/host/subscriptions/{slug}/floor/clear': { path: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostData['path']; responses: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses; errors: T.ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostErrors };

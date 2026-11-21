@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import click
@@ -13,6 +14,7 @@ from pydantic import TypeAdapter
 from blizzard.cli.collaborators import Response
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.refusal import refusal_of
+from blizzard.foundation.toml_emit import toml_document
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -146,3 +148,39 @@ def changes_settings(
     """Read the settings change history."""
     with _reach(ctx, "settings changes", directory, runner_url, runner, host) as (daemon, record):
         _echo(_answer(daemon, record.send("get", "/settings/changes")))
+
+
+def _document_options(command: Any) -> Any:
+    command = click.option("--runner-url", default=None, envvar=ENV_LOCAL_API_URL, help="Runner local API over TCP.")(
+        command
+    )
+    return click.option(
+        "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_RUNNER_DIR, help="Runner runtime directory."
+    )(command)
+
+
+@settings_group.command("apply")
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--dry-run", is_flag=True, help="Show what would change and write nothing.")
+@_document_options
+@click.pass_context
+def apply_settings(ctx: click.Context, file: Path, dry_run: bool, directory: str, runner_url: str | None) -> None:
+    """Apply a host settings document FILE, shaped like blizzard-host.toml, to the host whole."""
+    try:
+        document = decode_host_text(file.read_text(), what=str(file))
+        json.dumps(document, allow_nan=False)
+    except (ConfigError, ValueError, TypeError) as error:
+        raise click.BadParameter(str(error), param_hint="FILE") from error
+    path = "/api/host/settings/apply" + ("?dry_run=true" if dry_run else "")
+    with RunnerDaemon.reach("settings apply", directory, runner_url, Door.of(ctx)) as daemon:
+        _echo(_answer(daemon, daemon.send_to_host("post", path, json_body=document)))
+
+
+@settings_group.command("export")
+@_document_options
+@click.pass_context
+def export_settings(ctx: click.Context, directory: str, runner_url: str | None) -> None:
+    """Print the host settings document, every entry not at its default, as TOML that applies back unchanged."""
+    with RunnerDaemon.reach("settings export", directory, runner_url, Door.of(ctx)) as daemon:
+        document = _answer(daemon, daemon.send_to_host("get", "/api/host/settings/export"))
+    click.echo(toml_document(document), nl=False)
