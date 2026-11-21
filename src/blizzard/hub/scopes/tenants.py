@@ -9,6 +9,8 @@ the hub's shutdown is refused as a closed tenant, never as a server fault."""
 
 from __future__ import annotations
 
+# Guards this process's own tenant-scope map: it decides no exclusive write, the store's locked write still does.
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
