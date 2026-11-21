@@ -272,8 +272,17 @@ _SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
         "only the hub reaches it until the host rotates the key its runners' tokens are sealed under"
     ),
     "blizzard.foundation.registry.interface": (
-        "the registry interface every area's wiring imports; no daemon root registers through it until a process "
-        "activates its container"
+        "the registry interface every area's wiring imports; the hub's wiring reaches it, and no daemon root "
+        "registers through it until a process activates its container"
+    ),
+    "blizzard.foundation.registry.scopes": (
+        "the one door to a child scope; only the hub's tenant cache reaches it until the host opens runner scopes"
+    ),
+    "blizzard.foundation.registry.legacy": (
+        "the legacy bridge vocabulary; only the hub's bridge wiring reaches it until the runner bridges its own state"
+    ),
+    "blizzard.foundation.platform_tracing.wiring": (
+        "the platform tracing registration; only the hub reaches it until the runner registers its own handle"
     ),
 }
 

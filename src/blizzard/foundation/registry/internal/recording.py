@@ -31,10 +31,12 @@ class Kind(Enum):
     ABSENT = "absent"
     OPTIONAL = "optional"
     VALUE = "value"
+    LEAF = "leaf"
+    BAG = "bag"
 
 
 #: The kinds that own an instance, so an alias or an override may target them.
-OWNING = frozenset({Kind.SERVICE, Kind.FACTORY, Kind.RESOURCE, Kind.CONTEXT})
+OWNING = frozenset({Kind.SERVICE, Kind.FACTORY, Kind.RESOURCE, Kind.CONTEXT, Kind.LEAF, Kind.BAG})
 
 
 @domain_model
@@ -82,12 +84,7 @@ class RecordingRegistry:
         return self._own(Kind.SERVICE, source, lifetime, source)
 
     def factory[T](self, build: Callable[..., T], *, lifetime: Lifetime) -> Ref[T]:
-        if inspect.isgeneratorfunction(build):
-            raise RegistrationRefused(f"{_name(build)} is a generator: register it as a resource")
-        hints = _hints(build)
-        if "return" not in hints:
-            raise RegistrationRefused(f"{_name(build)} has no return annotation to key its registration by")
-        return self._own(Kind.FACTORY, hints["return"], lifetime, build)
+        return self._own_built(Kind.FACTORY, build, lifetime)
 
     def resource[T](self, open: Callable[..., Iterator[T]], *, lifetime: Lifetime) -> Ref[T]:
         if not inspect.isgeneratorfunction(open):
@@ -135,6 +132,14 @@ class RecordingRegistry:
         self._entries.append(entry)
         self._issued[entry.token] = entry
         return Ref(entry.token)
+
+    def _own_built(self, kind: Kind, build: Callable[..., Any], lifetime: Lifetime) -> Ref[Any]:
+        if inspect.isgeneratorfunction(build):
+            raise RegistrationRefused(f"{_name(build)} is a generator: register it as a resource")
+        hints = _hints(build)
+        if "return" not in hints:
+            raise RegistrationRefused(f"{_name(build)} has no return annotation to key its registration by")
+        return self._own(kind, hints["return"], lifetime, build)
 
     def _own(self, kind: Kind, key: object, lifetime: Lifetime, source: Any) -> Ref[Any]:
         entry = Registration(token=object(), key=key, lifetime=lifetime, kind=kind, source=source)

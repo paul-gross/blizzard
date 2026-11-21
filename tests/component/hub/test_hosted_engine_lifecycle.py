@@ -19,10 +19,11 @@ from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing,
 from blizzard.hub import app as hub_app
 from blizzard.hub import composition as hub_composition
 from blizzard.hub.cli import runtime as hub_cli
-from blizzard.hub.composition import HubSettingsGraph, TenantCache
+from blizzard.hub.composition import TenantCache
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.open_file_guard import inspect

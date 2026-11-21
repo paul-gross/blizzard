@@ -8,9 +8,11 @@ from typing import Protocol
 
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.internal.recording import RecordingRegistry
-from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES, ScopeValues
+from blizzard.foundation.registry.internal.translation import HOST_LIFETIMES, HUB_LIFETIMES
+from blizzard.foundation.registry.scopes import ScopeValues
 from tests.support.container_guards import (
     alias_identity_violations,
+    child_open_violations,
     default_factory_violations,
     dishka_importers,
     duplicate_owners,
@@ -49,6 +51,24 @@ def test_only_the_translation_package_imports_dishka() -> None:
 
 def test_wiring_modules_import_no_other_wiring_and_no_adapter() -> None:
     assert wiring_boundary_violations(_SRC) == []
+
+
+def test_no_module_opens_a_child_scope_except_through_open_child() -> None:
+    assert child_open_violations(_SRC) == []
+    tests = repo_root() / "tests"
+    assert child_open_violations(tests, exempt=(("unit", "foundation", "registry"),)) == []
+
+
+def test_the_child_open_gate_fails_a_planted_direct_open_and_passes_the_registry(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "hub/leak.py": "def go(owner):\n    return owner.open_child(lifetime=1, owner='t', values={})\n",
+            "hub/door.py": "from blizzard.foundation.registry.scopes import open_child\nopen_child(p, lifetime=1)\n",
+            "foundation/registry/scopes.py": "def go(parent):\n    return parent.open_child()\n",
+        },
+    )
+    assert child_open_violations(root) == ["hub/leak.py:2"]
 
 
 def _plant(tmp_path: Path, files: dict[str, str]) -> Path:

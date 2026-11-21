@@ -13,8 +13,8 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.cli import runtime
-from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.config import HubConfig
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from tests.support.config_inputs import hub_runtime_of, init_hub

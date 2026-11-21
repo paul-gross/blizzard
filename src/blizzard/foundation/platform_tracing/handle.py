@@ -70,6 +70,12 @@ class IPlatformTracing(Protocol):
         ...
 
 
+class IInstrumentClient(Protocol):
+    """The hook that instruments one HTTP client, sync or async; its own key so a consumer asks for the role."""
+
+    def __call__(self, client: httpx2.Client | httpx2.AsyncClient) -> None: ...
+
+
 #: The framework telemetry of an app with no platform tracing: no spans, no auto-configured exporters.
 DISABLED_TELEMETRY: TelemetryConfig = {"tracing": False, "auto_configure": False}
 

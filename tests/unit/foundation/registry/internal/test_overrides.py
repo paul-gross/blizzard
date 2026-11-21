@@ -8,7 +8,8 @@ import pytest
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.foundation.registry.internal.overrides import OverrideSet
 from blizzard.foundation.registry.internal.recording import RecordingRegistry, RegistrationRefused
-from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, GraphRefused, ScopeValues, build_container
+from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, GraphRefused, build_container
+from blizzard.foundation.registry.scopes import ScopeValues
 
 
 class Store:
