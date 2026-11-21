@@ -17,6 +17,10 @@ from dishka.exceptions import ExitError
 from blizzard.foundation.registry.interface import Lifetime, ScopeClosed
 
 
+class ScopeValuesRefused(ValueError):
+    """Values supplied to a lifetime that did not register them as context."""
+
+
 class OwnerGuard:
     """Shared for resolution, exclusive for closing, writer-preferring."""
 
@@ -66,8 +70,10 @@ class ContainerOwner:
         lifetimes: tuple[Lifetime, ...],
         owner: str,
         parent: ContainerOwner | None = None,
+        contexts: Mapping[Lifetime, frozenset[object]] | None = None,
     ) -> None:
         self._container = container
+        self._contexts = contexts
         self._lifetimes = lifetimes
         self._depth = 0 if parent is None else parent._depth + 1
         self._owner = owner
@@ -101,8 +107,18 @@ class ContainerOwner:
             raise ValueError(f"the {self.lifetime.value} scope opens only its next lifetime, not {lifetime.value}")
         if self._guard.closing:
             raise ScopeClosed(self.lifetime, self._owner)
+        self.check_values(lifetime, values)
         child = self._container(context=dict(values), lock_factory=threading.Lock)
-        return ContainerOwner(child, lifetimes=self._lifetimes, owner=owner, parent=self)
+        return ContainerOwner(child, lifetimes=self._lifetimes, owner=owner, parent=self, contexts=self._contexts)
+
+    def check_values(self, lifetime: Lifetime, values: Mapping[object, object]) -> None:
+        """Refuse a value whose key is no context registered at ``lifetime``, when the registered contexts are known."""
+        if self._contexts is None:
+            return
+        registered = self._contexts.get(lifetime, frozenset())
+        unregistered = [key for key in values if key not in registered]
+        if unregistered:
+            raise ScopeValuesRefused(f"no context registered at {lifetime.value} for {unregistered!r}")
 
     def close(self, exception: BaseException | None = None) -> None:
         """Close once: wait out active resolutions, then finalize outside the guards; later calls do nothing."""
