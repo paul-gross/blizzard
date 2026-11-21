@@ -20,6 +20,7 @@ from blizzard.foundation.registry.scopes import OwnedChild, ScopeValues, open_ch
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.events import wiring as events_wiring
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.scopes import wiring as scopes_wiring
 from blizzard.hub.scopes.tenants import TenantContainers
 from blizzard.hub.settings.graph import HubSettingsGraph
@@ -465,3 +466,21 @@ def test_shared_services_resolve_to_one_instance_from_every_caller_and_shutdown_
     rig.journal.note("engine:dispose")
     rig.engine.dispose()
     assert rig.journal.entries[-3:] == ["client:close:hub-action-loop", "loop:stop", "engine:dispose"]
+
+
+def test_an_open_racing_an_eviction_waits_and_gets_a_broker_the_old_scope_did_not_drop() -> None:
+    rig = _rig()
+    scope = StoreScope(T1)
+    old = rig.containers.resolve(scope, EventBroker)
+    evictor = threading.Thread(target=rig.containers.evict, args=(T1,))
+    evictor.start()
+    reopened: list[EventBroker] = []
+    opener = threading.Thread(target=lambda: reopened.append(rig.containers.resolve(scope, EventBroker)))
+    opener.start()
+    evictor.join(5)
+    opener.join(5)
+    brokers = rig.process.resolver.get(TenantBrokers)
+    assert reopened[0] is not old
+    assert brokers.for_tenant(T1) is reopened[0]
+    rig.containers.close()
+    rig.process.close()

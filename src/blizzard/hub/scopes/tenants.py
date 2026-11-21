@@ -40,6 +40,7 @@ class TenantContainers:
         self._open_tenants = open_tenants
         self._eager = tuple(eager)
         self._entries: dict[TenantId, _TenantScope] = {}
+        self._closing: dict[TenantId, threading.Event] = {}
         self._closed = False
         self._lock = threading.Lock()
 
@@ -69,11 +70,21 @@ class TenantContainers:
             return _TenantChild(open_child(tenant, lifetime=Lifetime.REQUEST, owner=scope.tenant, values=values))
 
     def evict(self, tenant: TenantId) -> None:
-        """Close and forget ``tenant``'s scope, if open; the tenant's deletion calls this. Closes outside the lock."""
+        """Close and forget ``tenant``'s scope, if open; the tenant's deletion calls this.
+
+        Closes outside the lock; an open of the same tenant waits for the close, so its new scope never shares a
+        resource the old scope's finalizer drops."""
         with self._lock:
             entry = self._entries.pop(tenant, None)
-        if entry is not None:
+            if entry is None:
+                return
+            done = self._closing[tenant] = threading.Event()
+        try:
             entry.close()
+        finally:
+            with self._lock:
+                del self._closing[tenant]
+            done.set()
 
     def close(self) -> None:
         """Refuse further opens, then close every tenant scope, attempting each and raising what failed together.
@@ -93,13 +104,17 @@ class TenantContainers:
             raise ExceptionGroup("closing the tenant scopes", failures)
 
     def _entry(self, scope: StoreScope) -> _TenantScope:
-        with self._lock:
-            if self._closed:
-                raise TenantClosed(scope.tenant)
-            entry = self._entries.get(scope.tenant)
-            if entry is None:
-                entry = self._entries[scope.tenant] = self._open_new(scope)
-        return entry
+        while True:
+            with self._lock:
+                if self._closed:
+                    raise TenantClosed(scope.tenant)
+                closing = self._closing.get(scope.tenant)
+                if closing is None:
+                    entry = self._entries.get(scope.tenant)
+                    if entry is None:
+                        entry = self._entries[scope.tenant] = self._open_new(scope)
+                    return entry
+            closing.wait()
 
     def _open_new(self, scope: StoreScope) -> _TenantScope:
         self._confirm_open(scope.tenant)
