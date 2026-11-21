@@ -15,9 +15,9 @@ from blizzard.foundation.registry.internal.recording import OWNING, Kind, Record
 from blizzard.foundation.registry.internal.translation import (
     GraphRefused,
     ProcessLifetimes,
-    ScopeValues,
     build_container,
 )
+from blizzard.foundation.registry.scopes import ScopeValues
 
 _INTERFACE = "blizzard.foundation.registry.interface"
 _REGISTRY_PACKAGE = ("foundation", "registry")
@@ -88,6 +88,22 @@ def dishka_importers(source_root: Path) -> list[str]:
             continue
         if any(name == "dishka" or name.startswith("dishka.") for name in _imports(path)):
             problems.append(str(path.relative_to(source_root)))
+    return problems
+
+
+def child_open_violations(root: Path, *, exempt: tuple[tuple[str, ...], ...] = (_REGISTRY_PACKAGE,)) -> list[str]:
+    """Modules under ``root`` that call ``.open_child(...)`` directly, outside the exempt package paths.
+
+    ``open_child`` the function is the one door to a child scope; the owner's method of the same name is private to
+    ``foundation/registry/`` and the tests of that owner."""
+    problems: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(root)
+        if any(relative.parts[: len(prefix)] == prefix for prefix in exempt):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "open_child":
+                problems.append(f"{relative}:{node.lineno}")
     return problems
 
 

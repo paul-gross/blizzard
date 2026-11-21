@@ -19,8 +19,8 @@ from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problems_admin import setting_not_live_problem, setting_unknown_problem, settings_invalid_problem
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import HubSettingsGraph
 from blizzard.hub.settings.footing import SettingNotLive, SettingUnknown, require_settable, settable_declarations
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.values import thaw
 from blizzard.wire.config import ConfigApplyOutcome, ConfigApplyResponse, FieldChangeView
 from blizzard.wire.hub_settings import (

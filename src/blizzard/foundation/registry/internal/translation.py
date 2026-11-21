@@ -15,18 +15,18 @@ from typing import Any
 from dishka import STRICT_VALIDATION, BaseScope, Provider, make_container, new_scope
 from dishka.exception_base import DishkaError
 
-from blizzard.foundation.registry.interface import Lifetime, Port, ServiceAbsent
+from blizzard.foundation.registry.interface import Lifetime, ServiceAbsent
 from blizzard.foundation.registry.internal.recording import (
     Kind,
     RecordingRegistry,
     Registration,
     Rewrites,
-    annotation_of,
     keys_by_lifetime,
     merged,
 )
 from blizzard.foundation.registry.internal.resolver import ContainerOwner, refuse_unregistered_values
-from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.foundation.registry.scopes import ScopeValues
+from blizzard.foundation.roles import adapter_model
 
 
 class GraphRefused(Exception):
@@ -84,32 +84,6 @@ COMMAND_LIFETIMES = ProcessLifetimes(
 )
 
 
-@domain_model
-@dataclass(frozen=True)
-class ScopeValue[T]:
-    """One borrowed value for a context port."""
-
-    port: Port[T]
-    value: T
-
-
-@domain_model
-@dataclass(frozen=True)
-class ScopeValues:
-    """Typed ``(Port[T], T)`` pairs supplied when a lifetime opens; checked against the contexts registered there."""
-
-    items: tuple[ScopeValue[Any], ...] = ()
-
-    def as_context(self) -> dict[object, object]:
-        """The values keyed by the annotation each port resolves under."""
-        return {annotation_of(item.port): item.value for item in self.items}
-
-
-def supply[T](port: Port[T], value: T) -> ScopeValue[T]:
-    """One typed value for ``port``."""
-    return ScopeValue(port, value)
-
-
 def build_container(
     recorded: RecordingRegistry,
     lifetimes: ProcessLifetimes,
@@ -126,6 +100,7 @@ def build_container(
                 f"{entry.lifetime.value} is not a lifetime of this process; it has "
                 f"{[lifetime.value for lifetime in lifetimes.path]}"
             )
+    _refuse_bag_dependents(entries)
     provider = Provider()
     for entry in entries:
         _provide(provider, entry, lifetimes)
@@ -145,11 +120,45 @@ def build_container(
     return ContainerOwner(container, lifetimes=lifetimes.path, owner=owner, contexts=contexts)
 
 
+def _refuse_bag_dependents(entries: tuple[Registration, ...]) -> None:
+    """Refuse any registration but a bag that depends on a bag key, directly or through an alias or an optional."""
+    bags = {entry.key for entry in entries if entry.kind is Kind.BAG}
+    if not bags:
+        return
+    for entry in entries:
+        if entry.kind is Kind.BAG:
+            continue
+        for dependency in _dependencies(entry):
+            if dependency in bags:
+                raise GraphRefused(
+                    f"{_label(entry)} depends on the legacy bag {_label_of(dependency)}; only a bag may depend on a bag"
+                )
+
+
+def _dependencies(entry: Registration) -> list[object]:
+    match entry.kind:
+        case Kind.ALIAS | Kind.OPTIONAL:
+            return [] if entry.target_key is None else [entry.target_key]
+        case Kind.SERVICE | Kind.FACTORY | Kind.RESOURCE | Kind.LEAF:
+            _check_parameters(entry)
+            return [p.annotation for p in inspect.signature(entry.source, eval_str=True).parameters.values()]
+        case _:
+            return []
+
+
+def _label(entry: Registration) -> str:
+    return _label_of(entry.key)
+
+
+def _label_of(key: object) -> str:
+    return getattr(key, "__qualname__", repr(key))
+
+
 def _provide(provider: Provider, entry: Registration, lifetimes: ProcessLifetimes) -> None:
     scope = None if entry.lifetime is None else lifetimes.scopes[entry.lifetime]
     key: Any = entry.key
     match entry.kind:
-        case Kind.SERVICE | Kind.FACTORY | Kind.RESOURCE:
+        case Kind.SERVICE | Kind.FACTORY | Kind.RESOURCE | Kind.LEAF | Kind.BAG:
             _check_parameters(entry)
             provider.provide(entry.source, scope=scope, provides=key)
         case Kind.CONTEXT:

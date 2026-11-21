@@ -17,10 +17,9 @@ from blizzard.foundation.registry.internal.translation import (
     HUB_LIFETIMES,
     GraphRefused,
     ProcessLifetimes,
-    ScopeValues,
     build_container,
-    supply,
 )
+from blizzard.foundation.registry.scopes import ScopeValues, open_child, supply
 
 HUB = ScopeValues()
 
@@ -113,13 +112,14 @@ def _open_hub(registry: RecordingRegistry) -> ContainerOwner:
 def test_a_hub_graph_builds_and_resolves_through_its_lifetimes() -> None:
     registry, _ = _hub()
     process = _open_hub(registry)
-    tenant = process.open_child(
+    tenant = open_child(
+        process,
         lifetime=Lifetime.TENANT,
         owner="t1",
-        values=ScopeValues((supply(port(StoreScope), StoreScope("t1")),)).as_context(),
+        values=ScopeValues((supply(port(StoreScope), StoreScope("t1")),)),
     )
-    request = tenant.open_child(
-        lifetime=Lifetime.REQUEST, owner="r1", values=ScopeValues((supply(port(Principal), Principal()),)).as_context()
+    request = open_child(
+        tenant, lifetime=Lifetime.REQUEST, owner="r1", values=ScopeValues((supply(port(Principal), Principal()),))
     )
     handler = request.resolver.get(RequestHandler)
     assert handler.service is tenant.resolver.get(TenantService)
@@ -140,15 +140,17 @@ def test_a_host_graph_builds_through_runner_and_operation() -> None:
     process = build_container(
         registry, HOST_LIFETIMES, owner="host", values=ScopeValues((supply(port(Engine), Engine()),))
     )
-    runner = process.open_child(
+    runner = open_child(
+        process,
         lifetime=Lifetime.RUNNER,
         owner="rn1",
-        values=ScopeValues((supply(port(StoreScope), StoreScope("r")),)).as_context(),
+        values=ScopeValues((supply(port(StoreScope), StoreScope("r")),)),
     )
-    operation = runner.open_child(
+    operation = open_child(
+        runner,
         lifetime=Lifetime.OPERATION,
         owner="op",
-        values=ScopeValues((supply(port(Principal), Principal()),)).as_context(),
+        values=ScopeValues((supply(port(Principal), Principal()),)),
     )
     assert isinstance(operation.resolver.get(RequestHandler), RequestHandler)
     operation.close()
@@ -389,11 +391,13 @@ def test_close_runs_every_finalizer_and_surfaces_an_exception_group_and_borrowed
 def test_a_missing_context_value_fails_resolution_and_an_unregistered_one_is_refused() -> None:
     registry, _ = _hub()
     process = _open_hub(registry)
-    tenant = process.open_child(lifetime=Lifetime.TENANT, owner="t", values={})
+    tenant = open_child(process, lifetime=Lifetime.TENANT, owner="t", values=ScopeValues())
     with pytest.raises(Exception, match="StoreScope"):
         tenant.resolver.get(TenantService)
     with pytest.raises(ScopeValuesRefused):
-        process.open_child(lifetime=Lifetime.TENANT, owner="t2", values={Principal: Principal()})
+        open_child(
+            process, lifetime=Lifetime.TENANT, owner="t2", values=ScopeValues((supply(port(Principal), Principal()),))
+        )
     with pytest.raises(ScopeValuesRefused):
         build_container(
             registry, HUB_LIFETIMES, owner="hub", values=ScopeValues((supply(port(Principal), Principal()),))

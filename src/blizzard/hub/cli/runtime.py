@@ -30,7 +30,7 @@ from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
-from blizzard.hub.composition import HubSettingsGraph, build_hub_settings, open_hub_store
+from blizzard.hub.composition import build_hub_settings, open_hub_store
 from blizzard.hub.config import ConfigError, HubConfig, bootstrap_document
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -41,6 +41,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError, check_own_floor
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.hub.settings.footing import HubSettingsFooting, setting_keys
+from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.errors import HubStoreConnections
 
