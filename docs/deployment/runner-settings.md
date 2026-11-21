@@ -86,6 +86,40 @@ authority, `If-Match` and refusals as a runner's. Naming a boot key such as `por
 edit that leaves the host's file invalid is refused `settings_invalid`, naming every failing key. Each change row also
 carries `record_kind` — `host` for the host's own entries — and `record_key`, and the changes route filters on both.
 
+### Apply and export a document
+
+The host's settings, its workspaces and subscriptions, and its runners' settings can also be kept as one document shaped
+like `blizzard-host.toml`: its host-level live keys, and its `[[runner]]`, `[[workspace]]` and `[[subscription]]`
+tables. Export it, preview the change, then apply it:
+
+```bash
+blizzard runner settings export --dir /var/lib/blizzard > host-settings.toml
+blizzard runner settings apply host-settings.toml --dry-run --dir /var/lib/blizzard
+blizzard runner settings apply host-settings.toml --dir /var/lib/blizzard
+```
+
+Neither verb takes `--host` or `--runner`: the document is the host's. A `[[runner]]` table names a runner the host
+holds by its `id`; a `[[workspace]]` names its record by `id` and a `[[subscription]]` by `slug`. An entry sets only the
+keys it states, and a record the document leaves out is never touched or retired. A stated workspace or subscription the
+host does not hold is created, and a retired one is enabled. Apply never unsets a key; use `settings unset` for that.
+Adding or retiring a runner is not an apply's: see
+[runner retirement and reset](./runner-auth.md#adding-and-retiring-a-hosts-runners).
+
+The apply is one transaction, and any refusal fails the whole document and writes nothing. It refuses a runner id the
+host does not hold (`runner_unknown`), a boot key (`setting_not_live`), an undeclared key (`setting_unknown`), an
+immutable key that differs from the record's (`setting_immutable`), and a malformed document or a value that leaves the
+host's file invalid (`settings_invalid`). Each refusal names the entry by `record_kind` and `record_key`. Every change
+row an apply writes carries door `apply` and one `apply_id`; `--dry-run` answers the same outcomes, with a `null`
+`apply_id`, and writes nothing.
+
+Export states every entry not at its default: the host's, each hosted runner's under its `id`, and every active
+workspace and subscription whole. It is not a backup of boot settings. Applying an export back answers every outcome
+`unchanged` and writes no change row.
+
+Over HTTP a superuser sends `POST /api/host/settings/apply` with the document as a JSON object, and `?dry_run=true` to
+preview it; the answer lists one outcome per host key, per stated record and per stated runner. Human clients read
+`GET /api/host/settings/export`.
+
 ## Retirement and recovery
 
 Retiring a runner can leave its identity alongside retained settings and history. An unconfigured retained identity
