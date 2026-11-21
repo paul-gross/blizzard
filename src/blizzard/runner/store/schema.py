@@ -538,8 +538,8 @@ local_pause_facts = Table(
     info={"scope": "runner"},
 )
 
-# --- Workspace prompt override (runtime-settable spawn preamble) --
-# A present row, empty ``prompt`` included, wins over config; no row falls back to it.
+# --- Workspace prompt override (deprecated) --------------------------
+# A present row, empty ``prompt`` included, is its workspace's ``prompt`` when the record is first seeded.
 
 workspace_prompt = Table(
     "workspace_prompt",
@@ -547,7 +547,7 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", UtcDateTime, nullable=False),
-    info={"scope": "host", "transfer": HOST_TRANSFER_WORKSPACE},
+    info={"scope": "host", "transfer": HOST_TRANSFER_WORKSPACE, "deprecated": "0.5"},
 )
 
 # --- Daemon liveness (when the runner was last known alive) -------
@@ -1271,6 +1271,56 @@ hosted_runner_facts = Table(
     info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
 )
 Index("ix_hosted_runner_facts_runner_id_id", hosted_runner_facts.c.runner_id, hosted_runner_facts.c.id)
+
+# --- Host workspaces and subscriptions (configured records, seeded once from the host file) ---
+# A row per record ever held, never deleted, retired while its newest append-only fact is ``retired``.
+
+host_workspaces = Table(
+    "host_workspaces",
+    metadata,
+    Column("workspace_id", String, primary_key=True),  # immutable
+    Column("revision", Integer, nullable=False),  # 1 at the create or seed; +1 per committed write
+    Column("settings", Text, nullable=False),  # JSON: every [[workspace]] key but id
+    Column("created_at", UtcDateTime, nullable=False),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+host_workspace_facts = Table(
+    "host_workspace_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("workspace_id", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("op", String, nullable=False),  # "retired" | "enabled"
+    Column("actor", String, nullable=False),
+    Column("door", String, nullable=False),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+Index("ix_host_workspace_facts_workspace_id_id", host_workspace_facts.c.workspace_id, host_workspace_facts.c.id)
+
+host_subscriptions = Table(
+    "host_subscriptions",
+    metadata,
+    Column("slug", String, primary_key=True),  # immutable
+    Column("provider", String, nullable=False),  # immutable
+    Column("revision", Integer, nullable=False),  # 1 at the create or seed; +1 per committed write
+    Column("settings", Text, nullable=False),  # JSON: name, credentials_path, usage_api_base, sample_interval_seconds
+    Column("created_at", UtcDateTime, nullable=False),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+
+host_subscription_facts = Table(
+    "host_subscription_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("op", String, nullable=False),  # "retired" | "enabled"
+    Column("actor", String, nullable=False),
+    Column("door", String, nullable=False),
+    info={"scope": "host", "transfer": HOST_TRANSFER_NONE},
+)
+Index("ix_host_subscription_facts_slug_id", host_subscription_facts.c.slug, host_subscription_facts.c.id)
 
 # --- Usage-limit marks and floor clears (the floor's facts) --------------------
 # Append-only; a floor derives from its key's newest mark and newest clear. Host rows per slug, runner rows per runner.

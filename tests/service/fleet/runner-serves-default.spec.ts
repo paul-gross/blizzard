@@ -11,9 +11,13 @@ test('test_a_freshly_initialized_runner_is_offered_a_default_chunk_on_first_regi
   const { chunk } = await issue('first contact');
   const runner = runnerHost.runners['runner-local']!;
   const scaffold = parse(runnerHost.initHostFile);
-  const configured = scaffold.runner as { projects: { project: string }[] }[];
+  const configured = scaffold.runner as { projects: { project: string; workspace: string }[] }[];
   expect(configured[0]!.projects.map((p) => p.project)).toEqual(['default']);
+  // `init` declares no workspace; the host serves the one its runner binds only once the host file declares it.
+  expect(scaffold.workspace).toBeUndefined();
   const overlaid = runnerHost.hostFile();
+  const declared = (parse(overlaid).workspace as { id: string }[]).map((w) => w.id);
+  expect(declared).toEqual([configured[0]!.projects[0]!.workspace]);
   const added = await api.get(`/api/runners/${runner.id}`);
   expect(added.status).toBe(200);
   expect(added.body.registered_at).toBeNull();

@@ -88,7 +88,15 @@ class HostSettingsStore:
         revision = self._record.bump_revision(conn)
         self._record.write_entries(conn, {field.key: field.new for field in decision.diff}, revision=revision)
         self._record.append_change(
-            conn, diff=decision.diff, op=change.op, door=door, actor=actor, apply_id=apply_id, revision=revision
+            conn,
+            diff=decision.diff,
+            op=change.op,
+            door=door,
+            actor=actor,
+            apply_id=apply_id,
+            revision=revision,
+            record_kind=HOST_RECORD_KIND,
+            record_key=None,
         )
         return decision.diff
 

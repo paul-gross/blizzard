@@ -155,10 +155,15 @@ blizzard hub graph sync                       # safe to re-run; run it again aft
 mkdir runner && blizzard runner init runner   # scaffolds blizzard-host.toml and registers the runner at the hub
 ```
 
-The runner starts agents with Claude Code by default, so it needs `claude` on your `PATH` and signed in. Give the
-runner's workspace a repository to work in by adding this to the end of `runner/blizzard-host.toml`:
+The runner starts agents with Claude Code by default, so it needs `claude` on your `PATH` and signed in. `init` binds
+the runner to a workspace named `workspace-local` but declares none, so declare it, with a repository to work in, by
+adding this to the end of `runner/blizzard-host.toml`:
 
 ```toml
+[[workspace]]
+id = "workspace-local"
+provider = "basic"
+
 [[workspace.repo]]
 name = "todo-mvc"
 url = "https://github.com/you/todo-mvc.git"

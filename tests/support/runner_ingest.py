@@ -25,6 +25,7 @@ from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.tools.invariants import runner_invariants
 from tests.support.config_inputs import load_host_config
 from tests.support.file_runners import add_file_runner
+from tests.support.host_files import declare_test_workspace
 from tests.support.runner_fakes import FakeProbe
 from tests.support.runner_init_fakes import FakeInitHub, init_runner
 from tests.support.runner_scope_seeding import T0, reflect, seed_tables
@@ -65,6 +66,8 @@ def two_hosts(tmp_path: Path, hub: FakeInitHub, *, adopt: bool = True, identifie
     here, there = tmp_path / "here", tmp_path / "there"
     ok(hub, "init", str(here), "--hub", HUB)
     ok(hub, "init", str(there), "--hub", HUB)
+    declare_test_workspace(here)
+    declare_test_workspace(there)
     with hub.host_clients(HUB) as host_clients:
         add_file_runner(host_clients(load_host_config(there).host_token.value), there, MOVING)
     ok(hub, "init", str(there), "--hub", HUB)
@@ -133,13 +136,28 @@ def _global_key_columns(shapes: sa.MetaData) -> frozenset[str]:
     return frozenset(names)
 
 
+#: The host's settings and its workspace and subscription records: read and judged by an ingest, never carried.
+_HOST_RECORD_TABLES = frozenset(
+    {
+        "host_setting_entries",
+        "host_workspaces",
+        "host_workspace_facts",
+        "host_subscriptions",
+        "host_subscription_facts",
+    }
+)
+
+
 def seed_host(engine: sa.Engine) -> None:
-    """One row in every host table an ingest carries or leaves but its own record, and the runners' sealed hub tokens,
-    whose content must be a real seal."""
+    """One row in every host table an ingest carries or leaves but its own record and the host's settings and its
+    workspace and subscription records, whose rows an ingest parses; and the runners' sealed hub tokens, whose content
+    must be a real seal."""
     seed_tables(
         engine,
         reflect(engine),
-        HOST_TABLES - {"host_ingests", "host_identity", "runner_hub_tokens", "hosted_runners", "hosted_runner_facts"},
+        HOST_TABLES
+        - {"host_ingests", "host_identity", "runner_hub_tokens", "hosted_runners", "hosted_runner_facts"}
+        - _HOST_RECORD_TABLES,
         values={"failure_reason": None},
     )
 

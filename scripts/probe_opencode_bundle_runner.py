@@ -252,6 +252,13 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     text = text.replace(
         "[runner.worker]\nenv_passthrough = []", '[runner.worker]\nenv_passthrough = ["XDG_DATA_HOME", "MISE_DATA_DIR"]'
     )
+    # `runner init` declares no workspace: the probe serves the env's own, where its scaffolded runner binds.
+    (binding,) = runner.bindings
+    envs = [e.strip() for e in env.get("BZ_WORKSPACE_ENVS", "").split(",") if e.strip()] or ["e1"]
+    text += (
+        f'\n[[workspace]]\nid = {json.dumps(binding.workspace)}\nprovider = "winter"\n'
+        f"root = {json.dumps(env['BZ_WORKSPACE_ROOT'])}\nenvs = {json.dumps(envs)}\n"
+    )
     direct_hub = f'hub_url = "{env["BZ_HUB_URL"]}"'
     assert text.count(direct_hub) == 1
     text = text.replace(direct_hub, f'hub_url = "{proxy_url}"')

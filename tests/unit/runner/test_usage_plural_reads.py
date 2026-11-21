@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.api.host import subscription_list
+from blizzard.runner.api.host_records import subscription_list
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from tests.support.runner_fakes import (

@@ -24,6 +24,7 @@ from blizzard.runner.runtime import sqlite_url
 from blizzard.runner.store import MIGRATIONS_DIR
 from tests.support.config_inputs import load_host_config
 from tests.support.file_runners import add_file_runner
+from tests.support.host_files import declare_test_workspace
 from tests.support.runner_ingest import (
     HUB,
     RUNNER_TABLES,
@@ -45,6 +46,7 @@ def _host(tmp_path: Path, hub: FakeInitHub) -> Path:
     """A registered host of two runners, ``runner-local`` and ``r2``, each with one row in every runner table."""
     root = tmp_path / "host"
     ok(hub, "init", str(root), "--hub", HUB)
+    declare_test_workspace(root)
     with hub.host_clients(HUB) as host_clients:
         add_file_runner(host_clients(load_host_config(root).host_token.value), root, "r2")
     ok(hub, "init", str(root), "--hub", HUB)

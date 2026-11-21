@@ -52,17 +52,19 @@ test('test_a_token_that_resolves_to_another_runner_halts_that_runner_while_the_h
   expect((await mockHub.runner(other.token, other.runner_id, 409)).status).toBe(409);
 });
 
-test('test_a_runner_only_config_error_halts_that_runner_while_the_host_serves', async ({ runnerHosts }) => {
+test('test_a_runner_naming_a_subscription_the_host_does_not_serve_runs_as_though_it_named_none', async ({ mockHub, runnerHosts }) => {
   const host = await runnerHosts.create({ runnerStarted: false });
   host.prepareStopped({ runnerSubscriptions: { 'runner-local': 'missing' } });
   await host.restart();
   expect((await host.api.health()).status).toBe(200);
-  expect((await host.api.ready()).body.detail).toContain("names subscription 'missing'");
-  expect((await host.runners['runner-local']!.expecting(503).status()).status).toBe(503);
-  const cli = await host.cli(['status', '--dir', host.dir]);
-  expect(cli.code).not.toBe(0);
-  expect(cli.stdout + cli.stderr).toContain("names subscription 'missing'");
-  expect(cli.stdout + cli.stderr).toContain('serves no runner');
+  expect((await host.api.ready()).body.detail ?? '').not.toContain("names subscription 'missing'");
+  expect((await host.step()).outcome).toBe('completed');
+  const runner = host.runners['runner-local']!;
+  expect((await runner.status()).status).toBe(200);
+  const view = await mockHub.fleetOf(host, 'runner-local').get(`/api/fleet/runners/${runner.id}`);
+  expect(view.status).toBe(200);
+  const registered = view.body as { subscription: string | null; subscriptions: unknown[] };
+  expect([registered.subscription, registered.subscriptions]).toEqual([null, []]);
 });
 
 test('test_two_held_runners_claim_and_lease_independently', async ({ mockHub, runnerHosts }) => {

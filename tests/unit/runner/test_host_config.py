@@ -27,6 +27,7 @@ from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.settings.ports import SettingsSnapshot
 from blizzard.runner.settings_reader import RunnerSettingsReader
 from tests.support.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
+from tests.support.host_files import TEST_WORKSPACE_ID
 
 _TOKEN = {"BZ_HUB_TOKEN_R_ONE": "tok-one"}
 
@@ -215,8 +216,8 @@ def test_a_scaffold_round_trips_through_load(tmp_path: Path) -> None:
     assert entry.id is None
     assert (entry.name, entry.subscription) == (runner_config.DEFAULT_RUNNER_NAME, "anthropic")
     assert [(b.project, b.workspace) for b in entry.bindings] == [
-        ("alpha", runner_config.DEFAULT_WORKSPACE_ID),
-        ("beta", runner_config.DEFAULT_WORKSPACE_ID),
+        ("alpha", TEST_WORKSPACE_ID),
+        ("beta", TEST_WORKSPACE_ID),
     ]
     assert entry.own is not None and entry.own.agents == 1
     assert [s.slug for s in reloaded.subscriptions] == ["anthropic"]
@@ -262,20 +263,23 @@ def test_a_runner_with_no_hub_token_at_all_names_no_rename(tmp_path: Path) -> No
 
 
 @pytest.mark.usefixtures("clean_seeds")
-def test_a_scaffold_seeds_its_workspace_and_runner_from_the_environment(
+def test_a_scaffold_seeds_its_runner_from_the_environment_and_declares_no_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(runner_config.ENV_WORKSPACE_ROOT, "/ws")
-    monkeypatch.setenv(runner_config.ENV_WORKSPACE_ENVS, "x1, x2")
+    monkeypatch.setenv("BZ_WORKSPACE_ROOT", "/ws")
+    monkeypatch.setenv("BZ_WORKSPACE_ENVS", "x1, x2")
     monkeypatch.setenv(runner_config.ENV_GATES, "review")
     monkeypatch.setenv(runner_config.ENV_PORT, "8500")
     scaffold = HostConfig.scaffold(tmp_path / "host")
-    reloaded = load_host_config(_write(tmp_path / "host", scaffold.to_toml()))
-    (workspace,) = reloaded.workspaces
-    assert (workspace.root, workspace.provider, workspace.envs) == ("/ws", "winter", ("x1", "x2"))
+    text = scaffold.to_toml()
+    reloaded = load_host_config(_write(tmp_path / "host", text))
+    assert reloaded.workspaces == ()
+    assert "[[workspace]]" not in text and "/ws" not in text
     assert reloaded.port == 8500
     assert reloaded.runners[0].own is not None and reloaded.runners[0].own.gates == ("review",)
-    assert [b.project for b in reloaded.runners[0].bindings] == list(runner_config.SCAFFOLD_PROJECTS)
+    assert [(b.project, b.workspace) for b in reloaded.runners[0].bindings] == [
+        (project, TEST_WORKSPACE_ID) for project in runner_config.SCAFFOLD_PROJECTS
+    ]
 
 
 @pytest.mark.parametrize(
@@ -358,23 +362,29 @@ def test_a_host_error_names_every_offending_entry_at_once(tmp_path: Path) -> Non
 
 
 def test_a_runner_error_halts_that_runner_and_leaves_its_sibling_intact(tmp_path: Path) -> None:
-    broken = load_host_config(_write(tmp_path / "host", _runner('id = "rn_1"\nsubscription = "missing"')))
+    broken = load_host_config(_write(tmp_path / "host", _runner("")))
     healthy = load_host_config(_write(tmp_path / "h2", _runner('id = "rn_2"').replace('"r-one"', '"r-two"')))
     environ = {**_TOKEN, "BZ_HUB_TOKEN_R_TWO": "tok-two"}
     (alone,) = healthy.projections(environ)
     halted, sibling = replace(healthy, runners=broken.runners + healthy.runners).projections(environ)
     assert isinstance(halted, HaltedRunner)
-    assert (halted.name, halted.id) == ("r-one", "rn_1")
-    assert any("missing" in error for error in halted.errors)
+    assert (halted.name, halted.id) == ("r-one", None)
+    assert any("has no id" in error for error in halted.errors)
     assert sibling == alone and isinstance(sibling, BuiltRunner)
+
+
+def test_a_subscription_the_host_does_not_serve_halts_nothing_and_resolves_as_naming_none(tmp_path: Path) -> None:
+    config = load_host_config(_write(tmp_path / "host", _runner('id = "rn_1"\nsubscription = "missing"')))
+    (built,) = config.projections(_TOKEN)
+    assert isinstance(built, BuiltRunner)
+    assert built.config.subscriptions == ()
+    assert any("missing" in error for error in config.binding_problems(config.runners[0]))
 
 
 @pytest.mark.parametrize(
     ("body", "error"),
     [
         ("", "has no id"),
-        ('id = "x"\nsubscription = "nope"', "does not declare"),
-        ('id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "nowhere" }]', "'nowhere'"),
         ('id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "ws", agents = 1 }]', "`[[runner]] agents`"),
         ('id = "x"\nprojects = [{ project = "p", workspace = "ws" }]', "has no agents"),
         ('id = "x"\nagents = 0\nprojects = [{ project = "p", workspace = "ws" }]', "agents must be a positive integer"),
@@ -400,6 +410,26 @@ def test_each_runner_error_halts_only_that_runner(tmp_path: Path, body: str, err
     (halted,) = load_host_config(_write(tmp_path / "host", text)).projections(_TOKEN)
     assert isinstance(halted, HaltedRunner)
     assert any(error in message for message in halted.errors), halted.errors
+
+
+@pytest.mark.parametrize(
+    ("body", "error"),
+    [
+        ('id = "x"\nsubscription = "nope"', "does not declare"),
+        ('id = "x"\nagents = 1\nprojects = [{ project = "p", workspace = "nowhere" }]', "'nowhere'"),
+    ],
+)
+def test_a_binding_or_subscription_the_host_does_not_serve_halts_no_runner(
+    tmp_path: Path, body: str, error: str
+) -> None:
+    text = _runner(body).replace(
+        'agents = 1\nprojects = [{ project = "p", workspace = "ws" }]\n',
+        "" if "projects" in body else 'agents = 1\nprojects = [{ project = "p", workspace = "ws" }]\n',
+    )
+    config = load_host_config(_write(tmp_path / "host", text))
+    (built,) = config.projections(_TOKEN)
+    assert isinstance(built, BuiltRunner)
+    assert any(error in message for message in config.binding_problems(config.runners[0]))
 
 
 def test_a_runner_with_no_projects_key_is_a_runner_error_and_an_empty_list_serves_none(tmp_path: Path) -> None:

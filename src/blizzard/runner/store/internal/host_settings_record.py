@@ -78,7 +78,11 @@ class HostSettingsRecord:
         actor: str,
         apply_id: str | None,
         revision: int,
+        record_kind: str,
+        record_key: str | None,
     ) -> None:
+        """Append one change row of the record ``record_kind`` names, keyed within its kind by ``record_key`` —
+        ``None`` for the host's own record."""
         conn.execute(
             insert(host_setting_changes).values(
                 recorded_at=self._clock.now(),
@@ -88,7 +92,7 @@ class HostSettingsRecord:
                 actor=actor,
                 apply_id=apply_id,
                 diff=json.dumps([asdict(field) for field in diff]),
-                record_kind=HOST_RECORD_KIND,
-                record_key=None,
+                record_kind=record_kind,
+                record_key=record_key,
             )
         )

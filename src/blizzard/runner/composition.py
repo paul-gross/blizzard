@@ -63,10 +63,11 @@ from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.environments.workspaces import (
-    IWorkspaceProviders,
-    IWorkspaces,
+    HostWorkspaces,
+    IWorkspaceEntries,
     IWorkspaceSpawnRoots,
     WorkspaceEntry,
+    WorkspaceLocks,
     WorkspaceRegistry,
 )
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
@@ -118,7 +119,16 @@ from blizzard.runner.host_layout import (
     HostLayout,
     hold_host,
 )
-from blizzard.runner.host_settings_reader import HostSettingsInForce, HostSettingsReader
+from blizzard.runner.host_records.model import HostRecord, HostRecordsSnapshot, RecordKind
+from blizzard.runner.host_records.prompt import PromptChange
+from blizzard.runner.host_records.service import HostRecordService
+from blizzard.runner.host_settings_reader import (
+    HostRecordReads,
+    HostRecordValidation,
+    HostSettingsInForce,
+    HostSettingsReader,
+    HostSettingsSnapshot,
+)
 from blizzard.runner.hosting.ports import IHostRunnerHub, IRunnerAdmission
 from blizzard.runner.hosting.reconcile import RunnerStartFailure, RunnerStartFailures, RunnerStartStep, reconcile
 from blizzard.runner.hosting.retirement import HubNoticedRetirement, RetirementNotices
@@ -186,6 +196,7 @@ from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
+from blizzard.runner.store.internal.host_record_store import HostSubscriptionStore, HostWorkspaceStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
@@ -247,13 +258,14 @@ from blizzard.runner.transfer.hosts import (
     DeclaredBinding,
     DeclaredSubscription,
     DeclaredWorkspace,
+    HeldRecords,
     HostDeclarations,
     IngestHost,
     ISourceHosts,
     RunnerDeclaration,
     SourceHost,
 )
-from blizzard.runner.transfer.ingest import IHostCiphers, IIngestStores, ITokenFiles, RunnerIngest
+from blizzard.runner.transfer.ingest import IHereRecords, IHostCiphers, IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.transfer.internal.host_files import HostFiles
 from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
@@ -291,8 +303,8 @@ class HostProcess:
     connections: RunnerStoreConnections
     host_stores: HostStores
     listeners: Listeners
-    #: Every workspace the host declares, each with its own provider, spawn root, standing prompt and lock.
-    workspaces: IWorkspaces
+    #: The one holder of the host's workspace registry in force, and of the pool locks that outlive each rebuild.
+    workspaces: HostWorkspaces
     events: EventBroker | None
     clock: IClock
     #: What every runner on the host measures its harnesses' deadlines and delays on — a time source, holding no state.
@@ -331,8 +343,10 @@ class HostProcess:
     runners: tuple[RunnerProcess, ...] = ()
     #: The runners the host file declares that were left unbuilt by their own errors; the host serves without them.
     halted: tuple[HaltedRunner, ...] = ()
-    #: The subscriptions the host declares, whichever runners spend them.
+    #: The subscriptions the host serves, set again by the host tick whenever a subscription record moves.
     subscriptions: tuple[SubscriptionDeclaration, ...] = ()
+    #: The host tick's per-pass reconcile of its workspaces and subscriptions; ``None`` for a host keeping no records.
+    records_reconcile: HostRecordsReconcile | None = None
     #: Who this host is at its hub; seeded from the store at boot, and handed the identity once it is first recorded.
     host_identity: HostIdentityHolder = field(default_factory=HostIdentityHolder)
     #: The host registration step's latest outcome — unregistered on a host with no host token.
@@ -376,6 +390,10 @@ class HostProcess:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
         no subscriptions of their own."""
         return self.host_registration.current().registered()
+
+    def current_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
+        """The subscriptions the host serves now — read on each call, since the host tick sets them."""
+        return self.subscriptions
 
     def halted_runners(self) -> tuple[HaltedRunner, ...]:
         """The runners halted now — read on each call, since a host's runner set changes while it runs."""
@@ -462,7 +480,7 @@ class RunnerProcess:
         return self.host.engine
 
     @property
-    def workspaces(self) -> IWorkspaces:
+    def workspaces(self) -> HostWorkspaces:
         return self.host.workspaces
 
     @property
@@ -570,27 +588,56 @@ def build_workspaces(
     *,
     launch: WorkspaceLaunch,
     audit: IRunnerAudit | None = None,
+    locks: WorkspaceLocks | None = None,
+    revisions: Mapping[str, int] | None = None,
+    keep: WorkspaceRegistry | None = None,
+    retired: Sequence[HostWorkspace] = (),
 ) -> WorkspaceRegistry:
-    """The host's workspace registry: one provider per declared workspace, each with its spawn root and its standing
-    prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. Each provider
-    launches its ``git`` and ``winter`` children through ``launch``. With ``audit``, each provider reads its own
-    pool's held set host-wide."""
-    entries: list[WorkspaceEntry] = []
-    for workspace in declared:
+    """The host's workspace registry over ``locks``: one provider per declared workspace, launching through
+    ``launch``, its spawn root and standing prompt resolved now — an unresolvable prompt raises. With ``audit``, each
+    provider reads its pool's held set host-wide. A workspace ``keep`` holds at its ``revisions`` entry keeps its
+    provider; ``retired`` ones serve only what they hold."""
+    revisions = revisions or {}
+
+    def entry(workspace: HostWorkspace) -> WorkspaceEntry:
+        revision = revisions.get(workspace.id)
+        kept = keep.entry(workspace.id) if keep is not None else None
+        if kept is not None and revision is not None and kept.revision == revision:
+            return kept
         held_ids = pool_held_ids(audit, workspace.id) if audit is not None else None
         provider = build_workspace_provider(workspace.settings(host_root), launch=launch, held_ids=held_ids)
-        entries.append(
-            WorkspaceEntry(
-                workspace.id, provider, spawn_root=provider.spawn_root(), prompt=workspace.resolved_prompt(host_root)
-            )
+        return WorkspaceEntry(
+            workspace.id,
+            provider,
+            spawn_root=provider.spawn_root(),
+            prompt=workspace.resolved_prompt(host_root),
+            max_environments=workspace.max_environments,
+            revision=revision,
         )
-    return WorkspaceRegistry(entries)
+
+    return WorkspaceRegistry(
+        [entry(workspace) for workspace in declared],
+        retired=[entry(workspace) for workspace in retired],
+        locks=locks,
+    )
 
 
 def bound_spawn_roots(config: RunnerConfig, workspaces: IWorkspaceSpawnRoots) -> tuple[str, ...]:
     """The distinct spawn roots of the workspaces ``config``'s runner binds — what its health probes and
     ambient-conflict checks run over."""
     return tuple(dict.fromkeys(workspaces.spawn_root(workspace.id) for workspace in config.bound_workspaces))
+
+
+def renewable_subscription(
+    declaration: SubscriptionDeclaration, clock: IClock, *, subprocess: SubprocessOneShotProcess, env: IToolProfile
+) -> RenewableSubscription | None:
+    """``declaration`` with its provider's renewer binding; ``None`` when its provider binds none."""
+    renewer = select_renewer(declaration, clock=clock, subprocess=subprocess, env=env)
+    if renewer is None:
+        return None
+    return RenewableSubscription(
+        slug=declaration.slug, sample_interval_seconds=declaration.sample_interval_seconds, renewer=renewer
+    )
 
 
 def credential_renewal_pass(
@@ -606,15 +653,31 @@ def credential_renewal_pass(
     one."""
     subprocess = SubprocessOneShotProcess(children)
     renewable = [
-        RenewableSubscription(
-            slug=declaration.slug, sample_interval_seconds=declaration.sample_interval_seconds, renewer=renewer
-        )
+        renewable
         for declaration in declarations
-        if (renewer := select_renewer(declaration, clock=clock, subprocess=subprocess, env=env)) is not None
+        if (renewable := renewable_subscription(declaration, clock, subprocess=subprocess, env=env)) is not None
     ]
+    return _renewal_pass(renewable, host_stores, clock)
+
+
+def _renewal_pass(
+    renewable: Sequence[RenewableSubscription], host_stores: HostStores, clock: IClock
+) -> CredentialRenewalPass | None:
     if not renewable:
         return None
     return CredentialRenewalPass(subscriptions=renewable, renewals=host_stores.external_usage, clock=clock)
+
+
+def sampled_subscription(
+    declaration: SubscriptionDeclaration, clock: IClock, http_client: LazyUsageHttpClient
+) -> SampledSubscription:
+    """``declaration`` with its provider's sampler, sharing the host's one usage HTTP client."""
+    return SampledSubscription(
+        slug=declaration.slug,
+        name=declaration.name,
+        sample_interval_seconds=declaration.sample_interval_seconds,
+        sampler=select_sampler(declaration, clock=clock, http_client=http_client),
+    )
 
 
 def _external_usage_sample_pass(
@@ -629,17 +692,20 @@ def _external_usage_sample_pass(
     """Every subscription the host declares paired with its provider's sampler, sharing one HTTP client; ``None``
     when the host declares none. ``registration`` says whether the host holds a host token, so its attempts ride its
     own lane."""
-    if not declarations:
+    sampled = [sampled_subscription(declaration, clock, http_client) for declaration in declarations]
+    return _sample_pass(sampled, host_stores, clock, runners, registration=registration)
+
+
+def _sample_pass(
+    sampled: Sequence[SampledSubscription],
+    host_stores: HostStores,
+    clock: IClock,
+    runners: Callable[[], tuple[RunnerProcess, ...]],
+    *,
+    registration: ICurrentHostRegistration,
+) -> ExternalUsageSamplePass | None:
+    if not sampled:
         return None
-    sampled = [
-        SampledSubscription(
-            slug=declaration.slug,
-            name=declaration.name,
-            sample_interval_seconds=declaration.sample_interval_seconds,
-            sampler=select_sampler(declaration, clock=clock, http_client=http_client),
-        )
-        for declaration in declarations
-    ]
     return ExternalUsageSamplePass(
         subscriptions=sampled,
         attempts=host_stores.external_usage,
@@ -647,6 +713,108 @@ def _external_usage_sample_pass(
         sink=ExternalUsageAttemptLane(host_stores.host_lane, runners, registration=registration),
         clock=clock,
     )
+
+
+class HostRecordsReconcile:
+    """The host tick's reconcile of its workspaces and subscriptions against the pass's snapshot of their records:
+    a moved workspace record rebuilds the registry in one assignment, unmoved workspaces keeping their providers; a
+    moved subscription rebuilds its sampler and renewer. A rebuild that raises keeps what is in force, and the next
+    pass tries again."""
+
+    def __init__(
+        self,
+        host: HostProcess,
+        root: Path,
+        *,
+        retired_workspaces: Callable[[HostSettingsSnapshot], tuple[HostWorkspace, ...]],
+    ) -> None:
+        self._host = host
+        self._root = root
+        self._retired_workspaces = retired_workspaces
+        self._log = get_logger("blizzard.runner.loop")
+        self._workspaces_at: tuple[tuple[str, int], ...] | None = None
+        self._subscriptions_at: dict[str, int] | None = None
+        self._sampled: dict[str, SampledSubscription] = {}
+        self._renewable: dict[str, RenewableSubscription | None] = {}
+
+    def run(self, effective: HostConfig, snapshot: HostSettingsSnapshot) -> None:
+        records = snapshot.records
+        if records is None:
+            return
+        try:
+            self._reconcile_workspaces(effective, snapshot, records)
+        except Exception:  # a prompt file gone, a provider that will not build: keep the registry in force
+            self._log.warning("workspace rebuild failed — the host keeps its workspaces", exc_info=True)
+        try:
+            self._reconcile_subscriptions(effective, records)
+        except Exception:
+            self._log.warning("subscription rebuild failed — the host keeps its subscriptions", exc_info=True)
+
+    def _reconcile_workspaces(
+        self, effective: HostConfig, snapshot: HostSettingsSnapshot, records: HostRecordsSnapshot
+    ) -> None:
+        at = tuple((record.key, record.revision) for record in (*records.workspaces, *records.retired_workspaces))
+        if at == self._workspaces_at:
+            return
+        host = self._host
+        current = host.workspaces.current()
+        registry = build_workspaces(
+            effective.workspaces,
+            self._root,
+            launch=WorkspaceLaunch(children=host.children, env=host.tool_profile),
+            audit=host.host_stores.runner_audit,
+            locks=host.workspaces.locks,
+            revisions=dict(at),
+            # The registry the host was composed with carries no record revisions, so the first pass builds each anew.
+            keep=current if self._workspaces_at is not None else None,
+            retired=self._retired_workspaces(snapshot),
+        )
+        host.workspaces.set(registry)
+        if self._workspaces_at is not None:
+            self._log.info("host workspaces rebuilt", workspaces=list(registry.ids()))
+        self._workspaces_at = at
+
+    def _reconcile_subscriptions(self, effective: HostConfig, records: HostRecordsSnapshot) -> None:
+        at = {record.key: record.revision for record in records.subscriptions}
+        if at == self._subscriptions_at:
+            return
+        host = self._host
+        declared = {declaration.slug: declaration for declaration in effective.subscriptions}
+        subprocess = SubprocessOneShotProcess(host.children)
+        sampled: dict[str, SampledSubscription] = {}
+        renewable: dict[str, RenewableSubscription | None] = {}
+        for slug, declaration in declared.items():
+            if (
+                slug in self._sampled
+                and self._subscriptions_at is not None
+                and self._subscriptions_at.get(slug) == at.get(slug)
+            ):
+                sampled[slug], renewable[slug] = self._sampled[slug], self._renewable.get(slug)
+                continue
+            sampled[slug] = sampled_subscription(declaration, host.clock, host.usage_http_client)
+            renewable[slug] = renewable_subscription(
+                declaration, host.clock, subprocess=subprocess, env=host.tool_profile
+            )
+        first = self._subscriptions_at is None
+        self._sampled, self._renewable, self._subscriptions_at = sampled, renewable, at
+        if first and tuple(declared) == tuple(s.slug for s in host.subscriptions):
+            # The pass the host was composed with already serves these declarations.
+            return
+        host.subscriptions = tuple(declared.values())
+        host.host_tick = replace(
+            host.host_tick,
+            external_usage_sample=_sample_pass(
+                tuple(sampled.values()),
+                host.host_stores,
+                host.clock,
+                lambda: host.runners,
+                registration=host.host_registration,
+            ),
+            credential_renewal=_renewal_pass(
+                tuple(r for r in renewable.values() if r is not None), host.host_stores, host.clock
+            ),
+        )
+        self._log.info("host subscriptions rebuilt", subscriptions=list(declared))
 
 
 #: How long the runner's shutdown waits for buffered platform spans to leave.
@@ -772,7 +940,7 @@ def build_host_process(
     )
     try:
         graph.host_settings = HostSettingsInForce(
-            HostSettingsReader(host, graph.host_stores.settings),
+            HostSettingsReader(host, graph.host_stores.settings, host_record_reads(graph.host_stores)),
             tool_profile=graph.tool_profile,
             tracing=TracingSettings.of(os.environ if environ is None else environ),
             clock=graph.clock,
@@ -780,8 +948,15 @@ def build_host_process(
         graph.host_settings_authoring = HostSettingsAuthoring(
             graph.host_settings.reader, graph.host_stores.settings, HOST_REGISTRY, drivers=graph.wakes
         )
+        if graph.host_settings.reader.records is not None:
+            graph.records_reconcile = HostRecordsReconcile(
+                graph, host.root, retired_workspaces=graph.host_settings.reader.retired_workspaces
+            )
         if graph.readiness.evaluate().ready:
-            graph.host_settings.take()
+            effective = graph.host_settings.take()
+            # Before any runner resumes: a retired workspace's provider releases what it holds.
+            if graph.records_reconcile is not None and graph.host_settings.taken is not None:
+                graph.records_reconcile.run(effective, graph.host_settings.taken)
         # Host entries read on use: each worker export is admitted under the host record's current revision.
         graph.telemetry_receiver = replace(
             graph.telemetry_receiver, tracing=graph.host_settings.reader.live(_receiver_tracing)
@@ -1428,11 +1603,13 @@ def _build_host_graph(
         tool_profile = ToolProfileHolder(
             config.tool_env(TracingSettings.of(os.environ if environ is None else environ))
         )
-        workspaces = build_workspaces(
-            config.workspaces,
-            config.root,
-            launch=WorkspaceLaunch(children=children, env=tool_profile),
-            audit=host_stores.runner_audit,
+        workspaces = HostWorkspaces(
+            build_workspaces(
+                config.workspaces,
+                config.root,
+                launch=WorkspaceLaunch(children=children, env=tool_profile),
+                audit=host_stores.runner_audit,
+            )
         )
         host_identity = HostIdentityHolder()
         # The one place a host's registration is derived: everything after reads it from the holder.
@@ -1482,7 +1659,11 @@ def _build_host_graph(
                 registration=(
                     HostRegistration(
                         client=host_hub,
-                        report=functools.partial(host_report, config, workspaces, subscriptions),
+                        # Built at each report from what the host serves then, which the host tick reconciles
+                        # from its records first.
+                        report=lambda: host_report(
+                            config, workspaces, built[0].subscriptions if built else tuple(subscriptions)
+                        ),
                         identities=host_stores.host_identity,
                         identity=host_identity,
                         status=host_registration,
@@ -1535,18 +1716,15 @@ _HOST_HUB_TIMEOUT_SECONDS = 10.0
 
 
 def host_report(
-    config: RunnerConfig, workspaces: IWorkspaceProviders, subscriptions: Sequence[SubscriptionDeclaration]
+    config: RunnerConfig, workspaces: IWorkspaceEntries, subscriptions: Sequence[SubscriptionDeclaration]
 ) -> HostReport:
     """What the host reports about itself: every public URL in declaration order, the panel's sign-in callback URIs,
-    each workspace with the environments it holds, and the subscriptions it declares."""
-    reported: list[HostReportedWorkspace] = []
-    for workspace in config.workspaces:
-        provider = workspaces.provider(workspace.id)
-        reported.append(
-            HostReportedWorkspace(
-                workspace_id=workspace.id, env_capacity=provider.capacity() if provider is not None else None
-            )
-        )
+    each workspace it serves with the environments it holds, and the subscriptions it serves — a retired one of
+    either never among them."""
+    reported = [
+        HostReportedWorkspace(workspace_id=entry.workspace_id, env_capacity=entry.provider.capacity())
+        for entry in workspaces.entries()
+    ]
     return HostReport(
         url=config.public_url or None,
         redirect_uris=config.redirect_uris,
@@ -1989,16 +2167,18 @@ class _HostedRunnerNames:
 @collaborator
 @dataclass(frozen=True)
 class _NewRunnerSettings:
-    """A new runner's entries judged as a store-only runner's are, over the host file, before its hub mints its id."""
+    """A new runner's entries judged as a store-only runner's are, over the host as ``host`` reads it at the add —
+    its workspaces and subscriptions as their records state them — before its hub mints its id."""
 
-    host: HostConfig
+    host: Callable[[], HostConfig]
 
     def problems(self, name: str, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        host = self.host()
         try:
-            entry = self.host.hosted_entry(None, name)
+            entry = host.hosted_entry(None, name)
         except (ConfigError, ValueError) as exc:
             return {"name": str(exc)}
-        return RunnerEntriesJudge(self.host, entry).validate(entries)
+        return RunnerEntriesJudge(host, entry).validate(entries)
 
 
 @collaborator
@@ -2012,6 +2192,111 @@ class _SealingTokens:
         return self.tokens().seal_first(runner_id, token)
 
 
+def host_record_reads(stores: HostStores | HostReadStores) -> HostRecordReads:
+    """The host's workspace and subscription records, as the host's settings reader reads them every pass."""
+    return HostRecordReads(workspaces=stores.workspaces, subscriptions=stores.subscriptions)
+
+
+def host_settings_reader(host: HostConfig, stores: HostStores | HostReadStores) -> HostSettingsReader:
+    """The reader of ``host``'s stored entries and records over ``stores``."""
+    return HostSettingsReader(host, stores.settings, host_record_reads(stores))
+
+
+def build_host_record_services(
+    reader: HostSettingsReader, stores: HostStores, *, clock: IClock
+) -> Mapping[RecordKind, HostRecordService]:
+    """Each record kind's service over ``stores``, judging a write by ``reader``'s host file parse beside the host's
+    stored entries and records — a running host's own reader, so one resolution serves its passes and its writes."""
+    validation = HostRecordValidation(reader)
+    return {
+        RecordKind.WORKSPACE: HostRecordService(RecordKind.WORKSPACE, stores.workspaces, validation, clock),
+        RecordKind.SUBSCRIPTION: HostRecordService(RecordKind.SUBSCRIPTION, stores.subscriptions, validation, clock),
+    }
+
+
+def _file_records(config: HostConfig, stores: HostStores | HostReadStores) -> tuple[HostRecord, ...]:
+    """Each ``[[workspace]]`` and ``[[subscription]]`` table as the record a seed makes of it, whole from its table,
+    the first of a key only. A deprecated ``workspace_prompt`` override for a workspace is its ``prompt``, with
+    ``prompt_file`` and ``prompt_package`` at their defaults, since the override already won over every file
+    prompt."""
+    authored = config.authored
+    if authored is None:
+        return ()
+    records: dict[tuple[RecordKind, str], HostRecord] = {}
+    for kind in (RecordKind.WORKSPACE, RecordKind.SUBSCRIPTION):
+        tables = cast(object, authored.get(str(kind), []))
+        for table in cast(list[object], tables) if isinstance(tables, list) else []:
+            if not isinstance(table, dict):
+                continue
+            entry = cast(dict[str, object], table)
+            if not isinstance(key := entry.get(kind.key_name), str) or (kind, key.strip()) in records:
+                continue
+            settings = {name: value for name, value in entry.items() if name != kind.key_name}
+            if kind is RecordKind.WORKSPACE:
+                override = stores.workspace_prompt.workspace_prompt_override(key.strip())
+                if override is not None:
+                    settings = PromptChange.stating("prompt", override).applied_to(settings)
+            records[kind, key.strip()] = HostRecord(kind, key.strip(), 0, settings)
+    return tuple(records.values())
+
+
+def seed_record_tables(config: HostConfig, stores: HostStores, *, clock: IClock) -> None:
+    """Seed steps 2-3: each ``[[workspace]]`` and ``[[subscription]]`` table with no record becomes one
+    (:func:`_file_records`), each its own write under the seed's door and actor; a record the store holds, retired
+    or not, is never touched."""
+    services = build_host_record_services(host_settings_reader(config, stores), stores, clock=clock)
+    for record in _file_records(config, stores):
+        services[record.kind].seed(record.key, record.settings)
+
+
+def seeded_records(config: HostConfig, stores: HostStores | HostReadStores) -> HostRecordsSnapshot:
+    """The host's records as they stand once its file's tables are seeded (:func:`seed_record_tables`), read with no
+    write: for a verb that judges against them and must leave the store as it found it when it refuses."""
+    workspaces = stores.workspaces.records(retired=True)
+    subscriptions = stores.subscriptions.records()
+    held = {(record.kind, record.key) for record in workspaces} | {
+        (RecordKind.SUBSCRIPTION, record.key) for record in stores.subscriptions.records(retired=True)
+    }
+    unseeded = [record for record in _file_records(config, stores) if (record.kind, record.key) not in held]
+
+    def ordered(records: Sequence[HostRecord]) -> tuple[HostRecord, ...]:
+        return tuple(sorted(records, key=lambda record: record.key))
+
+    return HostRecordsSnapshot(
+        workspaces=ordered(
+            [r for r in workspaces if not r.retired] + [r for r in unseeded if r.kind is RecordKind.WORKSPACE]
+        ),
+        subscriptions=ordered([*subscriptions, *(r for r in unseeded if r.kind is RecordKind.SUBSCRIPTION)]),
+        retired_workspaces=tuple(r for r in workspaces if r.retired),
+    )
+
+
+def held_records(config: HostConfig, stores: HostStores | HostReadStores, kind: RecordKind) -> tuple[HostRecord, ...]:
+    """Every record of ``kind`` the host holds, retired ones included, once its file's tables are seeded — each one
+    the store holds none of at the revision its seed writes — read with no write, so a stopped host's reads show what
+    its next start serves."""
+    held = stores.records_of(kind).records(retired=True)
+    keys = {record.key for record in held}
+    unseeded = [
+        replace(record, revision=1)
+        for record in _file_records(config, stores)
+        if record.kind is kind and record.key not in keys
+    ]
+    return tuple(sorted((*held, *unseeded), key=lambda record: record.key))
+
+
+def recorded_host_config(
+    config: HostConfig, stores: HostStores | HostReadStores, records: HostRecordsSnapshot | None = None
+) -> HostConfig:
+    """``config`` with its workspaces and subscriptions the store's active records — or ``records`` — over its stored
+    entries; raises :class:`ValueError` when they do not resolve."""
+    reader = HostSettingsReader(config, stores.settings, host_record_reads(stores))
+    if records is None:
+        return reader.current()
+    held = stores.settings.snapshot()
+    return reader.resolve(HostSettingsSnapshot(held.revision, held.entries, records))
+
+
 def build_hosted_runner_service(
     host: HostConfig,
     engine: Engine,
@@ -2021,7 +2306,8 @@ def build_hosted_runner_service(
     environ: Mapping[str, str] | None = None,
 ) -> HostedRunnerService:
     """The service that adds and retires a stopped host's runners in the store ``engine`` opens, under the host's
-    token through ``hub``, over host stores and a token sealer of its own."""
+    token through ``hub``, over host stores and a token sealer of its own; a new runner is judged against ``host``,
+    resolved from the store's records."""
     stores = build_host_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")), clock=clock)
     sealer = functools.partial(
         _sealing_hub_tokens,
@@ -2030,7 +2316,7 @@ def build_hosted_runner_service(
         environ=os.environ if environ is None else environ,
         clock=clock,
     )
-    return _hosted_runner_service(host, engine, hub, stores, sealer, clock)
+    return _hosted_runner_service(host, engine, hub, stores, sealer, clock, judged=lambda: host)
 
 
 def build_running_host_runner_service(
@@ -2047,6 +2333,7 @@ def build_running_host_runner_service(
             _running_host_tokens, host, host_config.root, environ=os.environ if environ is None else environ
         ),
         host.clock,
+        judged=host.host_settings.reader.current if host.host_settings is not None else lambda: host_config,
     )
 
 
@@ -2064,12 +2351,14 @@ def _hosted_runner_service(
     stores: HostStores,
     tokens: Callable[[], HubTokens],
     clock: IClock,
+    *,
+    judged: Callable[[], HostConfig],
 ) -> HostedRunnerService:
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
     return HostedRunnerService(
         hosted=stores.hosted_runners,
         admissions=_RunnerAdmissions(functools.partial(_admission_of, engine, errors=errors, clock=clock)),
-        settings=_NewRunnerSettings(host),
+        settings=_NewRunnerSettings(judged),
         names=_HostedRunnerNames(host, stores.runner_audit),
         tokens=_SealingTokens(tokens),
         hub=hub,
@@ -2118,6 +2407,8 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         hosted_runners=HostHostedRunnerStore(connections),
         usage_limits=SubscriptionUsageLimitStore(connections),
         settings=HostSettingsStore(connections, clock),
+        workspaces=HostWorkspaceStore(connections, clock),
+        subscriptions=HostSubscriptionStore(connections, clock),
         runner_audit=RunnerAudit(connections),
     )
 
@@ -2503,6 +2794,34 @@ class ConfigSourceHosts:
 _source_hosts_conforms: type[ISourceHosts] = ConfigSourceHosts
 
 
+@collaborator
+@dataclass(frozen=True)
+class SeededHereRecords:
+    """This host's workspaces and subscriptions from its store, as they stand once its file's tables are seeded."""
+
+    host: HostConfig
+
+    def held(self) -> HeldRecords:
+        engine = create_engine_from_url(self.host.db_url)
+        try:
+            stores = build_host_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+            records = seeded_records(self.host, stores)
+            try:
+                recorded = recorded_host_config(self.host, stores, records)
+            except ValueError as exc:
+                raise ConfigError(str(exc)) from exc
+        finally:
+            engine.dispose()
+        return HeldRecords(
+            workspaces=tuple(declared_workspace(workspace, recorded.root) for workspace in recorded.workspaces),
+            subscriptions=tuple(declared_subscription(subscription) for subscription in recorded.subscriptions),
+            retired_workspace_ids=frozenset(record.key for record in records.retired_workspaces),
+        )
+
+
+_here_records_conforms: type[IHereRecords] = SeededHereRecords
+
+
 def build_runner_ingest(
     host: HostConfig,
     hub: IHostHubClient,
@@ -2537,4 +2856,5 @@ def build_runner_ingest(
         ),
         clock=resolved,
         migrations=migrations,
+        records=SeededHereRecords(host),
     )

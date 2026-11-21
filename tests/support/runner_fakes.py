@@ -129,6 +129,7 @@ from blizzard.runner.store.internal.host_identity_store import HostIdentityStore
 from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
+from blizzard.runner.store.internal.host_record_store import HostSubscriptionStore, HostWorkspaceStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
@@ -395,6 +396,8 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         hosted_runners=HostHostedRunnerStore(store.connections),
         usage_limits=SubscriptionUsageLimitStore(store.connections),
         settings=HostSettingsStore(store.connections, clock or SystemClock()),
+        workspaces=HostWorkspaceStore(store.connections, clock or SystemClock()),
+        subscriptions=HostSubscriptionStore(store.connections, clock or SystemClock()),
         runner_audit=RunnerAudit(store.connections),
     )
 

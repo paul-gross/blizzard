@@ -124,7 +124,7 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
     RunnerIdentityStore(base.connections).record_runner_identity(
         RunnerIdentity(TEST_RUNNER_ID, host.runners[0].name, datetime.now(UTC))
     )
-    host = seed_host(host, {})
+    host = seed_host(host, {}, clock=SystemClock())
     ready, halted = seed_runners(host, clock=SystemClock())
     assert not halted
     graph = build_host_process(host, ready)
@@ -176,7 +176,7 @@ def test_cli_host_settings_round_trip_through_the_real_host_routes(
         assert json.loads(invoke("get", "tick_seconds").stdout)["source"] == "default"
         changes = json.loads(invoke("changes").stdout)["changes"]
         assert [c["revision"] for c in changes[:2]] == [revision + 2, revision + 1]
-        assert {c["record_kind"] for c in changes} == {"host"}
+        assert {c["record_kind"] for c in changes[:2]} == {"host"}
         # The host's record is reached at the host root, never under a runner's prefix, and names no runner.
         assert paths and all(path.startswith("/api/host/settings") for path in paths)
         both = cli.invoke(

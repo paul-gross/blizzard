@@ -31,7 +31,6 @@ from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
-    DEFAULT_WORKSPACE_ID,
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
@@ -70,7 +69,13 @@ from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
-from tests.support.host_files import host_config_of, load_runner_config, one_workspace, write_minimal_host
+from tests.support.host_files import (
+    TEST_WORKSPACE_ID,
+    host_config_of,
+    load_runner_config,
+    one_workspace,
+    write_minimal_host,
+)
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -108,14 +113,14 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
     )
     build_hosted_app(config)
     with loop_context(config) as loop:
-        provider = loop.workspaces.provider(DEFAULT_WORKSPACE_ID)
+        provider = loop.workspaces.provider(TEST_WORKSPACE_ID)
         assert isinstance(provider, BasicWorkspaceProvider)
         assert provider.capacity() == 3
-        assert loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID) == ""
+        assert loop.workspaces.spawn_root(TEST_WORKSPACE_ID) == ""
         assert loop.usage.workspaces is loop.workspaces
         assert provider.root == tmp_path / "scratch"
         assert SpawnCwd.of_session(
-            loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID), str(tmp_path / "scratch" / "chunk")
+            loop.workspaces.spawn_root(TEST_WORKSPACE_ID), str(tmp_path / "scratch" / "chunk")
         ) == str(tmp_path / "scratch" / "chunk")
 
 
@@ -128,7 +133,7 @@ def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> N
     )
 
     with loop_context(config) as loop:
-        assert loop.workspaces.spawn_root(DEFAULT_WORKSPACE_ID) == ""
+        assert loop.workspaces.spawn_root(TEST_WORKSPACE_ID) == ""
         assert loop.usage.workspaces is loop.workspaces
 
 

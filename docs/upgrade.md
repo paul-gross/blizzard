@@ -98,6 +98,33 @@ its runners from the host file alone, and such a runner has no `[[runner]]` and 
 hub with `blizzard hub runner retire <id>` and add it again on the older release, or add its `[[runner]]` and
 `BZ_HUB_TOKEN_<NAME>` by hand before walking back ([rollback](./rollback.md)).
 
+### Workspaces and subscriptions become records in the host store
+
+From this release a host's workspaces and subscriptions are records in its store, seeded from the host file's
+`[[workspace]]` and `[[subscription]]` once, at the first start that finds no record of that key. Migrate the store with
+the new release's `blizzard runner migrate --dir <host-directory>` before starting it. After that first seed, editing a
+seeded `[[workspace]]` or `[[subscription]]` in the file changes nothing, and removing one retires nothing: change one
+with `blizzard runner workspace` or `blizzard runner subscription` and their `create`, `edit`, `retire` and `enable`
+verbs, or the host's routes ([runner-auth.md](./deployment/runner-auth.md#the-hosts-workspaces-and-subscriptions)). A
+running host takes each change up at its next tick, with no restart. A workspace prompt set through the panel or
+`blizzard runner prompt` before the upgrade becomes that workspace's `prompt` at the first seed — only for a workspace
+the host file declares. A host that relied on the default `workspace-local` and creates it after the upgrade loses its
+override: before upgrading, read it with `blizzard runner prompt status` and state it in the `[[workspace]]` you add, or
+set it again once the workspace is created.
+
+There is no default workspace any more. A host whose file declares no `[[workspace]]` used to serve `workspace-local`
+anyway; it now serves none, and a runner bound to a workspace the host does not serve keeps running and claims nothing
+through that binding. `blizzard runner init` still binds its runner's projects to `workspace-local` but no longer writes
+a `[[workspace]]`, and no longer reads `BZ_WORKSPACE_ROOT`, `BZ_WORKSPACE_ENVS`, `BZ_WORKSPACE_PROMPT`,
+`BZ_WORKSPACE_PROMPT_PACKAGE` or `BZ_BASE_BRANCH`. Before upgrading, add a `[[workspace]]` for every workspace a
+`[[runner]]` binds, `id = "workspace-local"` for a host whose file declares none, or create it after the upgrade with
+`blizzard runner workspace create <id> KEY=VALUE…`. Script any `init` that relied on `BZ_WORKSPACE_*` to write the
+`[[workspace]]` itself.
+
+A runner settings write that binds a workspace or names a subscription the host does not hold is refused, where it used
+to halt the runner. Rolling back strands every record created or edited only in the store: restore the pre-upgrade store
+and host file together ([rollback](./rollback.md)).
+
 ## Upgrading to 0.4.0
 
 ### Store baseline at 0.2.0

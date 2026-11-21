@@ -1,45 +1,97 @@
-"""``blizzard runner prompt clear`` — the one prompt verb that goes through the running daemon."""
+"""``blizzard runner prompt clear`` — the workspace record's prompt settings returned to their defaults, through a
+running host or into a stopped host's store."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
 from pathlib import Path
 
 import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
-from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.harness.workspace_prompts import PACKAGED, WORKSPACE_PROMPT_FILENAME
 from tests.support.host_files import load_runner_config
 from tests.support.runner_cli_home import init_runner_home, serve_local_api
-from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.runner_init_fakes import init_runner
 from tests.support.worker_http import bind_local_only
 
 pytestmark = pytest.mark.usefixtures("short_host_sockets")
 
 
 def _run(*args: str) -> Result:
-    return bind_local_only().runner.invoke(blizzard, ["runner", "prompt", *args])
+    return bind_local_only().runner.invoke(blizzard, ["runner", *args])
 
 
-def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
+def _set_prompt(root: Path) -> None:
+    workspace_id = load_runner_config(root).home_workspace.id
+    result = _run("workspace", "edit", workspace_id, 'prompt="A STANDING PROMPT"', "--dir", str(root))
+    assert result.exit_code == 0, result.output
+
+
+def test_clear_on_a_running_host_goes_through_it(tmp_path: Path) -> None:
     root = init_runner_home(tmp_path)
-    config = load_runner_config(root)
-    store = SqlAlchemyRunnerStore(create_engine_from_url(config.db_url), runner_store_errors())
-    store.set_workspace_prompt(config.home_workspace.id, prompt="AN OVERRIDE", at=datetime(2026, 1, 1, tzinfo=UTC))
-    standing = _run("status", "--dir", str(root))
-    assert "store override" in standing.output
-    assert "runner prompt clear" in standing.output
+    _set_prompt(root)
+    assert "from inline prompt" in _run("prompt", "status", "--dir", str(root)).output
 
     with serve_local_api(root):
-        cleared = _run("clear", "--dir", str(root))
+        cleared = _run("prompt", "clear", "--dir", str(root))
 
     assert cleared.exit_code == 0, cleared.output
-    assert "store override" not in _run("status", "--dir", str(root)).output
+    assert "through the running host" in cleared.output
+    assert "from none" in _run("prompt", "status", "--dir", str(root)).output
 
 
-def test_clear_without_a_daemon_names_the_missing_runner(tmp_path: Path) -> None:
-    result = _run("clear", "--dir", str(init_runner_home(tmp_path)))
+def test_clear_on_a_stopped_host_writes_its_store(tmp_path: Path) -> None:
+    root = init_runner_home(tmp_path)
+    _set_prompt(root)
 
-    assert result.exit_code != 0
-    assert "no runner daemon is serving" in result.output
+    cleared = _run("prompt", "clear", "--dir", str(root))
+
+    assert cleared.exit_code == 0, cleared.output
+    assert "stopped host's store" in cleared.output
+    assert "from none" in _run("prompt", "status", "--dir", str(root)).output
+
+
+def test_the_prompt_verbs_address_a_workspace_only_the_store_holds(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(runner_group, ["init", str(root)]).exit_code == 0
+    created = _run("workspace", "create", "ws-store", f'root="{tmp_path / "ws"}"', 'prompt="STORE"', "--dir", str(root))
+    assert created.exit_code == 0, created.output
+
+    status = _run("prompt", "status", "--dir", str(root))
+    assert status.exit_code == 0, status.output
+    assert "5 characters, from inline prompt" in status.output
+
+    sample = PACKAGED.names[0]
+    installed = _run("prompt", "install", sample, "--dir", str(root))
+    assert installed.exit_code == 0, installed.output
+    shown = _run("workspace", "get", "ws-store", "--dir", str(root))
+    assert str(root / WORKSPACE_PROMPT_FILENAME) in shown.output and "STORE" not in shown.output
+    assert _run("prompt", "diff", sample, "--dir", str(root)).exit_code == 0
+
+
+def test_the_prompt_verbs_refuse_a_host_holding_no_workspace(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(runner_group, ["init", str(root)]).exit_code == 0
+
+    status = _run("prompt", "status", "--dir", str(root))
+
+    assert status.exit_code == 1 and "holds no active workspace" in status.output
+
+
+def test_a_reinstall_over_the_copy_the_record_names_moves_the_record(tmp_path: Path) -> None:
+    root = init_runner_home(tmp_path)
+    sample = PACKAGED.names[0]
+    workspace_id = load_runner_config(root).home_workspace.id
+    assert _run("prompt", "install", sample, "--dir", str(root)).exit_code == 0
+    first = json.loads(_run("workspace", "get", workspace_id, "--dir", str(root)).output)
+
+    again = _run("prompt", "install", sample, "--force", "--dir", str(root))
+
+    assert again.exit_code == 0, again.output
+    assert "nothing was written" not in again.output
+    second = json.loads(_run("workspace", "get", workspace_id, "--dir", str(root)).output)
+    assert second["revision"] == first["revision"] + 2
+    assert second["settings"] == first["settings"]

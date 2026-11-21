@@ -22,7 +22,7 @@ from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
 from tests.support.config_inputs import create_runner_app, init_host
-from tests.support.host_files import load_runner_config, with_workspace
+from tests.support.host_files import declare_test_workspace, load_runner_config, with_workspace
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
 
@@ -105,6 +105,7 @@ def test_a_runner_is_bound_from_configuration_before_its_hub_answers_and_registr
     tmp_path: Path,
 ) -> None:
     init_host(tmp_path / "runner")
+    declare_test_workspace(tmp_path / "runner")
     config = with_workspace(load_runner_config(tmp_path / "runner"), root=str(tmp_path / "workspace"))
     hub = FakeHub(default_runner_id="rn_other")
     hub.down = True

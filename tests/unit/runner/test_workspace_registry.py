@@ -14,6 +14,7 @@ from blizzard.runner.composition import bound_spawn_roots, build_workspaces
 from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.workspaces import (
+    HostWorkspaces,
     WorkspaceEntry,
     WorkspaceRegistry,
     held_workspace_id,
@@ -104,9 +105,54 @@ def test_the_try_lock_is_reentrant_and_never_waits_on_another_thread() -> None:
         assert taken  # released once the holder leaves
 
 
-def test_a_registry_needs_a_workspace() -> None:
-    with pytest.raises(ValueError, match="at least one workspace"):
-        WorkspaceRegistry([])
+def test_a_registry_with_no_workspace_serves_no_binding() -> None:
+    registry = WorkspaceRegistry([])
+
+    assert registry.ids() == ()
+    assert registry.acquisition_provider("ws_a") is None
+    assert registry.home(("ws_a",)) == "ws_a"
+    assert registry.home(()) == ""
+
+
+def test_a_retired_workspace_serves_what_it_holds_and_takes_no_acquisition() -> None:
+    retired = FakeProvider({"e1": "/r/e1"})
+    registry = WorkspaceRegistry(
+        [WorkspaceEntry("ws_a", FakeProvider({"e1": "/a/e1"}), spawn_root="/a")],
+        retired=[WorkspaceEntry("ws_r", retired, spawn_root="/r", prompt="R prose")],
+    )
+
+    assert registry.ids() == ("ws_a",)
+    assert registry.provider("ws_r") is retired
+    assert registry.acquisition_provider("ws_r") is None
+    assert (registry.spawn_root("ws_r"), registry.prompt("ws_r")) == ("/r", "R prose")
+    assert registry.held("ws_r", ("ws_a",)) == "ws_r"
+    assert registry.environment_workdirs()["ws_r"] == {"e1": "/r/e1"}
+
+
+def test_every_registry_built_over_the_hosts_locks_takes_one_lock_per_workspace() -> None:
+    holder = HostWorkspaces()
+    first = WorkspaceRegistry([WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="")], locks=holder.locks)
+    holder.set(first)
+    taken: list[bool] = []
+    with holder.try_acquisition_lock("ws_a") as held:
+        assert held
+        holder.set(WorkspaceRegistry([WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="")], locks=holder.locks))
+        thread = threading.Thread(target=lambda: taken.append(_try(holder, "ws_a")))
+        thread.start()
+        thread.join(5)
+    assert taken == [False]
+    assert holder.current() is not first
+
+
+def test_a_registry_built_over_other_locks_is_refused() -> None:
+    holder = HostWorkspaces()
+    with pytest.raises(ValueError, match="acquisition locks"):
+        holder.set(WorkspaceRegistry([WorkspaceEntry("ws_a", FakeProvider({}), spawn_root="")]))
+
+
+def _try(holder: HostWorkspaces, workspace_id: str) -> bool:
+    with holder.try_acquisition_lock(workspace_id) as taken:
+        return taken
 
 
 def test_the_host_builds_one_provider_per_workspace_and_resolves_each_prompt(tmp_path: Path) -> None:

@@ -14,7 +14,6 @@ import pytest
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.runner.config import (
-    DEFAULT_WORKSPACE_ID,
     SCAFFOLD_PROJECTS,
     Auth,
     HostWorkspace,
@@ -24,16 +23,18 @@ from blizzard.runner.config import (
     Transcripts,
     WorkerStdout,
 )
-from blizzard.runner.host_config import HostConfig, RunnerEntry
-from blizzard.runner.host_file import write_runner_id
+from blizzard.runner.host_config import HostConfig, RunnerEntry, workspace_toml
+from blizzard.runner.host_file import append_workspace, write_runner_id
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
-from tests.support.config_inputs import init_host, load_host_config
+from tests.support.config_inputs import STRICT, init_host, load_host_config
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID
 
 #: The id of the runner a test host file declares.
 TEST_RUNNER_ID = "rn_host_test"
+#: The workspace a test host serves — the one ``runner init``'s scaffolded runner binds its projects to.
+TEST_WORKSPACE_ID = "workspace-local"
 
 
 def write_minimal_host(
@@ -54,7 +55,7 @@ def write_minimal_host(
     text = (
         f"{top}\n"
         "[[workspace]]\n"
-        'id = "workspace-local"\n'
+        f'id = "{TEST_WORKSPACE_ID}"\n'
         f"{workspace}\n"
         "[[runner]]\n"
         f'id = "{TEST_RUNNER_ID}"\n'
@@ -102,7 +103,10 @@ def load_runner_config(root: Path | str, *, host: str | None = None, port: int |
 
 def host_config_of(config: RunnerConfig) -> HostConfig:
     """The host file one runner's ``config`` stands for: its host keys at the top, its workspaces as the
-    ``[[workspace]]`` entries, and the runner — with the projects it serves bound to its workspace, sharing its agent count — as the one ``[[runner]]``."""
+    ``[[workspace]]`` entries, and the runner — with the projects it serves bound to its workspace, sharing its agent count — as the one ``[[runner]]``. A
+    ``config`` holding no workspace declares :data:`TEST_WORKSPACE_ID`, the one its runner then serves."""
+    if not config.workspaces:
+        config = dataclasses.replace(config, workspaces=one_workspace())
     entry = RunnerEntry(
         name=config.name,
         id=config.runner_id,
@@ -173,9 +177,16 @@ def with_runner(config: RunnerConfig, **changes: object) -> RunnerConfig:
     return changed
 
 
+def declare_test_workspace(root: Path, **fields: object) -> None:
+    """Append to ``root``'s host file the ``[[workspace]]`` ``runner init``'s scaffolded runner binds — which ``init``
+    declares none of — on the basic provider unless ``fields`` names another."""
+    workspace = dataclasses.replace(HostWorkspace(TEST_WORKSPACE_ID, provider="basic"), **fields)
+    append_workspace(HostLayout(root), workspace_toml(workspace), strict=STRICT)
+
+
 def one_workspace(**fields: object) -> tuple[HostWorkspace, ...]:
-    """A host's ``workspaces`` holding one workspace, the default id unless ``fields`` names another."""
-    return (dataclasses.replace(HostWorkspace(DEFAULT_WORKSPACE_ID), **fields),)
+    """A host's ``workspaces`` holding one workspace, the test workspace's id unless ``fields`` names another."""
+    return (dataclasses.replace(HostWorkspace(TEST_WORKSPACE_ID), **fields),)
 
 
 def with_workspace(config: RunnerConfig, **changes: object) -> RunnerConfig:

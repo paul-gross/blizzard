@@ -1415,6 +1415,8 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "cli" / "runtime.py",
         _RUNNER_DIR / "cli" / "external_usage.py",
         _RUNNER_DIR / "cli" / "runners.py",
+        _RUNNER_DIR / "cli" / "host_records.py",
+        _RUNNER_DIR / "cli" / "prompt.py",
         _RUNNER_DIR / "cli" / "store.py",
         _RUNNER_DIR / "cli" / "store_guard.py",
         _RUNNER_DIR / "cli" / "token.py",
@@ -3298,6 +3300,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "throttle": frozenset({"events", "harness", "hub", "leases", "subscriptions", "usage"}),
     "usage": frozenset({"environments", "events", "harness", "leases", "subscriptions", "transcripts"}),
     "hosting": frozenset({"hub", "settings"}),
+    "host_records": frozenset(),
     "lifecycle": frozenset(
         {
             "auth",
@@ -3326,6 +3329,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
             "auth",
             "environments",
             "harness",
+            "host_records",
             "hosting",
             "hub",
             "leases",

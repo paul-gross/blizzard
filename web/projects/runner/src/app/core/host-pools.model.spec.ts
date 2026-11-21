@@ -42,7 +42,7 @@ describe('runnerNameResolver', () => {
 describe('hostPanelPools', () => {
   it('lays a workspace’s environments out as positional slots, in numeric environment order', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 3 }],
+      [{ workspace_id: 'ws', max_environments: 3, revision: null, settings: {}, state: 'active' }],
       [
         {
           workspace_id: 'ws',
@@ -66,7 +66,7 @@ describe('hostPanelPools', () => {
 
   it('describes a held environment by its chunk, project, and runner, and a free one as free', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 2 }],
+      [{ workspace_id: 'ws', max_environments: 2, revision: null, settings: {}, state: 'active' }],
       [
         {
           workspace_id: 'ws',
@@ -95,7 +95,7 @@ describe('hostPanelPools', () => {
 
   it('reads held alone: an environment reported unheld is free whatever chunk_id it carries', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 1 }],
+      [{ workspace_id: 'ws', max_environments: 1, revision: null, settings: {}, state: 'active' }],
       [{ workspace_id: 'ws', items: [hostEnv({ environment_id: 'e1', chunk_id: CHUNK, held: false })] }],
       names,
       same,
@@ -108,7 +108,7 @@ describe('hostPanelPools', () => {
 
   it('leaves out of a held slot’s title whatever the host does not name', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 1 }],
+      [{ workspace_id: 'ws', max_environments: 1, revision: null, settings: {}, state: 'active' }],
       [{ workspace_id: 'ws', items: [hostEnv({ environment_id: 'e1', held: true, project: '' })] }],
       names,
       same,
@@ -121,7 +121,7 @@ describe('hostPanelPools', () => {
 
   it('dims under a focus every held slot another runner — or no runner — holds, never a free one', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 4 }],
+      [{ workspace_id: 'ws', max_environments: 4, revision: null, settings: {}, state: 'active' }],
       [
         {
           workspace_id: 'ws',
@@ -144,7 +144,7 @@ describe('hostPanelPools', () => {
 
   it('dims nothing without a focus', () => {
     const [pool] = hostPanelPools(
-      [{ workspace_id: 'ws', max_environments: 1 }],
+      [{ workspace_id: 'ws', max_environments: 1, revision: null, settings: {}, state: 'active' }],
       [{ workspace_id: 'ws', items: [hostEnv({ environment_id: 'e1', chunk_id: CHUNK, runner_id: 'rn_2' })] }],
       names,
       same,
@@ -157,8 +157,8 @@ describe('hostPanelPools', () => {
   it('lists declared workspaces in declaration order, then undeclared ones the host reports, with no capacity', () => {
     const pools = hostPanelPools(
       [
-        { workspace_id: 'web', max_environments: 2 },
-        { workspace_id: 'local', max_environments: 6 },
+        { workspace_id: 'web', max_environments: 2, revision: null, settings: {}, state: 'active' },
+        { workspace_id: 'local', max_environments: 6, revision: null, settings: {}, state: 'active' },
       ],
       [
         { workspace_id: 'stray', items: [hostEnv({ environment_id: 'e1', chunk_id: CHUNK, runner_id: 'rn_1' })] },
@@ -194,7 +194,7 @@ describe('hostPoolsFor', () => {
     const projects: PanelProject[] = [{ slug: 'blizzard', name: 'Blizzard', entries: ['blizzard', 'proj_1'], color: null }];
     const [pool] = hostPoolsFor(
       {
-        workspaces: [{ workspace_id: 'ws', max_environments: 2 }],
+        workspaces: [{ workspace_id: 'ws', max_environments: 2, revision: null, settings: {}, state: 'active' }],
         groups: [
           {
             workspace_id: 'ws',

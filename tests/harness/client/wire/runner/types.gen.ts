@@ -2667,6 +2667,39 @@ export type HostRunnerView = {
 };
 
 /**
+ * HostSubscriptionCreateRequest
+ *
+ * A new subscription record: its immutable ``slug`` and ``provider``, its ``name``, and any further key of its
+ * table.
+ */
+export type HostSubscriptionCreateRequest = {
+    /**
+     * Credentials Path
+     */
+    credentials_path?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Sample Interval Seconds
+     */
+    sample_interval_seconds?: number | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Usage Api Base
+     */
+    usage_api_base?: string | null;
+};
+
+/**
  * HostSubscriptionListResponse
  */
 export type HostSubscriptionListResponse = {
@@ -2674,6 +2707,31 @@ export type HostSubscriptionListResponse = {
      * Items
      */
     items: Array<HostSubscriptionView>;
+};
+
+/**
+ * HostSubscriptionPatchRequest
+ *
+ * A sparse edit of a subscription record, its keys named as the ``[[subscription]]`` table names them; its
+ * ``slug`` and ``provider`` are immutable, and its required ``name`` refuses ``null``.
+ */
+export type HostSubscriptionPatchRequest = {
+    /**
+     * Credentials Path
+     */
+    credentials_path?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Sample Interval Seconds
+     */
+    sample_interval_seconds?: number | null;
+    /**
+     * Usage Api Base
+     */
+    usage_api_base?: string | null;
 };
 
 /**
@@ -2705,9 +2763,19 @@ export type HostSubscriptionView = {
     renewal_failure_reason: RenewalFailureReason | null;
     renewal_result: RenewalResult | null;
     /**
+     * Revision
+     */
+    revision: number | null;
+    /**
      * Sampled At
      */
     sampled_at: string | null;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
     /**
      * Slug
      */
@@ -2717,6 +2785,10 @@ export type HostSubscriptionView = {
      */
     spenders: Array<string>;
     /**
+     * State
+     */
+    state: 'active' | 'retired';
+    /**
      * Windows
      */
     windows: Array<ExternalSubscriptionUsageWindowView>;
@@ -2724,6 +2796,55 @@ export type HostSubscriptionView = {
      * Windows Sampled At
      */
     windows_sampled_at: string | null;
+};
+
+/**
+ * HostWorkspaceCreateRequest
+ *
+ * A new workspace record: its immutable ``id`` and any of its table's other keys; an absent key takes its
+ * default.
+ */
+export type HostWorkspaceCreateRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch?: string | null;
+    /**
+     * Envs
+     */
+    envs?: Array<string> | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Max Environments
+     */
+    max_environments?: number | null;
+    /**
+     * Prompt
+     */
+    prompt?: string | null;
+    /**
+     * Prompt File
+     */
+    prompt_file?: string | null;
+    /**
+     * Prompt Package
+     */
+    prompt_package?: string | null;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Repo
+     */
+    repo?: Array<HostWorkspaceRepoWrite> | null;
+    /**
+     * Root
+     */
+    root?: string | null;
 };
 
 /**
@@ -2751,15 +2872,90 @@ export type HostWorkspaceListResponse = {
 };
 
 /**
+ * HostWorkspacePatchRequest
+ *
+ * A sparse edit of a workspace record, its keys named as the ``[[workspace]]`` table names them.
+ */
+export type HostWorkspacePatchRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch?: string | null;
+    /**
+     * Envs
+     */
+    envs?: Array<string> | null;
+    /**
+     * Max Environments
+     */
+    max_environments?: number | null;
+    /**
+     * Prompt
+     */
+    prompt?: string | null;
+    /**
+     * Prompt File
+     */
+    prompt_file?: string | null;
+    /**
+     * Prompt Package
+     */
+    prompt_package?: string | null;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Repo
+     */
+    repo?: Array<HostWorkspaceRepoWrite> | null;
+    /**
+     * Root
+     */
+    root?: string | null;
+};
+
+/**
+ * HostWorkspaceRepoWrite
+ *
+ * One ``[[workspace.repo]]``: a repository a workspace's environments clone.
+ */
+export type HostWorkspaceRepoWrite = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
  * HostWorkspaceView
  *
- * One workspace the host declares, with the environments it may hold at once.
+ * One workspace the host declares, with the environments it may hold at once; on a host keeping records, its
+ * record's revision, state, and settings — every key of its ``[[workspace]]`` table but ``id``, as stated.
  */
 export type HostWorkspaceView = {
     /**
      * Max Environments
      */
     max_environments: number;
+    /**
+     * Revision
+     */
+    revision: number | null;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
+    /**
+     * State
+     */
+    state: 'active' | 'retired';
     /**
      * Workspace Id
      */
@@ -5240,7 +5436,7 @@ export type WorkerArtifact = {
 /**
  * WorkspacePromptReplacement
  *
- * A replacement workspace prompt — applies to subsequent spawns with no restart.
+ * A replacement workspace prompt — taken up with no restart at the host's next pass, by every spawn after it.
  */
 export type WorkspacePromptReplacement = {
     /**
@@ -5262,7 +5458,7 @@ export type WorkspacePromptResponse = {
     /**
      * Source
      */
-    source: 'override' | 'config';
+    source: 'override' | 'config' | 'default';
 };
 
 export type CallbackApiAuthCallbackPostData = {
@@ -5667,9 +5863,23 @@ export type HostSettingsChangesApiHostSettingsChangesGetResponse = HostSettingsC
 export type ListSubscriptionsApiHostSubscriptionsGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Retired
+         */
+        retired?: boolean;
+    };
     url: '/api/host/subscriptions';
 };
+
+export type ListSubscriptionsApiHostSubscriptionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubscriptionsApiHostSubscriptionsGetError = ListSubscriptionsApiHostSubscriptionsGetErrors[keyof ListSubscriptionsApiHostSubscriptionsGetErrors];
 
 export type ListSubscriptionsApiHostSubscriptionsGetResponses = {
     /**
@@ -5679,6 +5889,163 @@ export type ListSubscriptionsApiHostSubscriptionsGetResponses = {
 };
 
 export type ListSubscriptionsApiHostSubscriptionsGetResponse = ListSubscriptionsApiHostSubscriptionsGetResponses[keyof ListSubscriptionsApiHostSubscriptionsGetResponses];
+
+export type CreateSubscriptionApiHostSubscriptionsPostData = {
+    body: HostSubscriptionCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/host/subscriptions';
+};
+
+export type CreateSubscriptionApiHostSubscriptionsPostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * A record of the kind already holds the key
+     */
+    409: RunnerProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type CreateSubscriptionApiHostSubscriptionsPostError = CreateSubscriptionApiHostSubscriptionsPostErrors[keyof CreateSubscriptionApiHostSubscriptionsPostErrors];
+
+export type CreateSubscriptionApiHostSubscriptionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSubscriptionView;
+};
+
+export type CreateSubscriptionApiHostSubscriptionsPostResponse = CreateSubscriptionApiHostSubscriptionsPostResponses[keyof CreateSubscriptionApiHostSubscriptionsPostResponses];
+
+export type GetSubscriptionApiHostSubscriptionsSlugGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/host/subscriptions/{slug}';
+};
+
+export type GetSubscriptionApiHostSubscriptionsSlugGetErrors = {
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSubscriptionApiHostSubscriptionsSlugGetError = GetSubscriptionApiHostSubscriptionsSlugGetErrors[keyof GetSubscriptionApiHostSubscriptionsSlugGetErrors];
+
+export type GetSubscriptionApiHostSubscriptionsSlugGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSubscriptionView;
+};
+
+export type GetSubscriptionApiHostSubscriptionsSlugGetResponse = GetSubscriptionApiHostSubscriptionsSlugGetResponses[keyof GetSubscriptionApiHostSubscriptionsSlugGetResponses];
+
+export type EditSubscriptionApiHostSubscriptionsSlugPatchData = {
+    body: HostSubscriptionPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: string | null;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/host/subscriptions/{slug}';
+};
+
+export type EditSubscriptionApiHostSubscriptionsSlugPatchErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * The record is no longer at the If-Match revision
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type EditSubscriptionApiHostSubscriptionsSlugPatchError = EditSubscriptionApiHostSubscriptionsSlugPatchErrors[keyof EditSubscriptionApiHostSubscriptionsSlugPatchErrors];
+
+export type EditSubscriptionApiHostSubscriptionsSlugPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSubscriptionView;
+};
+
+export type EditSubscriptionApiHostSubscriptionsSlugPatchResponse = EditSubscriptionApiHostSubscriptionsSlugPatchResponses[keyof EditSubscriptionApiHostSubscriptionsSlugPatchResponses];
+
+export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/host/subscriptions/{slug}/enable';
+};
+
+export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Another write moved the record first
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostError = EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors[keyof EnableSubscriptionApiHostSubscriptionsSlugEnablePostErrors];
+
+export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSubscriptionView;
+};
+
+export type EnableSubscriptionApiHostSubscriptionsSlugEnablePostResponse = EnableSubscriptionApiHostSubscriptionsSlugEnablePostResponses[keyof EnableSubscriptionApiHostSubscriptionsSlugEnablePostResponses];
 
 export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostData = {
     body: FloorClearRequest;
@@ -5714,6 +6081,48 @@ export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse
 
 export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses];
 
+export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/host/subscriptions/{slug}/retire';
+};
+
+export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Another write moved the record first
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostError = RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors[keyof RetireSubscriptionApiHostSubscriptionsSlugRetirePostErrors];
+
+export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostSubscriptionView;
+};
+
+export type RetireSubscriptionApiHostSubscriptionsSlugRetirePostResponse = RetireSubscriptionApiHostSubscriptionsSlugRetirePostResponses[keyof RetireSubscriptionApiHostSubscriptionsSlugRetirePostResponses];
+
 export type RunHostTickApiHostTicksPostData = {
     body?: never;
     path?: never;
@@ -5740,9 +6149,23 @@ export type RunHostTickApiHostTicksPostResponse = RunHostTickApiHostTicksPostRes
 export type ListWorkspacesApiHostWorkspacesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Retired
+         */
+        retired?: boolean;
+    };
     url: '/api/host/workspaces';
 };
+
+export type ListWorkspacesApiHostWorkspacesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWorkspacesApiHostWorkspacesGetError = ListWorkspacesApiHostWorkspacesGetErrors[keyof ListWorkspacesApiHostWorkspacesGetErrors];
 
 export type ListWorkspacesApiHostWorkspacesGetResponses = {
     /**
@@ -5752,6 +6175,163 @@ export type ListWorkspacesApiHostWorkspacesGetResponses = {
 };
 
 export type ListWorkspacesApiHostWorkspacesGetResponse = ListWorkspacesApiHostWorkspacesGetResponses[keyof ListWorkspacesApiHostWorkspacesGetResponses];
+
+export type CreateWorkspaceApiHostWorkspacesPostData = {
+    body: HostWorkspaceCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/host/workspaces';
+};
+
+export type CreateWorkspaceApiHostWorkspacesPostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * A record of the kind already holds the key
+     */
+    409: RunnerProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type CreateWorkspaceApiHostWorkspacesPostError = CreateWorkspaceApiHostWorkspacesPostErrors[keyof CreateWorkspaceApiHostWorkspacesPostErrors];
+
+export type CreateWorkspaceApiHostWorkspacesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostWorkspaceView;
+};
+
+export type CreateWorkspaceApiHostWorkspacesPostResponse = CreateWorkspaceApiHostWorkspacesPostResponses[keyof CreateWorkspaceApiHostWorkspacesPostResponses];
+
+export type GetWorkspaceApiHostWorkspacesWorkspaceIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Workspace Id
+         */
+        workspace_id: string;
+    };
+    query?: never;
+    url: '/api/host/workspaces/{workspace_id}';
+};
+
+export type GetWorkspaceApiHostWorkspacesWorkspaceIdGetErrors = {
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkspaceApiHostWorkspacesWorkspaceIdGetError = GetWorkspaceApiHostWorkspacesWorkspaceIdGetErrors[keyof GetWorkspaceApiHostWorkspacesWorkspaceIdGetErrors];
+
+export type GetWorkspaceApiHostWorkspacesWorkspaceIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostWorkspaceView;
+};
+
+export type GetWorkspaceApiHostWorkspacesWorkspaceIdGetResponse = GetWorkspaceApiHostWorkspacesWorkspaceIdGetResponses[keyof GetWorkspaceApiHostWorkspacesWorkspaceIdGetResponses];
+
+export type EditWorkspaceApiHostWorkspacesWorkspaceIdPatchData = {
+    body: HostWorkspacePatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: string | null;
+    };
+    path: {
+        /**
+         * Workspace Id
+         */
+        workspace_id: string;
+    };
+    query?: never;
+    url: '/api/host/workspaces/{workspace_id}';
+};
+
+export type EditWorkspaceApiHostWorkspacesWorkspaceIdPatchErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * The record is no longer at the If-Match revision
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type EditWorkspaceApiHostWorkspacesWorkspaceIdPatchError = EditWorkspaceApiHostWorkspacesWorkspaceIdPatchErrors[keyof EditWorkspaceApiHostWorkspacesWorkspaceIdPatchErrors];
+
+export type EditWorkspaceApiHostWorkspacesWorkspaceIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostWorkspaceView;
+};
+
+export type EditWorkspaceApiHostWorkspacesWorkspaceIdPatchResponse = EditWorkspaceApiHostWorkspacesWorkspaceIdPatchResponses[keyof EditWorkspaceApiHostWorkspacesWorkspaceIdPatchResponses];
+
+export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostData = {
+    body?: never;
+    path: {
+        /**
+         * Workspace Id
+         */
+        workspace_id: string;
+    };
+    query?: never;
+    url: '/api/host/workspaces/{workspace_id}/enable';
+};
+
+export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Another write moved the record first
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostError = EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors[keyof EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostErrors];
+
+export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostWorkspaceView;
+};
+
+export type EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostResponse = EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostResponses[keyof EnableWorkspaceApiHostWorkspacesWorkspaceIdEnablePostResponses];
 
 export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData = {
     body?: never;
@@ -5767,13 +6347,17 @@ export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteData = {
 
 export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors = {
     /**
-     * The host declares no such workspace.
+     * The host holds no record of the workspace
      */
-    404: unknown;
+    404: RunnerProblem;
     /**
-     * Validation Error
+     * The workspace's prompt does not resolve, or another write moved the record first
      */
-    422: HttpValidationError;
+    409: RunnerProblem | SettingsProblem;
+    /**
+     * The host file would fail at boot with it, or the request is malformed
+     */
+    422: HttpValidationError | SettingsProblem;
 };
 
 export type ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteError = ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors[keyof ClearWorkspacePromptApiHostWorkspacesWorkspaceIdPromptDeleteErrors];
@@ -5801,9 +6385,13 @@ export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetData = {
 
 export type ReadWorkspacePromptApiHostWorkspacesWorkspaceIdPromptGetErrors = {
     /**
-     * The host declares no such workspace.
+     * The host holds no record of the workspace
      */
-    404: unknown;
+    404: RunnerProblem;
+    /**
+     * The workspace's prompt does not resolve
+     */
+    409: RunnerProblem;
     /**
      * Validation Error
      */
@@ -5835,13 +6423,17 @@ export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutData = {
 
 export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors = {
     /**
-     * The host declares no such workspace.
+     * The host holds no record of the workspace
      */
-    404: unknown;
+    404: RunnerProblem;
     /**
-     * Validation Error
+     * The workspace's prompt does not resolve, or another write moved the record first
      */
-    422: HttpValidationError;
+    409: RunnerProblem | SettingsProblem;
+    /**
+     * The host file would fail at boot with it, or the request is malformed
+     */
+    422: HttpValidationError | SettingsProblem;
 };
 
 export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutError = ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors[keyof ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutErrors];
@@ -5854,6 +6446,48 @@ export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses
 };
 
 export type ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponse = ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses[keyof ReplaceWorkspacePromptApiHostWorkspacesWorkspaceIdPromptPutResponses];
+
+export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostData = {
+    body?: never;
+    path: {
+        /**
+         * Workspace Id
+         */
+        workspace_id: string;
+    };
+    query?: never;
+    url: '/api/host/workspaces/{workspace_id}/retire';
+};
+
+export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors = {
+    /**
+     * Superuser required
+     */
+    403: unknown;
+    /**
+     * The host holds no such record
+     */
+    404: RunnerProblem;
+    /**
+     * Another write moved the record first
+     */
+    409: SettingsProblem;
+    /**
+     * The host file would fail at boot with it
+     */
+    422: SettingsProblem;
+};
+
+export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostError = RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors[keyof RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostErrors];
+
+export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HostWorkspaceView;
+};
+
+export type RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostResponse = RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostResponses[keyof RetireWorkspaceApiHostWorkspacesWorkspaceIdRetirePostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

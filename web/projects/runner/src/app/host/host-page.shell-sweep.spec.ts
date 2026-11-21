@@ -70,8 +70,8 @@ const RUNNERS = {
 
 const WORKSPACES = {
   items: [
-    { workspace_id: 'blizzard-workspace-with-a-long-identifier', max_environments: 3 },
-    { workspace_id: 'scratch', max_environments: 1 },
+    { workspace_id: 'blizzard-workspace-with-a-long-identifier', max_environments: 3, revision: null, settings: {}, state: 'active' as const },
+    { workspace_id: 'scratch', max_environments: 1, revision: null, settings: {}, state: 'active' as const },
   ],
 };
 

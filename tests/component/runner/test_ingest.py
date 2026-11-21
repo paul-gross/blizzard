@@ -366,7 +366,7 @@ def test_ingest_is_refused_for_a_source_workspace_this_host_holds_under_another_
 ) -> None:
     hosts = two_hosts(tmp_path, fake_init_hub)
     config = HostLayout(hosts.there).config_path
-    config.write_text(config.read_text().replace('root = ""', f'root = "{hosts.here / "workspace"}"', 1))
+    config.write_text(config.read_text().replace('\nroot = ""', f'\nroot = "{hosts.here / "workspace"}"', 1))
     _refuse(fake_init_hub, hosts, "re-run with --workspace-id workspace-local", "--workspace-id", _NEW_WORKSPACE)
 
 
@@ -866,7 +866,7 @@ def test_ingest_carries_a_relative_prompt_file_as_a_path_into_the_source_host(
     hosts = two_hosts(tmp_path, fake_init_hub)
     theirs = HostLayout(hosts.there).config_path
     (hosts.there / "standing.md").write_text("standing prompt\n")
-    theirs.write_text(theirs.read_text().replace('prompt_file = ""', 'prompt_file = "standing.md"', 1))
+    theirs.write_text(theirs.read_text().replace('\nprompt_file = ""', '\nprompt_file = "standing.md"', 1))
     assert load_host_config(hosts.there).workspaces[0].prompt_file == "standing.md"
 
     result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)

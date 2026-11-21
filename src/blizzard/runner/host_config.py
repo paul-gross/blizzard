@@ -41,8 +41,6 @@ from blizzard.runner.config import (
     DEFAULT_PORT,
     DEFAULT_RUNNER_NAME,
     DEFAULT_SESSION_SECRET_ENV,
-    DEFAULT_WORKSPACE_ID,
-    ENV_BASE_BRANCH,
     ENV_ENV_PASSTHROUGH,
     ENV_GATES,
     ENV_HOST,
@@ -51,10 +49,6 @@ from blizzard.runner.config import (
     ENV_PUBLIC_URL,
     ENV_RUNNER_PROMPT,
     ENV_TRANSCRIPTS_ROOT,
-    ENV_WORKSPACE_ENVS,
-    ENV_WORKSPACE_PROMPT,
-    ENV_WORKSPACE_PROMPT_PACKAGE,
-    ENV_WORKSPACE_ROOT,
     SCAFFOLD_AGENTS,
     SCAFFOLD_PROJECTS,
     Auth,
@@ -90,6 +84,8 @@ from blizzard.runner.host_layout import (
     HostLayout,
     migrate_remedy,
 )
+from blizzard.runner.host_records.model import HostRecord
+from blizzard.runner.host_records.prompt import EffectiveWorkspacePrompt
 from blizzard.runner.hub.sealed_tokens import FIRST_REVISION, StoredToken, StoredTokenState
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.loop.mode import LoopMode
@@ -106,6 +102,8 @@ GRADUATION_PROCEDURE = "docs/upgrade.md"
 
 #: What a scaffolded host declares for the plan today's scaffold synthesizes.
 SCAFFOLD_SUBSCRIPTION = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC)
+#: The workspace ``init``'s scaffolded runner binds its projects to; the scaffold declares no such workspace.
+_SCAFFOLD_WORKSPACE_ID = "workspace-local"
 
 
 class _Placement(StrEnum):
@@ -395,13 +393,21 @@ class HostConfig:
         )
 
     def runner_problems(self, entry: RunnerEntry) -> list[str]:
-        """The runner errors only the host's declarations show."""
+        """The runner errors that leave it unbuilt: its own entry's, and the host's declarations show beside them.
+        A binding or subscription the host does not serve is not among them (:meth:`binding_problems`)."""
         errors = list(entry.errors)
+        errors.extend(self._unsampled_levers(entry))
+        return errors
+
+    def binding_problems(self, entry: RunnerEntry) -> list[str]:
+        """Each workspace a binding names and the subscription the runner names that the host does not serve. A write
+        of the runner's settings is refused while any stands; a running runner is not halted by one — it claims
+        nothing through the binding and resolves as naming no subscription."""
+        errors: list[str] = []
         declared = {subscription.slug for subscription in self.subscriptions}
         if entry.subscription is not None and entry.subscription not in declared:
             errors.append(f"names subscription {entry.subscription!r}, which the host does not declare")
-        errors.extend(self._unsampled_levers(entry))
-        workspaces = {workspace.id: workspace for workspace in self.workspaces}
+        workspaces = {workspace.id for workspace in self.workspaces}
         for binding in entry.bindings:
             if binding.workspace not in workspaces:
                 errors.append(
@@ -535,7 +541,9 @@ class HostConfig:
         hub_token: str,
     ) -> RunnerConfig:
         declared = {subscription.slug: subscription for subscription in self.subscriptions}
-        chosen = (declared[entry.subscription],) if entry.subscription is not None else ()
+        # A subscription the host does not serve — retired, or never declared — resolves as naming none.
+        named = declared.get(entry.subscription) if entry.subscription is not None else None
+        chosen = (named,) if named is not None else ()
         return replace(
             self._shared(own),
             name=entry.name,
@@ -733,28 +741,18 @@ class HostConfig:
 
     @classmethod
     def scaffold(cls, root: Path, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None) -> HostConfig:
-        """The default host for a fresh directory (used by ``init``): today's runner scaffold, graduated —
-        one ``[[workspace]]`` and one ``[[runner]]`` seeded from the injected ``BZ_*`` environment, naming
-        the one ``[[subscription]]`` the old default synthesized. The runner has no ``id`` until it joins."""
+        """The default host for a fresh directory (used by ``init``): one ``[[runner]]`` naming the one
+        default ``[[subscription]]``, its projects bound to :data:`_SCAFFOLD_WORKSPACE_ID`,
+        which the host serves once the operator declares or creates it. The scaffold declares no ``[[workspace]]``.
+        The runner has no ``id`` until it joins."""
         layout = HostLayout(root)
         environ = os.environ
-        workspace_root = environ.get(ENV_WORKSPACE_ROOT, "")
-        envs = environ.get(ENV_WORKSPACE_ENVS)
-        workspace = HostWorkspace(
-            id=DEFAULT_WORKSPACE_ID,
-            root=workspace_root,
-            provider="winter" if workspace_root else "basic",
-            envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
-            base_branch=environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
-            prompt=environ.get(ENV_WORKSPACE_PROMPT, ""),
-            prompt_package=environ.get(ENV_WORKSPACE_PROMPT_PACKAGE, ""),
-        )
         entry = scaffold_runner(
             root,
             DEFAULT_RUNNER_NAME,
             subscription=SCAFFOLD_SUBSCRIPTION.slug,
             bindings=tuple(
-                ProjectBinding(project, workspace.id)
+                ProjectBinding(project, _SCAFFOLD_WORKSPACE_ID)
                 for project in (projects if projects is not None else SCAFFOLD_PROJECTS)
             ),
         )
@@ -766,7 +764,6 @@ class HostConfig:
             hub_url=hub_url or environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
             public_urls=PublicOrigins.entries(environ.get(ENV_PUBLIC_URL, "").split(","), ConfigError),
             subscriptions=(SCAFFOLD_SUBSCRIPTION,),
-            workspaces=(workspace,),
             runners=(entry,),
         )
 
@@ -1040,6 +1037,8 @@ def parse(
 
 #: The agent count a flat runner file declaring no ``max_agents`` ran with.
 _LEGACY_MAX_AGENTS = 1
+#: The workspace a flat runner file graduates into when it set no ``workspace_id`` — the one it always named.
+_GRADUATED_WORKSPACE_ID = "workspace-local"
 
 
 def decode_host_text(text: str, *, what: str) -> dict[str, Any]:
@@ -1068,7 +1067,7 @@ def graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[st
     and prompt keys as one ``[[workspace]]``, and everything else as one ``[[runner]]``."""
     raw: dict[str, Any] = {key: legacy[key] for key in _GRADUATED_HOST_KEYS if key in legacy}
     workspace = {home: legacy[key] for key, home in GRADUATED_WORKSPACE_KEYS.items() if key in legacy}
-    workspace.setdefault("id", DEFAULT_WORKSPACE_ID)
+    workspace.setdefault("id", _GRADUATED_WORKSPACE_ID)
     runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in _LEGACY_KEYS}
     runner["id"] = runner_id
     runner["name"] = legacy.get("name", legacy.get("runner_id", DEFAULT_RUNNER_NAME))
@@ -1158,6 +1157,23 @@ def _workspaces(document: ConfigView, *, root: Path, errors: _Errors) -> tuple[H
                 )
         workspaces.append(workspace)
     return tuple(workspaces)
+
+
+def record_prompt(record: HostRecord, host_root: Path) -> EffectiveWorkspacePrompt:
+    """The prompt workspace ``record``'s settings resolve to, a relative ``prompt_file`` against ``host_root``;
+    raises :class:`ConfigError` for a file or packaged sample that is not there."""
+    workspace = HostWorkspace(
+        id=record.key,
+        prompt=str(record.settings.get("prompt", "")),
+        prompt_file=str(record.settings.get("prompt_file", "")),
+        prompt_package=str(record.settings.get("prompt_package", "")),
+    )
+    origin = workspace.prompt_source()
+    return EffectiveWorkspacePrompt(
+        prompt=workspace.resolved_prompt(host_root),
+        source="default" if origin == "none" else "config",
+        origin=origin,
+    )
 
 
 def _workspace(entry: ConfigView) -> HostWorkspace:

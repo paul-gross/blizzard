@@ -66,7 +66,7 @@ def _status(store: SqlAlchemyRunnerStore, config: RunnerConfig) -> RunnerStatusS
         identity=registered_identity(config.served_id(), config.name),
         identity_verdict=None,
         runner_name=config.name,
-        workspace_id=config.home_workspace.id,
+        home_workspace=lambda: config.home_workspace.id,
         bindings=tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings or ()),
         agents=config.agents,
         hub_url=config.hub_url,
@@ -356,7 +356,7 @@ def test_host_workspaces_lists_each_declared_workspace(tmp_path: Path) -> None:
     app, _a, _b = _two_runner_app(tmp_path)
 
     assert TestClient(app).get("/api/host/workspaces").json() == {
-        "items": [{"workspace_id": "ws-1", "max_environments": 3}]
+        "items": [{"workspace_id": "ws-1", "max_environments": 3, "revision": None, "state": "active", "settings": {}}]
     }
 
 

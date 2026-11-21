@@ -103,7 +103,7 @@ async function render(
     'GET /api/host/subscriptions': () => options.subscriptionsFail ? stubError(502, { detail: 'down' }) : ({ items: [] }),
     'GET /api/host/workspaces': async () => {
       if (options.holdPoolRead?.read === 'workspaces') await options.holdPoolRead.until;
-      return options.workspacesFail ? stubError(502, { detail: 'down' }) : { items: options.emptyPools ? [] : [{ workspace_id: 'workspace-local', max_environments: 2 }] };
+      return options.workspacesFail ? stubError(502, { detail: 'down' }) : { items: options.emptyPools ? [] : [{ workspace_id: 'workspace-local', max_environments: 2, revision: null, settings: {}, state: 'active' }] };
     },
     'GET /api/host/environments': async () => {
       if (options.holdPoolRead?.read === 'environments') await options.holdPoolRead.until;

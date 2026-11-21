@@ -563,7 +563,7 @@ def _serve_host_of_halted_runners(root: Path) -> Generator[Path]:
 
 def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbuilt(tmp_path: Path) -> None:
     root = init_runner_home(tmp_path)
-    _edit_host_file(root, 'subscription = "anthropic"', 'subscription = "missing"')
+    _edit_host_file(root, 'subscription = "anthropic"', 'subscription = "anthropic"\nmax_agents = 3')
     bound = _no_hub()
     with _serve_host_of_halted_runners(root) as socket_path:
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
@@ -573,7 +573,7 @@ def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbu
     assert served == 200  # the host serves while its only runner is halted
     assert result.exit_code != 0
     assert "serves no runner" in result.output
-    assert "runner runner-local" in result.output and "names subscription 'missing'" in result.output
+    assert "runner runner-local" in result.output and "'max_agents' has no home" in result.output
 
 
 @pytest.mark.parametrize("answered", [404, 500])

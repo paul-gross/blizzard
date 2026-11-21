@@ -39,6 +39,7 @@ from blizzard.runner.status.view import RunnerStatusService
 from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
+from tests.support.host_files import one_workspace
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
@@ -76,7 +77,7 @@ def _app_with_status(
     hub_version: ICurrentHubVersion | None = None,
 ):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", workspaces=one_workspace())
     pool = config.home_workspace.envs if env_pool is None else env_pool
     _harness = harness or FakeHarness(
         handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
@@ -97,7 +98,7 @@ def _app_with_status(
         identity_verdict=identity_verdict,
         hub_version=hub_version,
         runner_name=config.name,
-        workspace_id=TEST_WORKSPACE_ID,
+        home_workspace=lambda: TEST_WORKSPACE_ID,
         bindings=serving() if bindings is None else bindings,
         agents=agents,
         hub_url=config.hub_url,
@@ -282,7 +283,7 @@ def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) ->
 
 
 def test_503_when_status_service_unwired(tmp_path: Path) -> None:
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", workspaces=one_workspace())
     with runner_client(create_runner_app(config)) as client:
         for path in ("/api/runner", "/api/escalations", "/api/takeovers"):
             assert client.get(path).status_code == 503, path
@@ -717,7 +718,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         escalations=store,
         identity=registered_identity("rn_status"),
         runner_name="runner-local",
-        workspace_id="workspace-local",
+        home_workspace=lambda: "workspace-local",
         hub_url="http://hub",
         workspaces=single_workspace(FakeProvider({}), spawn_root=workspace_root),
         harnesses=HarnessRegistry(
@@ -976,7 +977,7 @@ def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
 
 
 def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
-    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", workspaces=one_workspace())
     with runner_client(create_runner_app(config)) as client:
         assert client.get("/api/facts").status_code == 503
 

@@ -601,7 +601,9 @@ def test_seed_requires_identity_and_preserves_unset_after_file_edit(
     assert settings.snapshot().entries["agents"] == Entry(None, at_default=True)
 
 
-def test_invalid_initial_seed_and_boot_binding_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_invalid_initial_seed_is_refused_and_an_unserved_subscription_is_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("BZ_HUB_TOKEN_RUNNER_LOCAL", "test-token")
     url = f"sqlite:///{tmp_path / 'host.db'}"
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\n')
@@ -620,7 +622,8 @@ def test_invalid_initial_seed_and_boot_binding_are_refused(tmp_path: Path, monke
     write_minimal_host(tmp_path, top=f'db_url = "{url}"', runner='agents = "invalid"\nsubscription = "missing"\n')
     host = load_host_config(tmp_path)
     ready, halted = seed_runners(host, clock=SystemClock())
-    assert not ready and "subscription" in halted[0].errors[0]
+    # A subscription the host does not serve halts nothing: the runner resolves as naming none.
+    assert not halted and ready[0].config.subscriptions == ()
 
 
 def test_seed_validates_related_authored_settings_as_one_configuration(

@@ -58,7 +58,7 @@ const DASHBOARD = runnerDashboardView({
 /** The host's own reads, beyond its runners. */
 const HOST: Parameters<typeof stubRunnerClient>[0] = {
   'GET /api/host/environments': () => ({ workspaces: [{ workspace_id: 'ws', items: [hostEnvironmentView({ environment_id: 'e1' })] }] }),
-  'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 1 }] }),
+  'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 1, revision: null, settings: {}, state: 'active' }] }),
   'GET /api/host/subscriptions': () => ({ items: [] }),
   'GET /api/host/registration': () =>
     hostRegistrationView({ host_id: 'hs_1', tenant_id: 'ten_1', host_name: 'xps', held_runner_ids: ['rn_1'] }),

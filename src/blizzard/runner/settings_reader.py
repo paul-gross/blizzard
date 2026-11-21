@@ -45,12 +45,30 @@ class RunnerEntriesJudge:
         }
 
     def validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        """A write's judgement: every error the entries resolve to, and each binding or subscription they name that
+        the host does not serve — so a runner left bound to a retired workspace has every write refused until one
+        fixes the binding."""
+        return self._judge(entries, serving=True)
+
+    def seed_validate(self, entries: Mapping[str, Entry]) -> Mapping[str, str]:
+        """A seed's judgement: the errors that would leave the runner unbuilt, never a binding or subscription the
+        host does not serve, which halts no runner."""
+        return self._judge(entries, serving=False)
+
+    def _judging_host(self) -> HostConfig:
+        """The host a write's bindings and subscription are judged against."""
+        return self.host
+
+    def _judge(self, entries: Mapping[str, Entry], *, serving: bool) -> Mapping[str, str]:
         unknown = {
             key: "not a writable runner setting" for key in entries if key not in self.keys and key not in self.aliases
         }
         if unknown:
             return unknown
-        _, errors = self._resolve(entries)
+        entry, errors = self._resolve(entries)
+        if serving and entry is not self.entry:
+            # Only a parse that produced the candidate entry names the bindings it is judged by.
+            errors = [*errors, *self._judging_host().binding_problems(entry)]
         result: dict[str, str] = {}
         for error in errors:
             for key in self._error_keys(error, entries):
@@ -182,6 +200,9 @@ class RunnerSettingsReader(RunnerEntriesJudge):
     def resolve_pair(self, pair: SettingsPair) -> RunnerConfig:
         return self.resolve_for_read(pair.runner.entries, host=self._host_at(pair.host))
 
+    def _judging_host(self) -> HostConfig:
+        return self._host_at(None)
+
     def _host_at(self, snapshot: SettingsSnapshot | None) -> HostConfig:
         if self.host_settings is None:
             return self.host
@@ -194,7 +215,9 @@ class RunnerSettingsReader(RunnerEntriesJudge):
             if not self._identity_present():
                 return self.store.snapshot()
             assert self.entry.authored is not None
-            seed.seed(self.entry.authored, (*self.keys, *self.aliases), validate=self.validate, aliases=self.aliases)
+            seed.seed(
+                self.entry.authored, (*self.keys, *self.aliases), validate=self.seed_validate, aliases=self.aliases
+            )
             self._deferred_seed = None
         return self.store.snapshot()
 

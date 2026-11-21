@@ -8,7 +8,7 @@ import base64
 import binascii
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -59,18 +59,11 @@ DEFAULT_PORT = 8431
 ENV_HOST = "BZ_RUNNER_HOST"
 ENV_PORT = "BZ_RUNNER_PORT"
 ENV_HUB_URL = "BZ_HUB_URL"
-# Injected per feature env, so a fresh `runner init` scaffolds a runnable config with no
-# hand-editing of the toml.
-ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
-ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
-ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 #: What a freshly scaffolded runner serves: the project every tenant holds from its creation.
 SCAFFOLD_PROJECTS: tuple[str, ...] = ("default",)
 #: The agents a scaffolded runner runs at once.
 SCAFFOLD_AGENTS = 1
-ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
-ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
 ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
 # Where the harness writes session transcripts; empty resolves to a default at
 # the composition root, never here.
@@ -82,7 +75,6 @@ ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 # Reconciliation-loop defaults.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_NAME = "runner-local"
-DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_BASE_BRANCH = "main"
 # The env var NAMING the secret that signs this runner's session cookie, likewise name-only in the toml.
 DEFAULT_SESSION_SECRET_ENV = "BZ_RUNNER_SESSION_SECRET"
@@ -770,8 +762,8 @@ class RunnerConfig:
     #: resolved bytes, empty when the variable is unset.
     session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
     session_secret: bytes = field(default=b"", repr=False)
-    #: Every workspace the host declares, in file order; a config built without a host file holds the default one.
-    workspaces: tuple[HostWorkspace, ...] = (HostWorkspace(DEFAULT_WORKSPACE_ID),)
+    #: Every workspace the host serves, in file order; a config built without a host file serves none.
+    workspaces: tuple[HostWorkspace, ...] = ()
     #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
     autonomy: Autonomy = Autonomy.Dangerous
     #: Where :attr:`autonomy`'s posture comes from: a binding's legacy override, `[harness] autonomy`, or `"default"`.
@@ -951,9 +943,9 @@ class RunnerConfig:
 
     @property
     def home_workspace(self) -> HostWorkspace:
-        """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`)."""
-        by_id = {workspace.id: workspace for workspace in self.workspaces}
-        return by_id[home_workspace_id(self.bound_workspace_ids, tuple(by_id))]
+        """The workspace this runner is reported and addressed by as such (:func:`home_workspace_id`); raises
+        :class:`ConfigError` when the host declares none this runner could be addressed by."""
+        return _home_workspace(self.workspaces, self.bound_workspace_ids)
 
     @property
     def bound_workspace_ids(self) -> tuple[str, ...]:
@@ -1049,3 +1041,11 @@ def resolve_tick_seconds(
             "host file states one — unset it"
         ),
     )
+
+
+def _home_workspace(workspaces: Sequence[HostWorkspace], bound: Sequence[str]) -> HostWorkspace:
+    by_id = {workspace.id: workspace for workspace in workspaces}
+    home = by_id.get(home_workspace_id(bound, tuple(by_id)))
+    if home is None:
+        raise ConfigError("the host declares no workspace")
+    return home

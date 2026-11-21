@@ -1,7 +1,7 @@
 {
   "commands": {
     "add": {
-      "help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its\nidentity, settings and sealed token. A running host is asked over its socket and starts it at its next tick; a\nstopped host's store is written directly, and it starts at the host's next start. Neither `.env` nor the host file\nis written.\n\nRefused, with nothing added, on a host holding no host token, when NAME is taken by another of the host's runners,\nor when a --workspace is not one the host declares.",
+      "help": "Add runner NAME to this registered host at its hub and record it in the host store, through a running host's\nsocket or into a stopped host's store; neither `.env` nor the host file is written.\n\nRefused, with nothing added, on a host holding no host token, when NAME is another runner's, or when a\n--workspace is not one the host holds an active record of.",
       "params": [
         {
           "hidden": false,
@@ -64,7 +64,7 @@
         }
       ],
       "path": "runner add",
-      "short_help": "Add runner NAME to this registered host at its hub, with no hub sign-in, and record it in the host store \u2014 its identity, settings and sealed token."
+      "short_help": "Add runner NAME to this registered host at its hub and record it in the host store, through a running host's socket or into a stopped host's store; neither `.env` nor the host file is written."
     },
     "analytics": {
       "commands": {
@@ -1350,7 +1350,7 @@
       ],
       "commands": {
         "clear": {
-          "help": "Drop the store override so the configured workspace prompt resolves again.\n\nThe one `prompt` verb that needs a running runner. Takes effect on subsequent spawns.",
+          "help": "Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing\nprompt. Through a running host, which takes it up at its next tick, or into a stopped host's store, taken up at\nits next start.",
           "params": [
             {
               "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1390,10 +1390,10 @@
             }
           ],
           "path": "runner prompt clear",
-          "short_help": "Drop the store override so the configured workspace prompt resolves again."
+          "short_help": "Return the workspace's prompt, prompt_file and prompt_package to their defaults, so it carries no standing prompt."
         },
         "diff": {
-          "help": "Diff this runtime's effective workspace prompt against packaged sample NAME.\n\nEffective means the prompt a new worker starts with: the override `prompt clear` drops when one\nstands, else the configured prompt. Exits 1 when they differ, so a deploy can check a forked copy for drift.",
+          "help": "Diff this runtime's effective workspace prompt against packaged sample NAME.\n\nEffective means the prompt a new worker starts with: the one the workspace's record resolves to. Exits 1 when\nthey differ, so a deploy can check a forked copy for drift.",
           "params": [
             {
               "hidden": false,
@@ -1453,7 +1453,7 @@
           "short_help": "Print packaged sample NAME's prose to stdout."
         },
         "install": {
-          "help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy, which\n`prompt diff` then checks for drift. Takes effect on the next runner restart.",
+          "help": "Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which\n`prompt diff` then checks for drift. A running host takes it up at its next tick, a stopped one at its next\nstart; a re-install over the copy the record already names takes effect the same way.",
           "params": [
             {
               "hidden": false,
@@ -1504,7 +1504,7 @@
             }
           ],
           "path": "runner prompt install",
-          "short_help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy, which `prompt diff` then checks for drift."
+          "short_help": "Copy packaged sample NAME into the runtime root and point the workspace's record at the copy, which `prompt diff` then checks for drift."
         },
         "list": {
           "help": "List the workspace-prompt samples shipped in this wheel.",
@@ -1513,7 +1513,7 @@
           "short_help": "List the workspace-prompt samples shipped in this wheel."
         },
         "status": {
-          "help": "Report which source the effective workspace prompt comes from, and how large it is.\n\nExits 1 when a source is configured but resolves to nothing \u2014 the shape a rollback to a\nwheel that does not read the configured knob produces.",
+          "help": "Report which setting of the workspace's record the effective workspace prompt comes from, and how large it is.\n\nExits 1 when a setting is stated but resolves to nothing \u2014 the shape a rollback to a wheel that does not read\nthe stated setting produces.",
           "params": [
             {
               "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1541,7 +1541,7 @@
             }
           ],
           "path": "runner prompt status",
-          "short_help": "Report which source the effective workspace prompt comes from, and how large it is."
+          "short_help": "Report which setting of the workspace's record the effective workspace prompt comes from, and how large it is."
         }
       },
       "help": "Operator: the packaged workspace-prompt samples, and which one this runtime uses.",
@@ -2144,6 +2144,233 @@
       "path": "runner store",
       "short_help": "Administer the host's local store while the host is down."
     },
+    "subscription": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "create": {
+          "help": "Create subscription SLUG from KEY=VALUE settings, each VALUE a TOML literal, named as its [[subscription]] table names them; judged as the host file is at boot.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "pairs",
+              "opts": [
+                "pairs"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription create",
+          "short_help": "Create subscription SLUG from KEY=VALUE settings, each VALUE a TOML literal, named as its [[subscription]] table names them; judged as the host file is at boot."
+        },
+        "edit": {
+          "help": "Set each KEY=VALUE of subscription SLUG, each VALUE a TOML literal, and return each --unset KEY to its default; every other setting stands. A retired record stays retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "pairs",
+              "opts": [
+                "pairs"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Return KEY to its default; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "unsets",
+              "opts": [
+                "--unset"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription edit",
+          "short_help": "Set each KEY=VALUE of subscription SLUG, each VALUE a TOML literal, and return each --unset KEY to its default; every other setting stands."
+        },
+        "enable": {
+          "help": "Reverse the retirement of subscription SLUG. Of an enabled one, writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription enable",
+          "short_help": "Reverse the retirement of subscription SLUG."
+        },
+        "get": {
+          "help": "Print subscription SLUG, retired or not.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription get",
+          "short_help": "Print subscription SLUG, retired or not."
+        },
+        "list": {
+          "help": "List this host's subscriptions; --retired lists the retired ones too.",
+          "params": [
+            {
+              "help": "Include retired records.",
+              "hidden": false,
+              "kind": "option",
+              "name": "retired",
+              "opts": [
+                "--retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription list",
+          "short_help": "List this host's subscriptions; --retired lists the retired ones too."
+        },
+        "retire": {
+          "help": "Retire subscription SLUG, keeping its record and history; the host stops serving it. Of a retired one, writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner subscription retire",
+          "short_help": "Retire subscription SLUG, keeping its record and history; the host stops serving it."
+        }
+      },
+      "help": "Create, read, edit, retire and enable this host's subscriptions.",
+      "params": [],
+      "path": "runner subscription",
+      "short_help": "Create, read, edit, retire and enable this host's subscriptions."
+    },
     "takeover": {
       "help": "Take over a chunk this runner holds: resume its session interactively in this terminal. The runner\nleaves the chunk alone until the session exits, and an interrupted session still ends the takeover.\nRefused when this runner holds no environment for the chunk, a takeover is already open, there is no\nsession to resume, a worker is running (unless ``--force``), or its result is still waiting to reach\nthe hub.",
       "params": [
@@ -2738,6 +2965,233 @@
       ],
       "path": "runner work-items",
       "short_help": "Worker: read a chunk's work items from its tracker, printed as JSON, one entry per pointer."
+    },
+    "workspace": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "create": {
+          "help": "Create workspace ID from KEY=VALUE settings, each VALUE a TOML literal, named as its [[workspace]] table names them; judged as the host file is at boot.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "pairs",
+              "opts": [
+                "pairs"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace create",
+          "short_help": "Create workspace ID from KEY=VALUE settings, each VALUE a TOML literal, named as its [[workspace]] table names them; judged as the host file is at boot."
+        },
+        "edit": {
+          "help": "Set each KEY=VALUE of workspace ID, each VALUE a TOML literal, and return each --unset KEY to its default; every other setting stands. A retired record stays retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "pairs",
+              "opts": [
+                "pairs"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Return KEY to its default; repeatable.",
+              "hidden": false,
+              "kind": "option",
+              "name": "unsets",
+              "opts": [
+                "--unset"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace edit",
+          "short_help": "Set each KEY=VALUE of workspace ID, each VALUE a TOML literal, and return each --unset KEY to its default; every other setting stands."
+        },
+        "enable": {
+          "help": "Reverse the retirement of workspace ID. Of an enabled one, writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace enable",
+          "short_help": "Reverse the retirement of workspace ID."
+        },
+        "get": {
+          "help": "Print workspace ID, retired or not.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace get",
+          "short_help": "Print workspace ID, retired or not."
+        },
+        "list": {
+          "help": "List this host's workspaces; --retired lists the retired ones too.",
+          "params": [
+            {
+              "help": "Include retired records.",
+              "hidden": false,
+              "kind": "option",
+              "name": "retired",
+              "opts": [
+                "--retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace list",
+          "short_help": "List this host's workspaces; --retired lists the retired ones too."
+        },
+        "retire": {
+          "help": "Retire workspace ID, keeping its record and history; the host stops serving it. Of a retired one, writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Host directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner workspace retire",
+          "short_help": "Retire workspace ID, keeping its record and history; the host stops serving it."
+        }
+      },
+      "help": "Create, read, edit, retire and enable this host's workspaces.",
+      "params": [],
+      "path": "runner workspace",
+      "short_help": "Create, read, edit, retire and enable this host's workspaces."
     }
   },
   "help": "Talk to \u2014 or become \u2014 the blizzard runner.",

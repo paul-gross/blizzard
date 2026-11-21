@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 import secrets
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
@@ -74,6 +75,8 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.host_records import router as host_records_router
+from blizzard.runner.api.host_records import writes as host_record_writes_router
 from blizzard.runner.api.host_runners import router as host_runners_router
 from blizzard.runner.api.host_runners import writes as host_runner_writes_router
 from blizzard.runner.api.host_settings import router as host_settings_router
@@ -122,17 +125,18 @@ from blizzard.runner.composition import (
     NoDrivers,
     RunnerProcess,
     StartupNote,
+    build_host_record_services,
     build_runner_process,
     build_running_host_runner_service,
+    host_settings_reader,
 )
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
-from blizzard.runner.environments.workspaces import IWorkspaces
+from blizzard.runner.environments.workspaces import IWorkspaceEntries, IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
-from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner, HostConfig
 from blizzard.runner.host_settings_reader import HostSettingsInForce
 from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
@@ -216,6 +220,8 @@ _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 _HOST_HUMAN = (
     host_settings_router,
     host_router,
+    host_records_router,
+    host_record_writes_router,
     host_runners_router,
     host_runner_writes_router,
     hub_token_router,
@@ -391,7 +397,7 @@ def create_app(
     runners: Sequence[ServedRunner] | None = None,
     halted: Sequence[HaltedRunner] = (),
     workspaces: Sequence[ServedWorkspace] | None = None,
-    subscriptions: Sequence[SubscriptionDeclaration] | None = None,
+    subscriptions: Sequence[SubscriptionDeclaration] | Callable[[], Sequence[SubscriptionDeclaration]] | None = None,
     readiness: ReadinessService | None = None,
     workspace_registry: IWorkspaces | None = None,
     harnesses: IHarnessRegistry | None = None,
@@ -416,7 +422,6 @@ def create_app(
     pause: PauseService | None = None,
     lease_liveness: LeaseLivenessService | None = None,
     lease_sessions: LeaseSessionService | None = None,
-    workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx2.Client | None = None,
     hub_proxy_client: httpx2.Client | None = None,
     hub_retry_clock: IMonotonicClock | None = None,
@@ -493,8 +498,17 @@ def create_app(
                 stepper=stepper,
             ),
         )
-    if workspaces is None:
-        workspaces = tuple(_served_workspace(workspace, workspace_registry) for workspace in config.workspaces)
+    served_workspaces: Callable[[], tuple[ServedWorkspace, ...]]
+    if workspace_registry is not None and workspaces is None:
+        # Read at each request, so a workspace the host tick creates or retires is served from the next tick.
+        served_workspaces = functools.partial(_served_workspaces, workspace_registry)
+    else:
+        fixed = (
+            tuple(workspaces)
+            if workspaces is not None
+            else tuple(_served_workspace(workspace, None) for workspace in config.workspaces)
+        )
+        served_workspaces = functools.partial(tuple, fixed)
 
     # No framework exporters: tests/component/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
     app = FastAPI(
@@ -517,8 +531,12 @@ def create_app(
     app.state.host_settings_authoring = host_settings_authoring
     app.state.flags = flags
     app.state.runners = HostRunnerRegistry(RunnerRegistry(tuple(runners), tuple(halted)))
-    app.state.workspaces = tuple(workspaces)
-    app.state.subscriptions = tuple(subscriptions if subscriptions is not None else config.subscriptions)
+    app.state.workspaces = served_workspaces
+    app.state.subscriptions = (
+        subscriptions
+        if callable(subscriptions)
+        else functools.partial(tuple, subscriptions if subscriptions is not None else config.subscriptions)
+    )
     # A registered host signs in as itself; an unregistered one as its first runner.
     sign_in: ISignInClient | None = None
     if host_registration is not None and host_identity is not None and host_registration.current().registered():
@@ -551,14 +569,6 @@ def create_app(
     app.state.clock = clock
     # The worker telemetry receiver, built once by the composition root and shared by every runner.
     app.state.telemetry_receiver = telemetry_receiver
-    app.state.workspace_prompts = workspace_prompts or (
-        WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores is not None else None
-    )
-    app.state.workspace_prompt_reader = (
-        WorkspacePromptReader(host_stores.workspace_prompt, workspace_registry)
-        if host_stores is not None and workspace_registry is not None
-        else None
-    )
     app.state.subscription_floor_clears = (
         SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
     )
@@ -903,7 +913,7 @@ def _wire_hosted_app(
         config,
         runners=(),
         halted=host.halted,
-        subscriptions=host.subscriptions,
+        subscriptions=host.current_subscriptions,
         platform_tracing=host.platform_tracing,
         identity=_FirstServedIdentity(registry),
         readiness=host.readiness,
@@ -925,6 +935,19 @@ def _wire_hosted_app(
     )
     app.state.runners = registry
     app.state.start_failures = reconcile.failures if reconcile is not None else None
+    # The host's workspace and subscription writes, judged by the reader its passes resolve through.
+    record_reader = (
+        host.host_settings.reader
+        if host.host_settings is not None
+        else host_settings_reader(host_config, host.host_stores)
+        if host_config is not None
+        else None
+    )
+    app.state.host_records = (
+        build_host_record_services(record_reader, host.host_stores, clock=host.clock)
+        if record_reader is not None
+        else None
+    )
     app.state.hosted_runners = (
         build_running_host_runner_service(host_config, host, host.host_hub)
         if host_config is not None and host.host_hub is not None
@@ -983,8 +1006,6 @@ def _wire_runner_clients(
     connections = graph.connections
     harness_health = graph.health
     workspaces = host.workspaces
-    # The runner's own workspace, as such: the first its bindings name, else the host's first.
-    home = config.home_workspace.id
     harnesses = graph.harnesses
 
     def harnesses_for_lease(lease_id: str) -> HarnessRegistry:
@@ -1066,7 +1087,8 @@ def _wire_runner_clients(
         served_projects=read_stores.served_projects,
         projects=config.projects,
         runner_name=config.name,
-        workspace_id=home,
+        # The runner's own workspace, as such, read on use: the first its bindings name that the host serves now.
+        home_workspace=lambda: workspaces.home(config.bound_workspace_ids),
         bindings=tuple(BindingDeclaration(b.project, b.workspace) for b in config.bindings or ()),
         agents=config.agents,
         hub_url=config.hub_url,
@@ -1167,6 +1189,18 @@ def _wire_runner_clients(
             graph.settings_reader, graph.stores.settings, HOST_REGISTRY
         )
     return _WiredRunner(served, stepper, harness_health, (archived_transcript_client, hub_proxy_client))
+
+
+def _served_workspaces(registry: IWorkspaceEntries) -> tuple[ServedWorkspace, ...]:
+    """The host's active workspaces as its registry holds them now, each over its provider's pool."""
+    return tuple(
+        ServedWorkspace(
+            workspace_id=entry.workspace_id,
+            env_pool=entry.provider.pool(),
+            max_environments=entry.max_environments,
+        )
+        for entry in registry.entries()
+    )
 
 
 def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) -> ServedWorkspace:

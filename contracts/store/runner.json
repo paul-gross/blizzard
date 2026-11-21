@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261119_1000_hosted_runners",
+  "head_revision": "20261120_1000_host_records",
   "store": "runner",
   "tables": {
     "asks": {
@@ -1220,6 +1220,176 @@
       "foreign_keys": [],
       "primary_key": [
         "id"
+      ],
+      "unique": []
+    },
+    "host_subscription_facts": {
+      "checks": [],
+      "columns": {
+        "actor": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "door": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "op": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_subscriptions": {
+      "checks": [],
+      "columns": {
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "provider": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "settings": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "slug"
+      ],
+      "unique": []
+    },
+    "host_workspace_facts": {
+      "checks": [],
+      "columns": {
+        "actor": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "door": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "op": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "recorded_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "workspace_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "host_workspaces": {
+      "checks": [],
+      "columns": {
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "settings": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Text"
+        },
+        "workspace_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "workspace_id"
       ],
       "unique": []
     },
@@ -3899,7 +4069,7 @@
           "type": "String"
         }
       },
-      "deprecated": null,
+      "deprecated": "0.5",
       "foreign_keys": [],
       "primary_key": [
         "workspace_id"

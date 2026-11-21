@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -31,7 +31,7 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
-from tests.support.host_files import one_workspace
+from tests.support.host_files import TEST_WORKSPACE_ID, one_workspace
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -52,7 +52,7 @@ _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
 _BODY = {"repo": "toy-api", "branch": "feat/x", "commit": "abc123"}
 _PROVIDER = FakeProvider({"e1": "/ws/e1"})
-_WORKSPACES = single_workspace(_PROVIDER, workspace_id=DEFAULT_WORKSPACE_ID)
+_WORKSPACES = single_workspace(_PROVIDER, workspace_id=TEST_WORKSPACE_ID)
 
 
 def _app_with_declarations(tmp_path: Path):
@@ -65,7 +65,7 @@ def _app_with_declarations(tmp_path: Path):
 
 
 def _seed_lease(
-    store: SqlAlchemyRunnerStore, *, workspace_id: str = DEFAULT_WORKSPACE_ID, **overrides: Unpack[NewLeaseFields]
+    store: SqlAlchemyRunnerStore, *, workspace_id: str = TEST_WORKSPACE_ID, **overrides: Unpack[NewLeaseFields]
 ) -> None:
     fields: NewLeaseFields = {
         "lease_id": "lease_1",
@@ -273,7 +273,7 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     service = GitCommitDeclarationService(
         store,
         FixedClock(_NOW),
-        single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
+        single_workspace(provider, workspace_id=TEST_WORKSPACE_ID),
         outbound=store,
         lease_lock=store,
     )
@@ -282,7 +282,7 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     )
     _seed_lease(store)
     store.record_binding(
-        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=DEFAULT_WORKSPACE_ID
+        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=TEST_WORKSPACE_ID
     )
 
     with runner_client(app) as client:
@@ -309,7 +309,7 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     service = GitCommitDeclarationService(
         store,
         FixedClock(_NOW),
-        single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
+        single_workspace(provider, workspace_id=TEST_WORKSPACE_ID),
         outbound=store,
         lease_lock=store,
     )
@@ -318,7 +318,7 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     )
     _seed_lease(store)
     store.record_binding(
-        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=DEFAULT_WORKSPACE_ID
+        chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id=TEST_WORKSPACE_ID
     )
 
     with runner_client(app) as client:
@@ -365,7 +365,7 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     try:
         loop = LoopWiring(config, "").context(FakeHub(), graph)
         assert hosted.app.state.workspace_registry is loop.workspaces
-        assert loop.workspaces.provider(DEFAULT_WORKSPACE_ID) is provider
+        assert loop.workspaces.provider(TEST_WORKSPACE_ID) is provider
         provider.acquire("ch_1", 1, held_ids=[])
         _seed_lease(store)
         headers = {"X-Blizzard-Lease-Token": _TOKEN}
@@ -441,7 +441,7 @@ def test_a_declaration_is_checked_against_the_repos_of_the_workspace_its_environ
     workspaces = WorkspaceRegistry(
         [
             WorkspaceEntry(
-                DEFAULT_WORKSPACE_ID, FakeProvider({"e1": "/a/e1"}, repos={"e1": [("repo-a", "o-a")]}), spawn_root=""
+                TEST_WORKSPACE_ID, FakeProvider({"e1": "/a/e1"}, repos={"e1": [("repo-a", "o-a")]}), spawn_root=""
             ),
             WorkspaceEntry("ws_b", FakeProvider({"e1": "/b/e1"}, repos={"e1": [("repo-b", "o-b")]}), spawn_root=""),
         ]

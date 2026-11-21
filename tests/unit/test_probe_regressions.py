@@ -71,11 +71,16 @@ def test_runner_probe_registers_fresh_identity_before_init(tmp_path: Path, monke
             "BZ_HUB_URL": "http://localhost:1234",
             "BZ_HOST_TOKEN": "standing",
             "BZ_HUB_TOKEN_RUNNER_LOCAL": "standing",
+            "BZ_WORKSPACE_ROOT": "/ws",
+            "BZ_WORKSPACE_ENVS": "e1, e2",
         }
         runner_probe._runtime(root, tmp_path / f"scratch-{index}", env, "http://localhost:5678")
         config = tomllib.loads((root / "blizzard-host.toml").read_text())
         assert config["runner"][0]["name"] == names[-1]
         assert config["hub_url"] == "http://localhost:5678"
+        assert config["workspace"] == [
+            {"id": "workspace-local", "provider": "winter", "root": "/ws", "envs": ["e1", "e2"]}
+        ]
         assert (root / ".env").read_text() == (
             f"BZ_HOST_TOKEN=host-token\nBZ_HUB_TOKEN_{names[-1].upper().replace('-', '_')}=runner-token\n"
         )

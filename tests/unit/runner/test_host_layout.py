@@ -16,7 +16,6 @@ from blizzard.runner.host_file import (
     append_runner,
     append_subscription,
     append_workspace,
-    repoint_workspace_prompt,
     runner_table,
     with_runner_values,
     write_runner_id,
@@ -153,21 +152,6 @@ def test_a_runner_id_lands_in_a_file_without_a_trailing_newline(tmp_path: Path) 
     assert tomllib.loads(layout.config_path.read_text())["runner"][0] == {"name": "r", "id": "rn_1"}
 
 
-def test_a_prompt_install_repoints_the_workspace_prompt_keys_only(tmp_path: Path) -> None:
-    layout = HostLayout(tmp_path)
-    layout.config_path.write_text(_FILE)
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/workspace-prompt.md", strict=STRICT)
-    document = tomllib.loads(layout.config_path.read_text())
-    assert document["workspace"][0] == {
-        "id": "ws",
-        "root": "/w",
-        "prompt_package": "",
-        "prompt_file": "/tmp/workspace-prompt.md",
-    }
-    assert document["runner"][1]["id"] == "rn_old"
-    assert layout.config_path.read_text().startswith("# kept comment\n")
-
-
 _MULTILINE = '''hub_url = "https://hub.example"
 
 [[workspace]]
@@ -206,26 +190,11 @@ def test_a_runner_id_lands_in_the_runner_beside_a_bracket_led_line_in_a_multi_li
     assert after["runner"][0]["projects"] == ["p"]
 
 
-def test_a_prompt_install_repoints_a_workspace_whose_prompt_holds_a_bracket_led_line(tmp_path: Path) -> None:
-    layout = HostLayout(tmp_path)
-    layout.config_path.write_text(_MULTILINE)
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md", strict=STRICT)
-    after = tomllib.loads(layout.config_path.read_text())
-    before = tomllib.loads(_MULTILINE)
-    assert after["workspace"][0] == {**before["workspace"][0], "prompt_file": "/tmp/p.md", "prompt_package": ""}
-    assert after["runner"] == before["runner"]
-
-
 def test_a_replaced_multi_line_value_is_replaced_whole(tmp_path: Path) -> None:
     layout = HostLayout(tmp_path)
-    layout.config_path.write_text('[[workspace]]\nid = "ws"\nprompt_file = [\n  "x",\n  "[y]",\n]\nroot = "/w"\n')
-    repoint_workspace_prompt(layout, "ws", file_path="/tmp/p.md", strict=STRICT)
-    assert tomllib.loads(layout.config_path.read_text())["workspace"][0] == {
-        "id": "ws",
-        "root": "/w",
-        "prompt_file": "/tmp/p.md",
-        "prompt_package": "",
-    }
+    layout.config_path.write_text('[[runner]]\nname = "r"\nid = [\n  "x",\n  "[y]",\n]\nroot = "/w"\n')
+    write_runner_id(layout, "r", "rn_1", strict=STRICT)
+    assert tomllib.loads(layout.config_path.read_text())["runner"][0] == {"name": "r", "id": "rn_1", "root": "/w"}
 
 
 def test_a_file_that_is_not_toml_is_refused_and_left_as_it_was(tmp_path: Path) -> None:
