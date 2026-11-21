@@ -99,6 +99,11 @@ class SettingsProblem(RunnerProblem):
     key: str | None = None
     current: int | None = None
     errors: list[SettingError] | None = None
+    #: Which record a host settings document's refused entry names — ``host``, ``runner``, ``workspace`` or
+    #: ``subscription`` — as :class:`~blizzard.runner.api.host_settings.HostChangeView` names it.
+    record_kind: str | None = None
+    #: Which record of that kind; ``None`` for the host's own entries.
+    record_key: str | None = None
 
 
 SETTINGS_PROBLEM = {"schema": {"$ref": "#/components/schemas/SettingsProblem"}}

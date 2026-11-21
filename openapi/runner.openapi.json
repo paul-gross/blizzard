@@ -158,6 +158,28 @@
         "title": "AnalyticsSpendView",
         "type": "object"
       },
+      "AppliedFieldChange": {
+        "description": "One key an apply moves, each side its stated value \u2014 ``null`` for absent or at its default. Shaped as the\nhub's apply diff.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "new": {
+            "title": "New"
+          },
+          "old": {
+            "title": "Old"
+          }
+        },
+        "required": [
+          "field",
+          "old",
+          "new"
+        ],
+        "title": "AppliedFieldChange",
+        "type": "object"
+      },
       "ArtifactKind": {
         "description": "The union discriminator.",
         "enum": [
@@ -4836,6 +4858,81 @@
         "title": "HostRunnerView",
         "type": "object"
       },
+      "HostSettingsApplyResponse": {
+        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``. ``apply_id`` groups the\nchange rows a real apply wrote; ``null`` for a dry run.",
+        "properties": {
+          "apply_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Id"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/HostSettingsOutcome"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "apply_id",
+          "outcomes"
+        ],
+        "title": "HostSettingsApplyResponse",
+        "type": "object"
+      },
+      "HostSettingsOutcome": {
+        "description": "One entry's outcome: ``kind`` ``host``, ``runner``, ``workspace`` or ``subscription``; ``key`` the host key,\nrunner id, workspace id or subscription slug; ``op`` ``create``, ``edit`` or ``enable`` for a change written and\n``unchanged`` for one that needed none.",
+        "properties": {
+          "diff": {
+            "items": {
+              "$ref": "#/components/schemas/AppliedFieldChange"
+            },
+            "title": "Diff",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "create",
+              "edit",
+              "retire",
+              "enable",
+              "replace",
+              "unchanged"
+            ],
+            "title": "Op",
+            "type": "string",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "op",
+          "diff"
+        ],
+        "title": "HostSettingsOutcome",
+        "type": "object"
+      },
       "HostSubscriptionCreateRequest": {
         "additionalProperties": false,
         "description": "A new subscription record: its immutable ``slug`` and ``provider``, its ``name``, and any further key of its\ntable.",
@@ -8274,6 +8371,30 @@
             "default": null,
             "title": "Key"
           },
+          "record_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Key"
+          },
+          "record_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Kind"
+          },
           "status": {
             "title": "Status",
             "type": "integer"
@@ -8295,7 +8416,9 @@
           "code",
           "key",
           "current",
-          "errors"
+          "errors",
+          "record_kind",
+          "record_key"
         ],
         "title": "SettingsProblem",
         "type": "object"
@@ -10430,6 +10553,65 @@
         ]
       }
     },
+    "/api/host/settings/apply": {
+      "post": {
+        "description": "Apply a host settings document whole: every entry it states is reconciled in one transaction, and a record it\nomits is left as it stands. ``dry_run`` makes and rolls back the same writes.",
+        "operationId": "apply_host_settings_api_host_settings_apply_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Document",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSettingsApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "Superuser required"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsProblem"
+                }
+              }
+            },
+            "description": "A refused, malformed or invalid document entry; nothing is written"
+          }
+        },
+        "summary": "Apply Host Settings",
+        "tags": [
+          "host settings"
+        ]
+      }
+    },
     "/api/host/settings/changes": {
       "get": {
         "operationId": "host_settings_changes_api_host_settings_changes_get",
@@ -10519,6 +10701,30 @@
           }
         },
         "summary": "Host Settings Changes",
+        "tags": [
+          "host settings"
+        ]
+      }
+    },
+    "/api/host/settings/export": {
+      "get": {
+        "description": "The host settings document stating every entry not at its default; applied back, it moves nothing.",
+        "operationId": "export_host_settings_api_host_settings_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Host Settings Api Host Settings Export Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Export Host Settings",
         "tags": [
           "host settings"
         ]

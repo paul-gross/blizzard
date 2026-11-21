@@ -1726,6 +1726,60 @@
         "read"
       ],
       "commands": {
+        "apply": {
+          "help": "Apply a host settings document FILE, shaped like blizzard-host.toml, to the host whole.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "file",
+              "opts": [
+                "file"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "help": "Show what would change and write nothing.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dry_run",
+              "opts": [
+                "--dry-run"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings apply",
+          "short_help": "Apply a host settings document FILE, shaped like blizzard-host.toml, to the host whole."
+        },
         "changes": {
           "help": "Read the settings change history.",
           "params": [
@@ -1780,6 +1834,37 @@
           ],
           "path": "runner settings changes",
           "short_help": "Read the settings change history."
+        },
+        "export": {
+          "help": "Print the host settings document, every entry not at its default, as TOML that applies back unchanged.",
+          "params": [
+            {
+              "help": "Runner runtime directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Runner local API over TCP.",
+              "hidden": false,
+              "kind": "option",
+              "name": "runner_url",
+              "opts": [
+                "--runner-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner settings export",
+          "short_help": "Print the host settings document, every entry not at its default, as TOML that applies back unchanged."
         },
         "get": {
           "help": "Read the settings view, or one KEY.",

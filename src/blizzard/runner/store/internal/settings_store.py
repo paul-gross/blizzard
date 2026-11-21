@@ -16,8 +16,15 @@ from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
 from blizzard.runner.hosting.model import RunnerAdmission
 from blizzard.runner.hosting.ports import IAdmissionHandle, IWriteAdmittedSettings
-from blizzard.runner.settings.ports import IWriteRunnerSettings, SettingsChange, SettingsSnapshot
+from blizzard.runner.settings.ports import (
+    IApplyHandle,
+    IApplySettingsRecord,
+    IWriteRunnerSettings,
+    SettingsChange,
+    SettingsSnapshot,
+)
 from blizzard.runner.store.internal.admission_handle import admission_of
+from blizzard.runner.store.internal.apply_handle import apply_of
 from blizzard.runner.store.internal.settings_record import RunnerSettingsRecord
 from blizzard.runner.store.schema import runner_identity, runner_setting_changes, runner_setting_entries
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -74,7 +81,37 @@ class RunnerSettingsStore:
         )
         return revision
 
+    def snapshot_locked(self, handle: IApplyHandle) -> SettingsSnapshot:
+        conn = apply_of(handle).conn
+        return SettingsSnapshot(self._record.revision(conn), self._record.entries(conn))
+
+    def lock_locked(self, handle: IApplyHandle) -> None:
+        """Take the bound runner's identity lock on the apply's transaction."""
+        self._lock_identity(apply_of(handle).conn)
+
+    def write_locked(
+        self,
+        handle: IApplyHandle,
+        change: Change,
+        *,
+        if_match: int | None,
+        validate: Validate,
+        door: Door,
+        actor: str,
+        apply_id: str | None,
+    ) -> tuple[FieldChange, ...]:
+        return self._apply(
+            apply_of(handle).conn,
+            change,
+            if_match=if_match,
+            validate=validate,
+            door=door,
+            actor=actor,
+            apply_id=apply_id,
+        )
+
     def _lock_identity(self, conn: Connection) -> None:
+        """Serialize the bound runner's writers and its identity's removal, even before a settings row exists."""
         locked = conn.execute(
             self._store.update(runner_identity).values(runner_id=runner_identity.c.runner_id)
         ).rowcount
@@ -156,6 +193,7 @@ class RunnerSettingsStore:
 
 _store_conforms: type[IWriteRunnerSettings] = RunnerSettingsStore
 _admitted_settings_conforms: type[IWriteAdmittedSettings] = RunnerSettingsStore
+_apply_member_conforms: type[IApplySettingsRecord] = RunnerSettingsStore
 
 
 def _change(row: Any) -> SettingsChange:

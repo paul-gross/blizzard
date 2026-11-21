@@ -103,6 +103,7 @@ from blizzard.runner.host_config import (
     BuiltRunner,
     HaltedRunner,
     HostConfig,
+    RunnerEntry,
     read_legacy_document,
 )
 from blizzard.runner.host_file import (
@@ -174,9 +175,9 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
-from blizzard.runner.settings.authoring import HostSettingsAuthoring
+from blizzard.runner.settings.authoring import HostSettingsApplication, HostSettingsAuthoring
 from blizzard.runner.settings.ports import IWriteHostSettings, IWriteRunnerSettings
-from blizzard.runner.settings_reader import RunnerEntriesJudge, RunnerSettingsReader
+from blizzard.runner.settings_reader import HostApplyJudge, RunnerEntriesJudge, RunnerSettingsReader
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -198,6 +199,7 @@ from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheReposito
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_record_store import HostSubscriptionStore, HostWorkspaceStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_settings_apply_store import HostSettingsApplyStore
 from blizzard.runner.store.internal.host_settings_store import HostSettingsStore
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
@@ -365,6 +367,9 @@ class HostProcess:
     #: The host record's one write path, which wakes :attr:`wakes` after a write moving an interval; ``None`` beside
     #: an absent :attr:`host_settings`.
     host_settings_authoring: HostSettingsAuthoring | None = None
+    #: The host settings document's apply and export, which wakes :attr:`wakes` after an apply moving an interval;
+    #: ``None`` beside an absent :attr:`host_settings`.
+    host_settings_application: HostSettingsApplication | None = None
     #: Every timed driver's wake signal; a host write moving an interval wakes them all.
     wakes: WakeSignals = field(default_factory=WakeSignals)
     #: Each runner's sealed hub token under the host's key — ``None`` on a host that holds no key yet.
@@ -948,6 +953,7 @@ def build_host_process(
         graph.host_settings_authoring = HostSettingsAuthoring(
             graph.host_settings.reader, graph.host_stores.settings, HOST_REGISTRY, drivers=graph.wakes
         )
+        graph.host_settings_application = build_host_settings_application(graph, graph.host_settings.reader)
         if graph.host_settings.reader.records is not None:
             graph.records_reconcile = HostRecordsReconcile(
                 graph, host.root, retired_workspaces=graph.host_settings.reader.retired_workspaces
@@ -2053,6 +2059,35 @@ def _otlp_exporter(environ: Mapping[str, str] | None) -> OtlpTraceExporter:
         scope=INSTRUMENTATION_SCOPE,
         scope_version=INSTRUMENTATION_SCOPE_VERSION,
     )
+
+
+def build_host_settings_application(host: HostProcess, reader: HostSettingsReader) -> HostSettingsApplication:
+    """The host settings document's apply and export over ``host``'s store: its host-scoped records, and the record
+    of each runner it holds when the apply runs, each over that runner's own connections. Judged through ``reader``
+    and each runner's file entry."""
+    connections = RunnerStoreConnections(host.engine, RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+
+    def readers() -> dict[str, tuple[RunnerProcess, RunnerSettingsReader]]:
+        return {
+            runner.runner_id: (runner, runner.settings_reader)
+            for runner in host.runners
+            if runner.settings_reader is not None
+        }
+
+    def entries() -> dict[str, RunnerEntry]:
+        return {runner_id: reader.entry for runner_id, (_, reader) in readers().items()}
+
+    unit = HostSettingsApplyStore(
+        connections,
+        settings=HostSettingsStore(connections, host.clock),
+        workspaces=HostWorkspaceStore(connections, host.clock),
+        subscriptions=HostSubscriptionStore(connections, host.clock),
+        runners=lambda: {
+            runner_id: RunnerSettingsStore(runner.connections, host.clock)
+            for runner_id, (runner, _) in readers().items()
+        },
+    )
+    return HostSettingsApplication(unit, HostApplyJudge(reader, entries), HOST_REGISTRY, host.clock, drivers=host.wakes)
 
 
 def build_settings_stores(

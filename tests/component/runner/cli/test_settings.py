@@ -1,12 +1,14 @@
 """Settings verbs use the selected daemon and condition writes on its revision."""
 
 import json
+from pathlib import Path
 
 import httpx2
 import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.host_config import decode_host_text
 from tests.support.worker_http import bind_transport
 
 
@@ -163,3 +165,59 @@ def test_host_and_runner_are_mutually_exclusive(verb: list[str]) -> None:
     )
     assert result.exit_code == 2
     assert "--host and --runner are mutually exclusive" in result.output
+
+
+@pytest.mark.parametrize(("flags", "query"), [([], ""), (["--dry-run"], "dry_run=true")])
+def test_apply_posts_the_decoded_document_to_the_host(tmp_path: Path, flags: list[str], query: str) -> None:
+    file = tmp_path / "host.toml"
+    file.write_text('tick_seconds = 3\n[tracing]\nbatch_limit = 4\n[[runner]]\nid = "rn_1"\nagents = 2\n')
+    requests: list[httpx2.Request] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, json={"dry_run": bool(query), "apply_id": None, "outcomes": []})
+
+    bound = bind_transport(answer)
+    result = CliRunner().invoke(
+        runner_group,
+        ["settings", "apply", str(file), *flags, "--runner-url", "http://runner.test"],
+        obj=bound.collaborators,
+    )
+    assert result.exit_code == 0, result.output
+    [request] = requests
+    assert (request.method, request.url.path, request.url.query.decode()) == ("POST", "/api/host/settings/apply", query)
+    assert json.loads(request.content) == {
+        "tick_seconds": 3,
+        "tracing": {"batch_limit": 4},
+        "runner": [{"id": "rn_1", "agents": 2}],
+    }
+
+
+def test_apply_refuses_a_file_that_is_not_toml(tmp_path: Path) -> None:
+    file = tmp_path / "host.toml"
+    file.write_text("tick_seconds = = 3")
+    bound = bind_transport(lambda request: httpx2.Response(500))
+    result = CliRunner().invoke(
+        runner_group, ["settings", "apply", str(file), "--runner-url", "http://runner.test"], obj=bound.collaborators
+    )
+    assert result.exit_code == 2
+    assert "not valid TOML" in result.output
+
+
+def test_export_prints_toml_that_decodes_to_the_routes_document() -> None:
+    document = {
+        "tracing": {"batch_limit": 10, "worker_program_services": {"claude": "svc"}},
+        "workspace": [{"id": "ws_1", "envs": ["e1"]}],
+        "runner": [{"id": "rn_1", "agents": 1, "harness": {"autonomy": "full"}}],
+    }
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        assert (request.method, request.url.path) == ("GET", "/api/host/settings/export")
+        return httpx2.Response(200, json=document)
+
+    bound = bind_transport(answer)
+    result = CliRunner().invoke(
+        runner_group, ["settings", "export", "--runner-url", "http://runner.test"], obj=bound.collaborators
+    )
+    assert result.exit_code == 0, result.output
+    assert decode_host_text(result.output, what="export") == document

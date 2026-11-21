@@ -172,7 +172,7 @@ from blizzard.runner.public_origins import HubOrigin
 from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.settings.authoring import HostSettingsAuthoring
+from blizzard.runner.settings.authoring import HostSettingsApplication, HostSettingsAuthoring
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
@@ -443,6 +443,7 @@ def create_app(
     host_invariants: HostInvariantCheck | None = None,
     host_settings: HostSettingsInForce | None = None,
     host_settings_authoring: HostSettingsAuthoring | None = None,
+    host_settings_application: HostSettingsApplication | None = None,
     flags: Flags,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
@@ -529,6 +530,7 @@ def create_app(
     # The host's own settings record and its one write path; absent, `/api/host/settings` answers 503.
     app.state.host_settings = host_settings
     app.state.host_settings_authoring = host_settings_authoring
+    app.state.host_settings_application = host_settings_application
     app.state.flags = flags
     app.state.runners = HostRunnerRegistry(RunnerRegistry(tuple(runners), tuple(halted)))
     app.state.workspaces = served_workspaces
@@ -931,6 +933,7 @@ def _wire_hosted_app(
         host_invariants=host.invariants,
         host_settings=host.host_settings,
         host_settings_authoring=host.host_settings_authoring,
+        host_settings_application=host.host_settings_application,
         flags=host.flags,
     )
     app.state.runners = registry

@@ -16,7 +16,14 @@ from blizzard.foundation.settings_record.decision import decide, seed_choice
 from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import SEED, Change, Door, Entry, FieldChange
-from blizzard.runner.settings.ports import HostSettingsChange, IWriteHostSettings, SettingsSnapshot
+from blizzard.runner.settings.ports import (
+    HostSettingsChange,
+    IApplyHandle,
+    IApplySettingsRecord,
+    IWriteHostSettings,
+    SettingsSnapshot,
+)
+from blizzard.runner.store.internal.apply_handle import apply_of
 from blizzard.runner.store.internal.host_settings_record import HOST_RECORD_KIND, HostSettingsRecord
 from blizzard.runner.store.schema import host_setting_changes, host_setting_entries
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -66,6 +73,35 @@ class HostSettingsStore:
             )
             stmt = select(host_setting_entries.c.key, *host_setting_changes.c).select_from(joined)
             return snapshot, {row.key: _change(row) for row in conn.execute(stmt)}
+
+    def lock_locked(self, handle: IApplyHandle) -> None:
+        """Take the host record's lock on the apply's transaction."""
+        self._record.lock(apply_of(handle).conn)
+
+    def snapshot_locked(self, handle: IApplyHandle) -> SettingsSnapshot:
+        conn = apply_of(handle).conn
+        return SettingsSnapshot(self._record.revision(conn), self._record.entries(conn))
+
+    def write_locked(
+        self,
+        handle: IApplyHandle,
+        change: Change,
+        *,
+        if_match: int | None,
+        validate: Validate,
+        door: Door,
+        actor: str,
+        apply_id: str | None,
+    ) -> tuple[FieldChange, ...]:
+        return self._apply(
+            apply_of(handle).conn,
+            change,
+            if_match=if_match,
+            validate=validate,
+            door=door,
+            actor=actor,
+            apply_id=apply_id,
+        )
 
     def _apply(
         self,
@@ -141,6 +177,7 @@ class HostSettingsStore:
 
 
 _store_conforms: type[IWriteHostSettings] = HostSettingsStore
+_apply_member_conforms: type[IApplySettingsRecord] = HostSettingsStore
 
 
 def _change(row: Any) -> HostSettingsChange:

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Hashable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.settings_record.validator import Validate
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange
+from blizzard.runner.host_records.model import HostRecord, HostRecordsSnapshot, RecordActor, RecordKind, RecordWrite
+
+if TYPE_CHECKING:
+    from blizzard.runner.settings.apply import HeldHostState, HostSettingsPlan
 
 
 @domain_model
@@ -128,3 +132,102 @@ class IWakeDrivers(Protocol):
     """The host's timed drivers, woken to re-read their intervals."""
 
     def wake(self) -> None: ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class PreparedApply:
+    """A planned document apply, its workspace and subscription writes already judged, and how each settings write
+    it makes judges its candidate: the host record's, and each stated runner's by id."""
+
+    plan: HostSettingsPlan
+    validate_host: Validate
+    validate_runner: Mapping[str, Validate]
+
+
+@domain_model
+@dataclass(frozen=True)
+class ApplyBy:
+    """Who an apply writes as: every change row it writes carries door ``apply``, ``actor`` and ``apply_id``."""
+
+    actor: str
+    apply_id: str | None
+    at: datetime
+
+
+class IApplyHostSettings(Protocol):
+    """The host settings document's unit of work: one transaction over the host record, the workspace and
+    subscription records and the stated runners' records."""
+
+    def apply(
+        self,
+        runners: Sequence[str],
+        prepare: Callable[[HeldHostState], PreparedApply],
+        *,
+        by: ApplyBy,
+        dry_run: bool,
+    ) -> HostSettingsPlan:
+        """Take every lock — the host record, then its workspace and subscription records, then each of ``runners``
+        the host holds, in id order — read the held state under them, ``prepare`` the apply against it, then make
+        its writes. Rolled back whole on any refusal, and on ``dry_run`` after every write ran; the plan made."""
+        ...
+
+    def held(self) -> HeldHostState:
+        """The held state as one read sees it, every hosted runner's record included — what an export states."""
+        ...
+
+
+class IJudgeHostApply(Protocol):
+    """How a document apply's writes are judged: each beside the host entries and records the whole apply leaves, as
+    the host file would be at boot."""
+
+    def host(self, entries: Mapping[str, Entry], records: HostRecordsSnapshot) -> Mapping[str, str]: ...
+
+    def record(
+        self, kind: RecordKind, candidate: HostRecord, entries: Mapping[str, Entry], records: HostRecordsSnapshot
+    ) -> Mapping[str, str]: ...
+
+    def runner(
+        self,
+        runner_id: str,
+        entries: Mapping[str, Entry],
+        *,
+        host_entries: Mapping[str, Entry],
+        records: HostRecordsSnapshot,
+    ) -> Mapping[str, str]: ...
+
+
+class IApplyHandle(Protocol):
+    """The one write transaction a host settings document's apply hands each of its members; opaque here."""
+
+
+class IApplySettingsRecord(Protocol):
+    """A settings record — the host's, or one runner's — as a document apply's member, on the apply's transaction."""
+
+    def lock_locked(self, handle: IApplyHandle) -> None: ...
+
+    def snapshot_locked(self, handle: IApplyHandle) -> SettingsSnapshot: ...
+
+    def write_locked(
+        self,
+        handle: IApplyHandle,
+        change: Change,
+        *,
+        if_match: int | None,
+        validate: Validate,
+        door: Door,
+        actor: str,
+        apply_id: str | None,
+    ) -> tuple[FieldChange, ...]: ...
+
+
+class IApplyHostRecords(Protocol):
+    """One kind of the host's workspace and subscription records as a document apply's member."""
+
+    def lock_locked(self, handle: IApplyHandle) -> None: ...
+
+    def records_locked(self, handle: IApplyHandle) -> tuple[HostRecord, ...]:
+        """Every record of the kind, retired ones included, in key order."""
+        ...
+
+    def apply_locked(self, handle: IApplyHandle, write: RecordWrite, by: RecordActor) -> None: ...
