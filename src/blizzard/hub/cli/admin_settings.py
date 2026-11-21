@@ -12,11 +12,12 @@ import click
 from pydantic import BaseModel, TypeAdapter, model_validator
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.foundation.toml_emit import toml_document
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.config import ApplyListing
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.hub.config import ConfigError, HubConfig, json_literal
+from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.wire.config import ConfigApplyResponse
 from blizzard.wire.hub_settings import (
     HubSettingRow,
@@ -174,42 +175,6 @@ def settings_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     cli.show(raw, ApplyListing(applied.outcomes))
 
 
-def _literal(value: object) -> str:
-    if isinstance(value, dict):
-        return (
-            "{ "
-            + ", ".join(
-                f"{json.dumps(k, ensure_ascii=False)} = {_literal(v)}"
-                for k, v in cast(dict[str, object], value).items()
-            )
-            + " }"
-        )
-    if isinstance(value, list):
-        return "[" + ", ".join(_literal(item) for item in cast(list[object], value)) + "]"
-    if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
-    return json_literal(value)
-
-
-def _toml(document: dict[str, object], prefix: tuple[str, ...] = ()) -> list[str]:
-    lines = [
-        f"{json.dumps(key, ensure_ascii=False)} = {_literal(value)}"
-        for key, value in document.items()
-        if not isinstance(value, dict)
-    ]
-    for key, value in document.items():
-        if isinstance(value, dict):
-            path = (*prefix, key)
-            lines.extend(
-                [
-                    "",
-                    f"[{'.'.join(json.dumps(part, ensure_ascii=False) for part in path)}]",
-                    *_toml(cast(dict[str, object], value), path),
-                ]
-            )
-    return lines
-
-
 @admin_settings_group.command("export", cls=AdminCommand)
 def settings_export(cli: CliContext) -> None:
     """Export the settings document as TOML (or JSON with --json)."""
@@ -218,4 +183,4 @@ def settings_export(cli: CliContext) -> None:
     if cli.as_json:
         cli.show_lines(raw)
     else:
-        click.echo("\n".join(_toml(document)).lstrip())
+        click.echo(toml_document(document), nl=False)
