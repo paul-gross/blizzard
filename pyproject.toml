@@ -60,6 +60,9 @@ dependencies = [
     "cronsim>=2.7",
     # The IANA zone database, so `zoneinfo` resolves a cadence's zone on a slim image as on a workstation.
     "tzdata",
+    # The dependency container behind `foundation/registry/internal/`; no other module imports it, and the pin
+    # holds the 1.x API the translation is written against.
+    "dishka>=1.10,<2",
 ]
 
 # The sqlite/systemd path stays lean by default (`bzh:sql-portable`) — the postgres
