@@ -241,7 +241,7 @@ def accept_garden_proposal(
     reason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,
     or a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired."""
     proposal = _get_or_404(proposal_id, services)
-    urgency = stated_urgency(request.urgency, services)
+    urgency = stated_urgency(request.urgency, services.urgency_reading)
     proposal_findings = resolve_proposal_findings(services.findings, proposal.findings)
     try:
         accepted = services.garden_proposal_closure.accept(
@@ -262,7 +262,7 @@ def accept_garden_proposal(
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_admin.default_graph_retired_problem, str(exc))) from exc
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services, exc) from exc
+        raise ingest_conflict_refusal(services.work_sources, exc) from exc
     if accepted.chunk_id is not None:
         # A freshly minted chunk rests `not_ready`, exactly as a `POST
         # /work-sources/hub/items` mint does.

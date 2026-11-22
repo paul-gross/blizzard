@@ -5,11 +5,16 @@ still sends one. Every door that takes the old fields answers through :func:`war
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Annotated
 
-from fastapi import Response
+from dishka.integrations.fastapi import FromDishka, inject_sync
+from fastapi import Depends, Response
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.authoring import OldFieldUse
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.wire.forge import OldFieldWarning
@@ -22,7 +27,8 @@ _EVENT_OLD_FIELD_USED: EventLogKind = "config-old-field-used"
 
 def warned(
     response: Response,
-    services: TenantServices,
+    event_log: EventLogService,
+    clock: IClock,
     used: Sequence[OldFieldUse],
     *,
     record: str,
@@ -34,12 +40,12 @@ def warned(
         return []
     name, value = DEPRECATION_HEADER
     response.headers[name] = value
-    now = services.clock.now()
+    now = clock.now()
     warnings: list[OldFieldWarning] = []
     for use in used:
         credential = use.credential
         message = f"`{use.field}` is deprecated; it resolved to credential {credential.slug} — send `credential`"
-        services.event_log.record(
+        event_log.record(
             kind=_EVENT_OLD_FIELD_USED,
             runner_id=None,
             chunk_id=None,
@@ -61,3 +67,30 @@ def warned(
             OldFieldWarning(field=use.field, forge_id=forge.forge_id, forge_slug=forge.slug, message=message)
         )
     return warnings
+
+
+@dataclass(frozen=True)
+class OldFieldWarnings:
+    """Where a committed write's old-field warnings are recorded, and the clock that stamps them."""
+
+    event_log: EventLogService
+    clock: IClock
+
+    def warned(
+        self, response: Response, used: Sequence[OldFieldUse], *, record: str, forge: ConfiguredForge
+    ) -> list[OldFieldWarning]:
+        """:func:`warned`, recorded on this log."""
+        return warned(response, self.event_log, self.clock, used, record=record, forge=forge)
+
+
+@inject_sync
+def old_field_warnings(
+    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    event_log: FromDishka[EventLogService],
+    clock: FromDishka[IClock],
+) -> OldFieldWarnings:
+    """The request's :class:`OldFieldWarnings`, each resolved through its scope."""
+    return OldFieldWarnings(event_log=event_log, clock=clock)
+
+
+Warnings = Annotated[OldFieldWarnings, Depends(old_field_warnings)]

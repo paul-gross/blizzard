@@ -175,7 +175,7 @@ from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.settings.pass_config import bind_pass_config
-from blizzard.hub.settings.source import resolve_live_config
+from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -228,6 +228,10 @@ class Sweep:
         config: HubConfig = app.state.config
         tracer = app.state.platform_tracing.tracer
         settings: HubSettingsGraph | None = getattr(app.state, "hub_settings", None)
+        # A hub holding a settings graph reads each pass's config, and each live interval, from its live config source.
+        source: HubConfigSource | None = (
+            app.state.hub_process.resolver.get(HubConfigSource) if settings is not None else None
+        )
         for name in services.sweeps.names():
             if config.sweeps.of(name) is SweepMode.STEPPED:
                 continue
@@ -244,11 +248,11 @@ class Sweep:
                 app.state.shutdown,
                 jitter_seconds=random.uniform(0, interval),
                 live_interval=(
-                    partial(_live_sweep_interval, name, settings) if settings is not None and interval_key else None
+                    partial(_live_sweep_interval, name, source) if source is not None and interval_key else None
                 ),
                 subscribe=settings.authoring.subscribe if settings is not None and interval_key else None,
                 interval_key=interval_key,
-                pass_config=(partial(resolve_live_config, settings) if settings is not None else None),
+                pass_config=(source.resolved if source is not None else None),
             )
 
     @property
@@ -367,8 +371,8 @@ class Sweep:
             first = False
 
 
-def _live_sweep_interval(name: SweepName, settings: HubSettingsGraph) -> int:
-    return _sweep_interval(name, resolve_live_config(settings))
+def _live_sweep_interval(name: SweepName, source: HubConfigSource) -> int:
+    return _sweep_interval(name, source.resolved())
 
 
 def _sweep_interval(name: SweepName, config: HubConfig) -> int:

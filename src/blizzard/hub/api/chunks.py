@@ -192,7 +192,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
     named = body_project(request.project, services.projects).project_id if request.project is not None else None
-    urgency = stated_urgency(request.urgency, services)
+    urgency = stated_urgency(request.urgency, services.urgency_reading)
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -228,7 +228,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services, exc) from exc
+        raise ingest_conflict_refusal(services.work_sources, exc) from exc
     chunk_events.ChunkChanged.of(services.chunk_frames, chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{chunk_id}"
     )

@@ -198,9 +198,9 @@ def _shared(hub: HubHarness, tenant: StoreScope) -> dict[str, list[object]]:
         "forge registry": [scope.get(ForgeRegistry), services.forges],
         "forge budgets": [scope.get(ForgeBudgets), services.forge_budgets],
         "work sources": [scope.get(IWorkSourceRegistry), services.work_sources],
-        "credential readiness": [scope.get(CredentialReadiness), services.credential_readiness],
+        "credential readiness": [scope.get(CredentialReadiness)],
         "config authoring": [scope.get(ConfigAuthoring), services.config_authoring],
-        "config application": [scope.get(ConfigApplication), services.config_application],
+        "config application": [scope.get(ConfigApplication)],
         "config objects": [scope.get(ConfigObjectCache), objects],
     }
 
@@ -265,13 +265,13 @@ def _hosted(
         config=HubConfig(root=tmp_path, db_url=str(engine.url)),
         platform_tracing=tracing,
         environ={},
+        actions=TEST_HUB_ACTIONS,
         overrides=overrides,
     )
     services = build_services(
         core,
         follow_latest_default=False,
         version_window=VERSION_WINDOW,
-        actions=TEST_HUB_ACTIONS,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,

@@ -84,7 +84,11 @@ class _Hub:
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         core = build_hub_core(
-            connections_for_engine(self.engine), clock=FixedClock(_NOW), config=self.config, environ={}
+            connections_for_engine(self.engine),
+            clock=FixedClock(_NOW),
+            actions=TEST_HUB_ACTIONS,
+            config=self.config,
+            environ={},
         )
         return core.open(StoreScope(tenant)).tenant.get(ConfigAuthoring)
 

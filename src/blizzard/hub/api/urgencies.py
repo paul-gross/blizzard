@@ -42,6 +42,7 @@ from blizzard.hub.domain.urgency.model import (
     UrgencyShape,
     UrgencyUnknown,
 )
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.domain.urgency.services import UrgencyView as UrgencyRead
 from blizzard.wire.urgency import (
     UrgenciesListView,
@@ -86,13 +87,13 @@ def urgency_refusal(exc: ConfigFieldError) -> ProblemHTTPException:
     )
 
 
-def stated_urgency(key: str | None, services: TenantServices) -> Urgency | None:
+def stated_urgency(key: str | None, reading: UrgencyReading) -> Urgency | None:
     """The live urgency a mint request states by id or slug, checked before anything is written; ``None`` when it
     states none. 422 ``urgency_unknown`` or ``urgency_retired`` otherwise."""
     if key is None:
         return None
     try:
-        return services.urgency_reading.live(URGENCY_FIELD, key)
+        return reading.live(URGENCY_FIELD, key)
     except (UrgencyUnknown, UrgencyRetired) as exc:
         raise urgency_refusal(exc) from exc
 

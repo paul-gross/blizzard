@@ -5,16 +5,22 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
 from blizzard.hub.api import problems_admin
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.domain.config.forges import ConfiguredForge
+from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 
 
-def path_forge(forge: str, services: Services) -> ConfiguredForge:
-    found = services.forge_records.resolve(forge)
+@inject_sync
+def path_forge(
+    forge: str,
+    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    forges: FromDishka[IReadForgeRepository],
+) -> ConfiguredForge:
+    found = forges.resolve(forge)
     if found is None:
         raise ProblemHTTPException(partial(problems_admin.forge_not_found_problem, f"unknown forge {forge!r}"))
     return found

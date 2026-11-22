@@ -1185,5 +1185,5 @@ def test_admin_records_name_a_user_actor_and_leave_a_non_user_actor_to_its_id(tm
     assert source["created_by"] == ada.user_id and source["created_by_name"] == "Ada Lovelace"
 
     # A stored id that is no user — a config door, a deleted user — carries no name.
-    assert user_names(hub.services, [ada.user_id, "migration", "usr_gone"]) == {ada.user_id: "Ada Lovelace"}
+    assert user_names(hub.services.users, [ada.user_id, "migration", "usr_gone"]) == {ada.user_id: "Ada Lovelace"}
     assert hub.client.get("/api/work-sources/hub", headers=headers).json()["created_by_name"] is None

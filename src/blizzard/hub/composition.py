@@ -96,14 +96,14 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
-from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
-from blizzard.hub.domain.config.credentials import ICredentialReferences, IReadCredentialRepository
+from blizzard.hub.domain.config.changes import IReadConfigChanges
+from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretCatalog
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
-from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
@@ -239,7 +239,6 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
-from blizzard.hub.forge.readiness import CredentialReadiness
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
@@ -387,8 +386,6 @@ class TenantServices:
     forges: ForgeRegistry
     #: Each forge key's rate budget, shared by every caller of that forge and credential.
     forge_budgets: ForgeBudgets
-    #: Checks a credential read-only against the records acting with it.
-    credential_readiness: CredentialReadiness
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
@@ -410,13 +407,9 @@ class TenantServices:
     scope_lifecycle: ScopeLifecycle
     #: Secret metadata only — never a sealed row (``bzh:secret-write-only``).
     secret_catalog: ISecretCatalog
-    #: The active configured records naming each secret.
-    secret_references: ISecretReferences
     #: The one writer of configured records — forges, work sources, repositories and secrets, each write with its change
     #: row.
     config_authoring: ConfigAuthoring
-    #: Loads what a config document names, mints, plans, and applies it.
-    config_application: ConfigApplication
     #: Stored work-source records (the read half).
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
@@ -425,8 +418,6 @@ class TenantServices:
     forge_records: IReadForgeRepository
     #: Stored credential records (the read half).
     credential_records: IReadCredentialRepository
-    #: The enabled repositories and work sources naming each credential.
-    credential_references: ICredentialReferences
     #: Each chunk's landed-commit address on its repository record's forge.
     commit_links: IReadLandedCommitLinks
     #: Each branch's delivery line and the visits submitted to it (the read half).
@@ -1064,6 +1055,32 @@ def chunk_route_leaf(chunks: ChunkStores) -> IReadChunkRouteRepository:
     return chunks.route
 
 
+def chunk_work_refs_leaf(chunks: ChunkStores) -> IReadChunkWorkRefsRepository:
+    """The tenant's live-holder reads of each work ref, projected from its chunk stores — a legacy leaf the chunk
+    operations area owns until it adopts it."""
+    return chunks.work_refs
+
+
+def urgency_reading_leaf(
+    urgencies: UrgencyStore, order: UrgencyOrderStore, settings: TenantSettingsStore, chunks: UrgencyChunksStore
+) -> UrgencyReading:
+    """The tenant's urgency listing and lookup, a legacy leaf the projects and urgency area owns until it adopts it."""
+    return UrgencyReading(urgencies=urgencies, order=order, settings=settings, chunks=chunks)
+
+
+def graph_mint_leaf(graphs: GraphStore, clock: IClock, actions: HubActions) -> GraphMintService:
+    """The tenant's graph mint, validating against the catalogue of the actions the process serves — a legacy leaf the
+    graphs area owns until it adopts it."""
+    return GraphMintService(graphs=graphs, clock=clock, catalogue=actions.catalogue)
+
+
+def default_graph_leaf(
+    mint: GraphMintService, graphs: GraphStore, transactions: HubTransactions
+) -> DefaultGraphService:
+    """The tenant's mint-once default graph, a legacy leaf the graphs area owns until it adopts it."""
+    return DefaultGraphService(mint=mint, graphs=graphs, transactions=transactions)
+
+
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1074,6 +1091,8 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.leaf(repo_errors_leaf, lifetime=Lifetime.PROCESS)
     identity = registry.leaf(identity_transactions_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IIdentityTransactions), identity)
+    # The hub actions a node may name, borrowed from the root that serves them until the hub lifecycle adopts them.
+    registry.context(port(HubActions), lifetime=Lifetime.PROCESS)
     users = registry.leaf(users_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IReadUserRepository), users)
     registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
@@ -1102,6 +1121,10 @@ def register_legacy(registry: LegacyRegistry) -> None:
         chunk_facts_leaf,
         chunk_record_leaf,
         chunk_route_leaf,
+        chunk_work_refs_leaf,
+        urgency_reading_leaf,
+        graph_mint_leaf,
+        default_graph_leaf,
         delete_leaf,
         tenant_default_leaf,
         work_item_edits_leaf,
@@ -1130,6 +1153,10 @@ _LEGACY_TENANT_KEYS: tuple[type[Any], ...] = (
     IReadChunkFactsRepository,
     IReadChunkRecordRepository,
     IReadChunkRouteRepository,
+    IReadChunkWorkRefsRepository,
+    UrgencyReading,
+    GraphMintService,
+    DefaultGraphService,
     DeleteService,
     TenantDefault,
     WorkItemEditService,
@@ -1438,7 +1465,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
-        credential_readiness=tenant.get(CredentialReadiness),
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1634,14 +1660,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         scope_registry=scope_registry,
         scope_lifecycle=ScopeLifecycle(scopes=scope_store, clock=clock),
         secret_catalog=stores.secrets,
-        secret_references=stores.secret_referrers,
         config_authoring=config_authoring,
-        config_application=tenant.get(ConfigApplication),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
         credential_records=stores.credential_records,
-        credential_references=stores.credential_referrers,
         commit_links=commit_links,
         flows=stores.flows,
         flow_views=stores.flows,
@@ -1677,12 +1700,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         color_pick=parts.color_pick,
-        urgency_reading=UrgencyReading(
-            urgencies=stores.urgencies,
-            order=stores.urgency_order,
-            settings=stores.tenant_settings,
-            chunks=stores.urgency_chunks,
-        ),
+        urgency_reading=tenant.get(UrgencyReading),
         urgency_authoring=UrgencyAuthoring(
             urgencies=stores.urgencies,
             order=stores.urgency_order,

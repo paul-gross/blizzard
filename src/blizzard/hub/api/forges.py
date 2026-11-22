@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.auth_session import AdmittedTenant, require, tenant_bound, tenant_request
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_params import PathForge
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.credential_bindings import secret_of_authority
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import (
@@ -29,8 +31,13 @@ from blizzard.hub.domain.config.forges import (
     ForgeInUse,
     ForgeOriginTaken,
     ForgeSlugTaken,
+    IReadForgeRepository,
 )
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES, missing_capabilities
+from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
+from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.wire.forge import (
     ForgeBudgetView,
     ForgeCreateRequest,
@@ -46,6 +53,36 @@ from blizzard.wire.record_referrer import RecordReferrer
 router = APIRouter(
     prefix="/api/forges", tags=["forges"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
+#: The tenant's forge records, its one config writer and the user reads, each resolved through the request's scope.
+Forges = FromDishka[IReadForgeRepository]
+Authoring = FromDishka[ConfigAuthoring]
+Users = FromDishka[IReadUserRepository]
+
+
+@dataclass(frozen=True)
+class _DetailReads:
+    """What a forge's detail reads beside the record: the records naming it, its roles, its budgets and the users."""
+
+    repositories: IReadRepositoryRecordRepository
+    sources: IReadWorkSourceRepository
+    forges: ForgeRegistry
+    budgets: ForgeBudgets
+    users: IReadUserRepository
+
+
+@inject_sync
+def _detail_reads(
+    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    repositories: FromDishka[IReadRepositoryRecordRepository],
+    sources: FromDishka[IReadWorkSourceRepository],
+    forges: FromDishka[ForgeRegistry],
+    budgets: FromDishka[ForgeBudgets],
+    users: Users,
+) -> _DetailReads:
+    return _DetailReads(repositories, sources, forges, budgets, users)
+
+
+DetailReads = Annotated[_DetailReads, Depends(_detail_reads)]
 
 
 def _summary(record: ConfiguredForge, names: Mapping[str, str]) -> ForgeSummary:
@@ -65,12 +102,12 @@ def _summary(record: ConfiguredForge, names: Mapping[str, str]) -> ForgeSummary:
     )
 
 
-def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
-    repositories = services.repository_records.list_all(include_retired=True)
-    sources = services.work_source_records.list_all(include_retired=True)
-    offered = services.forges.offered(record)
+def _detail(record: ConfiguredForge, reads: _DetailReads) -> ForgeDetail:
+    repositories = reads.repositories.list_all(include_retired=True)
+    sources = reads.sources.list_all(include_retired=True)
+    offered = reads.forges.offered(record)
     return ForgeDetail(
-        **_summary(record, user_names(services, [record.created_by])).model_dump(),
+        **_summary(record, user_names(reads.users, [record.created_by])).model_dump(),
         repositories=[
             ForgeReferenceView(kind="repository", key=r.repository_id, label=r.slug)
             for r in repositories
@@ -96,7 +133,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
                 remaining=reading.remaining,
                 reset=iso_utc(reading.reset),
             )
-            for key, reading in services.forge_budgets.forge_readings(record.forge_id)
+            for key, reading in reads.budgets.forge_readings(record.forge_id)
         ],
     )
 
@@ -122,23 +159,26 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 
 
 @router.get("", response_model=ForgesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_forges(services: Services, include_retired: bool = False) -> ForgesListView:
+@inject_sync
+def list_forges(forges: Forges, users: Users, include_retired: bool = False) -> ForgesListView:
     """List forges by slug, including retired ones when requested."""
-    records = services.forge_records.list_all(include_retired=include_retired)
-    names = user_names(services, (r.created_by for r in records))
+    records = forges.list_all(include_retired=include_retired)
+    names = user_names(users, (r.created_by for r in records))
     return ForgesListView(forges=[_summary(r, names) for r in records])
 
 
 @router.post("", response_model=ForgeDetail, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_forge(
     request: ForgeCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: DetailReads,
 ) -> ForgeDetail:
     """Create a forge at revision one. Invalid fields answer 422; taken slug or API origin answers 409."""
     try:
-        record = services.config_authoring.create_forge(
+        record = authoring.create_forge(
             request.slug,
             request.name,
             request.kind,
@@ -149,71 +189,78 @@ def create_forge(
         raise _unprocessable(exc) from exc
     except (ForgeSlugTaken, ForgeOriginTaken) as exc:
         raise _conflict(exc) from exc
-    return _detail(record, services)
+    return _detail(record, reads)
 
 
 @router.get("/{forge}", response_model=ForgeDetail, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_forge(forge: PathForge, services: Services) -> ForgeDetail:
+def get_forge(forge: PathForge, reads: DetailReads) -> ForgeDetail:
     """Show a forge by id, current slug or former slug, with linked records."""
-    return _detail(forge, services)
+    return _detail(forge, reads)
 
 
 @router.patch("/{forge}", response_model=ForgeDetail)
+@inject_sync
 def patch_forge(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     forge: PathForge,
     request: ForgePatchRequest,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: DetailReads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ForgeDetail:
     """Edit stated fields, keeping the revision on a no-op. A stale If-Match answers 409."""
     edit = ForgeEdit(**{field: getattr(request, field) for field in request.model_fields_set})
     try:
-        record = services.config_authoring.edit_forge(forge, edit, change_context(identity, door), if_match=if_match)
+        record = authoring.edit_forge(forge, edit, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, ForgeSlugTaken, ForgeOriginTaken) as exc:
         raise _conflict(exc) from exc
-    return _detail(record, services)
+    return _detail(record, reads)
 
 
 def _lifecycle(
     forge: ConfiguredForge,
     identity: ResolvedIdentity,
     door: RequestDoor,
-    services: TenantServices,
+    authoring: ConfigAuthoring,
+    reads: _DetailReads,
     if_match: int | None,
     *,
     retired: bool,
 ) -> ForgeDetail:
     try:
-        verb = services.config_authoring.retire_forge if retired else services.config_authoring.enable_forge
+        verb = authoring.retire_forge if retired else authoring.enable_forge
         record = verb(forge, change_context(identity, door), if_match=if_match)
     except (ConfigRevisionConflict, ForgeInUse) as exc:
         raise _conflict(exc) from exc
-    return _detail(record, services)
+    return _detail(record, reads)
 
 
 @router.post("/{forge}/retire", response_model=ForgeDetail)
+@inject_sync
 def retire_forge(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     forge: PathForge,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: DetailReads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ForgeDetail:
     """Retire a forge only when no enabled configured record names it."""
-    return _lifecycle(forge, identity, door, services, if_match, retired=True)
+    return _lifecycle(forge, identity, door, authoring, reads, if_match, retired=True)
 
 
 @router.post("/{forge}/enable", response_model=ForgeDetail)
+@inject_sync
 def enable_forge(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     forge: PathForge,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: DetailReads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> ForgeDetail:
     """Enable a retired forge; an enabled forge remains unchanged."""
-    return _lifecycle(forge, identity, door, services, if_match, retired=False)
+    return _lifecycle(forge, identity, door, authoring, reads, if_match, retired=False)

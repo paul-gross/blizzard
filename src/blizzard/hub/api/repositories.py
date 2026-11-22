@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, Response, status
 
 from blizzard.auth_core import Permission
@@ -17,23 +18,23 @@ from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.credential_choice import credential_choice
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
-from blizzard.hub.api.forge_warnings import warned
+from blizzard.hub.api.forge_warnings import OldFieldWarnings, Warnings
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.record_reads import Reads, RecordReads
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.config.authoring import Authored
+from blizzard.hub.domain.config.authoring import Authored, ConfigAuthoring
 from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD, CredentialId
-from blizzard.hub.domain.config.credentials import ConfiguredCredential
+from blizzard.hub.domain.config.credentials import ConfiguredCredential, IReadCredentialRepository
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    IReadRepositoryRecordRepository,
     RepositoryCoordinateTaken,
     RepositoryDraft,
     RepositoryEdit,
@@ -49,6 +50,8 @@ from blizzard.wire.repository import (
 router = APIRouter(
     prefix="/api", tags=["repositories"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
+#: The tenant's config writer, resolved through the request's scope.
+Authoring = FromDishka[ConfigAuthoring]
 
 
 def _summary(
@@ -84,30 +87,28 @@ def _summary(
 
 
 def _credentials(
-    records: list[ConfiguredRepository], services: TenantServices
+    records: list[ConfiguredRepository], credentials: IReadCredentialRepository
 ) -> dict[CredentialId, ConfiguredCredential]:
-    return services.credential_records.get_many(
-        list({r.fields.credential_id for r in records if r.fields.credential_id is not None})
-    )
+    return credentials.get_many(list({r.fields.credential_id for r in records if r.fields.credential_id is not None}))
 
 
-def _shown(record: ConfiguredRepository, services: TenantServices) -> RepositorySummary:
+def _shown(record: ConfiguredRepository, reads: RecordReads) -> RepositorySummary:
     """``record``'s summary, with the forge and credential it names."""
-    forge = services.forge_records.get(record.fields.forge_id)
+    forge = reads.forges.get(record.fields.forge_id)
     assert forge is not None
     credential_id = record.fields.credential_id
-    credential = None if credential_id is None else services.credential_records.get(credential_id)
-    return _summary(record, forge, credential, user_names(services, [record.created_by]))
+    credential = None if credential_id is None else reads.credentials.get(credential_id)
+    return _summary(record, forge, credential, user_names(reads.users, [record.created_by]))
 
 
 def _authored(
-    authored: Authored[ConfiguredRepository], response: Response, services: TenantServices
+    authored: Authored[ConfiguredRepository], response: Response, reads: RecordReads, warnings: OldFieldWarnings
 ) -> RepositorySummary:
     """The written record's summary, carrying a warning for each old field the write resolved."""
-    shown = _shown(authored.record, services)
-    forge = services.forge_records.get(authored.record.fields.forge_id)
+    shown = _shown(authored.record, reads)
+    forge = reads.forges.get(authored.record.fields.forge_id)
     assert forge is not None
-    shown.warnings = warned(response, services, authored.old_fields, record=f"repository {shown.slug}", forge=forge)
+    shown.warnings = warnings.warned(response, authored.old_fields, record=f"repository {shown.slug}", forge=forge)
     return shown
 
 
@@ -128,12 +129,15 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 @router.get(
     "/repositories", response_model=RepositoriesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def list_repositories(services: Services, include_retired: bool = False) -> RepositoriesListView:
+@inject_sync
+def list_repositories(
+    repositories: FromDishka[IReadRepositoryRecordRepository], reads: Reads, include_retired: bool = False
+) -> RepositoriesListView:
     """Every stored repository by slug, retired ones hidden unless `include_retired`."""
-    records = services.repository_records.list_all(include_retired=include_retired)
-    names = user_names(services, (r.created_by for r in records))
-    forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
-    credentials = _credentials(records, services)
+    records = repositories.list_all(include_retired=include_retired)
+    names = user_names(reads.users, (r.created_by for r in records))
+    forges = reads.forges.get_many(list({r.fields.forge_id for r in records}))
+    credentials = _credentials(records, reads.credentials)
     return RepositoriesListView(
         repositories=[
             _summary(
@@ -148,11 +152,14 @@ def list_repositories(services: Services, include_retired: bool = False) -> Repo
 
 
 @router.post("/repositories", response_model=RepositorySummary, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_repository(
     request: RepositoryCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: Reads,
+    warnings: Warnings,
     response: Response,
 ) -> RepositorySummary:
     """Store a new repository at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422
@@ -176,19 +183,19 @@ def create_repository(
         park_timeout_hours=request.park_timeout_hours,
     )
     try:
-        authored = services.config_authoring.create_repository_naming(
+        authored = authoring.create_repository_naming(
             request.slug,
             request.name,
             draft,
-            forge_choice(request, services),
+            forge_choice(request, reads.forges),
             change_context(identity, door),
-            credential=credential_choice(request, services),
+            credential=credential_choice(request, reads.credentials),
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (RepositorySlugTaken, RepositoryCoordinateTaken) as exc:
         raise _conflict(exc) from exc
-    return _authored(authored, response, services)
+    return _authored(authored, response, reads, warnings)
 
 
 @router.get(
@@ -196,18 +203,21 @@ def create_repository(
     response_model=RepositorySummary,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_repository(repository: PathRepository, services: Services) -> RepositorySummary:
+def get_repository(repository: PathRepository, reads: Reads) -> RepositorySummary:
     """One repository by id or slug — a slug it left included — retired or not. 404 on an unknown repository."""
-    return _shown(repository, services)
+    return _shown(repository, reads)
 
 
 @router.patch("/repositories/{repository}", response_model=RepositorySummary)
+@inject_sync
 def patch_repository(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathRepository,
     request: RepositoryPatchRequest,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: Reads,
+    warnings: Warnings,
     response: Response,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
@@ -223,52 +233,56 @@ def patch_repository(
     stated = {field: getattr(request, field) for field in present if field not in (FORGE_FIELD, CREDENTIAL_FIELD)}
     edit = RepositoryEdit(**stated)
     try:
-        authored = services.config_authoring.edit_repository_naming(
+        authored = authoring.edit_repository_naming(
             record,
             edit,
-            forge_choice(request, services),
+            forge_choice(request, reads.forges),
             change_context(identity, door),
             if_match=if_match,
-            credential=credential_choice(request, services),
+            credential=credential_choice(request, reads.credentials),
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, RepositoryCoordinateTaken, RepositorySlugTaken) as exc:
         raise _conflict(exc) from exc
-    return _authored(authored, response, services)
+    return _authored(authored, response, reads, warnings)
 
 
 @router.post("/repositories/{repository}/retire", response_model=RepositorySummary)
+@inject_sync
 def retire_repository(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathRepository,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: Reads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Retire a repository — a reversible brake that keeps its coordinate claim. Retiring a
     retired repository changes nothing. 404 unknown, 409 for a stale `If-Match`."""
     try:
-        retired = services.config_authoring.retire_repository(record, change_context(identity, door), if_match=if_match)
+        retired = authoring.retire_repository(record, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(retired, services)
+    return _shown(retired, reads)
 
 
 @router.post("/repositories/{repository}/enable", response_model=RepositorySummary)
+@inject_sync
 def enable_repository(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathRepository,
     door: RequestDoor,
-    services: Services,
+    authoring: Authoring,
+    reads: Reads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
     """Re-enable a retired repository; enabling an active one changes nothing. 404 unknown,
     409 for a stale `If-Match`, 422 when its secret has since been retired."""
     try:
-        enabled = services.config_authoring.enable_repository(record, change_context(identity, door), if_match=if_match)
+        enabled = authoring.enable_repository(record, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(enabled, services)
+    return _shown(enabled, reads)

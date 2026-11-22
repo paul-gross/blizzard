@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 
 from blizzard.auth_core import Permission
@@ -21,23 +22,26 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events, problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.chunk_frames import ChunkFrameLoader
 from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.credential_choice import credential_choice
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
-from blizzard.hub.api.forge_warnings import warned
+from blizzard.hub.api.forge_warnings import OldFieldWarnings, Warnings
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject, project_of_call
+from blizzard.hub.api.record_reads import Reads, RecordReads
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
-from blizzard.hub.domain.config.authoring import Authored
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
+from blizzard.hub.domain.config.authoring import Authored, ConfigAuthoring
 from blizzard.hub.domain.config.credential_naming import CREDENTIAL_FIELD
 from blizzard.hub.domain.config.credentials import ConfiguredCredential
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
@@ -45,16 +49,20 @@ from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
+    IReadWorkSourceRepository,
     WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceLocatorTaken,
     WorkSourceSlugTaken,
     is_built_in,
 )
-from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
+from blizzard.hub.domain.graph.authoring import DefaultGraphRetired, DefaultGraphService
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.services import UrgencyReading
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
     WithdrawnWorkItem,
@@ -62,9 +70,11 @@ from blizzard.hub.domain.work_items.editing import (
     WorkItemHeldByLiveChunk,
 )
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.registry import label_from_binding
-from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
+from blizzard.hub.work_sources.source import AuthorView, IWorkSource, IWorkSourceRegistry, resolve_author_view
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
     WorkItemCreateRequest,
@@ -81,25 +91,34 @@ from blizzard.wire.work_source import (
 router = APIRouter(
     prefix="/api", tags=["work-sources"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
+#: The tenant's work-source registry and records, its config writer, its live-holder and runner-name reads, the user
+#: reads, and its chunk frames, each resolved through the request's scope.
+Sources = FromDishka[IWorkSourceRegistry]
+Records = FromDishka[IReadWorkSourceRepository]
+Authoring = FromDishka[ConfigAuthoring]
+Holders = FromDishka[IReadChunkWorkRefsRepository]
+Runners = FromDishka[IReadRunnerRegistry]
+Users = FromDishka[IReadUserRepository]
+Frames = FromDishka[ChunkFrameLoader]
 
 
-def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource, IWorkEditor]:
+def _require_editor(source: str, sources: IWorkSourceRegistry) -> tuple[IWorkSource, IWorkEditor]:
     """The source keyed ``source`` and its editor, or the refusal: 404 for an unknown source,
     409 for a known one with no editor — a structural refusal for every source but
     ``hub``, since no work-source record field could ever opt a configured source into
     editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
     in" the way ``annotate`` is."""
-    source_obj = services.work_sources.get(source)
+    source_obj = sources.get(source)
     if source_obj is None:
         raise ProblemHTTPException(
             partial(problems_admin.work_source_not_found_problem, f"unknown work source {source!r}")
         )
-    editor = services.work_sources.editor(source)
+    editor = sources.editor(source)
     if editor is None:
         raise ProblemHTTPException(
             partial(
                 problems_admin.work_source_no_editor_problem,
-                f"work source {services.work_sources.source_label(source)!r} has no editor",
+                f"work source {sources.source_label(source)!r} has no editor",
             )
         )
     return source_obj, editor
@@ -109,10 +128,10 @@ def _blank(exc: WorkItemFieldBlank) -> ProblemHTTPException:
     return ProblemHTTPException(partial(problems_admin.work_item_field_blank_problem, str(exc)))
 
 
-def _runner_names(services: TenantServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
+def _runner_names(runners: IReadRunnerRegistry, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
     """The registered names of the fleet authors among ``authors`` — one batched registry read,
     none at all when every author is a person."""
-    return services.registry.names_for(author.runner_id for author in authors if author.runner_id is not None)
+    return runners.names_for(author.runner_id for author in authors if author.runner_id is not None)
 
 
 def _view(
@@ -155,7 +174,7 @@ def _summary(
     record: ConfiguredWorkSource,
     forge: ConfiguredForge,
     credential: ConfiguredCredential | None,
-    services: TenantServices,
+    sources: IWorkSourceRegistry,
     names: Mapping[str, str],
 ) -> WorkSourceSummary:
     fields = record.fields
@@ -164,7 +183,7 @@ def _summary(
         slug=record.slug,
         name=record.name,
         annotate=fields.annotate,
-        edit=services.work_sources.editor(record.work_source_id) is not None,
+        edit=sources.editor(record.work_source_id) is not None,
         provider=fields.provider,
         locator=fields.locator,
         forge_id=forge.forge_id,
@@ -182,32 +201,36 @@ def _summary(
     )
 
 
-def _shown(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
+def _shown(record: ConfiguredWorkSource, sources: IWorkSourceRegistry, reads: RecordReads) -> WorkSourceSummary:
     """``record``'s summary, with the forge and credential it names."""
-    forge = services.forge_records.get(record.fields.forge_id)
+    forge = reads.forges.get(record.fields.forge_id)
     assert forge is not None
     credential_id = record.fields.credential_id
-    credential = None if credential_id is None else services.credential_records.get(credential_id)
-    return _summary(record, forge, credential, services, user_names(services, [record.created_by]))
+    credential = None if credential_id is None else reads.credentials.get(credential_id)
+    return _summary(record, forge, credential, sources, user_names(reads.users, [record.created_by]))
 
 
 def _authored(
-    authored: Authored[ConfiguredWorkSource], response: Response, services: TenantServices
+    authored: Authored[ConfiguredWorkSource],
+    response: Response,
+    sources: IWorkSourceRegistry,
+    reads: RecordReads,
+    warnings: OldFieldWarnings,
 ) -> WorkSourceSummary:
     """The written record's summary, carrying a warning for each old field the write resolved."""
-    shown = _shown(authored.record, services)
-    forge = services.forge_records.get(authored.record.fields.forge_id)
+    shown = _shown(authored.record, sources, reads)
+    forge = reads.forges.get(authored.record.fields.forge_id)
     assert forge is not None
-    shown.warnings = warned(response, services, authored.old_fields, record=f"work source {shown.slug}", forge=forge)
+    shown.warnings = warnings.warned(response, authored.old_fields, record=f"work source {shown.slug}", forge=forge)
     return shown
 
 
-def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
+def _built_in_summary(sources: IWorkSourceRegistry) -> WorkSourceSummary:
     return WorkSourceSummary(
         slug=RESERVED_HUB_SOURCE_NAME,
         name=RESERVED_HUB_SOURCE_NAME,
-        annotate=services.work_sources.annotator(RESERVED_HUB_SOURCE_NAME) is not None,
-        edit=services.work_sources.editor(RESERVED_HUB_SOURCE_NAME) is not None,
+        annotate=sources.annotator(RESERVED_HUB_SOURCE_NAME) is not None,
+        edit=sources.editor(RESERVED_HUB_SOURCE_NAME) is not None,
         built_in=True,
     )
 
@@ -227,39 +250,46 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 
 
 @router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_work_sources(services: Services, include_retired: bool = False) -> WorkSourcesListView:
+@inject_sync
+def list_work_sources(
+    sources: Sources, records: Records, reads: Reads, include_retired: bool = False
+) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
     `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
     sources gate their items."""
-    records = services.work_source_records.list_all(include_retired=include_retired)
-    names = user_names(services, (r.created_by for r in records))
-    forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
-    credentials = services.credential_records.get_many(
-        list({r.fields.credential_id for r in records if r.fields.credential_id is not None})
+    stored = records.list_all(include_retired=include_retired)
+    names = user_names(reads.users, (r.created_by for r in stored))
+    forges = reads.forges.get_many(list({r.fields.forge_id for r in stored}))
+    credentials = reads.credentials.get_many(
+        list({r.fields.credential_id for r in stored if r.fields.credential_id is not None})
     )
     return WorkSourcesListView(
         sources=[
-            _built_in_summary(services),
+            _built_in_summary(sources),
             *(
                 _summary(
                     r,
                     forges[r.fields.forge_id],
                     None if r.fields.credential_id is None else credentials.get(r.fields.credential_id),
-                    services,
+                    sources,
                     names,
                 )
-                for r in records
+                for r in stored
             ),
         ]
     )
 
 
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
+@inject_sync
 def create_work_source(
     request: WorkSourceCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    services: Services,
+    sources: Sources,
+    authoring: Authoring,
+    reads: Reads,
+    warnings: Warnings,
     response: Response,
 ) -> WorkSourceSummary:
     """Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. 422
@@ -279,39 +309,44 @@ def create_work_source(
         provider=request.provider, locator=request.locator, annotate=request.annotate, secret=request.secret
     )
     try:
-        authored = services.config_authoring.create_work_source_naming(
+        authored = authoring.create_work_source_naming(
             request.slug,
             request.name,
             draft,
-            forge_choice(request, services),
+            forge_choice(request, reads.forges),
             change_context(identity, door),
-            credential=credential_choice(request, services),
+            credential=credential_choice(request, reads.credentials),
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
         raise _conflict(exc) from exc
-    return _authored(authored, response, services)
+    return _authored(authored, response, sources, reads, warnings)
 
 
 @router.get(
     "/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_work_source(source: str, services: Services) -> WorkSourceSummary:
+@inject_sync
+def get_work_source(source: str, sources: Sources, records: Records, reads: Reads) -> WorkSourceSummary:
     """One work source by id or slug — a slug it left included — retired or not; the built-in `hub` shows as
     `built_in`. 404 on an unknown source."""
     if is_built_in(source):
-        return _built_in_summary(services)
-    return _shown(resolved_work_source(source, services), services)
+        return _built_in_summary(sources)
+    return _shown(resolved_work_source(source, records), sources, reads)
 
 
 @router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
+@inject_sync
 def patch_work_source(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathWorkSource,
     request: WorkSourcePatchRequest,
     door: RequestDoor,
-    services: Services,
+    sources: Sources,
+    authoring: Authoring,
+    reads: Reads,
+    warnings: Warnings,
     response: Response,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
@@ -329,59 +364,61 @@ def patch_work_source(
         **{name: getattr(request, name) for name in present if name not in (FORGE_FIELD, CREDENTIAL_FIELD)}
     )
     try:
-        authored = services.config_authoring.edit_work_source_naming(
+        authored = authoring.edit_work_source_naming(
             record,
             edit,
-            forge_choice(request, services),
+            forge_choice(request, reads.forges),
             change_context(identity, door),
             if_match=if_match,
-            credential=credential_choice(request, services),
+            credential=credential_choice(request, reads.credentials),
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:
         raise _conflict(exc) from exc
-    return _authored(authored, response, services)
+    return _authored(authored, response, sources, reads, warnings)
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
+@inject_sync
 def retire_work_source(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathWorkSource,
     door: RequestDoor,
-    services: Services,
+    sources: Sources,
+    authoring: Authoring,
+    reads: Reads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Retire a work source — a reversible brake that keeps its locator claim. Retiring a
     retired source changes nothing. 404 unknown, 409 for `hub` or a stale `If-Match`."""
     try:
-        retired = services.config_authoring.retire_work_source(
-            record, change_context(identity, door), if_match=if_match
-        )
+        retired = authoring.retire_work_source(record, change_context(identity, door), if_match=if_match)
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(retired, services)
+    return _shown(retired, sources, reads)
 
 
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
+@inject_sync
 def enable_work_source(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathWorkSource,
     door: RequestDoor,
-    services: Services,
+    sources: Sources,
+    authoring: Authoring,
+    reads: Reads,
     if_match: Annotated[int | None, Header()] = None,
 ) -> WorkSourceSummary:
     """Re-enable a retired work source; enabling an active one changes nothing. 404 unknown,
     409 for `hub` or a stale `If-Match`, 422 when its secret has since been retired."""
     try:
-        enabled = services.config_authoring.enable_work_source(
-            record, change_context(identity, door), if_match=if_match
-        )
+        enabled = authoring.enable_work_source(record, change_context(identity, door), if_match=if_match)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(enabled, services)
+    return _shown(enabled, sources, reads)
 
 
 @router.get(
@@ -389,23 +426,27 @@ def enable_work_source(
     response_model=WorkItemsListView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
+@inject_sync
 def list_work_items(
     source: PathSourceKey,
-    services: Services,
+    sources: Sources,
+    holders: Holders,
+    runners: Runners,
+    users: Users,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> WorkItemsListView:
     """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 from the source's editor gate."""
-    source_obj, editor = _require_editor(source, services)
+    source_obj, editor = _require_editor(source, sources)
     items = editor.list(limit=limit)
-    holders = services.chunks.work_refs.live_holders(WorkRef(source=item.source, ref=item.ref) for item in items)
+    held = holders.live_holders(WorkRef(source=item.source, ref=item.ref) for item in items)
     user_ids = {
         item.author.user_id
         for item in items
         if item.author.kind is WorkItemAuthorKind.USER and item.author.user_id is not None
     }
-    users_by_id = services.users.get_many(list(user_ids))
-    runner_names = _runner_names(services, (item.author for item in items))
-    slug = services.work_sources.source_label(source) if items else source
+    users_by_id = users.get_many(list(user_ids))
+    runner_names = _runner_names(runners, (item.author for item in items))
+    slug = sources.source_label(source) if items else source
     return WorkItemsListView(
         items=[
             _view(
@@ -413,7 +454,7 @@ def list_work_items(
                 source_obj,
                 resolve_author_view(item.author, users_by_id),
                 slug=slug,
-                live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
+                live_holder=held.get(WorkRef(source=item.source, ref=item.ref)),
                 runner_names=runner_names,
                 label=label_from_binding(WorkRef(source=item.source, ref=item.ref), source_obj, lambda: slug),
             )
@@ -427,29 +468,37 @@ def list_work_items(
     response_model=WorkItemCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@inject_sync
 def create_work_item(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
     source: PathSourceKey,
     request: WorkItemCreateRequest,
-    services: Services,
+    sources: Sources,
+    urgencies: FromDishka[UrgencyReading],
+    projects: FromDishka[IReadProjectRepository],
+    default_graph: FromDishka[DefaultGraphService],
+    frames: Frames,
+    events: FromDishka[EventBroker],
+    runners: Runners,
+    users: Users,
     project: QueryProject = None,
 ) -> object:
     """Allocate an open item at SOURCE and mint its resting ``not_ready`` chunk in one transaction, in the project
     ``?project=`` names or the tenant's only one. 404/409 from the editor gate; 422 for a blank title or body,
     ``urgency_unknown``/``urgency_retired``, an unknown project, or ``project_required``; 409 if an out-of-band
     ingest holds the allocated pointer; 503 if every default-named graph is retired (mirroring ``POST /chunks``)."""
-    source_obj, editor = _require_editor(source, services)
+    source_obj, editor = _require_editor(source, sources)
     # Validated before graph resolution, so a blank title/body rejects the whole request
     # without the store consulted — the ordering POST /chunks holds for its own guard too.
     try:
         text = WorkItemText.of(title=request.title, body=request.body)
     except WorkItemFieldBlank as exc:
         raise _blank(exc) from exc
-    urgency = stated_urgency(request.urgency, services)
-    project_id = project if project is not None else project_of_call(services.projects).project_id
+    urgency = stated_urgency(request.urgency, urgencies)
+    project_id = project if project is not None else project_of_call(projects).project_id
     try:
-        graph = services.default_graph.ensure_default(
-            services.default_graph_doc, definition_yaml=services.default_graph_yaml
+        graph = default_graph.ensure_default(
+            PACKAGED.default.doc, definition_yaml=PACKAGED.default.inlined_yaml(YAML_CODEC)
         )
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_admin.default_graph_retired_problem, str(exc))) from exc
@@ -466,22 +515,22 @@ def create_work_item(
     except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
         raise urgency_refusal(exc) from exc
     except IngestConflict as exc:
-        raise ingest_conflict_refusal(services, exc) from exc
+        raise ingest_conflict_refusal(sources, exc) from exc
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
-    chunk_events.ChunkChanged.of(services.chunk_frames, created.chunk_id, prev_status=None).publish(
+    chunk_events.ChunkChanged.of(frames, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
-    services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
+    events.publish_queue_changed()  # mint adds the chunk to the backlog list
     # The freshly minted resting chunk is always its own live holder — no read needed.
     return WorkItemCreateResponse(
         **_view(
             created.item,
             source_obj,
-            resolve_author_view(created.item.author, services.users),
-            slug=services.work_sources.source_label(source),
+            resolve_author_view(created.item.author, users),
+            slug=sources.source_label(source),
             live_holder=created.chunk_id,
-            runner_names=_runner_names(services, [created.item.author]),
-            label=services.work_sources.label(WorkRef(source=created.item.source, ref=created.item.ref)),
+            runner_names=_runner_names(runners, [created.item.author]),
+            label=sources.label(WorkRef(source=created.item.source, ref=created.item.ref)),
         ).model_dump(),
         chunk_id=created.chunk_id,
     )
@@ -492,10 +541,13 @@ def create_work_item(
     response_model=WorkItemView,
     dependencies=[Depends(require(Permission.FLEET_VIEW))],
 )
-def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkItemView:
+@inject_sync
+def get_work_item(
+    source: PathSourceKey, ref: str, sources: Sources, holders: Holders, runners: Runners, users: Users
+) -> WorkItemView:
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
     unallocated ref, or a known source with no editor answered as 409."""
-    source_obj, editor = _require_editor(source, services)
+    source_obj, editor = _require_editor(source, sources)
     pointer = WorkRef(source=source, ref=ref)
     try:
         item = editor.get(pointer)
@@ -504,11 +556,11 @@ def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkIt
     return _view(
         item,
         source_obj,
-        resolve_author_view(item.author, services.users),
-        slug=services.work_sources.source_label(source),
-        live_holder=services.chunks.work_refs.find_live_holder(pointer),
-        runner_names=_runner_names(services, [item.author]),
-        label=services.work_sources.label(pointer),
+        resolve_author_view(item.author, users),
+        slug=sources.source_label(source),
+        live_holder=holders.find_live_holder(pointer),
+        runner_names=_runner_names(runners, [item.author]),
+        label=sources.label(pointer),
     )
 
 
@@ -517,16 +569,20 @@ def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkIt
     response_model=WorkItemView,
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
+@inject_sync
 def patch_work_item(
     source: PathSourceKey,
     ref: str,
     request: WorkItemPatchRequest,
-    services: Services,
+    sources: Sources,
+    holders: Holders,
+    runners: Runners,
+    users: Users,
 ) -> WorkItemView:
     """Replace the given fields in place, all-or-nothing. 404 for an unknown source or
     an unallocated ref; 409 for a known source with no editor or an item that
     already carries a closure; 422 for a blank title or body."""
-    source_obj, editor = _require_editor(source, services)
+    source_obj, editor = _require_editor(source, sources)
     pointer = WorkRef(source=source, ref=ref)
     # Sentinel-tagged rather than merged here: filling an omitted field at the edge needs a
     # second, unguarded read of the pointer, which races a concurrent withdrawal.
@@ -547,11 +603,11 @@ def patch_work_item(
     return _view(
         updated,
         source_obj,
-        resolve_author_view(updated.author, services.users),
-        slug=services.work_sources.source_label(source),
-        live_holder=services.chunks.work_refs.find_live_holder(pointer),
-        runner_names=_runner_names(services, [updated.author]),
-        label=services.work_sources.label(pointer),
+        resolve_author_view(updated.author, users),
+        slug=sources.source_label(source),
+        live_holder=holders.find_live_holder(pointer),
+        runner_names=_runner_names(runners, [updated.author]),
+        label=sources.label(pointer),
     )
 
 
@@ -559,18 +615,24 @@ def patch_work_item(
     "/work-sources/{source}/items/{ref}",
     response_model=WorkItemView,
 )
+@inject_sync
 def withdraw_work_item(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
     source: PathSourceKey,
     ref: str,
-    services: Services,
+    sources: Sources,
+    holders: Holders,
+    runners: Runners,
+    users: Users,
+    frames: Frames,
+    events: FromDishka[EventBroker],
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
     or a chunk a race deletes between resolving it and this write; 409 for a known
     source with no editor, an item already closed, or one an *acquired* live chunk
     holds — an unacquired holder deletes instead unless it is now a standing
     prerequisite for another chunk, also 409."""
-    source_obj, editor = _require_editor(source, services)
+    source_obj, editor = _require_editor(source, sources)
     pointer = WorkRef(source=source, ref=ref)
     try:
         withdrawn = editor.withdraw(pointer, by=identity.user_id)
@@ -579,7 +641,7 @@ def withdraw_work_item(
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except WithdrawalLostToClosure as exc:
-        _publish_holder_deletion(services, exc.deletion, by=identity.user_id)
+        _publish_holder_deletion(frames, events, exc.deletion, by=identity.user_id)
         raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
     except WorkItemNotEditable as exc:
         raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
@@ -587,30 +649,32 @@ def withdraw_work_item(
         raise ProblemHTTPException(partial(problems_admin.work_item_held_by_live_chunk_problem, str(exc))) from exc
     except WorkItemHeldByDependents as exc:
         raise ProblemHTTPException(partial(problems_admin.work_item_held_by_dependents_problem, str(exc))) from exc
-    _publish_holder_deletion(services, withdrawn, by=identity.user_id)
-    holder = services.chunks.work_refs.find_live_holder(pointer)
+    _publish_holder_deletion(frames, events, withdrawn, by=identity.user_id)
+    holder = holders.find_live_holder(pointer)
     return _view(
         withdrawn.item,
         source_obj,
-        resolve_author_view(withdrawn.item.author, services.users),
-        slug=services.work_sources.source_label(source),
+        resolve_author_view(withdrawn.item.author, users),
+        slug=sources.source_label(source),
         live_holder=holder,
-        runner_names=_runner_names(services, [withdrawn.item.author]),
-        label=services.work_sources.label(pointer),
+        runner_names=_runner_names(runners, [withdrawn.item.author]),
+        label=sources.label(pointer),
     )
 
 
-def _publish_holder_deletion(services: TenantServices, withdrawn: WithdrawnWorkItem, *, by: str) -> None:
+def _publish_holder_deletion(
+    frames: ChunkFrameLoader, events: EventBroker, withdrawn: WithdrawnWorkItem, *, by: str
+) -> None:
     """Publish the cascade-deleted holder's frames, if the withdrawal deleted one — whether
     the withdrawal then stood or was refused, the deletion has committed."""
     if withdrawn.deleted_chunk_id is None:
         return
     chunk_events.ChunkChanged.of(
-        services.chunk_frames, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
+        frames, withdrawn.deleted_chunk_id, prev_status=withdrawn.deleted_chunk_status
     ).publish(
         cause="deleted",
         key=f"chunk_deleted:{withdrawn.deleted_chunk_fact_id}",
         by=by,
         status=withdrawn.deleted_chunk_status,
     )
-    services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
+    events.publish_queue_changed()  # a deleted chunk is never offered for claim again

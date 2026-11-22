@@ -9,17 +9,23 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
 from blizzard.hub.api import problems_admin
-from blizzard.hub.api.deps import Services
+from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.domain.config.repositories import ConfiguredRepository
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
 
 
-def path_repository(repository: str, services: Services) -> ConfiguredRepository:
+@inject_sync
+def path_repository(
+    repository: str,
+    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    repositories: FromDishka[IReadRepositoryRecordRepository],
+) -> ConfiguredRepository:
     """The repository the ``{repository}`` path segment names, by id, slug or former slug; ``404`` when none."""
-    found = services.repository_records.resolve(repository)
+    found = repositories.resolve(repository)
     if found is None:
         raise ProblemHTTPException(
             partial(problems_admin.repository_not_found_problem, f"unknown repository {repository!r}")

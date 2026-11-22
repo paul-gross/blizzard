@@ -155,10 +155,15 @@ def _register_config(registry: LegacyRegistry) -> None:
 
 
 def _inputs(
-    config: HubConfig | None, platform_tracing: IPlatformTracing | None, environ: Mapping[str, str] | None
+    config: HubConfig | None,
+    platform_tracing: IPlatformTracing | None,
+    environ: Mapping[str, str] | None,
+    actions: HubActions | None = None,
 ) -> list[ScopeValue[Any]]:
     """The scope values of the process inputs supplied; a graph opened without one serves nothing that reads it."""
     values: list[ScopeValue[Any]] = []
+    if actions is not None:
+        values.append(supply(port(HubActions), actions))
     if config is not None:
         values.append(supply(port(HubConfig), config))
     if platform_tracing is not None:
@@ -192,9 +197,8 @@ def build_store_backed(
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
         supply(port(IClock), clock),
-        supply(port(HubActions), actions),
         *_packaged(graphs, system_artifacts),
-        *_inputs(config, platform_tracing, environ),
+        *_inputs(config, platform_tracing, environ, actions),
     ]
     if settings is not None:
         values.append(supply(port(HubSettingsGraph), settings))
