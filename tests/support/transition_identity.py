@@ -8,7 +8,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from blizzard.hub.composition import TenantServices, TenantStores
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
@@ -31,6 +32,8 @@ from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProp
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -155,3 +158,16 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
             if tenant.get(each) is not owned
         )
     return problems
+
+
+def process_identity_violations(core: HubCore, services: HubServices) -> list[str]:
+    """Each retained hub-level field that is not the process container's instance."""
+    process = core.process.resolver
+    retained: tuple[tuple[str, object, type[Any]], ...] = (
+        ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
+        ("HubCore.hub_events", core.hub_events, HubEventLogStore),
+        ("HubCore.auth_errors", core.auth_errors, RepoErrorFactory),
+        ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
+        ("HubServices.hub_events", services.hub_events, HubEventLogStore),
+    )
+    return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]

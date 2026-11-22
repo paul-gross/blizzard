@@ -17,6 +17,7 @@ ignores:
   # The composition roots build the seam and hand it to its holders.
   - src/blizzard/hub/composition.py
   - src/blizzard/hub/process_root.py
+  - src/blizzard/hub/store/wiring.py
   # The aggregate and its member-group modules, each named hub_scoped_<kind>.
   - src/blizzard/hub/store/internal/hub_scoped_*.py
   - src/blizzard/hub/auth/**

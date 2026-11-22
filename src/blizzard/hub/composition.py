@@ -50,6 +50,7 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hub_admins import HubAdministrators
 from blizzard.hub.auth.identities import IReadIdentityRepository
+from blizzard.hub.auth.identity_transaction import IIdentityTransactions
 from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
@@ -284,7 +285,7 @@ from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
-from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
@@ -312,7 +313,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.tenant_guard import install_tenant_guard
-from blizzard.hub.store.transactions import HubTransactions, tenant_transactions
+from blizzard.hub.store.transactions import ClosedTenantUnits, HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -1050,9 +1051,14 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
-def hub_scoped_reads_leaf(connections: HubStoreConnections) -> HubScopedReads:
-    """The hub-scoped reads, a legacy leaf the hub identity area owns until it adopts them."""
-    return build_hub_scoped_reads(connections)
+def repo_errors_leaf() -> RepoErrorFactory:
+    """The identity adapters' one error factory, a legacy leaf the hub identity area owns until it adopts it."""
+    return RepoErrorFactory(get_logger("blizzard.hub.auth"))
+
+
+def identity_transactions_leaf(connections: HubStoreConnections, errors: RepoErrorFactory) -> IdentityTransactions:
+    """The identity unit-of-work opener, a legacy leaf the hub identity area owns until it adopts it."""
+    return IdentityTransactions(connections, errors, connections.errors)
 
 
 def open_tenants_leaf(reads: HubScopedReads) -> OpenTenants:
@@ -1069,10 +1075,14 @@ def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
     answer to until their areas adopt them."""
-    registry.leaf(hub_scoped_reads_leaf, lifetime=Lifetime.PROCESS)
     registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
     memberships = registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IReadMembershipRepository), memberships)
+    registry.leaf(repo_errors_leaf, lifetime=Lifetime.PROCESS)
+    identity = registry.leaf(identity_transactions_leaf, lifetime=Lifetime.PROCESS)
+    registry.alias(port(IIdentityTransactions), identity)
+    hub_events = store_wiring.register_process(registry)
+    registry.alias(port(IReadHubEventLog), hub_events)
     transactions, projects, project_links = store_wiring.register_tenant(registry)
     registry.alias(port(IHubTransactions), transactions)
     registry.alias(port(IReadProjectRepository), projects)
@@ -1081,8 +1091,17 @@ def register_legacy(registry: LegacyRegistry) -> None:
 
 def register_legacy_absent(registry: LegacyRegistry) -> None:
     """Declare each of the legacy bridge's leaves and transitional ports absent, for the store-free graph."""
-    for missing in (HubScopedReads, OpenTenants, MembershipRepository, IReadMembershipRepository):
+    for missing in (
+        OpenTenants,
+        MembershipRepository,
+        IReadMembershipRepository,
+        RepoErrorFactory,
+        IdentityTransactions,
+        IIdentityTransactions,
+        IReadHubEventLog,
+    ):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    store_wiring.register_process_absent(registry)
     store_wiring.register_tenant_absent(registry)
     for missing in (IHubTransactions, IReadProjectRepository, IReadProjectLinks):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
@@ -1094,9 +1113,10 @@ def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> 
 
     process = open_store_backed(store_connections, clock=clock)
     store_errors = store_connections.errors
-    hub_scoped_reads = process.resolver.get(HubScopedReads)
-    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    hub_events = HubEventLogStore(store_connections)
+    resolver = process.resolver
+    hub_scoped_reads = resolver.get(HubScopedReads)
+    auth_errors = resolver.get(RepoErrorFactory)
+    hub_events = resolver.get(HubEventLogStore)
 
     def build(scope: StoreScope) -> TenantStores:
         # The tenant's container scope opens with its legacy entry, whose adopted values and leaves are read from it, so
@@ -1160,7 +1180,6 @@ class TenantServiceParts:
     tenant, so no adapter or client is built twice."""
 
     clock: IClock
-    hub_scoped_reads: HubScopedReads
     users: IReadUserRepository
     secret_cipher: ISecretCipher
     graph_yaml: IConfigCodec
@@ -1872,7 +1891,6 @@ def build_services(
 
     parts = TenantServiceParts(
         clock=clock,
-        hub_scoped_reads=core.hub_scoped_reads,
         users=core.users,
         secret_cipher=secret_cipher(secret_keys),
         graph_yaml=YAML_CODEC,
@@ -1978,7 +1996,7 @@ def build_services(
         if egress_config.directory is not None
         else None
     )
-    egress_store = EgressStore(store_connections, hub_events=hub_events, usage=core.hub_scoped_reads.corpus)
+    egress_store = core.process.resolver.get(EgressStore)
     egress_event_reads = core.hub_scoped_reads.corpus
     egress_unavailable = egress_writer if isinstance(egress_writer, EgressUnavailable) else None
     # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
@@ -2049,7 +2067,7 @@ def build_services(
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     memberships = core.process.resolver.get(MembershipRepository)
     hub_admin_store = HubAdminRepository(store_connections)
-    identity_transactions = IdentityTransactions(store_connections, auth_errors, core.store_errors)
+    identity_transactions = core.process.resolver.get(IdentityTransactions)
     auth = AuthService(
         users=user_store,
         identities=identity_store,
@@ -2075,12 +2093,9 @@ def build_services(
         hub_admins=hub_admin_store, users=user_store, transactions=identity_transactions, clock=clock
     )
 
-    def tenant_unit(tenant: TenantId) -> HubTransactions:
-        # The tenant's ordinary unit of work, opened by the domain for a rename or a close.
-        return tenant_transactions(store_connections.scoped(StoreScope(tenant)))
-
+    tenant_unit = core.process.resolver.get(ClosedTenantUnits)
     tenant_admin = TenantAdministration(
-        tenants=TenantAdministrationStore(store_connections, identity_transactions),
+        tenants=core.process.resolver.get(TenantAdministrationStore),
         units=tenant_unit,
         mint_packaged=packaged_minter(clock, YAML_CODEC, actions.catalogue),
         changed=open_tenants.refresh,
@@ -2096,7 +2111,7 @@ def build_services(
         core.tenants.evict(tenant)
         open_tenants.refresh()
 
-    teardown_store = TenantTeardownStore(store_connections)
+    teardown_store = core.process.resolver.get(TenantTeardownStore)
     tenant_teardown = TenantTeardown(
         teardowns=teardown_store,
         units=tenant_unit,

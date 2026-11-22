@@ -15,8 +15,10 @@ from blizzard.hub.domain.kernel.transactions import (
     Transaction,
     TransactionMisuse,
 )
+from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.locking import lock_chunk_row, lock_hub, lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 
 class _Unit:
@@ -151,3 +153,14 @@ def tenant_transactions(connections: ScopedConnections) -> HubTransactions:
     """A tenant's ordinary unit-of-work opener over ``connections`` — the opener a closing or closed tenant, which has
     no container scope, is served by."""
     return HubTransactions(connections)
+
+
+class ClosedTenantUnits:
+    """Opens a tenant's ordinary unit of work for a tenant with no container scope — one closing or closed, which the
+    domain renames or tears down — over the hub's borrowed connections."""
+
+    def __init__(self, connections: HubStoreConnections) -> None:
+        self._connections = connections
+
+    def __call__(self, tenant: TenantId) -> HubTransactions:
+        return tenant_transactions(self._connections.scoped(StoreScope(tenant)))

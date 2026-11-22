@@ -14,7 +14,9 @@ from __future__ import annotations
 from typing import Any
 
 from blizzard.foundation.registry.interface import Lifetime, Ref, Registry, port
+from blizzard.hub.auth.invitations import IInvitationTokenReads
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.observability.egress.repository import IReadUsageCorpus
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -27,6 +29,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.credential_record_store import CredentialRecordStore
 from blizzard.hub.store.internal.credential_referrers import CredentialReferrersStore
+from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
@@ -42,6 +45,8 @@ from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
@@ -55,7 +60,9 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
@@ -63,7 +70,7 @@ from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, Urgency
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.store.transactions import ClosedTenantUnits, HubTransactions
 from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope
 
 #: Every other tenant adapter built as a service over the tenant's connections (one also takes the link port).
@@ -143,6 +150,52 @@ def register_tenant_absent(registry: Registry) -> None:
     """Declare every tenant adapter absent, for the store-free graph."""
     for missing in (*_TENANT_FACTORY_KEYS, *_TENANT_SERVICES, *_TENANT_ALIASED):
         registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
+#: The adapters built once per hub, as services over the borrowed connections.
+_PROCESS_SERVICES: tuple[type[Any], ...] = (
+    TenantAdministrationStore,
+    TenantTeardownStore,
+    EgressStore,
+    ClosedTenantUnits,
+)
+
+#: Every process key registered, for the store-free graph to declare absent.
+_PROCESS_KEYS: tuple[type[Any], ...] = (
+    HubScopedReads,
+    IReadUsageCorpus,
+    IInvitationTokenReads,
+    HubEventLogStore,
+    *_PROCESS_SERVICES,
+)
+
+
+def usage_corpus(reads: HubScopedReads) -> IReadUsageCorpus:
+    """The hub-scoped reads' usage corpus, as its port."""
+    return reads.corpus
+
+
+def invitation_token_reads(reads: HubScopedReads) -> IInvitationTokenReads:
+    """The hub-scoped reads' invitation-token reads, as their port."""
+    return reads.invitations
+
+
+def register_process(registry: Registry) -> Ref[HubEventLogStore]:
+    """Declare every hub-level adapter once per process, handing back the hub event log's ``Ref``, which the legacy
+    bridge's ``IReadHubEventLog`` aliases."""
+    registry.factory(build_hub_scoped_reads, lifetime=Lifetime.PROCESS)
+    registry.factory(usage_corpus, lifetime=Lifetime.PROCESS)
+    registry.factory(invitation_token_reads, lifetime=Lifetime.PROCESS)
+    hub_events = registry.service(HubEventLogStore, lifetime=Lifetime.PROCESS)
+    for each in _PROCESS_SERVICES:
+        registry.service(each, lifetime=Lifetime.PROCESS)
+    return hub_events
+
+
+def register_process_absent(registry: Registry) -> None:
+    """Declare every hub-level adapter absent, for the store-free graph."""
+    for missing in _PROCESS_KEYS:
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
 
 
 def register_findings(registry: Registry) -> Ref[FindingStore]:

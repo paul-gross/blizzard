@@ -8,13 +8,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from blizzard.foundation.registry.internal.recording import Kind, RecordingRegistry
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
 from blizzard.hub.open_tenants import OpenTenants
-from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads
 
 #: Each legacy key the hub registry declares, and the area that owns it until it adopts it.
 LEGACY_INVENTORY: Mapping[type, str] = {
-    HubScopedReads: "hub identity",
+    RepoErrorFactory: "hub identity",
+    IdentityTransactions: "hub identity",
     OpenTenants: "hub identity",
     MembershipRepository: "hub identity",
 }
