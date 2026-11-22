@@ -16,7 +16,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import TenantRequest, require, require_hub, resolve_tenant, tenant_bound
+from blizzard.hub.api.auth_session import AdmittedTenant, require, require_hub, resolve_tenant, tenant_bound
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
@@ -62,7 +62,7 @@ def _in_progress() -> JSONResponse:
     },
 )
 def run_tenant_pass(
-    name: str, tenant: Annotated[TenantRequest, Depends(resolve_tenant)], hub: Hub
+    name: str, tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)], hub: Hub
 ) -> SweepPassResponse | JSONResponse:
     """One pass of ``forge_status``, ``event_derivation``, ``close_drain`` or ``cadence`` over the request's tenant
     alone: ``failed`` with the fault its tenant met."""

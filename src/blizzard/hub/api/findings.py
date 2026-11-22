@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.auth_core import Permission
@@ -21,25 +22,26 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.garden.findings.model import (
     AbsorberNotLive,
     DuplicateFindingError,
     Finding,
+    FindingExitService,
     FindingFact,
     FindingNoteRequiredError,
     FindingSupersedesItself,
     FindingTransitionRefused,
     FindingWriteContended,
+    IReadFindingRepository,
     finding_exit,
 )
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.wire.finding import (
     FindingDetailView,
     FindingExitRequest,
@@ -51,6 +53,10 @@ from blizzard.wire.finding import (
 
 _GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
 router = APIRouter(prefix="/api", tags=["findings"], dependencies=_GUARDS)
+#: The tenant's finding reads, its exit verbs and its project reads, each resolved through the request's scope.
+Findings = FromDishka[IReadFindingRepository]
+Exits = FromDishka[FindingExitService]
+Projects = FromDishka[IReadProjectRepository]
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["findings"], dependencies=_GUARDS)
 
 
@@ -100,9 +106,9 @@ def _fact_view(fact: FindingFact) -> FindingFactView:
     )
 
 
-def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Finding]:
+def _load_or_404(finding_ids: list[str], findings_repo: IReadFindingRepository) -> list[Finding]:
     """`finding_ids`, in order — one batched read (`get_many`), not one query per id."""
-    by_id = services.findings.get_many(finding_ids)
+    by_id = findings_repo.get_many(finding_ids)
     findings: list[Finding] = []
     for finding_id in finding_ids:
         finding = by_id.get(finding_id)
@@ -114,12 +120,14 @@ def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Findi
     return findings
 
 
-def _reread(findings: list[Finding], services: TenantServices) -> list[FindingView]:
+def _reread(
+    findings: list[Finding], findings_repo: IReadFindingRepository, projects: IReadProjectRepository
+) -> list[FindingView]:
     """Every named finding, re-read post-write, so the response carries the fresh state
     and note an exit verb just recorded rather than the stale pre-call snapshot — one
     batched read (`get_many`), not one query per finding."""
-    by_id = services.findings.get_many([f.finding_id for f in findings])
-    labels = ProjectLabels.read(services, (f.project_id for f in findings))
+    by_id = findings_repo.get_many([f.finding_id for f in findings])
+    labels = ProjectLabels.read(projects, (f.project_id for f in findings))
     views: list[FindingView] = []
     for f in findings:
         fresh = by_id.get(f.finding_id)
@@ -129,7 +137,8 @@ def _reread(findings: list[Finding], services: TenantServices) -> list[FindingVi
 
 
 def _page(
-    services: TenantServices,
+    findings: IReadFindingRepository,
+    projects: IReadProjectRepository,
     project_id: str | None,
     *,
     routine: str | None,
@@ -143,7 +152,7 @@ def _page(
     limit: int,
 ) -> FindingsPageView:
     try:
-        page = services.findings.list_page(
+        page = findings.list_page(
             project_id=project_id,
             routine_name=routine,
             scope_slug=scope,
@@ -157,15 +166,17 @@ def _page(
         )
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
-    labels = ProjectLabels.read(services, (f.project_id for f in page.findings))
+    labels = ProjectLabels.read(projects, (f.project_id for f in page.findings))
     return FindingsPageView(
         findings=[finding_view(f, labels.fields(f.project_id)) for f in page.findings], next_cursor=page.next_cursor
     )
 
 
 @router.get("/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_findings(
-    services: Services,
+    findings: Findings,
+    projects: Projects,
     project: QueryProject,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
@@ -183,9 +194,10 @@ def list_findings(
     absent routine, scope and project read the whole tenant."""
     project_id: str | None = project
     if project_id is None and (routine is not None or scope is not None):
-        project_id = project_of_call(services).project_id
+        project_id = project_of_call(projects).project_id
     return _page(
-        services,
+        findings,
+        projects,
         project_id,
         routine=routine,
         scope=scope,
@@ -202,8 +214,10 @@ def list_findings(
 @project_router.get(
     "/findings", response_model=FindingsPageView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
+@inject_sync
 def list_project_findings(
-    services: Services,
+    findings: Findings,
+    projects: Projects,
     project: PathProject,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
@@ -218,7 +232,8 @@ def list_project_findings(
     """The project's findings bucket, bounded and keyset-paginated, narrowed as `GET /api/findings` narrows by
     `routine`, `scope`, `source`, `class`, `state`, `descending` and `include_gone`; 404 on an unknown project."""
     return _page(
-        services,
+        findings,
+        projects,
         project.project_id,
         routine=routine,
         scope=scope,
@@ -232,14 +247,18 @@ def list_project_findings(
     )
 
 
-def _classes(services: TenantServices, project_id: str | None, routine: str | None, scope: str | None) -> list[str]:
+def _classes(
+    findings: IReadFindingRepository, project_id: str | None, routine: str | None, scope: str | None
+) -> list[str]:
     # The list page's ids cannot bound class options: an unloaded page may introduce a new class.
-    return services.findings.distinct_classes(project_id=project_id, routine_name=routine, scope_slug=scope)
+    return findings.distinct_classes(project_id=project_id, routine_name=routine, scope_slug=scope)
 
 
 @router.get("/findings/classes", response_model=list[str], dependencies=[Depends(require(Permission.FLEET_VIEW))])
+@inject_sync
 def list_finding_classes(
-    services: Services,
+    findings: Findings,
+    projects: Projects,
     project: QueryProject,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
@@ -247,34 +266,36 @@ def list_finding_classes(
     """Distinct class labels for the entire routine/scope bucket, independent of list filters."""
     project_id: str | None = project
     if project_id is None and (routine is not None or scope is not None):
-        project_id = project_of_call(services).project_id
-    return _classes(services, project_id, routine, scope)
+        project_id = project_of_call(projects).project_id
+    return _classes(findings, project_id, routine, scope)
 
 
 @project_router.get(
     "/findings/classes", response_model=list[str], dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
+@inject_sync
 def list_project_finding_classes(
-    services: Services,
+    findings: Findings,
     project: PathProject,
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
 ) -> list[str]:
     """Distinct class labels in this project's routine/scope bucket."""
-    return _classes(services, project.project_id, routine, scope)
+    return _classes(findings, project.project_id, routine, scope)
 
 
 @router.get(
     "/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
-def get_finding(finding_id: str, services: Services) -> FindingDetailView:
+@inject_sync
+def get_finding(finding_id: str, findings: Findings, projects: Projects) -> FindingDetailView:
     """One finding's whole record, plus its whole fact chain oldest-first;
     404 on an unknown id."""
-    result = services.findings.get_with_facts(finding_id)
+    result = findings.get_with_facts(finding_id)
     if result is None:
         raise ProblemHTTPException(partial(problems_chunks.finding_not_found_problem, f"unknown finding {finding_id}"))
     finding, facts = result
-    labels = ProjectLabels.read(services, [finding.project_id]).fields(finding.project_id)
+    labels = ProjectLabels.read(projects, [finding.project_id]).fields(finding.project_id)
     return FindingDetailView.model_validate(
         {**_finding_view_fields(finding, labels), "facts": [_fact_view(f) for f in facts]}
     )
@@ -282,16 +303,17 @@ def get_finding(finding_id: str, services: Services) -> FindingDetailView:
 
 def _exit_verb(
     request: FindingExitRequest,
-    services: TenantServices,
+    exits: FindingExitService,
+    projects: IReadProjectRepository,
     identity: ResolvedIdentity,
     verb: Callable[..., None],
 ) -> list[FindingView]:
     """The shape every single-note exit verb shares: load or 404, apply `verb`, map the
     model's refusal, re-read. `supersede` also loads its absorber and stays apart."""
-    findings = _load_or_404(request.finding_ids, services)
+    findings = _load_or_404(request.finding_ids, exits.repo)
     with _refusals_mapped():
         verb(findings, note=request.note, actor=identity.user_id)
-    return _reread(findings, services)
+    return _reread(findings, exits.repo, projects)
 
 
 @contextmanager
@@ -316,57 +338,67 @@ def _refusals_mapped() -> Generator[None, None, None]:
 
 
 @router.post("/findings/resolve", response_model=list[FindingView])
+@inject_sync
 def resolve_findings(
     request: FindingExitRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Resolve every finding in `finding_ids`, recording NOTE: the work that answers a
     finding landed. 404 for an unknown id, 409 for a finding already exited (reopen it
     first), 422 for a blank note or a duplicate id. A hand resolution names
     no garden proposal — that attribution happens only when a delivery lands."""
-    return _exit_verb(request, services, identity, services.finding_exit.resolve)
+    return _exit_verb(request, exits, projects, identity, exits.resolve)
 
 
 @router.post("/findings/confirm-gone", response_model=list[FindingView])
+@inject_sync
 def confirm_gone_findings(
     request: FindingExitRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Confirm by hand that every finding in `finding_ids` no longer reproduces,
     recording NOTE. 404 for an unknown id, 409 for a finding already exited, 422 for a
     blank note or a duplicate id."""
-    return _exit_verb(request, services, identity, services.finding_exit.confirm_gone)
+    return _exit_verb(request, exits, projects, identity, exits.confirm_gone)
 
 
 @router.post("/findings/wont-fix", response_model=list[FindingView])
+@inject_sync
 def wont_fix_findings(
     request: FindingExitRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as won't-fix, recording NOTE: the ground
     hasn't moved, a person has decided it doesn't merit standing regardless. 404 for an
     unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id."""
-    return _exit_verb(request, services, identity, services.finding_exit.wont_fix)
+    return _exit_verb(request, exits, projects, identity, exits.wont_fix)
 
 
 @router.post("/findings/not-a-finding", response_model=list[FindingView])
+@inject_sync
 def not_a_finding_findings(
     request: FindingExitRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as not a finding, recording NOTE. 404 for
     an unknown id, 409 for a finding already exited, 422 for a blank note or a duplicate id."""
-    return _exit_verb(request, services, identity, services.finding_exit.not_a_finding)
+    return _exit_verb(request, exits, projects, identity, exits.not_a_finding)
 
 
 @router.post("/findings/supersede", response_model=list[FindingView])
+@inject_sync
 def supersede_findings(
     request: FindingSupersedeRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Withdraw every finding in `finding_ids` as superseded by `superseded_by`,
@@ -374,20 +406,22 @@ def supersede_findings(
     (checked first, so a self-naming unknown id is 404), 409 for a finding already exited,
     422 for a blank note, a duplicate id, a self-superseding id, or a `superseded_by` that
     isn't itself live."""
-    findings = _load_or_404(request.finding_ids, services)
-    (absorber,) = _load_or_404([request.superseded_by], services)
+    findings = _load_or_404(request.finding_ids, exits.repo)
+    (absorber,) = _load_or_404([request.superseded_by], exits.repo)
     with _refusals_mapped():
-        services.finding_exit.supersede(findings, absorber, note=request.note, actor=identity.user_id)
-    return _reread(findings, services)
+        exits.supersede(findings, absorber, note=request.note, actor=identity.user_id)
+    return _reread(findings, exits.repo, projects)
 
 
 @router.post("/findings/reopen", response_model=list[FindingView])
+@inject_sync
 def reopen_findings(
     request: FindingExitRequest,
-    services: Services,
+    exits: Exits,
+    projects: Projects,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> list[FindingView]:
     """Reopen every finding in `finding_ids`, undoing whichever exit or `gone` fact was
     newest, recording NOTE. 404 for an unknown id, 409 for a finding already live, 422 for
     a blank note or a duplicate id."""
-    return _exit_verb(request, services, identity, services.finding_exit.reopen)
+    return _exit_verb(request, exits, projects, identity, exits.reopen)

@@ -18,6 +18,7 @@ from tests.support.container_guards import (
     duplicate_owners,
     graph_builds,
     lifetime_violations,
+    narrowing_violations,
     role_key_violations,
     wiring_boundary_violations,
 )
@@ -86,9 +87,19 @@ def test_the_dishka_gate_fails_a_planted_importer_and_passes_the_package(tmp_pat
             "hub/leak.py": "import dishka\n",
             "hub/also.py": "from dishka.integrations import fastapi\n",
             "foundation/registry/internal/ok.py": "from dishka import Provider\n",
+            "hub/api/findings.py": "from dishka.integrations.fastapi import FromDishka, inject_sync\n",
+            "hub/api/provider.py": "from dishka.integrations.fastapi import FromDishka\nfrom dishka import Provider\n",
+            "hub/api/whole.py": "from dishka.integrations import fastapi\n",
+            "hub/domain/findings.py": "from dishka.integrations.fastapi import FromDishka\n",
         },
     )
-    assert dishka_importers(root) == ["hub/also.py", "hub/leak.py"]
+    assert dishka_importers(root) == [
+        "hub/also.py",
+        "hub/api/provider.py",
+        "hub/api/whole.py",
+        "hub/domain/findings.py",
+        "hub/leak.py",
+    ]
 
 
 def test_the_wiring_gate_catches_planted_cross_area_and_adapter_imports(tmp_path: Path) -> None:
@@ -98,7 +109,7 @@ def test_the_wiring_gate_catches_planted_cross_area_and_adapter_imports(tmp_path
             "findings/wiring.py": (
                 "from blizzard.foundation.registry.interface import Registry\n"
                 "from blizzard.chunks.wiring import register\n"
-                "from blizzard.findings.internal.store import Store\n"
+                "from blizzard.chunks.internal.store import Store\n"
                 "from blizzard.findings.service import Service\n"
             ),
             "chunks/wiring.py": "from blizzard.foundation.registry.interface import Registry\n",
@@ -106,8 +117,43 @@ def test_the_wiring_gate_catches_planted_cross_area_and_adapter_imports(tmp_path
         },
     )
     assert wiring_boundary_violations(root) == [
+        "findings/wiring.py: imports the adapter blizzard.chunks.internal.store",
         "findings/wiring.py: imports another area's wiring blizzard.chunks.wiring",
-        "findings/wiring.py: imports the adapter blizzard.findings.internal.store",
+    ]
+
+
+def test_the_wiring_gate_admits_an_adapter_wiring_its_own_internal_and_a_process_root(tmp_path: Path) -> None:
+    root = _plant(
+        tmp_path,
+        {
+            "hub/store/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+            ),
+            "hub/store/other.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+            ),
+            "hub/domain/findings/wiring.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+            ),
+            "hub/process_root.py": (
+                "from blizzard.foundation.registry.interface import Registry\n"
+                "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+                "from blizzard.hub.store.wiring import register\n"
+            ),
+        },
+    )
+    assert wiring_boundary_violations(root) == [
+        "hub/domain/findings/wiring.py: imports the adapter blizzard.hub.store.internal.finding_store",
+        "hub/store/other.py: imports the adapter blizzard.hub.store.internal.finding_store",
+    ]
+    assert wiring_boundary_violations(root, roots=frozenset()) == [
+        "hub/domain/findings/wiring.py: imports the adapter blizzard.hub.store.internal.finding_store",
+        "hub/process_root.py: imports the adapter blizzard.hub.store.internal.finding_store",
+        "hub/process_root.py: imports another area's wiring blizzard.hub.store.wiring",
+        "hub/store/other.py: imports the adapter blizzard.hub.store.internal.finding_store",
     ]
 
 
@@ -187,3 +233,22 @@ def test_default_factory_violations_flag_a_defaulted_constructor() -> None:
     defaulted = _registry()
     defaulted.service(Needs, lifetime=Lifetime.PROCESS)
     assert default_factory_violations(defaulted) == ["Needs parameter 'limit' has a default"]
+
+
+def test_a_narrowed_route_module_names_no_legacy_bag() -> None:
+    assert narrowing_violations(_SRC) == []
+
+
+def test_the_narrowing_gate_fails_a_planted_bag_import_parameter_and_attribute(tmp_path: Path) -> None:
+    planted = tmp_path / "hub" / "api" / "planted.py"
+    planted.parent.mkdir(parents=True)
+    planted.write_text(
+        "from blizzard.hub.api.deps import Services\n"
+        "from blizzard.hub import composition\n"
+        "def route(services: Services) -> composition.TenantServices: ...\n"
+    )
+    assert narrowing_violations(tmp_path, [Path("hub/api/planted.py")]) == [
+        "hub/api/planted.py:1: names Services",
+        "hub/api/planted.py:3: names Services",
+        "hub/api/planted.py:3: names TenantServices",
+    ]

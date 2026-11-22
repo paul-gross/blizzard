@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import as_utc
 from blizzard.foundation.tenants import TenantDeletionState
-from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.domain.tenancy import teardown
@@ -172,7 +172,7 @@ def _closing_after_resolution(hub: HubHarness, tenant: TenantId, rows: dict[str,
     committing mid-request lands in — keeping the tenant's rows as the close left them in ``rows["closed"]``."""
     assert hub.app is not None
 
-    def resolving_then_closing(request: Request, services: Hub) -> TenantRequest:
+    def resolving_then_closing(request: Request, services: Hub) -> AdmittedTenant:
         resolved = resolve_tenant(request, services)
         services.tenant_teardown.close(tenant, by="usr_closer")
         rows["closed"] = _rows_of(hub, tenant)
@@ -228,7 +228,7 @@ def _deleting_after_resolution(hub: HubHarness, tenant: TenantId, states: list[T
     deletion completing mid-request lands in — keeping each deletion's state in ``states``."""
     assert hub.app is not None
 
-    def resolving_then_deleting(request: Request, services: Hub) -> TenantRequest:
+    def resolving_then_deleting(request: Request, services: Hub) -> AdmittedTenant:
         resolved = resolve_tenant(request, services)
         states.append(services.tenant_teardown.delete(tenant, by="usr_deleter").state)
         return resolved

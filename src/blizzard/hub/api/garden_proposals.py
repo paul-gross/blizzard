@@ -109,7 +109,7 @@ def _labelled(
     proposal: GardenProposal, closure: GardenProposalClosure | None, services: TenantServices
 ) -> GardenProposalView:
     """``proposal``'s view, labelled from one read of its project."""
-    labels = ProjectLabels.read(services, [proposal.project_id]).fields(proposal.project_id)
+    labels = ProjectLabels.read(services.projects, [proposal.project_id]).fields(proposal.project_id)
     return garden_proposal_view(proposal, closure, labels)
 
 
@@ -157,7 +157,7 @@ def _page(
     except MalformedCursor as exc:
         raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
-    labels = ProjectLabels.read(services, (p.project_id for p in page.proposals))
+    labels = ProjectLabels.read(services.projects, (p.project_id for p in page.proposals))
     return GardenProposalsPageView(
         proposals=[
             garden_proposal_view(p, closures.get(p.proposal_id), labels.fields(p.project_id)) for p in page.proposals
@@ -322,7 +322,7 @@ def create_garden_proposal(
     project_required`), naming `routine` when the caller names one, else none. 422 for a blank title/class/body,
     an unknown routine, or an unknown, exited, or duplicate finding id, or one of another project — the whole
     call is refused, nothing is linked. Deprecated: `POST /api/projects/{project}/garden-proposals`."""
-    return _create(request, services, identity, project_of_call(services))
+    return _create(request, services, identity, project_of_call(services.projects))
 
 
 @project_router.post(

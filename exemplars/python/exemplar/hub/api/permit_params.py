@@ -6,16 +6,22 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
-from exemplar.hub.api.deps import Services
+from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
 from exemplar.hub.api.refusals import not_found
-from exemplar.hub.domain.permits.model import Permit
+from exemplar.hub.domain.permits.model import IReadPermitRepository, Permit
 
 
-def path_permit(permit_id: str, services: Services) -> Permit:
+@inject_sync
+def path_permit(
+    permit_id: str,
+    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    permits: FromDishka[IReadPermitRepository],
+) -> Permit:
     """The permit ``{permit_id}`` names; ``404`` when the tenant holds none by that id."""
-    found = services.permits.get(permit_id)
+    found = permits.get(permit_id)
     if found is None:
         raise not_found(f"unknown permit {permit_id!r}")
     return found

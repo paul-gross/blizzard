@@ -148,7 +148,7 @@ def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: Pr
     try:
         return services.ingest.choose_project(pointers, named)
     except IngestProjectUnknown:
-        return project_of_call(services).project_id
+        return project_of_call(services.projects).project_id
 
 
 def ingest_project_refusal(
@@ -191,7 +191,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     graph is retired (the operator's brake: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
-    named = body_project(request.project, services).project_id if request.project is not None else None
+    named = body_project(request.project, services.projects).project_id if request.project is not None else None
     urgency = stated_urgency(request.urgency, services)
     pointers: list[WorkRef] = []
     for token in request.tokens:

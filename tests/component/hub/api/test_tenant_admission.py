@@ -17,8 +17,8 @@ from fastapi import APIRouter, Depends
 from blizzard.auth_core import Permission, Role
 from blizzard.hub.api.auth_session import (
     TENANT_HEADER,
+    AdmittedTenant,
     TenantBoundAdmitting,
-    TenantRequest,
     require,
     require_either,
     resolve_tenant,
@@ -46,7 +46,7 @@ def _scratch_router(prefix: str, bound: Any) -> APIRouter:
     @router.get("/acting")
     def acting(
         actor: Annotated[ResolvedIdentity, Depends(require_either(Permission.USER_MANAGE, _ADMITTED))],
-        tenant: Annotated[TenantRequest, Depends(resolve_tenant)],
+        tenant: Annotated[AdmittedTenant, Depends(resolve_tenant)],
     ) -> dict[str, object]:
         return {
             "tenant": tenant.scope.tenant,

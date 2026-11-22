@@ -155,7 +155,7 @@ def _runs(services: TenantServices, project_id: str | None, since: str | None, u
         raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
     names = GraphNames(services.graphs)
     names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
-    labels = ProjectLabels.read(services, (row.project_id for row in rows))
+    labels = ProjectLabels.read(services.projects, (row.project_id for row in rows))
     return [_run_row_view(row, names, labels.fields(row.project_id)) for row in rows]
 
 
@@ -168,7 +168,7 @@ def _delta(services: TenantServices, chunk_id: str, project_id: str | None) -> R
     names = GraphNames(services.graphs)
     if delta.escalation is not None:
         names.prime([delta.escalation.graph_id])
-    labels = ProjectLabels.read(services, [delta.project_id]).fields(delta.project_id)
+    labels = ProjectLabels.read(services.projects, [delta.project_id]).fields(delta.project_id)
     return _run_delta_view(delta, names, labels)
 
 

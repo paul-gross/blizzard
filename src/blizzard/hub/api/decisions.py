@@ -79,7 +79,7 @@ def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsRe
     runner_names = services.registry.names_for(
         d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None
     )
-    labels = ProjectLabels.read(services, (d.project_id for d in rows))
+    labels = ProjectLabels.read(services.projects, (d.project_id for d in rows))
     return OpenDecisionsResponse(
         decisions=[to_decision_view(d, runner_names, labels.fields(d.project_id)) for d in rows]
     )

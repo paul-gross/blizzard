@@ -21,6 +21,22 @@ from blizzard.foundation.registry.scopes import ScopeValues
 
 _INTERFACE = "blizzard.foundation.registry.interface"
 _REGISTRY_PACKAGE = ("foundation", "registry")
+#: The one dishka module a route edge may import: the FastAPI integration's ``FromDishka`` and ``inject_sync``.
+_ROUTE_EDGE = ("hub", "api")
+_ROUTE_EDGE_DISHKA = "dishka.integrations.fastapi"
+
+#: The hub's composition roots, relative to the source root: the process root, the legacy bridge it registers, and the
+#: hosted app over it. Each composes adapters and areas, so the wiring boundary exempts it.
+PROCESS_ROOTS: frozenset[Path] = frozenset(
+    {Path("hub/process_root.py"), Path("hub/composition.py"), Path("hub/app.py")}
+)
+
+
+#: The route modules whose area resolves through the container, relative to the source root: each names the services
+#: it uses and never the legacy bags.
+NARROWED_MODULES: tuple[Path, ...] = (Path("hub/api/findings.py"),)
+#: The legacy bags a narrowed module may not name.
+_LEGACY_BAGS = frozenset({"Services", "TenantServices"})
 
 
 def graph_builds(registry: RecordingRegistry, lifetimes: ProcessLifetimes, values: ScopeValues) -> list[str]:
@@ -80,15 +96,25 @@ def _defaulted(entry: Registration) -> Iterable[str]:
 
 
 def dishka_importers(source_root: Path) -> list[str]:
-    """Modules under ``source_root`` that import dishka from outside ``foundation/registry/internal/``."""
+    """Modules under ``source_root`` that import dishka from outside ``foundation/registry/internal/``; a route edge
+    module under ``hub/api/`` may import ``dishka.integrations.fastapi`` and nothing else of dishka."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(source_root).parts
         if relative[:3] == (*_REGISTRY_PACKAGE, "internal"):
             continue
-        if any(name == "dishka" or name.startswith("dishka.") for name in _imports(path)):
+        edge = relative[:2] == _ROUTE_EDGE
+        if any(_is_dishka(name) and not (edge and _is_route_edge_dishka(name)) for name in _imports(path)):
             problems.append(str(path.relative_to(source_root)))
     return problems
+
+
+def _is_dishka(name: str) -> bool:
+    return name == "dishka" or name.startswith("dishka.")
+
+
+def _is_route_edge_dishka(name: str) -> bool:
+    return name == _ROUTE_EDGE_DISHKA or name.startswith(f"{_ROUTE_EDGE_DISHKA}.")
 
 
 def child_open_violations(root: Path, *, exempt: tuple[tuple[str, ...], ...] = (_REGISTRY_PACKAGE,)) -> list[str]:
@@ -107,12 +133,15 @@ def child_open_violations(root: Path, *, exempt: tuple[tuple[str, ...], ...] = (
     return problems
 
 
-def wiring_boundary_violations(source_root: Path) -> list[str]:
-    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter."""
+def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PROCESS_ROOTS) -> list[str]:
+    """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter.
+
+    An adapter package's own wiring module may import that package's ``internal/``; the process ``roots`` compose
+    adapters and areas, and are exempt."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
         relative = path.relative_to(source_root)
-        if relative.parts[:2] == _REGISTRY_PACKAGE:
+        if relative.parts[:2] == _REGISTRY_PACKAGE or relative in roots:
             continue
         imports = _imports(path)
         if _INTERFACE not in imports:
@@ -125,12 +154,32 @@ def wiring_boundary_violations(source_root: Path) -> list[str]:
             parts = name.split(".")
             if "internal" in parts:
                 adapter = ".".join(parts[: parts.index("internal") + 2])
+                if _is_wiring(_module(relative)) and ".".join(parts[: parts.index("internal")]) == own_area:
+                    continue
                 if adapter not in reported:
                     reported.add(adapter)
                     problems.append(f"{relative}: imports the adapter {adapter}")
             elif _is_wiring(name) and name.rpartition(".")[0] != own_area:
                 problems.append(f"{relative}: imports another area's wiring {name}")
     return problems
+
+
+def narrowing_violations(source_root: Path, modules: Iterable[Path] = NARROWED_MODULES) -> list[str]:
+    """Each place a narrowed module names a legacy bag — an import, a name, or an attribute."""
+    problems: list[str] = []
+    for relative in modules:
+        tree = ast.parse((source_root / relative).read_text(), filename=str(relative))
+        for node in ast.walk(tree):
+            named: str | None = None
+            if isinstance(node, ast.alias):
+                named = node.name.rpartition(".")[2]
+            elif isinstance(node, ast.Name):
+                named = node.id
+            elif isinstance(node, ast.Attribute):
+                named = node.attr
+            if named in _LEGACY_BAGS:
+                problems.append(f"{relative}:{getattr(node, 'lineno', 0)}: names {named}")
+    return sorted(problems)
 
 
 def _is_wiring(module: str) -> bool:

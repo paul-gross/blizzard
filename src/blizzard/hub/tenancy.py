@@ -17,6 +17,9 @@ TenantId = NewType("TenantId", str)
 # cross-tenant, exempting it from the tenant statement guard.
 HUB_SCOPED_OPTION = "blizzard_hub_scoped"
 
+#: The label every store-backed registration a store-free hub lacks answers with.
+STORE_UNAVAILABLE = "hub_store_unavailable"
+
 
 @domain_model
 @dataclass(frozen=True)

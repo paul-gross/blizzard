@@ -1422,6 +1422,7 @@ _COMPOSITION_ROOTS = frozenset(
     {
         _HUB_DIR / "app.py",
         _HUB_DIR / "composition.py",
+        _HUB_DIR / "process_root.py",
         _HUB_DIR / "cli" / "__init__.py",
         _RUNNER_DIR / "app.py",
         _RUNNER_DIR / "loop_wiring.py",
@@ -2311,7 +2312,7 @@ def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: P
     assert contexts - _conformance_sentinels(src / "runner/loop/context.py") == set()
 
 
-_DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx2")
+_DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx2", "dishka")
 _DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
 _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
 
@@ -2385,6 +2386,8 @@ def test_domain_core_driver_gate_flags_a_driver_and_honours_its_exemptions(tmp_p
             "harness/claude_code/adapter.py": "import subprocess\nimport os\n",
             "harness/claude_code/http.py": "import httpx2\n",
             "harness/wiring.py": "import tempfile\n",
+            "harness/claude_code/container.py": "from dishka import Provider\n",
+            "leases/container.py": "import dishka\n",
         },
     )
     files = _runner_domain_core_files(runner, _PLANTED_RUNNER_LAYERS)
@@ -2392,10 +2395,20 @@ def test_domain_core_driver_gate_flags_a_driver_and_honours_its_exemptions(tmp_p
     assert "leases/launch.py imports subprocess" in flagged
     assert "harness/wiring.py imports tempfile" in flagged
     assert "harness/claude_code/http.py imports httpx2" in flagged
+    assert "harness/claude_code/container.py imports dishka" in flagged
+    assert "leases/container.py imports dishka" in flagged
     assert not [v for v in flagged if v.startswith(("harness/claude_code/adapter.py", "leases/clean.py"))]
     admitted = _driver_import_violations(runner, files, {runner / "leases" / "paths.py": ("os",)})
     assert "leases/paths.py imports shutil" in admitted
     assert "leases/paths.py imports os" not in admitted
+
+
+def test_the_hub_domain_core_gate_bans_the_container_framework(tmp_path: Path) -> None:
+    planted = tmp_path / "hub" / "domain" / "findings" / "service.py"
+    planted.parent.mkdir(parents=True)
+    planted.write_text("from dishka import FromDishka\nfrom blizzard.foundation.registry.interface import Registry\n")
+    modules = _imported_modules(planted)
+    assert [package for package in _DOMAIN_CORE_FORBIDDEN if _imports_package(modules, package)] == ["dishka"]
 
 
 def test_domain_core_driver_gate_fails_a_stale_exemption(tmp_path: Path) -> None:
@@ -3826,6 +3839,7 @@ def test_runner_domain_core_selection_keys_on_every_node_module_outside_internal
 _COMPOSITION_ROOT_FILES = (
     _HUB_DIR / "app.py",
     _HUB_DIR / "composition.py",
+    _HUB_DIR / "process_root.py",
     _HUB_DIR / "store" / "internal" / "chunk_store_factory.py",
 )
 
@@ -3864,17 +3878,56 @@ def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
 )
 def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_roots() -> None:
     """bzh:dependency-injection: a process-scoped collaborator is built once and shared, so
-    no class is constructed twice across the hub's composition-root files."""
-    sites: dict[str, list[str]] = {}
-    for path in _COMPOSITION_ROOT_FILES:
-        for name, lineno in _canonical_blizzard_constructions(path, _SRC_DIR):
-            sites.setdefault(name, []).append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
-    duplicated = {
+    no class is constructed twice across the hub's composition-root files — a class the hub's
+    registry owns counting as constructed there."""
+    duplicated = _constructed_more_than_once(_COMPOSITION_ROOT_FILES, _SRC_DIR, _hub_registry_owned())
+    assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
+
+
+def test_the_constructed_once_gate_counts_a_registered_class_constructed_in_a_root(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    root = src / "hub" / "root.py"
+    root.parent.mkdir(parents=True)
+    root.write_text(
+        "from blizzard.hub.store.internal.finding_store import FindingStore\n"
+        "from blizzard.hub.store.internal.project_store import ProjectStore\n"
+        "def build(connections):\n"
+        "    return FindingStore(connections), ProjectStore(connections)\n"
+    )
+    owned = "blizzard.hub.store.internal.finding_store.FindingStore"
+    assert _constructed_more_than_once((root,), src, frozenset({owned})) == {
+        owned: ["the hub registry", f"{root.relative_to(tmp_path)}:4"]
+    }
+    assert _constructed_more_than_once((root,), src, frozenset()) == {}
+
+
+def _hub_registry_owned() -> frozenset[str]:
+    """Every class the store-backed hub registry constructs, by its canonical name."""
+    from blizzard.foundation.registry.internal.recording import Kind
+    from blizzard.foundation.registry.legacy import LegacyRegistry
+    from blizzard.hub.process_root import register_hub
+
+    registry = LegacyRegistry()
+    register_hub(registry, store_backed=True)
+    return frozenset(
+        f"{entry.source.__module__}.{entry.source.__qualname__}"
+        for entry in registry.entries
+        if entry.kind is Kind.SERVICE
+    )
+
+
+def _constructed_more_than_once(
+    files: Iterable[Path], src_root: Path, registered: frozenset[str]
+) -> dict[str, list[str]]:
+    sites: dict[str, list[str]] = {name: ["the hub registry"] for name in registered}
+    for path in files:
+        for name, lineno in _canonical_blizzard_constructions(path, src_root):
+            sites.setdefault(name, []).append(f"{path.relative_to(src_root.parent)}:{lineno}")
+    return {
         name: where
         for name, where in sites.items()
         if len(where) > 1 and name.rsplit(".", 1)[-1] not in _REPEATABLE_CONSTRUCTIONS
     }
-    assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
 
 
 # The hosted graph and the independent offline roots may each acquire a store, but only the hub composition
@@ -3882,6 +3935,7 @@ def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_root
 _HUB_STORE_WIRING_ROOTS = (
     "hub/app.py",
     "hub/composition.py",
+    "hub/process_root.py",
     "hub/cli/runtime.py",
     "hub/event_log_opener.py",
     "tools/invariants.py",
@@ -3994,8 +4048,92 @@ def _hub_store_wiring_breaches(src_root: Path) -> list[str]:
     return breaches
 
 
+#: The registry calls whose first argument is a function the container calls to build a value.
+_REGISTERED_BUILDERS = frozenset({"factory", "resource", "leaf", "bag"})
+_STORE_ACQUISITIONS = frozenset(
+    {
+        _HUB_CONNECTIONS_TARGET,
+        *_ENGINE_OPEN_TARGETS,
+        "blizzard.hub.composition.open_hub_store",
+        "blizzard.hub.composition.open_hub_engine",
+        "blizzard.hub.composition.connections_for_engine",
+    }
+)
+
+
+def _registered_store_acquisitions(src_root: Path) -> list[str]:
+    """Store acquisitions inside a wiring module, or inside a function some module registers with the container: the
+    container borrows the store's connections, and never opens or builds them."""
+    breaches: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        bindings = _wiring_bindings(path, src_root, tree)
+        registered = {
+            node.args[0].id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _REGISTERED_BUILDERS
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+        }
+        wiring = path.name == "wiring.py"
+        scopes: list[ast.AST] = (
+            [tree]
+            if wiring
+            else [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in registered]
+        )
+        relative = path.relative_to(src_root)
+        for scope in scopes:
+            for node in ast.walk(scope):
+                if isinstance(node, ast.Call) and _wiring_target(node.func, bindings) in _STORE_ACQUISITIONS:
+                    owner = "a wiring module" if wiring else f"the registered {getattr(scope, 'name', '')}"
+                    breaches.append(f"{relative}:{node.lineno} acquires a store inside {owner}")
+    return breaches
+
+
 def test_hub_store_wiring_goes_through_composition() -> None:
     assert not (breaches := _hub_store_wiring_breaches(_SRC_DIR)), breaches
+    assert not (acquired := _registered_store_acquisitions(_SRC_DIR)), acquired
+
+
+@pytest.mark.parametrize(
+    ("relative", "source"),
+    [
+        (
+            "hub/composition.py",
+            "from blizzard.hub.store.errors import HubStoreConnections\n"
+            "def leaf(engine: Engine) -> HubStoreConnections:\n    return HubStoreConnections(engine, errors)\n"
+            "def register(registry):\n    registry.leaf(leaf, lifetime=PROCESS)\n",
+        ),
+        (
+            "hub/process_root.py",
+            "from blizzard.hub.composition import open_hub_store\n"
+            "def opened(url: str) -> Engine:\n    return open_hub_store(url)[0]\n"
+            "def register(registry):\n    registry.resource(opened, lifetime=PROCESS)\n",
+        ),
+        ("hub/store/wiring.py", "import sqlalchemy\nsqlalchemy.create_engine(url)\n"),
+    ],
+)
+def test_hub_store_wiring_catches_a_registered_store_acquisition(tmp_path: Path, relative: str, source: str) -> None:
+    src = tmp_path / "blizzard"
+    path = src / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+    assert _registered_store_acquisitions(src)
+
+
+def test_hub_store_wiring_passes_a_registered_builder_over_borrowed_connections(tmp_path: Path) -> None:
+    src = tmp_path / "blizzard"
+    path = src / "hub/composition.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "from blizzard.hub.composition import open_hub_store\n"
+        "def leaf(connections: C) -> Reads:\n    return Reads(connections)\n"
+        "def register(registry):\n    registry.leaf(leaf, lifetime=PROCESS)\n"
+        "def offline(url):\n    return open_hub_store(url)\n"
+    )
+    assert _registered_store_acquisitions(src) == []
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPermitApiPermitsPermitIdGetData, GetPermitApiPermitsPermitIdGetErrors, GetPermitApiPermitsPermitIdGetResponses, GrantPermitApiPermitsPermitIdGrantPostData, GrantPermitApiPermitsPermitIdGrantPostErrors, GrantPermitApiPermitsPermitIdGrantPostResponses, ListPermitsApiPermitsGetData, ListPermitsApiPermitsGetErrors, ListPermitsApiPermitsGetResponses, RequestPermitApiPermitsPostData, RequestPermitApiPermitsPostErrors, RequestPermitApiPermitsPostResponses, ResumePermitApiPermitsPermitIdResumePostData, ResumePermitApiPermitsPermitIdResumePostErrors, ResumePermitApiPermitsPermitIdResumePostResponses, RevokePermitApiPermitsPermitIdRevokePostData, RevokePermitApiPermitsPermitIdRevokePostErrors, RevokePermitApiPermitsPermitIdRevokePostResponses, SuspendPermitApiPermitsPermitIdSuspendPostData, SuspendPermitApiPermitsPermitIdSuspendPostErrors, SuspendPermitApiPermitsPermitIdSuspendPostResponses } from './types.gen';
+import type { GetPermitApiPermitsPermitIdGetData, GetPermitApiPermitsPermitIdGetErrors, GetPermitApiPermitsPermitIdGetResponses, GrantPermitApiPermitsPermitIdGrantPostData, GrantPermitApiPermitsPermitIdGrantPostErrors, GrantPermitApiPermitsPermitIdGrantPostResponses, ListLivePermitsApiHoldersHolderPermitsGetData, ListLivePermitsApiHoldersHolderPermitsGetErrors, ListLivePermitsApiHoldersHolderPermitsGetResponses, ListPermitsApiPermitsGetData, ListPermitsApiPermitsGetErrors, ListPermitsApiPermitsGetResponses, RequestPermitApiPermitsPostData, RequestPermitApiPermitsPostErrors, RequestPermitApiPermitsPostResponses, ResumePermitApiPermitsPermitIdResumePostData, ResumePermitApiPermitsPermitIdResumePostErrors, ResumePermitApiPermitsPermitIdResumePostResponses, RevokePermitApiPermitsPermitIdRevokePostData, RevokePermitApiPermitsPermitIdRevokePostErrors, RevokePermitApiPermitsPermitIdRevokePostResponses, SuspendPermitApiPermitsPermitIdSuspendPostData, SuspendPermitApiPermitsPermitIdSuspendPostErrors, SuspendPermitApiPermitsPermitIdSuspendPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,13 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+/**
+ * List Live Permits
+ *
+ * Every permit ``holder`` holds that is not yet revoked, newest requested first, on one page: 200.
+ */
+export const listLivePermitsApiHoldersHolderPermitsGet = <ThrowOnError extends boolean = false>(options: Options<ListLivePermitsApiHoldersHolderPermitsGetData, ThrowOnError>): RequestResult<ListLivePermitsApiHoldersHolderPermitsGetResponses, ListLivePermitsApiHoldersHolderPermitsGetErrors, ThrowOnError> => (options.client ?? client).get<ListLivePermitsApiHoldersHolderPermitsGetResponses, ListLivePermitsApiHoldersHolderPermitsGetErrors, ThrowOnError>({ url: '/api/holders/{holder}/permits', ...options });
 
 /**
  * List Permits

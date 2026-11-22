@@ -4,6 +4,8 @@ HANDLERS = set(
     """\
 blizzard.foundation.flags.flags.FlagOffError -> blizzard.hub.api.flag_guard.refuse_flag_off d80393fbe43f072cef6030d6d2233a80d7566adce9b2b9b63ac6a2df88f125ce
 blizzard.foundation.flags.flags.FlagOffError -> blizzard.hub.api.flag_guard.refuse_flag_off transitive bd6b5e35ebc286239a9e826392f1d2e56e00a582713ec985f63a2f6563e1a919
+blizzard.foundation.registry.interface.ServiceAbsent -> blizzard.hub.api.resolution.refuse_absent_service f0fe68b143db3a1998dd859112dc90b4c945664b3a6058f39dcaf549869269dd
+blizzard.foundation.registry.interface.ServiceAbsent -> blizzard.hub.api.resolution.refuse_absent_service transitive 40ce8255889fea216b7d24681f2e2865d8809f229e6ea27c3142b03d78d82eff
 blizzard.hub.auth.memberships.MembershipRoleRefused -> blizzard.hub.api.members.refuse_membership_role c5ec0de2e41c981c628394954d27178b02f1ec0e121a94f4a2edc14bef0da5b6
 blizzard.hub.domain.config.work_sources.BuiltInWorkSource -> blizzard.hub.api.work_source_params.refuse_built_in_work_source 06d3d22277234cf8e5d83a2f040b667a254c6684a40060d2db097517a46dc8ba
 blizzard.hub.domain.projects.model.ProjectRequired -> blizzard.hub.api.project_params.refuse_project_required c7fe8991183e3ca1aa5ac6854e00b83b795769d7dca368c5dcb4a71378e36122

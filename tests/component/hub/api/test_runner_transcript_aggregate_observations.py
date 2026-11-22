@@ -9,7 +9,7 @@ from httpx2 import Response
 from pydantic import BaseModel
 
 from blizzard.hub.api.auth import RunnerAuth
-from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
+from blizzard.hub.api.auth_session import AdmittedTenant, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
@@ -85,7 +85,7 @@ def test_runner_transcript_problem_variants(tmp_path: Path, method: str, path: s
     observe(request(bearer(live)), 503, HubStoreUnavailableProblem)
     hub.app.state.services = services
 
-    def close_before_resolution(request: Request, services: Hub) -> TenantRequest:
+    def close_before_resolution(request: Request, services: Hub) -> AdmittedTenant:
         principal = RunnerAuth.of(request, services).demand()
         close_tenant(hub.engine, principal.tenant_id)
         services.tenants.open_tenants.refresh()

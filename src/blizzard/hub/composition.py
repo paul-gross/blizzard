@@ -16,13 +16,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock, SystemMonotonicClock
+from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock
 from blizzard.foundation.flags import (
     Flags,
     resolve_flags,
@@ -33,6 +33,9 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.registry.interface import Lifetime, port
+from blizzard.foundation.registry.legacy import LegacyRegistry
+from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher
@@ -153,6 +156,7 @@ from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecyc
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
@@ -312,8 +316,11 @@ from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
+from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
+
+if TYPE_CHECKING:
+    from blizzard.hub.process_root import HubProcess
 
 
 @dataclass(frozen=True)
@@ -498,9 +505,6 @@ class TenantServices:
     routine_baselines: RoutineBaselineService
     #: The finding read Protocol.
     findings: IReadFindingRepository
-    #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
-    #: not-a-finding/supersede/reopen.
-    finding_exit: FindingExitService
     #: The finding-set read Protocol — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
     #: The garden-proposal read Protocol.
@@ -541,6 +545,8 @@ class HubServices:
 
     #: Opens a tenant's services — the only way from the hub-level services to a tenant's.
     tenants: TenantServicesOpener
+    #: The hub's open process container and its tenant scopes — what a request resolves through.
+    process: HubProcess
     #: The hub-scoped reads a runner's credential resolves its tenant through — held only by the
     #: runner-auth edge (``bzh:hub-scoped-reads-confined``).
     hub_scoped_reads: HubScopedReads
@@ -637,6 +643,8 @@ class TenantStores:
     these instances from it rather than building its own copy (pinned by
     ``tests/component/hub/test_core_sharing.py``)."""
 
+    #: The tenant's container scope, the adopted values and the leaves below are read from.
+    tenant: Resolver
     connections: ScopedConnections
     transactions: HubTransactions
     registry: RunnerRegistryStore
@@ -645,7 +653,6 @@ class TenantStores:
     chunk_stores: ChunkStores
     delete: DeleteService
     finding_store: FindingStore
-    finding_exit: FindingExitService
     garden_proposal_store: GardenProposalStore
     garden_proposal_closure_store: GardenProposalClosureStore
     work_item_edits: WorkItemEditService
@@ -700,12 +707,20 @@ def tenant_transactions(connections: ScopedConnections) -> HubTransactions:
     return HubTransactions(connections)
 
 
-def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> TenantStores:
-    """Build the :class:`TenantStores` of the tenant ``connections`` is scoped to."""
+def tenant_flows(connections: ScopedConnections, clock: IClock) -> FlowStore:
+    """The one place a tenant's delivery-line store is constructed."""
+    return FlowStore(connections, clock)
+
+
+def build_tenant_stores(tenant: Resolver, *, clock: IClock) -> TenantStores:
+    """Build the :class:`TenantStores` of the tenant whose container scope ``tenant`` resolves through, reading its
+    adopted values and leaves from that scope."""
+    connections = tenant.get(ScopedConnections)
+    transactions = tenant.get(HubTransactions)
+    finding_store = tenant.get(FindingStore)
     registry = RunnerRegistryStore(connections)
     hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
-    transactions = tenant_transactions(connections)
     chunk_stores = build_chunk_stores(connections, clock)
     delete = DeleteService(
         items=work_item_store,
@@ -715,8 +730,6 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         dependencies=chunk_stores.dependencies,
         transactions=transactions,
     )
-    finding_store = FindingStore(connections)
-    finding_exit = FindingExitService(repo=finding_store, clock=clock, transactions=transactions)
     garden_proposal_store = GardenProposalStore(connections)
     garden_proposal_closure_store = GardenProposalClosureStore(connections)
     project_links = ProjectLinkStore(connections)
@@ -724,6 +737,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     tenant_settings = TenantSettingsStore(connections)
     tenant_default = TenantDefault(settings=tenant_settings, urgencies=urgencies)
     return TenantStores(
+        tenant=tenant,
         connections=connections,
         transactions=transactions,
         registry=registry,
@@ -732,7 +746,6 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         chunk_stores=chunk_stores,
         delete=delete,
         finding_store=finding_store,
-        finding_exit=finding_exit,
         garden_proposal_store=garden_proposal_store,
         garden_proposal_closure_store=garden_proposal_closure_store,
         secrets=SecretStore(connections),
@@ -740,12 +753,12 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         repository_records=RepositoryRecordStore(connections),
         forge_records=ForgeRecordStore(connections),
         credential_records=CredentialRecordStore(connections),
-        flows=FlowStore(connections, clock),
+        flows=tenant_flows(connections, clock),
         secret_referrers=SecretReferrersStore(connections),
         forge_referrers=ForgeReferrersStore(connections),
         credential_referrers=CredentialReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
-        projects=ProjectStore(connections),
+        projects=tenant.get(ProjectStore),
         project_links=project_links,
         chunk_targets=ChunkTargetsStore(connections),
         project_positions=ProjectPositionStore(connections, links=project_links),
@@ -772,7 +785,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
             closures=garden_proposal_closure_store,
             proposals=garden_proposal_store,
             findings=finding_store,
-            exits=finding_exit,
+            exits=tenant.get(FindingExitService),
         ),
         clock=clock,
     )
@@ -932,6 +945,8 @@ class HubCore:
     hub_event_log: HubEventLogService
     tenants: TenantCache
     clock: IClock
+    #: The process container the core was opened through; whoever disposes the store closes it first.
+    process: HubProcess
 
     def open(self, scope: StoreScope) -> TenantStores:
         """``scope``'s tenant's stores, built once per tenant. Raises :class:`UnknownTenant` or
@@ -1055,15 +1070,72 @@ def build_system_clock() -> IClock:
     return SystemClock()
 
 
+def hub_scoped_reads_leaf(connections: HubStoreConnections) -> HubScopedReads:
+    """The hub-scoped reads, a legacy leaf the hub identity area owns until it adopts them."""
+    return build_hub_scoped_reads(connections)
+
+
+def open_tenants_leaf(reads: HubScopedReads) -> OpenTenants:
+    """The open tenants held in memory, a legacy leaf the hub identity area owns until it adopts them."""
+    return OpenTenants(reads.tenants.open_tenants)
+
+
+def memberships_leaf(connections: HubStoreConnections) -> MembershipRepository:
+    """The membership repository, a legacy leaf the hub identity area owns until it adopts it."""
+    return MembershipRepository(connections)
+
+
+def scoped_connections_leaf(connections: HubStoreConnections, scope: StoreScope) -> ScopedConnections:
+    """The tenant's scoped connections, a legacy leaf the hub's scoped store adapters own until they adopt them."""
+    return connections.scoped(scope)
+
+
+def transactions_leaf(connections: ScopedConnections) -> HubTransactions:
+    """The tenant's unit-of-work opener, a legacy leaf the hub's scoped store adapters own until they adopt it."""
+    return tenant_transactions(connections)
+
+
+def projects_leaf(connections: ScopedConnections) -> ProjectStore:
+    """The tenant's project adapter, a legacy leaf the projects area owns until it adopts it."""
+    return ProjectStore(connections)
+
+
+def register_legacy(registry: LegacyRegistry) -> None:
+    """Declare the legacy bridge's leaves, each built as the legacy builder built it: the process services a request's
+    admission reads before its tenant is known, and the tenant values an adopted area depends on."""
+    registry.leaf(hub_scoped_reads_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(open_tenants_leaf, lifetime=Lifetime.PROCESS)
+    memberships = registry.leaf(memberships_leaf, lifetime=Lifetime.PROCESS)
+    registry.alias(port(IReadMembershipRepository), memberships)
+    registry.leaf(scoped_connections_leaf, lifetime=Lifetime.TENANT)
+    transactions = registry.leaf(transactions_leaf, lifetime=Lifetime.TENANT)
+    registry.alias(port(IHubTransactions), transactions)
+    projects = registry.leaf(projects_leaf, lifetime=Lifetime.TENANT)
+    registry.alias(port(IReadProjectRepository), projects)
+
+
+def register_legacy_absent(registry: LegacyRegistry) -> None:
+    """Declare each of the legacy bridge's leaves absent, for the store-free graph."""
+    for missing in (HubScopedReads, OpenTenants, MembershipRepository, IReadMembershipRepository):
+        registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    for missing in (ScopedConnections, HubTransactions, IHubTransactions, ProjectStore, IReadProjectRepository):
+        registry.absent(port(missing), lifetime=Lifetime.TENANT, label=STORE_UNAVAILABLE)
+
+
 def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> HubCore:
-    """Build the :class:`HubCore`."""
+    """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it."""
+    from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
+
+    process = open_store_backed(store_connections, clock=clock)
     store_errors = store_connections.errors
-    hub_scoped_reads = build_hub_scoped_reads(store_connections)
+    hub_scoped_reads = process.resolver.get(HubScopedReads)
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     hub_events = HubEventLogStore(store_connections)
 
     def build(scope: StoreScope) -> TenantStores:
-        return build_tenant_stores(store_connections.scoped(scope), clock=clock)
+        # The tenant's container scope opens with its legacy entry, whose adopted values and leaves are read from it, so
+        # a request admitting a tenant the legacy cache already serves finds its scope open too.
+        return build_tenant_stores(process.tenants.open(scope).resolver, clock=clock)
 
     return HubCore(
         store_connections=store_connections,
@@ -1075,6 +1147,7 @@ def build_hub_core(store_connections: HubStoreConnections, *, clock: IClock) -> 
         hub_event_log=HubEventLogService(events=hub_events),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
         clock=clock,
+        process=process,
     )
 
 
@@ -1234,7 +1307,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_trend_store = GardenTrendStore(tenant_connections)
     garden_sweeps_store = GardenSweepsStore(tenant_connections)
     garden_run_store = GardenRunStore(tenant_connections)
-    finding_bucket = FindingBucketReader(finding_store)
+    finding_bucket = stores.tenant.get(FindingBucketReader)
     garden_formats = GardenFormats()
     commit_links = LandedCommitLinks(
         project_links=stores.project_links,
@@ -1346,7 +1419,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             probes=parts.credential_probes,
             event_log=event_log,
             clock=clock,
-            monotonic=SystemMonotonicClock(),
+            monotonic=stores.tenant.get(IMonotonicClock),
         ),
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
@@ -1699,7 +1772,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,
-        finding_exit=stores.finding_exit,
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(
@@ -1869,7 +1941,7 @@ def build_services(
     )
     hub_events = core.hub_events
     hub_event_log = core.hub_event_log
-    open_tenants = OpenTenants(core.hub_scoped_reads.tenants.open_tenants)
+    open_tenants = core.process.resolver.get(OpenTenants)
 
     def scope_of(tenant: TenantId) -> StoreScope:
         """The scope a hub-level pass or bridge opens a row's tenant in — built in this one place."""
@@ -2012,7 +2084,7 @@ def build_services(
     superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
     # Built ahead of `auth` below, which takes it.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
-    memberships = MembershipRepository(store_connections)
+    memberships = core.process.resolver.get(MembershipRepository)
     hub_admin_store = HubAdminRepository(store_connections)
     identity_transactions = IdentityTransactions(store_connections, auth_errors, core.store_errors)
     auth = AuthService(
@@ -2054,8 +2126,10 @@ def build_services(
     )
 
     def forget_closed(tenant: TenantId) -> None:
-        # A closed tenant's cached stores and services, and its broker, go first; the in-memory open set is read
-        # again after, so a request resolving the tenant meanwhile misses the cache and is refused by the store.
+        # A closed tenant's container scope, its cached stores and services, and its broker go first; the in-memory
+        # open set is read again after, so a request resolving the tenant meanwhile misses both caches and is refused
+        # by the store. The legacy entry alone closes the tenant's configured clients.
+        core.process.tenants.evict(tenant)
         core.tenants.evict(tenant)
         open_tenants.refresh()
 
@@ -2106,6 +2180,7 @@ def build_services(
             open_services=core.open_services,
             open_tenants=open_tenants,
         ),
+        process=core.process,
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
         tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
@@ -2173,8 +2248,8 @@ def build_hub_invariants(connections: HubStoreConnections, clock: IClock) -> Hub
     connections the half hands them, which share its one read transaction."""
 
     def tenant_reads(scoped: ScopedConnections) -> TenantReads:
-        stores = build_tenant_stores(scoped, clock=clock)
-        return TenantReads(stores.chunk_stores.facts, stores.chunk_stores.record, stores.flows)
+        chunk_stores = build_chunk_stores(scoped, clock)
+        return TenantReads(chunk_stores.facts, chunk_stores.record, tenant_flows(scoped, clock))
 
     return HubInvariants(connections, tenant_reads, clock)
 

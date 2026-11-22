@@ -4,6 +4,7 @@ an equal-looking one."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,17 +12,22 @@ import pytest
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import build_hub_core, connections_for_engine
+from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
+from blizzard.hub.domain.garden.findings.model import FindingExitService, IReadFindingRepository
 from blizzard.hub.store.errors import HubStoreError
+from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from tests.support.scaffolding import add_tenant, build_hub, default_tenant, tenant_services_of
+from tests.support.transition_identity import transition_identity_violations
 
 
 def test_services_share_the_cores_stores(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     services = hub.services
 
-    assert services.findings is services.finding_exit.repo
+    exits = hub.resolve(default_tenant(hub.engine), FindingExitService)
+    assert services.findings is exits.repo
     assert services.garden_proposals is services.garden_proposal_authoring.proposals
     assert services.garden_proposal_closures is services.garden_proposal_authoring.closures
     assert services.delete is services.garden_proposal_closure.items.delete
@@ -90,3 +96,42 @@ def test_the_core_reads_no_tenant_until_one_is_opened_so_a_stale_store_still_bui
 
     with pytest.raises(HubStoreError):
         core.open(StoreScope(TenantId("ten_01J0000000000000000000000")))
+
+
+def test_every_retained_bag_field_is_its_container_instance(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+
+    stores = hub.open_stores(tenant)
+
+    assert transition_identity_violations(stores, hub.open_services(tenant)) == []
+
+
+def test_the_transition_identity_gate_fails_a_planted_second_copy(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    stores = hub.open_stores(tenant)
+    services = hub.open_services(tenant)
+
+    planted = replace(stores, finding_store=FindingStore(stores.connections))
+    replanted = replace(services, finding_bucket=FindingBucketReader(services.findings))
+
+    assert transition_identity_violations(planted, replanted) == [
+        "TenantStores.finding_store is not its container instance",
+        "TenantServices.finding_bucket is not its container instance",
+    ]
+
+
+def test_a_background_resolution_and_the_retained_bag_share_one_finding_service(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    services = hub.open_services(tenant)
+
+    exits = hub.hub_services.process.tenants.resolve(StoreScope(tenant), FindingExitService)
+    every = dict(hub.hub_services.process.tenants.every_open(IReadFindingRepository))
+
+    assert hub.resolve(tenant, IReadFindingRepository) is services.findings
+    assert hub.resolve(tenant, FindingBucketReader) is services.finding_bucket
+    assert every[tenant] is services.findings
+    assert exits.repo is services.findings
+    assert hub.open_services(add_tenant(hub.engine, "other")).findings is not services.findings
