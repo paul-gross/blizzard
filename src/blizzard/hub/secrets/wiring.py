@@ -28,7 +28,7 @@ def key_provider(environ: HubEnviron, config: HubConfig) -> IRotatableKeyProvide
 
 
 def secret_reader(catalog: ISecretCatalog, sealed: ISealedSecretRepository, cipher: ISecretCipher) -> ISecretReader:
-    """The tenant's one secret reader, revealing through the process cipher — what its forge authorizations hold."""
+    """The tenant's one secret reader, revealing through the process cipher."""
     return StoreSecretReader(catalog=catalog, sealed=sealed, cipher=cipher)
 
 

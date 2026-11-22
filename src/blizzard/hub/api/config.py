@@ -21,7 +21,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import AdmittedTenant, require, tenant_bound, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant, require, tenant_bound
 from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_scopes, chore_shapes, schedule_shape
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
@@ -122,31 +122,28 @@ _VIEW = Depends(require(Permission.FLEET_VIEW))
 #: The largest page of the change log a caller may request.
 MAX_CHANGES_LIMIT = 200
 
-#: The admitted tenant a config dependency resolves its reads beneath.
-_Admitted = Annotated[AdmittedTenant, Depends(tenant_request)]
-
 
 @dataclass(frozen=True)
 class _KeyedRecords:
     """The tenant's slugged records a change-log row or filter is keyed by."""
 
     repositories: IReadRepositoryRecordRepository
-    sources: IReadWorkSourceRepository
-    forges: IReadForgeRepository
+    source_records: IReadWorkSourceRepository
+    forge_records: IReadForgeRepository
     credentials: IReadCredentialRepository
     projects: IReadProjectRepository
 
 
 @inject_sync
 def _keyed_records(
-    _tenant: _Admitted,
+    _tenant: RequestTenant,
     repositories: FromDishka[IReadRepositoryRecordRepository],
-    sources: FromDishka[IReadWorkSourceRepository],
-    forges: FromDishka[IReadForgeRepository],
+    source_records: FromDishka[IReadWorkSourceRepository],
+    forge_records: FromDishka[IReadForgeRepository],
     credentials: FromDishka[IReadCredentialRepository],
     projects: FromDishka[IReadProjectRepository],
 ) -> _KeyedRecords:
-    return _KeyedRecords(repositories, sources, forges, credentials, projects)
+    return _KeyedRecords(repositories, source_records, forge_records, credentials, projects)
 
 
 @dataclass(frozen=True)
@@ -159,7 +156,7 @@ class _Applying:
 
 @inject_sync
 def _applying(
-    _tenant: _Admitted, application: FromDishka[ConfigApplication], events: FromDishka[EventBroker]
+    _tenant: RequestTenant, application: FromDishka[ConfigApplication], events: FromDishka[EventBroker]
 ) -> _Applying:
     return _Applying(application, events)
 
@@ -270,9 +267,9 @@ def _labels(
     labels: dict[tuple[RecordKind, str], str] = {}
     for repository_id, repository in records.repositories.get_many(repository_ids).items():
         labels.update({(kind, repository_id): repository.slug for kind in _REPOSITORY_KEYED})
-    for source_id, source in records.sources.get_many(source_ids).items():
+    for source_id, source in records.source_records.get_many(source_ids).items():
         labels.update({(kind, source_id): source.slug for kind in _WORK_SOURCE_KEYED})
-    forges = records.forges.get_many(forge_ids)
+    forges = records.forge_records.get_many(forge_ids)
     forge_labels = {str(forge_id): f"{forge.slug} · {forge.name}" for forge_id, forge in forges.items()}
     for forge_id, forge in forges.items():
         labels.update({(kind, str(forge_id)): forge.slug for kind in _FORGE_KEYED})
@@ -408,10 +405,10 @@ def _key_of(kind: RecordKind | None, key: str | None, records: _KeyedRecords) ->
         repository = records.repositories.resolve(key)
         return key if repository is None else repository.repository_id
     if kind in _WORK_SOURCE_KEYED:
-        source = records.sources.resolve(key)
+        source = records.source_records.resolve(key)
         return key if source is None else source.work_source_id
     if kind in _FORGE_KEYED:
-        forge = records.forges.resolve(key)
+        forge = records.forge_records.resolve(key)
         return key if forge is None else forge.forge_id
     if kind in _CREDENTIAL_KEYED:
         credential = records.credentials.resolve(key)
@@ -768,10 +765,10 @@ def export_config(
     live_cadences = sorted(
         (c for c in reads.cadences.list_all() if not c.retired), key=lambda c: (slug_of[c.project_id], c.slug)
     )
-    sources = records.sources.list_all(include_retired=False)
+    sources = records.source_records.list_all(include_retired=False)
     repositories = records.repositories.list_all(include_retired=False)
     held_credentials = records.credentials.list_all(include_retired=True) if version == CREDENTIALS_VERSION else []
-    forges = records.forges.get_many(
+    forges = records.forge_records.get_many(
         list(
             {r.fields.forge_id for r in sources}
             | {r.fields.forge_id for r in repositories}
@@ -779,7 +776,7 @@ def export_config(
         )
     )
     repository_slugs = {r.repository_id: r.slug for r in records.repositories.list_all(include_retired=True)}
-    source_slugs = {r.work_source_id: r.slug for r in records.sources.list_all(include_retired=True)}
+    source_slugs = {r.work_source_id: r.slug for r in records.source_records.list_all(include_retired=True)}
     project_ids = [project.project_id for project in projects]
     source_links = reads.links.sources_of_projects(project_ids)
     repository_links = reads.links.repositories_of_projects(project_ids)
@@ -843,7 +840,7 @@ def export_config(
         cadences=[_cadence_entry(c, slug_of[c.project_id], urgencies) for c in live_cadences],
         forges=[
             ForgeEntry(slug=f.slug, name=f.name, kind=f.kind, api_base=f.fields.api_base, web_base=f.fields.web_base)
-            for f in records.forges.list_all(include_retired=False)
+            for f in records.forge_records.list_all(include_retired=False)
         ],
         work_sources=[
             WorkSourceEntry(

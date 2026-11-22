@@ -70,7 +70,6 @@ from blizzard.hub.domain.work_items.editing import (
     WorkItemHeldByLiveChunk,
 )
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
-from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.registry import label_from_binding
@@ -91,10 +90,9 @@ from blizzard.wire.work_source import (
 router = APIRouter(
     prefix="/api", tags=["work-sources"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
-#: The tenant's work-source registry and records, its config writer, its live-holder and runner-name reads, the user
-#: reads, and its chunk frames, each resolved through the request's scope.
+#: The tenant's work-source registry and records, config writer, holder, runner and user reads, and chunk frames.
 Sources = FromDishka[IWorkSourceRegistry]
-Records = FromDishka[IReadWorkSourceRepository]
+SourceRecords = FromDishka[IReadWorkSourceRepository]
 Authoring = FromDishka[ConfigAuthoring]
 Holders = FromDishka[IReadChunkWorkRefsRepository]
 Runners = FromDishka[IReadRunnerRegistry]
@@ -252,12 +250,12 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 @router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 @inject_sync
 def list_work_sources(
-    sources: Sources, records: Records, reads: Reads, include_retired: bool = False
+    sources: Sources, source_records: SourceRecords, reads: Reads, include_retired: bool = False
 ) -> WorkSourcesListView:
     """The built-in ``hub`` source and every stored work source, retired ones hidden unless
     `include_retired`. No gate beyond `fleet:view`, since a client needs this to know which
     sources gate their items."""
-    stored = records.list_all(include_retired=include_retired)
+    stored = source_records.list_all(include_retired=include_retired)
     names = user_names(reads.users, (r.created_by for r in stored))
     forges = reads.forges.get_many(list({r.fields.forge_id for r in stored}))
     credentials = reads.credentials.get_many(
@@ -328,12 +326,12 @@ def create_work_source(
     "/work-sources/{source}", response_model=WorkSourceSummary, dependencies=[Depends(require(Permission.FLEET_VIEW))]
 )
 @inject_sync
-def get_work_source(source: str, sources: Sources, records: Records, reads: Reads) -> WorkSourceSummary:
+def get_work_source(source: str, sources: Sources, source_records: SourceRecords, reads: Reads) -> WorkSourceSummary:
     """One work source by id or slug — a slug it left included — retired or not; the built-in `hub` shows as
     `built_in`. 404 on an unknown source."""
     if is_built_in(source):
         return _built_in_summary(sources)
-    return _shown(resolved_work_source(source, records), sources, reads)
+    return _shown(resolved_work_source(source, source_records), sources, reads)
 
 
 @router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
@@ -478,7 +476,6 @@ def create_work_item(
     projects: FromDishka[IReadProjectRepository],
     default_graph: FromDishka[DefaultGraphService],
     frames: Frames,
-    events: FromDishka[EventBroker],
     runners: Runners,
     users: Users,
     project: QueryProject = None,
@@ -520,7 +517,7 @@ def create_work_item(
     chunk_events.ChunkChanged.of(frames, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
     )
-    events.publish_queue_changed()  # mint adds the chunk to the backlog list
+    frames.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     # The freshly minted resting chunk is always its own live holder — no read needed.
     return WorkItemCreateResponse(
         **_view(
@@ -625,7 +622,6 @@ def withdraw_work_item(
     runners: Runners,
     users: Users,
     frames: Frames,
-    events: FromDishka[EventBroker],
 ) -> WorkItemView:
     """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
     or a chunk a race deletes between resolving it and this write; 409 for a known
@@ -641,7 +637,7 @@ def withdraw_work_item(
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except WithdrawalLostToClosure as exc:
-        _publish_holder_deletion(frames, events, exc.deletion, by=identity.user_id)
+        _publish_holder_deletion(frames, exc.deletion, by=identity.user_id)
         raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
     except WorkItemNotEditable as exc:
         raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
@@ -649,7 +645,7 @@ def withdraw_work_item(
         raise ProblemHTTPException(partial(problems_admin.work_item_held_by_live_chunk_problem, str(exc))) from exc
     except WorkItemHeldByDependents as exc:
         raise ProblemHTTPException(partial(problems_admin.work_item_held_by_dependents_problem, str(exc))) from exc
-    _publish_holder_deletion(frames, events, withdrawn, by=identity.user_id)
+    _publish_holder_deletion(frames, withdrawn, by=identity.user_id)
     holder = holders.find_live_holder(pointer)
     return _view(
         withdrawn.item,
@@ -662,9 +658,7 @@ def withdraw_work_item(
     )
 
 
-def _publish_holder_deletion(
-    frames: ChunkFrameLoader, events: EventBroker, withdrawn: WithdrawnWorkItem, *, by: str
-) -> None:
+def _publish_holder_deletion(frames: ChunkFrameLoader, withdrawn: WithdrawnWorkItem, *, by: str) -> None:
     """Publish the cascade-deleted holder's frames, if the withdrawal deleted one — whether
     the withdrawal then stood or was refused, the deletion has committed."""
     if withdrawn.deleted_chunk_id is None:
@@ -677,4 +671,4 @@ def _publish_holder_deletion(
         by=by,
         status=withdrawn.deleted_chunk_status,
     )
-    events.publish_queue_changed()  # a deleted chunk is never offered for claim again
+    frames.events.publish_queue_changed()  # a deleted chunk is never offered for claim again

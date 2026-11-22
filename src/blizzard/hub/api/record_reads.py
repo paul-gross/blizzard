@@ -9,7 +9,7 @@ from typing import Annotated
 from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.config.credentials import IReadCredentialRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
@@ -26,7 +26,7 @@ class RecordReads:
 
 @inject_sync
 def record_reads(
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     forges: FromDishka[IReadForgeRepository],
     credentials: FromDishka[IReadCredentialRepository],
     users: FromDishka[IReadUserRepository],

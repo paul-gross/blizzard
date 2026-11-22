@@ -49,8 +49,7 @@ SECRETS_PREFIX = "/api/secrets"
 router = APIRouter(
     prefix=SECRETS_PREFIX, tags=["secrets"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
-#: The tenant's secret metadata, the records naming each secret, its one config writer and the user reads, each resolved
-#: through the request's scope.
+#: The tenant's secret metadata, its referrers, its config writer and the user reads, resolved per request.
 Catalog = FromDishka[ISecretCatalog]
 References = FromDishka[ISecretReferences]
 Authoring = FromDishka[ConfigAuthoring]

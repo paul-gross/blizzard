@@ -69,10 +69,9 @@ router = APIRouter(
     dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)],
 )
 
-#: The tenant's credential and forge records, its one config writer and the user reads, each resolved through the
-#: request's scope.
+#: The tenant's credential and forge records, its config writer and the user reads, resolved per request.
 Credentials = FromDishka[IReadCredentialRepository]
-Forges = FromDishka[IReadForgeRepository]
+ForgeRecords = FromDishka[IReadForgeRepository]
 Authoring = FromDishka[ConfigAuthoring]
 Users = FromDishka[IReadUserRepository]
 
@@ -108,9 +107,11 @@ def _summary(record: ConfiguredCredential, forge: ConfiguredForge, names: Mappin
     )
 
 
-def _shown(record: ConfiguredCredential, forges: IReadForgeRepository, users: IReadUserRepository) -> CredentialSummary:
+def _shown(
+    record: ConfiguredCredential, forge_records: IReadForgeRepository, users: IReadUserRepository
+) -> CredentialSummary:
     """``record``'s summary, with the forge it names."""
-    forge = forges.get(record.fields.forge_id)
+    forge = forge_records.get(record.fields.forge_id)
     assert forge is not None
     return _summary(record, forge, user_names(users, [record.created_by]))
 
@@ -152,7 +153,7 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 @inject_sync
 def list_credentials(
     credentials: Credentials,
-    forge_records: Forges,
+    forge_records: ForgeRecords,
     references: FromDishka[ICredentialReferences],
     users: Users,
     include_retired: bool = False,
@@ -197,7 +198,7 @@ def create_credential(
     request: CredentialCreateRequest,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
-    forges: Forges,
+    forge_records: ForgeRecords,
     authoring: Authoring,
     users: Users,
 ) -> CredentialSummary:
@@ -207,7 +208,7 @@ def create_credential(
     than the binding's, `credential_settings_invalid` for settings the binding refuses, `forge_unavailable` for an
     unknown or retired forge, and `secret_unavailable` for an unknown or retired secret; 409 for a slug some credential
     holds, or an authority another credential on the forge acts as, naming it."""
-    forge = forges.resolve(request.forge)
+    forge = forge_records.resolve(request.forge)
     draft = CredentialDraft(
         slug=request.slug,
         name=request.name,
@@ -222,7 +223,7 @@ def create_credential(
         raise _unprocessable(exc) from exc
     except (CredentialSlugTaken, CredentialAuthorityTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, forges, users)
+    return _shown(record, forge_records, users)
 
 
 @router.get("/{credential}", response_model=CredentialDocument, dependencies=[Depends(require(Permission.FLEET_VIEW))])
@@ -231,7 +232,7 @@ def get_credential(
     credential: PathCredential,
     repository_records: FromDishka[IReadRepositoryRecordRepository],
     source_records: FromDishka[IReadWorkSourceRepository],
-    forges: Forges,
+    forge_records: ForgeRecords,
     users: Users,
 ) -> CredentialDocument:
     """One credential by id, current slug or former slug, retired or not, with every repository and work source
@@ -240,7 +241,7 @@ def get_credential(
     repositories = repository_records.naming_credential(credential_id)
     sources = source_records.naming_credential(credential_id)
     return CredentialDocument(
-        **_shown(credential, forges, users).model_dump(),
+        **_shown(credential, forge_records, users).model_dump(),
         referrers=[
             *(
                 CredentialReferenceView(kind=UseKind.REPOSITORY, key=r.repository_id, label=r.slug)
@@ -258,7 +259,7 @@ def patch_credential(
     credential: PathCredential,
     request: CredentialPatchRequest,
     door: RequestDoor,
-    forges: Forges,
+    forge_records: ForgeRecords,
     authoring: Authoring,
     users: Users,
     if_match: Annotated[int | None, Header()] = None,
@@ -276,7 +277,7 @@ def patch_credential(
         raise _unprocessable(exc) from exc
     except (ConfigRevisionConflict, CredentialSlugTaken, CredentialAuthorityTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, forges, users)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/retire", response_model=CredentialSummary)
@@ -285,7 +286,7 @@ def retire_credential(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     door: RequestDoor,
-    forges: Forges,
+    forge_records: ForgeRecords,
     authoring: Authoring,
     users: Users,
     if_match: Annotated[int | None, Header()] = None,
@@ -296,7 +297,7 @@ def retire_credential(
         record = authoring.retire_credential(credential, change_context(identity, door), if_match=if_match)
     except (ConfigRevisionConflict, CredentialInUse) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, forges, users)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/enable", response_model=CredentialSummary)
@@ -305,7 +306,7 @@ def enable_credential(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     credential: PathCredential,
     door: RequestDoor,
-    forges: Forges,
+    forge_records: ForgeRecords,
     authoring: Authoring,
     users: Users,
     if_match: Annotated[int | None, Header()] = None,
@@ -318,7 +319,7 @@ def enable_credential(
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _shown(record, forges, users)
+    return _shown(record, forge_records, users)
 
 
 @router.post("/{credential}/checks", response_model=CredentialCheckView)

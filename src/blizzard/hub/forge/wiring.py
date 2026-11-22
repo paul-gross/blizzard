@@ -1,11 +1,8 @@
-"""The forge area's registrations: each forge kind's read-only credential check, held once for the process, and every
-tenant's forge seams — its installation tokens and authorization boundary, its rate budgets and write locks, the
-registry handing out each repository's roles, the commit resolver and links over it, and the credential check.
+"""The forge area's registrations: the process's per-kind credential checks, and each tenant's forge seams.
 
-The budgets and the installation tokens are held per tenant beside the adapter cache, so an edit that rebuilds an
-adapter keeps the budget it spends and the token its predecessor minted. The registry instruments each adapter's
-client through the process's tracing hook, the disabled handle's where a root has no tracing. The store-free graph
-declares each tenant registration absent, from the same roster."""
+Budgets and installation tokens are held per tenant beside the adapter cache, so a rebuilt adapter keeps the budget it
+spends and the token its predecessor minted. The registry instruments each adapter's client through the process's
+tracing hook. The store-free graph declares each tenant registration absent, from the same roster."""
 
 from __future__ import annotations
 

@@ -9,7 +9,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
 from blizzard.hub.api import problems_admin
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.config.credentials import ConfiguredCredential, IReadCredentialRepository
 
@@ -17,7 +17,7 @@ from blizzard.hub.domain.config.credentials import ConfiguredCredential, IReadCr
 @inject_sync
 def path_credential(
     credential: str,
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     credentials: FromDishka[IReadCredentialRepository],
 ) -> ConfiguredCredential:
     found = credentials.resolve(credential)

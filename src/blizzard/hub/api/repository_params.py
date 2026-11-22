@@ -13,7 +13,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
 from blizzard.hub.api import problems_admin
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
 
@@ -21,7 +21,7 @@ from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadR
 @inject_sync
 def path_repository(
     repository: str,
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     repositories: FromDishka[IReadRepositoryRecordRepository],
 ) -> ConfiguredRepository:
     """The repository the ``{repository}`` path segment names, by id, slug or former slug; ``404`` when none."""

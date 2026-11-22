@@ -14,7 +14,7 @@ from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import AdmittedTenant, require, tenant_bound, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant, require, tenant_bound
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_params import PathForge
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
@@ -54,7 +54,7 @@ router = APIRouter(
     prefix="/api/forges", tags=["forges"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
 #: The tenant's forge records, its one config writer and the user reads, each resolved through the request's scope.
-Forges = FromDishka[IReadForgeRepository]
+ForgeRecords = FromDishka[IReadForgeRepository]
 Authoring = FromDishka[ConfigAuthoring]
 Users = FromDishka[IReadUserRepository]
 
@@ -64,7 +64,7 @@ class _DetailReads:
     """What a forge's detail reads beside the record: the records naming it, its roles, its budgets and the users."""
 
     repositories: IReadRepositoryRecordRepository
-    sources: IReadWorkSourceRepository
+    source_records: IReadWorkSourceRepository
     forges: ForgeRegistry
     budgets: ForgeBudgets
     users: IReadUserRepository
@@ -72,14 +72,14 @@ class _DetailReads:
 
 @inject_sync
 def _detail_reads(
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     repositories: FromDishka[IReadRepositoryRecordRepository],
-    sources: FromDishka[IReadWorkSourceRepository],
+    source_records: FromDishka[IReadWorkSourceRepository],
     forges: FromDishka[ForgeRegistry],
     budgets: FromDishka[ForgeBudgets],
     users: Users,
 ) -> _DetailReads:
-    return _DetailReads(repositories, sources, forges, budgets, users)
+    return _DetailReads(repositories, source_records, forges, budgets, users)
 
 
 DetailReads = Annotated[_DetailReads, Depends(_detail_reads)]
@@ -104,7 +104,7 @@ def _summary(record: ConfiguredForge, names: Mapping[str, str]) -> ForgeSummary:
 
 def _detail(record: ConfiguredForge, reads: _DetailReads) -> ForgeDetail:
     repositories = reads.repositories.list_all(include_retired=True)
-    sources = reads.sources.list_all(include_retired=True)
+    sources = reads.source_records.list_all(include_retired=True)
     offered = reads.forges.offered(record)
     return ForgeDetail(
         **_summary(record, user_names(reads.users, [record.created_by])).model_dump(),
@@ -160,9 +160,9 @@ def _conflict(exc: Exception) -> ProblemHTTPException:
 
 @router.get("", response_model=ForgesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 @inject_sync
-def list_forges(forges: Forges, users: Users, include_retired: bool = False) -> ForgesListView:
+def list_forges(forge_records: ForgeRecords, users: Users, include_retired: bool = False) -> ForgesListView:
     """List forges by slug, including retired ones when requested."""
-    records = forges.list_all(include_retired=include_retired)
+    records = forge_records.list_all(include_retired=include_retired)
     names = user_names(users, (r.created_by for r in records))
     return ForgesListView(forges=[_summary(r, names) for r in records])
 

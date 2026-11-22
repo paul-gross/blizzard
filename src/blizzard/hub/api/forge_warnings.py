@@ -13,7 +13,7 @@ from fastapi import Depends, Response
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.config.authoring import OldFieldUse
 from blizzard.hub.domain.config.forges import ConfiguredForge
@@ -85,7 +85,7 @@ class OldFieldWarnings:
 
 @inject_sync
 def old_field_warnings(
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     event_log: FromDishka[EventLogService],
     clock: FromDishka[IClock],
 ) -> OldFieldWarnings:

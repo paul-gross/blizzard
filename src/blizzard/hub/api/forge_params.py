@@ -9,7 +9,7 @@ from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import Depends
 
 from blizzard.hub.api import problems_admin
-from blizzard.hub.api.auth_session import AdmittedTenant, tenant_request
+from blizzard.hub.api.auth_session import RequestTenant
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 
@@ -17,7 +17,7 @@ from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeReposit
 @inject_sync
 def path_forge(
     forge: str,
-    _tenant: Annotated[AdmittedTenant, Depends(tenant_request)],
+    _tenant: RequestTenant,
     forges: FromDishka[IReadForgeRepository],
 ) -> ConfiguredForge:
     found = forges.resolve(forge)
