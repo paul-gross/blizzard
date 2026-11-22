@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import httpx2
 from sqlalchemy import Engine
@@ -37,8 +37,7 @@ from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import Resolver
 from blizzard.foundation.roles import collaborator
-from blizzard.foundation.secrets.factories import secret_cipher
-from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher
+from blizzard.foundation.secrets.sealing import ISecretCipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
@@ -71,7 +70,6 @@ from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderConfig
-from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions
@@ -166,7 +164,7 @@ from blizzard.hub.domain.observability.analytics.operational import IReadOperati
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import export_paths
+from blizzard.hub.domain.observability.egress.event_rows import ExportPaths, export_paths
 from blizzard.hub.domain.observability.egress.ports import IEgressWriter
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
@@ -237,7 +235,6 @@ from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.internal.factory import (
-    build_credential_probes,
     build_forge_authorizations,
     build_forge_registry,
     build_installation_tokens,
@@ -255,6 +252,7 @@ from blizzard.hub.settings.footing import HubSettingsFooting
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.settings.reader import HubSettingsReader
 from blizzard.hub.settings.service import HubSettingsAuthoring
+from blizzard.hub.settings.source import HubConfigSource
 from blizzard.hub.store import wiring as store_wiring
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
@@ -320,7 +318,7 @@ from blizzard.hub.tenancy import STORE_UNAVAILABLE, StoreScope, TenantClosed, Te
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 if TYPE_CHECKING:
-    from blizzard.hub.process_root import HubProcess
+    from blizzard.hub.process_root import HubProcess, Overrides
 
 
 @dataclass(frozen=True)
@@ -877,14 +875,14 @@ class ServedTenant:
 @dataclass(frozen=True)
 class TenantServing:
     """How a :class:`TenantCache` serves its tenants: ``build`` wires a tenant's services over its
-    stores and its broker from ``brokers``."""
+    stores and the broker its container scope holds, which ``brokers`` owns."""
 
     build: Callable[[TenantStores, EventBroker], ServedTenant]
     brokers: TenantBrokers
 
     def serve(self, tenant: TenantId, stores: TenantStores) -> ServedTenant:
-        """What serving ``tenant`` builds over its ``stores``, publishing to its broker."""
-        return self.build(stores, self.brokers.for_tenant(tenant))
+        """What serving ``tenant`` builds over its ``stores``, publishing to its scope's broker."""
+        return self.build(stores, stores.tenant.get(EventBroker))
 
 
 class IOpenTenantServices(Protocol):
@@ -1064,6 +1062,28 @@ def memberships_leaf(connections: HubStoreConnections) -> MembershipRepository:
     return MembershipRepository(connections)
 
 
+def users_leaf(connections: HubStoreConnections, errors: RepoErrorFactory) -> UserRepository:
+    """The user repository, a legacy leaf the hub identity area owns until it adopts it."""
+    return UserRepository(connections, errors)
+
+
+def action_loop_leaf() -> ActionLoop:
+    """The one action loop every tenant's turns share, a legacy leaf the hub lifecycle owns until it adopts it."""
+    return ActionLoop()
+
+
+def step_wake_leaf() -> StepWake:
+    """The flow driver's wake, bound by `build_flow_driver` — a build with no driver wakes nothing. A legacy leaf the
+    hub lifecycle owns until it adopts it."""
+    return StepWake()
+
+
+def color_pick_leaf() -> ColorPick:
+    """One process-scoped draw for every project color a create leaves to the hub, a legacy leaf the projects area
+    owns until it adopts it."""
+    return random.Random().choice
+
+
 def register_legacy(registry: LegacyRegistry) -> None:
     """Declare the legacy bridge's leaves, each built as the legacy builder built it, over the store's adapters: the
     process services a request's admission reads before its tenant is known, and the transitional ports the adapters
@@ -1074,6 +1094,11 @@ def register_legacy(registry: LegacyRegistry) -> None:
     registry.leaf(repo_errors_leaf, lifetime=Lifetime.PROCESS)
     identity = registry.leaf(identity_transactions_leaf, lifetime=Lifetime.PROCESS)
     registry.alias(port(IIdentityTransactions), identity)
+    users = registry.leaf(users_leaf, lifetime=Lifetime.PROCESS)
+    registry.alias(port(IReadUserRepository), users)
+    registry.leaf(action_loop_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(step_wake_leaf, lifetime=Lifetime.PROCESS)
+    registry.leaf(color_pick_leaf, lifetime=Lifetime.PROCESS)
     hub_events = store_wiring.register_process(registry)
     registry.alias(port(IReadHubEventLog), hub_events)
     transactions, projects, project_links = store_wiring.register_tenant(registry)
@@ -1091,9 +1116,15 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
         RepoErrorFactory,
         IdentityTransactions,
         IIdentityTransactions,
+        UserRepository,
+        IReadUserRepository,
+        ActionLoop,
+        StepWake,
         IReadHubEventLog,
     ):
         registry.absent(port(missing), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
+    # A callable alias keys the color draw, so it is named as its key rather than as a class.
+    registry.absent(port(cast("type[Any]", ColorPick)), lifetime=Lifetime.PROCESS, label=STORE_UNAVAILABLE)
     store_wiring.register_process_absent(registry)
     store_wiring.register_tenant_absent(registry)
     for missing in (IHubTransactions, IReadProjectRepository, IReadProjectLinks):
@@ -1108,11 +1139,18 @@ def build_hub_core(
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+    config: HubConfig | None = None,
+    platform_tracing: IPlatformTracing | None = None,
+    environ: Mapping[str, str] | None = None,
+    overrides: Overrides | None = None,
 ) -> HubCore:
     """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it.
     ``actions`` are the hub actions a node may name, and ``graphs`` and ``system_artifacts`` the packaged loaders, each
     borrowed into the container. ``settings`` is the borrowed settings graph the container serves the settings ports
-    from; a core built without one declares them absent."""
+    from; a core built without one declares them absent. ``config``, ``platform_tracing`` and ``environ`` are the
+    borrowed boot config, tracing handle (disabled when ``None``) and process environment; a core built without the
+    config or the environment serves no hub services. ``overrides`` is a test root's replacements over the registered
+    graph."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
     process = open_store_backed(
@@ -1122,6 +1160,10 @@ def build_hub_core(
         settings=settings,
         graphs=graphs,
         system_artifacts=system_artifacts,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ=environ,
+        overrides=overrides,
     )
     store_errors = store_connections.errors
     resolver = process.resolver
@@ -1139,7 +1181,7 @@ def build_hub_core(
         store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
         auth_errors=auth_errors,
-        users=UserRepository(store_connections, auth_errors),
+        users=resolver.get(UserRepository),
         hub_events=hub_events,
         hub_event_log=HubEventLogService(events=hub_events),
         tenants=TenantCache(build=build, confirm_open=hub_scoped_reads.tenants.confirm_open),
@@ -1206,7 +1248,8 @@ class TenantServiceParts:
     versions: IVersionWindow
     extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
-    pass_config: Callable[[], HubConfig] | None
+    #: The config a turn binds: the settings graph's resolution, or the boot config without one.
+    pass_config: Callable[[], HubConfig]
     step_wake: StepWake
     #: Publishes a committed cadence mint's frames through the tenant's services — handed in by the hub's app,
     #: which owns the frames.
@@ -1843,9 +1886,6 @@ def build_services(
     *,
     work_sources: WorkSourceRegistryFactory,
     forges: ForgeRegistryFactory = default_forge_registry,
-    credential_probes: Mapping[str, ICredentialProbe] | None = None,
-    secret_keys: IKeyProvider,
-    brokers: TenantBrokers | None = None,
     public_url: str | None = None,
     follow_latest_default: bool,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
@@ -1856,42 +1896,34 @@ def build_services(
     login_throttle: LoginThrottleConfig | None = None,
     transcript_caps: TranscriptCaps | None = None,
     trace_exporter: ITraceExporter | None = None,
-    tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
-    platform_tracer: IPlatformTracer | None = None,
-    egress: EgressConfig | None = None,
     egress_path_key: bytes | None = None,
-    annotation_interval_seconds: int,
     version_window: VersionWindow,
     hub_version: str = __version__,
     extractors: Sequence[ITurnEventExtractor],
-    action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
     announce_minted: Callable[[TenantServices, MintedErrand], None],
-    live_config: Callable[[], HubConfig] | None = None,
-    pass_config: Callable[[], HubConfig] | None = None,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
     are one pass per hub, each acting on a row through the services of the row's tenant, opened from
-    the cache. ``work_sources`` builds a tenant's
-    work-source registry, ``forges`` its forge registry, ``credential_probes`` each forge kind's credential check —
-    every kind's own when ``None``; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are the turn-event extractors
-    the derivation runs, and a pass is bounded by
+    the cache. Every live config read goes through the process container's :class:`HubConfigSource`, and the core's
+    container supplies the process collaborators. ``work_sources`` builds a tenant's
+    work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
+    ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are the turn-event
+    extractors the derivation runs, and a pass is bounded by the live
     ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
     cadence pass, whether the ``cadences`` flag lets it mint, and
     ``announce_minted`` publishes each mint it commits."""
     clock = core.clock
-    # One per hub process, shared by every tenant's turns.
-    action_loop = ActionLoop()
-    # Bound to the flow driver by `build_flow_driver`; a build with no driver wakes nothing.
-    step_wake = StepWake()
+    process = core.process.resolver
+    config_source = process.get(HubConfigSource)
+    action_loop = process.get(ActionLoop)
+    step_wake = process.get(StepWake)
     store_connections = core.store_connections
-    brokers = brokers or TenantBrokers()
-    # One process-scoped draw for every project color a create leaves to the hub.
-    color_pick = random.Random().choice
+    brokers = process.get(TenantBrokers)
+    color_pick = process.get(ColorPick)
 
     def action_bound(seconds: float) -> PassBound:
         return PassBound(seconds, action_pass_grace)
@@ -1899,25 +1931,20 @@ def build_services(
     parts = TenantServiceParts(
         clock=clock,
         users=core.users,
-        secret_cipher=secret_cipher(secret_keys),
+        secret_cipher=process.get(ISecretCipher),
         work_sources=work_sources,
         forges=forges,
-        credential_probes=credential_probes if credential_probes is not None else build_credential_probes(),
+        credential_probes=process.get(Mapping[str, ICredentialProbe]),
         action_loop=action_loop,
         public_url=public_url,
         follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
-        platform_tracer=platform_tracer,
+        platform_tracer=process.get(IPlatformTracer),
         color_pick=color_pick,
         versions=HubVersionWindow(hub_version, version_window),
         extractors=extractors,
-        action_passes=ActionPassDriver(
-            action_loop,
-            (lambda: action_bound(live_config().action_pass_seconds))
-            if live_config is not None
-            else action_bound(action_pass_seconds),
-        ),
-        pass_config=pass_config,
+        action_passes=ActionPassDriver(action_loop, lambda: action_bound(config_source.current().action_pass_seconds)),
+        pass_config=config_source.resolved,
         step_wake=step_wake,
         announce_minted=announce_minted,
     )
@@ -1952,8 +1979,10 @@ def build_services(
         hydration=hydration_of,
         tenant_name=open_tenants.name,
     )
-    trace_config = tracing or TracingConfig()
-    trace_config_source = (lambda: live_config().tracing) if live_config is not None else trace_config
+
+    def trace_config_source() -> TracingConfig:
+        return config_source.current().tracing
+
     trace_export = (
         TraceExportSweep(
             steps=trace_store,
@@ -1971,20 +2000,16 @@ def build_services(
         status=trace_store,
         steps=trace_store,
         clock=clock,
-        replay_max_window=(lambda: live_config().tracing.replay_max_window)
-        if live_config is not None
-        else trace_config.replay_max_window,
+        replay_max_window=lambda: config_source.current().tracing.replay_max_window,
     )
-    exported = export_paths(egress or EgressConfig(), egress_path_key)
+    exported = export_paths(config_source.boot.egress, egress_path_key)
     egress_config, egress_paths, egress_missing_key = exported.config, exported.policy, exported.missing_key_env
-    egress_exported_source = (
-        (lambda: export_paths(live_config().egress, egress_path_key)) if live_config is not None else None
-    )
-    egress_source = (
-        (lambda: export_paths(live_config().egress, egress_path_key).config)
-        if live_config is not None
-        else egress_config
-    )
+
+    def egress_exported_source() -> ExportPaths:
+        return export_paths(config_source.current().egress, egress_path_key)
+
+    def egress_source() -> EgressConfig:
+        return egress_exported_source().config
 
     def writer_settings(config: EgressConfig) -> EgressWriterSettings:
         return EgressWriterSettings(config.max_rows_per_file, config.min_free_bytes)
@@ -2152,11 +2177,9 @@ def build_services(
         tenants=lambda: open_tenants.every().keys(),
         tenant=lambda tenant: sweeps_of(tenant).annotation,
         clock=clock,
-        full_pass_floor=(
-            lambda: timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * live_config().annotation_interval_seconds)
-        )
-        if live_config is not None
-        else timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
+        full_pass_floor=lambda: timedelta(
+            seconds=FULL_PASS_FLOOR_INTERVALS * config_source.current().annotation_interval_seconds
+        ),
     )
     return HubServices(
         step_wake=step_wake,

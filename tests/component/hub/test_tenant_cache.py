@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine, event
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.registry.interface import Lifetime, port
 from blizzard.foundation.registry.scopes import ScopeValues, open_child, supply
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -32,10 +33,9 @@ from blizzard.hub.composition import (
     build_tenant_stores,
     connections_for_engine,
 )
+from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
-from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
-from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -56,7 +56,16 @@ _SECOND = TenantId("ten_SECOND")
 
 def _core(tmp_path: Path) -> tuple[HubCore, Engine]:
     _, engine = migrate_to(tmp_path, "head")
-    return build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT), actions=TEST_HUB_ACTIONS), engine
+    config = HubConfig(root=tmp_path, db_url=str(engine.url))
+    core = build_hub_core(
+        connections_for_engine(engine),
+        clock=FixedClock(_AT),
+        actions=TEST_HUB_ACTIONS,
+        config=config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+    )
+    return core, engine
 
 
 def _add_tenant(engine: Engine, tenant: TenantId) -> None:
@@ -226,17 +235,14 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
     assert all(options.get(HUB_SCOPED_OPTION) for options in seen)
 
 
-def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubServices:
+def _served(core: HubCore) -> HubServices:
     def work_sources(_stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
         return WorkSourceRegistry({})
 
     return build_services(
         core,
         work_sources=work_sources,
-        secret_keys=hub_key_provider({}, data_dir=tmp_path),
-        brokers=brokers,
         follow_latest_default=False,
-        annotation_interval_seconds=120,
         version_window=VERSION_WINDOW,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
@@ -246,7 +252,7 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
 
 def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
-    hub = _served(core, tmp_path, TenantBrokers())
+    hub = _served(core)
     first = hub.tenants.open_services(StoreScope(default_tenant(engine)))
     second = add_tenant(engine, "second")
 
@@ -263,8 +269,8 @@ def test_a_tenants_services_are_built_once_over_its_own_stores(tmp_path: Path) -
 
 def test_each_tenant_publishes_to_its_own_broker(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
-    brokers = TenantBrokers()
-    hub = _served(core, tmp_path, brokers)
+    hub = _served(core)
+    brokers = hub.event_brokers
     tenant = default_tenant(engine)
     first = hub.tenants.open_services(StoreScope(tenant))
     second = add_tenant(engine, "second")
@@ -278,8 +284,8 @@ def test_each_tenant_publishes_to_its_own_broker(tmp_path: Path) -> None:
 
 def test_eviction_drops_a_tenants_services_and_its_broker(tmp_path: Path) -> None:
     core, engine = _core(tmp_path)
-    brokers = TenantBrokers()
-    hub = _served(core, tmp_path, brokers)
+    hub = _served(core)
+    brokers = hub.event_brokers
     second = add_tenant(engine, "second")
     before = hub.tenants.open_services(StoreScope(second))
     broker = before.events

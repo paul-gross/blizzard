@@ -5,33 +5,41 @@ builds. The store-backed graph declares the legacy bridge's leaves; the store-fr
 so a route that reaches one answers the store's unavailability rather than serving on nothing. A graph opened
 without settings declares the settings ports absent the same way.
 
-The process scope borrows every value it is opened with — the store's connections, the clock, the settings graph, the
-hub's actions and the packaged graph and system-artifact loaders — and the :class:`HubProcess` it returns owns only the
-container: closing it closes every tenant scope, then the process scope, and leaves the borrowed values to the
-entrypoint that built them."""
+The process scope borrows every value it is opened with — the store's connections, the clock, the boot config, the
+platform tracing handle, the process environment, the settings graph, the hub's actions and the packaged graph and
+system-artifact loaders — and the :class:`HubProcess` it returns owns only the container: closing it closes every
+tenant scope, then the process scope, and leaves the borrowed values to the entrypoint that built them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.platform_tracing import wiring as platform_tracing_wiring
+from blizzard.foundation.platform_tracing.handle import IPlatformTracing
 from blizzard.foundation.registry.interface import port
+from blizzard.foundation.registry.internal.recording import Rewrites
 from blizzard.foundation.registry.internal.translation import HUB_LIFETIMES, build_container
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.foundation.registry.scopes import OwnedChild, Resolver, ScopeValue, ScopeValues, supply
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.composition import register_legacy, register_legacy_absent
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery import wiring as delivery
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.documents import wiring as documents
 from blizzard.hub.domain.garden.findings import wiring as findings
 from blizzard.hub.domain.graph import wiring as graph_area
+from blizzard.hub.events import wiring as events
+from blizzard.hub.forge import wiring as forge
 from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.scopes import wiring as scopes
+from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.scopes.tenants import TenantContainers
+from blizzard.hub.secrets import wiring as secrets
 from blizzard.hub.settings import wiring as settings_wiring
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store import wiring as store
@@ -72,13 +80,19 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
     settings graph when ``settings`` is set, and are absent otherwise, whether or not the graph is store-backed."""
     scopes.register(registry)
     documents.register(registry)
+    platform_tracing_wiring.register(registry)
+    events.register(registry)
+    settings_wiring.register_boot(registry)
+    forge.register_process(registry)
     if store_backed:
         delivery.register(registry)
         register_legacy(registry)
+        secrets.register(registry)
         findings.register(registry, store.register_findings(registry))
         graph_area.register(registry, store.register_graphs(registry))
     else:
         register_legacy_absent(registry)
+        secrets.register_absent(registry)
         store.register_findings_absent(registry)
         findings.register_absent(registry)
         store.register_graphs_absent(registry)
@@ -87,6 +101,24 @@ def register_hub(registry: LegacyRegistry, *, store_backed: bool, settings: bool
         settings_wiring.register(registry)
     else:
         settings_wiring.register_absent(registry)
+
+
+def _inputs(
+    config: HubConfig | None, platform_tracing: IPlatformTracing | None, environ: Mapping[str, str] | None
+) -> list[ScopeValue[Any]]:
+    """The scope values of the process inputs supplied; a graph opened without one serves nothing that reads it."""
+    values: list[ScopeValue[Any]] = []
+    if config is not None:
+        values.append(supply(port(HubConfig), config))
+    if platform_tracing is not None:
+        values.append(supply(port(IPlatformTracing), platform_tracing))
+    if environ is not None:
+        values.append(supply(port(HubEnviron), HubEnviron(environ)))
+    return values
+
+
+#: A test root's replacements over the registered graph, built from the registry before the container is.
+type Overrides = Callable[[LegacyRegistry], Rewrites]
 
 
 def build_store_backed(
@@ -98,18 +130,24 @@ def build_store_backed(
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+    config: HubConfig | None = None,
+    platform_tracing: IPlatformTracing | None = None,
+    environ: Mapping[str, str] | None = None,
+    overrides: Overrides | None = None,
 ) -> HubProcess:
     """Open the store-backed graph ``registry`` declares over the borrowed ``connections``, ``clock``, ``actions``, the
-    packaged ``graphs`` and ``system_artifacts`` and, when the graph declares the settings ports, ``settings``."""
+    packaged ``graphs`` and ``system_artifacts``, boot config, tracing handle, environment and, when the graph declares
+    the settings ports, ``settings``. ``overrides`` is a test root's replacements."""
     values: list[ScopeValue[Any]] = [
         supply(port(HubStoreConnections), connections),
         supply(port(IClock), clock),
         supply(port(HubActions), actions),
         *_packaged(graphs, system_artifacts),
+        *_inputs(config, platform_tracing, environ),
     ]
     if settings is not None:
         values.append(supply(port(HubSettingsGraph), settings))
-    owner = _opened(registry, *values)
+    owner = _opened(registry, *values, overrides=overrides(registry) if overrides is not None else None)
     try:
         reads = owner.resolver.get(HubScopedReads)
     except BaseException:
@@ -124,10 +162,20 @@ def build_store_free(
     clock: IClock,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+    config: HubConfig | None = None,
+    platform_tracing: IPlatformTracing | None = None,
 ) -> HubProcess:
     """Open the store-free graph ``registry`` declares; it holds no tenant, so every tenant open is refused."""
-    owner = _opened(registry, supply(port(IClock), clock), *_packaged(graphs, system_artifacts))
-    return _process(owner, confirm_open=_no_tenant, open_tenants=tuple)
+    return _process(
+        _opened(
+            registry,
+            supply(port(IClock), clock),
+            *_packaged(graphs, system_artifacts),
+            *_inputs(config, platform_tracing, None),
+        ),
+        confirm_open=_no_tenant,
+        open_tenants=tuple,
+    )
 
 
 def open_store_backed(
@@ -138,6 +186,10 @@ def open_store_backed(
     settings: HubSettingsGraph | None = None,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+    config: HubConfig | None = None,
+    platform_tracing: IPlatformTracing | None = None,
+    environ: Mapping[str, str] | None = None,
+    overrides: Overrides | None = None,
 ) -> HubProcess:
     """The hub's store-backed process, registered and opened; the settings ports are present only with ``settings``."""
     registry = _registered(store_backed=True, settings=settings is not None)
@@ -149,6 +201,10 @@ def open_store_backed(
         settings=settings,
         graphs=graphs,
         system_artifacts=system_artifacts,
+        config=config,
+        platform_tracing=platform_tracing,
+        environ=environ,
+        overrides=overrides,
     )
 
 
@@ -157,10 +213,17 @@ def open_store_free(
     clock: IClock,
     graphs: PackagedGraphs = GRAPHS_PACKAGED,
     system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
+    config: HubConfig | None = None,
+    platform_tracing: IPlatformTracing | None = None,
 ) -> HubProcess:
     """The hub's store-free process, registered and opened."""
     return build_store_free(
-        _registered(store_backed=False), clock=clock, graphs=graphs, system_artifacts=system_artifacts
+        _registered(store_backed=False),
+        clock=clock,
+        graphs=graphs,
+        system_artifacts=system_artifacts,
+        config=config,
+        platform_tracing=platform_tracing,
     )
 
 
@@ -174,8 +237,8 @@ def _packaged(graphs: PackagedGraphs, system_artifacts: PackagedSystemArtifacts)
     return (supply(port(PackagedGraphs), graphs), supply(port(PackagedSystemArtifacts), system_artifacts))
 
 
-def _opened(registry: LegacyRegistry, *values: ScopeValue[Any]) -> OwnedChild:
-    return build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=ScopeValues(values))
+def _opened(registry: LegacyRegistry, *values: ScopeValue[Any], overrides: Rewrites | None = None) -> OwnedChild:
+    return build_container(registry, HUB_LIFETIMES, owner=HUB_OWNER, values=ScopeValues(values), overrides=overrides)
 
 
 def _process(

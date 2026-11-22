@@ -13,6 +13,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock, IMonotonicClock, SystemMonotonicClock
 from blizzard.foundation.registry.interface import Lifetime, Registry, port
 from blizzard.hub.graphs import PackagedGraphs
+from blizzard.hub.scopes.environ import HubEnviron
 from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
@@ -27,6 +28,7 @@ def register(registry: Registry) -> None:
     registry.context(port(IClock), lifetime=Lifetime.PROCESS)
     registry.context(port(PackagedGraphs), lifetime=Lifetime.PROCESS)
     registry.context(port(PackagedSystemArtifacts), lifetime=Lifetime.PROCESS)
+    registry.context(port(HubEnviron), lifetime=Lifetime.PROCESS)
     monotonic = registry.service(SystemMonotonicClock, lifetime=Lifetime.PROCESS)
     registry.alias(port(IMonotonicClock), monotonic)
     registry.context(port(StoreScope), lifetime=Lifetime.TENANT)

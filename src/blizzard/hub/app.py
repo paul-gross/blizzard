@@ -41,6 +41,7 @@ from blizzard.foundation.registry.interface import ServiceAbsent
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.rotation import RotationResult
+from blizzard.foundation.secrets.sealing import IRotatableKeyProvider
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.trace_attributes import CHUNK_ID
@@ -180,7 +181,8 @@ from blizzard.hub.process_root import open_store_free
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import ENV_SECRET_KEY, ENV_SECRET_KEY_PREVIOUS, hub_key_provider, require_hub_key
 from blizzard.hub.secrets.rotation import rotate_keys
-from blizzard.hub.settings.pass_config import bind_pass_config, current_pass_config
+from blizzard.hub.settings.pass_config import bind_pass_config
+from blizzard.hub.settings.source import HubConfigSource, resolve_live_config
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreError
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -255,7 +257,7 @@ class Sweep:
                 ),
                 subscribe=settings.authoring.subscribe if settings is not None and interval_key else None,
                 interval_key=interval_key,
-                pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
+                pass_config=(partial(resolve_live_config, settings) if settings is not None else None),
             )
 
     @property
@@ -375,12 +377,7 @@ class Sweep:
 
 
 def _live_sweep_interval(name: SweepName, settings: HubSettingsGraph) -> int:
-    return _sweep_interval(name, _resolve_live_config(settings))
-
-
-def _resolve_live_config(settings: HubSettingsGraph) -> HubConfig:
-    snapshot = settings.reader.snapshot()
-    return settings.footing.resolve(snapshot.entries)
+    return _sweep_interval(name, resolve_live_config(settings))
 
 
 def _sweep_interval(name: SweepName, config: HubConfig) -> int:
@@ -655,7 +652,11 @@ def create_app(
     app.state.readiness = readiness
     app.state.services = services
     # The store-backed process the services were built over, else the store-free one, which lifespan closes.
-    app.state.hub_process = services.process if services is not None else open_store_free(clock=build_system_clock())
+    app.state.hub_process = (
+        services.process
+        if services is not None
+        else open_store_free(clock=build_system_clock(), config=config, platform_tracing=platform_tracing)
+    )
     # Set on shutdown by ``lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
     # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``lifespan`` runs it beside the sweeps.
@@ -784,22 +785,21 @@ def build_hosted_app(
         readiness = ReadinessService(reader=reader, expected_revision=expected)
 
         core = build_hub_core(
-            connections, clock=resolved_clock, actions=build_hub_actions(os.environ), settings=settings
+            connections,
+            clock=resolved_clock,
+            actions=build_hub_actions(os.environ),
+            settings=settings,
+            config=config,
+            platform_tracing=platform_tracing,
+            environ=os.environ,
         )
         # Closed after everything registered below: the tenant scopes, then the process scope; the engine, tracing
         # and settings stay borrowed from `hub host`.
         cleanup.callback(core.process.close)
         # Minted here on first start when no key source exists yet.
-        secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+        secret_keys = core.process.resolver.get(IRotatableKeyProvider)
         remove_retired_workdirs(config.data_dir)
-
-        def live_config() -> HubConfig:
-            bound = current_pass_config()
-            if bound is not None:
-                return bound
-            if settings is None:
-                return config
-            return _resolve_live_config(settings)
+        config_source = core.process.resolver.get(HubConfigSource)
 
         def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
             return WorkSourceEntry.registry(
@@ -814,7 +814,7 @@ def build_hosted_app(
                 resolution=stores.garden_proposal_resolution,
                 budgets=budgets,
                 refusals=refusal_reader,
-                close_forge_writes_enabled=lambda: live_config().close_forge_writes_enabled,
+                close_forge_writes_enabled=lambda: config_source.current().close_forge_writes_enabled,
                 instrument_client=platform_tracing.instrument_client,
             )
 
@@ -858,7 +858,6 @@ def build_hosted_app(
             oauth_providers=oauth_providers,
             oauth_http_client=oauth_client,
             signing_keys_dir=signing_keys_dir,
-            secret_keys=secret_keys,
             trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
             login_throttle=config.auth.login_throttle,
             transcript_caps=config.transcripts.transcript_caps(),
@@ -872,19 +871,12 @@ def build_hosted_app(
                 if tracing.enabled()
                 else None
             ),
-            tracing=config.tracing,
             tracing_settings=tracing,
-            platform_tracer=platform_tracing.tracer,
             extractors=shipped_extractors(),
-            egress=config.egress,
             egress_path_key=_egress_path_key(config.egress),
-            annotation_interval_seconds=config.annotation_interval_seconds,
-            action_pass_seconds=config.action_pass_seconds,
             version_window=version_window,
             cadences_on=lambda: flags.on("cadences"),
             announce_minted=announce_minted,
-            live_config=live_config,
-            pass_config=(partial(_resolve_live_config, settings) if settings is not None else None),
         )
         cleanup.callback(services.action_loop.stop)
         cleanup.callback(services.close_tenant_objects)

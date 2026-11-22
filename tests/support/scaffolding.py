@@ -44,6 +44,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.secrets.sealing import IKeyProvider
@@ -160,6 +161,7 @@ from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.readiness import ICredentialProbe
+from blizzard.hub.layout import DATA_DIRNAME
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.settings.footing import HubSettingsFooting
@@ -208,6 +210,7 @@ from blizzard.hub.work_sources.source import (
 )
 from tests.support import engine_lifecycle
 from tests.support.config_inputs import HUB_FLAGS, VERSION_WINDOW, create_hub_app
+from tests.support.registry_overrides import replaced_probes
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -1659,7 +1662,9 @@ def seed_repositories(
     if not repositories:
         return
     authoring = config_authoring(
-        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+        engine,
+        keys=hub_key_provider({}, data_dir=tmp_path / DATA_DIRNAME),
+        clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC)),
     )
     forges = ForgeRecordStore(hub_store_connections(engine))
     for fields in repositories:
@@ -1693,7 +1698,9 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
     stores = WorkSourceRecordStore(hub_store_connections(engine))
     at = datetime(2026, 7, 12, tzinfo=UTC)
     authoring = config_authoring(
-        engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
+        engine,
+        keys=hub_key_provider({}, data_dir=tmp_path / DATA_DIRNAME),
+        clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC)),
     )
     for name in names:
         if stores.resolve(name) is not None:
@@ -1767,6 +1774,8 @@ def build_hub(
         trusted_proxies=tuple(trusted_proxies),
         tracing=tracing or TracingConfig(),
         egress=egress or EgressConfig(),
+        # A test may bound a pass below a second; the bound is only ever read as a number of seconds.
+        action_pass_seconds=cast("int", action_pass_seconds),
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -1806,6 +1815,12 @@ def build_hub(
         actions=actions,
         settings=settings,
         system_artifacts=system_artifacts or SYSTEM_ARTIFACTS_PACKAGED,
+        config=config,
+        platform_tracing=DisabledPlatformTracing(),
+        environ={},
+        overrides=(lambda registry: replaced_probes(registry, credential_probes))
+        if credential_probes is not None
+        else None,
     )
     default = StoreScope(default_tenant(engine))
     default_stores = core.open(default)
@@ -1830,7 +1845,6 @@ def build_hub(
         named = {RESERVED_HUB_SOURCE_NAME: source}
         return WorkSourceRegistry(dict(named), closers=dict(named), editors=dict(named))
 
-    secret_keys = hub_key_provider({}, data_dir=tmp_path)
     hub_services = build_services(
         core,
         work_sources=tenant_work_sources,
@@ -1840,23 +1854,17 @@ def build_hub(
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `src/blizzard/hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
-        secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         login_throttle=login_throttle,
         transcript_caps=transcript_caps,
         trace_exporter=trace_exporter,
         tracing_settings=tracing_settings,
-        tracing=config.tracing,
-        egress=config.egress,
         egress_path_key=egress_path_key,
-        annotation_interval_seconds=config.annotation_interval_seconds,
         hub_version=hub_version or __version__,
         version_window=version_window,
         extractors=extractors,
-        action_pass_seconds=action_pass_seconds,
         action_pass_grace=action_pass_grace,
         forges=forges,
-        credential_probes=credential_probes,
         cadences_on=lambda: (flags or HUB_FLAGS).on("cadences"),
         announce_minted=announce_minted,
     )

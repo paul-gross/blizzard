@@ -9,8 +9,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
+from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.delivery.flow_driver import StepWake
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
@@ -26,6 +29,8 @@ from blizzard.hub.domain.graph.model import (
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
@@ -162,6 +167,7 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),
         ("TenantServices.graph_mint", services.graph_mint, GraphMintService),
         ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
+        ("TenantServices.events", services.events, EventBroker),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)
@@ -183,9 +189,14 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("HubCore.hub_scoped_reads", core.hub_scoped_reads, HubScopedReads),
         ("HubCore.hub_events", core.hub_events, HubEventLogStore),
         ("HubCore.auth_errors", core.auth_errors, RepoErrorFactory),
+        ("HubCore.users", core.users, UserRepository),
         ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
         ("HubServices.hub_events", services.hub_events, HubEventLogStore),
         ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
+        ("HubServices.action_loop", services.action_loop, ActionLoop),
+        ("HubServices.step_wake", services.step_wake, StepWake),
+        ("HubServices.event_brokers", services.event_brokers, TenantBrokers),
+        ("HubServices.users", services.users, UserRepository),
     )
     return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]
 

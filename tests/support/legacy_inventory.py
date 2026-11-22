@@ -11,18 +11,27 @@ from blizzard.foundation.registry.internal.recording import Kind, RecordingRegis
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_transaction import IdentityTransactions
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.delivery.action_loop import ActionLoop
+from blizzard.hub.delivery.flow_driver import StepWake
+from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.open_tenants import OpenTenants
 
-#: Each legacy key the hub registry declares, and the area that owns it until it adopts it.
-LEGACY_INVENTORY: Mapping[type, str] = {
+#: Each legacy key the hub registry declares, and the area that owns it until it adopts it. A key is a class, or a
+#: callable alias such as ``ColorPick``.
+LEGACY_INVENTORY: Mapping[object, str] = {
     RepoErrorFactory: "hub identity",
     IdentityTransactions: "hub identity",
     OpenTenants: "hub identity",
     MembershipRepository: "hub identity",
+    UserRepository: "hub identity",
+    ActionLoop: "hub lifecycle",
+    StepWake: "hub lifecycle",
+    ColorPick: "projects",
 }
 
 
-def inventory_violations(registry: RecordingRegistry, allowed: Mapping[type, str] = LEGACY_INVENTORY) -> list[str]:
+def inventory_violations(registry: RecordingRegistry, allowed: Mapping[object, str] = LEGACY_INVENTORY) -> list[str]:
     """Each leaf or bag ``registry`` declares that ``allowed`` does not list, and each listed key it no longer
     declares."""
     declared = {entry.key: entry.kind for entry in registry.entries if entry.kind in (Kind.LEAF, Kind.BAG)}
@@ -32,7 +41,7 @@ def inventory_violations(registry: RecordingRegistry, allowed: Mapping[type, str
         if key not in allowed
     ]
     problems.extend(
-        f"{key.__qualname__} ({area}) is listed but no longer declared"
+        f"{getattr(key, '__qualname__', key)} ({area}) is listed but no longer declared"
         for key, area in allowed.items()
         if key not in declared
     )
