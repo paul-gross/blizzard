@@ -23,6 +23,7 @@ from exemplar.hub.api.permit_params import path_permit
 from exemplar.hub.domain.permits.model import IReadPermitRepository
 from exemplar.hub.process_root import open_store_backed
 from tests.support.scaffolding import (
+    TEST_HUB_ACTIONS,
     HubHarness,
     build_hub,
     default_project,
@@ -51,7 +52,7 @@ def _mounted(hub: HubHarness) -> Iterator[HubHarness]:
     with hub.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         _PERMITS.upgrade()
         _PERMIT_REVISION.upgrade()
-    process = open_store_backed(hub.core.store_connections, clock=hub.clock)
+    process = open_store_backed(hub.core.store_connections, clock=hub.clock, actions=TEST_HUB_ACTIONS)
     hub.app.state.hub_process = process
     hub.app.include_router(permits.router)
     routes = hub.app.router.routes

@@ -43,6 +43,7 @@ from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
     OP,
+    TEST_HUB_ACTIONS,
     add_tenant,
     close_tenant,
     default_project,
@@ -77,7 +78,9 @@ class _Hub:
     second: TenantId
 
     def stores(self, tenant: TenantId) -> TenantStores:
-        return build_hub_core(connections_for_engine(self.engine), clock=FixedClock(_NOW)).open(StoreScope(tenant))
+        return build_hub_core(
+            connections_for_engine(self.engine), clock=FixedClock(_NOW), actions=TEST_HUB_ACTIONS
+        ).open(StoreScope(tenant))
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)

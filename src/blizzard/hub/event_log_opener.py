@@ -6,12 +6,14 @@ the hub core over the root's clock, and closes the core's container, then dispos
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, closing, contextmanager
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.composition import build_hub_core, open_hub_store
 from blizzard.hub.config import HubConfig
+from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
 
 
@@ -22,7 +24,7 @@ def system_event_log_opener(clock: IClock) -> Callable[[HubConfig], AbstractCont
     def open_event_log(config: HubConfig) -> Generator[HubEventLogService, None, None]:
         engine, connections = open_hub_store(config.db_url)
         try:
-            core = build_hub_core(connections, clock=clock)
+            core = build_hub_core(connections, clock=clock, actions=build_hub_actions(os.environ))
             with closing(core.process):
                 yield core.hub_event_log
         finally:

@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, status
 
 from blizzard.auth_core import Permission
@@ -17,11 +18,21 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.documents.codec import ConfigDecodeError
-from blizzard.hub.domain.graph.model import ChoiceTarget, Graph, GraphDoc, GraphParseError, Mints, Node
+from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
+from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
+from blizzard.hub.domain.graph.model import (
+    ChoiceTarget,
+    Graph,
+    GraphDoc,
+    GraphParseError,
+    IReadGraphBodies,
+    IReadGraphRepository,
+    Mints,
+    Node,
+)
 from blizzard.hub.domain.graph.validation import GraphValidationError
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
 from blizzard.wire.graph import (
@@ -43,6 +54,13 @@ from blizzard.wire.graph import (
 router = APIRouter(
     prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
+#: The tenant's graph reads, stored bodies, mint and lifecycle verbs and the codec a definition is decoded
+#: through, each resolved through the request's scope.
+Graphs = FromDishka[IReadGraphRepository]
+Bodies = FromDishka[IReadGraphBodies]
+Minting = FromDishka[GraphMintService]
+Lifecycle = FromDishka[GraphLifecycleService]
+Codec = FromDishka[IConfigCodec]
 
 
 def _node_view(node: Node) -> GraphNodeView:
@@ -122,9 +140,9 @@ def _graph_view(
     )
 
 
-def _body(services: Services, graph_id: str) -> str:
+def _body(bodies: IReadGraphBodies, graph_id: str) -> str:
     """The graph's stored authoring body; a graph the route already read always has one."""
-    body = services.graph_bodies.definition_yaml(graph_id)
+    body = bodies.definition_yaml(graph_id)
     assert body is not None
     return body
 
@@ -135,22 +153,23 @@ def _body(services: Services, graph_id: str) -> str:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.GRAPH_EDIT))],
 )
-def mint_graph(request: GraphMintRequest, services: Services) -> object:
+@inject_sync
+def mint_graph(request: GraphMintRequest, codec: Codec, minting: Minting, bodies: Bodies) -> object:
     """Validate and mint an immutable graph; 422 on validation errors."""
     try:
-        doc = GraphDoc.of(services.graph_yaml.decode(request.definition_yaml.encode("utf-8")))
+        doc = GraphDoc.of(codec.decode(request.definition_yaml.encode("utf-8")))
     except (GraphParseError, ConfigDecodeError) as exc:
         raise ProblemHTTPException(partial(problems.graph_definition_invalid_problem, [str(exc)], [])) from exc
 
     try:
-        graph, warnings = services.graph_mint.mint(doc, definition_yaml=request.definition_yaml)
+        graph, warnings = minting.mint(doc, definition_yaml=request.definition_yaml)
     except GraphValidationError as exc:
         raise ProblemHTTPException(
             partial(problems.graph_definition_invalid_problem, exc.result.errors, exc.result.warnings)
         ) from exc
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
-    return _graph_view(graph, definition_yaml=_body(services, graph.graph_id), retired=False, warnings=warnings)
+    return _graph_view(graph, definition_yaml=_body(bodies, graph.graph_id), retired=False, warnings=warnings)
 
 
 @router.post(
@@ -159,14 +178,15 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
     dependencies=[Depends(require(Permission.GRAPH_EDIT))],
     deprecated=True,
 )
-def sync_graphs(services: Services) -> GraphSyncResponse:
+@inject_sync
+def sync_graphs(minting: Minting, graphs: Graphs, codec: Codec) -> GraphSyncResponse:
     """Reconcile the packaged graph set against the request's tenant, minting only what changed — superseded by
     ``POST /api/admin/graphs/sync``, which reconciles every open tenant.
 
     Idempotent, so it is safe to run unconditionally. Registered above
     ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
     graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict."""
-    outcomes = GraphReconciliation(services.graph_mint, services.graphs, services.graph_yaml).outcomes()
+    outcomes = GraphReconciliation(minting, graphs, codec).outcomes()
     return GraphSyncResponse(
         ok=all(o.status is not GraphSyncStatus.FAILED for o in outcomes),
         entries=[
@@ -176,16 +196,17 @@ def sync_graphs(services: Services) -> GraphSyncResponse:
 
 
 @router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def list_graphs(services: Services) -> list[GraphSummaryView]:
+@inject_sync
+def list_graphs(graphs: Graphs) -> list[GraphSummaryView]:
     """Every minted graph, unpaged, newest first, newest non-retired per name marked ``effective``.
 
     Reads the listing-shape projection — nothing here touches nodes,
     edges, sessions or artifacts."""
     # Unpaged:
     # tests/component/hub/api/test_graphs_read.py::test_list_graphs_returns_every_mint_past_the_default_page_limit
-    graphs = services.graphs.list_summaries()
-    retired_ids = services.graphs.retired_graph_ids()
-    mints = Mints.of(graphs, retired_ids=retired_ids)
+    summaries = graphs.list_summaries()
+    retired_ids = graphs.retired_graph_ids()
+    mints = Mints.of(summaries, retired_ids=retired_ids)
     effective_by_id = mints.effective
     lifecycle_by_id = mints.lifecycle
     return [
@@ -198,21 +219,22 @@ def list_graphs(services: Services) -> list[GraphSummaryView]:
             retired=g.graph_id in retired_ids,
             lifecycle=lifecycle_by_id[g.graph_id],
         )
-        for g in graphs
+        for g in summaries
     ]
 
 
 @router.get("/graphs/{graph_id}", response_model=GraphView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
-def get_graph(graph_id: str, services: Services) -> GraphView:
+@inject_sync
+def get_graph(graph_id: str, graphs: Graphs, bodies: Bodies) -> GraphView:
     """One graph's full reified definition; 404 on unknown id."""
-    graph = services.graphs.get(graph_id)
+    graph = graphs.get(graph_id)
     if graph is None:
         raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     return _graph_view(
         graph,
-        definition_yaml=_body(services, graph_id),
-        retired=services.graphs.is_retired(graph_id),
-        follow_latest=services.graphs.follow_latest(graph_id),
+        definition_yaml=_body(bodies, graph_id),
+        retired=graphs.is_retired(graph_id),
+        follow_latest=graphs.follow_latest(graph_id),
     )
 
 
@@ -221,22 +243,25 @@ def get_graph(graph_id: str, services: Services) -> GraphView:
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@inject_sync
 def retire_graph(
     graph_id: str,
-    services: Services,
+    graphs: Graphs,
+    bodies: Bodies,
+    lifecycle: Lifecycle,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Retire a graph — excludes it from name resolution; the claim on any chunk
     already pinned to it runs on untouched. 404 on an unknown id."""
-    graph = services.graphs.get(graph_id)
+    graph = graphs.get(graph_id)
     if graph is None:
         raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
-    services.graph_lifecycle.retire(graph, by=identity.user_id)
+    lifecycle.retire(graph, by=identity.user_id)
     return _graph_view(
         graph,
-        definition_yaml=_body(services, graph_id),
+        definition_yaml=_body(bodies, graph_id),
         retired=True,
-        follow_latest=services.graphs.follow_latest(graph_id),
+        follow_latest=graphs.follow_latest(graph_id),
     )
 
 
@@ -245,30 +270,36 @@ def retire_graph(
     response_model=GraphView,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@inject_sync
 def enable_graph(
     graph_id: str,
-    services: Services,
+    graphs: Graphs,
+    bodies: Bodies,
+    lifecycle: Lifecycle,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Re-enable a retired graph — restores normal newest-per-name derivation.
     Idempotent on an already-enabled graph; 404 on an unknown id."""
-    graph = services.graphs.get(graph_id)
+    graph = graphs.get(graph_id)
     if graph is None:
         raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
-    services.graph_lifecycle.enable(graph, by=identity.user_id)
+    lifecycle.enable(graph, by=identity.user_id)
     return _graph_view(
         graph,
-        definition_yaml=_body(services, graph_id),
+        definition_yaml=_body(bodies, graph_id),
         retired=False,
-        follow_latest=services.graphs.follow_latest(graph_id),
+        follow_latest=graphs.follow_latest(graph_id),
     )
 
 
 @router.patch("/graphs/{graph_id}", response_model=GraphView)
+@inject_sync
 def patch_graph(
     graph_id: str,
     request: GraphFlagsPatchRequest,
-    services: Services,
+    graphs: Graphs,
+    bodies: Bodies,
+    lifecycle: Lifecycle,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Sparse-edit this graph's mutable flags; 404 on an unknown id.
@@ -276,16 +307,16 @@ def patch_graph(
     An absent ``follow_latest`` writes nothing; a present one, ``null`` included, appends
     a policy fact scoped to this mint. A graph is not a configured record: no revision,
     no change row."""
-    graph = services.graphs.get(graph_id)
+    graph = graphs.get(graph_id)
     if graph is None:
         raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     if "follow_latest" in request.model_fields_set:
-        services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
+        lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
         graph,
-        definition_yaml=_body(services, graph_id),
-        retired=services.graphs.is_retired(graph_id),
-        follow_latest=services.graphs.follow_latest(graph_id),
+        definition_yaml=_body(bodies, graph_id),
+        retired=graphs.is_retired(graph_id),
+        follow_latest=graphs.follow_latest(graph_id),
     )
 
 
@@ -296,23 +327,26 @@ def patch_graph(
     deprecated=True,
     summary="Deprecated alias for PATCH /graphs/{graph_id} with follow_latest",
 )
+@inject_sync
 def set_graph_follow_latest(
     graph_id: str,
     request: GraphPolicyRequest,
-    services: Services,
+    graphs: Graphs,
+    bodies: Bodies,
+    lifecycle: Lifecycle,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.GRAPH_EDIT))],
 ) -> GraphView:
     """Deprecated: use ``PATCH /graphs/{graph_id}`` with ``follow_latest``.
 
     Kept for clients that cannot be redeployed: the same domain verb, answering ``202``.
     Idempotent, and 404 on an unknown id."""
-    graph = services.graphs.get(graph_id)
+    graph = graphs.get(graph_id)
     if graph is None:
         raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
-    services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
+    lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
         graph,
-        definition_yaml=_body(services, graph_id),
-        retired=services.graphs.is_retired(graph_id),
-        follow_latest=services.graphs.follow_latest(graph_id),
+        definition_yaml=_body(bodies, graph_id),
+        retired=graphs.is_retired(graph_id),
+        follow_latest=graphs.follow_latest(graph_id),
     )

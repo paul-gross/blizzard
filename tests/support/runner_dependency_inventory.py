@@ -38,13 +38,18 @@ GET /api/fleet/chunks/{chunk_id}/work-items
 GET /api/fleet/questions/{question_id}
 GET /api/fleet/scopes
 GET /api/fleet/summary
-GET /api/fleet/system-artifacts
-GET /api/fleet/system-artifacts/{name}
 POST /api/fleet/chunks/{chunk_id}/artifact-check
 POST /api/fleet/chunks/{chunk_id}/hub-advance
 POST /api/fleet/chunks/{chunk_id}/pause
 POST /api/fleet/chunks/{chunk_id}/resume
 POST /api/fleet/queue/peek
+""",
+    ),
+    (
+        RUNNER - {"blizzard.hub.api.deps.tenant_services"},
+        """
+GET /api/fleet/system-artifacts
+GET /api/fleet/system-artifacts/{name}
 """,
     ),
     (

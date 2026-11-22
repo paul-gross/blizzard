@@ -44,6 +44,7 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (
     OP,
+    TEST_HUB_ACTIONS,
     build_hub,
     config_authoring,
     default_tenant,
@@ -110,7 +111,7 @@ class _World:
         engine = create_engine_from_url(db_url)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         clock = FixedClock(_NOW)
-        self.stores = build_hub_core(connections_for_engine(engine), clock=clock).open(
+        self.stores = build_hub_core(connections_for_engine(engine), clock=clock, actions=TEST_HUB_ACTIONS).open(
             StoreScope(default_tenant(engine))
         )
         self.authoring = config_authoring(engine, keys=keys, clock=clock)

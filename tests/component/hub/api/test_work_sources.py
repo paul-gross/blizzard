@@ -20,6 +20,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
@@ -30,6 +31,7 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,
+    default_tenant,
     emitted_events,
     ensure_fixture_forge,
     hub_store_connections,
@@ -353,7 +355,7 @@ def test_create_against_a_retired_default_graph_is_503_and_writes_no_item(tmp_pa
     hub = build_hub(tmp_path)
     doc = hub.services.default_graph_doc
     graph = hub.services.default_graph.ensure_default(doc, definition_yaml=hub.services.default_graph_yaml)
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     resp = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"})
 
@@ -376,7 +378,7 @@ def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Pa
     graph = hub.services.default_graph.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     retired = hub.client.post("/api/work-sources/hub/items", json={"title": "  ", "body": "b"})
 

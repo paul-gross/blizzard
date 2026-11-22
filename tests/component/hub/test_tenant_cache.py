@@ -56,7 +56,7 @@ _SECOND = TenantId("ten_SECOND")
 
 def _core(tmp_path: Path) -> tuple[HubCore, Engine]:
     _, engine = migrate_to(tmp_path, "head")
-    return build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT)), engine
+    return build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT), actions=TEST_HUB_ACTIONS), engine
 
 
 def _add_tenant(engine: Engine, tenant: TenantId) -> None:
@@ -206,7 +206,7 @@ def test_racing_opens_of_one_tenant_share_one_set_of_stores(tmp_path: Path) -> N
 def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> None:
     migrate_to(tmp_path, "head")
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
-    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT))
+    core = build_hub_core(connections_for_engine(engine), clock=FixedClock(_AT), actions=TEST_HUB_ACTIONS)
     tenant = default_tenant(engine)
     seen: list[Mapping[str, Any]] = []
 
@@ -238,7 +238,6 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         follow_latest_default=False,
         annotation_interval_seconds=120,
         version_window=VERSION_WINDOW,
-        actions=TEST_HUB_ACTIONS,
         extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,

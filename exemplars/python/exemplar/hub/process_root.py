@@ -9,14 +9,15 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.registry.legacy import LegacyRegistry
 from blizzard.hub import process_root as hub
+from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.store.errors import HubStoreConnections
 from exemplar.hub.domain.permits import wiring as permits
 from exemplar.hub.store import wiring as store
 
 
-def open_store_backed(connections: HubStoreConnections, *, clock: IClock) -> hub.HubProcess:
+def open_store_backed(connections: HubStoreConnections, *, clock: IClock, actions: HubActions) -> hub.HubProcess:
     """The hub's store-backed process with the permits area, registered and opened over the borrowed values."""
     registry = LegacyRegistry()
     hub.register_hub(registry, store_backed=True)
     permits.register(registry, store.register_permits(registry))
-    return hub.build_store_backed(registry, connections, clock=clock)
+    return hub.build_store_backed(registry, connections, clock=clock, actions=actions)

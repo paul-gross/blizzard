@@ -13,6 +13,7 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
+from dishka.integrations.fastapi import FromDishka, inject_sync
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
@@ -94,6 +95,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerRetired,
 )
 from blizzard.hub.domain.runners.version import RunnerVersionRefused
+from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.attachments import ArtifactCheckRequest, ArtifactCheckResponse
@@ -294,19 +296,21 @@ def peek_matched_queue(
 
 
 @router.get("/system-artifacts", response_model=list[SystemArtifactView])
-def list_system_artifacts_route(services: Services) -> list[SystemArtifactView]:
+@inject_sync
+def list_system_artifacts_route(packaged: FromDishka[PackagedSystemArtifacts]) -> list[SystemArtifactView]:
     """The full ``system``-scoped artifact set — resolved at call time off the packaged
     set, pinned to no chunk or lease."""
-    return system_artifacts_api.list_system_artifacts(services.system_artifacts)
+    return system_artifacts_api.list_system_artifacts(packaged)
 
 
 @router.get("/system-artifacts/{name:path}", response_model=SystemArtifactView)
+@inject_sync
 def get_system_artifact_route(
-    name: str, services: Services, http_request: Request
+    name: str, packaged: FromDishka[PackagedSystemArtifacts], http_request: Request
 ) -> SystemArtifactView | JSONResponse:
     """One published system artifact by its slash-bearing name; ``404`` unknown."""
     try:
-        return system_artifacts_api.get_system_artifact(name, services.system_artifacts)
+        return system_artifacts_api.get_system_artifact(name, packaged)
     except HTTPException as exc:
         if exc.status_code != status.HTTP_404_NOT_FOUND:
             raise

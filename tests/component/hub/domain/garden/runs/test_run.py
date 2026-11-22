@@ -21,6 +21,7 @@ from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.routines import Routine, RoutineGraphUnresolvedError
 from blizzard.hub.domain.garden.runs.run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
@@ -31,6 +32,7 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,
+    default_tenant,
     hub_scoped,
     hub_store_connections,
     project_record,
@@ -318,7 +320,7 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
 def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, graph = _routine(hub)
-    hub.services.graph_lifecycle.retire(graph, by="operator")
+    hub.resolve(default_tenant(hub.engine), GraphLifecycleService).retire(graph, by="operator")
 
     with pytest.raises(RoutineGraphUnresolvedError):
         hub.services.routine_run.run(

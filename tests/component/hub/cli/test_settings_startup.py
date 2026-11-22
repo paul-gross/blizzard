@@ -18,6 +18,7 @@ from blizzard.hub.settings.graph import HubSettingsGraph
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.hub_settings_store import HubSettingsStore
 from tests.support.config_inputs import hub_runtime_of, init_hub
+from tests.support.scaffolding import TEST_HUB_ACTIONS
 
 
 def test_host_seeds_and_restarts_from_stored_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -320,7 +321,7 @@ def test_host_instruments_shared_settings_before_seed(tmp_path: Path, monkeypatc
         assert acquisitions == [(engine, connections)]
         with handle.tracer.root("startup seed complete"):
             pass
-        core = composition.build_hub_core(connections, clock=clock)
+        core = composition.build_hub_core(connections, clock=clock, actions=TEST_HUB_ACTIONS)
         assert core.store_connections is connections
         snapshot = settings.reader.snapshot()
         settings.authoring.apply(

@@ -10,12 +10,23 @@ from typing import Any
 
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.composition import HubCore, HubServices, TenantServices, TenantStores
+from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IWriteFindingRepository
+from blizzard.hub.domain.graph.actions import HubActionCatalogue
+from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
+from blizzard.hub.domain.graph.model import (
+    IReadGraphBodies,
+    IReadGraphRepository,
+    IReadNodeExecutors,
+    IWriteGraphRepository,
+)
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
@@ -54,6 +65,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 
 #: Each adapter the tenant scope owns, and the ports it is registered under.
 ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
@@ -88,6 +100,7 @@ ADAPTER_PORTS: Mapping[type[Any], tuple[type[Any], ...]] = {
     UrgencyChunksStore: (),
     ConfigRevisionsStore: (),
     FindingStore: (IReadFindingRepository, IWriteFindingRepository),
+    GraphStore: (IReadGraphRepository, IWriteGraphRepository, IReadGraphBodies, IReadNodeExecutors),
 }
 
 
@@ -146,6 +159,9 @@ def transition_identity_violations(stores: TenantStores, services: TenantService
         ("TenantServices.projects", services.projects, IReadProjectRepository),
         ("TenantServices.findings", services.findings, IReadFindingRepository),
         ("TenantServices.finding_bucket", services.finding_bucket, FindingBucketReader),
+        ("TenantServices.graph_yaml", services.graph_yaml, IConfigCodec),
+        ("TenantServices.graph_mint", services.graph_mint, GraphMintService),
+        ("TenantServices.default_graph", services.default_graph, DefaultGraphService),
     )
     problems = [
         f"{name} is not its container instance" for name, field, key in retained if field is not tenant.get(key)
@@ -169,5 +185,26 @@ def process_identity_violations(core: HubCore, services: HubServices) -> list[st
         ("HubCore.auth_errors", core.auth_errors, RepoErrorFactory),
         ("HubServices.hub_scoped_reads", services.hub_scoped_reads, HubScopedReads),
         ("HubServices.hub_events", services.hub_events, HubEventLogStore),
+        ("HubActions.catalogue", process.get(HubActions).catalogue, HubActionCatalogue),
     )
     return [f"{name} is not its container instance" for name, field, key in retained if field is not process.get(key)]
+
+
+#: The process values every tenant scope resolves to the process scope's one instance.
+PROCESS_SHARED: tuple[type[Any], ...] = (
+    HubActions,
+    HubActionCatalogue,
+    IConfigCodec,
+    PackagedGraphs,
+    PackagedSystemArtifacts,
+)
+
+
+def process_sharing_violations(core: HubCore, stores: TenantStores) -> list[str]:
+    """Each process value the tenant scope resolves to an instance other than the process scope's."""
+    process = core.process.resolver
+    return [
+        f"{key.__qualname__} is not the process instance"
+        for key in PROCESS_SHARED
+        if stores.tenant.get(key) is not process.get(key)
+    ]

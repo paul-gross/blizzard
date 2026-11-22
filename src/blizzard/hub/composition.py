@@ -78,7 +78,6 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
-from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
@@ -153,8 +152,8 @@ from blizzard.hub.domain.garden.runs.history import GardenRunService
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import DefaultGraphService, GraphMintService
-from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository, IReadNodeExecutors
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -247,7 +246,8 @@ from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.readiness import CredentialReadiness, ICredentialProbe
 from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
-from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.graphs import PACKAGED as GRAPHS_PACKAGED
+from blizzard.hub.graphs import PackagedGraphs
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
 from blizzard.hub.secrets import StoreSecretReader
@@ -366,7 +366,6 @@ class TenantServices:
     default_graph: DefaultGraphService
     #: The YAML binding of the config codec a graph definition is decoded and stored through.
     graph_yaml: IConfigCodec
-    graph_lifecycle: GraphLifecycleService
     questions: QuestionService
     queue: QueueService
     group: GroupService
@@ -387,9 +386,6 @@ class TenantServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
-    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
-    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
-    system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
     #: Each repository's forge roles, built from its records.
     forges: ForgeRegistry
@@ -569,9 +565,6 @@ class HubServices:
     #: The ``tenant_teardown`` sweep, which carries on every deletion underway.
     tenant_teardown_sweep: TenantTeardownSweep
     clock: IClock
-    #: The published ``ArtifactScope.SYSTEM`` set — the loader itself, so a read through it
-    #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
-    system_artifacts: PackagedSystemArtifacts
     #: The close-intent drain sweep — one pass per hub, acting in each intent's tenant.
     close_drain: CloseDrainSweep
     #: The cadence sweep — one pass per hub, judging and minting in each tenant holding a live cadence.
@@ -1041,9 +1034,9 @@ def open_hub_store(db_url: str, platform_tracing: IPlatformTracing | None = None
         raise
 
 
-def build_process_core(connections: HubStoreConnections) -> HubCore:
+def build_process_core(connections: HubStoreConnections, *, actions: HubActions) -> HubCore:
     """:func:`build_hub_core` on the system clock."""
-    return build_hub_core(connections, clock=build_system_clock())
+    return build_hub_core(connections, clock=build_system_clock(), actions=actions)
 
 
 def build_system_clock() -> IClock:
@@ -1108,14 +1101,28 @@ def register_legacy_absent(registry: LegacyRegistry) -> None:
 
 
 def build_hub_core(
-    store_connections: HubStoreConnections, *, clock: IClock, settings: HubSettingsGraph | None = None
+    store_connections: HubStoreConnections,
+    *,
+    clock: IClock,
+    actions: HubActions,
+    settings: HubSettingsGraph | None = None,
+    graphs: PackagedGraphs = GRAPHS_PACKAGED,
+    system_artifacts: PackagedSystemArtifacts = SYSTEM_ARTIFACTS_PACKAGED,
 ) -> HubCore:
     """Build the :class:`HubCore` over the hub's process container, opened here; the core's ``process`` closes it.
-    ``settings`` is the borrowed settings graph the container serves the settings ports from; a core built without one
-    declares them absent."""
+    ``actions`` are the hub actions a node may name, and ``graphs`` and ``system_artifacts`` the packaged loaders, each
+    borrowed into the container. ``settings`` is the borrowed settings graph the container serves the settings ports
+    from; a core built without one declares them absent."""
     from blizzard.hub.process_root import open_store_backed  # the root registers this module's leaves
 
-    process = open_store_backed(store_connections, clock=clock, settings=settings)
+    process = open_store_backed(
+        store_connections,
+        clock=clock,
+        actions=actions,
+        settings=settings,
+        graphs=graphs,
+        system_artifacts=system_artifacts,
+    )
     store_errors = store_connections.errors
     resolver = process.resolver
     hub_scoped_reads = resolver.get(HubScopedReads)
@@ -1186,12 +1193,10 @@ class TenantServiceParts:
     clock: IClock
     users: IReadUserRepository
     secret_cipher: ISecretCipher
-    graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
     forges: ForgeRegistryFactory
     #: Each forge kind's read-only credential check, by kind.
     credential_probes: Mapping[str, ICredentialProbe]
-    system_artifacts: PackagedSystemArtifacts
     action_loop: ActionLoop
     public_url: str | None
     follow_latest_default: bool
@@ -1199,7 +1204,6 @@ class TenantServiceParts:
     platform_tracer: IPlatformTracer | None
     color_pick: ColorPick
     versions: IVersionWindow
-    actions: HubActions
     extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
     pass_config: Callable[[], HubConfig] | None
@@ -1214,6 +1218,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     :class:`TenantStores`, publishing to ``events`` — the tenant's broker."""
     clock = parts.clock
     tenant = stores.tenant
+    actions = tenant.get(HubActions)
+    catalogue = tenant.get(HubActionCatalogue)
+    graph_yaml = tenant.get(IConfigCodec)
+    default_graph_file = tenant.get(PackagedGraphs).default
     chunk_stores = stores.chunk_stores
     work_item_store = stores.work_item_store
     finding_store = stores.finding_store
@@ -1278,9 +1286,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     host_report = HostReportService(hosts=host_store, clock=clock)
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
-    graph_mint = GraphMintService(graphs=graph_store, clock=clock, catalogue=parts.actions.catalogue)
-    default_graph = DefaultGraphService(mint=graph_mint, graphs=graph_store, transactions=stores.transactions)
-    default_graph_yaml = PACKAGED.default.inlined_yaml(parts.graph_yaml)
+    graph_mint = tenant.get(GraphMintService)
+    default_graph = tenant.get(DefaultGraphService)
+    default_graph_yaml = default_graph_file.inlined_yaml(graph_yaml)
     scope_store = tenant.get(ScopeStore)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = tenant.get(RoutineStore)
@@ -1379,7 +1387,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         links=stores.project_links,
         targets=chunk_targets,
         projects=stores.projects,
-        actions=parts.actions,
+        actions=actions,
         passes=parts.action_passes,
         forges=forges,
         review_findings=review_findings,
@@ -1560,8 +1568,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         graph_mint=graph_mint,
         default_graph=default_graph,
-        graph_yaml=parts.graph_yaml,
-        graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
+        graph_yaml=graph_yaml,
         questions=QuestionService(
             questions=chunk_questions, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
@@ -1593,9 +1600,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         events=events,
         event_log=event_log,
         clock=clock,
-        default_graph_doc=PACKAGED.default.doc,
+        default_graph_doc=default_graph_file.doc,
         default_graph_yaml=default_graph_yaml,
-        system_artifacts=parts.system_artifacts,
         work_sources=work_sources,
         users=parts.users,
         transcripts=transcript_store,
@@ -1651,7 +1657,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             links=stores.project_links,
             targets=chunk_targets,
             capture=chunk_target_capture,
-            catalogue=parts.actions.catalogue,
+            catalogue=catalogue,
             refusals=hub_router,
             transactions=stores.transactions,
             lines=flow_line_factory,
@@ -1771,7 +1777,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             closures=garden_proposal_closure_store,
             items=stores.work_item_edits,
             default_graph=lambda: default_graph.ensure_default(
-                PACKAGED.default.doc, definition_yaml=default_graph_yaml
+                default_graph_file.doc, definition_yaml=default_graph_yaml
             ),
             clock=clock,
             transactions=stores.transactions,
@@ -1784,7 +1790,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
         finding_bucket=finding_bucket,
-        garden_stage_check=GardenStageCheck(formats=garden_formats, catalogue=parts.actions.catalogue),
+        garden_stage_check=GardenStageCheck(formats=garden_formats, catalogue=catalogue),
         commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
@@ -1849,7 +1855,6 @@ def build_services(
     trusted_proxies: TrustedProxies | None = None,
     login_throttle: LoginThrottleConfig | None = None,
     transcript_caps: TranscriptCaps | None = None,
-    system_artifacts: PackagedSystemArtifacts | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
@@ -1859,7 +1864,6 @@ def build_services(
     annotation_interval_seconds: int,
     version_window: VersionWindow,
     hub_version: str = __version__,
-    actions: HubActions,
     extractors: Sequence[ITurnEventExtractor],
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
@@ -1874,8 +1878,8 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry, ``forges`` its forge registry, ``credential_probes`` each forge kind's credential check —
     every kind's own when ``None``; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
-    may name, ``extractors`` the turn-event extractors the derivation runs, and a pass is bounded by
+    ``oauth_providers``; ``hub_version`` defaults to the installed one; ``extractors`` are the turn-event extractors
+    the derivation runs, and a pass is bounded by
     ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
     cadence pass, whether the ``cadences`` flag lets it mint, and
     ``announce_minted`` publishes each mint it commits."""
@@ -1886,7 +1890,6 @@ def build_services(
     step_wake = StepWake()
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
-    system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
     # One process-scoped draw for every project color a create leaves to the hub.
     color_pick = random.Random().choice
 
@@ -1897,11 +1900,9 @@ def build_services(
         clock=clock,
         users=core.users,
         secret_cipher=secret_cipher(secret_keys),
-        graph_yaml=YAML_CODEC,
         work_sources=work_sources,
         forges=forges,
         credential_probes=credential_probes if credential_probes is not None else build_credential_probes(),
-        system_artifacts=system_artifacts,
         action_loop=action_loop,
         public_url=public_url,
         follow_latest_default=follow_latest_default,
@@ -1909,7 +1910,6 @@ def build_services(
         platform_tracer=platform_tracer,
         color_pick=color_pick,
         versions=HubVersionWindow(hub_version, version_window),
-        actions=actions,
         extractors=extractors,
         action_passes=ActionPassDriver(
             action_loop,
@@ -2101,7 +2101,9 @@ def build_services(
     tenant_admin = TenantAdministration(
         tenants=core.process.resolver.get(TenantAdministrationStore),
         units=tenant_unit,
-        mint_packaged=packaged_minter(clock, YAML_CODEC, actions.catalogue),
+        mint_packaged=packaged_minter(
+            clock, core.process.resolver.get(IConfigCodec), core.process.resolver.get(HubActionCatalogue)
+        ),
         changed=open_tenants.refresh,
         pick=color_pick,
         clock=clock,
@@ -2176,7 +2178,6 @@ def build_services(
         tenant_teardown_sweep=tenant_teardown_sweep,
         invariants=HubInvariantCheck(build_hub_invariants(store_connections, clock)),
         clock=clock,
-        system_artifacts=system_artifacts,
         close_drain=close_drain,
         cadence=cadence,
         trace_export=trace_export,
