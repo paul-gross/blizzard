@@ -136,7 +136,7 @@ def child_open_violations(root: Path, *, exempt: tuple[tuple[str, ...], ...] = (
 def wiring_boundary_violations(source_root: Path, *, roots: frozenset[Path] = PROCESS_ROOTS) -> list[str]:
     """Wiring modules (those importing the registry interface) that reach another area's wiring or an adapter.
 
-    An adapter package's own ``wiring.py`` may import that package's ``internal/``; the process ``roots`` compose
+    An adapter package's own wiring module may import that package's ``internal/``; the process ``roots`` compose
     adapters and areas, and are exempt."""
     problems: list[str] = []
     for path in sorted(source_root.rglob("*.py")):
