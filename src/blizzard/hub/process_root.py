@@ -2,11 +2,12 @@
 
 Registration and building are two steps, so a stand-in root can reuse the hub's registration and add to it before it
 builds. The store-backed graph declares the legacy bridge's leaves; the store-free graph declares each of them absent,
-so a route that reaches one answers the store's unavailability rather than serving on nothing.
+so a route that reaches one answers the store's unavailability rather than serving on nothing. A graph opened
+without settings declares the settings ports absent the same way.
 
-The process scope borrows every value it is opened with — the store's connections and the clock — and the
-:class:`HubProcess` it returns owns only the container: closing it closes every tenant scope, then the process scope,
-and leaves the borrowed values to the entrypoint that built them."""
+The process scope borrows every value it is opened with — the store's connections, the clock and the settings graph —
+and the :class:`HubProcess` it returns owns only the container: closing it closes every tenant scope, then the process
+scope, and leaves the borrowed values to the entrypoint that built them."""
 
 from __future__ import annotations
 
